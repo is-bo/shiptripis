@@ -1,0 +1,1 @@
+- [ShipTrip project](memory/project_shiptrip.md) — P2P delivery app; Flutter + Django monolith + Go services + Supabase; KYC in MVP, payments stripe-first
