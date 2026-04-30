@@ -27,100 +27,89 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final displaySize = size.height < 720 ? 34.0 : 40.0;
+    final heroHeight = (size.width * 0.42).clamp(140.0, 200.0);
     return Scaffold(
       backgroundColor: AppColors.parchment,
       body: Stack(
         children: [
-          // grain / paper texture wash
-          Positioned.fill(
-            child: CustomPaint(painter: _GrainPainter()),
-          ),
-          // top corner stamp
-          Positioned(
-            top: 60,
-            right: 24,
-            child: const StampChip(label: "EST. 2026 · ALG ↔ FR", angle: 0.05)
-                .animate()
-                .fadeIn(delay: 600.ms, duration: 500.ms)
-                .moveY(begin: -8, end: 0),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _GrainPainter())),
           SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: AppSpacing.x6),
-                // brand mark
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-                  child: Row(
-                    children: [
-                      _Logo().animate().fadeIn(duration: 600.ms).slideX(begin: -0.1, end: 0),
-                      const Spacer(),
-                      Text("FR · AR · EN",
-                          style: AppType.eyebrow().copyWith(letterSpacing: 2)),
-                    ],
-                  ),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: size.height - MediaQuery.paddingOf(context).vertical,
                 ),
-                const SizedBox(height: AppSpacing.x12),
-                // hero — flight route illustration
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-                  child: AnimatedBuilder(
-                    animation: _route,
-                    builder: (_, __) => CustomPaint(
-                      painter: _RoutePainter(_route.value),
-                      size: Size(double.infinity, MediaQuery.sizeOf(context).width * 0.55),
-                    ),
-                  ).animate().fadeIn(delay: 200.ms, duration: 800.ms),
-                ),
-                const SizedBox(height: AppSpacing.x4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("ALGIERS",
-                              style: AppType.mono(11, color: AppColors.inkMute)),
-                          const SizedBox(height: 2),
-                          const CountryPill(code: 'DZ', label: 'DZ', dense: true),
-                        ],
-                      ),
-                      Column(
-                        children: [
-                          Text("DIRECT · 2H 25M",
-                              style: AppType.mono(10, color: AppColors.inkMute)
-                                  .copyWith(letterSpacing: 1.4)),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text("PARIS",
-                              style: AppType.mono(11, color: AppColors.inkMute)),
-                          const SizedBox(height: 2),
-                          const CountryPill(code: 'FR', label: 'FR', dense: true),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x6),
+                child: IntrinsicHeight(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Eyebrow", style: AppType.eyebrow())
+                      const SizedBox(height: AppSpacing.x4),
+                      Row(
+                        children: [
+                          _Logo()
+                              .animate()
+                              .fadeIn(duration: 600.ms)
+                              .slideX(begin: -0.1, end: 0),
+                          const Spacer(),
+                          const StampChip(
+                                  label: "EST. 2026 · ALG ↔ FR", angle: 0.05)
+                              .animate()
+                              .fadeIn(delay: 600.ms, duration: 500.ms)
+                              .moveY(begin: -8, end: 0),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.x8),
+                      AnimatedBuilder(
+                        animation: _route,
+                        builder: (_, __) => CustomPaint(
+                          painter: _RoutePainter(_route.value),
+                          size: Size(double.infinity, heroHeight),
+                        ),
+                      ).animate().fadeIn(delay: 200.ms, duration: 800.ms),
+                      const SizedBox(height: AppSpacing.x3),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("ALGIERS",
+                                  style: AppType.mono(11,
+                                      color: AppColors.inkMute)),
+                              const SizedBox(height: 2),
+                              const CountryPill(
+                                  code: 'DZ', label: 'DZ', dense: true),
+                            ],
+                          ),
+                          Text("DIRECT · 2H 25M",
+                              style: AppType.mono(10, color: AppColors.inkMute)
+                                  .copyWith(letterSpacing: 1.4)),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text("PARIS",
+                                  style: AppType.mono(11,
+                                      color: AppColors.inkMute)),
+                              const SizedBox(height: 2),
+                              const CountryPill(
+                                  code: 'FR', label: 'FR', dense: true),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.x8),
+                      Text("Welcome", style: AppType.eyebrow())
                           .animate()
                           .fadeIn(delay: 400.ms),
                       const SizedBox(height: AppSpacing.x3),
                       Text(
                         "Send anything,\nthe travelers do\nthe rest.",
-                        style: AppType.display(46, w: FontWeight.w400, height: 1.0),
+                        style: AppType.display(displaySize,
+                            w: FontWeight.w400, height: 1.05),
                       )
                           .animate()
                           .fadeIn(delay: 500.ms, duration: 700.ms)
@@ -128,36 +117,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                       const SizedBox(height: AppSpacing.x4),
                       Text(
                         "A peer-to-peer corridor between Algeria and France. Travelers carry, senders save. Verified, escrowed, in DZD.",
-                        style: AppType.body(14.5, color: AppColors.inkSoft, height: 1.55),
+                        style: AppType.body(14,
+                            color: AppColors.inkSoft, height: 1.55),
                       )
                           .animate()
                           .fadeIn(delay: 700.ms, duration: 700.ms)
                           .moveY(begin: 8, end: 0),
-                      const SizedBox(height: AppSpacing.x8),
+                      const Spacer(),
+                      const SizedBox(height: AppSpacing.x6),
                       Row(
                         children: [
-                          PrimaryButton(
-                            label: "Get started",
-                            icon: Icons.arrow_forward_rounded,
-                            onTap: () => context.push('/role'),
+                          Expanded(
+                            child: PrimaryButton(
+                              label: "Get started",
+                              icon: Icons.arrow_forward_rounded,
+                              expand: true,
+                              color: AppColors.sun,
+                              fg: AppColors.ink,
+                              onTap: () => context.push('/auth/sign-up'),
+                            ),
                           ),
                           const SizedBox(width: AppSpacing.x3),
-                          GhostButton(label: "Sign in", onTap: () {}),
+                          GhostButton(
+                              label: "Sign in",
+                              onTap: () => context.push('/auth/sign-in')),
                         ],
-                      ).animate().fadeIn(delay: 900.ms, duration: 600.ms).moveY(begin: 8, end: 0),
+                      )
+                          .animate()
+                          .fadeIn(delay: 900.ms, duration: 600.ms)
+                          .moveY(begin: 8, end: 0),
                       const SizedBox(height: AppSpacing.x4),
                       Row(
                         children: [
                           _Dot(),
                           const SizedBox(width: 8),
-                          Text("KYC verified · Escrow · DZD pricing",
-                              style: AppType.body(12, color: AppColors.inkMute, w: FontWeight.w500)),
+                          Flexible(
+                            child: Text(
+                              "KYC verified · Escrow · DZD pricing",
+                              style: AppType.body(12,
+                                  color: AppColors.inkMute,
+                                  w: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ).animate().fadeIn(delay: 1100.ms),
+                      const SizedBox(height: AppSpacing.x4),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ],

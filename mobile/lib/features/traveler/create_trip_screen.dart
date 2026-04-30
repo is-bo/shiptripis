@@ -3,7 +3,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/mock/airports.dart';
+import '../../shared/widgets/airport_picker.dart';
+import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/country_pill.dart';
+import '../../shared/widgets/inline_calendar.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
@@ -14,11 +18,69 @@ class CreateTripScreen extends StatefulWidget {
 }
 
 class _CreateTripScreenState extends State<CreateTripScreen> {
-  String _from = 'DZ';
-  String _to = 'FR';
-  double _kg = 8;
+  Airport _origin = dzAirports.first; // ALG
+  Airport _dest = frAirports.first; // CDG
+  int _kg = 8;
+  DateTime _date = DateTime.now().add(const Duration(days: 4));
+  bool _showCalendar = false;
   final _accepted = <String>{"Documents", "Small box", "Clothing"};
   bool _ticketAdded = false;
+  final _flightCtl = TextEditingController(text: "AH 1004");
+
+  @override
+  void dispose() {
+    _flightCtl.dispose();
+    super.dispose();
+  }
+
+  void _swapAirports() {
+    setState(() {
+      final tmp = _origin;
+      _origin = _dest;
+      _dest = tmp;
+    });
+  }
+
+  Future<void> _pickAirport(bool isOrigin) async {
+    final country = isOrigin ? _origin.country : _dest.country;
+    final picked = await showAirportPicker(
+      context,
+      country: country,
+      currentIata: isOrigin ? _origin.iata : _dest.iata,
+      onCountryChanged: (newCountry) {
+        // when user toggles country in the picker, swap the relevant side
+        setState(() {
+          if (isOrigin) {
+            _origin = airportsByCountry(newCountry).first;
+            // make sure dest is the other country
+            if (_dest.country == newCountry) {
+              _dest = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
+            }
+          } else {
+            _dest = airportsByCountry(newCountry).first;
+            if (_origin.country == newCountry) {
+              _origin = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
+            }
+          }
+        });
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        if (isOrigin) {
+          _origin = picked;
+          if (_dest.country == picked.country) {
+            _dest = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
+          }
+        } else {
+          _dest = picked;
+          if (_origin.country == picked.country) {
+            _origin = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
+          }
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +102,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   const SizedBox(height: AppSpacing.x6),
                   _routeBlock(),
                   const SizedBox(height: AppSpacing.x6),
-                  _datesRow(),
+                  _dateBlock(),
                   const SizedBox(height: AppSpacing.x6),
-                  _capacity(),
+                  _flightAndCapacity(),
                   const SizedBox(height: AppSpacing.x6),
                   _acceptedTypes(),
                   const SizedBox(height: AppSpacing.x6),
@@ -82,7 +144,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             ),
           ),
           const Spacer(),
-          StampChip(label: "ADMIN APPROVAL · ~24H", color: AppColors.gold, angle: 0.04),
+          const StampChip(label: "ADMIN APPROVAL · ~24H", color: AppColors.gold, angle: 0.04),
         ],
       ),
     );
@@ -100,111 +162,138 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("ROUTE", style: AppType.eyebrow()),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              CountryPill(code: _from, label: _from == 'DZ' ? "Algeria" : "France"),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => setState(() {
-                  final tmp = _from;
-                  _from = _to;
-                  _to = tmp;
-                }),
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.ink,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: const Icon(Icons.swap_horiz_rounded,
-                      color: AppColors.parchment, size: 18),
-                ),
-              ),
-              const Spacer(),
-              CountryPill(code: _to, label: _to == 'FR' ? "France" : "Algeria"),
-            ],
-          ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _miniInput("Origin city", "Algiers · HOU")),
-              const SizedBox(width: 10),
-              Expanded(child: _miniInput("Destination city", "Paris · CDG")),
-            ],
+          _AirportTile(
+            label: "FROM",
+            airport: _origin,
+            onTap: () => _pickAirport(true),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: GestureDetector(
+              onTap: _swapAirports,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.ink,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: const Icon(Icons.swap_vert_rounded,
+                    color: AppColors.parchment, size: 20),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _AirportTile(
+            label: "TO",
+            airport: _dest,
+            onTap: () => _pickAirport(false),
           ),
         ],
       ),
     );
   }
 
-  Widget _datesRow() {
-    return Row(
+  Widget _dateBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _bigField(
-            label: "DEPARTURE",
-            value: "May 04, 2026",
-            icon: Icons.calendar_today_rounded,
+        Text("DEPARTURE DATE", style: AppType.eyebrow()),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () => setState(() => _showCalendar = !_showCalendar),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            decoration: BoxDecoration(
+              color: AppColors.parchmentSoft,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.hairline, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded,
+                    size: 18, color: AppColors.ink),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(formatDate(_date),
+                      style: AppType.mono(15, w: FontWeight.w700)),
+                ),
+                AnimatedRotation(
+                  duration: AppDurations.fast,
+                  turns: _showCalendar ? 0.5 : 0,
+                  child: const Icon(Icons.expand_more_rounded,
+                      color: AppColors.inkMute),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 10),
+        AnimatedSize(
+          duration: AppDurations.med,
+          curve: kAppCurve,
+          child: _showCalendar
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: InlineCalendar(
+                    selected: _date,
+                    onSelect: (d) => setState(() {
+                      _date = d;
+                      _showCalendar = false;
+                    }),
+                    minDate: DateTime.now(),
+                    maxDate: DateTime.now().add(const Duration(days: 365)),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  Widget _flightAndCapacity() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Expanded(
-          child: _bigField(
-            label: "FLIGHT NO.",
-            value: "AH 1004",
-            icon: Icons.confirmation_num_outlined,
+          flex: 5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("FLIGHT NUMBER", style: AppType.eyebrow()),
+              const SizedBox(height: 8),
+              AppInput(
+                controller: _flightCtl,
+                hint: "e.g. AH 1004",
+                icon: Icons.confirmation_num_outlined,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("CAPACITY", style: AppType.eyebrow()),
+              const SizedBox(height: 8),
+              NumberStepper(
+                value: _kg,
+                onChanged: (v) => setState(() => _kg = v),
+                min: 1,
+                max: 25,
+                unit: "kg",
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _capacity() {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentSoft,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text("AVAILABLE CAPACITY", style: AppType.eyebrow()),
-              const Spacer(),
-              Text("${_kg.toStringAsFixed(0)} kg",
-                  style: AppType.mono(15, w: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppColors.emerald,
-              inactiveTrackColor: AppColors.hairline,
-              thumbColor: AppColors.terracotta,
-              overlayColor: AppColors.terracotta.withValues(alpha: 0.15),
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-            ),
-            child: Slider(
-              value: _kg,
-              min: 1,
-              max: 25,
-              divisions: 24,
-              onChanged: (v) => setState(() => _kg = v),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _acceptedTypes() {
-    final types = ["Documents", "Small box", "Electronics", "Clothing", "Food"];
+    final types = ["Documents", "Small box", "Electronics", "Clothing"]; // food removed
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -293,7 +382,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   ),
                   Text(
                     _ticketAdded
-                        ? "boarding-AH1004.pdf · 412 KB"
+                        ? "boarding-${_flightCtl.text.replaceAll(' ', '')}.pdf · 412 KB"
                         : "Required · PDF or photo",
                     style: AppType.body(12, color: AppColors.inkMute),
                   ),
@@ -305,49 +394,59 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       ),
     );
   }
+}
 
-  Widget _bigField({required String label, required String value, required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentSoft,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(label, style: AppType.eyebrow()),
-              const Spacer(),
-              Icon(icon, size: 14, color: AppColors.inkMute),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(value, style: AppType.mono(14, w: FontWeight.w700)),
-        ],
-      ),
-    );
-  }
+class _AirportTile extends StatelessWidget {
+  const _AirportTile({required this.label, required this.airport, required this.onTap});
+  final String label;
+  final Airport airport;
+  final VoidCallback onTap;
 
-  Widget _miniInput(String hint, String initial) {
-    return TextFormField(
-      initialValue: initial,
-      style: AppType.body(13, w: FontWeight.w500),
-      decoration: InputDecoration(
-        hintText: hint,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        filled: true,
-        fillColor: AppColors.parchment,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: const BorderSide(color: AppColors.hairline),
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.hairline, width: 1.2),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: const BorderSide(color: AppColors.ink),
+        child: Row(
+          children: [
+            CountryPill(code: airport.country, label: airport.country, dense: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(label, style: AppType.eyebrow()),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.ink,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(airport.iata,
+                            style: AppType.mono(10,
+                                color: AppColors.parchment, w: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text("${airport.city} · ${airport.name}",
+                      style: AppType.body(13, w: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Icon(Icons.unfold_more_rounded, color: AppColors.inkMute),
+          ],
         ),
       ),
     );

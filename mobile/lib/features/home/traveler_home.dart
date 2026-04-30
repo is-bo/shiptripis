@@ -310,7 +310,9 @@ class _OfferCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCounter = o.status == "Counter";
-    return BoardingCard(
+    return GestureDetector(
+      onTap: () => context.push('/offer', extra: o),
+      child: BoardingCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -415,6 +417,7 @@ class _OfferCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }

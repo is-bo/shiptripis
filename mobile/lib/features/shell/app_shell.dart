@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/tokens.dart';
-import '../../core/theme/typography.dart';
 import '../chat/chat_list_screen.dart';
 import '../home/home_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -49,39 +47,50 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-class _BottomNav extends ConsumerWidget {
+class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.index, required this.onChange});
   final int index;
   final ValueChanged<int> onChange;
 
-  static const _items = [
-    _NavItem(Icons.travel_explore_rounded, "Home"),
-    _NavItem(Icons.chat_bubble_outline_rounded, "Chat"),
-    _NavItem(Icons.notifications_none_rounded, "Inbox"),
-    _NavItem(Icons.person_outline_rounded, "Me"),
+  static const _icons = [
+    Icons.travel_explore_rounded,
+    Icons.chat_bubble_rounded,
+    Icons.notifications_rounded,
+    Icons.person_rounded,
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         child: Container(
-          height: 68,
+          height: 66,
           decoration: BoxDecoration(
-            color: AppColors.ink,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(AppRadius.pill),
-            boxShadow: AppShadows.elevated,
+            border: Border.all(color: AppColors.hairline, width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x140E1F2C),
+                blurRadius: 20,
+                offset: Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Color(0x080E1F2C),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
-            children: List.generate(_items.length, (i) {
+            children: List.generate(_icons.length, (i) {
               final selected = i == index;
-              final item = _items[i];
               return Expanded(
                 child: GestureDetector(
-                  onTap: () => onChange(i),
                   behavior: HitTestBehavior.opaque,
+                  onTap: () => onChange(i),
                   child: Center(
                     child: AnimatedContainer(
                       duration: AppDurations.med,
@@ -91,26 +100,22 @@ class _BottomNav extends ConsumerWidget {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: selected ? AppColors.parchment : Colors.transparent,
+                        color: selected ? AppColors.sun : Colors.transparent,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
+                        boxShadow: selected
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.sun.withValues(alpha: 0.35),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            item.icon,
-                            size: 20,
-                            color: selected ? AppColors.ink : AppColors.parchment.withValues(alpha: 0.7),
-                          ),
-                          if (selected) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              item.label,
-                              style: AppType.body(12.5,
-                                  color: AppColors.ink, w: FontWeight.w600),
-                            ).animate().fadeIn(duration: 200.ms),
-                          ],
-                        ],
+                      child: Icon(
+                        _icons[i],
+                        size: 22,
+                        color: selected ? AppColors.ink : AppColors.inkMute,
                       ),
                     ),
                   ),
@@ -122,10 +127,4 @@ class _BottomNav extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _NavItem {
-  const _NavItem(this.icon, this.label);
-  final IconData icon;
-  final String label;
 }

@@ -305,7 +305,7 @@ class _TravelerCard extends StatelessWidget {
               ),
               const Spacer(),
               GestureDetector(
-                onTap: () => context.push('/sender/new'),
+                onTap: () => context.push('/sender/offer', extra: t),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(

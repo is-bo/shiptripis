@@ -23,6 +23,10 @@ class AppColors {
   static const gold = Color(0xFFC9A961);
   static const goldDeep = Color(0xFFA88842);
 
+  /// Signature accent used for the bottom nav and key CTAs.
+  static const sun = Color(0xFFFBBC04);
+  static const sunDeep = Color(0xFFD89E00);
+
   static const success = Color(0xFF2A8475);
   static const danger = Color(0xFFB23A2E);
   static const warning = Color(0xFFE8A33A);

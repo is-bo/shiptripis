@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/mock/airports.dart';
+import '../../shared/widgets/airport_picker.dart';
+import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/country_pill.dart';
+import '../../shared/widgets/inline_calendar.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
@@ -15,11 +18,51 @@ class SearchFilterScreen extends StatefulWidget {
 }
 
 class _SearchFilterScreenState extends State<SearchFilterScreen> {
-  String _from = 'DZ';
-  String _to = 'FR';
+  Airport _from = dzAirports.first;
+  Airport _to = frAirports.first;
+  DateTime _date = DateTime.now().add(const Duration(days: 3));
+  bool _showCalendar = false;
   String _type = 'Documents';
-  double _kg = 3;
-  String _when = "This week";
+  int _kg = 3;
+
+  Future<void> _pickAirport(bool isOrigin) async {
+    final country = isOrigin ? _from.country : _to.country;
+    final picked = await showAirportPicker(
+      context,
+      country: country,
+      currentIata: isOrigin ? _from.iata : _to.iata,
+      onCountryChanged: (newCountry) {
+        setState(() {
+          if (isOrigin) {
+            _from = airportsByCountry(newCountry).first;
+            if (_to.country == newCountry) {
+              _to = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
+            }
+          } else {
+            _to = airportsByCountry(newCountry).first;
+            if (_from.country == newCountry) {
+              _from = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
+            }
+          }
+        });
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        if (isOrigin) {
+          _from = picked;
+          if (_to.country == picked.country) {
+            _to = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
+          }
+        } else {
+          _to = picked;
+          if (_from.country == picked.country) {
+            _from = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
+          }
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,14 +77,14 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                 padding: const EdgeInsets.fromLTRB(
                     AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
                 children: [
-                  Text("Step 02 / 03", style: AppType.eyebrow()),
-                  const SizedBox(height: 8),
+                  Text("Find a traveler", style: AppType.eyebrow()),
+                  const SizedBox(height: 6),
                   Text("Where & when?",
                       style: AppType.display(34, w: FontWeight.w400, height: 1)),
                   const SizedBox(height: AppSpacing.x6),
                   _routeBlock(),
                   const SizedBox(height: AppSpacing.x6),
-                  _whenBlock(),
+                  _dateBlock(),
                   const SizedBox(height: AppSpacing.x6),
                   _typeBlock(),
                   const SizedBox(height: AppSpacing.x6),
@@ -52,17 +95,11 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: PrimaryButton(
-                      label: "Find travelers",
-                      icon: Icons.search_rounded,
-                      onTap: () => context.pop(),
-                      expand: true,
-                    ),
-                  ),
-                ],
+              child: PrimaryButton(
+                label: "Find travelers",
+                icon: Icons.search_rounded,
+                onTap: () => context.pop(),
+                expand: true,
               ),
             ),
           ],
@@ -86,105 +123,124 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
             ),
           ),
           const Spacer(),
-          StampChip(label: "DZ ⇆ FR ONLY", color: AppColors.emerald),
+          const StampChip(label: "DZ ⇆ FR ONLY", color: AppColors.emerald),
         ],
       ),
     );
   }
 
   Widget _routeBlock() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text("Route", style: AppType.eyebrow()),
-        const SizedBox(height: AppSpacing.x3),
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.x4),
-          decoration: BoxDecoration(
-            color: AppColors.parchmentSoft,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.hairline),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x4),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("ROUTE", style: AppType.eyebrow()),
+          const SizedBox(height: 12),
+          _AirportTile(
+            label: "FROM",
+            airport: _from,
+            onTap: () => _pickAirport(true),
           ),
-          child: Column(
-            children: [
-              _CountrySelectRow(
-                label: "FROM",
-                code: _from,
-                onTap: () => setState(() {
-                  final tmp = _from;
-                  _from = _to;
-                  _to = tmp;
-                }),
+          const SizedBox(height: 8),
+          Center(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                final tmp = _from;
+                _from = _to;
+                _to = tmp;
+              }),
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.ink,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: const Icon(Icons.swap_vert_rounded,
+                    color: AppColors.parchment, size: 18),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: Container(height: 1, color: AppColors.hairline)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() {
-                        final tmp = _from;
-                        _from = _to;
-                        _to = tmp;
-                      }),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: AppColors.ink,
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                        ),
-                        child: const Icon(Icons.swap_vert_rounded,
-                            color: AppColors.parchment, size: 18),
-                      ),
-                    ),
-                  ),
-                  Expanded(child: Container(height: 1, color: AppColors.hairline)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _CountrySelectRow(
-                label: "TO",
-                code: _to,
-                onTap: () => setState(() {
-                  final tmp = _from;
-                  _from = _to;
-                  _to = tmp;
-                }),
-              ),
-            ],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          _AirportTile(
+            label: "TO",
+            airport: _to,
+            onTap: () => _pickAirport(false),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _whenBlock() {
-    final options = ["Today", "This week", "Next week", "Custom"];
+  Widget _dateBlock() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("When", style: AppType.eyebrow()),
-        const SizedBox(height: AppSpacing.x3),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: options
-              .map((o) => _Choice(label: o, selected: _when == o, onTap: () => setState(() => _when = o)))
-              .toList(),
+        Text("WHEN", style: AppType.eyebrow()),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () => setState(() => _showCalendar = !_showCalendar),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            decoration: BoxDecoration(
+              color: AppColors.parchmentSoft,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.hairline, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded,
+                    size: 18, color: AppColors.ink),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(formatDate(_date),
+                      style: AppType.mono(15, w: FontWeight.w700)),
+                ),
+                AnimatedRotation(
+                  duration: AppDurations.fast,
+                  turns: _showCalendar ? 0.5 : 0,
+                  child: const Icon(Icons.expand_more_rounded,
+                      color: AppColors.inkMute),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: AppDurations.med,
+          curve: kAppCurve,
+          child: _showCalendar
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: InlineCalendar(
+                    selected: _date,
+                    onSelect: (d) => setState(() {
+                      _date = d;
+                      _showCalendar = false;
+                    }),
+                    minDate: DateTime.now(),
+                    maxDate: DateTime.now().add(const Duration(days: 365)),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );
   }
 
   Widget _typeBlock() {
-    final options = ["Documents", "Small box", "Electronics", "Clothing", "Food"];
+    final options = ["Documents", "Small box", "Electronics", "Clothing"];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Item type", style: AppType.eyebrow()),
-        const SizedBox(height: AppSpacing.x3),
+        Text("ITEM TYPE", style: AppType.eyebrow()),
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -200,64 +256,73 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text("Weight", style: AppType.eyebrow()),
-            const Spacer(),
-            Text("${_kg.toStringAsFixed(0)} kg",
-                style: AppType.mono(13, w: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.x2),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: AppColors.ink,
-            inactiveTrackColor: AppColors.hairline,
-            thumbColor: AppColors.terracotta,
-            overlayColor: AppColors.terracotta.withValues(alpha: 0.15),
-            trackHeight: 4,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-          ),
-          child: Slider(
-            value: _kg,
-            min: 1,
-            max: 20,
-            divisions: 19,
-            onChanged: (v) => setState(() => _kg = v),
-          ),
+        Text("WEIGHT", style: AppType.eyebrow()),
+        const SizedBox(height: 10),
+        NumberStepper(
+          value: _kg,
+          onChanged: (v) => setState(() => _kg = v),
+          min: 1,
+          max: 25,
+          unit: "kg",
         ),
       ],
-    ).animate().fadeIn(delay: 100.ms);
+    );
   }
 }
 
-class _CountrySelectRow extends StatelessWidget {
-  const _CountrySelectRow({required this.label, required this.code, required this.onTap});
+class _AirportTile extends StatelessWidget {
+  const _AirportTile({required this.label, required this.airport, required this.onTap});
   final String label;
-  final String code;
+  final Airport airport;
   final VoidCallback onTap;
-
-  String get _name => code == 'DZ' ? "Algeria" : "France";
-  String get _city => code == 'DZ' ? "Algiers · Oran · Constantine" : "Paris · Lyon · Marseille";
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 60,
-          child: Text(label,
-              style: AppType.eyebrow().copyWith(letterSpacing: 1.6)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.hairline, width: 1.2),
         ),
-        const SizedBox(width: 8),
-        CountryPill(code: code, label: _name),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(_city,
-              style: AppType.body(11.5, color: AppColors.inkMute, w: FontWeight.w500),
-              overflow: TextOverflow.ellipsis),
+        child: Row(
+          children: [
+            CountryPill(code: airport.country, label: airport.country, dense: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(label, style: AppType.eyebrow()),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.ink,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(airport.iata,
+                            style: AppType.mono(10,
+                                color: AppColors.parchment, w: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text("${airport.city} · ${airport.name}",
+                      style: AppType.body(13, w: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Icon(Icons.unfold_more_rounded, color: AppColors.inkMute),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

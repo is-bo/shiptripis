@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
@@ -117,6 +118,14 @@ class _NotifTile extends StatelessWidget {
   const _NotifTile({required this.n});
   final _Notif n;
 
+  String? _routeFor(_Kind k) => switch (k) {
+        _Kind.offer => '/payment/OF-001',
+        _Kind.payment => '/code/OF-001',
+        _Kind.code => '/tracking/TR-001',
+        _Kind.delivered => '/tracking/TR-001',
+        _Kind.kyc => null,
+      };
+
   ({IconData icon, Color color, String stamp}) get _meta => switch (n.kind) {
         _Kind.offer => (icon: Icons.local_offer_rounded, color: AppColors.terracotta, stamp: "OFFER"),
         _Kind.payment => (icon: Icons.payments_rounded, color: AppColors.emerald, stamp: "PAID"),
@@ -128,7 +137,10 @@ class _NotifTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = _meta;
-    return Container(
+    final route = _routeFor(n.kind);
+    return GestureDetector(
+      onTap: route == null ? null : () => context.push(route),
+      child: Container(
       padding: const EdgeInsets.all(AppSpacing.x4),
       decoration: BoxDecoration(
         color: n.unread ? AppColors.parchmentSoft : AppColors.parchment,
@@ -181,6 +193,7 @@ class _NotifTile extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }
