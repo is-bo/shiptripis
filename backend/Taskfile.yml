@@ -1,0 +1,113 @@
+# =============================================================================
+# ShipTrip master Taskfile.
+# Run from backend/. Requires `task` (https://taskfile.dev) + `docker compose`.
+# =============================================================================
+version: '3'
+
+dotenv: ['.env']
+
+tasks:
+  # --- Lifecycle -----------------------------------------------------------
+  up:
+    desc: "Bring up Postgres + Redis + MinIO + Django + Caddy"
+    cmds:
+      - docker compose up -d
+      - task: wait-db
+      - task: migrate
+
+  up-infra:
+    desc: "Bring up only infra (postgres, redis, minio) — for running Django on host"
+    cmds:
+      - docker compose up -d postgres redis minio
+
+  down:
+    desc: "Stop all services (volumes preserved)"
+    cmds:
+      - docker compose down
+
+  nuke:
+    desc: "Stop and DELETE all volumes. Destructive."
+    prompt: This will delete the database. Continue?
+    cmds:
+      - docker compose down -v
+
+  logs:
+    desc: "Tail logs for a service (default: django)"
+    cmds:
+      - docker compose logs -f {{.CLI_ARGS | default "django"}}
+
+  wait-db:
+    desc: "Block until postgres is ready"
+    cmds:
+      - |
+        for i in $(seq 1 30); do
+          docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0
+          sleep 1
+        done
+        echo "postgres did not become ready" >&2; exit 1
+
+  # --- Django --------------------------------------------------------------
+  manage:
+    desc: "Run a Django management command (e.g. task manage -- shell)"
+    cmds:
+      - docker compose exec django python manage.py {{.CLI_ARGS}}
+
+  migrate:
+    desc: "Apply Django migrations"
+    cmds:
+      - docker compose exec -T django python manage.py migrate --noinput
+
+  makemigrations:
+    desc: "Create new Django migrations"
+    cmds:
+      - docker compose exec django python manage.py makemigrations {{.CLI_ARGS}}
+
+  superuser:
+    desc: "Create a Django superuser"
+    cmds:
+      - docker compose exec django python manage.py createsuperuser
+
+  shell:
+    desc: "Drop into Django shell_plus"
+    cmds:
+      - docker compose exec django python manage.py shell
+
+  test:
+    desc: "Run Django test suite"
+    cmds:
+      - docker compose exec -T django python -m pytest {{.CLI_ARGS}}
+
+  # --- Contracts (DB schema export + sqlc) --------------------------------
+  contract:sync-db:
+    desc: "Export Postgres schema to contracts/sql/schema.sql (run AFTER migrate)"
+    cmds:
+      - mkdir -p contracts/sql
+      - |
+        docker compose exec -T postgres pg_dump \
+          --schema-only --no-owner --no-privileges \
+          -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+          > contracts/sql/schema.sql
+
+  contract:generate:
+    desc: "Run sqlc to regenerate Go repos from schema.sql"
+    cmds:
+      - cd contracts/sql && sqlc generate
+
+  check-drift:
+    desc: "CI gate: schema.sql + sqlc output must match committed state (CLAUDE.md G3)"
+    cmds:
+      - task: contract:sync-db
+      - task: contract:generate
+      - git diff --exit-code contracts/sql/ services/internal/
+
+  # --- QA ------------------------------------------------------------------
+  fmt:
+    desc: "Format Python code"
+    cmds:
+      - docker compose exec -T django ruff format .
+      - docker compose exec -T django ruff check --fix .
+
+  lint:
+    desc: "Lint Python code"
+    cmds:
+      - docker compose exec -T django ruff check .

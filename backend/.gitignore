@@ -1,0 +1,14 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+staticfiles/
+*.sqlite3
+
+# Object storage local data (already in named volumes, but be safe)
+miniodata/
+pgdata/
+redisdata/
