@@ -1,0 +1,787 @@
+@startuml ShipTrip
+' ShipTrip — Domain / DB class diagram (MVP v1)
+' Source of truth: ARCHITECTURE.md + current Flutter UI flows.
+' Edge cases captured: idempotent payments, hashed codes with attempt counter,
+' OTP throttling, refresh token rotation, soft-deleted users, partial product
+' refunds, KYC re-submission, trip cancellation, dispute placeholder, audit log,
+' WS read-receipts, push token rotation, currency lock at price quote time.
+
+skinparam backgroundColor #FAF6EE
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam classFontName "DM Sans"
+skinparam classAttributeFontName "JetBrains Mono"
+skinparam linetype ortho
+skinparam classBorderColor #0E1F2C
+skinparam classBackgroundColor #FFFFFF
+skinparam class {
+  HeaderBackgroundColor<<core>>     #0E1F2C
+  HeaderFontColor<<core>>           #FBBC04
+  HeaderBackgroundColor<<trip>>     #0E5A4F
+  HeaderFontColor<<trip>>           #F4EFE6
+  HeaderBackgroundColor<<parcel>>   #C75E26
+  HeaderFontColor<<parcel>>         #F4EFE6
+  HeaderBackgroundColor<<match>>    #C9A961
+  HeaderFontColor<<match>>          #0E1F2C
+  HeaderBackgroundColor<<money>>    #073C34
+  HeaderFontColor<<money>>          #FBBC04
+  HeaderBackgroundColor<<verify>>   #B23A2E
+  HeaderFontColor<<verify>>         #F4EFE6
+  HeaderBackgroundColor<<comm>>     #2A3B49
+  HeaderFontColor<<comm>>           #FBBC04
+  HeaderBackgroundColor<<media>>    #6B7785
+  HeaderFontColor<<media>>          #FFFFFF
+  HeaderBackgroundColor<<admin>>    #0E1F2C
+  HeaderFontColor<<admin>>          #E8763A
+}
+
+' =========================================================
+' ENUMERATIONS
+' =========================================================
+package "Enums" {
+  enum UserRole {
+    SENDER
+    TRAVELER
+    BOTH
+    ADMIN
+  }
+  enum AccountStatus {
+    ACTIVE
+    SUSPENDED
+    DELETED
+  }
+  enum KycStatus {
+    NOT_SUBMITTED
+    PENDING
+    UNDER_REVIEW
+    APPROVED
+    REJECTED
+  }
+  enum TripStatus {
+    DRAFT
+    PENDING_APPROVAL
+    APPROVED
+    BOARDED
+    IN_FLIGHT
+    LANDED
+    COMPLETED
+    CANCELLED
+    REJECTED
+  }
+  enum ParcelType {
+    DELIVERY
+    PRODUCT
+  }
+  enum ItemCategory {
+    DOCUMENTS
+    SMALL_BOX
+    ELECTRONICS
+    CLOTHING
+    OTHER
+  }
+  enum ParcelStatus {
+    DRAFT
+    OPEN
+    OFFER_PENDING
+    MATCHED
+    PAID
+    PICKED_UP
+    IN_TRANSIT
+    DELIVERED
+    CANCELLED
+    REFUNDED
+    DISPUTED
+  }
+  enum OfferDirection {
+    SENDER_TO_TRAVELER
+    TRAVELER_TO_SENDER
+  }
+  enum OfferStatus {
+    NEW
+    COUNTERED
+    ACCEPTED
+    REJECTED
+    EXPIRED
+    WITHDRAWN
+  }
+  enum PaymentStatus {
+    REQUIRES_PAYMENT
+    PROCESSING
+    HELD_IN_ESCROW
+    RELEASED
+    REFUNDED
+    PARTIALLY_REFUNDED
+    FAILED
+    DISPUTED
+  }
+  enum PaymentMethod {
+    CARD
+    CIB
+    EDAHABIA
+    APPLE_PAY
+    GOOGLE_PAY
+  }
+  enum WalletEntryKind {
+    HOLD
+    RELEASE
+    REFUND
+    PAYOUT
+    ADJUSTMENT
+    FEE
+  }
+  enum WithdrawalStatus {
+    REQUESTED
+    APPROVED
+    PROCESSING
+    PAID
+    REJECTED
+  }
+  enum CodeKind {
+    PICKUP
+    DELIVERY
+  }
+  enum NotificationKind {
+    OFFER_RECEIVED
+    OFFER_ACCEPTED
+    OFFER_REJECTED
+    PAYMENT_REQUIRED
+    PAYMENT_RECEIVED
+    PICKUP_CODE_REQUESTED
+    PICKUP_CONFIRMED
+    DELIVERY_CONFIRMED
+    KYC_APPROVED
+    KYC_REJECTED
+    TRIP_APPROVED
+    DISPUTE_OPENED
+  }
+  enum MediaBucket {
+    KYC_DOCS
+    PARCEL_PHOTOS
+    PRODUCT_PHOTOS
+    TICKETS
+  }
+  enum CountryCode {
+    DZ
+    FR
+  }
+}
+
+' =========================================================
+' ACCOUNTS / IDENTITY
+' =========================================================
+package "accounts" <<core>> {
+  class User <<core>> {
+    +id : UUID <<PK>>
+    +full_name : varchar(120)
+    +email : citext <<UQ, NOT NULL>>
+    +phone_e164 : varchar(20) <<UQ>>
+    +password_hash : text
+    +role : UserRole
+    +status : AccountStatus
+    +preferred_locale : varchar(8) {fr,ar,en}
+    +avatar_media_id : UUID? <<FK MediaObject>>
+    +last_login_at : timestamptz?
+    +deleted_at : timestamptz?  ' soft delete
+    +created_at : timestamptz
+    +updated_at : timestamptz
+    --
+    +unique(email) where deleted_at is null
+    +unique(phone_e164) where deleted_at is null
+    +check(role in domain)
+  }
+
+  class OAuthIdentity {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +provider : varchar(20) {google,apple}
+    +provider_subject : varchar(255)
+    +linked_at : timestamptz
+    --
+    +unique(provider, provider_subject)
+  }
+
+  class PhoneOtp {
+    +id : UUID <<PK>>
+    +phone_e164 : varchar(20)
+    +code_hash : text
+    +purpose : varchar(20) {signup,login,reset}
+    +attempts : smallint = 0
+    +max_attempts : smallint = 5
+    +sent_at : timestamptz
+    +expires_at : timestamptz
+    +consumed_at : timestamptz?
+    --
+    +index(phone_e164, purpose, expires_at)
+  }
+
+  class EmailVerification {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +token_hash : text
+    +expires_at : timestamptz
+    +consumed_at : timestamptz?
+  }
+
+  class PasswordReset {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +token_hash : text
+    +requested_ip : inet
+    +expires_at : timestamptz
+    +consumed_at : timestamptz?
+  }
+
+  class RefreshToken {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +token_hash : text <<UQ>>
+    +parent_id : UUID? <<FK self>>   ' rotation chain
+    +device_id : varchar(64)?
+    +user_agent : text?
+    +ip : inet?
+    +revoked_at : timestamptz?
+    +replaced_by_id : UUID? <<FK self>>
+    +expires_at : timestamptz
+    +created_at : timestamptz
+  }
+
+  class PushToken {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +platform : varchar(10) {ios,android,web}
+    +token : text <<UQ>>
+    +last_seen_at : timestamptz
+    +revoked_at : timestamptz?
+  }
+}
+
+' =========================================================
+' KYC  (owned by Go kyc-service, schema lives in shared DB)
+' =========================================================
+package "kyc" <<verify>> {
+  class KycSubmission <<verify>> {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +status : KycStatus
+    +id_front_media_id : UUID <<FK MediaObject>>
+    +id_back_media_id : UUID <<FK MediaObject>>
+    +selfie_media_id : UUID <<FK MediaObject>>
+    +document_country : CountryCode
+    +document_number_hash : text  ' never store plaintext
+    +submitted_at : timestamptz
+    +reviewed_at : timestamptz?
+    +reviewed_by_id : UUID? <<FK User>>  ' admin
+    +rejection_reason : text?
+    +retry_of_id : UUID? <<FK self>>     ' resubmission chain
+    --
+    +index(user_id, submitted_at desc)
+    +at-most-one APPROVED submission per user
+  }
+}
+
+' =========================================================
+' TRIPS  (traveler side)
+' =========================================================
+package "trips" <<trip>> {
+  class Airport <<trip>> {
+    +iata : varchar(3) <<PK>>
+    +icao : varchar(4)?
+    +city : varchar(80)
+    +country : CountryCode
+    +name : varchar(160)
+    +tz : varchar(64)
+  }
+
+  class Trip <<trip>> {
+    +id : UUID <<PK>>
+    +traveler_id : UUID <<FK User>>
+    +origin_iata : varchar(3) <<FK Airport>>
+    +destination_iata : varchar(3) <<FK Airport>>
+    +depart_at : timestamptz
+    +arrive_at : timestamptz?
+    +flight_number : varchar(10)
+    +carrier : varchar(64)?
+    +aircraft : varchar(40)?
+    +capacity_kg : numeric(5,2)
+    +reserved_kg : numeric(5,2) = 0
+    +price_per_kg_dzd : integer
+    +accepted_types : ItemCategory[]   ' postgres array
+    +status : TripStatus
+    +ticket_media_id : UUID? <<FK MediaObject>>
+    +approved_at : timestamptz?
+    +approved_by_id : UUID? <<FK User>>
+    +cancelled_at : timestamptz?
+    +cancellation_reason : text?
+    +created_at : timestamptz
+    +updated_at : timestamptz
+    --
+    +check(origin_iata <> destination_iata)
+    +check(reserved_kg <= capacity_kg)
+    +check(depart_at < arrive_at when arrive_at is set)
+    +check(traveler must have approved Kyc to be APPROVED)
+  }
+
+  class TripStopover {
+    +id : UUID <<PK>>
+    +trip_id : UUID <<FK Trip>>
+    +iata : varchar(3) <<FK Airport>>
+    +arrive_at : timestamptz
+    +depart_at : timestamptz
+    +order_idx : smallint
+    --
+    +unique(trip_id, order_idx)
+  }
+
+  class FlightTrackingSnapshot <<trip>> {
+    +id : UUID <<PK>>
+    +trip_id : UUID <<FK Trip>>
+    +captured_at : timestamptz
+    +lat : numeric(8,5)
+    +lon : numeric(8,5)
+    +altitude_m : integer?
+    +ground_speed_kmh : integer?
+    +heading_deg : smallint?
+    +source : varchar(20) {opensky,aviationstack,manual}
+    --
+    +index(trip_id, captured_at desc)
+  }
+}
+
+' =========================================================
+' PARCELS  (sender side, both delivery + product)
+' =========================================================
+package "parcels" <<parcel>> {
+  abstract class ParcelRequest <<parcel>> {
+    +id : UUID <<PK>>
+    +sender_id : UUID <<FK User>>
+    +type : ParcelType
+    +status : ParcelStatus
+    +origin_iata : varchar(3)? <<FK Airport>>
+    +destination_iata : varchar(3)? <<FK Airport>>
+    +pickup_address : text?
+    +pickup_lat : numeric(8,5)?
+    +pickup_lon : numeric(8,5)?
+    +dropoff_address : text?
+    +dropoff_lat : numeric(8,5)?
+    +dropoff_lon : numeric(8,5)?
+    +window_start : date?
+    +window_end : date?
+    +notes : text?
+    +currency : char(3) = 'DZD'
+    +created_at : timestamptz
+    +updated_at : timestamptz
+    --
+    +check(window_start <= window_end)
+  }
+
+  class DeliveryRequest <<parcel>> {
+    +category : ItemCategory
+    +weight_kg : numeric(5,2)
+    +declared_value_dzd : integer?
+    +max_offer_dzd : integer?
+  }
+
+  class ProductRequest <<parcel>> {
+    +product_name : varchar(160)
+    +product_url : text?
+    +max_price_dzd : integer
+    +quantity : smallint = 1
+  }
+
+  class ParcelMedia {
+    +id : UUID <<PK>>
+    +parcel_id : UUID <<FK ParcelRequest>>
+    +media_id : UUID <<FK MediaObject>>
+    +position : smallint
+    --
+    +unique(parcel_id, position)
+  }
+}
+
+' =========================================================
+' MATCHING  (offers + counter-offers)
+' =========================================================
+package "matching" <<match>> {
+  class Match <<match>> {
+    +id : UUID <<PK>>
+    +parcel_id : UUID <<FK ParcelRequest>>
+    +trip_id : UUID <<FK Trip>>
+    +current_offer_id : UUID? <<FK Offer>>
+    +accepted_offer_id : UUID? <<FK Offer>>
+    +status : OfferStatus
+    +chat_unlocked_at : timestamptz?  ' set on accept
+    +created_at : timestamptz
+    +updated_at : timestamptz
+    --
+    +unique(parcel_id, trip_id)
+  }
+
+  class Offer <<match>> {
+    +id : UUID <<PK>>
+    +match_id : UUID <<FK Match>>
+    +sender_by_id : UUID <<FK User>>
+    +direction : OfferDirection
+    +price_dzd : integer
+    +commission_dzd : integer  ' frozen at offer creation
+    +base_fee_dzd : integer    ' product only, else 0
+    +total_dzd : integer       ' price + commission + base_fee
+    +weight_kg : numeric(5,2)?
+    +parent_offer_id : UUID? <<FK self>>  ' counter chain
+    +status : OfferStatus
+    +expires_at : timestamptz?
+    +created_at : timestamptz
+    --
+    +check(price_dzd > 0)
+    +check(total_dzd = price_dzd + commission_dzd + base_fee_dzd)
+  }
+
+  class MatchEvent {
+    +id : UUID <<PK>>
+    +match_id : UUID <<FK Match>>
+    +actor_id : UUID <<FK User>>
+    +kind : varchar(40)  ' offered, countered, accepted, paid, picked_up, ...
+    +payload_jsonb : jsonb
+    +at : timestamptz
+    --
+    +index(match_id, at)
+  }
+}
+
+' =========================================================
+' PAYMENTS / WALLET
+' =========================================================
+package "payments" <<money>> {
+  class PaymentIntent <<money>> {
+    +id : UUID <<PK>>
+    +match_id : UUID <<FK Match>>
+    +payer_id : UUID <<FK User>>
+    +payee_id : UUID <<FK User>>  ' traveler
+    +method : PaymentMethod
+    +provider : varchar(20) {stripe}
+    +provider_intent_id : varchar(64) <<UQ>>
+    +idempotency_key : varchar(64) <<UQ>>
+    +currency : char(3) = 'DZD'
+    +amount_total_dzd : integer
+    +amount_commission_dzd : integer
+    +amount_base_fee_dzd : integer
+    +amount_traveler_dzd : integer
+    +status : PaymentStatus
+    +last_error_code : varchar(40)?
+    +created_at : timestamptz
+    +captured_at : timestamptz?
+    +released_at : timestamptz?
+    +refunded_at : timestamptz?
+  }
+
+  class PaymentEvent {
+    +id : UUID <<PK>>
+    +intent_id : UUID <<FK PaymentIntent>>
+    +provider_event_id : varchar(80) <<UQ>>  ' webhook idempotency
+    +kind : varchar(40)  ' created, succeeded, failed, refunded, ...
+    +payload_jsonb : jsonb
+    +received_at : timestamptz
+  }
+
+  class Refund {
+    +id : UUID <<PK>>
+    +intent_id : UUID <<FK PaymentIntent>>
+    +amount_dzd : integer
+    +reason : varchar(80)
+    +created_by_id : UUID <<FK User>>
+    +created_at : timestamptz
+  }
+}
+
+package "wallet" <<money>> {
+  class Wallet <<money>> {
+    +id : UUID <<PK>>
+    +user_id : UUID <<UQ, FK User>>
+    +balance_dzd : integer = 0      ' settled, withdrawable
+    +pending_dzd : integer = 0      ' held in escrow
+    +updated_at : timestamptz
+  }
+
+  class WalletEntry {
+    +id : UUID <<PK>>
+    +wallet_id : UUID <<FK Wallet>>
+    +match_id : UUID? <<FK Match>>
+    +intent_id : UUID? <<FK PaymentIntent>>
+    +kind : WalletEntryKind
+    +amount_dzd : integer  ' signed; +credit, -debit
+    +note : text?
+    +created_at : timestamptz
+    --
+    +index(wallet_id, created_at desc)
+  }
+
+  class Withdrawal {
+    +id : UUID <<PK>>
+    +wallet_id : UUID <<FK Wallet>>
+    +amount_dzd : integer
+    +method : varchar(20) {bank,ccp}
+    +iban_last4 : varchar(4)?
+    +status : WithdrawalStatus
+    +requested_at : timestamptz
+    +decided_at : timestamptz?
+    +decided_by_id : UUID? <<FK User>>
+    +rejection_reason : text?
+  }
+}
+
+' =========================================================
+' VERIFICATION CODES (pickup + delivery)
+' =========================================================
+package "verification" <<verify>> {
+  class HandoverCode <<verify>> {
+    +id : UUID <<PK>>
+    +match_id : UUID <<FK Match>>
+    +kind : CodeKind
+    +code_hash : text  ' bcrypt/argon2 of 4-digit
+    +last4_display : varchar(4)  ' shown only to issuing side
+    +attempts : smallint = 0
+    +max_attempts : smallint = 5
+    +issued_at : timestamptz
+    +expires_at : timestamptz?
+    +consumed_at : timestamptz?
+    +consumed_by_id : UUID? <<FK User>>
+    --
+    +unique(match_id, kind)  ' one PICKUP + one DELIVERY per match
+    +after consumed → status transitions in ParcelRequest
+  }
+}
+
+' =========================================================
+' CHAT
+' =========================================================
+package "chat" <<comm>> {
+  class Conversation <<comm>> {
+    +id : UUID <<PK>>
+    +match_id : UUID <<UQ, FK Match>>
+    +created_at : timestamptz
+    +closed_at : timestamptz?
+  }
+
+  class ConversationMember {
+    +conversation_id : UUID <<FK Conversation>>
+    +user_id : UUID <<FK User>>
+    +last_read_message_id : UUID? <<FK ChatMessage>>
+    +joined_at : timestamptz
+    --
+    +PK(conversation_id, user_id)
+  }
+
+  class ChatMessage <<comm>> {
+    +id : UUID <<PK>>
+    +conversation_id : UUID <<FK Conversation>>
+    +sender_id : UUID <<FK User>>
+    +body : text
+    +created_at : timestamptz
+    +edited_at : timestamptz?
+    +deleted_at : timestamptz?
+    --
+    +index(conversation_id, created_at)
+  }
+}
+
+' =========================================================
+' NOTIFICATIONS
+' =========================================================
+package "notifications" <<comm>> {
+  class Notification <<comm>> {
+    +id : UUID <<PK>>
+    +user_id : UUID <<FK User>>
+    +kind : NotificationKind
+    +title : varchar(120)
+    +body : varchar(500)
+    +match_id : UUID? <<FK Match>>
+    +parcel_id : UUID? <<FK ParcelRequest>>
+    +trip_id : UUID? <<FK Trip>>
+    +deeplink : varchar(255)?
+    +read_at : timestamptz?
+    +created_at : timestamptz
+    --
+    +index(user_id, created_at desc)
+  }
+
+  class NotificationPreference {
+    +user_id : UUID <<PK, FK User>>
+    +offers_enabled : boolean = true
+    +payments_enabled : boolean = true
+    +chat_enabled : boolean = true
+    +marketing_enabled : boolean = false
+    +quiet_hours_start : time?
+    +quiet_hours_end : time?
+  }
+}
+
+' =========================================================
+' MEDIA (Supabase object key registry)
+' =========================================================
+package "media" <<media>> {
+  class MediaObject <<media>> {
+    +id : UUID <<PK>>
+    +bucket : MediaBucket
+    +object_key : varchar(255) <<UQ>>
+    +mime : varchar(80)
+    +size_bytes : integer
+    +sha256 : char(64)?
+    +owner_id : UUID? <<FK User>>
+    +uploaded_via : varchar(20) {flutter,kyc-service,admin}
+    +created_at : timestamptz
+    --
+    +index(owner_id, created_at desc)
+  }
+}
+
+' =========================================================
+' DISPUTES + ADMIN
+' =========================================================
+package "admin" <<admin>> {
+  class Dispute {
+    +id : UUID <<PK>>
+    +match_id : UUID <<FK Match>>
+    +opened_by_id : UUID <<FK User>>
+    +reason : varchar(80)
+    +description : text
+    +status : varchar(20) {OPEN,IN_REVIEW,RESOLVED_REFUND,RESOLVED_RELEASE,REJECTED}
+    +resolution_note : text?
+    +resolved_by_id : UUID? <<FK User>>
+    +opened_at : timestamptz
+    +resolved_at : timestamptz?
+  }
+
+  class AdminAuditLog <<admin>> {
+    +id : bigserial <<PK>>
+    +actor_id : UUID <<FK User>>
+    +action : varchar(60)
+    +entity_type : varchar(40)
+    +entity_id : varchar(64)
+    +diff_jsonb : jsonb?
+    +ip : inet?
+    +at : timestamptz
+    --
+    +index(actor_id, at desc)
+    +index(entity_type, entity_id)
+  }
+}
+
+' =========================================================
+' RELATIONSHIPS
+' =========================================================
+User "1" -- "0..*" OAuthIdentity
+User "1" -- "0..*" RefreshToken
+User "1" -- "0..*" PhoneOtp : phone_e164
+User "1" -- "0..*" EmailVerification
+User "1" -- "0..*" PasswordReset
+User "1" -- "0..*" PushToken
+User "0..1" -- "0..1" MediaObject : avatar
+User "1" -- "0..1" Wallet
+User "1" -- "0..*" KycSubmission
+
+KycSubmission "1" -- "1" MediaObject : id_front
+KycSubmission "1" -- "1" MediaObject : id_back
+KycSubmission "1" -- "1" MediaObject : selfie
+KycSubmission "0..1" -- "0..1" KycSubmission : retry_of
+
+User "1" -- "0..*" Trip : "as traveler"
+Trip "0..*" -- "1" Airport : origin
+Trip "0..*" -- "1" Airport : destination
+Trip "1" -- "0..*" TripStopover
+TripStopover "0..*" -- "1" Airport
+Trip "0..1" -- "0..1" MediaObject : ticket
+Trip "1" -- "0..*" FlightTrackingSnapshot
+
+User "1" -- "0..*" ParcelRequest : "as sender"
+ParcelRequest <|-- DeliveryRequest
+ParcelRequest <|-- ProductRequest
+ParcelRequest "1" -- "0..*" ParcelMedia
+ParcelMedia "0..*" -- "1" MediaObject
+
+ParcelRequest "1" -- "0..*" Match
+Trip "1" -- "0..*" Match
+Match "1" -- "1..*" Offer
+Offer "0..1" -- "0..*" Offer : parent_offer
+Match "1" -- "0..*" MatchEvent
+
+Match "1" -- "0..*" PaymentIntent
+PaymentIntent "1" -- "0..*" PaymentEvent
+PaymentIntent "1" -- "0..*" Refund
+
+Wallet "1" -- "0..*" WalletEntry
+Wallet "1" -- "0..*" Withdrawal
+WalletEntry "0..*" -- "0..1" PaymentIntent
+WalletEntry "0..*" -- "0..1" Match
+
+Match "1" -- "0..2" HandoverCode
+
+Match "1" -- "0..1" Conversation
+Conversation "1" -- "1..*" ConversationMember
+Conversation "1" -- "0..*" ChatMessage
+ConversationMember "0..*" -- "1" User
+
+User "1" -- "0..*" Notification
+User "1" -- "0..1" NotificationPreference
+
+Match "1" -- "0..*" Dispute
+User "1" -- "0..*" AdminAuditLog : actor
+
+' Cross-package
+Notification "0..*" -- "0..1" Match
+Notification "0..*" -- "0..1" ParcelRequest
+Notification "0..*" -- "0..1" Trip
+
+' =========================================================
+' INVARIANTS / BUSINESS RULES (notes)
+' =========================================================
+note top of Trip
+  Invariants
+  - traveler.kyc.status = APPROVED  before status can move past PENDING_APPROVAL
+  - sum(active Match.weight_kg) <= capacity_kg  (reserved_kg cache)
+  - origin and destination must differ
+  - one of {origin.country, destination.country} must be DZ
+end note
+
+note bottom of Offer
+  Pricing rules (frozen on creation)
+  - DELIVERY: commission = round(price * 0.25); base_fee = 0
+  - PRODUCT : commission tiered on price; base_fee = 2500
+      <30k:0%  | 30k–54.99k:7% | 55k–99.99k:5% | >=100k:3%
+  - total = price + commission + base_fee  (must hold)
+  - Counter chain: parent_offer_id walks back to original
+end note
+
+note right of HandoverCode
+  - 4-digit numeric, hashed with bcrypt/argon2
+  - PICKUP issued by SENDER → spoken to TRAVELER at pickup point
+  - DELIVERY issued by SENDER → given to receiver → typed by TRAVELER
+  - max 5 attempts; lockout requires admin reset
+  - PICKUP consumed → ParcelRequest.status = IN_TRANSIT
+  - DELIVERY consumed → status = DELIVERED, escrow released
+end note
+
+note left of PaymentIntent
+  Idempotency
+  - idempotency_key required for create  (Stripe-style)
+  - provider_event_id is unique on PaymentEvent (webhook replay safe)
+  - amounts in DZD as integer  (no fractional currency)
+  - on success: WalletEntry HOLD on traveler wallet
+  - on DELIVERY confirmed: WalletEntry RELEASE → balance += amount
+  - dispute can move money back via Refund
+end note
+
+note bottom of ParcelRequest
+  Status machine
+  DRAFT → OPEN → OFFER_PENDING → MATCHED → PAID
+        → PICKED_UP → IN_TRANSIT → DELIVERED
+  Branches: CANCELLED (any pre-PAID), REFUNDED (post-PAID), DISPUTED.
+  PRODUCT vs DELIVERY share the table (single-table inheritance with type column).
+end note
+
+note top of MediaObject
+  - object_key = "<bucket>/<yyyy>/<mm>/<uuid>.<ext>"
+  - Flutter NEVER receives Supabase service-role keys
+  - All reads go via signed URL endpoint (5-min TTL)
+  - KYC bucket is admin-readable only
+end note
+
+@enduml
