@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
+import '../../features/onboarding/benefits_carousel_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/onboarding/role_select_screen.dart';
 import '../../features/sender/flight_tracking_screen.dart';
@@ -20,6 +21,8 @@ final appRouter = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(path: '/', builder: (_, __) => const OnboardingScreen()),
+    GoRoute(
+        path: '/benefits', builder: (_, __) => const BenefitsCarouselScreen()),
     GoRoute(path: '/auth/sign-in', builder: (_, __) => const SignInScreen()),
     GoRoute(path: '/auth/sign-up', builder: (_, __) => const SignUpScreen()),
     GoRoute(
