@@ -1,0 +1,83 @@
+# =============================================================================
+# Render Blueprint — Hinvest (ShipTrip backend)
+# Deploy with: Dashboard → New → Blueprint → point at this repo
+# =============================================================================
+
+databases:
+  - name: hinvest-db
+    plan: free                    # ← FREE tier: auto-deleted after 90 days
+    databaseName: hinvest
+    user: hinvest
+    region: frankfurt             # eu-central
+    ipAllowList: []               # only internal (Render private network)
+
+services:
+  # --- Redis (Render native) -------------------------------------------------
+  - type: redis
+    name: hinvest-redis
+    plan: free                    # 25 MB, no persistence — fine for cache/sessions
+    region: frankfurt
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+  # --- Django API (Web Service) -----------------------------------------------
+  - type: web
+    name: hinvest-api
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./backend/monolith/Dockerfile
+    dockerContext: ./backend/monolith
+    healthCheckPath: /healthz
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: DJANGO_SECRET_KEY
+        generateValue: true       # Render generates a random 64-char secret
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: hinvest-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: hinvest-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: hinvest-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: hinvest-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: hinvest-db
+          property: password
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hinvest-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: hinvest-redis
+          type: redis
+          property: connectionString
+      - key: JWT_HS256_SECRET
+        generateValue: true
+      - key: GRPC_AUTH_MODE
+        value: bearer              # No mTLS on Render free tier
+      - key: GRPC_INTERNAL_TOKEN
+        generateValue: true
+      # S3 — use any S3-compatible provider (Cloudflare R2, Backblaze B2, etc.)
+      # Fill these in manually after deploy:
+      - key: S3_ENDPOINT_URL
+        value: "https://your-s3-endpoint.example.com"
+      - key: S3_ACCESS_KEY
+        value: "change-me"
+      - key: S3_SECRET_KEY
+        value: "change-me"
