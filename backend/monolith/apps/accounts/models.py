@@ -16,6 +16,7 @@ class User(AbstractUser):
     is_phone_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)
     is_kyc_verified = models.BooleanField(default=False)
+    is_banned = models.BooleanField(default=False, db_index=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
