@@ -16,12 +16,8 @@ build/
 # Env / secrets
 .env
 .env.*
-!.env.example
 *.pem
 *.key
 
 # Logs
 *.log
-
-# Mobile (separate repo)
-mobile/
