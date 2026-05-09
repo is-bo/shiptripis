@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
-import '../../shared/mock/airports.dart';
+import '../../core/trips/trips_providers.dart';
+import '../../core/trips/trips_repository.dart';
 import '../../shared/widgets/airport_picker.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/country_pill.dart';
@@ -11,98 +13,101 @@ import '../../shared/widgets/inline_calendar.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
-class SearchFilterScreen extends StatefulWidget {
+class SearchFilterScreen extends ConsumerStatefulWidget {
   const SearchFilterScreen({super.key});
   @override
-  State<SearchFilterScreen> createState() => _SearchFilterScreenState();
+  ConsumerState<SearchFilterScreen> createState() => _SearchFilterScreenState();
 }
 
-class _SearchFilterScreenState extends State<SearchFilterScreen> {
-  Airport _from = dzAirports.first;
-  Airport _to = frAirports.first;
+class _SearchFilterScreenState extends ConsumerState<SearchFilterScreen> {
+  Airport? _from;
+  Airport? _to;
   DateTime _date = DateTime.now().add(const Duration(days: 3));
   bool _showCalendar = false;
   String _type = 'Documents';
   int _kg = 3;
 
-  Future<void> _pickAirport(bool isOrigin) async {
-    final country = isOrigin ? _from.country : _to.country;
+  Future<void> _pickAirport(bool isOrigin, List<Airport> airports) async {
+    final cur = isOrigin ? _from : _to;
+    final country = cur?.country ?? (isOrigin ? 'DZ' : 'FR');
     final picked = await showAirportPicker(
       context,
+      airports: airports,
       country: country,
-      currentIata: isOrigin ? _from.iata : _to.iata,
-      onCountryChanged: (newCountry) {
-        setState(() {
-          if (isOrigin) {
-            _from = airportsByCountry(newCountry).first;
-            if (_to.country == newCountry) {
-              _to = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
-            }
-          } else {
-            _to = airportsByCountry(newCountry).first;
-            if (_from.country == newCountry) {
-              _from = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
-            }
-          }
-        });
-      },
+      currentIata: cur?.iata ?? '',
+      onCountryChanged: (_) {},
     );
-    if (picked != null) {
-      setState(() {
-        if (isOrigin) {
-          _from = picked;
-          if (_to.country == picked.country) {
-            _to = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
-          }
-        } else {
-          _to = picked;
-          if (_from.country == picked.country) {
-            _from = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
-          }
-        }
-      });
-    }
+    if (picked == null) return;
+    setState(() {
+      if (isOrigin) {
+        _from = picked;
+        if (_to?.country == picked.country) _to = null;
+      } else {
+        _to = picked;
+        if (_from?.country == picked.country) _from = null;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final airportsAsync = ref.watch(airportsProvider(null));
     return Scaffold(
       backgroundColor: AppColors.parchment,
       body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(context),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
-                children: [
-                  Text("Find a traveler", style: AppType.eyebrow()),
-                  const SizedBox(height: 6),
-                  Text("Where & when?",
-                      style: AppType.display(34, w: FontWeight.w400, height: 1)),
-                  const SizedBox(height: AppSpacing.x6),
-                  _routeBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _dateBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _typeBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _weightBlock(),
-                ],
-              ),
+        child: airportsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => Center(
+            child: TextButton(
+              onPressed: () => ref.invalidate(airportsProvider(null)),
+              child: const Text('Retry'),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
-              child: PrimaryButton(
-                label: "Find travelers",
-                icon: Icons.search_rounded,
-                onTap: () => context.pop(),
-                expand: true,
-              ),
-            ),
-          ],
+          ),
+          data: (airports) {
+            _from ??= airports.firstWhere(
+              (a) => a.country == 'DZ',
+              orElse: () => airports.first,
+            );
+            _to ??= airports.firstWhere(
+              (a) => a.country == 'FR',
+              orElse: () => airports.last,
+            );
+            return Column(
+              children: [
+                _topBar(context),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
+                    children: [
+                      Text("Find a traveler", style: AppType.eyebrow()),
+                      const SizedBox(height: 6),
+                      Text("Where & when?",
+                          style: AppType.display(34, w: FontWeight.w400, height: 1)),
+                      const SizedBox(height: AppSpacing.x6),
+                      _routeBlock(airports),
+                      const SizedBox(height: AppSpacing.x6),
+                      _dateBlock(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _typeBlock(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _weightBlock(),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
+                  child: PrimaryButton(
+                    label: "Find travelers",
+                    icon: Icons.search_rounded,
+                    onTap: () => context.pop(),
+                    expand: true,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -129,7 +134,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
     );
   }
 
-  Widget _routeBlock() {
+  Widget _routeBlock(List<Airport> airports) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.x4),
       decoration: BoxDecoration(
@@ -144,8 +149,8 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
           const SizedBox(height: 12),
           _AirportTile(
             label: "FROM",
-            airport: _from,
-            onTap: () => _pickAirport(true),
+            airport: _from!,
+            onTap: () => _pickAirport(true, airports),
           ),
           const SizedBox(height: 8),
           Center(
@@ -170,8 +175,8 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
           const SizedBox(height: 8),
           _AirportTile(
             label: "TO",
-            airport: _to,
-            onTap: () => _pickAirport(false),
+            airport: _to!,
+            onTap: () => _pickAirport(false, airports),
           ),
         ],
       ),

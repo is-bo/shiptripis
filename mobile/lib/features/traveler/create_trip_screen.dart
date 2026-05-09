@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
-import '../../shared/mock/airports.dart';
+import '../../core/trips/trips_providers.dart';
+import '../../core/trips/trips_repository.dart';
 import '../../shared/widgets/airport_picker.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/country_pill.dart';
@@ -11,21 +13,23 @@ import '../../shared/widgets/inline_calendar.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
-class CreateTripScreen extends StatefulWidget {
+class CreateTripScreen extends ConsumerStatefulWidget {
   const CreateTripScreen({super.key});
   @override
-  State<CreateTripScreen> createState() => _CreateTripScreenState();
+  ConsumerState<CreateTripScreen> createState() => _CreateTripScreenState();
 }
 
-class _CreateTripScreenState extends State<CreateTripScreen> {
-  Airport _origin = dzAirports.first; // ALG
-  Airport _dest = frAirports.first; // CDG
+class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
+  Airport? _origin;
+  Airport? _dest;
   int _kg = 8;
   DateTime _date = DateTime.now().add(const Duration(days: 4));
   bool _showCalendar = false;
   final _accepted = <String>{"Documents", "Small box", "Clothing"};
   bool _ticketAdded = false;
   final _flightCtl = TextEditingController(text: "AH 1004");
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -41,89 +45,164 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     });
   }
 
-  Future<void> _pickAirport(bool isOrigin) async {
-    final country = isOrigin ? _origin.country : _dest.country;
+  Future<void> _pickAirport(bool isOrigin, List<Airport> airports) async {
+    final cur = isOrigin ? _origin : _dest;
+    final country = cur?.country ?? (isOrigin ? 'DZ' : 'FR');
     final picked = await showAirportPicker(
       context,
+      airports: airports,
       country: country,
-      currentIata: isOrigin ? _origin.iata : _dest.iata,
-      onCountryChanged: (newCountry) {
-        // when user toggles country in the picker, swap the relevant side
-        setState(() {
-          if (isOrigin) {
-            _origin = airportsByCountry(newCountry).first;
-            // make sure dest is the other country
-            if (_dest.country == newCountry) {
-              _dest = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
-            }
-          } else {
-            _dest = airportsByCountry(newCountry).first;
-            if (_origin.country == newCountry) {
-              _origin = airportsByCountry(newCountry == 'DZ' ? 'FR' : 'DZ').first;
-            }
-          }
-        });
-      },
+      currentIata: cur?.iata ?? '',
+      onCountryChanged: (_) {},
     );
-    if (picked != null) {
-      setState(() {
-        if (isOrigin) {
-          _origin = picked;
-          if (_dest.country == picked.country) {
-            _dest = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
-          }
-        } else {
-          _dest = picked;
-          if (_origin.country == picked.country) {
-            _origin = airportsByCountry(picked.country == 'DZ' ? 'FR' : 'DZ').first;
-          }
-        }
-      });
+    if (picked == null) return;
+    setState(() {
+      if (isOrigin) {
+        _origin = picked;
+        if (_dest?.country == picked.country) _dest = null;
+      } else {
+        _dest = picked;
+        if (_origin?.country == picked.country) _origin = null;
+      }
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_origin == null || _dest == null) {
+      setState(() => _error = 'Choose origin and destination.');
+      return;
+    }
+    if (_origin!.iata == _dest!.iata) {
+      setState(() => _error = 'Origin and destination must differ.');
+      return;
+    }
+    if (!_date.isAfter(DateTime.now())) {
+      setState(() => _error = 'Departure must be in the future.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await ref.read(myTripsProvider.notifier).create(
+            originIata: _origin!.iata,
+            destinationIata: _dest!.iata,
+            departureAt: _date,
+            capacityKg: _kg,
+            flightNumber: _flightCtl.text.trim(),
+          );
+      if (!mounted) return;
+      context.pop();
+    } on TripsFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Network error. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final airportsAsync = ref.watch(airportsProvider(null));
     return Scaffold(
       backgroundColor: AppColors.parchment,
       body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
+        child: airportsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.x6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("New trip", style: AppType.eyebrow()),
-                  const SizedBox(height: 6),
-                  Text("List your\nnext flight.",
-                      style: AppType.display(34, w: FontWeight.w400, height: 1)),
-                  const SizedBox(height: AppSpacing.x6),
-                  _routeBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _dateBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _flightAndCapacity(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _acceptedTypes(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _ticketUpload(),
+                  const Icon(Icons.cloud_off_rounded, size: 36, color: AppColors.inkMute),
+                  const SizedBox(height: 12),
+                  Text("Couldn't load airports.", style: AppType.body(14)),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => ref.invalidate(airportsProvider(null)),
+                    child: const Text('Retry'),
+                  ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
-              child: PrimaryButton(
-                label: "Submit for review",
-                icon: Icons.flight_takeoff_rounded,
-                expand: true,
-                color: AppColors.emerald,
-                onTap: () => context.pop(),
-              ),
-            ),
-          ],
+          ),
+          data: (airports) {
+            _origin ??= airports.firstWhere(
+              (a) => a.country == 'DZ',
+              orElse: () => airports.first,
+            );
+            _dest ??= airports.firstWhere(
+              (a) => a.country == 'FR',
+              orElse: () => airports.last,
+            );
+            return Column(
+              children: [
+                _topBar(),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
+                    children: [
+                      Text("New trip", style: AppType.eyebrow()),
+                      const SizedBox(height: 6),
+                      Text("List your\nnext flight.",
+                          style: AppType.display(34, w: FontWeight.w400, height: 1)),
+                      const SizedBox(height: AppSpacing.x6),
+                      _routeBlock(airports),
+                      const SizedBox(height: AppSpacing.x6),
+                      _dateBlock(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _flightAndCapacity(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _acceptedTypes(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _ticketUpload(),
+                      if (_error != null) ...[
+                        const SizedBox(height: AppSpacing.x4),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.terracotta.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: AppColors.terracotta),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded,
+                                  color: AppColors.terracotta, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(_error!,
+                                    style: AppType.body(13,
+                                        color: AppColors.terracottaDeep,
+                                        w: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
+                  child: PrimaryButton(
+                    label: _submitting ? "Submitting…" : "Submit for review",
+                    icon: Icons.flight_takeoff_rounded,
+                    expand: true,
+                    color: AppColors.emerald,
+                    onTap: _submitting ? null : _submit,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -150,7 +229,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     );
   }
 
-  Widget _routeBlock() {
+  Widget _routeBlock(List<Airport> airports) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.x4),
       decoration: BoxDecoration(
@@ -165,8 +244,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           const SizedBox(height: 12),
           _AirportTile(
             label: "FROM",
-            airport: _origin,
-            onTap: () => _pickAirport(true),
+            airport: _origin!,
+            onTap: () => _pickAirport(true, airports),
           ),
           const SizedBox(height: 8),
           Center(
@@ -187,8 +266,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           const SizedBox(height: 8),
           _AirportTile(
             label: "TO",
-            airport: _dest,
-            onTap: () => _pickAirport(false),
+            airport: _dest!,
+            onTap: () => _pickAirport(false, airports),
           ),
         ],
       ),
@@ -293,7 +372,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   }
 
   Widget _acceptedTypes() {
-    final types = ["Documents", "Small box", "Electronics", "Clothing"]; // food removed
+    final types = ["Documents", "Small box", "Electronics", "Clothing"];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -383,7 +462,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   Text(
                     _ticketAdded
                         ? "boarding-${_flightCtl.text.replaceAll(' ', '')}.pdf · 412 KB"
-                        : "Required · PDF or photo",
+                        : "Optional · PDF or photo",
                     style: AppType.body(12, color: AppColors.inkMute),
                   ),
                 ],

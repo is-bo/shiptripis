@@ -1,67 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/trips/trips_providers.dart';
+import '../../core/trips/trips_repository.dart';
 import '../../shared/mock/mock_data.dart';
 import '../../shared/widgets/boarding_card.dart';
 import '../../shared/widgets/country_pill.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
-class TravelerHome extends StatelessWidget {
+class TravelerHome extends ConsumerWidget {
   const TravelerHome({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _Header()),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
-          sliver: SliverToBoxAdapter(child: _CreateTripCta()),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(title: "Your trips", action: "Manage"),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tripsAsync = ref.watch(myTripsProvider);
+    return RefreshIndicator(
+      onRefresh: () => ref.read(myTripsProvider.notifier).refresh(),
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _Header(activeTrips: tripsAsync.value)),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
+            sliver: SliverToBoxAdapter(child: _CreateTripCta()),
           ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-          sliver: SliverToBoxAdapter(child: _MyTripCard(t: mockMyTrips.first)),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(title: "Offers received", action: "Filter"),
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+            sliver: SliverToBoxAdapter(
+              child: _SectionHeader(title: "Your trips", action: "Manage"),
+            ),
           ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
-        SliverList.separated(
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.x4),
-          itemCount: mockOffers.length,
-          itemBuilder: (_, i) => Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
-                i == mockOffers.length - 1 ? 110 : 0),
-            child: _OfferCard(o: mockOffers[i])
-                .animate()
-                .fadeIn(delay: Duration(milliseconds: 80 * i), duration: 400.ms)
-                .moveY(begin: 14, end: 0, curve: kAppCurve),
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+            sliver: SliverToBoxAdapter(
+              child: tripsAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => _ErrorTile(
+                  message: e.toString(),
+                  onRetry: () => ref.read(myTripsProvider.notifier).refresh(),
+                ),
+                data: (trips) => trips.isEmpty
+                    ? const _EmptyTrips()
+                    : Column(
+                        children: [
+                          for (final t in trips.take(3))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                              child: _MyTripCard(t: t),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
           ),
-        ),
-      ],
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+            sliver: SliverToBoxAdapter(
+              child: _SectionHeader(title: "Offers received", action: "Filter"),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
+          SliverList.separated(
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
+            itemCount: mockOffers.length,
+            itemBuilder: (_, i) => Padding(
+              padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
+                  i == mockOffers.length - 1 ? 110 : 0),
+              child: _OfferCard(o: mockOffers[i])
+                  .animate()
+                  .fadeIn(delay: Duration(milliseconds: 80 * i), duration: 400.ms)
+                  .moveY(begin: 14, end: 0, curve: kAppCurve),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _Header extends StatelessWidget {
+  const _Header({this.activeTrips});
+  final List<Trip>? activeTrips;
   @override
   Widget build(BuildContext context) {
+    final activeCount = activeTrips
+            ?.where((t) =>
+                t.status == 'active' ||
+                t.status == 'in_transit' ||
+                t.status == 'draft')
+            .length ??
+        0;
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -98,11 +136,15 @@ class _Header extends StatelessWidget {
             const SizedBox(height: AppSpacing.x6),
             Row(
               children: [
-                _Stat(label: "Earnings (mo)", value: "12 400", unit: "DZD", accent: AppColors.emerald),
+                _Stat(label: "Earnings (mo)", value: "0", unit: "DZD", accent: AppColors.emerald),
                 const SizedBox(width: AppSpacing.x3),
-                _Stat(label: "Active trips", value: "1", unit: "", accent: AppColors.terracotta),
+                _Stat(
+                    label: "Active trips",
+                    value: "$activeCount",
+                    unit: "",
+                    accent: AppColors.terracotta),
                 const SizedBox(width: AppSpacing.x3),
-                _Stat(label: "Rating", value: "4.9", unit: "★", accent: AppColors.gold),
+                _Stat(label: "Rating", value: "—", unit: "", accent: AppColors.gold),
               ],
             ),
           ],
@@ -220,12 +262,76 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _MyTripCard extends StatelessWidget {
-  const _MyTripCard({required this.t});
-  final MockTrip t;
+class _EmptyTrips extends StatelessWidget {
+  const _EmptyTrips();
   @override
   Widget build(BuildContext context) {
-    final pct = t.booked / t.total;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x6),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.parchment,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(color: AppColors.hairline),
+            ),
+            child: const Icon(Icons.flight_takeoff_rounded,
+                color: AppColors.inkMute, size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text("No trips yet",
+              style: AppType.display(18, w: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text("List your next flight to start earning.",
+              style: AppType.body(13, color: AppColors.inkMute),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorTile extends StatelessWidget {
+  const _ErrorTile({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x4),
+      decoration: BoxDecoration(
+        color: AppColors.terracotta.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.terracotta.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: AppColors.terracotta),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text("Couldn't load your trips.",
+                style: AppType.body(13, w: FontWeight.w600)),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyTripCard extends StatelessWidget {
+  const _MyTripCard({required this.t});
+  final Trip t;
+  @override
+  Widget build(BuildContext context) {
     return BoardingCard(
       color: AppColors.ink,
       child: Column(
@@ -235,7 +341,7 @@ class _MyTripCard extends StatelessWidget {
             children: [
               StampChip(label: t.status.toUpperCase(), color: AppColors.gold),
               const Spacer(),
-              Text("Trip #A1004",
+              Text("Trip #${t.id}",
                   style: AppType.mono(11, color: AppColors.parchmentDeep)),
             ],
           ),
@@ -243,7 +349,8 @@ class _MyTripCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              CountryPill(code: t.originCode, label: t.origin, dense: true),
+              CountryPill(
+                  code: t.origin.country, label: t.origin.iata, dense: true),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -253,7 +360,10 @@ class _MyTripCard extends StatelessWidget {
                   ),
                 ),
               ),
-              CountryPill(code: t.destCode, label: t.dest, dense: true),
+              CountryPill(
+                  code: t.destination.country,
+                  label: t.destination.iata,
+                  dense: true),
             ],
           ),
           const SizedBox(height: AppSpacing.x4),
@@ -264,43 +374,63 @@ class _MyTripCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("DEPARTURE", style: AppType.eyebrow(color: AppColors.parchmentDeep)),
+                  Text("DEPARTURE",
+                      style: AppType.eyebrow(color: AppColors.parchmentDeep)),
                   const SizedBox(height: 4),
-                  Text(t.date, style: AppType.mono(13.5, color: AppColors.parchment, w: FontWeight.w700)),
+                  Text(_fmtDate(t.departureAt),
+                      style: AppType.mono(13.5,
+                          color: AppColors.parchment, w: FontWeight.w700)),
                 ],
               ),
               const SizedBox(width: AppSpacing.x6),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("CAPACITY", style: AppType.eyebrow(color: AppColors.parchmentDeep)),
+                  Text("CAPACITY",
+                      style: AppType.eyebrow(color: AppColors.parchmentDeep)),
                   const SizedBox(height: 4),
-                  Text("${t.booked} / ${t.total} kg",
-                      style: AppType.mono(13.5, color: AppColors.parchment, w: FontWeight.w700)),
+                  Text("${t.capacityKg} kg",
+                      style: AppType.mono(13.5,
+                          color: AppColors.parchment, w: FontWeight.w700)),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          // capacity progress
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: Stack(
-              children: [
-                Container(height: 8, color: AppColors.parchment.withValues(alpha: 0.15)),
-                FractionallySizedBox(
-                  widthFactor: pct,
-                  child: Container(
-                    height: 8,
-                    decoration: const BoxDecoration(color: AppColors.terracotta),
-                  ),
+              const SizedBox(width: AppSpacing.x6),
+              if (t.flightNumber.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("FLIGHT",
+                        style: AppType.eyebrow(color: AppColors.parchmentDeep)),
+                    const SizedBox(height: 4),
+                    Text(t.flightNumber,
+                        style: AppType.mono(13.5,
+                            color: AppColors.parchment, w: FontWeight.w700)),
+                  ],
                 ),
-              ],
-            ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  static String _fmtDate(DateTime d) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final l = d.toLocal();
+    return "${l.day.toString().padLeft(2, '0')} ${months[l.month - 1]} · ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}";
   }
 }
 

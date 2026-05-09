@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_notifier.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../shared/widgets/app_input.dart';
@@ -9,22 +11,47 @@ import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 import 'oauth_buttons.dart';
 
-class SignInScreen extends StatefulWidget {
+class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
   @override
-  State<SignInScreen> createState() => _SignInScreenState();
+  ConsumerState<SignInScreen> createState() => _SignInScreenState();
 }
 
-class _SignInScreenState extends State<SignInScreen> {
+class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _email = TextEditingController();
   final _pw = TextEditingController();
   bool _showPw = false;
+  bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
     _email.dispose();
     _pw.dispose();
     super.dispose();
+  }
+
+  bool get _canSubmit =>
+      !_busy && _email.text.contains('@') && _pw.text.length >= 8;
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final ok = await ref.read(authNotifierProvider.notifier).signIn(
+          email: _email.text.trim(),
+          password: _pw.text,
+        );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      context.go('/role');
+    } else {
+      final s = ref.read(authNotifierProvider);
+      setState(() => _error = s is AuthError ? s.message : 'Sign-in failed.');
+    }
   }
 
   @override
@@ -66,6 +93,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 label: "Email",
                 icon: Icons.alternate_email_rounded,
                 keyboardType: TextInputType.emailAddress,
+                onChanged: (_) => setState(() {}),
               ).animate().fadeIn(delay: 200.ms).moveY(begin: 6, end: 0),
               const SizedBox(height: AppSpacing.x4),
               AppInput(
@@ -74,6 +102,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 label: "Password",
                 icon: Icons.lock_outline_rounded,
                 obscure: !_showPw,
+                onChanged: (_) => setState(() {}),
                 suffix: IconButton(
                   onPressed: () => setState(() => _showPw = !_showPw),
                   icon: Icon(
@@ -95,12 +124,32 @@ class _SignInScreenState extends State<SignInScreen> {
                           color: AppColors.ink, w: FontWeight.w600)),
                 ),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.x3),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0x14B23A2E),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.danger, width: 1),
+                  ),
+                  child: Text(_error!,
+                      style: AppType.body(13,
+                          color: AppColors.danger, w: FontWeight.w600)),
+                ),
+              ],
               const SizedBox(height: AppSpacing.x3),
               Center(
-                child: PrimaryButton(
-                  label: "Sign in",
-                  icon: Icons.arrow_forward_rounded,
-                  onTap: () => context.go('/role'),
+                child: AnimatedOpacity(
+                  duration: AppDurations.med,
+                  opacity: _canSubmit ? 1 : 0.5,
+                  child: PrimaryButton(
+                    label: _busy ? "Signing in..." : "Sign in",
+                    icon: _busy ? null : Icons.arrow_forward_rounded,
+                    onTap: _canSubmit ? _submit : null,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.x6),
