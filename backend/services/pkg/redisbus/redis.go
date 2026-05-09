@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -66,14 +67,21 @@ type Message struct {
 }
 
 // Subscription wraps *redis.PubSub so callers don't import go-redis.
+// Lifetime is controlled by Close, not the ctx passed to Subscribe —
+// that ctx only bounds the initial handshake.
 type Subscription struct {
-	ps  *redis.PubSub
-	out chan Message
-	log *slog.Logger
+	ps        *redis.PubSub
+	out       chan Message
+	log       *slog.Logger
+	stop      chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
-// Subscribe opens a pub/sub subscription. Callers read from Channel() and
-// must call Close() to release the connection.
+// Subscribe opens a pub/sub subscription. The provided ctx bounds only
+// the initial handshake; the subscription itself runs until Close().
+// Callers read from Channel() and must call Close() to release the
+// connection and stop the pump goroutine.
 func (c *Client) Subscribe(ctx context.Context, channels ...string) (*Subscription, error) {
 	ps := c.rdb.Subscribe(ctx, channels...)
 	if _, err := ps.Receive(ctx); err != nil {
@@ -82,11 +90,13 @@ func (c *Client) Subscribe(ctx context.Context, channels ...string) (*Subscripti
 	}
 
 	s := &Subscription{
-		ps:  ps,
-		out: make(chan Message, 64),
-		log: c.log,
+		ps:   ps,
+		out:  make(chan Message, 64),
+		log:  c.log,
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
 	}
-	go s.pump(ctx)
+	go s.pump()
 	return s, nil
 }
 
@@ -95,12 +105,13 @@ func (c *Client) Subscribe(ctx context.Context, channels ...string) (*Subscripti
 // best-effort path; the FCM stream (G1) is the durable one. Dropping here is preferable
 // to blocking, which would let go-redis's internal buffer fill and Redis would kick us
 // off the subscription for slow consumption.
-func (s *Subscription) pump(ctx context.Context) {
+func (s *Subscription) pump() {
+	defer close(s.done)
 	defer close(s.out)
 	ch := s.ps.Channel()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.stop:
 			return
 		case m, ok := <-ch:
 			if !ok {
@@ -109,7 +120,7 @@ func (s *Subscription) pump(ctx context.Context) {
 			msg := Message{Channel: m.Channel, Payload: []byte(m.Payload)}
 			select {
 			case s.out <- msg:
-			case <-ctx.Done():
+			case <-s.stop:
 				return
 			default:
 				s.log.Warn("pubsub buffer full, dropping message",
@@ -122,7 +133,18 @@ func (s *Subscription) pump(ctx context.Context) {
 
 func (s *Subscription) Channel() <-chan Message { return s.out }
 
-func (s *Subscription) Close() error { return s.ps.Close() }
+// Close signals the pump to stop, closes the underlying PubSub, and
+// waits for the pump goroutine to exit. Safe to call from multiple
+// goroutines; only the first call performs the shutdown.
+func (s *Subscription) Close() error {
+	var err error
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		err = s.ps.Close()
+		<-s.done
+	})
+	return err
+}
 
 // ── Presence + delivery receipts (G1) ────────────────────────────────────────
 

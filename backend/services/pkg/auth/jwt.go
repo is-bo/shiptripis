@@ -12,6 +12,11 @@ import (
 const (
 	clockSkewLeeway    = 30 * time.Second
 	driftWarnThreshold = 5 * time.Second
+
+	// accessTokenType is the value SimpleJWT puts in the `typ` claim
+	// for access tokens. Refresh tokens carry `typ=refresh` and must
+	// never authenticate a request.
+	accessTokenType = "access"
 )
 
 type Validator struct {
@@ -19,8 +24,13 @@ type Validator struct {
 	logger *slog.Logger
 }
 
+// Claims mirrors the SimpleJWT payload Django emits.
+// `UserID` is the integer PK (Django's BigAutoField) — never a string.
+// `Type` distinguishes access (`access`) from refresh (`refresh`) tokens.
 type Claims struct {
-	Role string `json:"role"`
+	UserID int64  `json:"user_id"`
+	Role   string `json:"role"`
+	Type   string `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -51,8 +61,13 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token payload")
 	}
-	if claims.Subject == "" {
-		return nil, errors.New("missing sub claim")
+	if claims.UserID == 0 {
+		return nil, errors.New("missing or zero user_id claim")
+	}
+	if claims.Type != accessTokenType {
+		// Refresh tokens carry the same signature as access tokens but
+		// must never authenticate API or WS requests.
+		return nil, fmt.Errorf("token type %q is not an access token", claims.Type)
 	}
 
 	if claims.IssuedAt != nil {
@@ -60,7 +75,7 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 		if drift > driftWarnThreshold {
 			v.logger.Warn("jwt iat ahead of now (clock drift)",
 				"drift_ms", drift.Milliseconds(),
-				"sub", claims.Subject,
+				"user_id", claims.UserID,
 			)
 		}
 	}
