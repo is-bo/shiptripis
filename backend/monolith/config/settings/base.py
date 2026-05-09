@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "django_filters",
     "corsheaders",
     "apps.accounts",
@@ -120,10 +121,21 @@ SIMPLE_JWT = {
     "LEEWAY": timedelta(seconds=env.int("JWT_LEEWAY_SECONDS", default=30)),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "sub",
+    "USER_ID_CLAIM": "user_id",
     "TOKEN_TYPE_CLAIM": "typ",
     "JTI_CLAIM": "jti",
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
+
+# --- Google OAuth ---
+GOOGLE_OAUTH_CLIENT_IDS = env.list("GOOGLE_OAUTH_CLIENT_IDS", default=[])
+
+# --- Password reset ---
+PASSWORD_RESET_CODE_TTL_SECONDS = env.int(
+    "PASSWORD_RESET_CODE_TTL_SECONDS", default=900  # 15 minutes
+)
+PASSWORD_RESET_MAX_ATTEMPTS = env.int("PASSWORD_RESET_MAX_ATTEMPTS", default=5)
 
 # --- Redis ---
 REDIS_URL = env.str("REDIS_URL", default="redis://redis:6379/0")

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
-import '../mock/airports.dart';
+import '../../core/trips/trips_repository.dart';
 import 'country_pill.dart';
 
 Future<Airport?> showAirportPicker(
   BuildContext context, {
+  required List<Airport> airports,
   required String country,
   required String currentIata,
   required ValueChanged<String> onCountryChanged,
@@ -16,6 +17,7 @@ Future<Airport?> showAirportPicker(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (_) => _AirportPickerSheet(
+      airports: airports,
       country: country,
       currentIata: currentIata,
       onCountryChanged: onCountryChanged,
@@ -25,10 +27,12 @@ Future<Airport?> showAirportPicker(
 
 class _AirportPickerSheet extends StatefulWidget {
   const _AirportPickerSheet({
+    required this.airports,
     required this.country,
     required this.currentIata,
     required this.onCountryChanged,
   });
+  final List<Airport> airports;
   final String country;
   final String currentIata;
   final ValueChanged<String> onCountryChanged;
@@ -43,7 +47,8 @@ class _AirportPickerSheetState extends State<_AirportPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final list = airportsByCountry(_country)
+    final list = widget.airports
+        .where((a) => a.country == _country)
         .where((a) =>
             _query.isEmpty ||
             a.city.toLowerCase().contains(_query.toLowerCase()) ||

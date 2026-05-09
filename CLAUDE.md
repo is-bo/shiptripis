@@ -7,6 +7,58 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ---
 
+## 0. Current state (handoff — last updated 2026-05-09)
+
+### What's done
+
+**Backend (Django monolith, `backend/monolith/`):**
+- `apps/accounts` — User (sender/traveler/both), email signup, Google OAuth,
+  password reset, JWT (HS256, `user_id`+`role`+`typ`+`jti` claims)
+- `apps/core` — pricing engine (`pricing.py`), `redis_bus.publish_after_commit`,
+  `published_event` audit table, channel constants in `channels.py`
+- `apps/trips` — Airport (DZ + FR seed), Trip + Stopover + Tracking,
+  status transitions, full CRUD endpoints under `/api/trips`
+- `apps/parcels` — **multi-table inheritance** (ParcelRequest base,
+  DeliveryRequest + ProductRequest children), full CRUD + cancel,
+  publishes `parcels.created` / `parcels.cancelled`. 14 tests pass.
+- All migrations reversible. Full test suite green.
+- Docker compose dev stack working (postgres, redis, minio, django, caddy).
+
+**Mobile (Flutter, `mobile/`):**
+- Onboarding (3-page benefits carousel)
+- Auth wired to `/api/auth/*`
+- Traveler home + create-trip wired to `/api/trips`
+- Sender home + make-request (delivery & product) wired to `/api/parcels`
+- Live pricing summary mirrors `pricing.py`
+- Builds clean against ngrok tunnel.
+
+### What's NOT done (and what unblocks who)
+
+| # | Task | Blocks Go? |
+|---|---|---|
+| 33 | `apps/matching` — Match + Offer chain | no |
+| 34 | `apps/payments` — PaymentIntent + Stripe + idempotency | no |
+| 35 | `apps/wallet` — balance + ledger | no |
+| 36 | `apps/verification` — HandoverCode (argon2) | no |
+| 30 | `apps/kyc` — schema only | **YES** — Go owns the API |
+| 37 | `apps/admin_panel` — Django admin polish | no |
+| 38 | Schema export + sqlc contract dir | **YES** — Go reads via sqlc |
+| 39 | Gateway: pick Caddy/Nginx | shared decision |
+
+### Decoupling — Go can start whenever
+
+Three contracts only:
+1. **Postgres schema** (`contracts/sql/schema.sql`) — Django exports, Go reads via sqlc.
+2. **Redis pub/sub + streams** — Django publishes after commit; Go subscribes. No subscriber = events go to void; Django keeps working.
+3. **gRPC** — only KYC, Django→Go. Stubbed in dev with bearer + Python fake.
+
+Go services (chat, notif, kyc, media) are NOT on Django's critical path. Claude A
+can build the full money + matching + verification spine without Go running.
+When Claude B is ready, run `task contract:generate` against current schema and
+start. See §1 for scopes, §3 for connection-pool budget.
+
+---
+
 ## 1. Two Claudes, two scopes
 
 This repo is co-built by **two Claude instances** working with two human

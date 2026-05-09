@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/parcels/parcels_providers.dart';
+import '../../core/parcels/parcels_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/trips/trips_providers.dart';
+import '../../core/trips/trips_repository.dart';
+import '../../shared/widgets/airport_picker.dart';
 import '../../shared/widgets/boarding_card.dart';
 import '../../shared/widgets/country_pill.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -11,74 +17,232 @@ import '../../shared/widgets/stamp_chip.dart';
 
 enum _RequestType { delivery, product }
 
-class MakeRequestScreen extends StatefulWidget {
+const _itemTypeOptions = [
+  ("documents", "Documents"),
+  ("small_box", "Small box"),
+  ("electronics", "Electronics"),
+  ("clothing", "Clothing"),
+  ("other", "Other"),
+];
+
+class MakeRequestScreen extends ConsumerStatefulWidget {
   const MakeRequestScreen({super.key});
   @override
-  State<MakeRequestScreen> createState() => _MakeRequestScreenState();
+  ConsumerState<MakeRequestScreen> createState() => _MakeRequestScreenState();
 }
 
-class _MakeRequestScreenState extends State<MakeRequestScreen> {
+class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
   _RequestType _type = _RequestType.delivery;
-  String _itemType = "Documents";
-  double _kg = 2;
-  final _itemCtl = TextEditingController(text: "Argan oil");
-  final _maxPriceCtl = TextEditingController(text: "12 000");
+  String _itemType = "documents";
+  int _kg = 2;
+
+  Airport? _origin;
+  Airport? _dest;
+
+  final _amountCtl = TextEditingController(text: "5000");
+  final _descCtl = TextEditingController();
+  final _storeCtl = TextEditingController();
+  final _urlCtl = TextEditingController();
+  final _pickupCityCtl = TextEditingController();
+  final _dropCityCtl = TextEditingController();
+
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
-    _itemCtl.dispose();
-    _maxPriceCtl.dispose();
+    _amountCtl.dispose();
+    _descCtl.dispose();
+    _storeCtl.dispose();
+    _urlCtl.dispose();
+    _pickupCityCtl.dispose();
+    _dropCityCtl.dispose();
     super.dispose();
+  }
+
+  int _amount() => int.tryParse(_amountCtl.text.replaceAll(' ', '').replaceAll(',', '')) ?? 0;
+
+  int _commissionDelivery(int base) => (base * 0.25).round();
+
+  int _commissionProduct(int price) {
+    if (price < 30000) return 0;
+    if (price < 55000) return (price * 0.07).round();
+    if (price < 100000) return (price * 0.05).round();
+    return (price * 0.03).round();
+  }
+
+  Future<void> _pickAirport(bool isOrigin, List<Airport> airports) async {
+    final cur = isOrigin ? _origin : _dest;
+    final country = cur?.country ?? (isOrigin ? 'DZ' : 'FR');
+    final picked = await showAirportPicker(
+      context,
+      airports: airports,
+      country: country,
+      currentIata: cur?.iata ?? '',
+      onCountryChanged: (_) {},
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isOrigin) {
+        _origin = picked;
+        if (_dest?.country == picked.country) _dest = null;
+      } else {
+        _dest = picked;
+        if (_origin?.country == picked.country) _origin = null;
+      }
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_origin == null || _dest == null) {
+      setState(() => _error = 'Choose origin and destination.');
+      return;
+    }
+    final amount = _amount();
+    if (amount < 100) {
+      setState(() => _error = _type == _RequestType.delivery
+          ? 'Enter a base amount of at least 100 DZD.'
+          : 'Enter a product price of at least 100 DZD.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final notifier = ref.read(myParcelsProvider.notifier);
+      if (_type == _RequestType.delivery) {
+        await notifier.createDelivery(
+          originIata: _origin!.iata,
+          destinationIata: _dest!.iata,
+          weightKg: _kg,
+          itemType: _itemType,
+          baseAmountDzd: amount,
+          description: _descCtl.text.trim(),
+          pickupCity: _pickupCityCtl.text.trim(),
+          deliveryCity: _dropCityCtl.text.trim(),
+        );
+      } else {
+        await notifier.createProduct(
+          originIata: _origin!.iata,
+          destinationIata: _dest!.iata,
+          weightKg: _kg,
+          itemType: _itemType,
+          productPriceDzd: amount,
+          storeName: _storeCtl.text.trim(),
+          productUrl: _urlCtl.text.trim(),
+          description: _descCtl.text.trim(),
+          pickupCity: _pickupCityCtl.text.trim(),
+          deliveryCity: _dropCityCtl.text.trim(),
+        );
+      }
+      if (!mounted) return;
+      context.pop();
+    } on ParcelsFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Network error. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final airportsAsync = ref.watch(airportsProvider(null));
     return Scaffold(
       backgroundColor: AppColors.parchment,
       body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
-                children: [
-                  Text("New request", style: AppType.eyebrow()),
-                  const SizedBox(height: 6),
-                  Text(
-                    _type == _RequestType.delivery
-                        ? "Send something\nto a friend."
-                        : "Buy from there,\nbring it here.",
-                    style: AppType.display(34, w: FontWeight.w400, height: 1),
-                  )
-                      .animate(target: _type.index.toDouble())
-                      .fadeIn(duration: 300.ms),
-                  const SizedBox(height: AppSpacing.x6),
-                  _typeToggle(),
-                  const SizedBox(height: AppSpacing.x6),
-                  if (_type == _RequestType.delivery) ..._deliveryFields()
-                  else ..._productFields(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _routeBlock(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _photoUpload(),
-                  const SizedBox(height: AppSpacing.x6),
-                  _summary(),
-                ],
-              ),
+        child: airportsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => Center(
+            child: TextButton(
+              onPressed: () => ref.invalidate(airportsProvider(null)),
+              child: const Text('Retry'),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
-              child: PrimaryButton(
-                label: "Post request",
-                icon: Icons.send_rounded,
-                expand: true,
-                onTap: () => context.pop(),
-              ),
-            ),
-          ],
+          ),
+          data: (airports) {
+            _origin ??= airports.firstWhere(
+              (a) => a.country == 'DZ',
+              orElse: () => airports.first,
+            );
+            _dest ??= airports.firstWhere(
+              (a) => a.country == 'FR',
+              orElse: () => airports.last,
+            );
+            return Column(
+              children: [
+                _topBar(),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.x6, AppSpacing.x4, AppSpacing.x6, AppSpacing.x6),
+                    children: [
+                      Text("New request", style: AppType.eyebrow()),
+                      const SizedBox(height: 6),
+                      Text(
+                        _type == _RequestType.delivery
+                            ? "Send something\nto a friend."
+                            : "Buy from there,\nbring it here.",
+                        style: AppType.display(34, w: FontWeight.w400, height: 1),
+                      )
+                          .animate(target: _type.index.toDouble())
+                          .fadeIn(duration: 300.ms),
+                      const SizedBox(height: AppSpacing.x6),
+                      _typeToggle(),
+                      const SizedBox(height: AppSpacing.x6),
+                      ..._commonFields(),
+                      const SizedBox(height: AppSpacing.x6),
+                      if (_type == _RequestType.delivery)
+                        ..._deliveryFields()
+                      else
+                        ..._productFields(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _routeBlock(airports),
+                      const SizedBox(height: AppSpacing.x6),
+                      _summary(),
+                      if (_error != null) ...[
+                        const SizedBox(height: AppSpacing.x4),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.terracotta.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: AppColors.terracotta),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded,
+                                  color: AppColors.terracotta, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(_error!,
+                                    style: AppType.body(13,
+                                        color: AppColors.terracottaDeep,
+                                        w: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
+                  child: PrimaryButton(
+                    label: _submitting ? "Posting…" : "Post request",
+                    icon: Icons.send_rounded,
+                    expand: true,
+                    onTap: _submitting ? null : _submit,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -99,7 +263,7 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
             ),
           ),
           const Spacer(),
-          StampChip(label: "ESCROW PROTECTED", color: AppColors.emerald),
+          const StampChip(label: "ESCROW PROTECTED", color: AppColors.emerald),
         ],
       ),
     );
@@ -126,7 +290,10 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     final selected = _type == t;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _type = t),
+        onTap: () => setState(() {
+          _type = t;
+          _amountCtl.text = t == _RequestType.delivery ? "5000" : "20000";
+        }),
         child: AnimatedContainer(
           duration: AppDurations.fast,
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -152,16 +319,15 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     );
   }
 
-  List<Widget> _deliveryFields() {
-    final types = ["Documents", "Small box", "Electronics", "Clothing", "Food"];
+  List<Widget> _commonFields() {
     return [
       _label("Item type"),
       const SizedBox(height: 10),
       Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: types
-            .map((t) => _chip(t, _itemType == t, () => setState(() => _itemType = t)))
+        children: _itemTypeOptions
+            .map((t) => _chip(t.$2, _itemType == t.$1, () => setState(() => _itemType = t.$1)))
             .toList(),
       ),
       const SizedBox(height: AppSpacing.x5),
@@ -179,34 +345,54 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
               ),
               child: Slider(
-                value: _kg,
+                value: _kg.toDouble(),
                 min: 1,
                 max: 25,
                 divisions: 24,
-                onChanged: (v) => setState(() => _kg = v),
+                onChanged: (v) => setState(() => _kg = v.toInt()),
               ),
             ),
           ),
-          Text("${_kg.toStringAsFixed(0)} kg",
-              style: AppType.mono(14, w: FontWeight.w700)),
+          Text("$_kg kg", style: AppType.mono(14, w: FontWeight.w700)),
         ],
       ),
     ];
   }
 
-  List<Widget> _productFields() {
+  List<Widget> _deliveryFields() {
     return [
-      _label("Product"),
+      _label("Description (optional)"),
       const SizedBox(height: 10),
-      _input(_itemCtl, "e.g. iPhone 15"),
+      _input(_descCtl, "e.g. wedding documents"),
       const SizedBox(height: AppSpacing.x4),
-      _label("Max price (DZD)"),
+      _label("Base amount you'll pay (DZD)"),
       const SizedBox(height: 10),
-      _input(_maxPriceCtl, "Maximum you'd pay"),
+      _input(_amountCtl, "5000",
+          keyboard: TextInputType.number,
+          onChanged: (_) => setState(() {})),
     ];
   }
 
-  Widget _routeBlock() {
+  List<Widget> _productFields() {
+    return [
+      _label("Product / store"),
+      const SizedBox(height: 10),
+      _input(_storeCtl, "e.g. Fnac, Amazon FR"),
+      const SizedBox(height: AppSpacing.x4),
+      _label("Product URL (optional)"),
+      const SizedBox(height: 10),
+      _input(_urlCtl, "https://…",
+          keyboard: TextInputType.url),
+      const SizedBox(height: AppSpacing.x4),
+      _label("Product price (DZD)"),
+      const SizedBox(height: 10),
+      _input(_amountCtl, "20000",
+          keyboard: TextInputType.number,
+          onChanged: (_) => setState(() {})),
+    ];
+  }
+
+  Widget _routeBlock(List<Airport> airports) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -223,22 +409,37 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
             children: [
               Row(
                 children: [
-                  const CountryPill(code: 'DZ', label: 'Algeria'),
+                  Expanded(
+                    child: _AirportTile(
+                      label: "FROM",
+                      airport: _origin!,
+                      onTap: () => _pickAirport(true, airports),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_rounded, color: AppColors.inkMute, size: 18),
+                  const Icon(Icons.arrow_forward_rounded,
+                      color: AppColors.inkMute, size: 18),
                   const SizedBox(width: 8),
-                  const CountryPill(code: 'FR', label: 'France'),
+                  Expanded(
+                    child: _AirportTile(
+                      label: "TO",
+                      airport: _dest!,
+                      onTap: () => _pickAirport(false, airports),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: _miniInput(hint: "Pickup city", initial: "Algiers · Hydra"),
+                    child: _miniInput(
+                        controller: _pickupCityCtl, hint: "Pickup city"),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _miniInput(hint: "Drop-off city", initial: "Paris · 13e"),
+                    child: _miniInput(
+                        controller: _dropCityCtl, hint: "Drop-off city"),
                   ),
                 ],
               ),
@@ -249,46 +450,12 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     );
   }
 
-  Widget _photoUpload() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _label("Photo"),
-        const SizedBox(height: 10),
-        Container(
-          height: 110,
-          decoration: BoxDecoration(
-            color: AppColors.parchmentSoft,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.hairline, width: 1.4),
-          ),
-          child: CustomPaint(
-            painter: _DashedRectPainter(),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.add_a_photo_outlined, color: AppColors.inkMute),
-                  const SizedBox(height: 8),
-                  Text("Tap to add a photo",
-                      style: AppType.body(13, color: AppColors.inkMute, w: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _summary() {
-    final base = _type == _RequestType.delivery
-        ? (_kg * 1800).toInt()
-        : int.tryParse(_maxPriceCtl.text.replaceAll(' ', '')) ?? 0;
-    final commission = (_type == _RequestType.delivery)
-        ? (base * 0.25).round()
-        : 2500 + _calcProductCommission(base);
-    final total = base + commission;
+    final amount = _amount();
+    final commission = _type == _RequestType.delivery
+        ? _commissionDelivery(amount)
+        : 2500 + _commissionProduct(amount);
+    final total = amount + commission;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.x4),
       decoration: BoxDecoration(
@@ -297,25 +464,21 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
       ),
       child: Column(
         children: [
-          _row("Base", "${_fmt(base)} DZD"),
+          _row(_type == _RequestType.delivery ? "Base amount" : "Product price",
+              "${_fmt(amount)} DZD"),
           _row(
-            _type == _RequestType.delivery ? "Commission · 25%" : "Base fee + commission",
+            _type == _RequestType.delivery
+                ? "Commission · 25%"
+                : "Base fee + commission",
             "${_fmt(commission)} DZD",
           ),
           const SizedBox(height: 4),
           DashedDivider(color: AppColors.parchment.withValues(alpha: 0.25)),
           const SizedBox(height: 8),
-          _row("Total", "${_fmt(total)} DZD", strong: true),
+          _row("Total you pay", "${_fmt(total)} DZD", strong: true),
         ],
       ),
     );
-  }
-
-  int _calcProductCommission(int price) {
-    if (price < 30000) return 0;
-    if (price < 55000) return (price * 0.07).round();
-    if (price < 100000) return (price * 0.05).round();
-    return (price * 0.03).round();
   }
 
   Widget _row(String l, String v, {bool strong = false}) {
@@ -334,8 +497,7 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     );
   }
 
-  Widget _label(String t) =>
-      Text(t.toUpperCase(), style: AppType.eyebrow());
+  Widget _label(String t) => Text(t.toUpperCase(), style: AppType.eyebrow());
 
   Widget _chip(String l, bool selected, VoidCallback onTap) {
     return GestureDetector(
@@ -356,9 +518,12 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     );
   }
 
-  Widget _input(TextEditingController c, String hint) {
+  Widget _input(TextEditingController c, String hint,
+      {TextInputType? keyboard, ValueChanged<String>? onChanged}) {
     return TextField(
       controller: c,
+      keyboardType: keyboard,
+      onChanged: onChanged,
       style: AppType.body(15, w: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
@@ -378,9 +543,9 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
     );
   }
 
-  Widget _miniInput({required String hint, required String initial}) {
-    return TextFormField(
-      initialValue: initial,
+  Widget _miniInput({required TextEditingController controller, required String hint}) {
+    return TextField(
+      controller: controller,
       style: AppType.body(13, w: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
@@ -406,19 +571,45 @@ class _MakeRequestScreenState extends State<MakeRequestScreen> {
   }
 }
 
-class _DashedRectPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = AppColors.hairline
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(6, 6, size.width - 12, size.height - 12),
-        const Radius.circular(AppRadius.md));
-    canvas.drawRRect(rect, p);
-  }
+class _AirportTile extends StatelessWidget {
+  const _AirportTile({required this.label, required this.airport, required this.onTap});
+  final String label;
+  final Airport airport;
+  final VoidCallback onTap;
 
   @override
-  bool shouldRepaint(covariant _DashedRectPainter old) => false;
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.hairline),
+        ),
+        child: Row(
+          children: [
+            CountryPill(code: airport.country, label: airport.country, dense: true),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppType.eyebrow()),
+                  const SizedBox(height: 2),
+                  Text("${airport.iata} · ${airport.city}",
+                      style: AppType.body(12.5, w: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Icon(Icons.unfold_more_rounded,
+                size: 16, color: AppColors.inkMute),
+          ],
+        ),
+      ),
+    );
+  }
 }

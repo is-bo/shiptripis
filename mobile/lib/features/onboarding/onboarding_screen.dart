@@ -134,7 +134,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                               expand: true,
                               color: AppColors.sun,
                               fg: AppColors.ink,
-                              onTap: () => context.push('/auth/sign-up'),
+                              onTap: () => context.push('/benefits'),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.x3),
