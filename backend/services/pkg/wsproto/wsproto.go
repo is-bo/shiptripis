@@ -70,6 +70,12 @@ type Conn struct {
 	log    *slog.Logger
 	closed sync.Once
 	done   chan struct{}
+
+	// connCtx is cancelled inside Close. Per-write/per-ping deadlines
+	// derive from it so Close() actually unblocks an in-flight Write
+	// instead of waiting up to WriteTimeout.
+	connCtx    context.Context
+	connCancel context.CancelFunc
 }
 
 // Upgrade authenticates the request, performs the WebSocket handshake,
@@ -110,13 +116,16 @@ func Upgrade(
 	}
 	ws.SetReadLimit(MaxMessageBytes)
 
+	connCtx, cancel := context.WithCancel(context.Background())
 	c := &Conn{
-		UserID: claims.UserID,
-		Role:   claims.Role,
-		ws:     ws,
-		send:   make(chan Envelope, SendQueueSize),
-		log:    log.With("user_id", claims.UserID),
-		done:   make(chan struct{}),
+		UserID:     claims.UserID,
+		Role:       claims.Role,
+		ws:         ws,
+		send:       make(chan Envelope, SendQueueSize),
+		log:        log.With("user_id", claims.UserID),
+		done:       make(chan struct{}),
+		connCtx:    connCtx,
+		connCancel: cancel,
 	}
 
 	go c.writer()
@@ -150,6 +159,10 @@ func (c *Conn) Read(ctx context.Context) (Envelope, error) {
 func (c *Conn) Send(env Envelope) {
 	select {
 	case <-c.done:
+		c.log.Debug("ws send after close; dropping message",
+			"event_id", env.EventID,
+			"type", env.Type,
+		)
 		return
 	case c.send <- env:
 	default:
@@ -164,6 +177,7 @@ func (c *Conn) Send(env Envelope) {
 func (c *Conn) Close(code websocket.StatusCode, reason string) {
 	c.closed.Do(func() {
 		close(c.done)
+		c.connCancel()
 		_ = c.ws.Close(code, reason)
 	})
 }
@@ -179,7 +193,7 @@ func (c *Conn) writer() {
 		case <-c.done:
 			return
 		case env := <-c.send:
-			ctx, cancel := context.WithTimeout(context.Background(), WriteTimeout)
+			ctx, cancel := context.WithTimeout(c.connCtx, WriteTimeout)
 			err := wsjson.Write(ctx, c.ws, env)
 			cancel()
 			if err != nil {
@@ -198,7 +212,7 @@ func (c *Conn) pinger() {
 		case <-c.done:
 			return
 		case <-t.C:
-			ctx, cancel := context.WithTimeout(context.Background(), WriteTimeout)
+			ctx, cancel := context.WithTimeout(c.connCtx, WriteTimeout)
 			err := c.ws.Ping(ctx)
 			cancel()
 			if err != nil {

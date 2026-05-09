@@ -20,6 +20,16 @@ type Client struct {
 type Config struct {
 	URL    string
 	Logger *slog.Logger
+
+	// Pool / timeout knobs. Zero values fall through to go-redis defaults
+	// (PoolSize = 10 × GOMAXPROCS). Set them explicitly in main.go so the
+	// per-service connection budget is reviewable — same discipline as
+	// the Postgres pool in CLAUDE.md §3.
+	PoolSize     int
+	MinIdleConns int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 func NewClient(ctx context.Context, cfg Config) (*Client, error) {
@@ -37,6 +47,22 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("parse redis url: %w", err)
 	}
 
+	if cfg.PoolSize > 0 {
+		opts.PoolSize = cfg.PoolSize
+	}
+	if cfg.MinIdleConns > 0 {
+		opts.MinIdleConns = cfg.MinIdleConns
+	}
+	if cfg.DialTimeout > 0 {
+		opts.DialTimeout = cfg.DialTimeout
+	}
+	if cfg.ReadTimeout > 0 {
+		opts.ReadTimeout = cfg.ReadTimeout
+	}
+	if cfg.WriteTimeout > 0 {
+		opts.WriteTimeout = cfg.WriteTimeout
+	}
+
 	rdb := redis.NewClient(opts)
 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -46,7 +72,11 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
-	log.Info("redis client ready", "addr", opts.Addr)
+	log.Info("redis client ready",
+		"addr", opts.Addr,
+		"pool_size", opts.PoolSize,
+		"min_idle", opts.MinIdleConns,
+	)
 	return &Client{rdb: rdb, log: log}, nil
 }
 

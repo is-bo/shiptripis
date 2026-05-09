@@ -208,6 +208,10 @@ func safeRun(ctx context.Context, fn CheckFunc) (err error) {
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
+	// Probe responses must never be cached. Caddy (CLAUDE.md §7b) sits
+	// in front of these endpoints; a cached "ready" after a dependency
+	// dies would mask the outage from the load balancer.
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }

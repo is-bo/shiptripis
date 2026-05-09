@@ -46,13 +46,21 @@ type Config struct {
 	UsePathStyle bool
 
 	Logger *slog.Logger
+
+	// MaxPutBytes caps Put() body size. Defaults to 16 MiB if zero.
+	// Server-generated objects (thumbnails, exports) fit easily within
+	// this; anything larger is misuse and must use PresignPut instead.
+	MaxPutBytes int64
 }
+
+const defaultMaxPutBytes = 16 << 20
 
 // Client is a thin wrapper over the S3 SDK with presigner hooks attached.
 type Client struct {
-	s3        *s3.Client
-	presigner *s3.PresignClient
-	log       *slog.Logger
+	s3          *s3.Client
+	presigner   *s3.PresignClient
+	log         *slog.Logger
+	maxPutBytes int64
 }
 
 // New builds an S3 client. The provided ctx bounds only credential
@@ -97,29 +105,79 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		"path_style", pathStyle,
 	)
 
+	maxPut := cfg.MaxPutBytes
+	if maxPut <= 0 {
+		maxPut = defaultMaxPutBytes
+	}
+
 	return &Client{
-		s3:        s3client,
-		presigner: s3.NewPresignClient(s3client),
-		log:       log,
+		s3:          s3client,
+		presigner:   s3.NewPresignClient(s3client),
+		log:         log,
+		maxPutBytes: maxPut,
 	}, nil
+}
+
+// Ping verifies the endpoint and credentials by issuing a HeadBucket
+// against the supplied bucket. Wire this into pkg/health.Register so
+// readiness flips to degraded when object storage is unreachable.
+//
+// HeadBucket returns success when the bucket exists and credentials
+// can read it; missing bucket / wrong creds / wrong endpoint all fail.
+func (c *Client) Ping(ctx context.Context, bucket string) error {
+	if bucket == "" {
+		return errors.New("storage: bucket is required for Ping")
+	}
+	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("ping bucket %s: %w", bucket, err)
+	}
+	return nil
 }
 
 // Put uploads body to bucket/key. Use only for small server-generated
 // objects (thumbnails, exports). Client uploads must use PresignPut.
+// contentType is required so downstream consumers (and the provider's
+// own Content-Type metadata) aren't left guessing.
 func (c *Client) Put(ctx context.Context, bucket, key string, body io.Reader, contentType string) error {
 	if err := validateRef(bucket, key); err != nil {
 		return err
 	}
+	if contentType == "" {
+		return errors.New("storage: contentType is required")
+	}
+	// Cap the body. LimitReader stops at maxPutBytes+1; the counter lets
+	// us detect overflow after the upload completes and remove the
+	// truncated object so callers don't see a partial result.
+	limited := &countingReader{r: io.LimitReader(body, c.maxPutBytes+1)}
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
-		Body:        body,
+		Body:        limited,
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return fmt.Errorf("put %s/%s: %w", bucket, key, err)
 	}
+	if limited.n > c.maxPutBytes {
+		// Best-effort cleanup; the object landed truncated.
+		_ = c.Delete(context.Background(), bucket, key)
+		return fmt.Errorf("storage: put %s/%s exceeded %d bytes", bucket, key, c.maxPutBytes)
+	}
 	return nil
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 // Get returns the object body. The caller MUST close the returned reader.
@@ -218,6 +276,13 @@ func (c *Client) PresignPut(ctx context.Context, bucket, key string, ttl time.Du
 	}
 	if err := validateTTL(ttl); err != nil {
 		return PresignedRequest{}, err
+	}
+	if contentType == "" {
+		// The signed Content-Type becomes part of the canonical request.
+		// Empty is technically valid but most HTTP clients refuse to send
+		// a literal empty Content-Type, so the upload would 403 at the
+		// provider with no useful diagnostics.
+		return PresignedRequest{}, errors.New("storage: contentType is required for presigned put")
 	}
 	req, err := c.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
