@@ -344,12 +344,10 @@ func validateRef(bucket, key string) error {
 }
 
 func isNotFound(err error) bool {
-	var nsk *types.NoSuchKey
-	if errors.As(err, &nsk) {
+	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
 		return true
 	}
-	var nf *types.NotFound
-	if errors.As(err, &nf) {
+	if _, ok := errors.AsType[*types.NotFound](err); ok {
 		return true
 	}
 	// HeadObject returns a generic APIError with code "NotFound" — no
