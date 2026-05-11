@@ -198,6 +198,8 @@ class MatchEvent(models.Model):
         OFFER_WITHDRAWN = "offer_withdrawn", "Offer withdrawn"
         OFFER_EXPIRED = "offer_expired", "Offer expired"
         MATCH_CANCELLED = "match_cancelled", "Match cancelled"
+        MATCH_IN_TRANSIT = "match_in_transit", "Match in transit"
+        MATCH_COMPLETED = "match_completed", "Match completed"
 
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="events")
     offer = models.ForeignKey(

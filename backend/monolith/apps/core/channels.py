@@ -18,6 +18,8 @@ PARCEL_CANCELLED = "parcel.cancelled"
 
 # matching
 MATCH_CREATED = "match.created"
+MATCH_IN_TRANSIT = "match.in_transit"
+MATCH_COMPLETED = "match.completed"
 OFFER_CREATED = "offer.created"
 OFFER_UPDATED = "offer.updated"  # countered / accepted / declined
 OFFER_ACCEPTED = "offer.accepted"
