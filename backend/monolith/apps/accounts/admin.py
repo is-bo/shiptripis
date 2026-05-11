@@ -13,17 +13,35 @@ class ShipTripUserAdmin(UserAdmin):
         "role",
         "is_phone_verified",
         "is_kyc_verified",
+        "is_banned",
         "is_staff",
     )
-    list_filter = ("role", "wilaya", "is_phone_verified", "is_kyc_verified", "is_staff")
+    list_filter = (
+        "role",
+        "wilaya",
+        "is_phone_verified",
+        "is_kyc_verified",
+        "is_banned",
+        "is_staff",
+    )
     search_fields = ("email", "phone", "full_name", "username")
     ordering = ("email",)
     fieldsets = UserAdmin.fieldsets + (
         ("ShipTrip", {
             "fields": ("full_name", "phone", "wilaya", "role",
-                       "is_phone_verified", "is_email_verified", "is_kyc_verified"),
+                       "is_phone_verified", "is_email_verified",
+                       "is_kyc_verified", "is_banned"),
         }),
     )
+    actions = ("ban_users", "unban_users")
+
+    @admin.action(description="Ban selected users")
+    def ban_users(self, request, queryset):
+        queryset.update(is_banned=True, is_active=False)
+
+    @admin.action(description="Unban selected users")
+    def unban_users(self, request, queryset):
+        queryset.update(is_banned=False, is_active=True)
 
 
 @admin.register(OAuthIdentity)

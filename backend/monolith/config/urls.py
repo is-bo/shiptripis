@@ -2,6 +2,10 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
+admin.site.site_header = "ShipTrip Operations"
+admin.site.site_title = "ShipTrip Admin"
+admin.site.index_title = "Operations dashboard"
+
 
 def healthz(_request):
     return JsonResponse({"status": "ok"})
