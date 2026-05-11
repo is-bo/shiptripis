@@ -1,0 +1,71 @@
+version: "2"
+
+# ShipTrip — Go sqlc configuration.
+#
+# Django (Claude A) owns the schema in `schema.sql`. Go services (Claude B)
+# read it through sqlc-generated repositories so changes propagate via
+# regeneration, not hand-edits.
+#
+# CLAUDE.md G3 enforces drift detection: schema.sql must be regenerated
+# from a fresh `task contract:sync-db` AND `task contract:generate` must
+# rerun sqlc — both diffs must be clean before merge.
+#
+# Each Go service owns ONLY the tables it reads/writes. Tables not listed
+# in a service's `queries` slice are not generated for that service.
+
+sql:
+  # ---- chat-service ----
+  # Reads/writes chat_message, chat_thread (populated by Go itself).
+  - engine: postgresql
+    schema: "schema.sql"
+    queries: "queries/chat/"
+    gen:
+      go:
+        package: "chatrepo"
+        out: "../../services/internal/chat/repo"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_pointers_for_null_types: true
+
+  # ---- notif-service ----
+  # Reads notification rows + presence keys (presence lives in Redis).
+  - engine: postgresql
+    schema: "schema.sql"
+    queries: "queries/notif/"
+    gen:
+      go:
+        package: "notifrepo"
+        out: "../../services/internal/notif/repo"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_pointers_for_null_types: true
+
+  # ---- kyc-service ----
+  # Reads/writes kyc_submission. Django reflects status via gRPC + Redis.
+  - engine: postgresql
+    schema: "schema.sql"
+    queries: "queries/kyc/"
+    gen:
+      go:
+        package: "kycrepo"
+        out: "../../services/internal/kyc/repo"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_pointers_for_null_types: true
+
+  # ---- media-service ----
+  # Reads/writes media_object metadata; the bytes live in S3/MinIO.
+  - engine: postgresql
+    schema: "schema.sql"
+    queries: "queries/media/"
+    gen:
+      go:
+        package: "mediarepo"
+        out: "../../services/internal/media/repo"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_pointers_for_null_types: true
