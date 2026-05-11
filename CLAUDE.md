@@ -7,43 +7,49 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ---
 
-## 0. Current state (handoff — last updated 2026-05-09)
+## 0. Current state (handoff — last updated 2026-05-12)
 
 ### What's done
 
 **Backend (Django monolith, `backend/monolith/`):**
 - `apps/accounts` — User (sender/traveler/both), email signup, Google OAuth,
-  password reset, JWT (HS256, `user_id`+`role`+`typ`+`jti` claims)
-- `apps/core` — pricing engine (`pricing.py`), `redis_bus.publish_after_commit`,
-  `published_event` audit table, channel constants in `channels.py`
-- `apps/trips` — Airport (DZ + FR seed), Trip + Stopover + Tracking,
-  status transitions, full CRUD endpoints under `/api/trips`
-- `apps/parcels` — **multi-table inheritance** (ParcelRequest base,
-  DeliveryRequest + ProductRequest children), full CRUD + cancel,
-  publishes `parcels.created` / `parcels.cancelled`. 14 tests pass.
-- All migrations reversible. Full test suite green.
-- Docker compose dev stack working (postgres, redis, minio, django, caddy).
+  password reset, JWT (HS256, `user_id`+`role`+`typ`+`jti` claims), ban/unban.
+- `apps/core` — pricing engine, `redis_bus.publish_after_commit`,
+  `published_event` audit table, channel constants.
+- `apps/trips` — Airport (DZ + FR seed), Trip + Stopover + Tracking, full CRUD.
+- `apps/parcels` — multi-table inheritance (Delivery + Product), full CRUD.
+- `apps/matching` — Match + Offer chain, frozen pricing, partial unique
+  constraints (one-accepted / one-pending per match). 21 tests.
+- `apps/payments` — PaymentIntent (mock provider, instant success), idempotency
+  via (provider, intent_id) + client key; PaymentEvent ledger; Refund. 14 tests.
+  Swap to real Stripe = one file (`providers.py`).
+- `apps/wallet` — append-only ledger (no stored balance), Hold table for
+  escrow, post_save signals bridge payments → wallet open_hold and
+  reverse_hold_for_refund. 12 tests.
+- `apps/verification` — HandoverCode (argon2id), PICKUP + DELIVERY codes,
+  6-digit numeric, 5-attempt lockout, code rotation. DELIVERY verify fires
+  `release_hold_to_payee` → traveler is paid. 12 tests.
+- `apps/kyc` — schema-only model (`kyc_submission`); Go service owns the API.
+- `apps/admin_panel` — User ban/unban actions, KYC review surface,
+  PublishedEvent audit view, site branding.
+- Contracts: `contracts/sql/schema.sql` exported via `task contract:sync-db`;
+  `sqlc.yaml` wires 4 Go services (chat/notif/kyc/media); query dirs ready.
+- Gateway: Caddy (see `docs/decisions/0001-gateway-caddy.md`).
+- All migrations reversible. Full suite green (115/115).
 
 **Mobile (Flutter, `mobile/`):**
-- Onboarding (3-page benefits carousel)
-- Auth wired to `/api/auth/*`
-- Traveler home + create-trip wired to `/api/trips`
-- Sender home + make-request (delivery & product) wired to `/api/parcels`
-- Live pricing summary mirrors `pricing.py`
-- Builds clean against ngrok tunnel.
+- Onboarding, auth, traveler+sender homes, create-trip, delivery+product
+  request flows with live pricing.
+- Builds against ngrok.
 
 ### What's NOT done (and what unblocks who)
 
+All backend V1 spine tasks complete. Remaining work:
+
 | # | Task | Blocks Go? |
 |---|---|---|
-| 33 | `apps/matching` — Match + Offer chain | no |
-| 34 | `apps/payments` — PaymentIntent + Stripe + idempotency | no |
-| 35 | `apps/wallet` — balance + ledger | no |
-| 36 | `apps/verification` — HandoverCode (argon2) | no |
-| 30 | `apps/kyc` — schema only | **YES** — Go owns the API |
-| 37 | `apps/admin_panel` — Django admin polish | no |
-| 38 | Schema export + sqlc contract dir | **YES** — Go reads via sqlc |
-| 39 | Gateway: pick Caddy/Nginx | shared decision |
+| — | Mobile: matching screens + mock payment UI + follow-package circles | no |
+| — | Mobile: handover-code issue/verify screens | no |
 
 ### Decoupling — Go can start whenever
 
