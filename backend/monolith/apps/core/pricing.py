@@ -18,6 +18,24 @@ from dataclasses import dataclass
 # --- Delivery (parcel-style: someone hands you a parcel; you deliver it) ---
 DELIVERY_COMMISSION_PCT = 25  # integer percent, sender pays total
 
+# Suggested delivery floor — used to compute an anchor the UI shows when the
+# sender posts a request and when the traveler dials in their counter. It is
+# NOT enforced (travelers can quote whatever they want — the marketplace
+# clears at the accepted price). It anchors expectations and prevents
+# obviously-wrong inputs (50 DZD for 10 kg).
+#
+# Shape: minimum_pickup_fee + (per_kg_rate * weight_kg). Tune from real
+# market data once we have any.
+DELIVERY_SUGGESTED_MIN_DZD = 1_500            # pickup/handling floor
+DELIVERY_SUGGESTED_PER_KG_DZD = 600           # per kg
+
+# Some routes cost more (DZ↔FR carries international risk + longer flight).
+# Keys are frozensets so the suggestion is symmetric: ALG↔CDG == CDG↔ALG.
+# Unknown country pairs fall back to 1x.
+DELIVERY_ROUTE_MULTIPLIER: dict[frozenset[str], float] = {
+    frozenset({"DZ", "FR"}): 1.6,
+}
+
 # --- Product (traveler buys an item, sender reimburses + tip) ---
 PRODUCT_BASE_FEE_DZD = 2_500
 # Tiers: (min_inclusive, max_exclusive_or_None, commission_percent)
@@ -82,6 +100,66 @@ def _product_commission_pct(price_dzd: int) -> int:
         if price_dzd >= lo and (hi is None or price_dzd < hi):
             return pct
     raise AssertionError("unreachable: tiers cover all non-negative ints")
+
+
+@dataclass(frozen=True, slots=True)
+class DeliverySuggestion:
+    """Non-binding price anchor for a delivery request.
+
+    `suggested_base_dzd` is the traveler-payout we recommend given weight
+    + route. `suggested_total_dzd` is what the sender would pay if the
+    traveler accepted the suggestion verbatim (base + 25% commission).
+    Both `min_floor_dzd` and `max_ceiling_dzd` are soft limits — the UI
+    should warn outside this band but not block.
+    """
+    weight_kg: int
+    suggested_base_dzd: int
+    suggested_total_dzd: int
+    min_floor_dzd: int
+    max_ceiling_dzd: int
+    route_multiplier_x100: int  # integer-ified for transport
+
+
+def suggest_delivery_quote(
+    *,
+    weight_kg: int,
+    origin_country: str = "",
+    destination_country: str = "",
+) -> DeliverySuggestion:
+    """Suggest a fair traveler-payout for a delivery, weight + route aware.
+
+    All math stays integer. The route multiplier is stored as a float in
+    the constant table but applied as `* mul_x100 // 100` so we never let
+    a float touch a money figure.
+
+    The suggestion is informational only — Offers can be created at any
+    `base_amount_dzd` the parties agree on.
+    """
+    _check_positive_int("weight_kg", weight_kg)
+    if weight_kg < 1:
+        raise ValueError("weight_kg must be >= 1")
+
+    pair = frozenset({(origin_country or "").upper(), (destination_country or "").upper()})
+    mul = DELIVERY_ROUTE_MULTIPLIER.get(pair, 1.0)
+    mul_x100 = int(round(mul * 100))
+
+    raw_base = DELIVERY_SUGGESTED_MIN_DZD + (DELIVERY_SUGGESTED_PER_KG_DZD * weight_kg)
+    suggested_base = raw_base * mul_x100 // 100
+
+    # Soft band: ±40% around the suggestion. Beyond that, UI warns.
+    min_floor = suggested_base * 60 // 100
+    max_ceiling = suggested_base * 140 // 100
+
+    sender_total = quote_delivery(suggested_base).total_dzd
+
+    return DeliverySuggestion(
+        weight_kg=weight_kg,
+        suggested_base_dzd=suggested_base,
+        suggested_total_dzd=sender_total,
+        min_floor_dzd=min_floor,
+        max_ceiling_dzd=max_ceiling,
+        route_multiplier_x100=mul_x100,
+    )
 
 
 def quote_delivery(base_amount_dzd: int) -> DeliveryQuote:

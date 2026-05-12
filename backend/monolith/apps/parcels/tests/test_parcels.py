@@ -237,3 +237,75 @@ class ParcelDetailTests(APITestCase):
     def test_404_for_unknown(self):
         r = self.client.get(reverse("parcels-detail", args=[9999]))
         assert r.status_code == 404
+
+
+class DeliveryQuoteTests(APITestCase):
+    """GET /api/parcels/quote/delivery — weight + route suggestion."""
+
+    def setUp(self):
+        self.user = _make_user("quote@example.com")
+        self.client = _auth_client(self.user)
+
+    def test_unauth_rejected(self):
+        c = APIClient()
+        r = c.get(reverse("parcels-quote-delivery"), {"weight_kg": 2})
+        assert r.status_code == 401
+
+    def test_dz_fr_route_returns_multiplied_suggestion(self):
+        r = self.client.get(
+            reverse("parcels-quote-delivery"),
+            {"weight_kg": 3, "origin": "ALG", "destination": "CDG"},
+        )
+        assert r.status_code == 200, r.data
+        # 1500 + 600*3 = 3300; * 1.6 = 5280
+        assert r.data["weight_kg"] == 3
+        assert r.data["route_multiplier_x100"] == 160
+        assert r.data["suggested_base_dzd"] == 5_280
+        # +25% commission = 6600
+        assert r.data["suggested_total_dzd"] == 6_600
+        assert r.data["currency"] == "DZD"
+
+    def test_no_route_returns_1x_multiplier(self):
+        r = self.client.get(reverse("parcels-quote-delivery"), {"weight_kg": 5})
+        assert r.status_code == 200
+        assert r.data["route_multiplier_x100"] == 100
+        # 1500 + 600*5 = 4500
+        assert r.data["suggested_base_dzd"] == 4_500
+
+    def test_missing_weight_rejected(self):
+        r = self.client.get(reverse("parcels-quote-delivery"))
+        assert r.status_code == 400
+
+    def test_non_int_weight_rejected(self):
+        r = self.client.get(
+            reverse("parcels-quote-delivery"), {"weight_kg": "heavy"}
+        )
+        assert r.status_code == 400
+
+    def test_zero_weight_rejected(self):
+        r = self.client.get(
+            reverse("parcels-quote-delivery"), {"weight_kg": 0}
+        )
+        assert r.status_code == 400
+
+    def test_over_cap_weight_rejected(self):
+        r = self.client.get(
+            reverse("parcels-quote-delivery"), {"weight_kg": 999}
+        )
+        assert r.status_code == 400
+
+    def test_unknown_iata_treated_as_no_route(self):
+        # Airport lookup misses → empty country → frozenset({""}) → no multiplier
+        r = self.client.get(
+            reverse("parcels-quote-delivery"),
+            {"weight_kg": 2, "origin": "ZZZ", "destination": "QQQ"},
+        )
+        assert r.status_code == 200
+        assert r.data["route_multiplier_x100"] == 100
+
+    def test_band_returned(self):
+        r = self.client.get(reverse("parcels-quote-delivery"), {"weight_kg": 5})
+        assert r.status_code == 200
+        # base 4500: floor 2700, ceiling 6300
+        assert r.data["min_floor_dzd"] == 2_700
+        assert r.data["max_ceiling_dzd"] == 6_300

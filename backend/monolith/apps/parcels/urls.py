@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     DeliveryCreateView,
+    DeliveryQuoteView,
     ParcelCancelView,
     ParcelDetailView,
     ParcelListView,
@@ -9,6 +10,12 @@ from .views import (
 )
 
 urlpatterns = [
+    # Quote first — must precede "parcels/<int:pk>" so "quote" isn't parsed as a pk.
+    path(
+        "parcels/quote/delivery",
+        DeliveryQuoteView.as_view(),
+        name="parcels-quote-delivery",
+    ),
     path("parcels", ParcelListView.as_view(), name="parcels-list"),
     path("parcels/delivery", DeliveryCreateView.as_view(), name="parcels-delivery-create"),
     path("parcels/product", ProductCreateView.as_view(), name="parcels-product-create"),

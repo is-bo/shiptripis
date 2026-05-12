@@ -170,3 +170,64 @@ class ParcelCancelView(APIView):
                 {"parcel_id": parcel.id, "sender_id": parcel.sender_id},
             )
         return Response(ParcelRequestSerializer(_refetch(parcel.pk)).data)
+
+
+class DeliveryQuoteView(APIView):
+    """Non-binding weight + route price suggestion for a delivery.
+
+    GET /api/parcels/quote/delivery?weight_kg=3&origin=ALG&destination=CDG
+
+    Returns the suggested traveler payout + sender total, plus a soft
+    floor/ceiling band the UI uses to warn on outlier offers. Authenticated
+    so we keep our pricing curve out of the public domain; rate-limited
+    naturally by DRF defaults.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        from apps.core.pricing import suggest_delivery_quote
+        from apps.trips.models import Airport
+
+        try:
+            weight_kg = int(request.query_params.get("weight_kg", ""))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "weight_kg must be a positive integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if weight_kg < 1 or weight_kg > 50:
+            return Response(
+                {"detail": "weight_kg must be between 1 and 50."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        origin_iata = (request.query_params.get("origin") or "").upper()
+        dest_iata = (request.query_params.get("destination") or "").upper()
+        origin_country = ""
+        dest_country = ""
+        if origin_iata:
+            o = Airport.objects.filter(iata=origin_iata).only("country").first()
+            if o:
+                origin_country = o.country
+        if dest_iata:
+            d = Airport.objects.filter(iata=dest_iata).only("country").first()
+            if d:
+                dest_country = d.country
+
+        q = suggest_delivery_quote(
+            weight_kg=weight_kg,
+            origin_country=origin_country,
+            destination_country=dest_country,
+        )
+        return Response(
+            {
+                "weight_kg": q.weight_kg,
+                "suggested_base_dzd": q.suggested_base_dzd,
+                "suggested_total_dzd": q.suggested_total_dzd,
+                "min_floor_dzd": q.min_floor_dzd,
+                "max_ceiling_dzd": q.max_ceiling_dzd,
+                "route_multiplier_x100": q.route_multiplier_x100,
+                "currency": "DZD",
+            }
+        )

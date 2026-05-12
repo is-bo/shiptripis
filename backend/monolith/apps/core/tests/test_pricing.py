@@ -3,9 +3,12 @@
 import pytest
 
 from apps.core.pricing import (
+    DELIVERY_SUGGESTED_MIN_DZD,
+    DELIVERY_SUGGESTED_PER_KG_DZD,
     PRODUCT_BASE_FEE_DZD,
     quote_delivery,
     quote_product,
+    suggest_delivery_quote,
 )
 
 
@@ -103,3 +106,85 @@ class TestProduct:
     def test_float_rejected(self):
         with pytest.raises(TypeError):
             quote_product(40_000.0)
+
+
+# ---------- delivery suggestion: weight + route anchor ----------
+
+class TestDeliverySuggestion:
+    def test_light_parcel_no_route(self):
+        s = suggest_delivery_quote(weight_kg=1)
+        # 1500 + 600*1 = 2100, no route multiplier
+        assert s.weight_kg == 1
+        assert s.suggested_base_dzd == 2_100
+        assert s.route_multiplier_x100 == 100
+        # sender total = base + 25% commission = 2625
+        assert s.suggested_total_dzd == 2_625
+
+    def test_heavier_parcel_scales_linearly(self):
+        s = suggest_delivery_quote(weight_kg=10)
+        # 1500 + 600*10 = 7500
+        assert s.suggested_base_dzd == 7_500
+        assert s.suggested_total_dzd == 9_375  # +25%
+
+    def test_dz_fr_route_multiplier_applied(self):
+        # 5kg: (1500 + 600*5) = 4500; * 1.6 = 7200
+        s = suggest_delivery_quote(
+            weight_kg=5, origin_country="DZ", destination_country="FR"
+        )
+        assert s.route_multiplier_x100 == 160
+        assert s.suggested_base_dzd == 7_200
+        assert s.suggested_total_dzd == 9_000  # +25%
+
+    def test_route_is_symmetric(self):
+        a = suggest_delivery_quote(
+            weight_kg=3, origin_country="DZ", destination_country="FR"
+        )
+        b = suggest_delivery_quote(
+            weight_kg=3, origin_country="FR", destination_country="DZ"
+        )
+        assert a.suggested_base_dzd == b.suggested_base_dzd
+
+    def test_unknown_country_pair_uses_1x(self):
+        s = suggest_delivery_quote(
+            weight_kg=2, origin_country="US", destination_country="JP"
+        )
+        assert s.route_multiplier_x100 == 100
+        assert s.suggested_base_dzd == DELIVERY_SUGGESTED_MIN_DZD + 2 * DELIVERY_SUGGESTED_PER_KG_DZD
+
+    def test_band_is_plus_minus_40(self):
+        s = suggest_delivery_quote(weight_kg=5)
+        # base = 4500; floor = 60% = 2700; ceiling = 140% = 6300
+        assert s.min_floor_dzd == 2_700
+        assert s.max_ceiling_dzd == 6_300
+
+    def test_zero_weight_rejected(self):
+        with pytest.raises(ValueError):
+            suggest_delivery_quote(weight_kg=0)
+
+    def test_negative_weight_rejected(self):
+        with pytest.raises(ValueError):
+            suggest_delivery_quote(weight_kg=-1)
+
+    def test_float_weight_rejected(self):
+        with pytest.raises(TypeError):
+            suggest_delivery_quote(weight_kg=1.5)
+
+    def test_all_outputs_are_int(self):
+        s = suggest_delivery_quote(
+            weight_kg=7, origin_country="DZ", destination_country="FR"
+        )
+        for v in (
+            s.weight_kg,
+            s.suggested_base_dzd,
+            s.suggested_total_dzd,
+            s.min_floor_dzd,
+            s.max_ceiling_dzd,
+            s.route_multiplier_x100,
+        ):
+            assert isinstance(v, int) and not isinstance(v, bool)
+
+    def test_case_insensitive_country_codes(self):
+        s = suggest_delivery_quote(
+            weight_kg=2, origin_country="dz", destination_country="fr"
+        )
+        assert s.route_multiplier_x100 == 160
