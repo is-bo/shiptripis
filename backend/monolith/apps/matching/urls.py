@@ -7,6 +7,7 @@ from django.urls import path
 from .views import (
     CounterOfferView,
     MatchCancelView,
+    MatchChatEligibilityView,
     MatchDetailView,
     MatchListView,
     OfferAcceptView,
@@ -21,6 +22,11 @@ urlpatterns = [
     path("matches/apply", TravelerApplyView.as_view(), name="matches-apply"),
     path("matches/<int:pk>", MatchDetailView.as_view(), name="matches-detail"),
     path("matches/<int:pk>/cancel", MatchCancelView.as_view(), name="matches-cancel"),
+    path(
+        "matches/<int:pk>/chat-eligibility",
+        MatchChatEligibilityView.as_view(),
+        name="matches-chat-eligibility",
+    ),
     path("matches/<int:pk>/offers", OfferListView.as_view(), name="matches-offers"),
     path(
         "matches/<int:pk>/offers/counter",

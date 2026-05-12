@@ -499,6 +499,67 @@ class OfferDeclineView(APIView):
         return Response(OfferSerializer(offer).data)
 
 
+class MatchChatEligibilityView(APIView):
+    """Whether the caller may open chat for this match.
+
+    Chat is gated on a succeeded payment for the match's accepted offer:
+    no payment, no chat. This protects both parties (no pre-payment harassment
+    funnel) and matches our user-privacy obligation -- counterparty PII flows
+    only after both have committed money + acceptance.
+
+    Returned shape is stable so the Go chat-service can call it before
+    upgrading a WebSocket without parsing free-form errors:
+
+      { "eligible": bool, "reason": str, "match_id": int }
+
+    Reasons (caller may surface verbatim):
+      ok                    -- chat allowed
+      not_a_party           -- caller is not sender/traveler on this match
+      no_accepted_offer     -- match has no accepted offer yet
+      payment_pending       -- accepted offer exists but no succeeded PI
+      match_closed          -- match cancelled / expired
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        match = get_object_or_404(Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk)
+        if not _is_party(match, request.user.id):
+            # 200 with eligible=false (not 403) -- caller is the Go chat-service
+            # calling on behalf of a user; we want a uniform shape it can cache.
+            return Response(
+                {"eligible": False, "reason": "not_a_party", "match_id": match.id}
+            )
+
+        if match.status in (Match.Status.CANCELLED, Match.Status.EXPIRED):
+            return Response(
+                {"eligible": False, "reason": "match_closed", "match_id": match.id}
+            )
+
+        accepted = (
+            Offer.objects.filter(match_id=match.id, status=Offer.Status.ACCEPTED)
+            .only("id")
+            .first()
+        )
+        if accepted is None:
+            return Response(
+                {"eligible": False, "reason": "no_accepted_offer", "match_id": match.id}
+            )
+
+        # Lazy import: payments depends on matching, not vice versa.
+        from apps.payments.models import PaymentIntent
+
+        succeeded = PaymentIntent.objects.filter(
+            offer_id=accepted.id, status=PaymentIntent.Status.SUCCEEDED
+        ).exists()
+        if not succeeded:
+            return Response(
+                {"eligible": False, "reason": "payment_pending", "match_id": match.id}
+            )
+
+        return Response({"eligible": True, "reason": "ok", "match_id": match.id})
+
+
 class OfferWithdrawView(APIView):
     """Proposer withdraws their own pending offer."""
 

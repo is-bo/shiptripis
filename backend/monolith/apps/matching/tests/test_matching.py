@@ -385,3 +385,127 @@ class MatchListAndDetailTests(APITestCase):
         assert r.status_code == 200
         assert r.data["latest_offer"]["total_dzd"] == 5000
         assert r.data["accepted_offer"] is None
+
+
+class ChatEligibilityTests(APITestCase):
+    """GET /api/matches/<id>/chat-eligibility — payment-gated chat."""
+
+    def setUp(self):
+        self.sender = _user("sender-chat@example.com", "1")
+        self.traveler = _user("traveler-chat@example.com", "2")
+        self.outsider = _user("outsider@example.com", "3")
+        parcel = _make_delivery(self.sender)
+        trip = _make_trip(self.traveler)
+        self.match = Match.objects.create(
+            parcel=parcel,
+            trip=trip,
+            sender=self.sender,
+            traveler=self.traveler,
+            status=Match.Status.PENDING,
+        )
+        self.offer = Offer.objects.create(
+            match=self.match,
+            proposer=self.traveler,
+            base_amount_dzd=4000,
+            base_fee_dzd=0,
+            commission_dzd=1000,
+            total_dzd=5000,
+            status=Offer.Status.PENDING,
+        )
+
+    def _accept_offer(self):
+        self.offer.status = Offer.Status.ACCEPTED
+        self.offer.save(update_fields=["status"])
+        self.match.status = Match.Status.ACCEPTED
+        self.match.save(update_fields=["status"])
+
+    def _succeed_payment(self):
+        from apps.payments.models import PaymentIntent
+
+        return PaymentIntent.objects.create(
+            offer=self.offer,
+            payer=self.sender,
+            amount_minor=5000,
+            currency="DZD",
+            provider=PaymentIntent.Provider.MOCK,
+            provider_intent_id=f"pi_test_{self.offer.id}",
+            status=PaymentIntent.Status.SUCCEEDED,
+        )
+
+    def test_unauth_rejected(self):
+        c = APIClient()
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.status_code == 401
+
+    def test_outsider_gets_not_a_party(self):
+        c = _client(self.outsider)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.status_code == 200
+        assert r.data == {
+            "eligible": False,
+            "reason": "not_a_party",
+            "match_id": self.match.id,
+        }
+
+    def test_party_with_no_accepted_offer_blocked(self):
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.status_code == 200
+        assert r.data["eligible"] is False
+        assert r.data["reason"] == "no_accepted_offer"
+
+    def test_accepted_offer_without_payment_blocked(self):
+        self._accept_offer()
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.status_code == 200
+        assert r.data["eligible"] is False
+        assert r.data["reason"] == "payment_pending"
+
+    def test_pending_payment_blocked(self):
+        from apps.payments.models import PaymentIntent
+
+        self._accept_offer()
+        PaymentIntent.objects.create(
+            offer=self.offer,
+            payer=self.sender,
+            amount_minor=5000,
+            currency="DZD",
+            provider=PaymentIntent.Provider.MOCK,
+            provider_intent_id=f"pi_pending_{self.offer.id}",
+            status=PaymentIntent.Status.PROCESSING,
+        )
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.data["eligible"] is False
+        assert r.data["reason"] == "payment_pending"
+
+    def test_succeeded_payment_unlocks_chat_for_sender(self):
+        self._accept_offer()
+        self._succeed_payment()
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.status_code == 200
+        assert r.data == {"eligible": True, "reason": "ok", "match_id": self.match.id}
+
+    def test_succeeded_payment_unlocks_chat_for_traveler(self):
+        self._accept_offer()
+        self._succeed_payment()
+        c = _client(self.traveler)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.data["eligible"] is True
+
+    def test_cancelled_match_blocks_chat_even_after_payment(self):
+        self._accept_offer()
+        self._succeed_payment()
+        self.match.status = Match.Status.CANCELLED
+        self.match.save(update_fields=["status"])
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
+        assert r.data["eligible"] is False
+        assert r.data["reason"] == "match_closed"
+
+    def test_404_for_unknown_match(self):
+        c = _client(self.sender)
+        r = c.get(reverse("matches-chat-eligibility", args=[999999]))
+        assert r.status_code == 404
