@@ -10,9 +10,16 @@ from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
 
 
 class ParcelMediaSerializer(serializers.ModelSerializer):
+    """Public parcel media metadata.
+
+    We deliberately do NOT expose `bucket` or `object_key` — those are
+    internal storage paths. The Go media-service issues short-lived
+    presigned URLs on demand; the client never sees the raw S3 key.
+    """
+
     class Meta:
         model = ParcelMedia
-        fields = ("id", "bucket", "object_key", "content_type", "bytes", "created_at")
+        fields = ("id", "content_type", "bytes", "created_at")
         read_only_fields = fields
 
 

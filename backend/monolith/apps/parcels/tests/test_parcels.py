@@ -8,6 +8,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.accounts.models import User
 from apps.parcels.models import (
     DeliveryRequest,
+    ParcelMedia,
     ParcelRequest,
     ProductRequest,
 )
@@ -309,3 +310,39 @@ class DeliveryQuoteTests(APITestCase):
         # base 4500: floor 2700, ceiling 6300
         assert r.data["min_floor_dzd"] == 2_700
         assert r.data["max_ceiling_dzd"] == 6_300
+
+
+class ParcelMediaPrivacyTests(APITestCase):
+    """Regression — media serializer must NOT leak storage bucket/object_key."""
+
+    def setUp(self):
+        self.user = _make_user("media-priv@example.com")
+        self.client = _auth_client(self.user)
+        self.delivery = DeliveryRequest.objects.create(
+            sender=self.user,
+            kind=ParcelRequest.Kind.DELIVERY,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=1,
+            item_type=ParcelRequest.ItemType.DOCUMENTS,
+            description="x",
+            base_amount_dzd=2000,
+        )
+        ParcelMedia.objects.create(
+            parcel=self.delivery,
+            bucket="parcels-private",
+            object_key="users/42/some-uuid.jpg",
+            content_type="image/jpeg",
+            bytes=12345,
+        )
+
+    def test_detail_does_not_leak_storage_keys(self):
+        r = self.client.get(reverse("parcels-detail", args=[self.delivery.pk]))
+        assert r.status_code == 200
+        assert r.data["media"], "expected media in response"
+        m = r.data["media"][0]
+        assert "bucket" not in m
+        assert "object_key" not in m
+        # but useful fields are still there
+        assert m["content_type"] == "image/jpeg"
+        assert m["bytes"] == 12345
