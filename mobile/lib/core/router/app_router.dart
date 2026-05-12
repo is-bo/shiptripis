@@ -6,7 +6,7 @@ import '../../features/auth/sign_up_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/onboarding/role_select_screen.dart';
-import '../../features/sender/flight_tracking_screen.dart';
+import '../../features/sender/follow_package_screen.dart';
 import '../../features/sender/make_request_screen.dart';
 import '../../features/sender/offer_to_traveler_screen.dart';
 import '../../features/sender/payment_screen.dart';
@@ -64,7 +64,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/tracking/:id',
       builder: (_, state) =>
-          FlightTrackingScreen(tripId: state.pathParameters['id']!),
+          FollowPackageScreen(matchId: state.pathParameters['id']!),
     ),
   ],
 );

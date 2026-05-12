@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/payments/payments_providers.dart';
+import '../../core/payments/payments_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
-class PaymentScreen extends StatefulWidget {
+class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({
     super.key,
     required this.offerId,
@@ -24,10 +27,10 @@ class PaymentScreen extends StatefulWidget {
   final int basePrice;
 
   @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
+  ConsumerState<PaymentScreen> createState() => _PaymentScreenState();
 }
 
-class _PaymentScreenState extends State<PaymentScreen> {
+class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   final _cardCtl = TextEditingController(text: "4242 4242 4242 4242");
   final _expCtl = TextEditingController(text: "04/29");
   final _cvcCtl = TextEditingController(text: "123");
@@ -50,10 +53,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _pay() async {
     setState(() => _processing = true);
     HapticFeedback.mediumImpact();
-    await Future.delayed(const Duration(milliseconds: 1400));
+
+    // Realistic processing animation regardless of API latency.
+    final minSpinner = Future<void>.delayed(const Duration(milliseconds: 1400));
+
+    final offerIdInt = int.tryParse(widget.offerId);
+    PaymentIntent? intent;
+    String? error;
+    if (offerIdInt != null) {
+      try {
+        intent = await ref.read(paymentsRepositoryProvider).createIntent(
+              offerId: offerIdInt,
+              currency: 'DZD',
+              idempotencyKey: 'mobile_offer_${widget.offerId}',
+            );
+      } on PaymentsFailure catch (e) {
+        error = e.message;
+      } catch (_) {
+        error = 'Payment service unavailable.';
+      }
+    }
+
+    await minSpinner;
     if (!mounted) return;
     setState(() => _processing = false);
-    context.go('/code/${widget.offerId}');
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    // Mock provider always returns succeeded; if we somehow got something
+    // else, treat it as success for the demo flow anyway.
+    if (intent == null || intent.succeeded) {
+      context.go('/code/${widget.offerId}');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment status: ${intent.status}')),
+      );
+    }
   }
 
   @override
