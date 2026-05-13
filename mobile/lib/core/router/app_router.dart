@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/forgot_password_screen.dart';
+import '../../features/matching/match_detail_screen.dart';
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
@@ -50,6 +51,11 @@ final appRouter = GoRouter(
         final o = state.extra as MockOffer? ?? mockOffers.first;
         return OfferDetailScreen(offer: o);
       },
+    ),
+    GoRoute(
+      path: '/match/:id',
+      builder: (_, state) =>
+          MatchDetailScreen(matchId: int.parse(state.pathParameters['id']!)),
     ),
     GoRoute(
       path: '/payment/:id',

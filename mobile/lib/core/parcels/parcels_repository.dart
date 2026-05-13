@@ -12,21 +12,15 @@ class ParcelsFailure implements Exception {
 class ParcelMedia {
   const ParcelMedia({
     required this.id,
-    required this.bucket,
-    required this.objectKey,
     required this.contentType,
     required this.bytes,
   });
   factory ParcelMedia.fromJson(Map<String, dynamic> j) => ParcelMedia(
         id: j['id'] as int,
-        bucket: j['bucket'] as String,
-        objectKey: j['object_key'] as String,
         contentType: j['content_type'] as String? ?? 'image/jpeg',
         bytes: j['bytes'] as int? ?? 0,
       );
   final int id;
-  final String bucket;
-  final String objectKey;
   final String contentType;
   final int bytes;
 }
