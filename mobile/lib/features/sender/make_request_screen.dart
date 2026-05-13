@@ -370,6 +370,20 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
       _input(_amountCtl, "5000",
           keyboard: TextInputType.number,
           onChanged: (_) => setState(() {})),
+      if (_origin != null && _dest != null) ...[
+        const SizedBox(height: 10),
+        _DeliveryQuoteHint(
+          params: DeliveryQuoteParams(
+            weightKg: _kg,
+            originIata: _origin!.iata,
+            destinationIata: _dest!.iata,
+          ),
+          currentAmount: _amount(),
+          onUseSuggested: (suggested) {
+            setState(() => _amountCtl.text = suggested.toString());
+          },
+        ),
+      ],
     ];
   }
 
@@ -610,6 +624,125 @@ class _AirportTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DeliveryQuoteHint extends ConsumerWidget {
+  const _DeliveryQuoteHint({
+    required this.params,
+    required this.currentAmount,
+    required this.onUseSuggested,
+  });
+
+  final DeliveryQuoteParams params;
+  final int currentAmount;
+  final void Function(int) onUseSuggested;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(deliveryQuoteProvider(params));
+    return async.when(
+      loading: () => _hintShell(
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.inkMute),
+            ),
+            const SizedBox(width: 10),
+            Text("Estimating fair price…",
+                style: AppType.body(12, w: FontWeight.w600)
+                    .copyWith(color: AppColors.inkMute)),
+          ],
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (q) {
+        final differs = currentAmount != q.suggestedBaseDzd;
+        final outOfBand = currentAmount > 0 &&
+            (currentAmount < q.minFloorDzd ||
+                currentAmount > q.maxCeilingDzd);
+        return _hintShell(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded,
+                      size: 14, color: AppColors.gold),
+                  const SizedBox(width: 6),
+                  Text("Suggested base",
+                      style: AppType.eyebrow()
+                          .copyWith(color: AppColors.inkMute)),
+                  const Spacer(),
+                  Text("${q.suggestedBaseDzd} DZD",
+                      style: AppType.body(13, w: FontWeight.w800)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Soft band: ${q.minFloorDzd} – ${q.maxCeilingDzd} DZD · "
+                "${q.weightKg} kg",
+                style: AppType.body(11.5, w: FontWeight.w600)
+                    .copyWith(color: AppColors.inkMute),
+              ),
+              if (outOfBand) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 12, color: AppColors.terracotta),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        currentAmount < q.minFloorDzd
+                            ? "Below the typical range — travelers may decline."
+                            : "Above the typical range — fewer travelers may accept.",
+                        style: AppType.body(11, w: FontWeight.w600)
+                            .copyWith(color: AppColors.terracotta),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (differs) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => onUseSuggested(q.suggestedBaseDzd),
+                    icon: const Icon(Icons.bolt_rounded, size: 14),
+                    label: Text("Use ${q.suggestedBaseDzd} DZD",
+                        style: AppType.body(12, w: FontWeight.w800)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.emerald,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _hintShell({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: child,
     );
   }
 }

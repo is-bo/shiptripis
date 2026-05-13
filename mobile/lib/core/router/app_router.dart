@@ -1,7 +1,10 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/forgot_password_screen.dart';
+import '../../core/verification/verification_repository.dart';
 import '../../features/matching/match_detail_screen.dart';
+import '../../features/verification/handover_issue_screen.dart';
+import '../../features/verification/handover_verify_screen.dart';
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
@@ -66,6 +69,24 @@ final appRouter = GoRouter(
       path: '/code/:id',
       builder: (_, state) =>
           PickupCodeScreen(offerId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/handover/issue/:id',
+      builder: (_, state) => HandoverIssueScreen(
+        matchId: int.parse(state.pathParameters['id']!),
+        kind: (state.uri.queryParameters['kind'] == 'delivery')
+            ? HandoverKind.delivery
+            : HandoverKind.pickup,
+      ),
+    ),
+    GoRoute(
+      path: '/handover/verify/:id',
+      builder: (_, state) => HandoverVerifyScreen(
+        matchId: int.parse(state.pathParameters['id']!),
+        kind: (state.uri.queryParameters['kind'] == 'delivery')
+            ? HandoverKind.delivery
+            : HandoverKind.pickup,
+      ),
     ),
     GoRoute(
       path: '/tracking/:id',

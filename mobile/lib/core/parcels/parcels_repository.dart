@@ -93,9 +93,54 @@ class Parcel {
   final DateTime createdAt;
 }
 
+class DeliveryQuote {
+  const DeliveryQuote({
+    required this.weightKg,
+    required this.suggestedBaseDzd,
+    required this.suggestedTotalDzd,
+    required this.minFloorDzd,
+    required this.maxCeilingDzd,
+    required this.routeMultiplierX100,
+  });
+  factory DeliveryQuote.fromJson(Map<String, dynamic> j) => DeliveryQuote(
+        weightKg: j['weight_kg'] as int,
+        suggestedBaseDzd: j['suggested_base_dzd'] as int,
+        suggestedTotalDzd: j['suggested_total_dzd'] as int,
+        minFloorDzd: j['min_floor_dzd'] as int,
+        maxCeilingDzd: j['max_ceiling_dzd'] as int,
+        routeMultiplierX100: j['route_multiplier_x100'] as int,
+      );
+  final int weightKg;
+  final int suggestedBaseDzd;
+  final int suggestedTotalDzd;
+  final int minFloorDzd;
+  final int maxCeilingDzd;
+  final int routeMultiplierX100;
+}
+
 class ParcelsRepository {
   ParcelsRepository(this._dio);
   final Dio _dio;
+
+  Future<DeliveryQuote> quoteDelivery({
+    required int weightKg,
+    String? originIata,
+    String? destinationIata,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/parcels/quote/delivery',
+      queryParameters: {
+        'weight_kg': weightKg,
+        if (originIata != null && originIata.isNotEmpty) 'origin': originIata,
+        if (destinationIata != null && destinationIata.isNotEmpty)
+          'destination': destinationIata,
+      },
+    );
+    if (r.statusCode == 200 && r.data != null) {
+      return DeliveryQuote.fromJson(r.data!);
+    }
+    throw ParcelsFailure(_extractMessage(r) ?? 'Could not load quote.');
+  }
 
   Future<List<Parcel>> listMine({String? status, String? kind}) async {
     final r = await _dio.get<dynamic>(

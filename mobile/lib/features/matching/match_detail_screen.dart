@@ -216,6 +216,17 @@ class _MatchBody extends StatelessWidget {
             onPay: onGoToPayment,
           ),
 
+        // Handover code entry points -- visible once the match is paid +
+        // accepted (server gates this anyway; we only show buttons when the
+        // status makes the action legal).
+        if (match.status == MatchStatus.accepted ||
+            match.status == MatchStatus.inTransit)
+          _HandoverPanel(
+            matchId: match.id,
+            status: match.status,
+            isSender: myId == match.senderId,
+          ),
+
         // The chain
         Text('Offer history', style: AppType.display(16)),
         const SizedBox(height: 8),
@@ -502,6 +513,77 @@ class _ErrorView extends StatelessWidget {
             PrimaryButton(label: 'Retry', onTap: onRetry),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HandoverPanel extends StatelessWidget {
+  const _HandoverPanel({
+    required this.matchId,
+    required this.status,
+    required this.isSender,
+  });
+  final int matchId;
+  final MatchStatus status;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    // Which code is relevant right now:
+    //   accepted   -> PICKUP
+    //   in_transit -> DELIVERY
+    final isPickup = status == MatchStatus.accepted;
+    final kindParam = isPickup ? 'pickup' : 'delivery';
+    final actionLabel = isSender
+        ? (isPickup ? 'Show pickup code' : 'Show delivery code')
+        : (isPickup ? 'Enter pickup code' : 'Enter delivery code');
+    final blurb = isSender
+        ? (isPickup
+            ? 'Show the traveler this code when they arrive to collect the parcel.'
+            : 'Give the recipient this code so they can confirm delivery to the traveler.')
+        : (isPickup
+            ? 'Ask the sender for the pickup code and enter it here.'
+            : 'Ask the recipient for the delivery code. Verifying it releases your payment.');
+    final route = isSender
+        ? '/handover/issue/$matchId?kind=$kindParam'
+        : '/handover/verify/$matchId?kind=$kindParam';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.gold.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isPickup ? Icons.inventory_2_outlined : Icons.local_shipping_outlined,
+                color: AppColors.goldDeep,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isPickup ? 'Pickup' : 'Delivery',
+                style: AppType.eyebrow(color: AppColors.goldDeep),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(blurb, style: AppType.body(13, color: AppColors.inkSoft)),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: actionLabel,
+            expand: true,
+            color: AppColors.emerald,
+            onTap: () => GoRouter.of(context).push(route),
+          ),
+        ],
       ),
     );
   }

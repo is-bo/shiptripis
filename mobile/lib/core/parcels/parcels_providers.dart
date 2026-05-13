@@ -7,6 +7,36 @@ final parcelsRepositoryProvider = Provider<ParcelsRepository>((ref) {
   return ParcelsRepository(ref.read(dioProvider));
 });
 
+class DeliveryQuoteParams {
+  const DeliveryQuoteParams({
+    required this.weightKg,
+    this.originIata,
+    this.destinationIata,
+  });
+  final int weightKg;
+  final String? originIata;
+  final String? destinationIata;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeliveryQuoteParams &&
+      other.weightKg == weightKg &&
+      other.originIata == originIata &&
+      other.destinationIata == destinationIata;
+
+  @override
+  int get hashCode => Object.hash(weightKg, originIata, destinationIata);
+}
+
+final deliveryQuoteProvider = FutureProvider.autoDispose
+    .family<DeliveryQuote, DeliveryQuoteParams>((ref, p) async {
+  return ref.read(parcelsRepositoryProvider).quoteDelivery(
+        weightKg: p.weightKg,
+        originIata: p.originIata,
+        destinationIata: p.destinationIata,
+      );
+});
+
 class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
   @override
   Future<List<Parcel>> build() async {
