@@ -55,6 +55,40 @@ class ParcelListView(APIView):
         return Response(ParcelRequestSerializer(qs, many=True).data)
 
 
+class OpenParcelSearchView(APIView):
+    """Public open-parcel feed for travelers looking for shipments to carry.
+
+    Returns OPEN parcels not owned by the caller. Filters:
+      ?origin=ALG&destination=CDG     IATA codes
+      ?max_weight_kg=5                integer (parcel weight <= cap)
+      ?kind=delivery|product
+    Results ordered newest-first; capped at 100 rows.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        qs = (
+            ParcelRequest.objects.filter(status=ParcelRequest.Status.OPEN)
+            .exclude(sender=request.user)
+            .select_related("origin", "destination")
+            .prefetch_related("media")
+        )
+        if (o := request.query_params.get("origin")):
+            qs = qs.filter(origin_id=o.upper())
+        if (d := request.query_params.get("destination")):
+            qs = qs.filter(destination_id=d.upper())
+        if (k := request.query_params.get("kind")):
+            qs = qs.filter(kind=k)
+        if (w := request.query_params.get("max_weight_kg")):
+            try:
+                qs = qs.filter(weight_kg__lte=int(w))
+            except ValueError:
+                pass
+        qs = qs.order_by("-created_at")[:100]
+        return Response(ParcelRequestSerializer(qs, many=True).data)
+
+
 class DeliveryCreateView(APIView):
     permission_classes = (IsAuthenticated,)
 

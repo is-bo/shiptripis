@@ -114,6 +114,46 @@ class Offer {
   final DateTime createdAt;
 }
 
+class MatchParcelMini {
+  const MatchParcelMini({
+    required this.id,
+    required this.kind,
+    required this.weightKg,
+    required this.originIata,
+    required this.originCity,
+    required this.originCountry,
+    required this.destinationIata,
+    required this.destinationCity,
+    required this.destinationCountry,
+  });
+
+  factory MatchParcelMini.fromJson(Map<String, dynamic> j) {
+    final o = Map<String, dynamic>.from(j['origin'] as Map);
+    final d = Map<String, dynamic>.from(j['destination'] as Map);
+    return MatchParcelMini(
+      id: j['id'] as int,
+      kind: j['kind'] as String,
+      weightKg: j['weight_kg'] as int,
+      originIata: o['iata'] as String,
+      originCity: o['city'] as String,
+      originCountry: o['country'] as String,
+      destinationIata: d['iata'] as String,
+      destinationCity: d['city'] as String,
+      destinationCountry: d['country'] as String,
+    );
+  }
+
+  final int id;
+  final String kind;
+  final int weightKg;
+  final String originIata;
+  final String originCity;
+  final String originCountry;
+  final String destinationIata;
+  final String destinationCity;
+  final String destinationCountry;
+}
+
 class MatchSummary {
   const MatchSummary({
     required this.id,
@@ -122,6 +162,7 @@ class MatchSummary {
     required this.senderId,
     required this.travelerId,
     required this.status,
+    required this.parcel,
     required this.latestOffer,
     required this.acceptedOffer,
     required this.createdAt,
@@ -134,6 +175,10 @@ class MatchSummary {
         senderId: j['sender_id'] as int,
         travelerId: j['traveler_id'] as int,
         status: MatchStatus.fromString(j['status'] as String),
+        parcel: j['parcel'] == null
+            ? null
+            : MatchParcelMini.fromJson(
+                Map<String, dynamic>.from(j['parcel'] as Map)),
         latestOffer: j['latest_offer'] == null
             ? null
             : Offer.fromJson(Map<String, dynamic>.from(j['latest_offer'] as Map)),
@@ -150,6 +195,7 @@ class MatchSummary {
   final int senderId;
   final int travelerId;
   final MatchStatus status;
+  final MatchParcelMini? parcel;
   final Offer? latestOffer;
   final Offer? acceptedOffer;
   final DateTime createdAt;
@@ -200,6 +246,29 @@ class MatchingRepository {
           .toList();
     }
     throw MatchingFailure(_msg(r) ?? 'Could not load offers.');
+  }
+
+  /// Traveler applies to carry a sender's parcel. Creates Match + first Offer.
+  /// 409 if a pending Match already exists for (parcel, trip).
+  Future<MatchSummary> apply({
+    required int parcelId,
+    required int tripId,
+    int? baseAmountDzd,
+    String note = '',
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/matches/apply',
+      data: {
+        'parcel_id': parcelId,
+        'trip_id': tripId,
+        if (baseAmountDzd != null) 'base_amount_dzd': baseAmountDzd,
+        if (note.isNotEmpty) 'note': note,
+      },
+    );
+    if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {
+      return MatchSummary.fromJson(r.data!);
+    }
+    throw MatchingFailure(_msg(r) ?? 'Could not apply to parcel.');
   }
 
   /// Counter the current pending offer with a new asking amount.

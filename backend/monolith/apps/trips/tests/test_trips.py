@@ -218,3 +218,54 @@ class TripDetailTests(APITestCase):
     def test_404_for_unknown(self):
         r = self.client.get(reverse("trips-detail", kwargs={"pk": 999_999}))
         assert r.status_code == 404
+
+
+class TripSearchTests(APITestCase):
+    def setUp(self):
+        self.traveler = _make_user("trav1@example.com")
+        self.other_traveler = _make_user("trav2@example.com")
+        self.sender = _make_user("send@example.com", role="sender")
+
+        self.t_active = Trip.objects.create(
+            traveler=self.other_traveler,
+            origin_id="ALG",
+            destination_id="CDG",
+            departure_at=timezone.now() + timedelta(days=5),
+            capacity_kg=10,
+        )
+        self.t_cancelled = Trip.objects.create(
+            traveler=self.other_traveler,
+            origin_id="ALG",
+            destination_id="CDG",
+            departure_at=timezone.now() + timedelta(days=4),
+            capacity_kg=10,
+            status=Trip.Status.CANCELLED,
+        )
+        self.t_own = Trip.objects.create(
+            traveler=self.sender,
+            origin_id="ALG",
+            destination_id="CDG",
+            departure_at=timezone.now() + timedelta(days=6),
+            capacity_kg=10,
+        )
+
+    def test_returns_only_active_excluding_caller(self):
+        c = _auth_client(self.sender)
+        r = c.get(reverse("trips-search") + "?origin=ALG&destination=CDG")
+        assert r.status_code == 200
+        ids = {row["id"] for row in r.data}
+        assert ids == {self.t_active.id}
+
+    def test_filters_by_capacity(self):
+        c = _auth_client(self.sender)
+        r = c.get(
+            reverse("trips-search")
+            + "?origin=ALG&destination=CDG&min_capacity_kg=20"
+        )
+        assert r.status_code == 200
+        assert r.data == []
+
+    def test_requires_auth(self):
+        c = APIClient()
+        r = c.get(reverse("trips-search"))
+        assert r.status_code in (401, 403)

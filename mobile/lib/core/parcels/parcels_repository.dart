@@ -226,6 +226,31 @@ class ParcelsRepository {
     throw ParcelsFailure(_extractMessage(r) ?? 'Could not create request.');
   }
 
+  Future<List<Parcel>> searchOpen({
+    String? originIata,
+    String? destinationIata,
+    String? kind,
+    int? maxWeightKg,
+  }) async {
+    final params = <String, dynamic>{};
+    if (originIata != null && originIata.isNotEmpty) params['origin'] = originIata;
+    if (destinationIata != null && destinationIata.isNotEmpty) {
+      params['destination'] = destinationIata;
+    }
+    if (kind != null && kind.isNotEmpty) params['kind'] = kind;
+    if (maxWeightKg != null) params['max_weight_kg'] = maxWeightKg;
+    final r = await _dio.get<dynamic>(
+      '/api/parcels/open',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    if (r.statusCode == 200 && r.data is List) {
+      return (r.data as List)
+          .map((e) => Parcel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    }
+    throw ParcelsFailure(_extractMessage(r) ?? 'Could not load open parcels.');
+  }
+
   Future<Parcel> cancel(int id) async {
     final r = await _dio.post<Map<String, dynamic>>('/api/parcels/$id/cancel');
     if (r.statusCode == 200 && r.data != null) {

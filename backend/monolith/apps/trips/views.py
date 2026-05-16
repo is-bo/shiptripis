@@ -3,6 +3,7 @@
 Endpoints:
   GET  /api/airports                 — list (filter by ?country=DZ)
   GET  /api/trips                    — list (mine, with ?status=active)
+  GET  /api/trips/search             — public search (active trips, not mine)
   POST /api/trips                    — create
   GET  /api/trips/<id>               — retrieve (any auth user)
   POST /api/trips/<id>/cancel        — cancel (owner only, while active)
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -95,6 +97,42 @@ class TripListCreateView(APIView):
             .get(pk=trip.pk)
         )
         return Response(TripSerializer(trip).data, status=status.HTTP_201_CREATED)
+
+
+class TripSearchView(APIView):
+    """Public trip search for senders looking for travelers.
+
+    Only returns trips in ACTIVE status that are NOT the caller's own. Filters:
+      ?origin=ALG&destination=CDG     IATA codes (uppercased)
+      ?departure_after=2026-05-20T00:00:00Z   ISO 8601, accepts naive
+      ?min_capacity_kg=2              integer
+    Results are ordered by earliest departure first; capped at 100 rows.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        qs = (
+            Trip.objects.filter(status=Trip.Status.ACTIVE)
+            .exclude(traveler=request.user)
+            .select_related("origin", "destination", "traveler")
+            .prefetch_related("stopovers__airport")
+        )
+        if (o := request.query_params.get("origin")):
+            qs = qs.filter(origin_id=o.upper())
+        if (d := request.query_params.get("destination")):
+            qs = qs.filter(destination_id=d.upper())
+        if (after := request.query_params.get("departure_after")):
+            dt = parse_datetime(after)
+            if dt is not None:
+                qs = qs.filter(departure_at__gte=dt)
+        if (cap := request.query_params.get("min_capacity_kg")):
+            try:
+                qs = qs.filter(capacity_kg__gte=int(cap))
+            except ValueError:
+                pass
+        qs = qs.order_by("departure_at")[:100]
+        return Response(TripSerializer(qs, many=True).data)
 
 
 class TripDetailView(APIView):

@@ -12,7 +12,8 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final role = ref.watch(roleProvider);
+    final role = ref.watch(effectiveRoleProvider);
+    final canSwitch = ref.watch(canSwitchRoleProvider);
     return ListView(
       padding: EdgeInsets.zero,
       children: [
@@ -35,13 +36,15 @@ class ProfileScreen extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
           child: _PassportCard(),
         ),
-        const SizedBox(height: AppSpacing.x5),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
-          child: _RoleSwitcher(role: role, ref: ref)
-              .animate()
-              .fadeIn(delay: 100.ms, duration: 400.ms),
-        ),
+        if (canSwitch) ...[
+          const SizedBox(height: AppSpacing.x5),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+            child: _RoleSwitcher(role: role, ref: ref)
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 400.ms),
+          ),
+        ],
         const SizedBox(height: AppSpacing.x5),
         const _SettingsList(),
         const SizedBox(height: 110),

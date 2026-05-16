@@ -7,7 +7,8 @@ import '../../core/parcels/parcels_providers.dart';
 import '../../core/parcels/parcels_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
-import '../../shared/mock/mock_data.dart';
+import '../../core/trips/trips_providers.dart';
+import '../../core/trips/trips_repository.dart';
 import '../../shared/widgets/boarding_card.dart';
 import '../../shared/widgets/country_pill.dart';
 import '../../shared/widgets/stamp_chip.dart';
@@ -18,6 +19,11 @@ class SenderHome extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final parcelsAsync = ref.watch(myParcelsProvider);
+    // Suggest travelers along the most-recently OPEN parcel's route.
+    final openParcels =
+        (parcelsAsync.value ?? const <Parcel>[]).where((p) => p.status == 'open').toList();
+    final hint = openParcels.isNotEmpty ? openParcels.first : null;
+
     return RefreshIndicator(
       onRefresh: () => ref.read(myParcelsProvider.notifier).refresh(),
       child: CustomScrollView(
@@ -48,6 +54,7 @@ class SenderHome extends ConsumerWidget {
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (_, _) => _ErrorTile(
+                  message: "Couldn't load your requests.",
                   onRetry: () => ref.read(myParcelsProvider.notifier).refresh(),
                 ),
                 data: (parcels) => parcels.isEmpty
@@ -68,21 +75,133 @@ class SenderHome extends ConsumerWidget {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(
-              child: _SectionHeader(title: "Suggested travelers", action: "See all"),
+              child: _SectionHeader(
+                title: hint == null
+                    ? "Travelers near you"
+                    : "Travelers on ${hint.origin.iata} → ${hint.destination.iata}",
+                action: "Refine",
+              ),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
-          SliverList.separated(
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
-            itemCount: mockTravelers.length,
-            itemBuilder: (_, i) => Padding(
-              padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
-                  i == mockTravelers.length - 1 ? 110 : 0),
-              child: _TravelerCard(t: mockTravelers[i])
-                  .animate()
-                  .fadeIn(delay: Duration(milliseconds: 80 * i), duration: 400.ms)
-                  .moveY(begin: 14, end: 0, curve: kAppCurve),
+          if (hint == null)
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.x6, 0, AppSpacing.x6, 110),
+              sliver: SliverToBoxAdapter(child: _NoHintTile()),
+            )
+          else
+            _SuggestedTravelersList(
+              params: TripSearchParams(
+                originIata: hint.origin.iata,
+                destinationIata: hint.destination.iata,
+                minCapacityKg: hint.weightKg,
+              ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestedTravelersList extends ConsumerWidget {
+  const _SuggestedTravelersList({required this.params});
+  final TripSearchParams params;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tripsAsync = ref.watch(tripSearchProvider(params));
+    return tripsAsync.when(
+      loading: () => const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (_, _) => SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+          child: _ErrorTile(
+            message: "Couldn't load travelers right now.",
+            onRetry: () => ref.invalidate(tripSearchProvider(params)),
+          ),
+        ),
+      ),
+      data: (trips) {
+        if (trips.isEmpty) {
+          return const SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.x6, 0, AppSpacing.x6, 110),
+            sliver: SliverToBoxAdapter(child: _NoTripsTile()),
+          );
+        }
+        return SliverList.separated(
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
+          itemCount: trips.length,
+          itemBuilder: (_, i) => Padding(
+            padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
+                i == trips.length - 1 ? 110 : 0),
+            child: _TripCard(trip: trips[i])
+                .animate()
+                .fadeIn(delay: Duration(milliseconds: 60 * i), duration: 350.ms)
+                .moveY(begin: 14, end: 0, curve: kAppCurve),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _NoHintTile extends StatelessWidget {
+  const _NoHintTile();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x5),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.flight_takeoff_rounded, color: AppColors.inkMute),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Post a request to see travelers on your route.",
+              style: AppType.body(13, color: AppColors.inkSoft, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoTripsTile extends StatelessWidget {
+  const _NoTripsTile();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x5),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.search_off_rounded,
+              color: AppColors.inkMute, size: 28),
+          const SizedBox(height: 8),
+          Text("No travelers on this route yet",
+              style: AppType.body(13.5, w: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(
+            "Travelers will see your request and apply. You'll get a notification when they do.",
+            style: AppType.body(12, color: AppColors.inkMute, height: 1.4),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -245,7 +364,7 @@ class _SearchAction extends StatelessWidget {
                 children: [
                   Text("Find a traveler",
                       style: AppType.body(15, color: AppColors.parchment, w: FontWeight.w600)),
-                  Text("Algiers → Paris · this week",
+                  Text("Filter trips by route, date, capacity",
                       style: AppType.body(12, color: AppColors.parchmentDeep)),
                 ],
               ),
@@ -274,9 +393,13 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title, style: AppType.display(20, w: FontWeight.w500)),
-        const Spacer(),
-        Text(action, style: AppType.body(12.5, color: AppColors.inkMute, w: FontWeight.w600)),
+        Expanded(
+          child: Text(title,
+              style: AppType.display(20, w: FontWeight.w500),
+              overflow: TextOverflow.ellipsis),
+        ),
+        Text(action,
+            style: AppType.body(12.5, color: AppColors.inkMute, w: FontWeight.w600)),
         const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.inkMute),
       ],
     );
@@ -321,8 +444,9 @@ class _EmptyParcels extends StatelessWidget {
 }
 
 class _ErrorTile extends StatelessWidget {
-  const _ErrorTile({required this.onRetry});
+  const _ErrorTile({required this.onRetry, required this.message});
   final VoidCallback onRetry;
+  final String message;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -337,7 +461,7 @@ class _ErrorTile extends StatelessWidget {
           const Icon(Icons.cloud_off_rounded, color: AppColors.terracotta),
           const SizedBox(width: 12),
           Expanded(
-            child: Text("Couldn't load your requests.",
+            child: Text(message,
                 style: AppType.body(13, w: FontWeight.w600)),
           ),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
@@ -436,12 +560,15 @@ class _ParcelCard extends StatelessWidget {
   }
 }
 
-class _TravelerCard extends StatelessWidget {
-  const _TravelerCard({required this.t});
-  final MockTraveler t;
+class _TripCard extends StatelessWidget {
+  const _TripCard({required this.trip});
+  final Trip trip;
 
   @override
   Widget build(BuildContext context) {
+    final dep = trip.departureAt.toLocal();
+    final dateStr =
+        "${_month(dep.month)} ${dep.day.toString().padLeft(2, '0')}";
     return BoardingCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,37 +583,41 @@ class _TravelerCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: Text(t.avatar,
-                    style: AppType.display(15, w: FontWeight.w600, color: AppColors.emerald)),
+                child: Text("T${trip.travelerId}",
+                    style: AppType.body(11,
+                        w: FontWeight.w700, color: AppColors.emeraldDeep)),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(t.name, style: AppType.display(17, w: FontWeight.w500)),
-                      const SizedBox(width: 6),
-                      if (t.kyc)
-                        const Icon(Icons.verified_rounded, size: 14, color: AppColors.emerald),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "${(t.rating / 10).toStringAsFixed(1)} ★ · ${t.trips} trips",
-                    style: AppType.body(12, color: AppColors.inkMute, w: FontWeight.w500),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "${trip.origin.city} → ${trip.destination.city}",
+                      style: AppType.display(16, w: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      trip.flightNumber.isEmpty
+                          ? "$dateStr · ${trip.capacityKg} kg capacity"
+                          : "${trip.flightNumber} · $dateStr",
+                      style: AppType.body(12,
+                          color: AppColors.inkMute, w: FontWeight.w500),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              StampChip(label: "VERIFIED", color: AppColors.emerald),
+              StampChip(label: "ACTIVE", color: AppColors.emerald),
             ],
           ),
           const SizedBox(height: AppSpacing.x4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              CountryPill(code: t.originCode, label: t.origin, dense: true),
+              CountryPill(
+                  code: trip.origin.country, label: trip.origin.iata, dense: true),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -496,7 +627,10 @@ class _TravelerCard extends StatelessWidget {
                   ),
                 ),
               ),
-              CountryPill(code: t.destCode, label: t.dest, dense: true),
+              CountryPill(
+                  code: trip.destination.country,
+                  label: trip.destination.iata,
+                  dense: true),
             ],
           ),
           const SizedBox(height: AppSpacing.x4),
@@ -504,67 +638,29 @@ class _TravelerCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.x4),
           Row(
             children: [
-              _Meta(label: "FLIGHT", value: t.flightNo),
-              const SizedBox(width: AppSpacing.x6),
-              _Meta(label: "DATE", value: t.date),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text("FROM", style: AppType.eyebrow()),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text(_fmt(t.pricePerKg),
-                          style: AppType.mono(15, w: FontWeight.w700)),
-                      const SizedBox(width: 4),
-                      Text("DZD/kg",
-                          style: AppType.mono(11, color: AppColors.inkMute)),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          Row(
-            children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.gold.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.luggage_rounded, size: 14, color: AppColors.goldDeep),
+                    const Icon(Icons.luggage_rounded,
+                        size: 14, color: AppColors.goldDeep),
                     const SizedBox(width: 4),
-                    Text("${t.kgFree} kg free",
+                    Text("${trip.capacityKg} kg free",
                         style: AppType.body(11.5,
                             color: AppColors.goldDeep, w: FontWeight.w700)),
                   ],
                 ),
               ),
               const Spacer(),
-              GestureDetector(
-                onTap: () => context.push('/sender/offer', extra: t),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.ink,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Row(
-                    children: [
-                      Text("Request",
-                          style: AppType.body(12.5,
-                              color: AppColors.parchment, w: FontWeight.w600)),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.arrow_forward_rounded,
-                          size: 14, color: AppColors.parchment),
-                    ],
-                  ),
-                ),
+              Text(
+                "Travelers reach out to you when they apply.",
+                style: AppType.body(11,
+                    color: AppColors.inkMute, w: FontWeight.w500),
               ),
             ],
           ),
@@ -573,30 +669,10 @@ class _TravelerCard extends StatelessWidget {
     );
   }
 
-  static String _fmt(int n) {
-    final s = n.toString();
-    return s.replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => "${m[1]} ",
-    );
-  }
-}
-
-class _Meta extends StatelessWidget {
-  const _Meta({required this.label, required this.value});
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppType.eyebrow()),
-        const SizedBox(height: 2),
-        Text(value, style: AppType.mono(13, w: FontWeight.w600)),
-      ],
-    );
-  }
+  static String _month(int m) => const [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      ][m - 1];
 }
 
 class _DashLinePainter extends CustomPainter {

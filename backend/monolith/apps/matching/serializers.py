@@ -45,12 +45,32 @@ class MatchEventSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class _MatchParcelMini(serializers.Serializer):
+    """Compact parcel snapshot embedded in MatchSerializer so list/detail
+    consumers don't need a second fetch to render route + weight + kind."""
+
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    weight_kg = serializers.IntegerField()
+    origin = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+
+    def get_origin(self, obj) -> dict:
+        from apps.trips.serializers import AirportSerializer
+        return AirportSerializer(obj.origin).data
+
+    def get_destination(self, obj) -> dict:
+        from apps.trips.serializers import AirportSerializer
+        return AirportSerializer(obj.destination).data
+
+
 class MatchSerializer(serializers.ModelSerializer):
     sender_id = serializers.IntegerField(read_only=True)
     traveler_id = serializers.IntegerField(read_only=True)
     parcel_id = serializers.IntegerField(read_only=True)
     trip_id = serializers.IntegerField(read_only=True)
 
+    parcel = _MatchParcelMini(read_only=True)
     latest_offer = serializers.SerializerMethodField()
     accepted_offer = serializers.SerializerMethodField()
 
@@ -63,6 +83,7 @@ class MatchSerializer(serializers.ModelSerializer):
             "sender_id",
             "traveler_id",
             "status",
+            "parcel",
             "latest_offer",
             "accepted_offer",
             "created_at",

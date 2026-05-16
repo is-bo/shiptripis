@@ -9,7 +9,7 @@ class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final role = ref.watch(roleProvider);
+    final role = ref.watch(effectiveRoleProvider);
     return role == AppRole.sender ? const SenderHome() : const TravelerHome();
   }
 }

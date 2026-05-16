@@ -95,6 +95,31 @@ class TripsRepository {
     throw TripsFailure(_extractMessage(r) ?? 'Could not load trips.');
   }
 
+  Future<List<Trip>> searchTrips({
+    String? originIata,
+    String? destinationIata,
+    DateTime? departureAfter,
+    int? minCapacityKg,
+  }) async {
+    final params = <String, dynamic>{};
+    if (originIata != null) params['origin'] = originIata;
+    if (destinationIata != null) params['destination'] = destinationIata;
+    if (departureAfter != null) {
+      params['departure_after'] = departureAfter.toUtc().toIso8601String();
+    }
+    if (minCapacityKg != null) params['min_capacity_kg'] = minCapacityKg;
+    final r = await _dio.get<dynamic>(
+      '/api/trips/search',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    if (r.statusCode == 200 && r.data is List) {
+      return (r.data as List)
+          .map((e) => Trip.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    }
+    throw TripsFailure(_extractMessage(r) ?? 'Could not search trips.');
+  }
+
   Future<Trip> createTrip({
     required String originIata,
     required String destinationIata,

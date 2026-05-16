@@ -61,3 +61,34 @@ class MyTripsNotifier extends AsyncNotifier<List<Trip>> {
 
 final myTripsProvider =
     AsyncNotifierProvider<MyTripsNotifier, List<Trip>>(MyTripsNotifier.new);
+
+class TripSearchParams {
+  const TripSearchParams({
+    this.originIata,
+    this.destinationIata,
+    this.minCapacityKg,
+  });
+  final String? originIata;
+  final String? destinationIata;
+  final int? minCapacityKg;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TripSearchParams &&
+      other.originIata == originIata &&
+      other.destinationIata == destinationIata &&
+      other.minCapacityKg == minCapacityKg;
+
+  @override
+  int get hashCode =>
+      Object.hash(originIata, destinationIata, minCapacityKg);
+}
+
+final tripSearchProvider = FutureProvider.autoDispose
+    .family<List<Trip>, TripSearchParams>((ref, p) async {
+  return ref.read(tripsRepositoryProvider).searchTrips(
+        originIata: p.originIata,
+        destinationIata: p.destinationIata,
+        minCapacityKg: p.minCapacityKg,
+      );
+});

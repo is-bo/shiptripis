@@ -3,11 +3,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/matching/matching_providers.dart';
+import '../../core/matching/matching_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/trips/trips_providers.dart';
 import '../../core/trips/trips_repository.dart';
-import '../../shared/mock/mock_data.dart';
 import '../../shared/widgets/boarding_card.dart';
 import '../../shared/widgets/country_pill.dart';
 import '../../shared/widgets/stamp_chip.dart';
@@ -27,6 +28,10 @@ class TravelerHome extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
             sliver: SliverToBoxAdapter(child: _CreateTripCta()),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+            sliver: SliverToBoxAdapter(child: _FindParcelsCta()),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
           SliverPadding(
@@ -66,23 +71,251 @@ class TravelerHome extends ConsumerWidget {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(
-              child: _SectionHeader(title: "Offers received", action: "Filter"),
+              child: _SectionHeader(title: "Senders interested in your trips", action: ""),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
-          SliverList.separated(
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
-            itemCount: mockOffers.length,
-            itemBuilder: (_, i) => Padding(
-              padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
-                  i == mockOffers.length - 1 ? 110 : 0),
-              child: _OfferCard(o: mockOffers[i])
-                  .animate()
-                  .fadeIn(delay: Duration(milliseconds: 80 * i), duration: 400.ms)
-                  .moveY(begin: 14, end: 0, curve: kAppCurve),
+          const _IncomingOffersSection(),
+        ],
+      ),
+    );
+  }
+}
+
+class _IncomingOffersSection extends ConsumerWidget {
+  const _IncomingOffersSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const params = MatchListParams(role: 'traveler', status: 'pending');
+    final async = ref.watch(matchListProvider(params));
+    return async.when(
+      loading: () => const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (e, _) => SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+        sliver: SliverToBoxAdapter(
+          child: _ErrorTile(
+            message: "Couldn't load incoming offers.",
+            onRetry: () => ref.invalidate(matchListProvider(params)),
+          ),
+        ),
+      ),
+      data: (matches) {
+        if (matches.isEmpty) {
+          return const SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.x6, 0, AppSpacing.x6, 110),
+            sliver: SliverToBoxAdapter(child: _NoIncomingTile()),
+          );
+        }
+        return SliverList.separated(
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
+          itemCount: matches.length,
+          itemBuilder: (_, i) => Padding(
+            padding: EdgeInsets.fromLTRB(AppSpacing.x6, 0, AppSpacing.x6,
+                i == matches.length - 1 ? 110 : 0),
+            child: _IncomingMatchCard(match: matches[i])
+                .animate()
+                .fadeIn(delay: Duration(milliseconds: 60 * i), duration: 350.ms)
+                .moveY(begin: 14, end: 0, curve: kAppCurve),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _NoIncomingTile extends StatelessWidget {
+  const _NoIncomingTile();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x5),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.mark_email_unread_outlined,
+              color: AppColors.inkMute),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("No incoming offers yet",
+                    style: AppType.body(13.5, w: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  "Apply to open parcels — when a sender accepts, they'll appear here.",
+                  style: AppType.body(11.5,
+                      color: AppColors.inkMute, height: 1.4),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _IncomingMatchCard extends StatelessWidget {
+  const _IncomingMatchCard({required this.match});
+  final MatchSummary match;
+
+  @override
+  Widget build(BuildContext context) {
+    final latestOffer = match.latestOffer;
+    final parcel = match.parcel;
+    final route = parcel != null
+        ? "${parcel.originIata} → ${parcel.destinationIata}"
+        : "Match #${match.id}";
+    final subtitle = parcel != null
+        ? "${parcel.weightKg} kg · ${parcel.kind == 'product' ? 'product' : 'delivery'}"
+        : "Parcel #${match.parcelId}";
+    return GestureDetector(
+      onTap: () => context.push('/match/${match.id}'),
+      child: BoardingCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.terracotta.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    "S${match.senderId}",
+                    style: AppType.body(11,
+                        w: FontWeight.w700, color: AppColors.terracottaDeep),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(route,
+                          style: AppType.display(16, w: FontWeight.w500)),
+                      Text(subtitle,
+                          style: AppType.body(12, color: AppColors.inkMute)),
+                    ],
+                  ),
+                ),
+                StampChip(label: "PENDING", color: AppColors.terracotta, angle: 0.06),
+              ],
+            ),
+            if (latestOffer != null) ...[
+              const SizedBox(height: AppSpacing.x4),
+              const DashedDivider(),
+              const SizedBox(height: AppSpacing.x4),
+              Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("YOUR PAYOUT", style: AppType.eyebrow()),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(_fmt(latestOffer.baseAmountDzd),
+                              style:
+                                  AppType.mono(18, w: FontWeight.w700)),
+                          const SizedBox(width: 4),
+                          Text("DZD",
+                              style: AppType.mono(11,
+                                  color: AppColors.inkMute)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.ink,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Row(
+                      children: [
+                        Text("Review",
+                            style: AppType.body(12.5,
+                                color: AppColors.parchment,
+                                w: FontWeight.w700)),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.arrow_forward_rounded,
+                            size: 14, color: AppColors.parchment),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _fmt(int n) {
+    final s = n.toString();
+    return s.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => "${m[1]} ");
+  }
+}
+
+class _FindParcelsCta extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push('/traveler/find'),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+        decoration: BoxDecoration(
+          color: AppColors.ink,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.travel_explore_rounded, color: AppColors.parchment),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Find parcels to carry",
+                      style: AppType.body(15,
+                          color: AppColors.parchment, w: FontWeight.w600)),
+                  Text("Browse open requests and apply with your trip",
+                      style: AppType.body(12, color: AppColors.parchmentDeep)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.parchmentSoft.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: const Icon(Icons.arrow_forward_rounded,
+                  color: AppColors.parchment, size: 16),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -431,131 +664,6 @@ class _MyTripCard extends StatelessWidget {
     ];
     final l = d.toLocal();
     return "${l.day.toString().padLeft(2, '0')} ${months[l.month - 1]} · ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}";
-  }
-}
-
-class _OfferCard extends StatelessWidget {
-  const _OfferCard({required this.o});
-  final MockOffer o;
-  @override
-  Widget build(BuildContext context) {
-    final isCounter = o.status == "Counter";
-    return GestureDetector(
-      onTap: () => context.push('/offer', extra: o),
-      child: BoardingCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.terracotta.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  o.senderName.split(' ').map((s) => s[0]).take(2).join(),
-                  style: AppType.display(13, w: FontWeight.w600, color: AppColors.terracottaDeep),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(o.senderName, style: AppType.display(16, w: FontWeight.w500)),
-                  Text(o.when, style: AppType.body(12, color: AppColors.inkMute)),
-                ],
-              ),
-              const Spacer(),
-              StampChip(
-                label: o.status,
-                color: isCounter ? AppColors.warning : AppColors.terracotta,
-                angle: 0.06,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("ITEM", style: AppType.eyebrow()),
-                    const SizedBox(height: 4),
-                    Text(o.item, style: AppType.body(13.5, w: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Text("${o.weightKg} kg · ${o.pickupCity} → ${o.deliveryCity}",
-                        style: AppType.body(11.5, color: AppColors.inkMute)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text("PROPOSED", style: AppType.eyebrow()),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(_fmt(o.proposedPrice),
-                          style: AppType.mono(18, w: FontWeight.w700)),
-                      const SizedBox(width: 4),
-                      Text("DZD", style: AppType.mono(11, color: AppColors.inkMute)),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          const DashedDivider(),
-          const SizedBox(height: AppSpacing.x4),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {},
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                      border: Border.all(color: AppColors.hairline, width: 1.4),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text("Counter",
-                        style: AppType.body(13, w: FontWeight.w600)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.ink,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text("Accept",
-                      style: AppType.body(13,
-                          color: AppColors.parchment, w: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-
-  static String _fmt(int n) {
-    final s = n.toString();
-    return s.replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => "${m[1]} ");
   }
 }
 

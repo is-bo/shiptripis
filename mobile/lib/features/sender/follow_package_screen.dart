@@ -1,62 +1,131 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/matching/matching_providers.dart';
+import '../../core/matching/matching_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
-/// Follow-package — 3 loading circles for the journey stages.
-///
-/// No map. Per user instruction: "those loading circles is enough
-/// (waiting to handover, transmitting, package arrived)".
+/// Follow-package — 3 loading circles bound to live Match.status.
 ///
 /// Stages map to backend Match.status:
-///   accepted    → waitingHandover (circle 1 spinning, 2&3 idle)
-///   in_transit  → transmitting    (circle 1 done, 2 spinning, 3 idle)
-///   completed   → arrived         (all 3 done)
-class FollowPackageScreen extends StatefulWidget {
-  const FollowPackageScreen({
-    super.key,
-    required this.matchId,
-    this.stage = FollowStage.waitingHandover,
-    this.travelerName = 'Yacine M.',
-    this.itemSummary = 'Documents · 2 kg',
-  });
+///   accepted    → waitingHandover
+///   in_transit  → transmitting
+///   delivered/completed → arrived
+class FollowPackageScreen extends ConsumerStatefulWidget {
+  const FollowPackageScreen({super.key, required this.matchId});
 
   final String matchId;
-  final FollowStage stage;
-  final String travelerName;
-  final String itemSummary;
 
   @override
-  State<FollowPackageScreen> createState() => _FollowPackageScreenState();
+  ConsumerState<FollowPackageScreen> createState() =>
+      _FollowPackageScreenState();
 }
 
-enum FollowStage { waitingHandover, transmitting, arrived }
+enum _Stage { waitingHandover, transmitting, arrived }
 
-class _FollowPackageScreenState extends State<FollowPackageScreen> {
-  late FollowStage _stage = widget.stage;
+class _FollowPackageScreenState extends ConsumerState<FollowPackageScreen> {
+  Timer? _poll;
+  int get _id => int.parse(widget.matchId);
+
+  @override
+  void initState() {
+    super.initState();
+    // Light polling — Match status changes are infrequent so 12s is plenty.
+    _poll = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted) return;
+      ref.invalidate(matchDetailProvider(_id));
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  _Stage _stageFor(MatchStatus s) {
+    switch (s) {
+      case MatchStatus.accepted:
+        return _Stage.waitingHandover;
+      case MatchStatus.inTransit:
+        return _Stage.transmitting;
+      case MatchStatus.delivered:
+      case MatchStatus.completed:
+        return _Stage.arrived;
+      case MatchStatus.pending:
+      case MatchStatus.cancelled:
+      case MatchStatus.expired:
+        return _Stage.waitingHandover;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final async = ref.watch(matchDetailProvider(_id));
     return Scaffold(
       backgroundColor: AppColors.parchment,
       body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(),
-            const SizedBox(height: AppSpacing.x4),
-            _headerCard(),
-            const SizedBox(height: AppSpacing.x6),
-            Expanded(child: _stagesColumn()),
-            _devToggle(),
-          ],
+        child: async.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.x6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off_rounded,
+                      color: AppColors.terracotta, size: 32),
+                  const SizedBox(height: 12),
+                  Text("Couldn't load match.",
+                      style: AppType.body(13, w: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () =>
+                        ref.invalidate(matchDetailProvider(_id)),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          data: (match) {
+            final stage = _stageFor(match.status);
+            return RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(matchDetailProvider(_id)),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                children: [
+                  _topBar(match.status),
+                  const SizedBox(height: AppSpacing.x4),
+                  _headerCard(match),
+                  const SizedBox(height: AppSpacing.x6),
+                  _stagesColumn(stage),
+                  const SizedBox(height: AppSpacing.x6),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _topBar() {
+  Widget _topBar(MatchStatus status) {
+    final stamp = switch (status) {
+      MatchStatus.completed => ('PAID OUT', AppColors.emerald),
+      MatchStatus.delivered => ('DELIVERED', AppColors.emerald),
+      MatchStatus.inTransit => ('IN TRANSIT', AppColors.gold),
+      MatchStatus.cancelled => ('CANCELLED', AppColors.terracotta),
+      _ => ('IN ESCROW', AppColors.emerald),
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.x4, AppSpacing.x4, AppSpacing.x4, 0),
@@ -71,13 +140,20 @@ class _FollowPackageScreenState extends State<FollowPackageScreen> {
             ),
           ),
           const Spacer(),
-          StampChip(label: 'IN ESCROW', color: AppColors.emerald),
+          StampChip(label: stamp.$1, color: stamp.$2),
         ],
       ),
     );
   }
 
-  Widget _headerCard() {
+  Widget _headerCard(MatchSummary match) {
+    final parcel = match.parcel;
+    final route = parcel != null
+        ? "${parcel.originIata} → ${parcel.destinationIata}"
+        : "Match #${match.id}";
+    final summary = parcel != null
+        ? "${parcel.weightKg} kg · ${parcel.kind == 'product' ? 'product' : 'delivery'}"
+        : "Parcel #${match.parcelId}";
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
       child: Container(
@@ -95,19 +171,22 @@ class _FollowPackageScreenState extends State<FollowPackageScreen> {
                     style: AppType.eyebrow().copyWith(
                         color: AppColors.parchmentDeep, letterSpacing: 1.6)),
                 const Spacer(),
-                Text('MATCH #${widget.matchId}',
+                Text('MATCH #${match.id}',
                     style:
                         AppType.mono(10.5, color: AppColors.parchmentDeep)),
               ],
             ),
             const SizedBox(height: 8),
-            Text(widget.travelerName,
+            Text("Traveler #${match.travelerId}",
                 style: AppType.display(22,
                     color: AppColors.parchment,
                     w: FontWeight.w400,
                     height: 1)),
             const SizedBox(height: 4),
-            Text(widget.itemSummary,
+            Text(route,
+                style: AppType.body(13,
+                    color: AppColors.parchmentDeep, w: FontWeight.w500)),
+            Text(summary,
                 style: AppType.body(12.5, color: AppColors.parchmentDeep)),
           ],
         ),
@@ -115,54 +194,37 @@ class _FollowPackageScreenState extends State<FollowPackageScreen> {
     );
   }
 
-  Widget _stagesColumn() {
+  Widget _stagesColumn(_Stage stage) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           _StageRow(
             label: 'Waiting to handover',
             sub: 'Sender will hand the package to the traveler.',
-            status: _statusFor(0),
+            status: _statusFor(stage, 0),
           ),
-          _Connector(active: _stage.index >= 1),
+          _Connector(active: stage.index >= 1),
           _StageRow(
             label: 'Transmitting',
             sub: 'In transit with the traveler.',
-            status: _statusFor(1),
+            status: _statusFor(stage, 1),
           ),
-          _Connector(active: _stage.index >= 2),
+          _Connector(active: stage.index >= 2),
           _StageRow(
             label: 'Package arrived',
             sub: 'Delivered. Escrow released to the traveler.',
-            status: _statusFor(2),
+            status: _statusFor(stage, 2),
           ),
         ],
       ),
     );
   }
 
-  _StageStatus _statusFor(int index) {
-    if (_stage.index > index) return _StageStatus.done;
-    if (_stage.index == index) return _StageStatus.active;
+  _StageStatus _statusFor(_Stage stage, int index) {
+    if (stage.index > index) return _StageStatus.done;
+    if (stage.index == index) return _StageStatus.active;
     return _StageStatus.idle;
-  }
-
-  // Hidden until backed by a real Match.status stream. Keeps demo usable.
-  Widget _devToggle() {
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      child: SegmentedButton<FollowStage>(
-        segments: const [
-          ButtonSegment(value: FollowStage.waitingHandover, label: Text('1')),
-          ButtonSegment(value: FollowStage.transmitting, label: Text('2')),
-          ButtonSegment(value: FollowStage.arrived, label: Text('3')),
-        ],
-        selected: {_stage},
-        onSelectionChanged: (s) => setState(() => _stage = s.first),
-      ),
-    );
   }
 }
 
@@ -204,13 +266,7 @@ class _StageRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  sub,
-                  style: AppType.body(
-                    12,
-                    color: AppColors.inkSoft,
-                  ),
-                ),
+                Text(sub, style: AppType.body(12, color: AppColors.inkSoft)),
               ],
             ),
           ),

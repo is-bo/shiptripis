@@ -346,3 +346,57 @@ class ParcelMediaPrivacyTests(APITestCase):
         # but useful fields are still there
         assert m["content_type"] == "image/jpeg"
         assert m["bytes"] == 12345
+
+
+class OpenParcelSearchTests(APITestCase):
+    def setUp(self):
+        self.sender = _make_user("send1@example.com")
+        self.other_sender = _make_user("send2@example.com")
+        self.traveler = _make_user("trav@example.com")
+
+        self.p_open = DeliveryRequest.objects.create(
+            sender=self.other_sender,
+            kind=ParcelRequest.Kind.DELIVERY,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            item_type="documents",
+            base_amount_dzd=3000,
+        )
+        self.p_own = DeliveryRequest.objects.create(
+            sender=self.sender,
+            kind=ParcelRequest.Kind.DELIVERY,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            item_type="documents",
+            base_amount_dzd=3000,
+        )
+        self.p_matched = DeliveryRequest.objects.create(
+            sender=self.other_sender,
+            kind=ParcelRequest.Kind.DELIVERY,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            item_type="documents",
+            base_amount_dzd=3000,
+            status=ParcelRequest.Status.MATCHED,
+        )
+
+    def test_returns_only_open_not_owned_by_caller(self):
+        c = _auth_client(self.sender)
+        r = c.get(reverse("parcels-open-search") + "?origin=ALG&destination=CDG")
+        assert r.status_code == 200
+        ids = {row["id"] for row in r.data}
+        assert ids == {self.p_open.id}
+
+    def test_filters_by_max_weight(self):
+        c = _auth_client(self.traveler)
+        r = c.get(reverse("parcels-open-search") + "?max_weight_kg=1")
+        assert r.status_code == 200
+        assert r.data == []
+
+    def test_requires_auth(self):
+        c = APIClient()
+        r = c.get(reverse("parcels-open-search"))
+        assert r.status_code in (401, 403)

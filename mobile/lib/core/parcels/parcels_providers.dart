@@ -116,3 +116,38 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
 
 final myParcelsProvider =
     AsyncNotifierProvider<MyParcelsNotifier, List<Parcel>>(MyParcelsNotifier.new);
+
+class OpenParcelSearchParams {
+  const OpenParcelSearchParams({
+    this.originIata,
+    this.destinationIata,
+    this.kind,
+    this.maxWeightKg,
+  });
+  final String? originIata;
+  final String? destinationIata;
+  final String? kind;
+  final int? maxWeightKg;
+
+  @override
+  bool operator ==(Object other) =>
+      other is OpenParcelSearchParams &&
+      other.originIata == originIata &&
+      other.destinationIata == destinationIata &&
+      other.kind == kind &&
+      other.maxWeightKg == maxWeightKg;
+
+  @override
+  int get hashCode =>
+      Object.hash(originIata, destinationIata, kind, maxWeightKg);
+}
+
+final openParcelSearchProvider = FutureProvider.autoDispose
+    .family<List<Parcel>, OpenParcelSearchParams>((ref, p) async {
+  return ref.read(parcelsRepositoryProvider).searchOpen(
+        originIata: p.originIata,
+        destinationIata: p.destinationIata,
+        kind: p.kind,
+        maxWeightKg: p.maxWeightKg,
+      );
+});

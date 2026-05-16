@@ -39,7 +39,7 @@ class _ShipTripAppState extends ConsumerState<ShipTripApp> {
       title: 'ShipTrip',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      routerConfig: appRouter,
+      routerConfig: ref.watch(appRouterProvider),
     );
   }
 }
