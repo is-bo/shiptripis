@@ -16,8 +16,13 @@
 //     routing scheme that doesn't hardcode payload-field names per channel.
 //   - XAUTOCLAIM PEL sweeper — only matters once the stream consumer exists.
 //
-// Listens on NOTIF_HTTP_ADDR (default :8081). Mounted by Caddy as the
-// public /ws prefix; /healthz and /readyz are scraped by the K3s probes.
+// Listens on NOTIF_HTTP_ADDR (default :8082, matches Caddy's
+// notification-service:8082 upstream in backend/gateway/Caddyfile). The
+// WS handler is mounted at /ws/notifications because Caddy's
+// reverse_proxy preserves the request path — it does NOT rewrite
+// /ws/notifications to /ws. If you ever change the public path, change
+// both this mount and the Caddyfile in the same commit. /healthz and
+// /readyz are scraped by the K3s probes.
 package main
 
 import (
@@ -49,7 +54,7 @@ const (
 	dbMaxConnsDefault = int32(10)
 
 	httpAddrKey      = "NOTIF_HTTP_ADDR"
-	httpAddrFallback = ":8081"
+	httpAddrFallback = ":8082"
 
 	shutdownTimeout = 15 * time.Second
 )
@@ -127,7 +132,7 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", healthH.Liveness())
 	mux.Handle("/readyz", healthH.Readiness())
-	mux.HandleFunc("/ws", notification.WSHandler(rootCtx, validator, hub, presence, log))
+	mux.HandleFunc("/ws/notifications", notification.WSHandler(rootCtx, validator, hub, presence, log))
 
 	srv := &http.Server{
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),

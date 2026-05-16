@@ -13,8 +13,9 @@
 //     miss.
 //   - GET /kyc/me (status lookup) — needs sqlc-generated repo.
 //
-// Listens on KYC_HTTP_ADDR (default :8082); Caddy routes /api/v1/kyc/*
-// here (ARCHITECTURE.md §3).
+// Listens on KYC_HTTP_ADDR (default :8083, matches Caddy's
+// kyc-service:8083 upstream in backend/gateway/Caddyfile); Caddy routes
+// /kyc/* and /api/kyc/* here (ARCHITECTURE.md §3).
 package main
 
 import (
@@ -46,7 +47,7 @@ const (
 	dbMaxConnsDefault = int32(5)
 
 	httpAddrKey      = "KYC_HTTP_ADDR"
-	httpAddrFallback = ":8082"
+	httpAddrFallback = ":8083"
 
 	// Bucket holding KYC document images. Lives in its own bucket so
 	// access policies can be tightened independently of profile media.
