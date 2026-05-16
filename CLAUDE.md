@@ -7,7 +7,7 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ---
 
-## 0. Current state (handoff — last updated 2026-05-12)
+## 0. Current state (handoff — last updated 2026-05-15)
 
 ### What's done
 
@@ -36,6 +36,21 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
   `sqlc.yaml` wires 4 Go services (chat/notif/kyc/media); query dirs ready.
 - Gateway: Caddy (see `docs/decisions/0001-gateway-caddy.md`).
 - All migrations reversible. Full suite green (115/115).
+
+**Backend (Go services, `backend/services/`):**
+- `cmd/notification` — WS hub + Redis pub/sub consumer; offer.accepted
+  vertical slice fans to sender+traveler, writes `delivered:<event_id>`
+  and back-fills `core_published_event.delivered_at`. FCM fallback
+  deferred (blocked on fcm_token schema). G1 + G6b paths wired.
+- `cmd/kyc` — multipart `/kyc/submit`, streams images to MinIO under
+  `kyc-docs/<user_id>/<idempotency_key>-<field>.<ext>` (deterministic
+  so retries overwrite, no orphans), then calls Recorder. Wired with
+  `kyc.NoopRecorder` (fails loudly via `ErrRecorderNotConfigured`)
+  until codegen + Django gRPC server land.
+- Shared: `pkg/redisbus`, `pkg/wsproto`, `pkg/storage` (S3 abstraction
+  per G4), `pkg/auth` (HS256 + 30s leeway per G2), `pkg/config`.
+- Contracts: `contracts/grpc/kyc.proto` checked in. sqlc + chat/media
+  protos still pending Claude A schema work.
 
 **Mobile (Flutter, `mobile/`):**
 - Onboarding, auth, traveler+sender homes, create-trip, delivery+product
