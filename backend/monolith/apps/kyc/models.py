@@ -45,6 +45,12 @@ class KycSubmission(models.Model):
         max_length=24, choices=DocumentType.choices
     )
 
+    # Flutter-generated UUIDv4 hex (32 chars). Stable across retries of the
+    # same logical submission so the Go kyc-service's RecordSubmission gRPC
+    # is idempotent — INSERT ... ON CONFLICT (idempotency_key) DO NOTHING.
+    # Contract: backend/contracts/grpc/kyc.proto RecordSubmissionRequest.
+    idempotency_key = models.CharField(max_length=32, unique=True)
+
     # Front + back image keys in MinIO/S3. The bytes never touch Django.
     front_image_key = models.CharField(max_length=512)
     back_image_key = models.CharField(max_length=512, blank=True, default="")

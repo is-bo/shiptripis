@@ -93,6 +93,21 @@ tasks:
     cmds:
       - cd contracts/sql && sqlc generate
 
+  contract:python-grpc:
+    desc: "Regenerate Python grpc stubs for Django (kyc only for now)"
+    cmds:
+      - mkdir -p monolith/apps/kyc/grpc_gen
+      - touch monolith/apps/kyc/grpc_gen/__init__.py
+      - |
+        docker compose run --rm -v "$(pwd)/contracts:/contracts:ro" django \
+          python -m grpc_tools.protoc -I/contracts/grpc \
+            --python_out=/app/apps/kyc/grpc_gen \
+            --grpc_python_out=/app/apps/kyc/grpc_gen \
+            /contracts/grpc/kyc.proto
+      # grpc_tools emits `import kyc_pb2` (absolute). Patch to relative
+      # import so the package is importable from inside Django.
+      - sed -i 's|^import kyc_pb2 as kyc__pb2|from . import kyc_pb2 as kyc__pb2  # patched|' monolith/apps/kyc/grpc_gen/kyc_pb2_grpc.py
+
   check-drift:
     desc: "CI gate: schema.sql + sqlc output must match committed state (CLAUDE.md G3)"
     cmds:

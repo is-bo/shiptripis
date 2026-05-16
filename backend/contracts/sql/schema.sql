@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict aZcyTNCNz6dxVScCkdXO5zVNQwhSgsgPV1NBdzKLlG7V8QVHs00JR9VWBQzvxSf
+\restrict PDpJV1xjy0Hl8n5sdbPgYoQGcBhseGAmi1pLg1JrBkn3wkRaNrqcHngFE2SmGLh
 
 -- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
@@ -370,7 +370,8 @@ CREATE TABLE public.kyc_submission (
     expires_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    user_id bigint NOT NULL
+    user_id bigint NOT NULL,
+    idempotency_key character varying(32) NOT NULL
 );
 
 
@@ -1177,6 +1178,14 @@ ALTER TABLE ONLY public.django_session
 
 
 --
+-- Name: kyc_submission kyc_submission_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kyc_submission
+    ADD CONSTRAINT kyc_submission_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
 -- Name: kyc_submission kyc_submission_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1641,6 +1650,13 @@ CREATE UNIQUE INDEX kyc_one_approved_per_user_doctype ON public.kyc_submission U
 --
 
 CREATE INDEX kyc_status_idx ON public.kyc_submission USING btree (status);
+
+
+--
+-- Name: kyc_submission_idempotency_key_87ed0c3f_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX kyc_submission_idempotency_key_87ed0c3f_like ON public.kyc_submission USING btree (idempotency_key varchar_pattern_ops);
 
 
 --
@@ -2696,5 +2712,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict aZcyTNCNz6dxVScCkdXO5zVNQwhSgsgPV1NBdzKLlG7V8QVHs00JR9VWBQzvxSf
+\unrestrict PDpJV1xjy0Hl8n5sdbPgYoQGcBhseGAmi1pLg1JrBkn3wkRaNrqcHngFE2SmGLh
 

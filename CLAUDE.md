@@ -39,10 +39,20 @@ Smaller follow-ups (not blockers, file these if convenient):
   before generalising — current per-channel struct/switch is fine for V1.
 - `offerAcceptedPayload.Ts` is unmarshalled but never used. Drop the field
   or parse it to `time.Time`.
-- FCM fallback, mTLS, real gRPC Recorder, mobile WS client — all already
-  acknowledged as deferred in §0 below.
+- FCM fallback, mTLS, mobile WS client — all already acknowledged as
+  deferred in §0 below.
 
 Once #1 and #2 are fixed, delete this section.
+
+### Unblocked for Claude B (2026-05-16 by Claude A)
+
+- **KYC gRPC is ready to wire up.** Django side complete:
+  - Migration `0002_add_idempotency_key` added the unique 32-char column the proto requires.
+  - `apps/kyc/grpc_server.py` implements `RecordSubmission` (enum mapping, idempotent insert via key lookup + IntegrityError race fallback, validation at the boundary).
+  - `apps/kyc/management/commands/runkycgrpc.py` runs the server on `:50051` with a bearer interceptor (dev) or aborts on `mtls` (TODO).
+  - Python stubs at `apps/kyc/grpc_gen/`. Regenerate via `task contract:python-grpc`.
+  - 9 servicer tests, full suite 176/176 green.
+- **Action for Claude B:** swap `kyc.NoopRecorder` for a real gRPC client in `services/internal/kyc/` and point it at the Django server. Use `GRPC_AUTH_MODE=bearer` + `GRPC_BEARER_TOKEN` for now; mTLS later.
 
 ---
 
