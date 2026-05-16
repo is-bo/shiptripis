@@ -7,6 +7,45 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ---
 
+## 0a. ⚠️ Open blockers for Claude B (added 2026-05-16 by Claude A review)
+
+Two concrete bugs found in commit `4b4a5e2` that will prevent any end-to-end
+test from working. Fix these before adding more channels or features.
+
+1. **Port mismatch — Caddy ↔ Go services won't connect**
+   - Caddyfile expects `notification-service:8082` and `kyc-service:8083`
+     (see `backend/gateway/Caddyfile` lines 23, 28).
+   - Go binaries default to `NOTIF_HTTP_ADDR=:8081` and `KYC_HTTP_ADDR=:8082`
+     (see `cmd/notification/main.go` and `cmd/kyc/main.go`).
+   - Result: every `/ws/notifications` and `/kyc/*` request 502s.
+   - Fix: pick one source of truth. Easiest is to change the Go defaults
+     to `:8082` (notif) and `:8083` (kyc) and update §3 / docker-compose
+     env to match. Also update §3 of this file if the env var defaults move.
+
+2. **WS path mismatch — Go doesn't mount `/ws/notifications`**
+   - Caddy reverse-proxies `/ws/notifications` to the notif service.
+     Caddy's `reverse_proxy` preserves the request path; it does NOT
+     rewrite to `/ws`.
+   - Go currently mounts the handler at `/ws` (see `cmd/notification/main.go`).
+   - Result: Caddy forwards `/ws/notifications`, Go returns 404.
+   - Fix: mount the handler at `/ws/notifications` in `cmd/notification/main.go`,
+     OR add a Caddy `rewrite /ws/notifications /ws` directive. Pick one
+     and document it in the file's doc comment so it stays.
+
+Smaller follow-ups (not blockers, file these if convenient):
+- Dispatcher only consumes `offer.accepted`. The most user-visible missing
+  channel is `offer.created` (sender notification when traveler applies).
+  Needs Islam's call on the `targets:[user_id,...]` payload convention
+  before generalising — current per-channel struct/switch is fine for V1.
+- `offerAcceptedPayload.Ts` is unmarshalled but never used. Drop the field
+  or parse it to `time.Time`.
+- FCM fallback, mTLS, real gRPC Recorder, mobile WS client — all already
+  acknowledged as deferred in §0 below.
+
+Once #1 and #2 are fixed, delete this section.
+
+---
+
 ## 0. Current state (handoff — last updated 2026-05-15)
 
 ### What's done
