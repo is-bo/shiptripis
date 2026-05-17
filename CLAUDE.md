@@ -7,52 +7,21 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ---
 
-## 0a. ⚠️ Open blockers for Claude B (added 2026-05-16 by Claude A review)
+## 0a. Open notes for Claude B (added 2026-05-17 by Claude A)
 
-Two concrete bugs found in commit `4b4a5e2` that will prevent any end-to-end
-test from working. Fix these before adding more channels or features.
+§0a port + WS-path blockers fixed in `0c7a689 fixed notifications` ✓ — section deleted.
 
-1. **Port mismatch — Caddy ↔ Go services won't connect**
-   - Caddyfile expects `notification-service:8082` and `kyc-service:8083`
-     (see `backend/gateway/Caddyfile` lines 23, 28).
-   - Go binaries default to `NOTIF_HTTP_ADDR=:8081` and `KYC_HTTP_ADDR=:8082`
-     (see `cmd/notification/main.go` and `cmd/kyc/main.go`).
-   - Result: every `/ws/notifications` and `/kyc/*` request 502s.
-   - Fix: pick one source of truth. Easiest is to change the Go defaults
-     to `:8082` (notif) and `:8083` (kyc) and update §3 / docker-compose
-     env to match. Also update §3 of this file if the env var defaults move.
+**Unblocked: KYC gRPC ready to wire.** Django side complete (commit `d6f4dc6`):
+- Migration `0002_add_idempotency_key` added the unique 32-char column the proto requires.
+- `apps/kyc/grpc_server.py` implements `RecordSubmission` (enum maps, idempotent insert via key lookup + IntegrityError race fallback, boundary validation).
+- `apps/kyc/management/commands/runkycgrpc.py` runs the server on `:50051`. Bearer auth interceptor for dev; mTLS path is a TODO.
+- Python stubs at `apps/kyc/grpc_gen/`. Regenerate via `task contract:python-grpc`.
+- 9 servicer tests, full suite 176/176 green.
+- **Action:** swap `kyc.NoopRecorder` for a real gRPC client in `services/internal/kyc/` pointing at `:50051`. Set `GRPC_AUTH_MODE=bearer` + `GRPC_BEARER_TOKEN` for now; mTLS later.
 
-2. **WS path mismatch — Go doesn't mount `/ws/notifications`**
-   - Caddy reverse-proxies `/ws/notifications` to the notif service.
-     Caddy's `reverse_proxy` preserves the request path; it does NOT
-     rewrite to `/ws`.
-   - Go currently mounts the handler at `/ws` (see `cmd/notification/main.go`).
-   - Result: Caddy forwards `/ws/notifications`, Go returns 404.
-   - Fix: mount the handler at `/ws/notifications` in `cmd/notification/main.go`,
-     OR add a Caddy `rewrite /ws/notifications /ws` directive. Pick one
-     and document it in the file's doc comment so it stays.
-
-Smaller follow-ups (not blockers, file these if convenient):
-- Dispatcher only consumes `offer.accepted`. The most user-visible missing
-  channel is `offer.created` (sender notification when traveler applies).
-  Needs Islam's call on the `targets:[user_id,...]` payload convention
-  before generalising — current per-channel struct/switch is fine for V1.
-- `offerAcceptedPayload.Ts` is unmarshalled but never used. Drop the field
-  or parse it to `time.Time`.
-- FCM fallback, mTLS, mobile WS client — all already acknowledged as
-  deferred in §0 below.
-
-Once #1 and #2 are fixed, delete this section.
-
-### Unblocked for Claude B (2026-05-16 by Claude A)
-
-- **KYC gRPC is ready to wire up.** Django side complete:
-  - Migration `0002_add_idempotency_key` added the unique 32-char column the proto requires.
-  - `apps/kyc/grpc_server.py` implements `RecordSubmission` (enum mapping, idempotent insert via key lookup + IntegrityError race fallback, validation at the boundary).
-  - `apps/kyc/management/commands/runkycgrpc.py` runs the server on `:50051` with a bearer interceptor (dev) or aborts on `mtls` (TODO).
-  - Python stubs at `apps/kyc/grpc_gen/`. Regenerate via `task contract:python-grpc`.
-  - 9 servicer tests, full suite 176/176 green.
-- **Action for Claude B:** swap `kyc.NoopRecorder` for a real gRPC client in `services/internal/kyc/` and point it at the Django server. Use `GRPC_AUTH_MODE=bearer` + `GRPC_BEARER_TOKEN` for now; mTLS later.
+Smaller follow-ups (still on the list, not blockers):
+- Dispatcher only consumes `offer.accepted`. The most user-visible missing channel is `offer.created` (sender notification when traveler applies). Needs Islam's call on the `targets:[user_id,...]` payload convention before generalising — current per-channel struct/switch is fine for V1.
+- `offerAcceptedPayload.Ts` is unmarshalled but never used. Drop the field or parse it to `time.Time`.
 
 ---
 

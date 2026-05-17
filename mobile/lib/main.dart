@@ -6,6 +6,7 @@ import 'core/auth/auth_notifier.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens.dart';
+import 'core/ws/notifications_providers.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,10 @@ class _ShipTripAppState extends ConsumerState<ShipTripApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authNotifierProvider.notifier).bootstrap();
+      // Instantiate the WS client so its auth-state listener is live
+      // for the first sign-in transition. The provider keeps the
+      // socket alive while signed in and tears it down on sign-out.
+      ref.read(notificationWsClientProvider);
     });
   }
 

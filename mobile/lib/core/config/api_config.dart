@@ -11,4 +11,16 @@ class ApiConfig {
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8080',
   );
+
+  /// WebSocket origin derived from `baseUrl` (http→ws, https→wss).
+  /// Append the specific path (e.g. `/ws/notifications`) at the call site.
+  static String get wsBaseUrl {
+    if (baseUrl.startsWith('https://')) {
+      return 'wss://${baseUrl.substring(8)}';
+    }
+    if (baseUrl.startsWith('http://')) {
+      return 'ws://${baseUrl.substring(7)}';
+    }
+    return baseUrl;
+  }
 }
