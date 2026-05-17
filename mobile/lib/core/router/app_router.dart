@@ -69,8 +69,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/payment/:id',
-        builder: (_, state) =>
-            PaymentScreen(offerId: state.pathParameters['id']!),
+        builder: (_, state) => PaymentScreen(
+          offerId: state.pathParameters['id']!,
+          matchId: int.tryParse(state.uri.queryParameters['match'] ?? ''),
+        ),
       ),
       GoRoute(
         path: '/code/:id',

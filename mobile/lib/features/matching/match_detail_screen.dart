@@ -147,7 +147,8 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
               onCounterToggle: () =>
                   setState(() => _counterOpen = !_counterOpen),
               onCounterSubmit: _doCounter,
-              onGoToPayment: () => context.push('/payment/${match.id}'),
+              onGoToPayment: (offerId) =>
+                  context.push('/payment/$offerId?match=${match.id}'),
             ),
           );
         },
@@ -183,7 +184,7 @@ class _MatchBody extends StatelessWidget {
   final void Function(int offerId) onWithdraw;
   final VoidCallback onCounterToggle;
   final VoidCallback onCounterSubmit;
-  final VoidCallback onGoToPayment;
+  final void Function(int offerId) onGoToPayment;
 
   @override
   Widget build(BuildContext context) {
@@ -357,7 +358,7 @@ class _AcceptedBanner extends StatelessWidget {
   });
   final Offer offer;
   final bool isSender;
-  final VoidCallback onPay;
+  final void Function(int offerId) onPay;
 
   @override
   Widget build(BuildContext context) {
@@ -381,7 +382,10 @@ class _AcceptedBanner extends StatelessWidget {
           ),
           if (isSender) ...[
             const SizedBox(height: 12),
-            PrimaryButton(label: 'Pay to start delivery', expand: true, onTap: onPay),
+            PrimaryButton(
+                label: 'Pay to start delivery',
+                expand: true,
+                onTap: () => onPay(offer.id)),
           ] else
             Padding(
               padding: const EdgeInsets.only(top: 8),

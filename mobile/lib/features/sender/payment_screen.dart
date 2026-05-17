@@ -16,12 +16,14 @@ class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({
     super.key,
     required this.offerId,
+    this.matchId,
     this.travelerName = "Yacine M.",
     this.itemSummary = "Documents · 2 kg",
     this.basePrice = 4500,
   });
 
   final String offerId;
+  final int? matchId;
   final String travelerName;
   final String itemSummary;
   final int basePrice;
@@ -85,7 +87,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     // Mock provider always returns succeeded; if we somehow got something
     // else, treat it as success for the demo flow anyway.
     if (intent == null || intent.succeeded) {
-      context.go('/code/${widget.offerId}');
+      final mid = widget.matchId;
+      if (mid != null) {
+        context.go('/handover/issue/$mid?kind=pickup');
+      } else {
+        context.go('/');
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Payment status: ${intent.status}')),
