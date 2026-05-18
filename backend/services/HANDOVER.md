@@ -61,7 +61,7 @@ backend/services/
 - All other event types (`offer.countered`, `match.completed`,
   `payment.succeeded`, etc.) — vertical slice only for now.
 
-### `cmd/kyc` — done, gated on Django gRPC
+### `cmd/kyc` — done, wired end-to-end
 
 - `POST /kyc/submit` (multipart): bearer auth → `MaxBytesReader(25 MiB)`
   → `ParseMultipartForm(16 MiB)` → validates `document_type` +
@@ -70,24 +70,20 @@ backend/services/
   retries overwrite, no orphans) → calls `Recorder.RecordSubmission`.
 - On RecordSubmission failure: `cleanupOrphans` best-effort deletes the
   three S3 objects on a detached 5s context.
-- Wired with `kyc.NoopRecorder{}` which returns
-  `ErrRecorderNotConfigured` so a half-built production deploy is loud,
-  not silent.
+- Recorder is `kyc.GRPCClient` — generated stubs at
+  `internal/kyc/kycpb/`, hand-written wrapper at `internal/kyc/grpc_client.go`.
+  Dials Django at `KYC_GRPC_TARGET` (e.g. `django:50051`) on boot with
+  `WithBlock`-equivalent readiness probe so misconfig fails fast.
+- Auth: `GRPC_AUTH_MODE=bearer` + `GRPC_BEARER_TOKEN` shared with
+  Django's `runkycgrpc` interceptor. mTLS (CLAUDE.md §G5) still TODO on
+  both sides — wait for cert-manager / mkcert pipeline.
 - Image constraints: ≤8 MiB each, JPEG/PNG only; the storage client
   enforces overflow on the write path.
+- `kyc.NoopRecorder` is retained for unit-test scaffolding only.
 
-**Hard blockers** (Islam's scope):
-1. Migration adding `idempotency_key` (32-char unique) to
-   `kyc_submission`.
-2. `apps/kyc/grpc_server.py` implementing `RecordSubmission` with
-   `INSERT … ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`.
-3. Taskfile target `task contract:generate-grpc` wired for
-   `contracts/grpc/kyc.proto`.
-
-Once those land: re-run codegen, write `internal/kyc/grpc_client.go`
-that implements `Recorder`, swap `NoopRecorder{}` in `cmd/kyc/main.go`.
-Don't change the `Recorder` interface shape — it mirrors the proto
-intentionally.
+**Codegen:** `task contract:go-grpc` regenerates `internal/kyc/kycpb/`;
+`task check-drift` runs it and `git diff --exit-code`s the result, so
+proto changes that don't ship regenerated stubs fail CI.
 
 ### `cmd/chat` — not started
 
@@ -160,11 +156,9 @@ project-wide rules. Follow them so the services stay consistent.
 
 | # | Item | Why we're blocked |
 |---|---|---|
-| 1 | Migration: `kyc_submission.idempotency_key` (32-char unique) | kyc gRPC server can't INSERT idempotently without it |
-| 2 | `apps/kyc/grpc_server.py` | kyc-service is wired with NoopRecorder; uploads orphan until this lands |
-| 3 | Taskfile `task contract:generate-grpc` for kyc.proto | no Go gRPC client without it |
-| 4 | `chat_message` / `chat_thread` schema | `cmd/chat` is empty |
-| 5 | `fcm_token` schema + routing decision | notification FCM fallback can't ship |
+| 1 | `chat_message` / `chat_thread` schema | `cmd/chat` is empty |
+| 2 | `fcm_token` schema + routing decision | notification FCM fallback can't ship |
+| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC + future Go-↔-Go calls run on bearer until this lands; CLAUDE.md §G5 |
 
 When any of these lands, **update this table** and the §0 handoff in
 `../../CLAUDE.md` in the same commit as the Go work that consumes it.

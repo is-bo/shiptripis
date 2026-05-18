@@ -204,6 +204,41 @@ func LoadS3() (S3, error) {
 	}, nil
 }
 
+// ── KYC gRPC client ──────────────────────────────────────────────────────────
+
+// KYCGRPC holds the kyc-service → Django gRPC dial settings. Matches
+// the env contract documented in CLAUDE.md §G5 and the Django runner
+// command (apps/kyc/management/commands/runkycgrpc.py).
+type KYCGRPC struct {
+	Target      string
+	AuthMode    string
+	BearerToken string
+}
+
+// LoadKYCGRPC reads KYC_GRPC_TARGET + GRPC_AUTH_MODE + GRPC_BEARER_TOKEN.
+// Target is required — a half-built deploy without the gRPC dependency
+// should fail loud at boot rather than ship a NoopRecorder to prod
+// (CLAUDE.md §9).
+func LoadKYCGRPC() (KYCGRPC, error) {
+	var b errBuilder
+	target := mustString(&b, "KYC_GRPC_TARGET", "")
+	mode := strings.ToLower(optString("GRPC_AUTH_MODE", "bearer"))
+	switch mode {
+	case "bearer", "mtls":
+		// ok
+	default:
+		b.addf("GRPC_AUTH_MODE must be 'bearer' or 'mtls' (got %q)", mode)
+	}
+	token := optString("GRPC_BEARER_TOKEN", "")
+	if mode == "bearer" && token == "" {
+		b.addf("GRPC_BEARER_TOKEN is required when GRPC_AUTH_MODE=bearer")
+	}
+	if err := b.err(); err != nil {
+		return KYCGRPC{}, err
+	}
+	return KYCGRPC{Target: target, AuthMode: mode, BearerToken: token}, nil
+}
+
 // ── logger / service identity ────────────────────────────────────────────────
 
 type Logger struct {

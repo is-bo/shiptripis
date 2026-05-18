@@ -108,11 +108,26 @@ tasks:
       # import so the package is importable from inside Django.
       - sed -i 's|^import kyc_pb2 as kyc__pb2|from . import kyc_pb2 as kyc__pb2  # patched|' monolith/apps/kyc/grpc_gen/kyc_pb2_grpc.py
 
+  contract:go-grpc:
+    desc: "Regenerate Go grpc stubs (kyc only for now). Requires host protoc + protoc-gen-go + protoc-gen-go-grpc on PATH."
+    # Host-based, NOT docker compose: the Django image doesn't ship the
+    # Go protoc plugins, and re-baking that image just for codegen is a
+    # bigger lift than `go install` on the dev box. CI nodes get the
+    # plugins via `go install` in the workflow setup step.
+    cmds:
+      - mkdir -p services/internal/kyc/kycpb
+      - |
+        protoc -I contracts/grpc \
+          --go_out=services/internal/kyc/kycpb --go_opt=paths=source_relative \
+          --go-grpc_out=services/internal/kyc/kycpb --go-grpc_opt=paths=source_relative \
+          contracts/grpc/kyc.proto
+
   check-drift:
     desc: "CI gate: schema.sql + sqlc output must match committed state (CLAUDE.md G3)"
     cmds:
       - task: contract:sync-db
       - task: contract:generate
+      - task: contract:go-grpc
       - git diff --exit-code contracts/sql/ services/internal/
 
   # --- QA ------------------------------------------------------------------

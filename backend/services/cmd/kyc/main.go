@@ -6,12 +6,14 @@
 //     KYCSubmissionService.RecordSubmission via gRPC for the durable row.
 //   - /healthz, /readyz for K3s probes.
 //
-// Deferred until contracts/grpc/kyc.proto codegen lands and Django ships
-// apps/kyc/grpc_server.py + the idempotency_key migration:
-//   - The gRPC client itself. We wire kyc.NoopRecorder for now, which
-//     fails loudly so a half-built production deploy is impossible to
-//     miss.
+// The gRPC Recorder client (kyc.GRPCClient) is dialled at boot from
+// KYC_GRPC_TARGET + GRPC_AUTH_MODE + GRPC_BEARER_TOKEN. Missing config
+// fails the service start — half-built deploys should never reach prod
+// (CLAUDE.md §9).
+//
+// Deferred:
 //   - GET /kyc/me (status lookup) — needs sqlc-generated repo.
+//   - mTLS for the gRPC dial (CLAUDE.md §G5). Bearer is dev-only.
 //
 // Listens on KYC_HTTP_ADDR (default :8083, matches Caddy's
 // kyc-service:8083 upstream in backend/gateway/Caddyfile); Caddy routes
@@ -79,6 +81,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	grpcCfg, err := config.LoadKYCGRPC()
+	if err != nil {
+		return err
+	}
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -114,11 +120,21 @@ func run() error {
 
 	bucket := config.String(bucketEnvKey, bucketEnvFallback)
 
+	recorder, err := kyc.NewGRPCClient(rootCtx, kyc.GRPCClientConfig{
+		Target:      grpcCfg.Target,
+		AuthMode:    kyc.GRPCAuthMode(grpcCfg.AuthMode),
+		BearerToken: grpcCfg.BearerToken,
+	}, log)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = recorder.Close() }()
+
 	handler := &kyc.Handler{
 		Validator: validator,
 		Storage:   store,
 		Bucket:    bucket,
-		Recorder:  kyc.NoopRecorder{}, // TODO(claude-b): swap for grpc client when codegen lands
+		Recorder:  recorder,
 		Log:       log,
 	}
 
