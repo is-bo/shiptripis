@@ -1,53 +1,55 @@
 ---
 name: ShipTrip project
-description: P2P delivery + product-purchase platform for Algeria; Flutter + API gateway + Django monolith + Go services + Postgres
+description: P2P delivery + product-purchase platform for Algeria; Flutter + Caddy + Django monolith + Go services + Postgres + Redis + MinIO/S3
 type: project
 ---
-ShipTrip is a peer-to-peer platform connecting Senders (post delivery requests or product-purchase requests) with Travelers (list trips, fulfill requests). Pricing in DZD. Algeria-focused — corridor between Algeria and France.
+ShipTrip is a peer-to-peer platform connecting Senders (delivery requests or product-purchase requests) with Travelers (list trips, fulfill requests). Pricing in DZD. Algeria-focused, primary corridor Algeria ↔ France.
 
-**Repo layout:**
-- `mobile/` — Flutter app (iOS + Android). Scaffolded 2026-04-29 with Riverpod (Notifier API, v3) + go_router + flutter_animate + google_fonts + country_flags v4 (no width/height — wrap in SizedBox). Aesthetic = "Mediterranean transit": parchment cream + emerald + terracotta + gold; Fraunces display + DM Sans body + JetBrains Mono. State management: **Riverpod**.
-- `backend/monolith/` — Django REST monolith (auth, trips, parcels, matching, payments, wallet, chat persistence, notifications store, admin)
-- `backend/services/` — Go microservices: realtime chat, notifications, **KYC**, **media gateway** (all photo/document uploads → Supabase storage)
+V1 architecture is **locked** (commit 058f25d). Source of truth: `ARCHITECTURE.md` + `CLAUDE.md`. Read those before acting; this memory is just a session-start hook.
 
-**Stack decisions (target build):**
-- Mobile: Flutter
-- Public ingress: API Gateway (Kong / Traefik / Nginx — TBD; must support WS upgrade, so plain AWS API Gateway REST is out). Gateway terminates TLS, validates JWT, injects X-User-Id header, handles rate limiting + CORS.
-- Backend monolith: Django (REST + admin)
-- Async / specialized services: Go — chat (WS), notifications (WS), KYC (ID/selfie processing + admin review API), media gateway (single upload endpoint for all binary content)
-- DB: PostgreSQL (shared between Django and Go services)
-- Object storage: **Supabase Storage** — all media (KYC docs, parcel photos, product item photos, ticket scans) uploaded via the Go media gateway, never directly from Flutter to Supabase
-- Service comms: Shared Postgres + Redis pub/sub (Django publishes events, Go services subscribe). Internal traffic stays on private network — never through gateway.
-- Realtime: WebSockets only in v1 (no FCM push yet)
-- Payments v1: Stripe-style cards (local DZ rails — CIB/Edahabia/Baridimob — deferred)
-- Deferred to post-MVP: ratings/reviews, dispute resolution flow, boost feature, insurance, image attachments in chat
+**Two Claudes split:**
+- Claude A (Islam): `mobile/`, `backend/monolith/` (Django apps + migrations), `contracts/sql/schema.sql`, Django gRPC server, Django redis publisher.
+- Claude B (this user, on this machine — writes Go): `backend/services/` (Go workspace), `contracts/grpc/*.proto` (jointly), sqlc consumption, Go gRPC clients.
+- Shared (require explicit user approval to touch): `gateway/Caddyfile`, `docker-compose.yml`, master `Taskfile.yml`, `.env.example`, `ARCHITECTURE.md`, `CLAUDE.md`.
 
-**KYC + media in Go (NOT in Django):**
-- KYC service: ID upload, admin verify, KYC state machine — lives in `backend/services/`
-- Media gateway service: single Go upload endpoint that receives ALL binary content from the app (KYC docs, parcel photos, product item photos, ticket uploads) and pushes to Supabase Storage. Returns Supabase object key/URL; Django stores only the reference, never the bytes.
-- Required in MVP — travelers cannot list trips until KYC approved
-- Django reads KYC status from shared Postgres (or via internal API call to Go KYC service — TBD)
-- Flutter never uploads directly to Supabase — always goes Flutter → API gateway → Go media service → Supabase.
-- Supabase auth: media-service holds service-role key server-side; Flutter never sees Supabase credentials.
-- Buckets: separate per content type (e.g. `kyc-docs`, `parcel-photos`, `product-photos`, `tickets`) — not one shared bucket with prefixes.
-- Image handling v1: no compression on upload, but enforce **size limits** (per-bucket max bytes). Thumbnails generated **on read** (lazy), not pre-generated.
-- No virus scanning in v1.
-- KYC service calls media-service **internally** (server-to-server). Flutter sends KYC payload to kyc-service; kyc-service then forwards files to media-service. Flutter does NOT upload to media-service first and pass the key.
+**Stack (V1, locked):**
+- Mobile: Flutter (Riverpod 3 Notifier API, country_flags v4 wrapped in SizedBox).
+- Public ingress: **Caddy** (auto-TLS, native WS, no JWT validation at edge — services validate themselves).
+- Monolith: Django (REST + admin) — owns 100% of migrations.
+- Go services: `cmd/chat`, `cmd/notif` (WS hub + FCM consumer in one binary), `cmd/kyc` (HTTP + MinIO + Django gRPC client).
+- DB: shared Postgres. Django uses ORM; Go uses `pgxpool` + sqlc-generated repos reading `contracts/sql/schema.sql`.
+- Object storage: **MinIO** in dev, S3-compatible (Hetzner/Backblaze/Wasabi) in prod, abstracted via `pkg/storage/s3.go` (aws-sdk-go-v2). No MinIO-specific admin calls.
+- Service comms: shared Postgres + Redis (pub/sub for WS fan-out, streams for FCM queue) + gRPC mTLS for Django↔Go (KYC RecordSubmission).
+- Realtime: WS first, **FCM fallback** (yes, FCM is V1 — only custom topics/segmentation are V2).
+- Payments V1: Stripe-style cards. Local DZ rails (CIB/Edahabia/Baridimob) deferred.
 
-**Commission rules (load-bearing):**
-- Delivery payments: 25% platform commission flat
-- Product requests: 2,500 DZD base fee + tiered commission (0% under 30k, 7% 30–55k, 5% 55–100k, 3% 100k+)
-- Traveler always receives 100% of item price for product requests
+**6 production guardrails (do not skip — see CLAUDE.md §2):**
+- G1 multi-pod presence + delivery receipts (`presence:<uid>` 15s TTL, `delivered:<event_id>` 60s TTL, FCM consumer waits 2s before fallback, XAUTOCLAIM sweeper 30s).
+- G2 JWT clock-skew leeway 30s on both sides.
+- G3 schema-drift CI gate runs BOTH `task contract:sync-db` AND `task contract:generate` then `git diff --exit-code`.
+- G4 S3-compatible abstraction, no MinIO-specific code.
+- G5 gRPC mTLS in prod (bearer only allowed in docker-compose dev). 16 MB max msg size both sides.
+- G6 Redis publish always inside `transaction.on_commit`, plus `published_event` audit row (G6b detection-only outbox; full outbox is V2).
 
-**Verification flow (load-bearing):**
-- 2-step code: sender gives code 1 at pickup → traveler enters → "In Transit"; sender gives code 2 to final receiver → confirms delivery
-- Trips require admin approval (ticket upload mandatory)
+**Connection pool budget (load-bearing):** Postgres `max_connections=100`. Allocation: Django 20, chat 30 (2×15), notif 10, kyc 5, reserved 10 = 75 used. Headroom for one extra Go pod = 25 conn — update `pgxpool.MaxConns` before scaling.
 
-**Why:** Modular architecture and clean separation between monolith (CRUD/business logic) and Go services (realtime + KYC + media).
-**How to apply:** When discussing ShipTrip features:
-- Don't put KYC in Django — it's a Go service.
-- Don't suggest FCM/push for v1.
-- Don't propose ratings/disputes/boost for MVP.
-- All public traffic flows through the API gateway — Flutter never hits Django/Go directly.
-- Rate limiting belongs in gateway, not DRF throttles.
-- All media uploads go: Flutter → API gateway → Go media service → Supabase Storage. Django only stores Supabase object references, never raw bytes. Don't suggest direct-to-Supabase signed URLs from Flutter for v1 — server-mediated upload is the chosen design.
+**Commission rules (load-bearing, frozen on Offer at creation):**
+- Delivery: 25% flat platform commission, sender pays total.
+- Product: 2,500 DZD base fee + tiered commission on item price (0% <30k, 7% 30–55k, 5% 55–100k, 3% 100k+). Traveler always receives 100% of item price.
+- Single source: `monolith/apps/core/pricing.py`. Integer DZD, no floats.
+
+**Verification flow (load-bearing):** 2-step argon2-hashed handover code (PICKUP → "In Transit", DELIVERY → confirm). Trips require admin approval (ticket upload mandatory).
+
+**Local dev (Windows + WSL Ubuntu):** docker-compose up from inside WSL. Redis exposed on **host port 6380** (native redis-server holds 6379); inside compose network services still use `redis:6379`. Don't run native `psql`/`redis-cli` against containers — separate instances.
+
+**Why:** V1 architecture survived a brutal review and the 6 guardrails each neutralize a specific distributed-systems failure class. Drifting from them is what causes silent prod outages.
+**How to apply:** When working on backend tasks:
+- Verify scope (Claude A vs B) before touching files.
+- Never put `redis.publish` inside an open Django transaction — always `transaction.on_commit`.
+- `presence:<user_id>` TTL is 15s, not 30s. WS ping interval is 10s. TTL must be tighter than ping.
+- FCM consumer waits 2s, then checks `delivered:<event_id>`, then maybe 2s more if presence online — never fall back immediately.
+- Production gRPC = mTLS, never static bearer.
+- Don't add a 6th Go service. Don't pre-generate thumbnails. Don't compress images server-side in V1. Don't change `Airport.iata` to surrogate id without a migration plan.
+- Pricing changes go in `pricing.py`, never in schema. Old Offers settle at frozen rates.
+- Mobile: no `Spacer` inside scrollable columns; reconnect logic must use exponential backoff with ±30% jitter.
+- Don't merge with failing `check-drift`.

@@ -1,1 +1,2 @@
 - [ShipTrip project](memory/project_shiptrip.md) — P2P delivery app; Flutter + Django monolith + Go services + Supabase; KYC in MVP, payments stripe-first
+- [Rate limiting at gateway](memory/feedback_ratelimit_at_gateway.md) — rate limiting lives in Caddy, not in Go services or Django; do not build pkg/ratelimit
