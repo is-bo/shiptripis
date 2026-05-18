@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -21,6 +22,23 @@ import (
 // (see apps/kyc/management/commands/runkycgrpc.py). Asymmetric limits
 // produce cryptic RESOURCE_EXHAUSTED errors — CLAUDE.md §G5.
 const MaxGRPCMessageBytes = 16 << 20
+
+// retryServiceConfig retries transient UNAVAILABLE / DEADLINE_EXCEEDED
+// from the Django gRPC server. Safe because RecordSubmission is
+// idempotency-keyed server-side (kyc_submission.idempotency_key, commit
+// d6f4dc6) — duplicate writes collapse to the original row.
+const retryServiceConfig = `{
+    "methodConfig": [{
+        "name": [{"service": "shiptrip.kyc.v1.KYCSubmissionService"}],
+        "retryPolicy": {
+            "maxAttempts": 4,
+            "initialBackoff": "0.2s",
+            "maxBackoff": "2s",
+            "backoffMultiplier": 2.0,
+            "retryableStatusCodes": ["UNAVAILABLE", "DEADLINE_EXCEEDED"]
+        }
+    }]
+}`
 
 // GRPCAuthMode picks how the Go client authenticates to the Django gRPC
 // server. Mirrors the GRPC_AUTH_MODE env documented in CLAUDE.md §G5.
@@ -94,12 +112,22 @@ func NewGRPCClient(ctx context.Context, cfg GRPCClientConfig, log *slog.Logger) 
 	// grpc.NewClient is the modern (non-deprecated) constructor; the dial
 	// is lazy. We force the connection eagerly below so KYC_GRPC_TARGET
 	// misconfig surfaces at boot, not on the first user upload.
+	//
+	// Keepalive: KYC submissions are infrequent, so the HTTP/2 connection
+	// can sit idle long enough for conntrack/NAT to silently drop the
+	// flow. 30s pings (with PermitWithoutStream) keep the path warm.
 	conn, err := grpc.NewClient(cfg.Target,
 		transport,
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallSendMsgSize(MaxGRPCMessageBytes),
 			grpc.MaxCallRecvMsgSize(MaxGRPCMessageBytes),
 		),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                30 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
+		grpc.WithDefaultServiceConfig(retryServiceConfig),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("kyc grpc: new client %s: %w", cfg.Target, err)

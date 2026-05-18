@@ -9,14 +9,17 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
-**KYC gRPC client wired.** Done in this commit:
+**KYC gRPC client wired + hardened.** Done across recent commits:
 - `task contract:go-grpc` target added to `backend/Taskfile.yml` (mirrors the existing python-grpc target; uses host `protoc` + `protoc-gen-go` + `protoc-gen-go-grpc`) and now runs in `check-drift` so generated Go stubs stay in lockstep with the proto.
 - Generated stubs at `backend/services/internal/kyc/kycpb/`.
 - `backend/services/internal/kyc/grpc_client.go` implements the `Recorder` interface (translates the typed-string `DocumentType`/`Status` ↔ proto enums, attaches `authorization: Bearer <token>` metadata per RPC, 16 MiB max msg size both sides per §G5).
-- `cmd/kyc/main.go` now dials at boot via `LoadKYCGRPC()` — `KYC_GRPC_TARGET` + `GRPC_AUTH_MODE` + `GRPC_BEARER_TOKEN` are **required**, missing config fails service start (§9 "evidence > assertions"). `NoopRecorder` is retained for unit-test scaffolding but no longer the default.
+- **Keepalive**: 30s pings / 10s timeout / `PermitWithoutStream: true` so idle TCP between rare KYC submissions isn't silently dropped by conntrack/NAT.
+- **Retry policy** via gRPC service-config: 4 attempts on `UNAVAILABLE`/`DEADLINE_EXCEEDED`, 0.2s→2s exponential. Safe because Django dedupes on `idempotency_key` (commit `d6f4dc6`).
+- `cmd/kyc/main.go` dials at boot via `LoadKYCGRPC()` — `KYC_GRPC_TARGET` is **required**, missing config fails service start (§9 "evidence > assertions"). `NoopRecorder` is retained for unit-test scaffolding but no longer the default.
+- `GRPC_AUTH_MODE` defaults to `mtls` per §G5 — missing value in prod surfaces as a startup error (mtls is still TODO) instead of silently downgrading to bearer.
 - mTLS still a TODO in both `grpc_client.go` and `runkycgrpc.py` (§G5).
 
-**Set in dev `.env`:** `KYC_GRPC_TARGET=django:50051`, `GRPC_AUTH_MODE=bearer`, `GRPC_BEARER_TOKEN=<shared with Django>`.
+**Set in dev `.env`:** `KYC_GRPC_TARGET=django:50051`, `GRPC_AUTH_MODE=bearer` (must be set explicitly — no implicit default), `GRPC_BEARER_TOKEN=<shared with Django>`.
 
 Smaller follow-ups (still on the list, not blockers):
 - Dispatcher only consumes `offer.accepted`. The most user-visible missing channel is `offer.created` (sender notification when traveler applies). Needs Islam's call on the `targets:[user_id,...]` payload convention before generalising — current per-channel struct/switch is fine for V1.

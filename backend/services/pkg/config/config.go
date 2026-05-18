@@ -218,11 +218,13 @@ type KYCGRPC struct {
 // LoadKYCGRPC reads KYC_GRPC_TARGET + GRPC_AUTH_MODE + GRPC_BEARER_TOKEN.
 // Target is required — a half-built deploy without the gRPC dependency
 // should fail loud at boot rather than ship a NoopRecorder to prod
-// (CLAUDE.md §9).
+// (CLAUDE.md §9). GRPC_AUTH_MODE defaults to "mtls" per §G5 so a missing
+// value in prod surfaces as a startup error (mtls is not yet wired)
+// rather than silently downgrading to bearer.
 func LoadKYCGRPC() (KYCGRPC, error) {
 	var b errBuilder
 	target := mustString(&b, "KYC_GRPC_TARGET", "")
-	mode := strings.ToLower(optString("GRPC_AUTH_MODE", "bearer"))
+	mode := strings.ToLower(optString("GRPC_AUTH_MODE", "mtls"))
 	switch mode {
 	case "bearer", "mtls":
 		// ok
