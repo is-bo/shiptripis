@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../core/media/media_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/trips/trips_providers.dart';
@@ -26,10 +30,29 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   DateTime _date = DateTime.now().add(const Duration(days: 4));
   bool _showCalendar = false;
   final _accepted = <String>{"Documents", "Small box", "Clothing"};
-  bool _ticketAdded = false;
+  String? _ticketPath;
+  String? _ticketName;
+  int? _ticketBytes;
   final _flightCtl = TextEditingController(text: "AH 1004");
   bool _submitting = false;
   String? _error;
+
+  Future<void> _pickTicket() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1800,
+      imageQuality: 80,
+    );
+    if (picked == null) return;
+    final f = File(picked.path);
+    final size = await f.length();
+    setState(() {
+      _ticketPath = picked.path;
+      _ticketName = picked.name;
+      _ticketBytes = size;
+    });
+  }
 
   @override
   void dispose() {
@@ -85,13 +108,29 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       _error = null;
     });
     try {
-      await ref.read(myTripsProvider.notifier).create(
+      final trip = await ref.read(myTripsProvider.notifier).create(
             originIata: _origin!.iata,
             destinationIata: _dest!.iata,
             departureAt: _date,
             capacityKg: _kg,
             flightNumber: _flightCtl.text.trim(),
           );
+      if (_ticketPath != null) {
+        try {
+          await ref.read(mediaRepositoryProvider).uploadTripPhoto(
+                tripId: trip.id,
+                filePath: _ticketPath!,
+                filename: _ticketName ?? 'ticket.jpg',
+              );
+        } on MediaFailure catch (e) {
+          // Trip is created; surface but don't roll back.
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Trip saved. Photo: ${e.message}')),
+            );
+          }
+        }
+      }
       if (!mounted) return;
       context.pop();
     } on TripsFailure catch (e) {
@@ -421,16 +460,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   }
 
   Widget _ticketUpload() {
+    final attached = _ticketPath != null;
+    final sub = attached
+        ? '${_ticketName ?? "ticket"} · ${((_ticketBytes ?? 0) / 1024).toStringAsFixed(0)} KB'
+        : 'Optional · photo (JPEG / PNG)';
     return GestureDetector(
-      onTap: () => setState(() => _ticketAdded = !_ticketAdded),
+      onTap: _pickTicket,
       child: AnimatedContainer(
         duration: AppDurations.med,
         padding: const EdgeInsets.all(AppSpacing.x4),
         decoration: BoxDecoration(
-          color: _ticketAdded ? AppColors.emerald.withValues(alpha: 0.08) : AppColors.parchmentSoft,
+          color: attached ? AppColors.emerald.withValues(alpha: 0.08) : AppColors.parchmentSoft,
           borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(
-            color: _ticketAdded ? AppColors.emerald : AppColors.hairline,
+            color: attached ? AppColors.emerald : AppColors.hairline,
             width: 1.4,
           ),
         ),
@@ -440,14 +483,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: _ticketAdded
+                color: attached
                     ? AppColors.emerald
                     : AppColors.ink.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                _ticketAdded ? Icons.check_rounded : Icons.upload_file_rounded,
-                color: _ticketAdded ? AppColors.parchment : AppColors.ink,
+                attached ? Icons.check_rounded : Icons.upload_file_rounded,
+                color: attached ? AppColors.parchment : AppColors.ink,
               ),
             ),
             const SizedBox(width: 12),
@@ -456,18 +499,27 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _ticketAdded ? "Ticket attached" : "Upload your boarding pass",
+                    attached ? 'Ticket attached' : 'Upload your boarding pass',
                     style: AppType.body(14.5, w: FontWeight.w700),
                   ),
                   Text(
-                    _ticketAdded
-                        ? "boarding-${_flightCtl.text.replaceAll(' ', '')}.pdf · 412 KB"
-                        : "Optional · PDF or photo",
+                    sub,
                     style: AppType.body(12, color: AppColors.inkMute),
                   ),
                 ],
               ),
             ),
+            if (attached)
+              IconButton(
+                tooltip: 'Remove',
+                onPressed: () => setState(() {
+                  _ticketPath = null;
+                  _ticketName = null;
+                  _ticketBytes = null;
+                }),
+                icon: const Icon(Icons.close_rounded,
+                    color: AppColors.inkMute),
+              ),
           ],
         ),
       ),

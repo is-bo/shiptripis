@@ -78,16 +78,18 @@ def _synthesize_succeeded(intent: PaymentIntent, provider_intent_id: str) -> Non
         kind=PaymentEvent.Kind.INTENT_SUCCEEDED,
         payload={"amount_minor": intent.amount_minor, "currency": intent.currency},
     )
+    match = intent.offer.match
     redis_bus.publish_after_commit(
         channels.PAYMENT_CAPTURED,
         {
             "intent_id": intent.id,
             "offer_id": intent.offer_id,
-            "match_id": intent.offer.match_id,
+            "match_id": match.id,
             "payer_id": intent.payer_id,
             "amount_minor": intent.amount_minor,
             "currency": intent.currency,
         },
+        targets=[match.sender_id, match.traveler_id],
     )
 
 
@@ -348,6 +350,7 @@ class PaymentIntentRefundView(APIView):
                     "currency": intent.currency,
                     "full": intent.status == PaymentIntent.Status.REFUNDED,
                 },
+                targets=[intent.payer_id],
             )
 
         return Response(

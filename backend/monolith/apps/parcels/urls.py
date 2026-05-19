@@ -7,6 +7,7 @@ from .views import (
     ParcelCancelView,
     ParcelDetailView,
     ParcelListView,
+    ParcelMediaUploadView,
     ProductCreateView,
 )
 
@@ -22,4 +23,9 @@ urlpatterns = [
     path("parcels/product", ProductCreateView.as_view(), name="parcels-product-create"),
     path("parcels/<int:pk>", ParcelDetailView.as_view(), name="parcels-detail"),
     path("parcels/<int:pk>/cancel", ParcelCancelView.as_view(), name="parcels-cancel"),
+    path(
+        "parcels/<int:pk>/media",
+        ParcelMediaUploadView.as_view(),
+        name="parcels-media-upload",
+    ),
 ]

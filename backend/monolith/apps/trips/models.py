@@ -139,6 +139,40 @@ class TripStopover(models.Model):
         return f"{self.trip_id}#{self.position} {self.airport_id}"
 
 
+class TripMedia(models.Model):
+    """Photo attached to a trip (airline ticket / boarding pass).
+
+    `object_key` references an object in MinIO/S3; Django never stores
+    bytes (ARCHITECTURE.md §9, §11).
+    """
+
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="media"
+    )
+    bucket = models.CharField(max_length=64)
+    object_key = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=64, default="image/jpeg")
+    bytes = models.PositiveIntegerField(default=0)
+    kind = models.CharField(max_length=24, default="ticket")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "trips_media"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["trip", "created_at"], name="trips_media_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bucket", "object_key"],
+                name="trips_media_unique_object",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"trip#{self.trip_id} {self.object_key}"
+
+
 class FlightTrackingSnapshot(models.Model):
     """Cached snapshot from an external flight-tracking API.
 

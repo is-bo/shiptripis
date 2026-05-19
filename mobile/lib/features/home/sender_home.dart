@@ -42,7 +42,10 @@ class SenderHome extends ConsumerWidget {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(
-                child: _SectionHeader(title: "Your requests", action: "All")),
+                child: _SectionHeader(
+                    title: "Your requests",
+                    action: "All",
+                    onTap: () => context.push('/sender/requests'))),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x3)),
           SliverPadding(
@@ -386,9 +389,10 @@ class _SearchAction extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.action});
+  const _SectionHeader({required this.title, required this.action, this.onTap});
   final String title;
   final String action;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -398,9 +402,19 @@ class _SectionHeader extends StatelessWidget {
               style: AppType.display(20, w: FontWeight.w500),
               overflow: TextOverflow.ellipsis),
         ),
-        Text(action,
-            style: AppType.body(12.5, color: AppColors.inkMute, w: FontWeight.w600)),
-        const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.inkMute),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Row(
+            children: [
+              Text(action,
+                  style: AppType.body(12.5,
+                      color: AppColors.inkMute, w: FontWeight.w600)),
+              const Icon(Icons.arrow_forward_rounded,
+                  size: 14, color: AppColors.inkMute),
+            ],
+          ),
+        ),
       ],
     );
   }

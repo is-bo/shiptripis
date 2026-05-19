@@ -14,30 +14,33 @@ import (
 	"shiptrip/pkg/wsproto"
 )
 
-// DeliveredTTL is the lifetime of the delivered:<event_id> marker that
-// the WS-owning pod writes once a message has actually been queued to a
-// socket. The FCM consumer (V2) reads this to decide whether to skip the
-// push fallback. 60s is per CLAUDE.md §2 G1.
 const DeliveredTTL = 60 * time.Second
-
-// markDeliveredTimeout caps the detached write that closes a delivery
-// receipt. Detached so shutdown doesn't abort an in-flight receipt — a
-// truncated UPDATE here would surface as a phantom undelivered row in
-// the G6b sweep.
 const markDeliveredTimeout = 5 * time.Second
 
 // Channels this service subscribes to.
 //
-// V1 scope: only offer.accepted with hardcoded {sender_id, traveler_id}
-// routing. When Islam confirms the multi-channel routing strategy (likely
-// Django adding `targets:[user_id,...]` to every payload), this list
-// grows and routing moves out of the per-channel switch in Dispatch.
-const (
-	channelOfferAccepted = "offer.accepted"
-)
+// Every Django payload is wrapped as {event_id, ts, targets:[user_id,...], ...}
+// (see apps/core/redis_bus.py). The dispatcher walks `targets` and fans
+// each event to those users' local WS sockets. Channels listed here that
+// predate the `targets` convention fall back to legacy keys
+// (sender_id/traveler_id/recipient_id) on missing/empty targets.
+var subscribedChannels = []string{
+	"match.created",
+	"match.in_transit",
+	"match.completed",
+	"offer.created",
+	"offer.updated",
+	"offer.accepted",
+	"parcel.created",
+	"parcel.cancelled",
+	"trip.created",
+	"trip.cancelled",
+	"payment.captured",
+	"payment.refunded",
+	"handover.code_issued",
+	"handover.confirmed",
+}
 
-// Dispatcher consumes Redis pub/sub events, fans them to local WS
-// sockets via the Hub, and writes G1 delivery receipts.
 type Dispatcher struct {
 	rdb  *redisbus.Client
 	pool *pgxpool.Pool
@@ -52,17 +55,14 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 	return &Dispatcher{rdb: rdb, pool: pool, hub: hub, log: log}
 }
 
-// Run subscribes and pumps messages until ctx is cancelled. Blocks.
-// Caller (main.go) should run this in its own goroutine and Close the
-// returned subscription on shutdown.
 func (d *Dispatcher) Run(ctx context.Context) error {
-	sub, err := d.rdb.Subscribe(ctx, channelOfferAccepted)
+	sub, err := d.rdb.Subscribe(ctx, subscribedChannels...)
 	if err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
 
-	d.log.Info("dispatcher subscribed", "channels", []string{channelOfferAccepted})
+	d.log.Info("dispatcher subscribed", "channels", subscribedChannels)
 
 	for {
 		select {
@@ -77,87 +77,90 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	}
 }
 
-// offerAcceptedPayload mirrors apps/matching/views.py L441-L452.
-// Django wraps every publish in {event_id, ts, ...payload}, so those
-// two fields are always present alongside the channel-specific keys.
-type offerAcceptedPayload struct {
-	EventID    string `json:"event_id"`
-	Ts         string `json:"ts"`
-	MatchID    int64  `json:"match_id"`
-	OfferID    int64  `json:"offer_id"`
-	ParcelID   int64  `json:"parcel_id"`
-	TripID     int64  `json:"trip_id"`
-	SenderID   int64  `json:"sender_id"`
-	TravelerID int64  `json:"traveler_id"`
-	TotalDZD   int64  `json:"total_dzd"`
+// genericPayload is the envelope every Django publish now produces.
+// Channel-specific fields are read on-demand from the raw bytes for the
+// legacy-fallback path.
+type genericPayload struct {
+	EventID string  `json:"event_id"`
+	Ts      string  `json:"ts"`
+	Targets []int64 `json:"targets"`
+}
+
+// legacyTargets is read only when `targets` is absent/empty (older
+// publishes during the rollout). Channels that don't carry any of these
+// keys simply produce no recipients and the event is dropped silently.
+type legacyTargets struct {
+	SenderID    int64 `json:"sender_id"`
+	TravelerID  int64 `json:"traveler_id"`
+	RecipientID int64 `json:"recipient_id"`
+	PayerID     int64 `json:"payer_id"`
+	IssuedToID  int64 `json:"issued_to_id"`
 }
 
 func (d *Dispatcher) dispatch(msg redisbus.Message) {
-	switch msg.Channel {
-	case channelOfferAccepted:
-		d.dispatchOfferAccepted(msg.Payload)
-	default:
-		// Unreachable: we control the subscribe list. Logged just in case
-		// go-redis ever surfaces a misrouted message.
-		d.log.Warn("dispatcher: unknown channel", "channel", msg.Channel)
-	}
-}
-
-func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
-	var p offerAcceptedPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
-		d.log.Error("offer.accepted: bad payload", "err", err)
+	var env genericPayload
+	if err := json.Unmarshal(msg.Payload, &env); err != nil {
+		d.log.Error("dispatcher: bad payload", "channel", msg.Channel, "err", err)
 		return
 	}
-	if p.EventID == "" {
-		d.log.Error("offer.accepted: missing event_id")
-		return
-	}
-	if p.SenderID == 0 || p.TravelerID == 0 {
-		d.log.Error("offer.accepted: missing party id",
-			"sender_id", p.SenderID,
-			"traveler_id", p.TravelerID,
-			"event_id", p.EventID,
-		)
+	if env.EventID == "" {
+		d.log.Error("dispatcher: missing event_id", "channel", msg.Channel)
 		return
 	}
 
-	env := wsproto.Envelope{
-		EventID: p.EventID,
-		Ts:      p.Ts,
-		Type:    channelOfferAccepted,
-		Payload: raw,
+	targets := env.Targets
+	if len(targets) == 0 {
+		var lg legacyTargets
+		_ = json.Unmarshal(msg.Payload, &lg)
+		targets = uniqueNonZero([]int64{
+			lg.SenderID, lg.TravelerID, lg.RecipientID, lg.PayerID, lg.IssuedToID,
+		})
+	}
+	if len(targets) == 0 {
+		d.log.Debug("dispatcher: no targets",
+			"channel", msg.Channel, "event_id", env.EventID)
+		return
 	}
 
-	sockets := d.hub.Send(p.SenderID, env) + d.hub.Send(p.TravelerID, env)
+	wsEnv := wsproto.Envelope{
+		EventID: env.EventID,
+		Ts:      env.Ts,
+		Type:    msg.Channel,
+		Payload: msg.Payload,
+	}
+
+	var sockets int
+	for _, uid := range targets {
+		sockets += d.hub.Send(uid, wsEnv)
+	}
 	if sockets == 0 {
-		// Neither party is on this pod. Either they're on another pod
-		// (which is also subscribed and will deliver) or they're offline
-		// (FCM fallback, V2). Either way this pod does not own the receipt.
-		d.log.Debug("offer.accepted: no local recipients",
-			"event_id", p.EventID,
-			"sender_id", p.SenderID,
-			"traveler_id", p.TravelerID,
+		d.log.Debug("dispatcher: no local recipients",
+			"channel", msg.Channel,
+			"event_id", env.EventID,
+			"target_count", len(targets),
 		)
 		return
 	}
-
-	d.markDelivered(p.EventID, sockets)
+	d.markDelivered(env.EventID, msg.Channel, sockets)
 }
 
-// markDelivered performs the G1 two-step:
-//  1. SET delivered:<event_id> 1 EX 60 — signals the FCM consumer to skip
-//  2. UPDATE core_published_event SET delivered_at = now() WHERE event_id = $1
-//     AND delivered_at IS NULL — closes the G6b detection-only audit row.
-//
-// Uses a detached, bounded context so a shutdown mid-fanout doesn't
-// abandon the receipt write — the G6b sweep would otherwise flag an
-// event that was actually delivered.
-//
-// Rows-affected = 0 on the second pod fanning the same event (the first
-// pod's UPDATE already filled delivered_at). That's the intended outcome
-// and not worth logging.
-func (d *Dispatcher) markDelivered(eventID string, sockets int) {
+func uniqueNonZero(in []int64) []int64 {
+	seen := make(map[int64]struct{}, len(in))
+	out := make([]int64, 0, len(in))
+	for _, v := range in {
+		if v == 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+func (d *Dispatcher) markDelivered(eventID, channel string, sockets int) {
 	ctx, cancel := context.WithTimeout(context.Background(), markDeliveredTimeout)
 	defer cancel()
 
@@ -175,5 +178,6 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 		d.log.Warn("published_event update failed", "event_id", eventID, "err", err)
 		return
 	}
-	d.log.Debug("offer.accepted delivered", "event_id", eventID, "sockets", sockets)
+	d.log.Debug("dispatched",
+		"channel", channel, "event_id", eventID, "sockets", sockets)
 }
