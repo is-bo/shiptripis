@@ -21,7 +21,7 @@ class User(AbstractUser):
     full_name = models.CharField(max_length=120)
     phone = models.CharField(max_length=32, blank=True, db_index=True)
     wilaya = models.CharField(max_length=2, choices=WILAYA_CHOICES, blank=True)
-    role = models.CharField(max_length=16, choices=Role.choices, default=Role.SENDER)
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.BOTH)
 
     is_phone_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)

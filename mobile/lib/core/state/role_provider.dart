@@ -6,12 +6,31 @@ enum AppRole { sender, traveler }
 
 /// User-controlled override for users whose server role is "both".
 /// Pure senders / pure travelers ignore this — their role is server-locked.
+///
+/// The choice is persisted to secure storage so a relaunch lands the user
+/// back in the same UI they last used. Hydration is fire-and-forget: the
+/// first frame shows `AppRole.sender`, then the saved value takes over
+/// once the disk read completes (usually well under a frame).
 class RoleNotifier extends Notifier<AppRole> {
   @override
-  AppRole build() => AppRole.sender;
-  void set(AppRole r) => state = r;
-  void toggle() =>
-      state = state == AppRole.sender ? AppRole.traveler : AppRole.sender;
+  AppRole build() {
+    _hydrate();
+    return AppRole.sender;
+  }
+
+  Future<void> _hydrate() async {
+    final raw = await ref.read(authStorageProvider).readRole();
+    if (raw == 'traveler') state = AppRole.traveler;
+    if (raw == 'sender') state = AppRole.sender;
+  }
+
+  void set(AppRole r) {
+    state = r;
+    // Persist asynchronously; UI doesn't wait on disk.
+    ref.read(authStorageProvider).writeRole(r.name);
+  }
+
+  void toggle() => set(state == AppRole.sender ? AppRole.traveler : AppRole.sender);
 }
 
 final roleProvider = NotifierProvider<RoleNotifier, AppRole>(RoleNotifier.new);

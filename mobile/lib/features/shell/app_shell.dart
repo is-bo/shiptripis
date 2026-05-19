@@ -44,7 +44,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
             child: KeyedSubtree(key: ValueKey(_idx), child: pages[_idx]),
           ),
-          if (canSwitch && _idx == 0)
+          if (canSwitch)
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,
               right: 16,
