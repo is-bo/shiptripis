@@ -151,6 +151,13 @@ func run() error {
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		// Generous bodies bounded by MaxRequestBytes — but capped so a
+		// stalled multipart upload can't pin a goroutine forever. KYC
+		// posts are O(few seconds) over normal mobile networks; 60s is
+		// a tail latency ceiling, not a target.
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	serverErr := make(chan error, 1)

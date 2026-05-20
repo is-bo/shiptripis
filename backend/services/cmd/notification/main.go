@@ -138,6 +138,11 @@ func run() error {
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		// IdleTimeout governs HTTP/1.1 keep-alive on /healthz, /readyz.
+		// WS connections are hijacked at Upgrade and aren't subject to
+		// the server's Write/Read timeouts after that — adding them
+		// here would only risk breaking the upgrade itself.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	dispatcherErr := make(chan error, 1)

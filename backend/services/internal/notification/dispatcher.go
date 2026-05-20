@@ -28,12 +28,13 @@ const markDeliveredTimeout = 5 * time.Second
 
 // Channels this service subscribes to.
 //
-// V1 scope: only offer.accepted with hardcoded {sender_id, traveler_id}
-// routing. When Islam confirms the multi-channel routing strategy (likely
-// Django adding `targets:[user_id,...]` to every payload), this list
-// grows and routing moves out of the per-channel switch in Dispatch.
+// Per-channel typed structs (vs. a generic `targets:[user_id,...]` shape)
+// stay readable while the set is small. If a fourth/fifth channel lands
+// with identical routing, factor the unmarshal+route+receipt path into a
+// generic handler then.
 const (
 	channelOfferAccepted = "offer.accepted"
+	channelOfferCreated  = "offer.created"
 )
 
 // Dispatcher consumes Redis pub/sub events, fans them to local WS
@@ -56,13 +57,14 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 // Caller (main.go) should run this in its own goroutine and Close the
 // returned subscription on shutdown.
 func (d *Dispatcher) Run(ctx context.Context) error {
-	sub, err := d.rdb.Subscribe(ctx, channelOfferAccepted)
+	channels := []string{channelOfferAccepted, channelOfferCreated}
+	sub, err := d.rdb.Subscribe(ctx, channels...)
 	if err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
 
-	d.log.Info("dispatcher subscribed", "channels", []string{channelOfferAccepted})
+	d.log.Info("dispatcher subscribed", "channels", channels)
 
 	for {
 		select {
@@ -92,10 +94,26 @@ type offerAcceptedPayload struct {
 	TotalDZD   int64  `json:"total_dzd"`
 }
 
+// offerCreatedPayload mirrors apps/matching/views.py L233-L242 + L368-L379.
+// Django picks the recipient (sender for traveler-proposed offers, traveler
+// for sender-proposed counters) and sends it as a single `recipient_id`
+// — no fan-out at this layer.
+type offerCreatedPayload struct {
+	EventID     string `json:"event_id"`
+	Ts          string `json:"ts"`
+	MatchID     int64  `json:"match_id"`
+	OfferID     int64  `json:"offer_id"`
+	ProposedBy  string `json:"proposed_by"`
+	TotalDZD    int64  `json:"total_dzd"`
+	RecipientID int64  `json:"recipient_id"`
+}
+
 func (d *Dispatcher) dispatch(msg redisbus.Message) {
 	switch msg.Channel {
 	case channelOfferAccepted:
 		d.dispatchOfferAccepted(msg.Payload)
+	case channelOfferCreated:
+		d.dispatchOfferCreated(msg.Payload)
 	default:
 		// Unreachable: we control the subscribe list. Logged just in case
 		// go-redis ever surfaces a misrouted message.
@@ -142,7 +160,41 @@ func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
 		return
 	}
 
-	d.markDelivered(p.EventID, sockets)
+	go d.markDelivered(p.EventID, sockets)
+}
+
+func (d *Dispatcher) dispatchOfferCreated(raw []byte) {
+	var p offerCreatedPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		d.log.Error("offer.created: bad payload", "err", err)
+		return
+	}
+	if p.EventID == "" {
+		d.log.Error("offer.created: missing event_id")
+		return
+	}
+	if p.RecipientID == 0 {
+		d.log.Error("offer.created: missing recipient_id", "event_id", p.EventID)
+		return
+	}
+
+	env := wsproto.Envelope{
+		EventID: p.EventID,
+		Ts:      p.Ts,
+		Type:    channelOfferCreated,
+		Payload: raw,
+	}
+
+	sockets := d.hub.Send(p.RecipientID, env)
+	if sockets == 0 {
+		d.log.Debug("offer.created: no local recipient",
+			"event_id", p.EventID,
+			"recipient_id", p.RecipientID,
+		)
+		return
+	}
+
+	go d.markDelivered(p.EventID, sockets)
 }
 
 // markDelivered performs the G1 two-step:
@@ -150,9 +202,10 @@ func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
 //  2. UPDATE core_published_event SET delivered_at = now() WHERE event_id = $1
 //     AND delivered_at IS NULL — closes the G6b detection-only audit row.
 //
-// Uses a detached, bounded context so a shutdown mid-fanout doesn't
-// abandon the receipt write — the G6b sweep would otherwise flag an
-// event that was actually delivered.
+// Always invoked in its own goroutine so a slow Redis or Postgres can't
+// stall the pub/sub loop and back up other channels. The detached,
+// bounded context further insulates the receipt write from shutdown —
+// the G6b sweep would otherwise flag an event that was actually delivered.
 //
 // Rows-affected = 0 on the second pod fanning the same event (the first
 // pod's UPDATE already filled delivered_at). That's the intended outcome

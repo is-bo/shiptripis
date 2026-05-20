@@ -33,6 +33,11 @@ const MaxMultipartMemory int64 = 16 << 20
 // streaming forever.
 const MaxRequestBytes int64 = 25 << 20
 
+// recordSubmissionTimeout bounds the gRPC handoff to Django. Comfortably
+// covers the SDK's own retry policy (4 attempts × ≤2s backoff = ~6s
+// worst case) with headroom for slow networks.
+const recordSubmissionTimeout = 10 * time.Second
+
 // SubmissionFormFields are the multipart form field names Flutter sends.
 const (
 	fieldDocumentType   = "document_type"
@@ -122,6 +127,22 @@ func (h *Handler) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Track every key we successfully PUT so a later failure cleans up
+	// all of them, not just the last batch. Deferred cleanup runs unless
+	// success is flipped to true after the Recorder call returns OK —
+	// covers partial-upload failures (back/selfie fail after front lands)
+	// in addition to the post-RecordSubmission case.
+	var (
+		uploaded []string
+		success  bool
+	)
+	defer func() {
+		if success || len(uploaded) == 0 {
+			return
+		}
+		h.cleanupOrphans(claims.UserID, uploaded...)
+	}()
+
 	// Front image is always required; back is required for ID and
 	// driving licence; selfie is always required for liveness.
 	frontKey, err := h.uploadImage(r.Context(), claims.UserID, idemKey, r.MultipartForm, fieldFront, true)
@@ -129,18 +150,33 @@ func (h *Handler) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		writeUploadError(w, fieldFront, err)
 		return
 	}
+	if frontKey != "" {
+		uploaded = append(uploaded, frontKey)
+	}
 	backKey, err := h.uploadImage(r.Context(), claims.UserID, idemKey, r.MultipartForm, fieldBack, docType != DocumentPassport)
 	if err != nil {
 		writeUploadError(w, fieldBack, err)
 		return
+	}
+	if backKey != "" {
+		uploaded = append(uploaded, backKey)
 	}
 	selfieKey, err := h.uploadImage(r.Context(), claims.UserID, idemKey, r.MultipartForm, fieldSelfie, true)
 	if err != nil {
 		writeUploadError(w, fieldSelfie, err)
 		return
 	}
+	if selfieKey != "" {
+		uploaded = append(uploaded, selfieKey)
+	}
 
-	out, err := h.Recorder.RecordSubmission(r.Context(), RecordSubmissionInput{
+	// Bounded deadline on the gRPC handoff so a hung Django doesn't tie
+	// up an HTTP goroutine until the global ReadTimeout. The deadline
+	// also fences in the SDK's own retry policy (4 attempts × 2s backoff).
+	rpcCtx, rpcCancel := context.WithTimeout(r.Context(), recordSubmissionTimeout)
+	defer rpcCancel()
+
+	out, err := h.Recorder.RecordSubmission(rpcCtx, RecordSubmissionInput{
 		UserID:         claims.UserID,
 		DocumentType:   docType,
 		IdempotencyKey: idemKey,
@@ -149,11 +185,9 @@ func (h *Handler) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		SelfieImageKey: selfieKey,
 	})
 	if err != nil {
-		// Image bytes are already in S3. Best-effort delete so a failed
-		// gRPC call doesn't accumulate orphans; the idempotency_key still
-		// protects against double-recording on the client's retry.
-		h.cleanupOrphans(claims.UserID, frontKey, backKey, selfieKey)
-
+		// Image bytes are already in S3. Deferred cleanup above handles
+		// the orphan delete; the idempotency_key still protects against
+		// double-recording on the client's retry.
 		if errors.Is(err, ErrRecorderNotConfigured) {
 			// Loud signal during partial-build deploys.
 			h.Log.Error("kyc: recorder not configured",
@@ -168,6 +202,7 @@ func (h *Handler) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	success = true
 	status := http.StatusOK
 	if out.Created {
 		status = http.StatusCreated

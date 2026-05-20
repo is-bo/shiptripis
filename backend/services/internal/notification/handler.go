@@ -89,7 +89,14 @@ func refreshPresenceLoop(ctx context.Context, p *Presence, conn *wsproto.Conn) {
 		case <-conn.Done():
 			return
 		case <-t.C:
-			_ = p.Refresh(ctx, conn.UserID)
+			// Detached short ctx per tick: during graceful shutdown the
+			// parent ctx is already cancelled, but the presence key SHOULD
+			// still be refreshed (Drop runs on disconnect, not on signal —
+			// the socket may keep serving until the WS read returns).
+			// Mirrors the Drop pattern at handler.go:61-63.
+			rctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = p.Refresh(rctx, conn.UserID)
+			cancel()
 		}
 	}
 }

@@ -187,7 +187,29 @@ func (c *Conn) Close(code websocket.StatusCode, reason string) {
 func (c *Conn) Done() <-chan struct{} { return c.done }
 
 func (c *Conn) writer() {
-	defer c.Close(websocket.StatusInternalError, "writer exit")
+	defer func() {
+		// Drain whatever is still buffered so an exit on write error
+		// doesn't silently swallow queued messages — at least the
+		// operator sees the loss in logs. Non-blocking: if nothing is
+		// buffered we exit cleanly.
+		dropped := 0
+		for {
+			select {
+			case env := <-c.send:
+				dropped++
+				c.log.Debug("ws writer exit dropping queued message",
+					"event_id", env.EventID,
+					"type", env.Type,
+				)
+			default:
+				if dropped > 0 {
+					c.log.Warn("ws writer exit dropped queued messages", "count", dropped)
+				}
+				c.Close(websocket.StatusInternalError, "writer exit")
+				return
+			}
+		}
+	}()
 	for {
 		select {
 		case <-c.done:

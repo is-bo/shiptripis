@@ -148,10 +148,10 @@ func (c *Client) Put(ctx context.Context, bucket, key string, body io.Reader, co
 	if contentType == "" {
 		return errors.New("storage: contentType is required")
 	}
-	// Cap the body. LimitReader stops at maxPutBytes+1; the counter lets
-	// us detect overflow after the upload completes and remove the
-	// truncated object so callers don't see a partial result.
-	limited := &countingReader{r: io.LimitReader(body, c.maxPutBytes+1)}
+	// Fail-fast cap: the reader errors at byte maxPutBytes+1 so the SDK
+	// aborts the PUT before we waste bandwidth and have to clean up a
+	// truncated object. ErrTooLarge is sentinel so callers can detect.
+	limited := &limitErrReader{r: body, max: c.maxPutBytes}
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
@@ -159,24 +159,39 @@ func (c *Client) Put(ctx context.Context, bucket, key string, body io.Reader, co
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
+		if errors.Is(err, ErrTooLarge) {
+			return fmt.Errorf("storage: put %s/%s exceeded %d bytes: %w", bucket, key, c.maxPutBytes, ErrTooLarge)
+		}
 		return fmt.Errorf("put %s/%s: %w", bucket, key, err)
-	}
-	if limited.n > c.maxPutBytes {
-		// Best-effort cleanup; the object landed truncated.
-		_ = c.Delete(context.Background(), bucket, key)
-		return fmt.Errorf("storage: put %s/%s exceeded %d bytes", bucket, key, c.maxPutBytes)
 	}
 	return nil
 }
 
-type countingReader struct {
-	r io.Reader
-	n int64
+// ErrTooLarge is returned by Put when the body exceeds maxPutBytes.
+var ErrTooLarge = errors.New("storage: body exceeds max put bytes")
+
+// limitErrReader reads up to max bytes then returns ErrTooLarge. Differs
+// from io.LimitReader which silently EOFs at the cap — silent truncation
+// is exactly the failure mode the abort here prevents.
+type limitErrReader struct {
+	r   io.Reader
+	max int64
+	n   int64
 }
 
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	c.n += int64(n)
+func (l *limitErrReader) Read(p []byte) (int, error) {
+	if l.n >= l.max {
+		return 0, ErrTooLarge
+	}
+	remaining := l.max - l.n + 1 // +1 so we *detect* overflow, not pre-truncate
+	if int64(len(p)) > remaining {
+		p = p[:remaining]
+	}
+	n, err := l.r.Read(p)
+	l.n += int64(n)
+	if l.n > l.max {
+		return n, ErrTooLarge
+	}
 	return n, err
 }
 
