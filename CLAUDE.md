@@ -21,9 +21,40 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 **Set in dev `.env`:** `KYC_GRPC_TARGET=django:50051`, `GRPC_AUTH_MODE=bearer` (must be set explicitly — no implicit default), `GRPC_BEARER_TOKEN=<shared with Django>`.
 
+**Go services hardened from senior review (commit `6239048`).** Each fix is a
+silent failure mode that production traffic would have surfaced:
+- `kyc/handler.go`: every uploaded S3 key is tracked, deferred cleanup gated on
+  a success flag. Previously a back/selfie upload failing *after* front landed
+  left an orphan in MinIO.
+- `kyc/handler.go`: 10s `context.WithTimeout` around `RecordSubmission`. The
+  gRPC SDK's own retry (4 attempts × ≤2s backoff) is fenced in by this.
+- `cmd/kyc/main.go`: full `http.Server` timeouts (Read 60s, Write 60s, Idle
+  120s). Previously only `ReadHeaderTimeout` was set.
+- `notification/dispatcher.go`: **`offer.created` is now wired.** Routing uses
+  the single `recipient_id` Django sends in `apps/matching/views.py:240,375`
+  — not the speculated `targets:[user_id,...]` shape. Per-channel struct/switch
+  stays readable while the channel set is small.
+- `notification/dispatcher.go`: `markDelivered` runs in its own goroutine so a
+  slow Redis or Postgres can't stall the pub/sub loop.
+- `notification/handler.go`: presence `Refresh` uses a detached short ctx per
+  tick (mirrors the `Drop` pattern) so graceful shutdown doesn't gap presence.
+- `cmd/notification/main.go`: `IdleTimeout` on `/healthz`+`/readyz`. WS conns
+  are hijacked at upgrade so `Read/WriteTimeout` would only risk the upgrade.
+- `pkg/wsproto/wsproto.go`: writer drains `c.send` on exit and logs the
+  dropped count. Previously queued messages vanished silently on write error.
+- `pkg/storage/s3.go`: `Put` uses a fail-fast `limitErrReader` returning
+  `ErrTooLarge` at `maxPutBytes+1` instead of post-PutObject truncation +
+  Delete. Saves bandwidth and prevents transient orphans on every oversize PUT.
+
+Skipped from review:
+- `pkg/storage/s3.go` `errors.AsType` — verified to exist in stdlib, agent was
+  wrong.
+- Unexporting `NoopRecorder` — still referenced as a unit-test scaffold by
+  HANDOVER.md and `client.go` doc-comments.
+
 Smaller follow-ups (still on the list, not blockers):
-- Dispatcher only consumes `offer.accepted`. The most user-visible missing channel is `offer.created` (sender notification when traveler applies). Needs Islam's call on the `targets:[user_id,...]` payload convention before generalising — current per-channel struct/switch is fine for V1.
-- `offerAcceptedPayload.Ts` is unmarshalled but never used. Drop the field or parse it to `time.Time`.
+- `offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` are unmarshalled but
+  never used. Drop or parse to `time.Time`.
 
 ---
 
