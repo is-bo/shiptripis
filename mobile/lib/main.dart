@@ -6,6 +6,7 @@ import 'core/auth/auth_notifier.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens.dart';
+import 'core/ws/live_event_router.dart';
 import 'core/ws/notifications_providers.dart';
 
 void main() {
@@ -35,6 +36,9 @@ class _ShipTripAppState extends ConsumerState<ShipTripApp> {
       // for the first sign-in transition. The provider keeps the
       // socket alive while signed in and tears it down on sign-out.
       ref.read(notificationWsClientProvider);
+      // Kick the live event router so it subscribes to incoming
+      // envelopes and starts invalidating providers.
+      ref.read(liveEventProvider);
     });
   }
 

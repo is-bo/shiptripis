@@ -54,23 +54,19 @@ def _payload_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def publish_after_commit(channel: str, payload: dict[str, Any]) -> str:
+def publish_after_commit(
+    channel: str,
+    payload: dict[str, Any],
+    *,
+    targets: list[int] | None = None,
+) -> str:
     """Schedule a Redis publish + audit-row write to fire on commit.
 
-    Returns the `event_id` (UUID4 hex) so callers can include it in their
-    response if the API contract requires it.
+    `targets` lists user ids the Go notification dispatcher should fan
+    out to over WS. If omitted the dispatcher falls back to legacy
+    sender_id/traveler_id/recipient_id keys in the payload.
 
-    Behavior:
-    - Generates `event_id` immediately (so callers get it synchronously).
-    - Wraps payload with `{event_id, ts, ...payload}`.
-    - Uses `transaction.on_commit(...)` so nothing fires on rollback.
-    - On commit: INSERT `PublishedEvent`, then PUBLISH to Redis.
-      If the audit insert fails, the publish is skipped (so we never
-      emit an event we can't later detect a miss for).
-
-    Outside an atomic block, `on_commit` runs the callback immediately —
-    safe but defeats the purpose; views should be wrapped in
-    `@transaction.atomic`.
+    Returns the `event_id` (UUID4 hex).
     """
     if not channel or not isinstance(channel, str):
         raise ValueError("channel must be a non-empty string")
@@ -78,9 +74,10 @@ def publish_after_commit(channel: str, payload: dict[str, Any]) -> str:
         raise TypeError("payload must be a dict")
 
     event_id = uuid.uuid4().hex
-    enriched = {
+    enriched: dict[str, Any] = {
         "event_id": event_id,
         "ts": timezone.now().isoformat(),
+        "targets": list(targets) if targets else [],
         **payload,
     }
     serialized = json.dumps(enriched, separators=(",", ":"))

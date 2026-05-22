@@ -229,6 +229,7 @@ class TravelerApplyView(APIView):
                     "sender_id": match.sender_id,
                     "traveler_id": match.traveler_id,
                 },
+                targets=[match.sender_id, match.traveler_id],
             )
             redis_bus.publish_after_commit(
                 channels.OFFER_CREATED,
@@ -239,6 +240,7 @@ class TravelerApplyView(APIView):
                     "total_dzd": offer.total_dzd,
                     "recipient_id": match.sender_id,
                 },
+                targets=[match.sender_id],
             )
 
         return Response(
@@ -275,17 +277,19 @@ class MatchCancelView(APIView):
                 kind=MatchEvent.Kind.MATCH_CANCELLED,
                 payload={"by_user_id": request.user.id},
             )
+            recipient = (
+                match.traveler_id
+                if request.user.id == match.sender_id
+                else match.sender_id
+            )
             redis_bus.publish_after_commit(
                 channels.OFFER_UPDATED,
                 {
                     "match_id": match.id,
                     "status": "cancelled",
-                    "recipient_id": (
-                        match.traveler_id
-                        if request.user.id == match.sender_id
-                        else match.sender_id
-                    ),
+                    "recipient_id": recipient,
                 },
+                targets=[recipient],
             )
 
         return Response(MatchSerializer(_refetch_match(match.pk)).data)
@@ -365,6 +369,9 @@ class CounterOfferView(APIView):
                 kind=MatchEvent.Kind.OFFER_COUNTERED,
                 payload={"parent_offer_id": pending.id, "total_dzd": child.total_dzd},
             )
+            recipient = (
+                match.traveler_id if my_side == Offer.ProposedBy.SENDER else match.sender_id
+            )
             redis_bus.publish_after_commit(
                 channels.OFFER_CREATED,
                 {
@@ -372,10 +379,9 @@ class CounterOfferView(APIView):
                     "offer_id": child.id,
                     "proposed_by": child.proposed_by,
                     "total_dzd": child.total_dzd,
-                    "recipient_id": (
-                        match.traveler_id if my_side == Offer.ProposedBy.SENDER else match.sender_id
-                    ),
+                    "recipient_id": recipient,
                 },
+                targets=[recipient],
             )
 
         return Response(OfferSerializer(child).data, status=http.HTTP_201_CREATED)
@@ -449,6 +455,7 @@ class OfferAcceptView(APIView):
                     "traveler_id": match.traveler_id,
                     "total_dzd": offer.total_dzd,
                 },
+                targets=[match.sender_id, match.traveler_id],
             )
 
         return Response(OfferSerializer(offer).data)
@@ -494,6 +501,7 @@ class OfferDeclineView(APIView):
                     "status": "declined",
                     "recipient_id": offer.proposer_id,
                 },
+                targets=[offer.proposer_id],
             )
 
         return Response(OfferSerializer(offer).data)
@@ -589,18 +597,20 @@ class OfferWithdrawView(APIView):
                 kind=MatchEvent.Kind.OFFER_WITHDRAWN,
                 payload={},
             )
+            recipient = (
+                offer.match.sender_id
+                if request.user.id == offer.match.traveler_id
+                else offer.match.traveler_id
+            )
             redis_bus.publish_after_commit(
                 channels.OFFER_UPDATED,
                 {
                     "match_id": offer.match_id,
                     "offer_id": offer.id,
                     "status": "withdrawn",
-                    "recipient_id": (
-                        offer.match.sender_id
-                        if request.user.id == offer.match.traveler_id
-                        else offer.match.traveler_id
-                    ),
+                    "recipient_id": recipient,
                 },
+                targets=[recipient],
             )
 
         return Response(OfferSerializer(offer).data)

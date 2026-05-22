@@ -20,7 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.core import redis_bus
+from apps.core import channels, redis_bus
 from apps.matching.models import Match, MatchEvent, Offer
 from apps.payments.models import PaymentIntent
 from apps.wallet.models import Hold
@@ -52,6 +52,9 @@ def issue_code(
     """Generate a fresh code and store its argon2 hash.
 
     If a previous ACTIVE code exists for (match, kind) it is ROTATED.
+    Publishes `handover.code_issued` to both parties; the payload carries
+    the plaintext code so the sender's app surfaces it without a separate
+    fetch. This is V1 — the code is short-lived and rate-limited.
     """
     HandoverCode.objects.filter(
         match=match, kind=kind, status=HandoverCode.Status.ACTIVE
@@ -64,6 +67,17 @@ def issue_code(
         code_hash=_PH.hash(code),
         issued_to=issued_to,
         status=HandoverCode.Status.ACTIVE,
+    )
+    redis_bus.publish_after_commit(
+        channels.HANDOVER_CODE_ISSUED,
+        {
+            "match_id": match.id,
+            "handover_id": row.id,
+            "kind": kind,
+            "code": code,
+            "issued_to_id": issued_to.id,
+        },
+        targets=[match.sender_id, match.traveler_id],
     )
     return IssuedCode(code=code, handover_id=row.id)
 
@@ -142,7 +156,9 @@ def _advance_match_to_in_transit(match: Match) -> None:
         payload={"via": "handover_pickup"},
     )
     redis_bus.publish_after_commit(
-        "match.in_transit", {"match_id": match.id}
+        channels.MATCH_IN_TRANSIT,
+        {"match_id": match.id, "sender_id": match.sender_id, "traveler_id": match.traveler_id},
+        targets=[match.sender_id, match.traveler_id],
     )
 
 
@@ -185,6 +201,12 @@ def _advance_match_to_delivered_and_release(match: Match) -> None:
         payload={"via": "handover_delivery"},
     )
     redis_bus.publish_after_commit(
-        "match.completed",
-        {"match_id": match.id, "payee_amount_minor": payee_amount},
+        channels.MATCH_COMPLETED,
+        {
+            "match_id": match.id,
+            "sender_id": match.sender_id,
+            "traveler_id": match.traveler_id,
+            "payee_amount_minor": payee_amount,
+        },
+        targets=[match.sender_id, match.traveler_id],
     )

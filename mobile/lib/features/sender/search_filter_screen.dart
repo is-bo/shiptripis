@@ -101,7 +101,12 @@ class _SearchFilterScreenState extends ConsumerState<SearchFilterScreen> {
                   child: PrimaryButton(
                     label: "Find travelers",
                     icon: Icons.search_rounded,
-                    onTap: () => context.pop(),
+                    onTap: () {
+                      final from = _from!.iata;
+                      final to = _to!.iata;
+                      context.push(
+                          '/sender/results?from=$from&to=$to&kg=$_kg');
+                    },
                     expand: true,
                   ),
                 ),

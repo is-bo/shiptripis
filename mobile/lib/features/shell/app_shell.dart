@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/state/role_provider.dart';
 import '../../core/theme/tokens.dart';
 import '../chat/chat_list_screen.dart';
 import '../home/home_screen.dart';
@@ -24,24 +25,84 @@ class _AppShellState extends ConsumerState<AppShell> {
       NotificationsScreen(),
       ProfileScreen(),
     ];
+    final canSwitch = ref.watch(canSwitchRoleProvider);
+    final role = ref.watch(effectiveRoleProvider);
     return Scaffold(
       backgroundColor: AppColors.parchment,
       extendBody: true,
-      body: AnimatedSwitcher(
-        duration: AppDurations.med,
-        switchInCurve: kAppCurve,
-        transitionBuilder: (child, anim) => FadeTransition(
-          opacity: anim,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(anim),
-            child: child,
+      body: Stack(
+        children: [
+          AnimatedSwitcher(
+            duration: AppDurations.med,
+            switchInCurve: kAppCurve,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(anim),
+                child: child,
+              ),
+            ),
+            child: KeyedSubtree(key: ValueKey(_idx), child: pages[_idx]),
           ),
-        ),
-        child: KeyedSubtree(key: ValueKey(_idx), child: pages[_idx]),
+          if (canSwitch)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              right: 16,
+              child: _RoleSwitchPill(role: role),
+            ),
+        ],
       ),
       bottomNavigationBar: _BottomNav(
         index: _idx,
         onChange: (i) => setState(() => _idx = i),
+      ),
+    );
+  }
+}
+
+class _RoleSwitchPill extends ConsumerWidget {
+  const _RoleSwitchPill({required this.role});
+  final AppRole role;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSender = role == AppRole.sender;
+    return Material(
+      color: Colors.white,
+      elevation: 2,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        onTap: () => ref.read(roleProvider.notifier).toggle(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColors.hairline),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSender ? Icons.inventory_2_rounded : Icons.flight_takeoff_rounded,
+                size: 16,
+                color: AppColors.ink,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isSender ? 'Sender' : 'Traveler',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.swap_horiz_rounded, size: 14, color: AppColors.inkMute),
+            ],
+          ),
+        ),
       ),
     );
   }

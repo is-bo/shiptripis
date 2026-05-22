@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../core/media/media_repository.dart';
 import '../../core/parcels/parcels_providers.dart';
 import '../../core/parcels/parcels_repository.dart';
 import '../../core/theme/tokens.dart';
@@ -48,6 +52,19 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
 
   bool _submitting = false;
   String? _error;
+
+  final List<XFile> _photos = [];
+
+  Future<void> _addPhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1800,
+      imageQuality: 80,
+    );
+    if (picked == null) return;
+    setState(() => _photos.add(picked));
+  }
 
   @override
   void dispose() {
@@ -111,8 +128,9 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
     });
     try {
       final notifier = ref.read(myParcelsProvider.notifier);
+      final Parcel parcel;
       if (_type == _RequestType.delivery) {
-        await notifier.createDelivery(
+        parcel = await notifier.createDelivery(
           originIata: _origin!.iata,
           destinationIata: _dest!.iata,
           weightKg: _kg,
@@ -123,7 +141,7 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
           deliveryCity: _dropCityCtl.text.trim(),
         );
       } else {
-        await notifier.createProduct(
+        parcel = await notifier.createProduct(
           originIata: _origin!.iata,
           destinationIata: _dest!.iata,
           weightKg: _kg,
@@ -135,6 +153,24 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
           pickupCity: _pickupCityCtl.text.trim(),
           deliveryCity: _dropCityCtl.text.trim(),
         );
+      }
+      if (_photos.isNotEmpty) {
+        final media = ref.read(mediaRepositoryProvider);
+        for (final p in _photos) {
+          try {
+            await media.uploadParcelPhoto(
+              parcelId: parcel.id,
+              filePath: p.path,
+              filename: p.name,
+            );
+          } on MediaFailure catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Request saved. Photo: ${e.message}')),
+              );
+            }
+          }
+        }
       }
       if (!mounted) return;
       context.pop();
@@ -203,6 +239,8 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
                       _routeBlock(airports),
                       const SizedBox(height: AppSpacing.x6),
                       _summary(),
+                      const SizedBox(height: AppSpacing.x6),
+                      _photoStrip(),
                       if (_error != null) ...[
                         const SizedBox(height: AppSpacing.x4),
                         Container(
@@ -582,6 +620,84 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
   static String _fmt(int n) {
     final s = n.toString();
     return s.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => "${m[1]} ");
+  }
+
+  Widget _photoStrip() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('PACKAGE PHOTOS', style: AppType.eyebrow()),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 84,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _photos.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              if (i == _photos.length) {
+                return GestureDetector(
+                  onTap: _addPhoto,
+                  child: Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: AppColors.parchmentSoft,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      border: Border.all(
+                          color: AppColors.hairline, width: 1.4),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.add_a_photo_outlined,
+                            color: AppColors.ink, size: 22),
+                        const SizedBox(height: 4),
+                        Text('Add',
+                            style: AppType.body(11,
+                                color: AppColors.inkMute,
+                                w: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    child: Image.file(
+                      File(_photos[i].path),
+                      width: 84,
+                      height: 84,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: GestureDetector(
+                      onTap: () =>
+                          setState(() => _photos.removeAt(i)),
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close_rounded,
+                            color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
 

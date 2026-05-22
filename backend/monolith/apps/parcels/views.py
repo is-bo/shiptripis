@@ -22,13 +22,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
+from apps.core.storage import ext_for_content_type, make_key, put_object
+from django.conf import settings
+from rest_framework.parsers import MultiPartParser
 
-from .models import DeliveryRequest, ParcelRequest, ProductRequest
+from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
 from .serializers import (
     DeliveryCreateSerializer,
     ParcelRequestSerializer,
     ProductCreateSerializer,
 )
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB cap, V1 (client should pre-resize)
 
 
 def _refetch(pk: int) -> ParcelRequest:
@@ -120,6 +125,7 @@ class DeliveryCreateView(APIView):
                     "origin": parcel.origin_id,
                     "destination": parcel.destination_id,
                 },
+                targets=[request.user.id],
             )
 
         return Response(
@@ -161,6 +167,7 @@ class ProductCreateView(APIView):
                     "origin": parcel.origin_id,
                     "destination": parcel.destination_id,
                 },
+                targets=[request.user.id],
             )
 
         return Response(
@@ -202,6 +209,7 @@ class ParcelCancelView(APIView):
             redis_bus.publish_after_commit(
                 channels.PARCEL_CANCELLED,
                 {"parcel_id": parcel.id, "sender_id": parcel.sender_id},
+                targets=[parcel.sender_id],
             )
         return Response(ParcelRequestSerializer(_refetch(parcel.pk)).data)
 
@@ -264,4 +272,57 @@ class DeliveryQuoteView(APIView):
                 "route_multiplier_x100": q.route_multiplier_x100,
                 "currency": "DZD",
             }
+        )
+
+
+class ParcelMediaUploadView(APIView):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        parcel = get_object_or_404(ParcelRequest, pk=pk)
+        if parcel.sender_id != request.user.id:
+            return Response(
+                {"detail": "Only the sender can attach photos."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        f = request.FILES.get("photo")
+        if f is None:
+            return Response(
+                {"detail": "Send the file under the 'photo' field."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if f.size > MAX_UPLOAD_BYTES:
+            return Response(
+                {"detail": "File exceeds 10 MiB."},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+        ext = ext_for_content_type(f.content_type or "")
+        if ext is None:
+            return Response(
+                {"detail": "Only JPEG / PNG / WebP images are allowed."},
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            )
+        body = f.read()
+        bucket = settings.S3_BUCKET_PARCEL
+        key = make_key(f"parcels/{parcel.id}", ext)
+        put_object(
+            bucket=bucket, key=key, body=body, content_type=f.content_type
+        )
+        media = ParcelMedia.objects.create(
+            parcel=parcel,
+            bucket=bucket,
+            object_key=key,
+            content_type=f.content_type,
+            bytes=len(body),
+        )
+        return Response(
+            {
+                "id": media.id,
+                "bucket": media.bucket,
+                "object_key": media.object_key,
+                "content_type": media.content_type,
+                "bytes": media.bytes,
+            },
+            status=status.HTTP_201_CREATED,
         )

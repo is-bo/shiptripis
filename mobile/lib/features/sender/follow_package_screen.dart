@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import '../../core/matching/matching_providers.dart';
 import '../../core/matching/matching_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ws/live_event_router.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
 /// Follow-package — 3 loading circles bound to live Match.status.
@@ -96,6 +98,11 @@ class _FollowPackageScreenState extends ConsumerState<FollowPackageScreen> {
           ),
           data: (match) {
             final stage = _stageFor(match.status);
+            final live = liveCodeFor(ref, _id);
+            final showCode = live != null &&
+                live.kind == 'pickup' &&
+                (match.status == MatchStatus.accepted ||
+                    match.status == MatchStatus.inTransit);
             return RefreshIndicator(
               onRefresh: () async =>
                   ref.invalidate(matchDetailProvider(_id)),
@@ -106,6 +113,10 @@ class _FollowPackageScreenState extends ConsumerState<FollowPackageScreen> {
                   _topBar(match.status),
                   const SizedBox(height: AppSpacing.x4),
                   _headerCard(match),
+                  if (showCode) ...[
+                    const SizedBox(height: AppSpacing.x5),
+                    _PickupCodeBanner(code: live.code),
+                  ],
                   const SizedBox(height: AppSpacing.x6),
                   _stagesColumn(stage),
                   const SizedBox(height: AppSpacing.x6),
@@ -336,6 +347,65 @@ class _Circle extends StatelessWidget {
               color: Colors.white, size: 26),
         );
     }
+  }
+}
+
+class _PickupCodeBanner extends StatelessWidget {
+  const _PickupCodeBanner({required this.code});
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.x5, AppSpacing.x4, AppSpacing.x4, AppSpacing.x4),
+        decoration: BoxDecoration(
+          color: AppColors.sun,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: AppColors.ink, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PICKUP CODE',
+                      style: AppType.eyebrow()
+                          .copyWith(color: AppColors.ink, letterSpacing: 1.6)),
+                  const SizedBox(height: 6),
+                  Text(
+                    code,
+                    style: AppType.display(28, w: FontWeight.w600).copyWith(
+                      letterSpacing: 4,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Share this with the traveler at handover.',
+                      style: AppType.body(12, color: AppColors.ink)),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copy',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Pickup code copied'),
+                      duration: Duration(seconds: 2)),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded, color: AppColors.ink),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

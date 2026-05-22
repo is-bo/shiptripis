@@ -10,8 +10,10 @@ import '../../features/matching/match_detail_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/onboarding/role_select_screen.dart';
+import '../../features/sender/find_travelers_screen.dart';
 import '../../features/sender/follow_package_screen.dart';
 import '../../features/sender/make_request_screen.dart';
+import '../../features/sender/my_requests_screen.dart';
 import '../../features/sender/payment_screen.dart';
 import '../../features/sender/search_filter_screen.dart';
 import '../../features/shell/app_shell.dart';
@@ -55,8 +57,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/sender/new', builder: (_, _) => const MakeRequestScreen()),
       GoRoute(
+          path: '/sender/requests',
+          builder: (_, _) => const MyRequestsScreen()),
+      GoRoute(
           path: '/sender/search',
           builder: (_, _) => const SearchFilterScreen()),
+      GoRoute(
+        path: '/sender/results',
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return FindTravelersScreen(
+            originIata: q['from'] ?? '',
+            destinationIata: q['to'] ?? '',
+            minCapacityKg: int.tryParse(q['kg'] ?? '') ?? 1,
+          );
+        },
+      ),
       GoRoute(
           path: '/traveler/new', builder: (_, _) => const CreateTripScreen()),
       GoRoute(
