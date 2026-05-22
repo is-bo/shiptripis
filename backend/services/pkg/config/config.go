@@ -241,6 +241,61 @@ func LoadKYCGRPC() (KYCGRPC, error) {
 	return KYCGRPC{Target: target, AuthMode: mode, BearerToken: token}, nil
 }
 
+// ── FCM (push fallback) ──────────────────────────────────────────────────────
+
+// FCM holds the notif-service push-fallback settings. CLAUDE.md §G1 path:
+// stream → wait 2s → check delivered:<event_id> → send via FCM if absent.
+//
+// Disabled by default — V1 ships without the schema (no fcm_token column
+// on accounts_user) and without the Django publisher writing to the
+// stream. The consumer is built ahead so flipping FCM_ENABLED=true once
+// both sides land is a one-knob change, not a feature build.
+type FCM struct {
+	Enabled         bool
+	Stream          string
+	ConsumerGroup   string
+	ConsumerName    string
+	ProjectID       string // Firebase project — required when Enabled.
+	CredentialsPath string // Service-account JSON path — required when Enabled.
+}
+
+// LoadFCM reads FCM_* env vars. When FCM_ENABLED is false (the default)
+// every other field is optional and the returned struct can be passed
+// to the consumer for a no-op idle state. When true, ProjectID and
+// CredentialsPath are required so a half-configured push deploy fails
+// loud at boot per CLAUDE.md §9.
+func LoadFCM() (FCM, error) {
+	var b errBuilder
+	enabled := optBool(&b, "FCM_ENABLED", false)
+	stream := optString("FCM_STREAM", "notif:fcm")
+	group := optString("FCM_CONSUMER_GROUP", "notif-fcm-workers")
+	// The consumer name disambiguates pods inside the group. HOSTNAME is
+	// set by K3s to the pod name; fall back to a literal so dev still works.
+	name := optString("FCM_CONSUMER_NAME", optString("HOSTNAME", "notif-fcm-1"))
+
+	project := optString("FCM_PROJECT_ID", "")
+	creds := optString("FCM_CREDENTIALS_PATH", "")
+	if enabled {
+		if project == "" {
+			b.addf("FCM_PROJECT_ID is required when FCM_ENABLED=true")
+		}
+		if creds == "" {
+			b.addf("FCM_CREDENTIALS_PATH is required when FCM_ENABLED=true")
+		}
+	}
+	if err := b.err(); err != nil {
+		return FCM{}, err
+	}
+	return FCM{
+		Enabled:         enabled,
+		Stream:          stream,
+		ConsumerGroup:   group,
+		ConsumerName:    name,
+		ProjectID:       project,
+		CredentialsPath: creds,
+	}, nil
+}
+
 // ── logger / service identity ────────────────────────────────────────────────
 
 type Logger struct {

@@ -8,13 +8,19 @@
 //     so the G6b detection-only outbox sees the receipt.
 //   - Refreshes `presence:<user_id>` 15s TTL on every WS ping.
 //
+// FCM push fallback is implemented but gated by FCM_ENABLED (default
+// false). When Claude A adds the `fcm_token` column and the Django
+// publisher writes to the `notif:fcm` stream, flipping FCM_ENABLED=true
+// + supplying FCM_PROJECT_ID and FCM_CREDENTIALS_PATH activates the
+// consumer + XAUTOCLAIM sweeper. The actual FCM HTTP call is currently
+// stubbed via notification.LogOnlySender — swap for the firebase admin
+// SDK once the publisher lands. The consumer flow (XReadGroup → 2s wait
+// → check delivered:<event_id> → send/skip → XAck) can be exercised end-
+// to-end in dev with the stub.
+//
 // Deferred (see CLAUDE.md §0 / handoff notes):
-//   - FCM push fallback (notif:fcm stream consumer) — needs the fcm_token
-//     table and a decision on who writes to the stream (Django on_commit
-//     vs notif on receipt miss).
 //   - Other channels (trip.*, parcel.*, payment.*, match.*) — need a
 //     routing scheme that doesn't hardcode payload-field names per channel.
-//   - XAUTOCLAIM PEL sweeper — only matters once the stream consumer exists.
 //
 // Listens on NOTIF_HTTP_ADDR (default :8082, matches Caddy's
 // notification-service:8082 upstream in backend/gateway/Caddyfile). The
@@ -79,6 +85,10 @@ func run() error {
 		return err
 	}
 	jwtCfg, err := config.LoadJWT()
+	if err != nil {
+		return err
+	}
+	fcmCfg, err := config.LoadFCM()
 	if err != nil {
 		return err
 	}
@@ -150,6 +160,27 @@ func run() error {
 		dispatcherErr <- dispatcher.Run(rootCtx)
 	}()
 
+	// FCM consumer + XAUTOCLAIM sweeper. Two goroutines because the
+	// blocking XReadGroup would otherwise stall the periodic sweep.
+	// Both share the same channel so any fatal exit cancels rootCtx.
+	fcmErr := make(chan error, 2)
+	if fcmCfg.Enabled {
+		fcm := notification.NewConsumer(rdb, notification.ConsumerConfig{
+			Stream:        fcmCfg.Stream,
+			ConsumerGroup: fcmCfg.ConsumerGroup,
+			ConsumerName:  fcmCfg.ConsumerName,
+			// Sender is nil for now — LogOnlySender is installed by
+			// NewConsumer. Wire the real Firebase Admin SDK client here
+			// once the publisher lands.
+			Sender: nil,
+		}, log)
+		go func() { fcmErr <- fcm.Run(rootCtx) }()
+		go func() { fcmErr <- fcm.Sweep(rootCtx) }()
+		log.Info("fcm consumer enabled", "stream", fcmCfg.Stream)
+	} else {
+		log.Info("fcm consumer disabled (FCM_ENABLED=false)")
+	}
+
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Info("http listening", "addr", srv.Addr)
@@ -179,6 +210,13 @@ func run() error {
 			fatal = errors.Join(errors.New("dispatcher exited"), err)
 		}
 		rootCancel()
+	case err := <-fcmErr:
+		// One of {Run, Sweep} exited early. nil = graceful (ctx cancelled
+		// by another leg already). Non-nil = fatal; tear down everything.
+		if err != nil {
+			fatal = errors.Join(errors.New("fcm consumer exited"), err)
+		}
+		rootCancel()
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -191,6 +229,16 @@ func run() error {
 	case <-dispatcherErr:
 	case <-shutdownCtx.Done():
 		log.Warn("dispatcher did not exit before shutdown deadline")
+	}
+	// Drain both FCM goroutines (Run + Sweep) if they were started.
+	if fcmCfg.Enabled {
+		for range 2 {
+			select {
+			case <-fcmErr:
+			case <-shutdownCtx.Done():
+				log.Warn("fcm goroutine did not exit before shutdown deadline")
+			}
+		}
 	}
 	log.Info("notification service stopped")
 	return fatal
