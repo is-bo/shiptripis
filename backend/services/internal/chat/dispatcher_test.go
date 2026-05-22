@@ -80,9 +80,10 @@ func (s *stubReceipts) eventIDsCopy() []string {
 // isolation requires this seam.
 func newTestDispatcher(hub *stubRouter, receipts *stubReceipts) *Dispatcher {
 	return &Dispatcher{
-		hub:      hub,
-		receipts: receipts,
-		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		hub:        hub,
+		receipts:   receipts,
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		receiptSem: make(chan struct{}, receiptConcurrency),
 	}
 }
 

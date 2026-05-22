@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"shiptrip/pkg/redisbus"
@@ -36,6 +37,13 @@ type Consumer struct {
 	deliverGrace  time.Duration
 	sweepMinIdle  time.Duration
 	sweepInterval time.Duration
+
+	// sem bounds concurrent handle() goroutines so a slow FCM endpoint
+	// can't grow goroutines without limit. wg tracks them so Run/Sweep
+	// don't return until in-flight handlers finish — XAck on a cancelled
+	// ctx would re-deliver via the sweeper.
+	sem chan struct{}
+	wg  sync.WaitGroup
 }
 
 // ConsumerConfig wires the runtime knobs. Defaults match CLAUDE.md G1
@@ -69,10 +77,16 @@ const (
 	// effect after Block elapses (see redisbus.XReadGroupArgs comment).
 	xreadBlock = 2 * time.Second
 
-	// xreadCount is the batch size per loop. 16 keeps each iteration
-	// short (loop latency = grace + send × 16) while still amortising
-	// the round-trip to Redis.
+	// xreadCount is the batch size per loop. Each entry's grace period
+	// runs concurrently up to handleConcurrency, so the loop latency is
+	// roughly grace + send (not grace × count).
 	xreadCount = 16
+
+	// handleConcurrency bounds in-flight handle() goroutines per pod.
+	// Each in-flight handler holds one entry from the PEL and at most
+	// one FCM HTTP call's worth of memory. 32 gives ~16 batch + a small
+	// buffer; raise if FCM RTT dominates and throughput falls behind.
+	handleConcurrency = 32
 )
 
 // NewConsumer builds a Consumer with sensible defaults. Caller must
@@ -104,19 +118,21 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		deliverGrace:  DeliverGracePeriod,
 		sweepMinIdle:  SweepMinIdle,
 		sweepInterval: SweepInterval,
+		sem:           make(chan struct{}, handleConcurrency),
 	}
 }
 
-// Run is the main consumer loop. Blocks until ctx is cancelled. Run the
-// sweeper in a separate goroutine via Sweep — they share the consumer
-// name but read the stream independently (XAUTOCLAIM reassigns to the
-// caller's consumer, not to a different one).
+// Run is the main consumer loop. Blocks until ctx is cancelled and
+// every in-flight handler has finished. Run the sweeper in a separate
+// goroutine via Sweep — they share the consumer name but read the
+// stream independently (XAUTOCLAIM reassigns to the caller's consumer).
 func (c *Consumer) Run(ctx context.Context) error {
 	if err := c.rdb.XGroupCreate(ctx, c.stream, c.group, "$"); err != nil {
 		return fmt.Errorf("fcm: xgroup create: %w", err)
 	}
 	c.log.Info("fcm consumer started",
 		"stream", c.stream, "group", c.group, "consumer", c.name)
+	defer c.wg.Wait()
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -145,14 +161,17 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 		for _, m := range msgs {
-			c.handle(ctx, m)
+			if !c.dispatchHandle(ctx, m) {
+				return nil
+			}
 		}
 	}
 }
 
 // Sweep runs XAUTOCLAIM on a fixed interval, reclaiming PEL entries from
-// dead pods. Returns when ctx is cancelled. Caller runs in its own
-// goroutine.
+// dead pods. Returns when ctx is cancelled. Run and Sweep share the same
+// in-flight WaitGroup, so the first to return waits for both fleets of
+// handlers — main.go must call ctx-cancel on both before joining.
 func (c *Consumer) Sweep(ctx context.Context) error {
 	t := time.NewTicker(c.sweepInterval)
 	defer t.Stop()
@@ -184,7 +203,9 @@ func (c *Consumer) sweepOnce(ctx context.Context) {
 			return
 		}
 		for _, m := range msgs {
-			c.handle(ctx, m)
+			if !c.dispatchHandle(ctx, m) {
+				return
+			}
 		}
 		// "0-0" sentinel means the scan finished — XAUTOCLAIM signals
 		// completion this way per Redis docs.
@@ -193,6 +214,23 @@ func (c *Consumer) sweepOnce(ctx context.Context) {
 		}
 		start = next
 	}
+}
+
+// dispatchHandle acquires a slot in the semaphore and spawns a handler.
+// Returns false iff ctx was cancelled while waiting for a slot — the
+// caller should stop pulling new work in that case. The PEL entry stays
+// claimed and the sweeper on the next pod will reclaim it.
+func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case c.sem <- struct{}{}:
+	}
+	c.wg.Go(func() {
+		defer func() { <-c.sem }()
+		c.handle(ctx, m)
+	})
+	return true
 }
 
 // handle processes a single stream entry: wait, check delivered, send, ack.
@@ -205,7 +243,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	eventID := stringField(m.Values, "event_id")
 	if eventID == "" {
 		c.log.Warn("fcm: stream entry missing event_id; acking to drop", "id", m.ID)
-		c.ack(ctx, m.ID)
+		c.ack(m.ID)
 		return
 	}
 
@@ -224,7 +262,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 	if delivered {
 		c.log.Debug("fcm: skipping; ws delivered", "event_id", eventID)
-		c.ack(ctx, m.ID)
+		c.ack(m.ID)
 		return
 	}
 
@@ -232,7 +270,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	if err != nil {
 		c.log.Warn("fcm: bad payload; acking to drop",
 			"event_id", eventID, "id", m.ID, "err", err)
-		c.ack(ctx, m.ID)
+		c.ack(m.ID)
 		return
 	}
 
@@ -241,19 +279,16 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 			"event_id", eventID, "err", err)
 		return
 	}
-	c.ack(ctx, m.ID)
+	c.ack(m.ID)
 }
 
-func (c *Consumer) ack(ctx context.Context, id string) {
-	// Detach so a cancelled parent ctx doesn't leave a delivered push
-	// un-ack'd, which would re-send on next sweep.
-	ackCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// ack detaches from the caller's ctx so a cancelled parent (graceful
+// shutdown, sweep abort) doesn't leave a delivered push un-ack'd —
+// which would surface as a duplicate FCM on next sweep.
+func (c *Consumer) ack(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if ctx.Err() != nil {
-		// If parent is already gone, use the detached ctx alone.
-		ctx = ackCtx
-	}
-	if err := c.rdb.XAck(ackCtx, c.stream, c.group, id); err != nil {
+	if err := c.rdb.XAck(ctx, c.stream, c.group, id); err != nil {
 		c.log.Warn("fcm xack failed", "id", id, "err", err)
 	}
 }

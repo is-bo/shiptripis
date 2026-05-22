@@ -170,9 +170,13 @@ func (c *Client) Put(ctx context.Context, bucket, key string, body io.Reader, co
 // ErrTooLarge is returned by Put when the body exceeds maxPutBytes.
 var ErrTooLarge = errors.New("storage: body exceeds max put bytes")
 
-// limitErrReader reads up to max bytes then returns ErrTooLarge. Differs
-// from io.LimitReader which silently EOFs at the cap — silent truncation
-// is exactly the failure mode the abort here prevents.
+// limitErrReader reads up to max bytes from r then returns ErrTooLarge.
+// Differs from io.LimitReader which silently EOFs at the cap — silent
+// truncation is exactly the failure mode the abort here prevents.
+//
+// To detect overflow we peek one byte past max into a discard buffer.
+// Read never returns (n>0, ErrTooLarge) in the same call — that would
+// violate the io.Reader contract (callers may discard err when n>0).
 type limitErrReader struct {
 	r   io.Reader
 	max int64
@@ -181,17 +185,25 @@ type limitErrReader struct {
 
 func (l *limitErrReader) Read(p []byte) (int, error) {
 	if l.n >= l.max {
-		return 0, ErrTooLarge
+		// One extra byte means the body is strictly larger than max.
+		// Probe with a 1-byte scratch buffer so an exact-fit body still
+		// returns the underlying io.EOF, not ErrTooLarge.
+		var scratch [1]byte
+		n, err := l.r.Read(scratch[:])
+		if n > 0 {
+			return 0, ErrTooLarge
+		}
+		if err != nil {
+			return 0, err
+		}
+		return 0, io.EOF
 	}
-	remaining := l.max - l.n + 1 // +1 so we *detect* overflow, not pre-truncate
+	remaining := l.max - l.n
 	if int64(len(p)) > remaining {
 		p = p[:remaining]
 	}
 	n, err := l.r.Read(p)
 	l.n += int64(n)
-	if l.n > l.max {
-		return n, ErrTooLarge
-	}
 	return n, err
 }
 

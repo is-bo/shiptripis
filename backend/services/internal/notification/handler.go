@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -52,10 +53,17 @@ func WSHandler(
 				"user_id", conn.UserID, "err", err)
 		}
 
-		go refreshPresenceLoop(ctx, presence, conn)
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			refreshPresenceLoop(ctx, presence, conn)
+		})
 
 		defer func() {
 			hub.Unregister(conn)
+			// Cancel the refresh loop and wait for it before issuing Drop,
+			// so a hung Redis refresh can't outlive the handler.
+			cancel()
+			wg.Wait()
 			// Use a short detached ctx — parent may already be cancelled
 			// during graceful shutdown, but the DEL should still fire.
 			dropCtx, dropCancel := context.WithTimeout(context.Background(), 2*time.Second)

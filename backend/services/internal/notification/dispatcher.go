@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,12 @@ const DeliveredTTL = 60 * time.Second
 // the G6b sweep.
 const markDeliveredTimeout = 5 * time.Second
 
+// receiptConcurrency bounds in-flight markDelivered goroutines per pod.
+// Each holds at most one Redis SET + one Postgres UPDATE; 64 is more
+// than the steady-state of any reasonable pub/sub burst and keeps a
+// slow Postgres from spawning goroutines without limit.
+const receiptConcurrency = 64
+
 // Channels this service subscribes to.
 //
 // Per-channel typed structs (vs. a generic `targets:[user_id,...]` shape)
@@ -44,13 +51,26 @@ type Dispatcher struct {
 	pool *pgxpool.Pool
 	hub  *Hub
 	log  *slog.Logger
+
+	// receiptSem bounds in-flight markDelivered goroutines. receiptWG
+	// tracks them so Run waits at shutdown — a half-finished UPDATE on
+	// core_published_event would look like a missed delivery to the G6b
+	// audit sweep.
+	receiptSem chan struct{}
+	receiptWG  sync.WaitGroup
 }
 
 func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog.Logger) *Dispatcher {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Dispatcher{rdb: rdb, pool: pool, hub: hub, log: log}
+	return &Dispatcher{
+		rdb:        rdb,
+		pool:       pool,
+		hub:        hub,
+		log:        log,
+		receiptSem: make(chan struct{}, receiptConcurrency),
+	}
 }
 
 // Run subscribes and pumps messages until ctx is cancelled. Blocks.
@@ -63,6 +83,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
+	defer d.receiptWG.Wait()
 
 	d.log.Info("dispatcher subscribed", "channels", channels)
 
@@ -77,6 +98,25 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			d.dispatch(msg)
 		}
 	}
+}
+
+// scheduleReceipt fires markDelivered through the bounded worker pool.
+// Dropping the receipt on a full pool is preferable to growing goroutines
+// without bound — the G6b audit sweep will flag the event next run, and
+// pub/sub fan-out has already happened.
+func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
+	select {
+	case d.receiptSem <- struct{}{}:
+	default:
+		d.log.Warn("dispatcher: receipt pool saturated; dropping",
+			"event_id", eventID, "sockets", sockets,
+			"capacity", receiptConcurrency)
+		return
+	}
+	d.receiptWG.Go(func() {
+		defer func() { <-d.receiptSem }()
+		d.markDelivered(eventID, sockets)
+	})
 }
 
 // offerAcceptedPayload mirrors apps/matching/views.py L441-L452.
@@ -160,7 +200,7 @@ func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
 		return
 	}
 
-	go d.markDelivered(p.EventID, sockets)
+	d.scheduleReceipt(p.EventID, sockets)
 }
 
 func (d *Dispatcher) dispatchOfferCreated(raw []byte) {
@@ -194,7 +234,7 @@ func (d *Dispatcher) dispatchOfferCreated(raw []byte) {
 		return
 	}
 
-	go d.markDelivered(p.EventID, sockets)
+	d.scheduleReceipt(p.EventID, sockets)
 }
 
 // markDelivered performs the G1 two-step:

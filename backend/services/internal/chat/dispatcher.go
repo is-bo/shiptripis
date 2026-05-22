@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,12 @@ const DeliveredTTL = 60 * time.Second
 // write — the G6b sweep would otherwise flag an event that was actually
 // delivered.
 const markDeliveredTimeout = 5 * time.Second
+
+// receiptConcurrency bounds in-flight markDelivered goroutines per pod.
+// Chat fan-out is rare in V1 but burst-prone (a group chat reaction-storm
+// would publish dozens per second); 64 keeps the goroutine count flat
+// while leaving Postgres headroom inside the §3 pool budget.
+const receiptConcurrency = 64
 
 // Channels this service subscribes to. Kept narrow on purpose; new
 // channels go through the same per-channel struct + switch pattern
@@ -55,6 +62,12 @@ type Dispatcher struct {
 	hub      router
 	receipts receiptStore
 	log      *slog.Logger
+
+	// receiptSem bounds in-flight markDelivered goroutines; receiptWG
+	// tracks them so Run waits at shutdown — a half-finished UPDATE on
+	// core_published_event would look like a missed delivery to G6b.
+	receiptSem chan struct{}
+	receiptWG  sync.WaitGroup
 }
 
 // NewDispatcher wires the production dispatcher against the real Hub
@@ -65,10 +78,11 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 		log = slog.Default()
 	}
 	return &Dispatcher{
-		rdb:      rdb,
-		hub:      hub,
-		receipts: &dbReceiptStore{rdb: rdb, pool: pool, log: log},
-		log:      log,
+		rdb:        rdb,
+		hub:        hub,
+		receipts:   &dbReceiptStore{rdb: rdb, pool: pool, log: log},
+		log:        log,
+		receiptSem: make(chan struct{}, receiptConcurrency),
 	}
 }
 
@@ -82,6 +96,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
+	defer d.receiptWG.Wait()
 
 	d.log.Info("chat dispatcher subscribed", "channels", channels)
 
@@ -159,9 +174,26 @@ func (d *Dispatcher) dispatchChatMessageNew(raw []byte) {
 		return
 	}
 
-	// Detached goroutine so DB/Redis latency on the receipt write can't
-	// stall the pub/sub loop — same pattern as notification dispatcher.
-	go d.markDelivered(p.EventID, sockets)
+	d.scheduleReceipt(p.EventID, sockets)
+}
+
+// scheduleReceipt fires markDelivered through the bounded worker pool.
+// Dropping the receipt on a full pool is preferable to growing goroutines
+// without bound — G6b will flag the event next sweep and the WS fan-out
+// has already happened.
+func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
+	select {
+	case d.receiptSem <- struct{}{}:
+	default:
+		d.log.Warn("chat dispatcher: receipt pool saturated; dropping",
+			"event_id", eventID, "sockets", sockets,
+			"capacity", receiptConcurrency)
+		return
+	}
+	d.receiptWG.Go(func() {
+		defer func() { <-d.receiptSem }()
+		d.markDelivered(eventID, sockets)
+	})
 }
 
 func (d *Dispatcher) markDelivered(eventID string, sockets int) {
