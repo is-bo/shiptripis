@@ -56,9 +56,40 @@ Smaller follow-ups (still on the list, not blockers):
 - `offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` are unmarshalled but
   never used. Drop or parse to `time.Time`.
 
+**FCM consumer scaffolded (commit `f00b3e6`).** Gated behind `FCM_ENABLED`
+(default false) so it ships dark until Claude A lands the `fcm_token` schema
+and the Django publisher to `notif:fcm`:
+- `notification/fcm.go`: `Consumer.Run` (XReadGroup → wait 2s → check
+  `delivered:<event_id>` → send/skip → XAck) + `Consumer.Sweep` (XAUTOCLAIM
+  every 30s, MinIdle 60s) per G1.
+- `FCMSender` exported interface is the prod swap point; `LogOnlySender`
+  is the V1 stub. Replace with Firebase Admin SDK client once schema lands.
+- `ack()` uses a detached context so a cancelled parent doesn't leave
+  events unacked mid-shutdown.
+- `cmd/notification/main.go` drains consumer + sweeper goroutines on
+  shutdown via `for range 2 { <-doneCh }`.
+
+**Chat-service V1 landed (commit `c04a369`).** Stateless WS relay for
+`chat.message.new`. Django still owns persistence — this service only fans
+events to the recipient's local socket:
+- `internal/chat/hub.go`: per-pod `map[user_id]map[*Conn]struct{}`,
+  mirrors `notification.Hub`. Intentionally NOT shared with notification
+  (clean lifecycle boundary; if a third service appears, extract `pkg/wshub`).
+- `internal/chat/dispatcher.go`: uses unexported `router` + `receiptStore`
+  interfaces as test seams. Production wires real `*Hub` + `*dbReceiptStore`;
+  unit tests build `Dispatcher` directly with stubs (no Postgres/Redis).
+- `internal/chat/handler.go`: WSHandler with **no presence refresh loop**
+  (notification owns `presence:<user_id>`). A user with chat WS but no
+  notification WS will get duplicate FCM — acceptable V1 tradeoff.
+- `cmd/chat/main.go`: serves `:8081`, `CHAT_DB_MAX_CONNS` default 15
+  (CLAUDE.md §3: 2 pods × 15 conn). Only `IdleTimeout` set on http.Server
+  since WS upgrade hijacks the conn.
+- 5 tests + 3 subtests cover routing, no-local-sockets skip, bad-payload
+  drops, receipt-error logging, and unknown-channel dispatch.
+
 ---
 
-## 0. Current state (handoff — last updated 2026-05-15)
+## 0. Current state (handoff — last updated 2026-05-22)
 
 ### What's done
 
@@ -89,15 +120,19 @@ Smaller follow-ups (still on the list, not blockers):
 - All migrations reversible. Full suite green (115/115).
 
 **Backend (Go services, `backend/services/`):**
-- `cmd/notification` — WS hub + Redis pub/sub consumer; offer.accepted
-  vertical slice fans to sender+traveler, writes `delivered:<event_id>`
-  and back-fills `core_published_event.delivered_at`. FCM fallback
-  deferred (blocked on fcm_token schema). G1 + G6b paths wired.
+- `cmd/notification` — WS hub + Redis pub/sub consumer; offer.accepted +
+  offer.created vertical slices fan to sender/traveler, write
+  `delivered:<event_id>` and back-fill `core_published_event.delivered_at`.
+  FCM consumer scaffolded behind `FCM_ENABLED` (LogOnlySender stub;
+  awaits Django publisher + fcm_token schema). G1 + G6b paths wired.
+- `cmd/chat` — WS relay for `chat.message.new`. Stateless fan-out
+  (Django owns persistence). Per-pod Hub mirrors notification's. 5 unit
+  tests + 3 subtests via test-seam interfaces (no Postgres/Redis needed).
 - `cmd/kyc` — multipart `/kyc/submit`, streams images to MinIO under
   `kyc-docs/<user_id>/<idempotency_key>-<field>.<ext>` (deterministic
-  so retries overwrite, no orphans), then calls Recorder. Wired with
-  `kyc.NoopRecorder` (fails loudly via `ErrRecorderNotConfigured`)
-  until codegen + Django gRPC server land.
+  so retries overwrite, no orphans), then calls Recorder. Real gRPC
+  client wired with keepalive + retries; `KYC_GRPC_TARGET` required at
+  boot. `NoopRecorder` retained for unit-test scaffolding only.
 - Shared: `pkg/redisbus`, `pkg/wsproto`, `pkg/storage` (S3 abstraction
   per G4), `pkg/auth` (HS256 + 30s leeway per G2), `pkg/config`.
 - Contracts: `contracts/grpc/kyc.proto` checked in. sqlc + chat/media
