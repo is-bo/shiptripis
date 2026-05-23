@@ -414,12 +414,20 @@ instances. Use `docker compose exec postgres psql -U shiptrip` and
 
 - Project memory persists in `.claude/memory/` (committed).
 - Session transcripts in `docs/claude-sessions/` (committed; full JSONL).
+- **`TASKS.md` at repo root is the live to-do board for both Claudes.**
+  Read it at session start. When you finish a task, move it under **Done**
+  with date + commit SHA. When you discover new work, add it under the
+  right owner. Commit it in the same change so the other side sees it
+  on next `git pull`. Don't claim a task that's `in-progress` for the
+  other owner.
 - A new Claude session at the start should:
-  1. Read `CLAUDE.md` (this file)
-  2. Read `ARCHITECTURE.md`
-  3. Read `.claude/MEMORY.md` and the linked memory files
-  4. Skim the most recent session in `docs/claude-sessions/`
-  5. Check `git log --oneline -20`
+  1. `git pull`
+  2. Read `CLAUDE.md` (this file)
+  3. Read `ARCHITECTURE.md`
+  4. Read `TASKS.md` (your owner section)
+  5. Read `.claude/MEMORY.md` and the linked memory files
+  6. Skim the most recent session in `docs/claude-sessions/`
+  7. Check `git log --oneline -20`
 
 If you discover something the user wants persisted across sessions,
 write it to `.claude/memory/<topic>.md` and add a one-line entry to
