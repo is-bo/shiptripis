@@ -28,21 +28,39 @@ const DeliveredTTL = 60 * time.Second
 const markDeliveredTimeout = 5 * time.Second
 
 // receiptConcurrency bounds in-flight markDelivered goroutines per pod.
-// Each holds at most one Redis SET + one Postgres UPDATE; 64 is more
-// than the steady-state of any reasonable pub/sub burst and keeps a
-// slow Postgres from spawning goroutines without limit.
 const receiptConcurrency = 64
 
-// Channels this service subscribes to.
-//
-// Per-channel typed structs (vs. a generic `targets:[user_id,...]` shape)
-// stay readable while the set is small. If a fourth/fifth channel lands
-// with identical routing, factor the unmarshal+route+receipt path into a
-// generic handler then.
-const (
-	channelOfferAccepted = "offer.accepted"
-	channelOfferCreated  = "offer.created"
-)
+// Channels this service subscribes to. The list is the contract with
+// apps/core/channels.py — keep them aligned. Every payload carries
+// `event_id`, `ts`, and `targets: [user_id, ...]` (apps/core/redis_bus.py
+// enriches before publish), so a single typed wrapper handles them all.
+var subscribedChannels = []string{
+	"offer.created",
+	"offer.accepted",
+	"offer.updated",
+	"match.created",
+	"match.in_transit",
+	"match.completed",
+	"payment.captured",
+	"payment.refunded",
+	"handover.code_issued",
+	"handover.confirmed",
+	"parcel.created",
+	"parcel.cancelled",
+	"trip.created",
+	"trip.updated",
+	"trip.cancelled",
+	"kyc.status_changed",
+}
+
+// envelopeHeader is the canonical wrapper Django writes via
+// `apps.core.redis_bus.publish_after_commit`. Each payload also carries
+// channel-specific fields, but routing only needs these three.
+type envelopeHeader struct {
+	EventID string  `json:"event_id"`
+	Ts      string  `json:"ts"`
+	Targets []int64 `json:"targets"`
+}
 
 // Dispatcher consumes Redis pub/sub events, fans them to local WS
 // sockets via the Hub, and writes G1 delivery receipts.
@@ -52,10 +70,6 @@ type Dispatcher struct {
 	hub  *Hub
 	log  *slog.Logger
 
-	// receiptSem bounds in-flight markDelivered goroutines. receiptWG
-	// tracks them so Run waits at shutdown — a half-finished UPDATE on
-	// core_published_event would look like a missed delivery to the G6b
-	// audit sweep.
 	receiptSem chan struct{}
 	receiptWG  sync.WaitGroup
 }
@@ -74,18 +88,15 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 }
 
 // Run subscribes and pumps messages until ctx is cancelled. Blocks.
-// Caller (main.go) should run this in its own goroutine and Close the
-// returned subscription on shutdown.
 func (d *Dispatcher) Run(ctx context.Context) error {
-	channels := []string{channelOfferAccepted, channelOfferCreated}
-	sub, err := d.rdb.Subscribe(ctx, channels...)
+	sub, err := d.rdb.Subscribe(ctx, subscribedChannels...)
 	if err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
 	defer d.receiptWG.Wait()
 
-	d.log.Info("dispatcher subscribed", "channels", channels)
+	d.log.Info("dispatcher subscribed", "channels", subscribedChannels)
 
 	for {
 		select {
@@ -100,10 +111,6 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	}
 }
 
-// scheduleReceipt fires markDelivered through the bounded worker pool.
-// Dropping the receipt on a full pool is preferable to growing goroutines
-// without bound — the G6b audit sweep will flag the event next run, and
-// pub/sub fan-out has already happened.
 func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 	select {
 	case d.receiptSem <- struct{}{}:
@@ -119,133 +126,61 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 	})
 }
 
-// offerAcceptedPayload mirrors apps/matching/views.py L441-L452.
-// Django wraps every publish in {event_id, ts, ...payload}, so those
-// two fields are always present alongside the channel-specific keys.
-type offerAcceptedPayload struct {
-	EventID    string `json:"event_id"`
-	Ts         string `json:"ts"`
-	MatchID    int64  `json:"match_id"`
-	OfferID    int64  `json:"offer_id"`
-	ParcelID   int64  `json:"parcel_id"`
-	TripID     int64  `json:"trip_id"`
-	SenderID   int64  `json:"sender_id"`
-	TravelerID int64  `json:"traveler_id"`
-	TotalDZD   int64  `json:"total_dzd"`
-}
-
-// offerCreatedPayload mirrors apps/matching/views.py L233-L242 + L368-L379.
-// Django picks the recipient (sender for traveler-proposed offers, traveler
-// for sender-proposed counters) and sends it as a single `recipient_id`
-// — no fan-out at this layer.
-type offerCreatedPayload struct {
-	EventID     string `json:"event_id"`
-	Ts          string `json:"ts"`
-	MatchID     int64  `json:"match_id"`
-	OfferID     int64  `json:"offer_id"`
-	ProposedBy  string `json:"proposed_by"`
-	TotalDZD    int64  `json:"total_dzd"`
-	RecipientID int64  `json:"recipient_id"`
-}
-
+// dispatch unmarshals the envelope header, fans the raw payload to every
+// `targets[]` user with a local socket on this pod, and schedules the G1
+// delivery receipt if at least one socket received it. The raw bytes are
+// passed through unmodified — mobile parses channel-specific fields from
+// them — so adding a new channel server-side requires no Go change beyond
+// the `subscribedChannels` list.
 func (d *Dispatcher) dispatch(msg redisbus.Message) {
-	switch msg.Channel {
-	case channelOfferAccepted:
-		d.dispatchOfferAccepted(msg.Payload)
-	case channelOfferCreated:
-		d.dispatchOfferCreated(msg.Payload)
-	default:
-		// Unreachable: we control the subscribe list. Logged just in case
-		// go-redis ever surfaces a misrouted message.
-		d.log.Warn("dispatcher: unknown channel", "channel", msg.Channel)
-	}
-}
-
-func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
-	var p offerAcceptedPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
-		d.log.Error("offer.accepted: bad payload", "err", err)
+	var h envelopeHeader
+	if err := json.Unmarshal(msg.Payload, &h); err != nil {
+		d.log.Error("dispatch: bad envelope", "channel", msg.Channel, "err", err)
 		return
 	}
-	if p.EventID == "" {
-		d.log.Error("offer.accepted: missing event_id")
+	if h.EventID == "" {
+		d.log.Error("dispatch: missing event_id", "channel", msg.Channel)
 		return
 	}
-	if p.SenderID == 0 || p.TravelerID == 0 {
-		d.log.Error("offer.accepted: missing party id",
-			"sender_id", p.SenderID,
-			"traveler_id", p.TravelerID,
-			"event_id", p.EventID,
-		)
+	if len(h.Targets) == 0 {
+		// A publish with no targets is a legit Django-side state event
+		// nobody on mobile needs to react to (or a publisher bug). Log
+		// at debug — alerting belongs in the G6b sweep, not here.
+		d.log.Debug("dispatch: no targets",
+			"channel", msg.Channel, "event_id", h.EventID)
 		return
 	}
 
 	env := wsproto.Envelope{
-		EventID: p.EventID,
-		Ts:      p.Ts,
-		Type:    channelOfferAccepted,
-		Payload: raw,
+		EventID: h.EventID,
+		Ts:      h.Ts,
+		Type:    msg.Channel,
+		Payload: msg.Payload,
 	}
 
-	sockets := d.hub.Send(p.SenderID, env) + d.hub.Send(p.TravelerID, env)
+	var sockets int
+	for _, uid := range h.Targets {
+		if uid == 0 {
+			continue
+		}
+		sockets += d.hub.Send(uid, env)
+	}
 	if sockets == 0 {
-		// Neither party is on this pod. Either they're on another pod
-		// (which is also subscribed and will deliver) or they're offline
-		// (FCM fallback, V2). Either way this pod does not own the receipt.
-		d.log.Debug("offer.accepted: no local recipients",
-			"event_id", p.EventID,
-			"sender_id", p.SenderID,
-			"traveler_id", p.TravelerID,
+		d.log.Debug("dispatch: no local recipients",
+			"channel", msg.Channel,
+			"event_id", h.EventID,
+			"targets", h.Targets,
 		)
 		return
 	}
 
-	d.scheduleReceipt(p.EventID, sockets)
-}
-
-func (d *Dispatcher) dispatchOfferCreated(raw []byte) {
-	var p offerCreatedPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
-		d.log.Error("offer.created: bad payload", "err", err)
-		return
-	}
-	if p.EventID == "" {
-		d.log.Error("offer.created: missing event_id")
-		return
-	}
-	if p.RecipientID == 0 {
-		d.log.Error("offer.created: missing recipient_id", "event_id", p.EventID)
-		return
-	}
-
-	env := wsproto.Envelope{
-		EventID: p.EventID,
-		Ts:      p.Ts,
-		Type:    channelOfferCreated,
-		Payload: raw,
-	}
-
-	sockets := d.hub.Send(p.RecipientID, env)
-	if sockets == 0 {
-		d.log.Debug("offer.created: no local recipient",
-			"event_id", p.EventID,
-			"recipient_id", p.RecipientID,
-		)
-		return
-	}
-
-	d.scheduleReceipt(p.EventID, sockets)
+	d.scheduleReceipt(h.EventID, sockets)
 }
 
 // markDelivered performs the G1 two-step:
 //  1. SET delivered:<event_id> 1 EX 60 — signals the FCM consumer to skip
 //  2. UPDATE core_published_event SET delivered_at = now() WHERE event_id = $1
 //     AND delivered_at IS NULL — closes the G6b detection-only audit row.
-//
-// Always invoked in its own goroutine so a slow Redis or Postgres can't
-// stall the pub/sub loop and back up other channels. The detached,
-// bounded context further insulates the receipt write from shutdown —
-// the G6b sweep would otherwise flag an event that was actually delivered.
 //
 // Rows-affected = 0 on the second pod fanning the same event (the first
 // pod's UPDATE already filled delivered_at). That's the intended outcome
@@ -268,5 +203,5 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 		d.log.Warn("published_event update failed", "event_id", eventID, "err", err)
 		return
 	}
-	d.log.Debug("offer.accepted delivered", "event_id", eventID, "sockets", sockets)
+	d.log.Debug("delivered", "event_id", eventID, "sockets", sockets)
 }

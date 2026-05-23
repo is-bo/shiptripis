@@ -23,7 +23,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 - [ ] **Mobile: traveler "enter pickup code" entry surface** — traveler gets a notification after payment ("ready for pickup, enter code"); deep-link routes to `/handover/verify/<match_id>?kind=pickup`.
 - [ ] **Mobile: sender follow-package screen after pickup code accepted** — when `match.in_transit` fires, sender's notification deep-links to `/tracking/<match_id>` (the progress screen).
 - [ ] **Mobile: counter-offer flow only when sender requested a specific traveler** — if the sender posted a *general* request, traveler offer is accept/decline only (price was sender-computed). If the sender targeted *this traveler*, traveler can counter.
-- [ ] **Audit Django publish targets** — every event must have `targets: [user_id,...]` populated correctly so Go's per-pod routing works. Today some use `recipient_id` (single int). Pick one convention.
+- [x] 2026-05-23 Audit Django publish targets — confirmed every publisher in `apps/*/views.py` and `apps/verification/services.py` passes `targets=[...]` to `publish_after_commit`. Go now reads top-level `targets` uniformly; `recipient_id`/`sender_id` keys remain in payloads as channel-specific data only.
 
 ### Soon
 
@@ -42,18 +42,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Now (blocking demo polish)
 
-- [ ] **Subscribe to ALL Django channels in `notification/dispatcher.go`** — today only `offer.accepted` + `offer.created` are wired. Mobile listens for all of these and silently misses them:
-  - `handover.code_issued`  *(critical for demo flow — pickup code arrival on traveler side)*
-  - `match.in_transit`       *(sender's "package picked up" notification)*
-  - `match.completed`        *(sender + traveler "delivery confirmed")*
-  - `payment.captured`       *(traveler's "you have a paid match" notification)*
-  - `payment.refunded`
-  - `match.created`
-  - `offer.updated`          *(declined / withdrawn / countered)*
-  - `parcel.created`, `parcel.cancelled`
-  - `trip.created`, `trip.cancelled`
-  Each channel is a 5-line block following the existing `offer.accepted` pattern. Payloads all carry `targets: [user_id, ...]` — fan to those targets.
-- [ ] **Confirm `targets` payload convention** — Islam asked the same question (see his list). Once agreed, both sides use it consistently.
+(none — see Done; both items moved.)
 
 ### Soon
 
@@ -62,6 +51,8 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-05-23 Subscribe to ALL Django channels — dispatcher refactored to a single `targets: [user_id, ...]` envelope (done by Islam in his Commit 1; payload convention confirmed across every Django publisher).
+- [x] 2026-05-23 Notification service added to `docker-compose.yml` + `Dockerfile.notification`; Caddy upstream renamed `notification-service` → `notification` (fixes 502 on `/ws/notifications`).
 - [x] 2026-05-22 `c7e80a8` Hardened Go services from senior review.
 - [x] 2026-05-22 `c04a369` Chat service V1.
 - [x] 2026-05-22 `f00b3e6` FCM consumer scaffold (gated).

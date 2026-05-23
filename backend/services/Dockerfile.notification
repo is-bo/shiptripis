@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7
+# Multi-stage build for the notification service. Mirrors the pattern we'll
+# use for chat/kyc/media — golang module cache as a BuildKit cache mount,
+# distroless static runtime, non-root.
+ARG GO_VERSION=1.26
+FROM golang:${GO_VERSION}-alpine AS build
+WORKDIR /src
+
+# Copy module files first for cache-friendly rebuilds.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Now copy the rest. The whole services/ tree is the module root.
+COPY . .
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/notification ./cmd/notification
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/notification /notification
+USER nonroot:nonroot
+EXPOSE 8082
+ENTRYPOINT ["/notification"]
