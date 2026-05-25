@@ -41,6 +41,11 @@ class _ParcelBase(serializers.Serializer):
         required=False, allow_blank=True, max_length=2000, default=""
     )
     deadline_at = serializers.DateTimeField(required=False, allow_null=True)
+    # Optional: when present, this request is aimed at one specific traveler
+    # (e.g. sender hit "Request this trip" on a trip tile). The traveler can
+    # then counter-offer; on broadcast requests the price is sender-set and
+    # the traveler only accepts/declines. See CounterOfferView.
+    target_traveler_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
         if attrs["origin"].upper() == attrs["destination"].upper():
@@ -84,6 +89,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
     """Read serializer — picks subtype-specific fields off the concrete row."""
 
     sender_id = serializers.IntegerField(source="sender.id", read_only=True)
+    target_traveler_id = serializers.IntegerField(read_only=True, allow_null=True)
     origin = AirportSerializer(read_only=True)
     destination = AirportSerializer(read_only=True)
     media = ParcelMediaSerializer(many=True, read_only=True)
@@ -98,6 +104,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "sender_id",
+            "target_traveler_id",
             "kind",
             "origin",
             "destination",

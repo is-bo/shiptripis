@@ -341,6 +341,15 @@ class CounterOfferView(APIView):
                 status=http.HTTP_403_FORBIDDEN,
             )
 
+        # Counter is only legal on direct requests (sender posted targeting
+        # this traveler). Broadcast requests are priced by the sender so the
+        # traveler may only accept/decline. See parcels.models.ParcelRequest.
+        if match.parcel.target_traveler_id is None:
+            return Response(
+                {"detail": "Counter not allowed on broadcast requests; accept or decline."},
+                status=http.HTTP_409_CONFLICT,
+            )
+
         my_side = (
             Offer.ProposedBy.SENDER
             if request.user.id == match.sender_id

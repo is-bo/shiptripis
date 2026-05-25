@@ -20,6 +20,7 @@ from .serializers import (
 from .services import (
     CodeInvalid,
     CodeNotActive,
+    get_active_code,
     issue_code,
     verify_code,
 )
@@ -111,6 +112,30 @@ class HandoverVerifyView(APIView):
             )
 
         return Response(HandoverCodeSerializer(row).data, status=status.HTTP_200_OK)
+
+
+class HandoverActiveCodeView(APIView):
+    """GET the active code metadata for (match, kind) without rotating.
+
+    The sender's app uses this to know whether to show the "view pickup code"
+    button after payment — the actual plaintext was delivered once via the
+    `handover.code_issued` WS event and is cached client-side. Returns 404 if
+    no active code exists (e.g. pickup already used; traveler picked up).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, match_id: int):
+        match = _get_match_for_party(match_id, request.user)
+        kind = request.query_params.get("kind", HandoverCode.Kind.PICKUP)
+        if kind not in dict(HandoverCode.Kind.choices):
+            raise ValidationError({"kind": f"Unknown kind '{kind}'."})
+
+        # Sender sees the pickup code, traveler sees the delivery code.
+        row = get_active_code(match=match, kind=kind, viewer=request.user)
+        if row is None:
+            return Response({"detail": "No active code."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(HandoverCodeSerializer(row).data)
 
 
 class HandoverListView(generics.ListAPIView):

@@ -207,7 +207,8 @@ class CounterAcceptTests(APITestCase):
     def setUp(self):
         self.sender = _user("sender2@example.com", "4")
         self.traveler = _user("traveler2@example.com", "5")
-        self.parcel = _make_delivery(self.sender)
+        # Direct request (target_traveler set) — counter is only legal here.
+        self.parcel = _make_delivery(self.sender, target_traveler=self.traveler)
         self.trip = _make_trip(self.traveler)
         # Traveler applies (first offer).
         self.match = Match.objects.create(
@@ -252,6 +253,37 @@ class CounterAcceptTests(APITestCase):
             format="json",
         )
         assert r.status_code == 403
+
+    def test_counter_blocked_on_broadcast_request(self):
+        # Broadcast = target_traveler is NULL. Sender priced the deal up
+        # front; the traveler may only accept/decline. Counter is 409.
+        broadcast_sender = _user("broadcast-sender@example.com", "44")
+        broadcast_traveler = _user("broadcast-traveler@example.com", "55")
+        parcel = _make_delivery(broadcast_sender)  # target_traveler=None
+        trip = _make_trip(broadcast_traveler)
+        match = Match.objects.create(
+            parcel=parcel,
+            trip=trip,
+            sender=broadcast_sender,
+            traveler=broadcast_traveler,
+            status=Match.Status.PENDING,
+        )
+        Offer.objects.create(
+            match=match,
+            proposed_by=Offer.ProposedBy.TRAVELER,
+            proposer=broadcast_traveler,
+            base_amount_dzd=4000,
+            commission_dzd=1000,
+            total_dzd=5000,
+        )
+        c = _client(broadcast_sender)
+        r = c.post(
+            reverse("matches-offers-counter", args=[match.id]),
+            {"base_amount_dzd": 3500},
+            format="json",
+        )
+        assert r.status_code == 409
+        assert "broadcast" in r.data["detail"].lower()
 
     def test_sender_accepts_offer_locks_match_and_parcel(self):
         c = _client(self.sender)

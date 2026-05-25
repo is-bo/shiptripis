@@ -81,6 +81,18 @@ class ParcelRequest(models.Model):
         help_text="Latest acceptable delivery time. Used by matching.",
     )
 
+    # When set, the sender posted this request targeting one specific traveler
+    # (e.g. from a trip tile). Counter-offers are only legal in that direction —
+    # broadcast requests (target_traveler=NULL) are accept/decline because the
+    # sender already priced the deal. See apps/matching/views.py CounterOfferView.
+    target_traveler = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="targeted_parcels",
+    )
+
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.OPEN, db_index=True
     )

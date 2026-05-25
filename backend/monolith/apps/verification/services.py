@@ -42,6 +42,34 @@ def _gen_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
+def get_active_code(
+    *,
+    match: Match,
+    kind: str,
+    viewer: User,
+) -> HandoverCode | None:
+    """Return the current ACTIVE code for (match, kind) without rotating.
+
+    Used by the sender's "view pickup code" screen — the code is auto-issued
+    server-side on payment capture and the sender may reopen it any time
+    until pickup. Returning the row (not plaintext) — plaintext is shown
+    ONCE at issue; on re-view the mobile screen reads the same row that was
+    in the `handover.code_issued` WS event payload.
+
+    For V1 the viewer must be the party the code was issued to. Returning
+    None covers both "no code yet" and "code already used/rotated".
+    """
+    if viewer not in (match.sender, match.traveler):
+        return None
+    return (
+        HandoverCode.objects.filter(
+            match=match, kind=kind, status=HandoverCode.Status.ACTIVE, issued_to=viewer
+        )
+        .order_by("-id")
+        .first()
+    )
+
+
 @transaction.atomic
 def issue_code(
     *,

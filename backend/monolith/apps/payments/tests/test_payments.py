@@ -145,6 +145,26 @@ class CreateIntentTests(APITestCase):
         assert r2.status_code == 200
         assert r2.data["id"] == r1.data["id"]
 
+    def test_capture_auto_issues_pickup_code(self):
+        # Mock provider succeeds inline, so creating the intent triggers
+        # _synthesize_succeeded → auto-issues a PICKUP code to the sender.
+        from apps.verification.models import HandoverCode
+
+        c = _client(self.sender)
+        r = c.post(
+            reverse("payments-create"),
+            {"offer_id": self.offer.id, "currency": "DZD"},
+            format="json",
+        )
+        assert r.status_code == 201, r.data
+        active = HandoverCode.objects.filter(
+            match=self.offer.match,
+            kind=HandoverCode.Kind.PICKUP,
+            status=HandoverCode.Status.ACTIVE,
+        )
+        assert active.count() == 1
+        assert active.get().issued_to_id == self.sender.id
+
 
 class DetailAndCancelTests(APITestCase):
     def setUp(self):

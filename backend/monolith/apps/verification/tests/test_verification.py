@@ -294,3 +294,28 @@ class HandoverApiTests(APITestCase):
         assert r.status_code == 200
         results = r.data["results"] if isinstance(r.data, dict) else r.data
         assert len(results) == 1
+
+    def test_active_code_get_returns_same_row_without_rotating(self):
+        sender, _, match, _, _ = _accepted_match_with_intent()
+        issued = issue_code(
+            match=match, kind=HandoverCode.Kind.PICKUP, issued_to=sender
+        )
+        url = f"/api/matches/{match.id}/handover/code?kind=pickup"
+        r1 = _client(sender).get(url)
+        r2 = _client(sender).get(url)
+        assert r1.status_code == 200 and r2.status_code == 200
+        assert r1.data["id"] == r2.data["id"] == issued.handover_id
+        # Only one ACTIVE row exists — nothing was rotated.
+        active = HandoverCode.objects.filter(
+            match=match,
+            kind=HandoverCode.Kind.PICKUP,
+            status=HandoverCode.Status.ACTIVE,
+        )
+        assert active.count() == 1
+
+    def test_active_code_get_404_when_none(self):
+        sender, _, match, _, _ = _accepted_match_with_intent()
+        r = _client(sender).get(
+            f"/api/matches/{match.id}/handover/code?kind=pickup"
+        )
+        assert r.status_code == 404

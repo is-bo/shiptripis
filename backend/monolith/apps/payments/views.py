@@ -34,6 +34,8 @@ from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
 from apps.matching.models import Match, Offer
+from apps.verification.models import HandoverCode
+from apps.verification.services import issue_code
 
 from .models import PaymentEvent, PaymentIntent, Refund
 from .providers import choose_provider, get_provider
@@ -91,6 +93,20 @@ def _synthesize_succeeded(intent: PaymentIntent, provider_intent_id: str) -> Non
         },
         targets=[match.sender_id, match.traveler_id],
     )
+
+    # Auto-issue PICKUP code so the sender lands on a "your code is X" screen
+    # without a second round-trip. The mobile traveler home shows a "paid match
+    # awaiting pickup" entry once it sees the corresponding `handover.code_issued`
+    # WS event. Skipped if there's already an ACTIVE pickup code (idempotent
+    # against double-capture). Same atomic block as the payment transition so
+    # a failure here rolls the capture back too.
+    has_active = HandoverCode.objects.filter(
+        match=match,
+        kind=HandoverCode.Kind.PICKUP,
+        status=HandoverCode.Status.ACTIVE,
+    ).exists()
+    if not has_active:
+        issue_code(match=match, kind=HandoverCode.Kind.PICKUP, issued_to=match.sender)
 
 
 # ---------- views ----------

@@ -114,6 +114,7 @@ class DeliveryCreateView(APIView):
                 item_type=d["item_type"],
                 description=d.get("description", ""),
                 deadline_at=d.get("deadline_at"),
+                target_traveler_id=d.get("target_traveler_id"),
                 base_amount_dzd=d["base_amount_dzd"],
             )
             redis_bus.publish_after_commit(
@@ -154,6 +155,7 @@ class ProductCreateView(APIView):
                 item_type=d["item_type"],
                 description=d.get("description", ""),
                 deadline_at=d.get("deadline_at"),
+                target_traveler_id=d.get("target_traveler_id"),
                 product_url=d.get("product_url", ""),
                 store_name=d.get("store_name", ""),
                 product_price_dzd=d["product_price_dzd"],
