@@ -53,8 +53,40 @@ Skipped from review:
   HANDOVER.md and `client.go` doc-comments.
 
 Smaller follow-ups (still on the list, not blockers):
-- `offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` are unmarshalled but
-  never used. Drop or parse to `time.Time`.
+- ~~`offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` unmarshalled but
+  unused~~ — fixed in `dbd1097`.
+
+**Senior-Go review pass (commits `c7e80a8` + `dbd1097`).** Punch list from
+a from-scratch review of the whole Go workspace, focused on concurrency
+correctness, scalability hazards, and goroutine lifetime:
+- `notification/fcm.go`: `handle()` was called serially inside the
+  XReadGroup batch loop — with `xreadCount=16` and a 2s grace period
+  per entry, a full batch serialized to 32s+ (throughput ~0.5 msg/s/pod).
+  Now dispatched concurrently through a `handleConcurrency=32` semaphore;
+  `sync.WaitGroup` tracked by `Run`/`Sweep` so XAck can't be cut short
+  on shutdown.
+- `notification/fcm.go`: `ack()` had a dead conditional ctx reassignment
+  that never affected the XAck call — removed; always uses the detached ctx.
+- `notification/dispatcher.go` + `chat/dispatcher.go`: `go d.markDelivered(...)`
+  was unbounded goroutine fan-out per pub/sub message; a Redis burst with
+  slow Postgres would spawn thousands the `shutdownTimeout` never waits for.
+  Now bounded via `receiptConcurrency=64` semaphore + `WaitGroup` drained
+  on `Run` exit. Drop-on-saturation logs `event_id` + `sockets` so G6b's
+  daily audit catches anything missed.
+- `notification/handler.go`: `refreshPresenceLoop` was fire-and-forget;
+  a hung Redis refresh could outlive the handler. Now tracked with a
+  per-handler `sync.WaitGroup` and waited before `Drop` fires.
+- `pkg/storage/s3.go`: `limitErrReader` could return `(n>0, ErrTooLarge)`
+  in the same Read call (violates `io.Reader` contract) and allowed one
+  extra byte past `max`. Rewritten with a probe-byte read after `max` so
+  an exact-fit body returns `io.EOF` and an oversize body returns `(0,
+  ErrTooLarge)`. Three internal tests lock the contract.
+
+Reviewed and rejected:
+- Hub `Send` slice alloc (per fan-out, not per message); calling `c.Send`
+  under RLock would let a slow producer hold the read lock.
+- `cmd/notification/main.go` cancelling rootCtx on nil fcm return — the
+  cancel is idempotent and an unexpected nil return SHOULD cascade.
 
 **FCM consumer scaffolded (commit `f00b3e6`).** Gated behind `FCM_ENABLED`
 (default false) so it ships dark until Claude A lands the `fcm_token` schema
@@ -89,7 +121,7 @@ events to the recipient's local socket:
 
 ---
 
-## 0. Current state (handoff — last updated 2026-05-22)
+## 0. Current state (handoff — last updated 2026-05-23)
 
 ### What's done
 
