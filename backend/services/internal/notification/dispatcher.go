@@ -120,11 +120,11 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 }
 
 // offerAcceptedPayload mirrors apps/matching/views.py L441-L452.
-// Django wraps every publish in {event_id, ts, ...payload}, so those
-// two fields are always present alongside the channel-specific keys.
+// Django wraps every publish in {event_id, ts, ...payload}; `ts` is
+// re-derived by the client from message metadata so we don't unmarshal
+// it server-side.
 type offerAcceptedPayload struct {
 	EventID    string `json:"event_id"`
-	Ts         string `json:"ts"`
 	MatchID    int64  `json:"match_id"`
 	OfferID    int64  `json:"offer_id"`
 	ParcelID   int64  `json:"parcel_id"`
@@ -140,7 +140,6 @@ type offerAcceptedPayload struct {
 // — no fan-out at this layer.
 type offerCreatedPayload struct {
 	EventID     string `json:"event_id"`
-	Ts          string `json:"ts"`
 	MatchID     int64  `json:"match_id"`
 	OfferID     int64  `json:"offer_id"`
 	ProposedBy  string `json:"proposed_by"`
@@ -182,7 +181,6 @@ func (d *Dispatcher) dispatchOfferAccepted(raw []byte) {
 
 	env := wsproto.Envelope{
 		EventID: p.EventID,
-		Ts:      p.Ts,
 		Type:    channelOfferAccepted,
 		Payload: raw,
 	}
@@ -220,7 +218,6 @@ func (d *Dispatcher) dispatchOfferCreated(raw []byte) {
 
 	env := wsproto.Envelope{
 		EventID: p.EventID,
-		Ts:      p.Ts,
 		Type:    channelOfferCreated,
 		Payload: raw,
 	}
