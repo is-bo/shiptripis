@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/wsproto"
 )
@@ -32,6 +33,20 @@ const markDeliveredTimeout = 5 * time.Second
 // than the steady-state of any reasonable pub/sub burst and keeps a
 // slow Postgres from spawning goroutines without limit.
 const receiptConcurrency = 64
+
+// dispatchConcurrency bounds in-flight dispatch goroutines. The pub/sub
+// pump produces messages faster than a single goroutine fanning to
+// multiple hub.Send + receipt-schedule can drain under reconnect-storm
+// load — without this pool the pump's 1024 buffer fills and pubsub
+// drops start. 128 covers a burst where every connected user has a
+// notification in flight; capped so a misbehaving handler can't fork
+// goroutines without bound.
+const dispatchConcurrency = 128
+
+// setEXRetryDelay is the gap before retrying a failed delivered:<event_id>
+// write. One brief retry is enough to ride a Redis blip without letting
+// the FCM consumer see a stale EXISTS=0 and push a duplicate.
+const setEXRetryDelay = 100 * time.Millisecond
 
 // Channels this service subscribes to. Source of truth is
 // monolith/apps/core/channels.py — keep these strings in lockstep.
@@ -77,10 +92,18 @@ type targetsEnvelope struct {
 // Dispatcher consumes Redis pub/sub events, fans them to local WS
 // sockets via the Hub, and writes G1 delivery receipts.
 type Dispatcher struct {
-	rdb  *redisbus.Client
-	pool *pgxpool.Pool
-	hub  *Hub
-	log  *slog.Logger
+	rdb     *redisbus.Client
+	pool    *pgxpool.Pool
+	hub     *Hub
+	log     *slog.Logger
+	metrics *metrics.Group
+
+	// dispatchSem bounds in-flight per-message goroutines so the pub/sub
+	// pump never blocks on a slow hub.Send or receipt schedule. dispatchWG
+	// tracks them so Run drains at shutdown — letting a goroutine outlive
+	// Run would mean Send on a closed Hub or write to a closed Postgres.
+	dispatchSem chan struct{}
+	dispatchWG  sync.WaitGroup
 
 	// receiptSem bounds in-flight markDelivered goroutines. receiptWG
 	// tracks them so Run waits at shutdown — a half-finished UPDATE on
@@ -90,16 +113,18 @@ type Dispatcher struct {
 	receiptWG  sync.WaitGroup
 }
 
-func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog.Logger) *Dispatcher {
+func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog.Logger, m *metrics.Group) *Dispatcher {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &Dispatcher{
-		rdb:        rdb,
-		pool:       pool,
-		hub:        hub,
-		log:        log,
-		receiptSem: make(chan struct{}, receiptConcurrency),
+		rdb:         rdb,
+		pool:        pool,
+		hub:         hub,
+		log:         log,
+		metrics:     m,
+		dispatchSem: make(chan struct{}, dispatchConcurrency),
+		receiptSem:  make(chan struct{}, receiptConcurrency),
 	}
 }
 
@@ -112,7 +137,11 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	defer func() { _ = sub.Close() }()
+	// dispatchWG must drain before receiptWG — a still-running dispatch
+	// goroutine could schedule another receipt after we'd already waited
+	// on the receipt pool.
 	defer d.receiptWG.Wait()
+	defer d.dispatchWG.Wait()
 
 	d.log.Info("dispatcher subscribed", "channels", subscribeChannels)
 
@@ -124,9 +153,37 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			if !ok {
 				return errors.New("subscription closed unexpectedly")
 			}
-			d.dispatch(msg)
+			d.scheduleDispatch(ctx, msg)
 		}
 	}
+}
+
+// scheduleDispatch fans a single message through the dispatch worker
+// pool. Saturation drops the message — pub/sub is best-effort and the
+// next pod (also subscribed) will deliver if it has a free slot. The
+// drop is logged with event_id so G6b can attribute the loss.
+func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message) {
+	select {
+	case d.dispatchSem <- struct{}{}:
+	case <-ctx.Done():
+		return
+	default:
+		if d.metrics != nil {
+			d.metrics.Counter("dispatch_drops_total", 1)
+		}
+		// Extract event_id only on the drop path so the steady-state
+		// dispatch doesn't pay the unmarshal twice.
+		var env targetsEnvelope
+		_ = json.Unmarshal(msg.Payload, &env)
+		d.log.Warn("dispatcher: pool saturated; dropping",
+			"channel", msg.Channel, "event_id", env.EventID,
+			"capacity", dispatchConcurrency)
+		return
+	}
+	d.dispatchWG.Go(func() {
+		defer func() { <-d.dispatchSem }()
+		d.dispatch(msg)
+	})
 }
 
 func (d *Dispatcher) dispatch(msg redisbus.Message) {
@@ -182,6 +239,9 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 	select {
 	case d.receiptSem <- struct{}{}:
 	default:
+		if d.metrics != nil {
+			d.metrics.Counter("receipt_drops_total", 1)
+		}
 		d.log.Warn("dispatcher: receipt pool saturated; dropping",
 			"event_id", eventID, "sockets", sockets,
 			"capacity", receiptConcurrency)
@@ -210,8 +270,29 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 	ctx, cancel := context.WithTimeout(context.Background(), markDeliveredTimeout)
 	defer cancel()
 
-	if err := d.rdb.SetEX(ctx, "delivered:"+eventID, "1", DeliveredTTL); err != nil {
-		d.log.Warn("delivered key set failed", "event_id", eventID, "err", err)
+	// One retry on SetEX failure. The FCM consumer reads EXISTS
+	// delivered:<event_id> after a 2s grace period; if our key is missing
+	// it will push a duplicate. A brief retry rides the typical Redis
+	// blip without delaying the receipt update.
+	key := "delivered:" + eventID
+	if err := d.rdb.SetEX(ctx, key, "1", DeliveredTTL); err != nil {
+		if d.metrics != nil {
+			d.metrics.Counter("delivered_setex_failures_total", 1)
+		}
+		d.log.Warn("delivered key set failed (retrying)",
+			"event_id", eventID, "err", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(setEXRetryDelay):
+		}
+		if err := d.rdb.SetEX(ctx, key, "1", DeliveredTTL); err != nil {
+			if d.metrics != nil {
+				d.metrics.Counter("delivered_setex_failures_final_total", 1)
+			}
+			d.log.Error("delivered key set failed after retry; FCM may duplicate",
+				"event_id", eventID, "err", err)
+		}
 	}
 
 	if _, err := d.pool.Exec(ctx,
@@ -221,8 +302,14 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 		    AND delivered_at IS NULL`,
 		eventID,
 	); err != nil {
+		if d.metrics != nil {
+			d.metrics.Counter("receipt_update_failures_total", 1)
+		}
 		d.log.Warn("published_event update failed", "event_id", eventID, "err", err)
 		return
+	}
+	if d.metrics != nil {
+		d.metrics.Counter("events_delivered_total", 1)
 	}
 	d.log.Debug("event delivered", "event_id", eventID, "sockets", sockets)
 }

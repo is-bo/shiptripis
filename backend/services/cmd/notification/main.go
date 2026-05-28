@@ -34,6 +34,7 @@ package main
 import (
 	"context"
 	"errors"
+	"expvar"
 	"log/slog"
 	"net/http"
 	"os"
@@ -47,6 +48,7 @@ import (
 	"shiptrip/pkg/db"
 	"shiptrip/pkg/health"
 	"shiptrip/pkg/logger"
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 )
 
@@ -113,9 +115,12 @@ func run() error {
 	}
 	defer pool.Close()
 
+	m := metrics.Register(serviceName)
+
 	rdb, err := redisbus.NewClient(rootCtx, redisbus.Config{
-		URL:    redisCfg.URL,
-		Logger: log,
+		URL:     redisCfg.URL,
+		Logger:  log,
+		Metrics: m,
 	})
 	if err != nil {
 		return err
@@ -129,7 +134,7 @@ func run() error {
 
 	hub := notification.NewHub()
 	presence := notification.NewPresence(rdb, log)
-	dispatcher := notification.NewDispatcher(rdb, pool, hub, log)
+	dispatcher := notification.NewDispatcher(rdb, pool, hub, log, m)
 
 	healthH := health.New(health.Config{Logger: log})
 	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
@@ -142,7 +147,11 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", healthH.Liveness())
 	mux.Handle("/readyz", healthH.Readiness())
-	mux.HandleFunc("/ws/notifications", notification.WSHandler(rootCtx, validator, hub, presence, log))
+	// expvar publishes /debug/vars on http.DefaultServeMux at import time.
+	// Mount it explicitly on our service mux so the metric scrape target is
+	// the admin port, not the default mux that's never served.
+	mux.Handle("/debug/vars", expvar.Handler())
+	mux.HandleFunc("/ws/notifications", notification.WSHandler(rootCtx, validator, hub, presence, log, m))
 
 	srv := &http.Server{
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),

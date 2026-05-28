@@ -9,6 +9,49 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**Production-grade hardening pass (2026-05-28, "this is a final product not a
+demo" reframe).** Promoted five "V1-acceptable" trade-offs from the senior
+review to must-fix because demo-grade silences would surface as real user-
+visible bugs (duplicate FCM pushes, presence gaps, invisible pubsub drops):
+
+- **New `pkg/metrics`**: expvar-backed `Group` (Counter / Gauge / GaugeAdd),
+  zero new deps. Names sanitized to `[a-z0-9_]` so the swap to Prometheus
+  client_golang is a one-file change. Both services expose `/debug/vars`
+  on the admin mux (`cmd/notification/main.go`, `cmd/chat/main.go`).
+- **SetEX retry on delivered:<event_id>** (`notification/dispatcher.go`,
+  `chat/dispatcher.go`): one retry after 100ms before falling through. A
+  Redis blip during the FCM consumer's 2s grace window would otherwise
+  push a duplicate notification. Metered as
+  `*_delivered_setex_failures_total` + `*_final_total`.
+- **Bounded dispatch worker pool** (both dispatchers): the pubsub pump
+  was synchronously calling `hub.Send` + `scheduleReceipt` per message;
+  under reconnect-storm load this filled the (now 1024) pubsub buffer
+  and started dropping silently. New `dispatchSem`+`dispatchWG` caps
+  fan-out at 128 per pod with drop-on-saturation logging `event_id` and
+  counter `*_dispatch_drops_total`. `Run` defers `dispatchWG.Wait()`
+  *before* `receiptWG.Wait()` so a late dispatch can still enqueue a
+  receipt that's then drained.
+- **Pubsub drops carry event_id + counter** (`pkg/redisbus/redis.go`):
+  the in-process buffer widened from 64 → 1024 (covers transient
+  bursts; sustained load is what the dispatch pool is for), and the
+  drop branch unmarshals `event_id` from the JSON envelope so a missed
+  fan-out is attributable to a specific Django publish. Metered as
+  `pubsub_drops_total` + per-channel `pubsub_drops_<channel>`.
+- **Presence initial-write retry** (`notification/handler.go`): the
+  first `presence.Refresh` on WS upgrade now retries once after 50ms.
+  Without it a Redis hiccup at the wrong moment left a user with a
+  live WS but no `presence:<uid>` key, causing the FCM consumer to
+  push a duplicate for the next ~5s until the periodic loop caught up.
+  Metered as `presence_refresh_failures_total` + `*_final_total`. Did
+  NOT fail the upgrade — Django doesn't gate any user-visible flow on
+  presence (FCM fallback covers the gap), and aborting the upgrade
+  would make a transient Redis issue much more user-visible than the
+  duplicate it would prevent.
+
+All commands build, vet, and `go test -race ./...` green. WSHandler
+signature changed (`metrics.Group` param); `cmd/notification/main.go`
++ `cmd/chat/main.go` both updated.
+
 **Dispatcher migrated to generic `targets` routing (2026-05-28).** Go was
 only routing 2 of Django's 16 published channels, and was reading legacy
 per-channel keys (`recipient_id`/`sender_id`/`traveler_id`) instead of
