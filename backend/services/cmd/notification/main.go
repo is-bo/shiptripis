@@ -163,7 +163,11 @@ func run() error {
 	// FCM consumer + XAUTOCLAIM sweeper. Two goroutines because the
 	// blocking XReadGroup would otherwise stall the periodic sweep.
 	// Both share the same channel so any fatal exit cancels rootCtx.
+	// fcmAlive tracks how many of {Run, Sweep} are still alive so the
+	// drain loop below waits for exactly the right count — if the outer
+	// select consumed one fcmErr, only one remains to drain.
 	fcmErr := make(chan error, 2)
+	fcmAlive := 0
 	if fcmCfg.Enabled {
 		fcm := notification.NewConsumer(rdb, notification.ConsumerConfig{
 			Stream:        fcmCfg.Stream,
@@ -176,6 +180,7 @@ func run() error {
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()
+		fcmAlive = 2
 		log.Info("fcm consumer enabled", "stream", fcmCfg.Stream)
 	} else {
 		log.Info("fcm consumer disabled (FCM_ENABLED=false)")
@@ -213,6 +218,9 @@ func run() error {
 	case err := <-fcmErr:
 		// One of {Run, Sweep} exited early. nil = graceful (ctx cancelled
 		// by another leg already). Non-nil = fatal; tear down everything.
+		// Either way one of the two FCM goroutines is gone — the drain
+		// loop below only needs to wait for the survivor.
+		fcmAlive--
 		if err != nil {
 			fatal = errors.Join(errors.New("fcm consumer exited"), err)
 		}
@@ -230,14 +238,14 @@ func run() error {
 	case <-shutdownCtx.Done():
 		log.Warn("dispatcher did not exit before shutdown deadline")
 	}
-	// Drain both FCM goroutines (Run + Sweep) if they were started.
-	if fcmCfg.Enabled {
-		for range 2 {
-			select {
-			case <-fcmErr:
-			case <-shutdownCtx.Done():
-				log.Warn("fcm goroutine did not exit before shutdown deadline")
-			}
+	// Drain remaining FCM goroutines. fcmAlive was decremented if the
+	// outer select consumed one; without that bookkeeping we'd hang on a
+	// phantom receive every clean shutdown that fired on fcmErr.
+	for range fcmAlive {
+		select {
+		case <-fcmErr:
+		case <-shutdownCtx.Done():
+			log.Warn("fcm goroutine did not exit before shutdown deadline")
 		}
 	}
 	log.Info("notification service stopped")
