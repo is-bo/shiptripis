@@ -9,6 +9,30 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**Dispatcher migrated to generic `targets` routing (2026-05-28).** Go was
+only routing 2 of Django's 16 published channels, and was reading legacy
+per-channel keys (`recipient_id`/`sender_id`/`traveler_id`) instead of
+the canonical `targets:[uid,...]` field that `redis_bus.publish_after_commit`
+attaches to every envelope. Now:
+- `notification/dispatcher.go` subscribes to all 16 channels (see
+  `subscribeChannels`, mirrors `apps/core/channels.py`).
+- Single generic `dispatch` path: unmarshal `targetsEnvelope{event_id, targets}`,
+  fan the raw payload to each target's local sockets via `hub.Send`, schedule
+  one receipt write through the existing `receiptConcurrency=64` pool.
+- Per-channel `offerAcceptedPayload` / `offerCreatedPayload` structs and
+  their dispatchers deleted — payload semantics (match_id, offer_id, code,
+  …) are mobile's concern. Go forwards the raw payload as the envelope body.
+- `dispatch` logs at WARN when `targets` is missing (so any missed Django
+  migration is visible) and at DEBUG when targets exist but no socket on
+  this pod owns them (another pod likely already delivered).
+- Mobile previously silently missed: `handover.code_issued`,
+  `match.in_transit`, `match.completed`, `payment.captured`,
+  `payment.refunded`, `match.created`, `offer.updated`, parcel + trip
+  events, `kyc.status_changed`. All wired now.
+- Confirmed every Django `publish_after_commit` call (14 sites across
+  trips/parcels/matching/payments/verification) passes `targets=[uid,...]`
+  as kwarg. The audit task is resolved.
+
 **KYC gRPC client wired + hardened.** Done across recent commits:
 - `task contract:go-grpc` target added to `backend/Taskfile.yml` (mirrors the existing python-grpc target; uses host `protoc` + `protoc-gen-go` + `protoc-gen-go-grpc`) and now runs in `check-drift` so generated Go stubs stay in lockstep with the proto.
 - Generated stubs at `backend/services/internal/kyc/kycpb/`.
@@ -121,7 +145,7 @@ events to the recipient's local socket:
 
 ---
 
-## 0. Current state (handoff — last updated 2026-05-23)
+## 0. Current state (handoff — last updated 2026-05-28)
 
 ### What's done
 
@@ -152,9 +176,11 @@ events to the recipient's local socket:
 - All migrations reversible. Full suite green (115/115).
 
 **Backend (Go services, `backend/services/`):**
-- `cmd/notification` — WS hub + Redis pub/sub consumer; offer.accepted +
-  offer.created vertical slices fan to sender/traveler, write
-  `delivered:<event_id>` and back-fill `core_published_event.delivered_at`.
+- `cmd/notification` — WS hub + Redis pub/sub consumer. Subscribes to
+  all 16 Django channels (`apps/core/channels.py`); single generic
+  dispatch path routes by the canonical `targets:[uid,...]` field on
+  every envelope. Writes `delivered:<event_id>` and back-fills
+  `core_published_event.delivered_at` through a bounded receipt pool.
   FCM consumer scaffolded behind `FCM_ENABLED` (LogOnlySender stub;
   awaits Django publisher + fcm_token schema). G1 + G6b paths wired.
 - `cmd/chat` — WS relay for `chat.message.new`. Stateless fan-out
