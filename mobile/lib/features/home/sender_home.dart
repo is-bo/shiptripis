@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/matching/matching_providers.dart';
+import '../../core/matching/matching_repository.dart';
 import '../../core/parcels/parcels_providers.dart';
 import '../../core/parcels/parcels_repository.dart';
 import '../../core/theme/tokens.dart';
@@ -38,7 +40,9 @@ class SenderHome extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(child: _SearchAction()),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x4)),
+          const _InTransitSection(),
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x2)),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(
@@ -207,6 +211,128 @@ class _NoTripsTile extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// In-transit matches need eye-catching real-time entry to the
+/// follow-package screen. We fetch traveler-side accepted-in-transit matches
+/// for this sender and surface each as a tappable boarding-card stub.
+class _InTransitSection extends ConsumerWidget {
+  const _InTransitSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const params = MatchListParams(role: 'sender', status: 'in_transit');
+    final async = ref.watch(matchListProvider(params));
+    return async.maybeWhen(
+      data: (matches) {
+        if (matches.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        return SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x4),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.emerald,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                        .animate(onPlay: (c) => c.repeat())
+                        .scale(
+                            begin: const Offset(1, 1),
+                            end: const Offset(2.2, 2.2),
+                            duration: 1200.ms,
+                            curve: Curves.easeOut)
+                        .fadeOut(),
+                    const SizedBox(width: 8),
+                    Text("In transit",
+                        style: AppType.display(20, w: FontWeight.w500)),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.x3),
+                for (final m in matches)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                    child: _InTransitCard(match: m),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+      orElse: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+    );
+  }
+}
+
+class _InTransitCard extends StatelessWidget {
+  const _InTransitCard({required this.match});
+  final MatchSummary match;
+
+  @override
+  Widget build(BuildContext context) {
+    final parcel = match.parcel;
+    final route = parcel != null
+        ? "${parcel.originIata} → ${parcel.destinationIata}"
+        : "Match #${match.id}";
+    return Material(
+      color: AppColors.ink,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => context.push('/tracking/${match.id}'),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            color: AppColors.ink,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.parchmentSoft.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.local_shipping_outlined,
+                    color: AppColors.parchmentSoft),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(route,
+                        style: AppType.body(14.5,
+                            w: FontWeight.w700,
+                            color: AppColors.parchmentSoft)),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Tap to follow live",
+                      style: AppType.body(12,
+                          color: AppColors.parchmentDeep),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_rounded,
+                  color: AppColors.parchmentSoft),
+            ],
+          ),
+        ),
       ),
     );
   }

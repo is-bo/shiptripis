@@ -52,6 +52,7 @@ class _MatchParcelMini(serializers.Serializer):
     id = serializers.IntegerField()
     kind = serializers.CharField()
     weight_kg = serializers.IntegerField()
+    target_traveler_id = serializers.IntegerField(allow_null=True)
     origin = serializers.SerializerMethodField()
     destination = serializers.SerializerMethodField()
 

@@ -203,6 +203,12 @@ class _MatchBody extends StatelessWidget {
         myId != null &&
         currentPending.proposerId == myId;
 
+    // Counter is only legal on direct (targeted) requests. Server enforces
+    // this with 409; we hide the button so it doesn't look broken on broadcast.
+    final canCounter =
+        match.parcel?.targetTravelerId != null &&
+            match.parcel?.targetTravelerId == myId;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
@@ -241,25 +247,32 @@ class _MatchBody extends StatelessWidget {
         if (currentPending != null && match.status == MatchStatus.pending) ...[
           const SizedBox(height: 12),
           if (iAmCounterparty) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _SecondaryButton(
-                    label: 'Decline',
-                    onTap: busy ? null : () => onDecline(currentPending.id),
-                    color: AppColors.danger,
+            if (canCounter)
+              Row(
+                children: [
+                  Expanded(
+                    child: _SecondaryButton(
+                      label: 'Decline',
+                      onTap: busy ? null : () => onDecline(currentPending.id),
+                      color: AppColors.danger,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SecondaryButton(
-                    label: counterOpen ? 'Cancel' : 'Counter',
-                    onTap: busy ? null : onCounterToggle,
-                    color: AppColors.terracotta,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SecondaryButton(
+                      label: counterOpen ? 'Cancel' : 'Counter',
+                      onTap: busy ? null : onCounterToggle,
+                      color: AppColors.terracotta,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              )
+            else
+              _SecondaryButton(
+                label: 'Decline',
+                onTap: busy ? null : () => onDecline(currentPending.id),
+                color: AppColors.danger,
+              ),
             const SizedBox(height: 10),
             PrimaryButton(
               label: busy ? 'Working…' : 'Accept ${_dzd(currentPending.totalDzd)} DZD',
@@ -273,7 +286,7 @@ class _MatchBody extends StatelessWidget {
               color: AppColors.inkSoft,
             ),
           ],
-          if (counterOpen && iAmCounterparty) ...[
+          if (counterOpen && iAmCounterparty && canCounter) ...[
             const SizedBox(height: 14),
             Text(
               'Your counter (traveler payout, DZD)',
@@ -540,17 +553,22 @@ class _HandoverPanel extends StatelessWidget {
     final isPickup = status == MatchStatus.accepted;
     final kindParam = isPickup ? 'pickup' : 'delivery';
     final actionLabel = isSender
-        ? (isPickup ? 'Show pickup code' : 'Show delivery code')
+        ? (isPickup ? 'View pickup code' : 'Follow package')
         : (isPickup ? 'Enter pickup code' : 'Enter delivery code');
     final blurb = isSender
         ? (isPickup
-            ? 'Show the traveler this code when they arrive to collect the parcel.'
-            : 'Give the recipient this code so they can confirm delivery to the traveler.')
+            ? 'Show the traveler this code when they arrive to collect the parcel. You can come back here anytime — we won\'t change it.'
+            : 'Your parcel is on the move. Track it live and stay reachable for the recipient.')
         : (isPickup
-            ? 'Ask the sender for the pickup code and enter it here.'
-            : 'Ask the recipient for the delivery code. Verifying it releases your payment.');
+            ? 'Ask the sender for the pickup code and enter it here to confirm you have the parcel.'
+            : 'Ask the recipient for the delivery code. Verifying it releases your payment from escrow.');
+    // Sender-PICKUP uses the view-only screen (no rotation); sender-DELIVERY
+    // routes to follow-package since the recipient owns the delivery code
+    // surface, not the sender. Traveler always verifies.
     final route = isSender
-        ? '/handover/issue/$matchId?kind=$kindParam'
+        ? (isPickup
+            ? '/handover/code/$matchId?kind=$kindParam'
+            : '/tracking/$matchId')
         : '/handover/verify/$matchId?kind=$kindParam';
 
     return Container(

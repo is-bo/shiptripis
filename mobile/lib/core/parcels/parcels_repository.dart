@@ -168,6 +168,7 @@ class ParcelsRepository {
     String pickupCity = '',
     String deliveryCity = '',
     DateTime? deadlineAt,
+    int? targetTravelerId,
   }) async {
     final r = await _dio.post<Map<String, dynamic>>(
       '/api/parcels/delivery',
@@ -182,6 +183,7 @@ class ParcelsRepository {
         'base_amount_dzd': baseAmountDzd,
         if (deadlineAt != null)
           'deadline_at': deadlineAt.toUtc().toIso8601String(),
+        if (targetTravelerId != null) 'target_traveler_id': targetTravelerId,
       },
     );
     if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {
@@ -202,6 +204,7 @@ class ParcelsRepository {
     String pickupCity = '',
     String deliveryCity = '',
     DateTime? deadlineAt,
+    int? targetTravelerId,
   }) async {
     final r = await _dio.post<Map<String, dynamic>>(
       '/api/parcels/product',
@@ -218,6 +221,7 @@ class ParcelsRepository {
         'delivery_city': deliveryCity,
         if (deadlineAt != null)
           'deadline_at': deadlineAt.toUtc().toIso8601String(),
+        if (targetTravelerId != null) 'target_traveler_id': targetTravelerId,
       },
     );
     if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {

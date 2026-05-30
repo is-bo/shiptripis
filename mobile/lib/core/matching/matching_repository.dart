@@ -119,6 +119,7 @@ class MatchParcelMini {
     required this.id,
     required this.kind,
     required this.weightKg,
+    required this.targetTravelerId,
     required this.originIata,
     required this.originCity,
     required this.originCountry,
@@ -134,6 +135,7 @@ class MatchParcelMini {
       id: j['id'] as int,
       kind: j['kind'] as String,
       weightKg: j['weight_kg'] as int,
+      targetTravelerId: (j['target_traveler_id'] as num?)?.toInt(),
       originIata: o['iata'] as String,
       originCity: o['city'] as String,
       originCountry: o['country'] as String,
@@ -146,6 +148,10 @@ class MatchParcelMini {
   final int id;
   final String kind;
   final int weightKg;
+  /// When non-null, the sender directed this parcel at a specific traveler
+  /// (e.g. via a trip tile). Counter-offers are only allowed in this case;
+  /// broadcast requests (null) accept-or-decline only.
+  final int? targetTravelerId;
   final String originIata;
   final String originCity;
   final String originCountry;

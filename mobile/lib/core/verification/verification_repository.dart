@@ -54,6 +54,30 @@ class VerifiedCode {
   final String status;
 }
 
+/// Metadata about an active handover code — plaintext NOT included.
+/// Plaintext is delivered exactly once via the WS `handover.code_issued`
+/// event and held in [LiveEventState.codesByMatch]. This object lets the
+/// UI confirm a code exists (so it can render the cached plaintext) and
+/// surface metadata like issued-at without rotating the code.
+class ActiveCodeInfo {
+  const ActiveCodeInfo({
+    required this.id,
+    required this.kind,
+    required this.status,
+    required this.createdAt,
+  });
+  factory ActiveCodeInfo.fromJson(Map<String, dynamic> j) => ActiveCodeInfo(
+        id: j['id'] as int,
+        kind: j['kind'] as String,
+        status: j['status'] as String,
+        createdAt: DateTime.parse(j['created_at'] as String),
+      );
+  final int id;
+  final String kind;
+  final String status;
+  final DateTime createdAt;
+}
+
 class VerificationRepository {
   VerificationRepository(this._dio);
   final Dio _dio;
@@ -73,6 +97,29 @@ class VerificationRepository {
       throw VerificationFailure(_msg(r) ?? 'Could not issue code.');
     } on DioException catch (e) {
       throw VerificationFailure(_msg(e.response) ?? 'Could not issue code.');
+    }
+  }
+
+  /// Fetches metadata about an existing ACTIVE code without rotating it.
+  /// Returns null when no active code exists (server 404). Plaintext is
+  /// never returned by this endpoint — only the WS issue event ever carries
+  /// the plaintext. UI should read plaintext from LiveEventState.
+  Future<ActiveCodeInfo?> getActiveCode({
+    required int matchId,
+    required HandoverKind kind,
+  }) async {
+    try {
+      final r = await _dio.get<Map<String, dynamic>>(
+        '/api/matches/$matchId/handover/code',
+        queryParameters: {'kind': kind.wire},
+      );
+      if (r.statusCode == 200 && r.data != null) {
+        return ActiveCodeInfo.fromJson(r.data!);
+      }
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw VerificationFailure(_msg(e.response) ?? 'Could not load code.');
     }
   }
 

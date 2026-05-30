@@ -114,7 +114,18 @@ class _MatchTile extends ConsumerWidget {
               Text(_subline(m), style: AppType.body(12.5, color: AppColors.inkSoft)),
               if (liveCode != null) ...[
                 const SizedBox(height: 12),
-                _CodeBanner(code: liveCode),
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  onTap: () => context
+                      .push('/handover/code/${m.id}?kind=${liveCode.kind}'),
+                  child: _CodeBanner(code: liveCode),
+                ),
+              ] else if (m.status == MatchStatus.accepted) ...[
+                const SizedBox(height: 12),
+                _ViewCodePrompt(
+                  onTap: () =>
+                      context.push('/handover/code/${m.id}?kind=pickup'),
+                ),
               ],
               const SizedBox(height: 10),
               Row(
@@ -234,6 +245,44 @@ class _CodeBanner extends StatelessWidget {
             style: AppType.body(11, color: AppColors.inkMute),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ViewCodePrompt extends StatelessWidget {
+  const _ViewCodePrompt({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.emerald.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+              color: AppColors.emerald.withValues(alpha: 0.3), width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.qr_code_2_rounded,
+                size: 18, color: AppColors.emeraldDeep),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'View pickup code',
+                style: AppType.body(13,
+                    w: FontWeight.w700, color: AppColors.emeraldDeep),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 18, color: AppColors.emeraldDeep),
+          ],
+        ),
       ),
     );
   }

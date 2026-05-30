@@ -59,6 +59,7 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
     String description = '',
     String pickupCity = '',
     String deliveryCity = '',
+    int? targetTravelerId,
   }) async {
     final repo = ref.read(parcelsRepositoryProvider);
     final p = await repo.createDelivery(
@@ -70,6 +71,7 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
       description: description,
       pickupCity: pickupCity,
       deliveryCity: deliveryCity,
+      targetTravelerId: targetTravelerId,
     );
     state = AsyncValue.data([p, ...(state.value ?? const <Parcel>[])]);
     return p;
@@ -86,6 +88,7 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
     String description = '',
     String pickupCity = '',
     String deliveryCity = '',
+    int? targetTravelerId,
   }) async {
     final repo = ref.read(parcelsRepositoryProvider);
     final p = await repo.createProduct(
@@ -99,6 +102,7 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
       description: description,
       pickupCity: pickupCity,
       deliveryCity: deliveryCity,
+      targetTravelerId: targetTravelerId,
     );
     state = AsyncValue.data([p, ...(state.value ?? const <Parcel>[])]);
     return p;

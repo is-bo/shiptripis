@@ -30,7 +30,13 @@ const _itemTypeOptions = [
 ];
 
 class MakeRequestScreen extends ConsumerStatefulWidget {
-  const MakeRequestScreen({super.key});
+  const MakeRequestScreen({super.key, this.targetTravelerId});
+
+  /// When non-null the request is directed at a specific traveler (e.g. user
+  /// arrived from a trip tile). Server-side, counter-offers are only legal
+  /// for the named traveler — broadcast requests are accept-or-decline only.
+  final int? targetTravelerId;
+
   @override
   ConsumerState<MakeRequestScreen> createState() => _MakeRequestScreenState();
 }
@@ -139,6 +145,7 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
           description: _descCtl.text.trim(),
           pickupCity: _pickupCityCtl.text.trim(),
           deliveryCity: _dropCityCtl.text.trim(),
+          targetTravelerId: widget.targetTravelerId,
         );
       } else {
         parcel = await notifier.createProduct(
@@ -152,6 +159,7 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
           description: _descCtl.text.trim(),
           pickupCity: _pickupCityCtl.text.trim(),
           deliveryCity: _dropCityCtl.text.trim(),
+          targetTravelerId: widget.targetTravelerId,
         );
       }
       if (_photos.isNotEmpty) {
@@ -226,6 +234,35 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
                       )
                           .animate(target: _type.index.toDouble())
                           .fadeIn(duration: 300.ms),
+                      if (widget.targetTravelerId != null) ...[
+                        const SizedBox(height: AppSpacing.x4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.emerald.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(
+                                color: AppColors.emerald
+                                    .withValues(alpha: 0.35)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.alternate_email_rounded,
+                                  size: 16, color: AppColors.emeraldDeep),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "Directed to traveler #${widget.targetTravelerId} — they can accept, decline, or counter your price.",
+                                  style: AppType.body(12.5,
+                                      color: AppColors.emeraldDeep,
+                                      w: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.x6),
                       _typeToggle(),
                       const SizedBox(height: AppSpacing.x6),

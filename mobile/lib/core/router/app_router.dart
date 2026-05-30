@@ -19,6 +19,7 @@ import '../../features/sender/search_filter_screen.dart';
 import '../../features/shell/app_shell.dart';
 import '../../features/traveler/create_trip_screen.dart';
 import '../../features/traveler/find_parcels_screen.dart';
+import '../../features/verification/handover_code_screen.dart';
 import '../../features/verification/handover_issue_screen.dart';
 import '../../features/verification/handover_verify_screen.dart';
 
@@ -55,7 +56,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/role', builder: (_, _) => const RoleSelectScreen()),
       GoRoute(path: '/app', builder: (_, _) => const AppShell()),
       GoRoute(
-          path: '/sender/new', builder: (_, _) => const MakeRequestScreen()),
+        path: '/sender/new',
+        builder: (_, state) {
+          final t = state.uri.queryParameters['traveler'];
+          final tid = t == null ? null : int.tryParse(t);
+          return MakeRequestScreen(targetTravelerId: tid);
+        },
+      ),
       GoRoute(
           path: '/sender/requests',
           builder: (_, _) => const MyRequestsScreen()),
@@ -93,7 +100,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/code/:id',
         redirect: (_, state) =>
-            '/handover/issue/${state.pathParameters['id']}?kind=pickup',
+            '/handover/code/${state.pathParameters['id']}?kind=pickup',
+      ),
+      GoRoute(
+        path: '/handover/code/:id',
+        builder: (_, state) => HandoverCodeScreen(
+          matchId: int.parse(state.pathParameters['id']!),
+          kind: (state.uri.queryParameters['kind'] == 'delivery')
+              ? HandoverKind.delivery
+              : HandoverKind.pickup,
+        ),
       ),
       GoRoute(
         path: '/handover/issue/:id',

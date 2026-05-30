@@ -68,6 +68,7 @@ class TravelerHome extends ConsumerWidget {
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.x6)),
+          const _AwaitingPickupSection(),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x6),
             sliver: SliverToBoxAdapter(
@@ -126,6 +127,108 @@ class _IncomingOffersSection extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Matches the traveler accepted that the sender then PAID — the sender is
+/// now looking at the pickup code, and the traveler needs to coordinate
+/// pickup and enter the code. Surfaces above the offer-shopping list so it
+/// always wins the eye.
+class _AwaitingPickupSection extends ConsumerWidget {
+  const _AwaitingPickupSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const params = MatchListParams(role: 'traveler', status: 'accepted');
+    final async = ref.watch(matchListProvider(params));
+    return async.maybeWhen(
+      data: (matches) {
+        if (matches.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        return SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.x6, 0, AppSpacing.x6, AppSpacing.x6),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionHeader(title: "Awaiting pickup", action: ""),
+                const SizedBox(height: AppSpacing.x3),
+                for (final m in matches)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                    child: _AwaitingPickupCard(match: m),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+      orElse: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+    );
+  }
+}
+
+class _AwaitingPickupCard extends StatelessWidget {
+  const _AwaitingPickupCard({required this.match});
+  final MatchSummary match;
+
+  @override
+  Widget build(BuildContext context) {
+    final parcel = match.parcel;
+    final route = parcel != null
+        ? "${parcel.originIata} → ${parcel.destinationIata}"
+        : "Match #${match.id}";
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () =>
+            context.push('/handover/verify/${match.id}?kind=pickup'),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border:
+                Border.all(color: AppColors.gold.withValues(alpha: 0.5), width: 1.5),
+            color: AppColors.gold.withValues(alpha: 0.05),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.inventory_2_outlined,
+                    color: AppColors.goldDeep),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(route,
+                        style: AppType.body(14.5, w: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Sender paid — ask for the pickup code",
+                      style: AppType.body(12, color: AppColors.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_rounded,
+                  size: 18, color: AppColors.goldDeep),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

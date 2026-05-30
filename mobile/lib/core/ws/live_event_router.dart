@@ -8,6 +8,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_notifier.dart';
 import '../matching/matching_providers.dart';
 import '../parcels/parcels_providers.dart';
 import '../trips/trips_providers.dart';
@@ -28,10 +29,32 @@ class LiveHandoverCode {
   final DateTime issuedAt;
 }
 
+/// A toast-style notice the shell renders at the top of the app. Each one
+/// carries optional deep-link metadata so taps land on the right screen.
+class LiveBanner {
+  const LiveBanner({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.deepLink,
+    this.tone = LiveBannerTone.info,
+  });
+
+  final int id;
+  final String title;
+  final String body;
+  final String? deepLink;
+  final LiveBannerTone tone;
+}
+
+enum LiveBannerTone { info, success, warning }
+
 class LiveEventState {
   const LiveEventState({
     this.codesByMatch = const {},
     this.matchTick = 0,
+    this.banners = const [],
+    this.nextBannerId = 1,
   });
 
   final Map<int, LiveHandoverCode> codesByMatch;
@@ -41,14 +64,60 @@ class LiveEventState {
   /// when this changes.
   final int matchTick;
 
+  /// Active actionable notifications. Newest first. Shell pops them on tap
+  /// or auto-dismiss.
+  final List<LiveBanner> banners;
+
+  final int nextBannerId;
+
   LiveEventState withCode(LiveHandoverCode c) {
     final next = Map<int, LiveHandoverCode>.from(codesByMatch);
     next[c.matchId] = c;
-    return LiveEventState(codesByMatch: next, matchTick: matchTick);
+    return LiveEventState(
+      codesByMatch: next,
+      matchTick: matchTick,
+      banners: banners,
+      nextBannerId: nextBannerId,
+    );
   }
 
   LiveEventState withMatchTick() {
-    return LiveEventState(codesByMatch: codesByMatch, matchTick: matchTick + 1);
+    return LiveEventState(
+      codesByMatch: codesByMatch,
+      matchTick: matchTick + 1,
+      banners: banners,
+      nextBannerId: nextBannerId,
+    );
+  }
+
+  LiveEventState withBanner({
+    required String title,
+    required String body,
+    String? deepLink,
+    LiveBannerTone tone = LiveBannerTone.info,
+  }) {
+    final banner = LiveBanner(
+      id: nextBannerId,
+      title: title,
+      body: body,
+      deepLink: deepLink,
+      tone: tone,
+    );
+    return LiveEventState(
+      codesByMatch: codesByMatch,
+      matchTick: matchTick,
+      banners: [banner, ...banners],
+      nextBannerId: nextBannerId + 1,
+    );
+  }
+
+  LiveEventState withoutBanner(int id) {
+    return LiveEventState(
+      codesByMatch: codesByMatch,
+      matchTick: matchTick,
+      banners: banners.where((b) => b.id != id).toList(growable: false),
+      nextBannerId: nextBannerId,
+    );
   }
 }
 
@@ -66,13 +135,20 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
     return const LiveEventState();
   }
 
+  int? _viewerId() {
+    final auth = ref.read(authNotifierProvider);
+    return auth is AuthSignedIn ? auth.user.id : null;
+  }
+
   void _onEnvelope(NotificationEnvelope env) {
     final p = env.payload ?? const {};
+    final viewerId = _viewerId();
     switch (env.type) {
       case 'handover.code_issued':
         final mid = (p['match_id'] as num?)?.toInt();
         final kind = p['kind'] as String?;
         final code = p['code'] as String?;
+        final issuedTo = (p['issued_to_id'] as num?)?.toInt();
         if (mid != null && kind != null && code != null) {
           state = state.withCode(LiveHandoverCode(
             matchId: mid,
@@ -81,14 +157,24 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
             issuedAt: DateTime.now(),
           ));
           ref.invalidate(matchDetailProvider(mid));
+          // Surface a banner to the user who holds the code (the issued_to
+          // side). The counterparty doesn't need a banner — they'll enter
+          // the code in person.
+          if (viewerId != null && issuedTo == viewerId) {
+            final label = kind == 'pickup' ? 'pickup' : 'delivery';
+            state = state.withBanner(
+              title: 'Your $label code is ready',
+              body: 'Tap to view — we won\'t rotate it.',
+              deepLink: '/handover/code/$mid?kind=$kind',
+              tone: LiveBannerTone.success,
+            );
+          }
         }
         break;
       case 'offer.created':
       case 'offer.updated':
       case 'offer.accepted':
       case 'match.created':
-      case 'match.in_transit':
-      case 'match.completed':
         final mid = (p['match_id'] as num?)?.toInt();
         if (mid != null) {
           ref.invalidate(matchDetailProvider(mid));
@@ -96,7 +182,76 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
         }
         state = state.withMatchTick();
         break;
+      case 'match.in_transit':
+        final mid = (p['match_id'] as num?)?.toInt();
+        final senderId = (p['sender_id'] as num?)?.toInt();
+        final travelerId = (p['traveler_id'] as num?)?.toInt();
+        if (mid != null) {
+          ref.invalidate(matchDetailProvider(mid));
+          ref.invalidate(offerListProvider(mid));
+        }
+        state = state.withMatchTick();
+        if (viewerId != null && mid != null) {
+          if (viewerId == senderId) {
+            state = state.withBanner(
+              title: 'Your parcel is on its way',
+              body: 'Follow it live.',
+              deepLink: '/tracking/$mid',
+              tone: LiveBannerTone.success,
+            );
+          } else if (viewerId == travelerId) {
+            state = state.withBanner(
+              title: 'Pickup confirmed',
+              body: 'Safe travels — deliver to complete the run.',
+              tone: LiveBannerTone.info,
+            );
+          }
+        }
+        break;
+      case 'match.completed':
+        final mid = (p['match_id'] as num?)?.toInt();
+        final senderId = (p['sender_id'] as num?)?.toInt();
+        final travelerId = (p['traveler_id'] as num?)?.toInt();
+        if (mid != null) {
+          ref.invalidate(matchDetailProvider(mid));
+          ref.invalidate(offerListProvider(mid));
+        }
+        state = state.withMatchTick();
+        if (viewerId != null) {
+          final isTraveler = viewerId == travelerId;
+          final isSender = viewerId == senderId;
+          if (isTraveler) {
+            state = state.withBanner(
+              title: 'Payment released',
+              body: 'Your earnings are now in your wallet.',
+              tone: LiveBannerTone.success,
+            );
+          } else if (isSender) {
+            state = state.withBanner(
+              title: 'Delivered',
+              body: 'Thanks for using ShipTrip.',
+              tone: LiveBannerTone.success,
+            );
+          }
+        }
+        break;
       case 'payment.captured':
+        final mid = (p['match_id'] as num?)?.toInt();
+        final payerId = (p['payer_id'] as num?)?.toInt();
+        if (mid != null) {
+          ref.invalidate(matchDetailProvider(mid));
+        }
+        state = state.withMatchTick();
+        // Traveler side: surface "you have a paid match — wait for the code"
+        // (the sender just paid and is being shown the pickup code).
+        if (viewerId != null && payerId != null && viewerId != payerId) {
+          state = state.withBanner(
+            title: 'Match locked in',
+            body: 'The sender paid — wait for them to show you the pickup code.',
+            tone: LiveBannerTone.info,
+          );
+        }
+        break;
       case 'payment.refunded':
         final mid = (p['match_id'] as num?)?.toInt();
         if (mid != null) {
@@ -113,6 +268,10 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
         ref.invalidate(myTripsProvider);
         break;
     }
+  }
+
+  void dismissBanner(int id) {
+    state = state.withoutBanner(id);
   }
 }
 

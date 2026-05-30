@@ -105,7 +105,8 @@ class FindTravelersScreen extends ConsumerWidget {
                           const SizedBox(height: AppSpacing.x3),
                       itemBuilder: (_, i) => _TripTile(
                         trip: trips[i],
-                        onTap: () => context.push('/sender/new'),
+                        onTap: () => context.push(
+                            '/sender/new?traveler=${trips[i].travelerId}'),
                       ),
                     ),
                   );

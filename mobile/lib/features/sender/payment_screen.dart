@@ -89,7 +89,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (intent == null || intent.succeeded) {
       final mid = widget.matchId;
       if (mid != null) {
-        context.go('/handover/issue/$mid?kind=pickup');
+        context.go('/handover/code/$mid?kind=pickup');
       } else {
         context.go('/');
       }
