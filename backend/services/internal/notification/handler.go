@@ -31,6 +31,12 @@ const initialPresenceRetryDelay = 50 * time.Millisecond
 // the connection with the hub + presence, and runs the read loop until
 // the client disconnects or the parent context is cancelled.
 //
+// connWG tracks in-flight handler goroutines so main can wait for them to
+// finish their presence.Drop before tearing down Redis/Postgres on
+// shutdown. Hijacked WS conns are invisible to http.Server.Shutdown, so
+// without this the deferred rdb.Close()/pool.Close() could race a Drop
+// still in flight. Pass nil to opt out (tests).
+//
 // The Flutter client speaks a one-way channel for now: server → client
 // only. Inbound frames are read so the library can process pong control
 // frames and surface close errors; any unexpected envelope is logged
@@ -42,6 +48,7 @@ func WSHandler(
 	presence *Presence,
 	log *slog.Logger,
 	m *metrics.Group,
+	connWG *sync.WaitGroup,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsproto.Upgrade(w, r, validator, log)
@@ -49,6 +56,13 @@ func WSHandler(
 			// Upgrade already wrote the HTTP error.
 			log.Debug("ws upgrade failed", "err", err)
 			return
+		}
+
+		// Track this handler for shutdown draining. Add only after a
+		// successful upgrade so a rejected handshake doesn't skew the count.
+		if connWG != nil {
+			connWG.Add(1)
+			defer connWG.Done()
 		}
 
 		// Tie the connection lifetime to both the request ctx and the

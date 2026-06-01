@@ -46,12 +46,23 @@ const dispatchConcurrency = 128
 // giving up so a Redis blip doesn't cause an FCM duplicate.
 const setEXRetryDelay = 100 * time.Millisecond
 
-// Channels this service subscribes to. Kept narrow on purpose; new
-// channels go through the same per-channel struct + switch pattern
-// notification uses (CLAUDE.md §0a closed that debate for offer.created).
+// Channels this service subscribes to. Kept narrow on purpose — chat is a
+// stateless relay for chat.message.new only (Django owns persistence).
 const (
 	channelChatMessageNew = "chat.message.new"
 )
+
+// targetsEnvelope is the shared shape every Django publish carries via
+// redis_bus.publish_after_commit. The dispatcher unmarshals only this
+// minimal envelope and fans the raw payload to each target's local
+// sockets — payload semantics (message_id, thread_id, body) are the
+// mobile client's concern, not Go's. Mirrors notification's routing so
+// both services read the one canonical contract (CLAUDE.md §0a).
+type targetsEnvelope struct {
+	EventID string  `json:"event_id"`
+	Ts      string  `json:"ts"`
+	Targets []int64 `json:"targets"`
+}
 
 // router is the minimal surface the dispatcher needs from the Hub, so
 // tests can pass a stub without spinning real WS sockets. Production
@@ -167,29 +178,10 @@ func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message)
 	})
 }
 
-// chatMessageNewPayload mirrors the envelope Django will publish when a
-// chat_message row is INSERTed. Single recipient_id same as offer.created
-// (apps/matching/views.py:240,375) — Django picks the other party from
-// the thread.members set so the Go side doesn't need a DB lookup on the
-// hot path.
-//
-// MessageID + ThreadID arrive denormalised so the mobile client can
-// route to the right thread without a follow-up GET (chat history
-// endpoint is V2 / pending the chat_message schema landing).
-type chatMessageNewPayload struct {
-	EventID     string `json:"event_id"`
-	Ts          string `json:"ts"`
-	MessageID   int64  `json:"message_id"`
-	ThreadID    int64  `json:"thread_id"`
-	SenderID    int64  `json:"sender_id"`
-	RecipientID int64  `json:"recipient_id"`
-	Body        string `json:"body"`
-}
-
 func (d *Dispatcher) dispatch(msg redisbus.Message) {
 	switch msg.Channel {
 	case channelChatMessageNew:
-		d.dispatchChatMessageNew(msg.Payload)
+		d.dispatchChatMessageNew(msg.Channel, msg.Payload)
 	default:
 		// Unreachable: we control the subscribe list. Logged just in case
 		// go-redis ever surfaces a misrouted message.
@@ -197,38 +189,52 @@ func (d *Dispatcher) dispatch(msg redisbus.Message) {
 	}
 }
 
-func (d *Dispatcher) dispatchChatMessageNew(raw []byte) {
-	var p chatMessageNewPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
+// dispatchChatMessageNew fans the raw chat.message.new payload to every
+// target's local sockets, identically to notification's generic path. The
+// recipient is whoever Django listed in targets:[uid,...] — for a 1:1
+// thread that's the other member; the relay never inspects message_id /
+// thread_id / body (the client does).
+func (d *Dispatcher) dispatchChatMessageNew(channel string, raw []byte) {
+	var env targetsEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
 		d.log.Error("chat.message.new: bad payload", "err", err)
 		return
 	}
-	if p.EventID == "" {
+	if env.EventID == "" {
 		d.log.Error("chat.message.new: missing event_id")
 		return
 	}
-	if p.RecipientID == 0 {
-		d.log.Error("chat.message.new: missing recipient_id", "event_id", p.EventID)
+	if len(env.Targets) == 0 {
+		// Django built the publish without targets — every
+		// publish_after_commit call passes targets=[...], so an empty set
+		// is a publisher bug. Log so the miss is visible (mirrors notification).
+		d.log.Warn("chat.message.new: no targets", "event_id", env.EventID)
 		return
 	}
 
-	env := wsproto.Envelope{
-		EventID: p.EventID,
-		Ts:      p.Ts,
-		Type:    channelChatMessageNew,
+	wsEnv := wsproto.Envelope{
+		EventID: env.EventID,
+		Ts:      env.Ts,
+		Type:    channel,
 		Payload: raw,
 	}
 
-	sockets := d.hub.Send(p.RecipientID, env)
+	var sockets int
+	for _, uid := range env.Targets {
+		if uid == 0 {
+			continue
+		}
+		sockets += d.hub.Send(uid, wsEnv)
+	}
 	if sockets == 0 {
 		d.log.Debug("chat.message.new: no local recipient",
-			"event_id", p.EventID,
-			"recipient_id", p.RecipientID,
+			"event_id", env.EventID,
+			"targets", len(env.Targets),
 		)
 		return
 	}
 
-	d.scheduleReceipt(p.EventID, sockets)
+	d.scheduleReceipt(env.EventID, sockets)
 }
 
 // scheduleReceipt fires markDelivered through the bounded worker pool.

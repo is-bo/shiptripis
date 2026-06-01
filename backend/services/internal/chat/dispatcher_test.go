@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,9 +21,9 @@ import (
 // simulate "user is local on this pod" (count > 0) and "user is on
 // another pod or offline" (count == 0) without touching real conns.
 type stubRouter struct {
-	mu       sync.Mutex
-	sockets  map[int64]int // user_id → sockets to report on Send
-	calls    []routerCall
+	mu      sync.Mutex
+	sockets map[int64]int // user_id → sockets to report on Send
+	calls   []routerCall
 }
 
 type routerCall struct {
@@ -88,23 +89,23 @@ func newTestDispatcher(hub *stubRouter, receipts *stubReceipts) *Dispatcher {
 	}
 }
 
-func TestDispatchChatMessageNew_RoutesToRecipient(t *testing.T) {
+func TestDispatchChatMessageNew_RoutesToTargets(t *testing.T) {
 	hub := newStubRouter()
 	hub.sockets[42] = 2 // recipient has two sockets on this pod
 	receipts := &stubReceipts{}
 	d := newTestDispatcher(hub, receipts)
 
-	payload := mustJSON(t, chatMessageNewPayload{
-		EventID:     "evt-1",
-		Ts:          "2026-05-22T12:00:00Z",
-		MessageID:   100,
-		ThreadID:    7,
-		SenderID:    99,
-		RecipientID: 42,
-		Body:        "hello",
+	// Canonical envelope: event_id + ts + targets + the raw chat payload
+	// Django publishes via redis_bus.publish_after_commit.
+	payload := chatEnvelope(t, "evt-1", []int64{42}, map[string]any{
+		"ts":         "2026-05-22T12:00:00Z",
+		"message_id": 100,
+		"thread_id":  7,
+		"sender_id":  99,
+		"body":       "hello",
 	})
 
-	d.dispatchChatMessageNew(payload)
+	d.dispatchChatMessageNew(channelChatMessageNew, payload)
 
 	calls := hub.callsCopy()
 	if len(calls) != 1 {
@@ -117,16 +118,19 @@ func TestDispatchChatMessageNew_RoutesToRecipient(t *testing.T) {
 	if got.Env.EventID != "evt-1" {
 		t.Errorf("envelope event_id = %q, want %q", got.Env.EventID, "evt-1")
 	}
+	if got.Env.Ts != "2026-05-22T12:00:00Z" {
+		t.Errorf("envelope ts = %q, want passthrough", got.Env.Ts)
+	}
 	if got.Env.Type != channelChatMessageNew {
 		t.Errorf("envelope type = %q, want %q", got.Env.Type, channelChatMessageNew)
 	}
-	// The full payload should be passed through unchanged so the client
-	// can pick out message_id, thread_id, body without a follow-up GET.
-	var roundTrip chatMessageNewPayload
+	// The full payload is passed through unchanged so the client can pick
+	// out message_id, thread_id, body without a follow-up GET.
+	var roundTrip map[string]any
 	if err := json.Unmarshal(got.Env.Payload, &roundTrip); err != nil {
 		t.Fatalf("envelope payload unmarshal: %v", err)
 	}
-	if roundTrip.MessageID != 100 || roundTrip.ThreadID != 7 || roundTrip.Body != "hello" {
+	if roundTrip["message_id"] != float64(100) || roundTrip["thread_id"] != float64(7) || roundTrip["body"] != "hello" {
 		t.Errorf("envelope payload roundtrip mismatch: %+v", roundTrip)
 	}
 
@@ -139,17 +143,42 @@ func TestDispatchChatMessageNew_RoutesToRecipient(t *testing.T) {
 	}
 }
 
+func TestDispatchChatMessageNew_FansToEveryTarget(t *testing.T) {
+	hub := newStubRouter()
+	hub.sockets[42] = 1
+	hub.sockets[99] = 1
+	receipts := &stubReceipts{}
+	d := newTestDispatcher(hub, receipts)
+
+	// A multi-member thread publishes targets=[42,99,0]; the 0 is a
+	// defensive guard (skipped) and must not produce a Send.
+	payload := chatEnvelope(t, "evt-multi", []int64{42, 99, 0}, nil)
+	d.dispatchChatMessageNew(channelChatMessageNew, payload)
+
+	calls := hub.callsCopy()
+	if len(calls) != 2 {
+		t.Fatalf("hub.Send called %d times, want 2 (uid 0 skipped)", len(calls))
+	}
+	seen := map[int64]bool{}
+	for _, c := range calls {
+		seen[c.UserID] = true
+	}
+	if !seen[42] || !seen[99] || seen[0] {
+		t.Errorf("Send targeted %v, want {42,99} and not 0", seen)
+	}
+	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 1 }) {
+		t.Errorf("receipts.MarkDelivered called %d times, want 1", receipts.called.Load())
+	}
+}
+
 func TestDispatchChatMessageNew_NoLocalSocketsSkipsReceipt(t *testing.T) {
 	hub := newStubRouter() // sockets map empty → Send returns 0
 	receipts := &stubReceipts{}
 	d := newTestDispatcher(hub, receipts)
 
-	payload := mustJSON(t, chatMessageNewPayload{
-		EventID:     "evt-no-local",
-		RecipientID: 42,
-	})
+	payload := chatEnvelope(t, "evt-no-local", []int64{42}, nil)
 
-	d.dispatchChatMessageNew(payload)
+	d.dispatchChatMessageNew(channelChatMessageNew, payload)
 
 	if calls := hub.callsCopy(); len(calls) != 1 {
 		t.Fatalf("hub.Send should still be called once to probe, got %d", len(calls))
@@ -170,13 +199,8 @@ func TestDispatchChatMessageNew_DropsBadPayloads(t *testing.T) {
 		payload []byte
 	}{
 		{"invalid json", []byte("not json")},
-		{"missing event_id", mustJSON(t, chatMessageNewPayload{
-			RecipientID: 42, // event_id intentionally absent
-		})},
-		{"missing recipient_id", mustJSON(t, chatMessageNewPayload{
-			EventID: "evt-no-recip",
-			// RecipientID = 0
-		})},
+		{"missing event_id", chatEnvelope(t, "", []int64{42}, nil)},
+		{"empty targets", chatEnvelope(t, "evt-no-targets", nil, nil)},
 	}
 
 	for _, tc := range cases {
@@ -186,7 +210,7 @@ func TestDispatchChatMessageNew_DropsBadPayloads(t *testing.T) {
 			receipts := &stubReceipts{}
 			d := newTestDispatcher(hub, receipts)
 
-			d.dispatchChatMessageNew(tc.payload)
+			d.dispatchChatMessageNew(channelChatMessageNew, tc.payload)
 
 			if calls := hub.callsCopy(); len(calls) != 0 {
 				t.Errorf("hub.Send called %d times for %s, want 0",
@@ -207,14 +231,11 @@ func TestDispatchChatMessageNew_ReceiptErrorIsLoggedNotPropagated(t *testing.T) 
 	receipts := &stubReceipts{err: errors.New("postgres exploded")}
 	d := newTestDispatcher(hub, receipts)
 
-	payload := mustJSON(t, chatMessageNewPayload{
-		EventID:     "evt-receipt-fails",
-		RecipientID: 42,
-	})
+	payload := chatEnvelope(t, "evt-receipt-fails", []int64{42}, nil)
 
 	// Should not panic. The dispatcher only logs the error — the WS
 	// fan-out already succeeded so the user got the message.
-	d.dispatchChatMessageNew(payload)
+	d.dispatchChatMessageNew(channelChatMessageNew, payload)
 
 	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 1 }) {
 		t.Errorf("receipts.MarkDelivered should still have been attempted")
@@ -240,6 +261,19 @@ func TestDispatch_UnknownChannel(t *testing.T) {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// chatEnvelope builds the canonical Django publish shape:
+// {event_id, ts, targets, ...extra}. Mirrors redis_bus.publish_after_commit
+// so the test exercises exactly what the dispatcher receives in prod.
+func chatEnvelope(t *testing.T, eventID string, targets []int64, extra map[string]any) []byte {
+	t.Helper()
+	env := map[string]any{"targets": targets}
+	if eventID != "" {
+		env["event_id"] = eventID
+	}
+	maps.Copy(env, extra)
+	return mustJSON(t, env)
+}
 
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()

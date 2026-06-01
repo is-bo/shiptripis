@@ -3,9 +3,9 @@
 // V1 scope (stateless relay — chat_message persistence is Claude A's
 // scope until the schema lands):
 //   - Subscribes to Redis pub/sub `chat.message.new` from Django.
-//   - Holds Flutter client WS sockets keyed by user_id; routes to the
-//     single `recipient_id` in the payload (Django picks the other
-//     thread member at publish time, same pattern as offer.created).
+//   - Holds Flutter client WS sockets keyed by user_id; routes generically
+//     by the canonical targets:[uid,...] field every publish_after_commit
+//     envelope carries (same path as the notification service).
 //   - Writes `delivered:<event_id>` 60s + updates `core_published_event`
 //     so the G6b detection-only outbox sees the receipt.
 //
@@ -34,6 +34,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -119,6 +120,11 @@ func run() error {
 	hub := chat.NewHub()
 	dispatcher := chat.NewDispatcher(rdb, pool, hub, log, m)
 
+	// connWG tracks in-flight WS handler goroutines. Drained explicitly on
+	// shutdown (below) before the deferred rdb.Close()/pool.Close(), since
+	// hijacked WS conns are invisible to srv.Shutdown.
+	var connWG sync.WaitGroup
+
 	healthH := health.New(health.Config{Logger: log})
 	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
 	healthH.Register("redis", func(ctx context.Context) error {
@@ -132,7 +138,7 @@ func run() error {
 	// Mount explicitly on our service mux so the scrape target is the
 	// admin port, not the default mux that's never served.
 	mux.Handle("/debug/vars", expvar.Handler())
-	mux.HandleFunc("/ws/chat", chat.WSHandler(rootCtx, validator, hub, log))
+	mux.HandleFunc("/ws/chat", chat.WSHandler(rootCtx, validator, hub, log, &connWG))
 
 	srv := &http.Server{
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),
@@ -186,6 +192,28 @@ func run() error {
 	case <-shutdownCtx.Done():
 		log.Warn("dispatcher did not exit before shutdown deadline")
 	}
+	// Wait for in-flight WS handlers (hijacked conns srv.Shutdown can't see)
+	// to finish before the deferred rdb/pool close fire. rootCtx is already
+	// cancelled here, so each conn.Read has unblocked. Bounded by shutdownCtx.
+	if !waitWithCtx(shutdownCtx, &connWG) {
+		log.Warn("ws handlers did not drain before shutdown deadline")
+	}
 	log.Info("chat service stopped")
 	return fatal
+}
+
+// waitWithCtx blocks until wg is done or ctx expires. Returns true if the
+// WaitGroup drained, false if the context deadline hit first.
+func waitWithCtx(ctx context.Context, wg *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

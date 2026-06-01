@@ -1,9 +1,26 @@
 # Go services — handover
 
-Last updated: 2026-05-15. You are **Claude B** (Go side). Pair with Claude A
+Last updated: 2026-05-30. You are **Claude B** (Go side). Pair with Claude A
 (Django + Flutter). Before touching anything, read `../../CLAUDE.md` end to
-end and `../../ARCHITECTURE.md` §3–§7. This file is the Go-specific
-quickstart on top of those.
+end (especially §0a open notes, §2 guardrails G1–G6b, §3 pool budget) and
+`../../ARCHITECTURE.md` §3–§7. This file is the Go-specific quickstart on top
+of those — when it disagrees with the code, **the code wins**; fix this file.
+
+---
+
+## 30-second orientation
+
+The Go workspace is **feature-complete for the V1 spine** and was green
+(`go build`/`vet`/`test -race ./...`) as of `002b969` — re-run the day-one
+checklist to confirm before trusting it. Three services run:
+`notification`, `chat`, `kyc`. None is on Django's critical path — Django
+publishes to Redis after commit; Go subscribes. No subscriber = events go to
+void, Django keeps working.
+
+There is **no unblocked feature work** on the board right now. The open items
+(see the blocked-on-Islam table) all wait on Django schema or shared infra.
+The highest-value *unblocked* work is **test coverage** for the packages that
+the hardening pass left untested — see "Known gaps".
 
 ---
 
@@ -11,144 +28,193 @@ quickstart on top of those.
 
 ```
 backend/services/
-├── cmd/                # service entrypoints (main.go per binary)
-│   ├── chat/           # empty — schema not landed
-│   ├── kyc/            # ✅ multipart upload + S3, NoopRecorder stub
-│   └── notification/   # ✅ WS hub + Redis pub/sub consumer
+├── cmd/                # service entrypoints (main.go = wiring only)
+│   ├── chat/           # ✅ WS relay for chat.message.new
+│   ├── kyc/            # ✅ multipart upload + S3 + real gRPC client
+│   └── notification/   # ✅ WS hub + 16-channel pub/sub + FCM (gated)
 ├── internal/           # service-private code (one pkg per service)
-│   ├── chat/           # empty
-│   ├── kyc/            # handler, client (Recorder iface), NoopRecorder
-│   └── notification/   # hub, dispatcher, handler, presence
-├── pkg/                # shared libs across services
-│   ├── auth/           # HS256 JWT validator + 30s leeway (G2)
-│   ├── config/         # env loaders → typed structs (LoadPostgres, …)
+│   ├── chat/           # hub, dispatcher (+test), handler  — stateless relay
+│   ├── kyc/            # handler, client iface, grpc_client, kycpb/ (stubs)
+│   └── notification/   # hub, dispatcher, handler, presence, fcm
+├── pkg/                # shared libs
+│   ├── auth/           # HS256 JWT validator + 30s leeway (G2) — tested
+│   ├── config/         # env loaders → typed structs
 │   ├── db/             # pgxpool wrapper
 │   ├── health/         # /healthz + /readyz
 │   ├── logger/         # slog setup
-│   ├── redisbus/       # pub/sub + SetEX/Del helpers + drop-on-overflow
-│   ├── storage/        # S3-compat client (G4, no MinIO-isms)
+│   ├── metrics/        # expvar-backed Group (Counter/Gauge/GaugeAdd) — NEW
+│   ├── redisbus/       # pub/sub + SetEX/Del + streams + drop-on-overflow
+│   ├── storage/        # S3-compat client (G4, no MinIO-isms) — tested
 │   └── wsproto/        # coder/websocket wrapper, ping interval = 10s
 └── go.mod              # module: shiptrip
 ```
 
 ---
 
-## What's live
+## What's live (current, not the 2026-05-15 version)
 
-### `cmd/notification` — done, single vertical slice
+### `cmd/notification` — done, all 16 channels
 
-- WS upgrade → registers a `*wsproto.Conn` in the per-pod `Hub` keyed by
-  `user_id` (decoded from the JWT bearer).
-- Subscribes to Redis pub/sub channel `offer.accepted`; on each event:
-  fans out to **sender + traveler** sockets owned by this pod, writes
-  `delivered:<event_id>` (60s TTL), back-fills
-  `core_published_event.delivered_at`. This is the G1 + G6b path.
-- Presence (`presence:<user_id>`, 15s TTL) refreshed by an independent
-  5s ticker per socket — **tighter than the 10s WS ping** by design
-  (CLAUDE.md §5).
-- `markDelivered` uses a **detached `context.Background()`** with a 5s
-  timeout so shutdown mid-fanout doesn't abort the delivery receipt
-  UPDATE (which would otherwise make the G6b sweep flag a real delivery
-  as a miss).
-- `main.go` derives `rootCtx` from `signalCtx` via
-  `context.WithCancel(signalCtx)` and calls `rootCancel()` on any
-  unexpected leg exit so HTTP + dispatcher always tear down together.
+- WS upgrade → registers `*wsproto.Conn` in the per-pod `Hub` keyed by
+  `user_id` (from the JWT bearer).
+- Subscribes to **all 16 Django channels** (`dispatcher.go:subscribeChannels`,
+  mirrors `monolith/apps/core/channels.py`). Routing is **generic**: every
+  envelope carries `targets:[uid,...]` (attached by
+  `redis_bus.publish_after_commit`); `dispatch` unmarshals only
+  `targetsEnvelope{event_id, targets}` and fans the **raw payload** to each
+  target's local sockets. Payload semantics (match_id, offer_id, code) are
+  mobile's concern — Go never parses them. Per-channel structs were deleted;
+  do not reintroduce them.
+- G1 + G6b receipt path: writes `delivered:<event_id>` (60s TTL) + back-fills
+  `core_published_event.delivered_at`, through a bounded receipt pool.
+- **Bounded dispatch worker pool** (`dispatchSem`, cap 128) feeds
+  **bounded receipt pool** (`receiptSem`, cap 64). Both drop-on-saturation
+  with `event_id` logged + metrics counters. `Run` drains
+  `dispatchWG` *before* `receiptWG` (a late dispatch can still enqueue a
+  receipt) — see the `defer` ordering, don't swap it.
+- **SetEX retry**: one 100 ms retry on the `delivered:<event_id>` write before
+  giving up (a Redis blip in the FCM 2 s grace window would otherwise cause a
+  duplicate push). Metered `*_delivered_setex_failures_total` / `_final_total`.
+- Presence (`presence:<user_id>`, 15 s TTL) refreshed by a 5 s ticker per
+  socket — **tighter than the 10 s WS ping** by design (CLAUDE.md §5). Initial
+  refresh on upgrade **retries once** after 50 ms; failure is metered but does
+  **not** fail the upgrade (FCM fallback covers the gap; aborting would make a
+  transient Redis issue more user-visible than the duplicate it prevents).
+- **FCM consumer scaffolded, gated behind `FCM_ENABLED` (default false).**
+  `LogOnlySender` stub; `FCMSender` is the prod swap point. Consumer flow
+  (`XReadGroup` → 2 s wait → check `delivered:<event_id>` → send/skip → `XAck`)
+  + `XAUTOCLAIM` sweeper are wired and shutdown-drained. Blocked on Islam's
+  `fcm_token` schema + a Django publisher to the `notif:fcm` stream.
 
-**Deferred:**
-- FCM fallback (Redis stream `notif:fcm`, 2s wait, check delivered key)
-  — blocked on `fcm_token` schema + routing strategy decision from
-  Islam.
-- All other event types (`offer.countered`, `match.completed`,
-  `payment.succeeded`, etc.) — vertical slice only for now.
+### `cmd/chat` — done, stateless relay
+
+- WS relay for `chat.message.new` only. **Django owns persistence**; this
+  service just fans the event to the targets' local sockets. Per-pod `Hub`
+  mirrors notification's but is deliberately **not shared** (clean lifecycle
+  boundary; if a third WS service appears, extract `pkg/wshub` then).
+- **Generic targets routing** (mirrors notification): unmarshals only
+  `targetsEnvelope{event_id, ts, targets}` and fans the raw payload to each
+  target's local sockets. Django attaches `targets:[uid,...]` to every publish
+  via `redis_bus.publish_after_commit`; the relay never inspects message_id /
+  thread_id / body. The old per-channel `recipient_id` struct was removed — do
+  not reintroduce it (it broke the one-contract invariant notification already
+  follows).
+- `dispatcher.go` uses unexported `router` + `receiptStore` interface seams
+  (with `dbReceiptStore` as the production impl) so unit tests inject stubs (no
+  Postgres/Redis needed). **This is the pattern to copy** — notification now has
+  the same seams.
+- No presence loop (notification owns `presence:<uid>`). A user with a chat WS
+  but no notification WS gets a duplicate FCM for chat events — accepted V1
+  tradeoff.
+- Tests cover targets routing, multi-target fan-out (with uid 0 skipped),
+  no-local-sockets skip, bad-payload/empty-targets drop, receipt-error logging,
+  unknown-channel dispatch.
 
 ### `cmd/kyc` — done, wired end-to-end
 
-- `POST /kyc/submit` (multipart): bearer auth → `MaxBytesReader(25 MiB)`
-  → `ParseMultipartForm(16 MiB)` → validates `document_type` +
-  32-char-hex `idempotency_key` → streams each image to S3 under
-  `kyc-docs/<user_id>/<idempotency_key>-<field>.<ext>` (deterministic,
-  retries overwrite, no orphans) → calls `Recorder.RecordSubmission`.
-- On RecordSubmission failure: `cleanupOrphans` best-effort deletes the
-  three S3 objects on a detached 5s context.
-- Recorder is `kyc.GRPCClient` — generated stubs at
-  `internal/kyc/kycpb/`, hand-written wrapper at `internal/kyc/grpc_client.go`.
-  Dials Django at `KYC_GRPC_TARGET` (e.g. `django:50051`) on boot with
-  `WithBlock`-equivalent readiness probe so misconfig fails fast.
-- Auth: `GRPC_AUTH_MODE=bearer` + `GRPC_BEARER_TOKEN` shared with
-  Django's `runkycgrpc` interceptor. mTLS (CLAUDE.md §G5) still TODO on
-  both sides — wait for cert-manager / mkcert pipeline.
-- Image constraints: ≤8 MiB each, JPEG/PNG only; the storage client
-  enforces overflow on the write path.
-- `kyc.NoopRecorder` is retained for unit-test scaffolding only.
+- `POST /kyc/submit` (multipart): bearer auth → size caps → validates
+  `document_type` + 32-char-hex `idempotency_key` → streams each image to S3
+  under `kyc-docs/<user_id>/<idempotency_key>-<field>.<ext>` (deterministic;
+  retries overwrite, no orphans) → calls `Recorder.RecordSubmission`. Every
+  uploaded key is tracked; deferred cleanup is gated on a success flag, so a
+  later-image failure can't orphan an earlier upload. `RecordSubmission` is
+  fenced by a 10 s `context.WithTimeout`.
+- Recorder is the **real gRPC client** (`internal/kyc/grpc_client.go` +
+  generated `internal/kyc/kycpb/`): keepalive (30 s/10 s, `PermitWithoutStream`),
+  retry policy (4 attempts on `UNAVAILABLE`/`DEADLINE_EXCEEDED`, safe because
+  Django dedupes on `idempotency_key`), 16 MiB max msg both sides (G5).
+  `KYC_GRPC_TARGET` is **required at boot** — missing config fails start.
+  `NoopRecorder` retained for unit-test scaffolding only.
+- Auth: `GRPC_AUTH_MODE` defaults to `mtls` (prod); **`bearer` is dev-only** and
+  must be set explicitly with `GRPC_BEARER_TOKEN`. mTLS is still a TODO on both
+  sides (`grpc_client.go` returns an explicit error in `mtls` mode today).
 
 **Codegen:** `task contract:go-grpc` regenerates `internal/kyc/kycpb/`;
-`task check-drift` runs it and `git diff --exit-code`s the result, so
-proto changes that don't ship regenerated stubs fail CI.
+`task check-drift` runs it + `git diff --exit-code`, so proto changes that
+don't ship regenerated stubs fail CI.
 
-### `cmd/chat` — not started
+---
 
-Blocked on the `chat_message` / `chat_thread` schema from Islam.
-sqlc.yaml has the slot reserved. When unblocked: model after
-`cmd/notification` (same Hub + WS upgrade pattern + Redis fan-out), but
-this one persists every message to Postgres via sqlc.
+## Known gaps (highest-value unblocked work)
+
+`go test -race ./...` is green, but three packages where the hardening pass
+added real logic have **no tests**:
+
+| Package | Untested logic |
+|---|---|
+| `internal/notification` | dispatch pool saturation/drop, SetEX retry, targets routing, receipt scheduling |
+| `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_*` counters |
+| `pkg/metrics` | `Counter`/`Gauge`/`sanitize` contract everything else meters against |
+
+To test the notification SetEX-retry you must first give the dispatcher the
+same `router` + `receiptStore` seams `chat` already has (mechanical, behaviour-
+preserving): copy the `router`/`receiptStore` interfaces and `dbReceiptStore`
+struct from `internal/chat/dispatcher.go`, change `Dispatcher.hub` to the
+`router` type, move the SetEX-retry + `UPDATE core_published_event` body into
+`dbReceiptStore.MarkDelivered`, then model the test on
+`internal/chat/dispatcher_test.go` (stubRouter / stubReceipts / `newTestDispatcher`).
+To cover the retry *inside* the store (chat's is currently untested too), give
+`dbReceiptStore` micro-seams over `SetEX` and `Exec` so a stub can fail the
+first SetEX and assert the `*_delivered_setex_failures_*` counters move.
 
 ---
 
 ## Conventions that survive across sessions
 
-These are not in CLAUDE.md because they're Go-side patterns, not
-project-wide rules. Follow them so the services stay consistent.
+Go-side patterns, not project-wide rules. Follow them so the services stay
+consistent.
 
-- **Drop-on-overflow back-pressure.** `pkg/redisbus`, `pkg/wsproto`, and
-  `notification.Hub.Send` all use bounded channels + non-blocking sends.
-  Never `<-chan` with `select` that blocks; always `default:` drop +
-  log. A slow consumer must NOT stall a fast producer.
-- **`sync.Once` for `Close()`.** Any type with a `Close()` method that
-  cleans up background goroutines uses `sync.Once` so double-close is
-  safe. See `redisbus.Client.Close`.
-- **`signal.NotifyContext` + derived `rootCtx`.** Every `main.go` looks
-  the same: build `signalCtx` for SIGINT/SIGTERM, derive `rootCtx` via
-  `WithCancel`, defer `rootCancel`. Goroutines select on `rootCtx.Done()`
-  not `signalCtx.Done()` so any leg can pull the plug.
-- **Detached contexts for delivery receipts.** Anything that writes "I
-  delivered X" (Redis `delivered:`, Postgres `delivered_at`,
-  S3 cleanup) uses `context.WithTimeout(context.Background(), …)`. A
-  request being cancelled MUST NOT cancel the bookkeeping.
-- **Per-service `*_DB_MAX_CONNS` env var.** Pool sizes are budgeted in
-  CLAUDE.md §3. Every `main.go` defines its own const +
-  `LoadPostgres("FOO_DB_MAX_CONNS", N)` with the budgeted default.
-  Don't ad-hoc bump the default — update §3 first.
-- **All env reads via `pkg/config`.** Never `os.Getenv` directly in
-  `main.go` or handlers. Use `config.String/HTTPAddr/LoadX`.
-- **Hand-written proto-mirror types until codegen lands.** See
-  `internal/kyc/client.go` — `DocumentType`/`Status` are string consts
-  that mirror the proto enum names. When codegen lands, replace by
-  wrapping the generated stub, don't rewrite the call sites.
-- **No business logic in `cmd/`.** `main.go` is wiring only:
-  load config → build pool/store/validator → assemble handler →
-  serve. Everything testable lives in `internal/<service>/`.
+- **Generic targets routing, never per-channel structs.** Every Django publish
+  carries `targets:[uid,...]`. Route by that. Do not unmarshal payload bodies
+  in Go (CLAUDE.md §0a closed this debate).
+- **Drop-on-overflow back-pressure, everywhere.** `pkg/redisbus`,
+  `pkg/wsproto`, `Hub.Send`, and both dispatch/receipt pools use bounded
+  channels + non-blocking sends with a `default:` drop + log (+ a metrics
+  counter + `event_id` where available). A slow consumer must never stall a
+  fast producer.
+- **Metrics via `pkg/metrics`, guarded by `if m != nil`.** Counters are
+  monotonic; names are folded labels (`pubsub_drops_<channel>`) and sanitized
+  to `[a-z0-9_]` so the future Prometheus swap is one file. Expose
+  `/debug/vars` on the service mux (both `main.go`s do).
+- **`sync.Once` for `Close()`** on any type that tears down background
+  goroutines (see `redisbus.Subscription.Close`).
+- **`signal.NotifyContext` + derived `rootCtx`.** Every `main.go`: build
+  `signalCtx` for SIGINT/SIGTERM, derive `rootCtx` via `WithCancel`, defer
+  `rootCancel`. Goroutines select on `rootCtx.Done()` so any leg can pull the
+  plug.
+- **Detached contexts for delivery receipts.** Anything writing "I delivered X"
+  (Redis `delivered:`, Postgres `delivered_at`, S3 cleanup, presence Drop)
+  uses `context.WithTimeout(context.Background(), …)`. A cancelled request must
+  not cancel the bookkeeping.
+- **Per-service `*_DB_MAX_CONNS`** with the CLAUDE.md §3 budgeted default. Don't
+  ad-hoc bump it — update §3 first.
+- **All env reads via `pkg/config`.** Never `os.Getenv` in `main.go`/handlers.
+- **No business logic in `cmd/`.** `main.go` is wiring only. Everything testable
+  lives in `internal/<service>/` behind interface seams.
 
 ## Conventions NOT to copy
 
 - Don't add a `pkg/ratelimit/`. Rate limiting is at Caddy
-  (`docs/decisions/0001-gateway-caddy.md` + project memory).
-- Don't write SQL migrations from Go. Tell Islam what columns you need;
-  he writes the Django migration; you regenerate via sqlc.
+  (`docs/decisions/0001-gateway-caddy.md`).
+- Don't write SQL migrations from Go. Tell Islam the columns you need; he writes
+  the Django migration; you regenerate via sqlc.
 - Don't add a 6th Go service (CLAUDE.md §5).
+- Don't reintroduce per-channel payload structs in the dispatcher.
 
 ---
 
 ## Day-one checklist for a fresh Claude B session
 
-1. `cd backend/services && go build ./... && go vet ./...` — must be clean.
-2. `gofmt -l .` — must be empty (`pkg/auth/jwt_test.go` may show; that's
-   pre-existing drift, leave it).
-3. Skim `cmd/notification/main.go` and `cmd/kyc/main.go` to see the
-   wiring template.
-4. Skim `internal/notification/dispatcher.go` for the G1+G6b pattern;
-   `internal/kyc/handler.go` for the multipart-upload pattern.
-5. Check `git log --oneline -20` for what landed since last session.
-6. Check `../../.claude/MEMORY.md` for cross-session decisions.
+1. `git pull` then `cd backend/services && go build ./... && go vet ./...` —
+   must be clean.
+2. `go test -race -count=1 ./...` — `chat`, `auth`, `storage` should be `ok`;
+   `notification`, `redisbus`, `metrics` show `[no test files]` (the gap).
+3. `gofmt -l .` — must be empty.
+4. Skim `cmd/notification/main.go` + `cmd/kyc/main.go` for the wiring template;
+   `internal/notification/dispatcher.go` for the G1+G6b + pool pattern;
+   `internal/chat/dispatcher.go` for the test-seam pattern.
+5. `git -C ../.. log --oneline -20` for what landed since last session.
+6. Read `../../TASKS.md` (Alaa section) + `../../.claude/MEMORY.md`.
 
 ---
 
@@ -156,9 +222,18 @@ project-wide rules. Follow them so the services stay consistent.
 
 | # | Item | Why we're blocked |
 |---|---|---|
-| 1 | `chat_message` / `chat_thread` schema | `cmd/chat` is empty |
-| 2 | `fcm_token` schema + routing decision | notification FCM fallback can't ship |
-| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC + future Go-↔-Go calls run on bearer until this lands; CLAUDE.md §G5 |
+| 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then; flip `FCM_ENABLED=true` + wire a real `FCMSender` once it lands |
+| 2 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
+| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC runs on dev bearer; `grpc_client.go` errors in `mtls` mode until certs exist (CLAUDE.md §G5). Shared scope — coordinate, get explicit approval |
 
-When any of these lands, **update this table** and the §0 handoff in
-`../../CLAUDE.md` in the same commit as the Go work that consumes it.
+When any lands, **update this table** and the §0a handoff in `../../CLAUDE.md`
+in the same commit as the Go work that consumes it.
+
+---
+
+## Repo state at handoff
+
+- Branch `main`, in sync with `origin/main` at `002b969`.
+- Untracked tooling side-state present (`.codegraph/`, `.cursor/`, `.mcp.json`,
+  `AGENTS.md`, `opencode.jsonc`) — editor/agent config, **not project work**.
+  Leave alone or gitignore; don't commit as part of a feature change.

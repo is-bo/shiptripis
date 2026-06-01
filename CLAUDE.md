@@ -9,6 +9,30 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**WS handler shutdown drain (2026-06-01).** Both WS services now track in-flight
+WS handler goroutines with a per-service `sync.WaitGroup` (`connWG`) passed into
+`WSHandler`. Hijacked WS conns are invisible to `http.Server.Shutdown`, so
+without this the deferred `rdb.Close()`/`pool.Close()` could race a handler's
+`presence.Drop` still in flight. On shutdown `main` waits `connWG` (bounded by
+`shutdownTimeout` via a `waitWithCtx` helper) after `srv.Shutdown` and before the
+close defers fire. `rootCtx` is already cancelled at that point so every
+`conn.Read` has unblocked. `WSHandler` signatures gained a `*sync.WaitGroup`
+param (nil opts out, for tests).
+
+**Chat dispatcher aligned to generic `targets` routing (2026-06-01).** Chat was
+still routing `chat.message.new` by a per-channel `recipient_id` field it
+unmarshalled from the payload, while notification had already migrated to the
+canonical `targets:[uid,...]` envelope that `redis_bus.publish_after_commit`
+attaches to *every* publish. Since the Django chat publisher doesn't exist yet
+(awaits the `chat_message` schema), this wasn't breaking anything — but it was a
+latent trap: a publisher built the normal way (via `publish_after_commit`) would
+have carried `targets`, not `recipient_id`, and chat would have silently dropped
+every message. Now chat unmarshals `targetsEnvelope{event_id, ts, targets}` and
+fans the raw payload to each target's local sockets, identical to notification.
+The per-channel `chatMessageNewPayload` struct was deleted. **Claude A:** when
+you wire the chat publisher, pass `targets=[other_member_uid]` to
+`publish_after_commit` like every other channel — no `recipient_id` needed.
+
 **Production-grade hardening pass (2026-05-28, "this is a final product not a
 demo" reframe).** Promoted five "V1-acceptable" trade-offs from the senior
 review to must-fix because demo-grade silences would surface as real user-
