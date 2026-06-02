@@ -137,25 +137,24 @@ don't ship regenerated stubs fail CI.
 
 ## Known gaps (highest-value unblocked work)
 
-`go test -race ./...` is green, but three packages where the hardening pass
-added real logic have **no tests**:
+**Test-coverage gap closed (2026-06-01).** The three previously-untested
+packages now have unit tests; `go test -race ./...` exercises them:
 
-| Package | Untested logic |
+| Package | Now covered |
 |---|---|
-| `internal/notification` | dispatch pool saturation/drop, SetEX retry, targets routing, receipt scheduling |
-| `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_*` counters |
-| `pkg/metrics` | `Counter`/`Gauge`/`sanitize` contract everything else meters against |
+| `internal/notification` | targets routing (100%), multi-target fan-out w/ uid-0 skip, bad-envelope drops, dispatch + receipt pool saturation/drop, ctx-cancel on saturated pool, `dbReceiptStore.MarkDelivered` SetEX retry (succeed-on-2nd / both-fail / cancel-during-backoff) |
+| `internal/chat` | same SetEX-retry coverage added (`receipt_test.go`) + UPDATE-error metering; routing already covered |
+| `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_total` / per-channel counters, nil-metrics safety, unparseable-payload tolerance |
+| `pkg/metrics` | `Counter`/`Gauge`/`GaugeAdd`/`Sanitize` + folded-label names (100%) |
 
-To test the notification SetEX-retry you must first give the dispatcher the
-same `router` + `receiptStore` seams `chat` already has (mechanical, behaviour-
-preserving): copy the `router`/`receiptStore` interfaces and `dbReceiptStore`
-struct from `internal/chat/dispatcher.go`, change `Dispatcher.hub` to the
-`router` type, move the SetEX-retry + `UPDATE core_published_event` body into
-`dbReceiptStore.MarkDelivered`, then model the test on
-`internal/chat/dispatcher_test.go` (stubRouter / stubReceipts / `newTestDispatcher`).
-To cover the retry *inside* the store (chat's is currently untested too), give
-`dbReceiptStore` micro-seams over `SetEX` and `Exec` so a stub can fail the
-first SetEX and assert the `*_delivered_setex_failures_*` counters move.
+Both `dbReceiptStore`s now expose `keyExpirer` + `receiptExecer` micro-seams
+(behaviour-preserving) so the SetEX retry is testable without live Redis/PG.
+`metrics.Sanitize` was exported so tests can reconstruct a published var's key.
+
+What still can't be unit-tested without integration infra (live Redis/PG/gRPC):
+`Dispatcher.Run`, `redisbus.Subscribe`/`pump`, the FCM consumer's
+`XReadGroup`/`Sweep` loop, and `kyc.GRPCClient` dial. These are integration-test
+territory (a `docker compose` harness), tracked separately — not a unit gap.
 
 ---
 
@@ -207,8 +206,9 @@ consistent.
 
 1. `git pull` then `cd backend/services && go build ./... && go vet ./...` —
    must be clean.
-2. `go test -race -count=1 ./...` — `chat`, `auth`, `storage` should be `ok`;
-   `notification`, `redisbus`, `metrics` show `[no test files]` (the gap).
+2. `go test -race -count=1 ./...` — `chat`, `notification`, `auth`, `storage`,
+   `redisbus`, `metrics` should be `ok`. The `cmd/*`, `internal/kyc`, and the
+   pure-wiring `pkg/*` (config/db/health/logger/wsproto) show `[no test files]`.
 3. `gofmt -l .` — must be empty.
 4. Skim `cmd/notification/main.go` + `cmd/kyc/main.go` for the wiring template;
    `internal/notification/dispatcher.go` for the G1+G6b + pool pattern;

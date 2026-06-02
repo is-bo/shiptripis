@@ -137,7 +137,7 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 	return &Dispatcher{
 		rdb:         rdb,
 		hub:         hub,
-		receipts:    &dbReceiptStore{rdb: rdb, pool: pool, log: log, metrics: m},
+		receipts:    newDBReceiptStore(rdb, pool, log, m),
 		log:         log,
 		metrics:     m,
 		dispatchSem: make(chan struct{}, dispatchConcurrency),
@@ -296,11 +296,46 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 // pod's UPDATE already filled delivered_at). That's the intended outcome
 // and not worth logging. Mirrors chat's dbReceiptStore so the G6b sweep
 // treats either service's delivery identically.
+//
+// keyExpirer + receiptExecer are micro-seams over the Redis SETEX and the
+// Postgres UPDATE so a test can fail the first SETEX and assert the retry
+// + its counters. Production passes *redisbus.Client and a pool adapter
+// (newDBReceiptStore); neither concrete method signature changes.
 type dbReceiptStore struct {
-	rdb     *redisbus.Client
-	pool    *pgxpool.Pool
+	rdb     keyExpirer
+	exec    receiptExecer
 	log     *slog.Logger
 	metrics *metrics.Group
+}
+
+// keyExpirer is the SETEX surface (satisfied by *redisbus.Client).
+type keyExpirer interface {
+	SetEX(ctx context.Context, key string, value any, ttl time.Duration) error
+}
+
+// receiptExecer runs the delivered_at UPDATE. The pool adapter returns
+// only error; rows-affected isn't acted on (0 is a valid second-pod case).
+type receiptExecer interface {
+	exec(ctx context.Context, eventID string) error
+}
+
+// poolExecer adapts *pgxpool.Pool to receiptExecer, keeping the SQL in one
+// place and pgconn out of the seam.
+type poolExecer struct{ pool *pgxpool.Pool }
+
+func (p poolExecer) exec(ctx context.Context, eventID string) error {
+	_, err := p.pool.Exec(ctx,
+		`UPDATE core_published_event
+		    SET delivered_at = now()
+		  WHERE event_id = $1
+		    AND delivered_at IS NULL`,
+		eventID,
+	)
+	return err
+}
+
+func newDBReceiptStore(rdb *redisbus.Client, pool *pgxpool.Pool, log *slog.Logger, m *metrics.Group) *dbReceiptStore {
+	return &dbReceiptStore{rdb: rdb, exec: poolExecer{pool: pool}, log: log, metrics: m}
 }
 
 func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) error {
@@ -329,13 +364,7 @@ func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) erro
 		}
 	}
 
-	_, err := s.pool.Exec(ctx,
-		`UPDATE core_published_event
-		    SET delivered_at = now()
-		  WHERE event_id = $1
-		    AND delivered_at IS NULL`,
-		eventID,
-	)
+	err := s.exec.exec(ctx, eventID)
 	if err != nil && s.metrics != nil {
 		s.metrics.Counter("receipt_update_failures_total", 1)
 	}
