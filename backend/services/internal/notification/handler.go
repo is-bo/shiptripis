@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 
 	"shiptrip/pkg/auth"
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/wsproto"
 )
 
@@ -18,9 +19,23 @@ import (
 // the key never gaps even if one refresh fails.
 const presenceRefreshInterval = 5 * time.Second
 
+// initialPresenceRetryDelay is the gap before retrying the very first
+// presence.Refresh on a new WS connection. If both attempts fail we
+// proceed with the upgrade anyway — the per-tick refresh loop will
+// rehydrate the key within 5s and Django doesn't gate any user-visible
+// flow on presence (FCM fallback covers the gap). We log + meter the
+// failure so a Redis brown-out is visible without burning sockets.
+const initialPresenceRetryDelay = 50 * time.Millisecond
+
 // WSHandler returns an http.HandlerFunc that upgrades to WS, registers
 // the connection with the hub + presence, and runs the read loop until
 // the client disconnects or the parent context is cancelled.
+//
+// connWG tracks in-flight handler goroutines so main can wait for them to
+// finish their presence.Drop before tearing down Redis/Postgres on
+// shutdown. Hijacked WS conns are invisible to http.Server.Shutdown, so
+// without this the deferred rdb.Close()/pool.Close() could race a Drop
+// still in flight. Pass nil to opt out (tests).
 //
 // The Flutter client speaks a one-way channel for now: server → client
 // only. Inbound frames are read so the library can process pong control
@@ -32,6 +47,8 @@ func WSHandler(
 	hub *Hub,
 	presence *Presence,
 	log *slog.Logger,
+	m *metrics.Group,
+	connWG *sync.WaitGroup,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsproto.Upgrade(w, r, validator, log)
@@ -41,6 +58,13 @@ func WSHandler(
 			return
 		}
 
+		// Track this handler for shutdown draining. Add only after a
+		// successful upgrade so a rejected handshake doesn't skew the count.
+		if connWG != nil {
+			connWG.Add(1)
+			defer connWG.Done()
+		}
+
 		// Tie the connection lifetime to both the request ctx and the
 		// service-level shutdown ctx. The request ctx alone is not enough:
 		// some HTTP servers cancel it on upgrade completion.
@@ -48,9 +72,27 @@ func WSHandler(
 		defer cancel()
 
 		hub.Register(conn)
+		// One retry on the initial presence write. A first-tick failure
+		// would otherwise leave the user with a live WS but no
+		// presence:<uid> key — the FCM consumer would then push a
+		// duplicate for ~5s until the periodic loop catches up.
 		if err := presence.Refresh(ctx, conn.UserID); err != nil {
-			log.Warn("initial presence refresh failed",
+			if m != nil {
+				m.Counter("presence_refresh_failures_total", 1)
+			}
+			log.Warn("initial presence refresh failed (retrying)",
 				"user_id", conn.UserID, "err", err)
+			select {
+			case <-ctx.Done():
+			case <-time.After(initialPresenceRetryDelay):
+				if err := presence.Refresh(ctx, conn.UserID); err != nil {
+					if m != nil {
+						m.Counter("presence_refresh_failures_final_total", 1)
+					}
+					log.Error("initial presence refresh failed after retry",
+						"user_id", conn.UserID, "err", err)
+				}
+			}
 		}
 
 		var wg sync.WaitGroup

@@ -9,6 +9,97 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**WS handler shutdown drain (2026-06-01).** Both WS services now track in-flight
+WS handler goroutines with a per-service `sync.WaitGroup` (`connWG`) passed into
+`WSHandler`. Hijacked WS conns are invisible to `http.Server.Shutdown`, so
+without this the deferred `rdb.Close()`/`pool.Close()` could race a handler's
+`presence.Drop` still in flight. On shutdown `main` waits `connWG` (bounded by
+`shutdownTimeout` via a `waitWithCtx` helper) after `srv.Shutdown` and before the
+close defers fire. `rootCtx` is already cancelled at that point so every
+`conn.Read` has unblocked. `WSHandler` signatures gained a `*sync.WaitGroup`
+param (nil opts out, for tests).
+
+**Chat dispatcher aligned to generic `targets` routing (2026-06-01).** Chat was
+still routing `chat.message.new` by a per-channel `recipient_id` field it
+unmarshalled from the payload, while notification had already migrated to the
+canonical `targets:[uid,...]` envelope that `redis_bus.publish_after_commit`
+attaches to *every* publish. Since the Django chat publisher doesn't exist yet
+(awaits the `chat_message` schema), this wasn't breaking anything — but it was a
+latent trap: a publisher built the normal way (via `publish_after_commit`) would
+have carried `targets`, not `recipient_id`, and chat would have silently dropped
+every message. Now chat unmarshals `targetsEnvelope{event_id, ts, targets}` and
+fans the raw payload to each target's local sockets, identical to notification.
+The per-channel `chatMessageNewPayload` struct was deleted. **Claude A:** when
+you wire the chat publisher, pass `targets=[other_member_uid]` to
+`publish_after_commit` like every other channel — no `recipient_id` needed.
+
+**Production-grade hardening pass (2026-05-28, "this is a final product not a
+demo" reframe).** Promoted five "V1-acceptable" trade-offs from the senior
+review to must-fix because demo-grade silences would surface as real user-
+visible bugs (duplicate FCM pushes, presence gaps, invisible pubsub drops):
+
+- **New `pkg/metrics`**: expvar-backed `Group` (Counter / Gauge / GaugeAdd),
+  zero new deps. Names sanitized to `[a-z0-9_]` so the swap to Prometheus
+  client_golang is a one-file change. Both services expose `/debug/vars`
+  on the admin mux (`cmd/notification/main.go`, `cmd/chat/main.go`).
+- **SetEX retry on delivered:<event_id>** (`notification/dispatcher.go`,
+  `chat/dispatcher.go`): one retry after 100ms before falling through. A
+  Redis blip during the FCM consumer's 2s grace window would otherwise
+  push a duplicate notification. Metered as
+  `*_delivered_setex_failures_total` + `*_final_total`.
+- **Bounded dispatch worker pool** (both dispatchers): the pubsub pump
+  was synchronously calling `hub.Send` + `scheduleReceipt` per message;
+  under reconnect-storm load this filled the (now 1024) pubsub buffer
+  and started dropping silently. New `dispatchSem`+`dispatchWG` caps
+  fan-out at 128 per pod with drop-on-saturation logging `event_id` and
+  counter `*_dispatch_drops_total`. `Run` defers `dispatchWG.Wait()`
+  *before* `receiptWG.Wait()` so a late dispatch can still enqueue a
+  receipt that's then drained.
+- **Pubsub drops carry event_id + counter** (`pkg/redisbus/redis.go`):
+  the in-process buffer widened from 64 → 1024 (covers transient
+  bursts; sustained load is what the dispatch pool is for), and the
+  drop branch unmarshals `event_id` from the JSON envelope so a missed
+  fan-out is attributable to a specific Django publish. Metered as
+  `pubsub_drops_total` + per-channel `pubsub_drops_<channel>`.
+- **Presence initial-write retry** (`notification/handler.go`): the
+  first `presence.Refresh` on WS upgrade now retries once after 50ms.
+  Without it a Redis hiccup at the wrong moment left a user with a
+  live WS but no `presence:<uid>` key, causing the FCM consumer to
+  push a duplicate for the next ~5s until the periodic loop caught up.
+  Metered as `presence_refresh_failures_total` + `*_final_total`. Did
+  NOT fail the upgrade — Django doesn't gate any user-visible flow on
+  presence (FCM fallback covers the gap), and aborting the upgrade
+  would make a transient Redis issue much more user-visible than the
+  duplicate it would prevent.
+
+All commands build, vet, and `go test -race ./...` green. WSHandler
+signature changed (`metrics.Group` param); `cmd/notification/main.go`
++ `cmd/chat/main.go` both updated.
+
+**Dispatcher migrated to generic `targets` routing (2026-05-28).** Go was
+only routing 2 of Django's 16 published channels, and was reading legacy
+per-channel keys (`recipient_id`/`sender_id`/`traveler_id`) instead of
+the canonical `targets:[uid,...]` field that `redis_bus.publish_after_commit`
+attaches to every envelope. Now:
+- `notification/dispatcher.go` subscribes to all 16 channels (see
+  `subscribeChannels`, mirrors `apps/core/channels.py`).
+- Single generic `dispatch` path: unmarshal `targetsEnvelope{event_id, targets}`,
+  fan the raw payload to each target's local sockets via `hub.Send`, schedule
+  one receipt write through the existing `receiptConcurrency=64` pool.
+- Per-channel `offerAcceptedPayload` / `offerCreatedPayload` structs and
+  their dispatchers deleted — payload semantics (match_id, offer_id, code,
+  …) are mobile's concern. Go forwards the raw payload as the envelope body.
+- `dispatch` logs at WARN when `targets` is missing (so any missed Django
+  migration is visible) and at DEBUG when targets exist but no socket on
+  this pod owns them (another pod likely already delivered).
+- Mobile previously silently missed: `handover.code_issued`,
+  `match.in_transit`, `match.completed`, `payment.captured`,
+  `payment.refunded`, `match.created`, `offer.updated`, parcel + trip
+  events, `kyc.status_changed`. All wired now.
+- Confirmed every Django `publish_after_commit` call (14 sites across
+  trips/parcels/matching/payments/verification) passes `targets=[uid,...]`
+  as kwarg. The audit task is resolved.
+
 **KYC gRPC client wired + hardened.** Done across recent commits:
 - `task contract:go-grpc` target added to `backend/Taskfile.yml` (mirrors the existing python-grpc target; uses host `protoc` + `protoc-gen-go` + `protoc-gen-go-grpc`) and now runs in `check-drift` so generated Go stubs stay in lockstep with the proto.
 - Generated stubs at `backend/services/internal/kyc/kycpb/`.
@@ -53,8 +144,40 @@ Skipped from review:
   HANDOVER.md and `client.go` doc-comments.
 
 Smaller follow-ups (still on the list, not blockers):
-- `offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` are unmarshalled but
-  never used. Drop or parse to `time.Time`.
+- ~~`offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts` unmarshalled but
+  unused~~ — fixed in `dbd1097`.
+
+**Senior-Go review pass (commits `c7e80a8` + `dbd1097`).** Punch list from
+a from-scratch review of the whole Go workspace, focused on concurrency
+correctness, scalability hazards, and goroutine lifetime:
+- `notification/fcm.go`: `handle()` was called serially inside the
+  XReadGroup batch loop — with `xreadCount=16` and a 2s grace period
+  per entry, a full batch serialized to 32s+ (throughput ~0.5 msg/s/pod).
+  Now dispatched concurrently through a `handleConcurrency=32` semaphore;
+  `sync.WaitGroup` tracked by `Run`/`Sweep` so XAck can't be cut short
+  on shutdown.
+- `notification/fcm.go`: `ack()` had a dead conditional ctx reassignment
+  that never affected the XAck call — removed; always uses the detached ctx.
+- `notification/dispatcher.go` + `chat/dispatcher.go`: `go d.markDelivered(...)`
+  was unbounded goroutine fan-out per pub/sub message; a Redis burst with
+  slow Postgres would spawn thousands the `shutdownTimeout` never waits for.
+  Now bounded via `receiptConcurrency=64` semaphore + `WaitGroup` drained
+  on `Run` exit. Drop-on-saturation logs `event_id` + `sockets` so G6b's
+  daily audit catches anything missed.
+- `notification/handler.go`: `refreshPresenceLoop` was fire-and-forget;
+  a hung Redis refresh could outlive the handler. Now tracked with a
+  per-handler `sync.WaitGroup` and waited before `Drop` fires.
+- `pkg/storage/s3.go`: `limitErrReader` could return `(n>0, ErrTooLarge)`
+  in the same Read call (violates `io.Reader` contract) and allowed one
+  extra byte past `max`. Rewritten with a probe-byte read after `max` so
+  an exact-fit body returns `io.EOF` and an oversize body returns `(0,
+  ErrTooLarge)`. Three internal tests lock the contract.
+
+Reviewed and rejected:
+- Hub `Send` slice alloc (per fan-out, not per message); calling `c.Send`
+  under RLock would let a slow producer hold the read lock.
+- `cmd/notification/main.go` cancelling rootCtx on nil fcm return — the
+  cancel is idempotent and an unexpected nil return SHOULD cascade.
 
 **FCM consumer scaffolded (commit `f00b3e6`).** Gated behind `FCM_ENABLED`
 (default false) so it ships dark until Claude A lands the `fcm_token` schema
@@ -89,7 +212,7 @@ events to the recipient's local socket:
 
 ---
 
-## 0. Current state (handoff — last updated 2026-05-22)
+## 0. Current state (handoff — last updated 2026-05-28)
 
 ### What's done
 
@@ -120,9 +243,11 @@ events to the recipient's local socket:
 - All migrations reversible. Full suite green (115/115).
 
 **Backend (Go services, `backend/services/`):**
-- `cmd/notification` — WS hub + Redis pub/sub consumer; offer.accepted +
-  offer.created vertical slices fan to sender/traveler, write
-  `delivered:<event_id>` and back-fill `core_published_event.delivered_at`.
+- `cmd/notification` — WS hub + Redis pub/sub consumer. Subscribes to
+  all 16 Django channels (`apps/core/channels.py`); single generic
+  dispatch path routes by the canonical `targets:[uid,...]` field on
+  every envelope. Writes `delivered:<event_id>` and back-fills
+  `core_published_event.delivered_at` through a bounded receipt pool.
   FCM consumer scaffolded behind `FCM_ENABLED` (LogOnlySender stub;
   awaits Django publisher + fcm_token schema). G1 + G6b paths wired.
 - `cmd/chat` — WS relay for `chat.message.new`. Stateless fan-out

@@ -2,6 +2,7 @@ package redisbus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,16 +11,23 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"shiptrip/pkg/metrics"
 )
 
 type Client struct {
-	rdb *redis.Client
-	log *slog.Logger
+	rdb     *redis.Client
+	log     *slog.Logger
+	metrics *metrics.Group
 }
 
 type Config struct {
 	URL    string
 	Logger *slog.Logger
+
+	// Metrics is the service's metrics group. Pass nil to disable the
+	// pubsub_drops / pubsub_drops_total counters (used by tests).
+	Metrics *metrics.Group
 
 	// Pool / timeout knobs. Zero values fall through to go-redis defaults
 	// (PoolSize = 10 × GOMAXPROCS). Set them explicitly in main.go so the
@@ -77,7 +85,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		"pool_size", opts.PoolSize,
 		"min_idle", opts.MinIdleConns,
 	)
-	return &Client{rdb: rdb, log: log}, nil
+	return &Client{rdb: rdb, log: log, metrics: cfg.Metrics}, nil
 }
 
 func (c *Client) Close() error {
@@ -103,9 +111,26 @@ type Subscription struct {
 	ps        *redis.PubSub
 	out       chan Message
 	log       *slog.Logger
+	metrics   *metrics.Group
 	stop      chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
+}
+
+// subscribeBuffer sizes the pump's outbound channel. 1024 is large
+// enough that a reconnect storm (CLAUDE.md §7: thousands of devices
+// reconnecting after a tower hiccup) fills the buffer for several
+// seconds before drops start, giving the dispatcher's worker pool time
+// to catch up. The trade-off vs heap is ~32 KiB per subscription —
+// trivial against the alternative of losing a notification.
+const subscribeBuffer = 1024
+
+// pubsubEventID is the JSON-tagged subset of the envelope every
+// publisher wraps payloads in (see monolith/apps/core/redis_bus.py).
+// Decoded only when we drop a message so a healthy subscription pays
+// no JSON cost; on backpressure we surface event_id to the G6b sweep.
+type pubsubEventID struct {
+	EventID string `json:"event_id"`
 }
 
 // Subscribe opens a pub/sub subscription. The provided ctx bounds only
@@ -120,21 +145,28 @@ func (c *Client) Subscribe(ctx context.Context, channels ...string) (*Subscripti
 	}
 
 	s := &Subscription{
-		ps:   ps,
-		out:  make(chan Message, 64),
-		log:  c.log,
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
+		ps:      ps,
+		out:     make(chan Message, subscribeBuffer),
+		log:     c.log,
+		metrics: c.metrics,
+		stop:    make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 	go s.pump()
 	return s, nil
 }
 
-// pump forwards messages from go-redis's PubSub channel to our buffered out channel.
-// On backpressure (out is full) we DROP the message and log a warn — pub/sub is the
-// best-effort path; the FCM stream (G1) is the durable one. Dropping here is preferable
-// to blocking, which would let go-redis's internal buffer fill and Redis would kick us
-// off the subscription for slow consumption.
+// pump forwards messages from go-redis's PubSub channel to our buffered
+// out channel. On backpressure (out is full) we DROP the message and:
+//
+//   - parse event_id from the envelope so G6b can correlate the loss
+//     with the undelivered core_published_event row,
+//   - increment a per-channel drop counter (pubsub_drops_<channel>),
+//   - increment the global pubsub_drops_total counter.
+//
+// Dropping is preferable to blocking — a blocked reader would let
+// go-redis's internal buffer fill and Redis would terminate the
+// subscription for slow consumption, which is strictly worse.
 func (s *Subscription) pump() {
 	defer close(s.done)
 	defer close(s.out)
@@ -153,11 +185,23 @@ func (s *Subscription) pump() {
 			case <-s.stop:
 				return
 			default:
-				s.log.Warn("pubsub buffer full, dropping message",
-					"channel", m.Channel,
-				)
+				s.recordDrop(m.Channel, msg.Payload)
 			}
 		}
+	}
+}
+
+func (s *Subscription) recordDrop(channel string, payload []byte) {
+	var env pubsubEventID
+	_ = json.Unmarshal(payload, &env) // best-effort; missing event_id is fine
+	s.log.Warn("pubsub buffer full, dropping message",
+		"channel", channel,
+		"event_id", env.EventID,
+		"buffer", subscribeBuffer,
+	)
+	if s.metrics != nil {
+		s.metrics.Counter("pubsub_drops_total", 1)
+		s.metrics.Counter("pubsub_drops_"+channel, 1)
 	}
 }
 

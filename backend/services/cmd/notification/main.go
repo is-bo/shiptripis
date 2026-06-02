@@ -1,12 +1,13 @@
 // Command notification is the Go-side WebSocket fan-out + presence service.
 //
-// V1 scope (vertical slice):
-//   - Subscribes to Redis pub/sub `offer.accepted` from Django.
-//   - Holds Flutter client WS sockets; routes to {sender_id, traveler_id}
-//     from the payload (CLAUDE.md G1).
+// Scope:
+//   - Subscribes to all 16 Django pub/sub channels (see
+//     notification.subscribeChannels, mirroring apps/core/channels.py).
+//   - Holds Flutter client WS sockets; routes each envelope generically by
+//     its targets:[uid,...] field to every target's local sockets (CLAUDE.md G1).
 //   - Writes `delivered:<event_id>` 60s + updates `core_published_event`
 //     so the G6b detection-only outbox sees the receipt.
-//   - Refreshes `presence:<user_id>` 15s TTL on every WS ping.
+//   - Refreshes `presence:<user_id>` 15s TTL while the socket is live.
 //
 // FCM push fallback is implemented but gated by FCM_ENABLED (default
 // false). When Claude A adds the `fcm_token` column and the Django
@@ -17,10 +18,6 @@
 // SDK once the publisher lands. The consumer flow (XReadGroup → 2s wait
 // → check delivered:<event_id> → send/skip → XAck) can be exercised end-
 // to-end in dev with the stub.
-//
-// Deferred (see CLAUDE.md §0 / handoff notes):
-//   - Other channels (trip.*, parcel.*, payment.*, match.*) — need a
-//     routing scheme that doesn't hardcode payload-field names per channel.
 //
 // Listens on NOTIF_HTTP_ADDR (default :8082, matches Caddy's
 // notification-service:8082 upstream in backend/gateway/Caddyfile). The
@@ -34,10 +31,12 @@ package main
 import (
 	"context"
 	"errors"
+	"expvar"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,6 +46,7 @@ import (
 	"shiptrip/pkg/db"
 	"shiptrip/pkg/health"
 	"shiptrip/pkg/logger"
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 )
 
@@ -113,9 +113,12 @@ func run() error {
 	}
 	defer pool.Close()
 
+	m := metrics.Register(serviceName)
+
 	rdb, err := redisbus.NewClient(rootCtx, redisbus.Config{
-		URL:    redisCfg.URL,
-		Logger: log,
+		URL:     redisCfg.URL,
+		Logger:  log,
+		Metrics: m,
 	})
 	if err != nil {
 		return err
@@ -129,7 +132,13 @@ func run() error {
 
 	hub := notification.NewHub()
 	presence := notification.NewPresence(rdb, log)
-	dispatcher := notification.NewDispatcher(rdb, pool, hub, log)
+	dispatcher := notification.NewDispatcher(rdb, pool, hub, log, m)
+
+	// connWG tracks in-flight WS handler goroutines. Hijacked WS conns are
+	// invisible to srv.Shutdown, so we drain them explicitly below before the
+	// deferred rdb.Close()/pool.Close() — otherwise a handler's presence.Drop
+	// could race a closed Redis client on shutdown.
+	var connWG sync.WaitGroup
 
 	healthH := health.New(health.Config{Logger: log})
 	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
@@ -142,7 +151,11 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", healthH.Liveness())
 	mux.Handle("/readyz", healthH.Readiness())
-	mux.HandleFunc("/ws/notifications", notification.WSHandler(rootCtx, validator, hub, presence, log))
+	// expvar publishes /debug/vars on http.DefaultServeMux at import time.
+	// Mount it explicitly on our service mux so the metric scrape target is
+	// the admin port, not the default mux that's never served.
+	mux.Handle("/debug/vars", expvar.Handler())
+	mux.HandleFunc("/ws/notifications", notification.WSHandler(rootCtx, validator, hub, presence, log, m, &connWG))
 
 	srv := &http.Server{
 		Addr:              config.HTTPAddr(httpAddrKey, httpAddrFallback),
@@ -163,7 +176,11 @@ func run() error {
 	// FCM consumer + XAUTOCLAIM sweeper. Two goroutines because the
 	// blocking XReadGroup would otherwise stall the periodic sweep.
 	// Both share the same channel so any fatal exit cancels rootCtx.
+	// fcmAlive tracks how many of {Run, Sweep} are still alive so the
+	// drain loop below waits for exactly the right count — if the outer
+	// select consumed one fcmErr, only one remains to drain.
 	fcmErr := make(chan error, 2)
+	fcmAlive := 0
 	if fcmCfg.Enabled {
 		fcm := notification.NewConsumer(rdb, notification.ConsumerConfig{
 			Stream:        fcmCfg.Stream,
@@ -176,6 +193,7 @@ func run() error {
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()
+		fcmAlive = 2
 		log.Info("fcm consumer enabled", "stream", fcmCfg.Stream)
 	} else {
 		log.Info("fcm consumer disabled (FCM_ENABLED=false)")
@@ -213,6 +231,9 @@ func run() error {
 	case err := <-fcmErr:
 		// One of {Run, Sweep} exited early. nil = graceful (ctx cancelled
 		// by another leg already). Non-nil = fatal; tear down everything.
+		// Either way one of the two FCM goroutines is gone — the drain
+		// loop below only needs to wait for the survivor.
+		fcmAlive--
 		if err != nil {
 			fatal = errors.Join(errors.New("fcm consumer exited"), err)
 		}
@@ -230,16 +251,39 @@ func run() error {
 	case <-shutdownCtx.Done():
 		log.Warn("dispatcher did not exit before shutdown deadline")
 	}
-	// Drain both FCM goroutines (Run + Sweep) if they were started.
-	if fcmCfg.Enabled {
-		for range 2 {
-			select {
-			case <-fcmErr:
-			case <-shutdownCtx.Done():
-				log.Warn("fcm goroutine did not exit before shutdown deadline")
-			}
+	// Drain remaining FCM goroutines. fcmAlive was decremented if the
+	// outer select consumed one; without that bookkeeping we'd hang on a
+	// phantom receive every clean shutdown that fired on fcmErr.
+	for range fcmAlive {
+		select {
+		case <-fcmErr:
+		case <-shutdownCtx.Done():
+			log.Warn("fcm goroutine did not exit before shutdown deadline")
 		}
+	}
+	// Wait for in-flight WS handlers (hijacked conns srv.Shutdown can't see)
+	// to finish their presence.Drop before the deferred rdb/pool close fire.
+	// rootCtx is already cancelled here, so each conn.Read has unblocked.
+	// Bounded by shutdownCtx so a wedged handler can't hang the process.
+	if !waitWithCtx(shutdownCtx, &connWG) {
+		log.Warn("ws handlers did not drain before shutdown deadline")
 	}
 	log.Info("notification service stopped")
 	return fatal
+}
+
+// waitWithCtx blocks until wg is done or ctx expires. Returns true if the
+// WaitGroup drained, false if the context deadline hit first.
+func waitWithCtx(ctx context.Context, wg *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

@@ -23,7 +23,6 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 - [ ] **Mobile: traveler "enter pickup code" entry surface** — traveler gets a notification after payment ("ready for pickup, enter code"); deep-link routes to `/handover/verify/<match_id>?kind=pickup`.
 - [ ] **Mobile: sender follow-package screen after pickup code accepted** — when `match.in_transit` fires, sender's notification deep-links to `/tracking/<match_id>` (the progress screen).
 - [ ] **Mobile: counter-offer flow only when sender requested a specific traveler** — if the sender posted a *general* request, traveler offer is accept/decline only (price was sender-computed). If the sender targeted *this traveler*, traveler can counter.
-- [x] 2026-05-23 Audit Django publish targets — confirmed every publisher in `apps/*/views.py` and `apps/verification/services.py` passes `targets=[...]` to `publish_after_commit`. Go now reads top-level `targets` uniformly; `recipient_id`/`sender_id` keys remain in payloads as channel-specific data only.
 
 ### Soon
 
@@ -32,6 +31,8 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-06-02 Bug bash + product-grade pass: sign-out, sender "All" tab, notifications persistence (server-backed inbox + WS dedupe), traveler "on the road" surface, profile real data. Notification model + GET/POST endpoints + WS hooks landed; mobile notifications screen rewritten with deep-link routing + mark-read.
+- [x] 2026-05-28 `78ac9e4` ~~**Audit Django publish targets**~~ — confirmed: all 14 publish sites already pass `targets=[uid,...]` as kwarg via `redis_bus.publish_after_commit`. Go now reads only `targets`; legacy `recipient_id`/`sender_id`/`traveler_id` in payloads are forwarded raw to mobile but no longer consulted for routing.
 - [x] 2026-05-23 `9c4ce7f` Merge demo → main, dispatcher conflict resolved in Alaa's favor.
 - [x] 2026-05-23 `605feee` Role: UI-only (no server gating), always-on switch pill.
 - [x] 2026-05-23 `08a07a3`/`791822b` Render free-tier blueprint (lives on `demo-prod`).
@@ -42,16 +43,16 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Now (blocking demo polish)
 
-(none — see Done; both items moved.)
+- [ ] **FCM consumer** is scaffolded behind `FCM_ENABLED=false`. Needs `fcm_token` schema from Islam before unblocking.
 
 ### Soon
 
-- [ ] **Drop unused `offerAcceptedPayload.Ts` / `offerCreatedPayload.Ts`** (per CLAUDE.md §0a follow-up).
-- [ ] **FCM consumer** is scaffolded behind `FCM_ENABLED=false`. Needs `fcm_token` schema from Islam before unblocking.
+- [ ] (none)
 
 ### Done
 
-- [x] 2026-05-23 Subscribe to ALL Django channels — dispatcher refactored to a single `targets: [user_id, ...]` envelope (done by Islam in his Commit 1; payload convention confirmed across every Django publisher).
+- [x] 2026-05-30 Production hardening pass (final-product reframe): new `pkg/metrics` (expvar Group, `/debug/vars` on both services); SetEX retry on `delivered:<event_id>`; bounded dispatch worker pool (128/pod, drop-on-saturation with event_id); pubsub buffer 64→1024 + drop event_id/counter; presence initial-write retry. All build/vet/race green.
+- [x] 2026-05-28 `78ac9e4` Dispatcher: subscribe to all 16 Django channels via generic `targets=[uid,...]` envelope. Per-channel structs dropped; `dispatch` now fans by `targets` for every channel uniformly. Existing audit/receipt path unchanged.
 - [x] 2026-05-23 Notification service added to `docker-compose.yml` + `Dockerfile.notification`; Caddy upstream renamed `notification-service` → `notification` (fixes 502 on `/ws/notifications`).
 - [x] 2026-05-22 `c7e80a8` Hardened Go services from senior review.
 - [x] 2026-05-22 `c04a369` Chat service V1.
@@ -62,4 +63,3 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 ## Shared / cross-cutting
 
 - [ ] **mTLS for gRPC** (CLAUDE.md G5) — both sides still on bearer in dev. Production gate before V1 launch.
-- [ ] **Handover code `targets` payload** — see Islam's "audit publish targets" task.

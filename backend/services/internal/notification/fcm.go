@@ -233,12 +233,23 @@ func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage)
 	return true
 }
 
+// sendTimeout caps a single FCM Send. Detached from the parent ctx so a
+// graceful shutdown mid-send still completes — a cancelled Send returns
+// without acking the PEL entry, and the next pod's sweeper would push a
+// duplicate to the same user.
+const sendTimeout = 15 * time.Second
+
 // handle processes a single stream entry: wait, check delivered, send, ack.
 // All errors are logged; only XAck failures leave the entry in the PEL
 // for the sweeper. The delivered-key check is intentionally NOT a
 // guarantee against duplicates — two pods can race the EXISTS, both
 // see "not delivered", and both push. CLAUDE.md accepts this; the
 // alternative (distributed lock per event) is far worse for V1.
+//
+// Once past the grace-period select we detach from the parent ctx — at
+// that point we've committed to either acking or leaving in PEL, and a
+// shutdown-cancelled Send would surface as a duplicate push on the next
+// pod's sweep.
 func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	eventID := stringField(m.Values, "event_id")
 	if eventID == "" {
@@ -248,13 +259,22 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	// Grace period — give the WS-owning pod a chance to mark delivered.
+	// This is the one point we honor parent ctx: a fast shutdown here is
+	// free (entry stays in PEL, next pod handles).
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(c.deliverGrace):
 	}
 
-	delivered, err := c.rdb.Exists(ctx, "delivered:"+eventID)
+	// From here on the parent ctx is replaced with a detached, bounded
+	// context. Run's defer c.wg.Wait() already holds shutdown until handle
+	// returns; detaching ensures Send sees its own deadline, not the
+	// service-shutdown cancel.
+	sendCtx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+
+	delivered, err := c.rdb.Exists(sendCtx, "delivered:"+eventID)
 	if err != nil {
 		c.log.Warn("fcm: delivered check failed", "event_id", eventID, "err", err)
 		// Don't ack — sweeper will reclaim and retry.
@@ -274,7 +294,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		return
 	}
 
-	if err := c.sender.Send(ctx, payload); err != nil {
+	if err := c.sender.Send(sendCtx, payload); err != nil {
 		c.log.Warn("fcm send failed; leaving in PEL for sweep",
 			"event_id", eventID, "err", err)
 		return

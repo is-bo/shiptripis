@@ -255,4 +255,3 @@ func TestValidate_ErrorWrapsJWTError(t *testing.T) {
 		t.Fatalf("error chain should contain jwt.ErrTokenExpired, got: %v", err)
 	}
 }
-
