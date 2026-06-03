@@ -1,0 +1,9 @@
+# Keep the Go build context small + deterministic. Source + module files
+# are all the build needs; everything below is editor/tooling side-state.
+.codegraph/
+.claude/
+.mcp.json
+opencode.jsonc
+*.md
+Dockerfile
+.dockerignore

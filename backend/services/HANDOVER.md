@@ -146,6 +146,11 @@ packages now have unit tests; `go test -race ./...` exercises them:
 | `internal/chat` | same SetEX-retry coverage added (`receipt_test.go`) + UPDATE-error metering; routing already covered |
 | `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_total` / per-channel counters, nil-metrics safety, unparseable-payload tolerance |
 | `pkg/metrics` | `Counter`/`Gauge`/`GaugeAdd`/`Sanitize` + folded-label names (100%) |
+| `internal/kyc` | `handleSubmit` happy path (201) + idempotent replay (200), passport-no-back, 401 unauth, full validation-rejection table (bad/missing doc_type, short/non-hex idem key, missing front/back/selfie, bad content type, empty file, too-many-parts), recorder-not-configured (503), recorder error (502), partial-upload orphan cleanup (500). `handleSubmit` 96.6%, `uploadImage` 95.7%, validation paths 100% (2026-06-03) |
+
+`internal/kyc` test seam: `Handler.Storage` was narrowed from `*storage.Client`
+to an `objectStore` interface (`Put`/`Delete`) so a `fakeStore` injects without
+live MinIO — `*storage.Client` satisfies it unchanged, so prod wiring is identical.
 
 Both `dbReceiptStore`s now expose `keyExpirer` + `receiptExecer` micro-seams
 (behaviour-preserving) so the SetEX retry is testable without live Redis/PG.
@@ -153,8 +158,25 @@ Both `dbReceiptStore`s now expose `keyExpirer` + `receiptExecer` micro-seams
 
 What still can't be unit-tested without integration infra (live Redis/PG/gRPC):
 `Dispatcher.Run`, `redisbus.Subscribe`/`pump`, the FCM consumer's
-`XReadGroup`/`Sweep` loop, and `kyc.GRPCClient` dial. These are integration-test
-territory (a `docker compose` harness), tracked separately — not a unit gap.
+`XReadGroup`/`Sweep` loop, and `kyc.GRPCClient` dial. The compose harness below
+now exists to exercise these end-to-end.
+
+**Compose harness landed (2026-06-03).** The Go services are now in
+`backend/docker-compose.yml` and actually runnable:
+- One parameterized `services/Dockerfile` (`SERVICE` build-arg → `cmd/<SERVICE>`)
+  builds all three; `kyc-service` / `notification-service` / `chat-service`
+  blocks each `env_file: .env` + healthcheck on their `/healthz`.
+- New `django-grpc` service runs `manage.py runkycgrpc` so port 50051 actually
+  serves — previously the `django` block mapped 50051 but only ran `runserver`,
+  so the kyc gRPC dial had nothing to talk to. The 50051 mapping moved here.
+- `backend/.env.example` created (was entirely absent despite CLAUDE.md §7b's
+  `cp -n .env.example .env` flow + base.py:2 referencing it). Root `.gitignore`
+  gained `!.env.example` so the template is trackable under the `.env.*` ignore.
+- **Heads-up for Claude A:** Django settings read `GRPC_INTERNAL_TOKEN`
+  (base.py:153) but `runkycgrpc.py` reads `GRPC_BEARER_TOKEN` via `os.getenv`.
+  The runner wins for the gRPC bearer flow, so `.env.example` sets
+  `GRPC_BEARER_TOKEN`. The unused `GRPC_INTERNAL_TOKEN` in settings is a latent
+  inconsistency on the Django side — not touched (Claude A scope).
 
 ---
 
