@@ -178,6 +178,34 @@ now exists to exercise these end-to-end.
   `GRPC_BEARER_TOKEN`. The unused `GRPC_INTERNAL_TOKEN` in settings is a latent
   inconsistency on the Django side — not touched (Claude A scope).
 
+**KYC verified end-to-end (2026-06-04).** Full cold-start stack came up and a
+real multipart POST through Caddy → kyc-service → MinIO → gRPC → Django →
+Postgres returned 201 (first) then 200 (idempotent replay on same key); the 3
+images landed in MinIO and the `kyc_submission` row was inserted. Two fixes the
+live run surfaced (both committed):
+- **`pkg/storage/s3.go` PutObject was broken against any plain-http S3 endpoint.**
+  aws-sdk-go-v2 (≥v1.36) defaults `RequestChecksumCalculation=when_supported`,
+  which appends a CRC32 *trailing* checksum; for an unseekable Body over non-TLS
+  the SDK aborts with "unseekable stream is not supported without TLS and
+  trailing checksum". Fix: set `when_required` at config load AND pass the
+  seekable `multipart.File` straight through `Put` (was wrapped in a plain-Reader
+  `limitErrReader`, which stripped `io.Seeker` and forced the SDK to fail). The
+  fail-fast wrapper is kept only for non-seekable bodies. This was a real prod
+  bug — it would have failed every upload against MinIO/Backblaze/Hetzner over
+  http; exactly the §G4 "providers differ" caution. `go test -race ./...` green.
+- **`createbuckets` compose job** provisions `kyc-docs` (+`shiptrip-parcel`) via
+  `minio/mc`; without it kyc-service `/readyz` stays 503 on a fresh volume
+  (HeadBucket 404). App code must not create buckets (§G4), so this lives in
+  compose.
+
+**Pre-existing wart (not fixed — flagged for owner):** `imageKey()`
+(handler.go:328) hardcodes a `kyc-docs/` prefix *inside* the object key while
+the bucket is also `kyc-docs`, so objects land at `kyc-docs/kyc-docs/<uid>/…`.
+Functional (keys are deterministic, store+fetch stay consistent) but the doubled
+segment is ugly. Drop the literal prefix from `imageKey` if you want clean paths
+— but it's a stored-key change, so coordinate: existing rows reference the old
+keys.
+
 ---
 
 ## Conventions that survive across sessions

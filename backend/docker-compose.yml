@@ -143,6 +143,12 @@ services:
       args:
         SERVICE: kyc
     env_file: .env
+    # The kyc-service forces an eager gRPC connection at boot (fail-fast on a
+    # bad KYC_GRPC_TARGET, by design — cmd/kyc/main.go). On a cold `up` the
+    # django-grpc server may not have bound :50051 within the 10s dial window,
+    # so the first boot can lose the race and exit. on-failure self-heals that
+    # transient race; a genuinely wrong target keeps crash-looping (visible).
+    restart: on-failure
     environment:
       KYC_HTTP_ADDR: ":8083"
       KYC_GRPC_TARGET: "django-grpc:50051"

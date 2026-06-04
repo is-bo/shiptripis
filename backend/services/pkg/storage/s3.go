@@ -85,6 +85,16 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
 		),
+		// aws-sdk-go-v2 defaults to RequestChecksumCalculation=when_supported
+		// (since v1.36), which appends a CRC32 *trailing* checksum to every
+		// PutObject. For an unseekable Body (our streamed multipart parts) the
+		// SDK can only send that trailer over TLS — against a plain-http
+		// MinIO/S3-compat endpoint it aborts with "unseekable stream is not
+		// supported without TLS and trailing checksum". `when_required` only
+		// adds checksums when the operation mandates one (PutObject does not),
+		// so streamed PUTs work over http dev endpoints and still sign the
+		// payload normally against real AWS S3.
+		awsconfig.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
@@ -148,14 +158,27 @@ func (c *Client) Put(ctx context.Context, bucket, key string, body io.Reader, co
 	if contentType == "" {
 		return errors.New("storage: contentType is required")
 	}
-	// Fail-fast cap: the reader errors at byte maxPutBytes+1 so the SDK
-	// aborts the PUT before we waste bandwidth and have to clean up a
-	// truncated object. ErrTooLarge is sentinel so callers can detect.
-	limited := &limitErrReader{r: body, max: c.maxPutBytes}
+	// Body selection turns on seekability:
+	//
+	//   - Seekable body (e.g. a multipart.File, already buffered to mem/disk
+	//     by ParseMultipartForm): pass it straight through. aws-sdk-go-v2
+	//     needs a seekable stream to compute the SigV4 payload hash without
+	//     buffering — wrapping it in a plain io.Reader strips io.Seeker and
+	//     forces the SDK to fail with "unseekable stream is not supported
+	//     without TLS" against a plain-http endpoint. The caller bounds size
+	//     before Put (and MaxBytesReader caps the whole request), so the
+	//     fail-fast wrapper is redundant here.
+	//   - Non-seekable body: keep the limitErrReader fail-fast cap so an
+	//     unknown-length stream still aborts at maxPutBytes+1 rather than
+	//     silently truncating or streaming forever.
+	var putBody io.Reader = body
+	if _, ok := body.(io.Seeker); !ok {
+		putBody = &limitErrReader{r: body, max: c.maxPutBytes}
+	}
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
-		Body:        limited,
+		Body:        putBody,
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
