@@ -9,6 +9,51 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**KYC verified end-to-end in compose + two prod bugs fixed (2026-06-04).** The
+three Go services are now wired into `backend/docker-compose.yml` and a real
+`POST /kyc/submit` through Caddy → kyc-service → MinIO → gRPC → Django → Postgres
+returned 201 (first) then 200 (idempotent replay); images landed in MinIO and the
+`kyc_submission` row was written. What changed:
+- **One parameterized `backend/services/Dockerfile`** (`SERVICE` build-arg →
+  `cmd/<SERVICE>`) builds all three binaries; the runtime stage is **hermetic**
+  (no `apk add`, CA certs copied from the build image) so it works in
+  CI/airgapped/sandboxed builds. `kyc-service` / `notification-service` /
+  `chat-service` blocks each `env_file: .env` + `/healthz` healthcheck.
+- **New `django-grpc` compose service** runs `manage.py runkycgrpc` so port 50051
+  actually serves — the `django` block only ran `runserver`, so the 50051 mapping
+  was dead and the kyc gRPC dial had nothing to talk to. The 50051 mapping moved
+  to `django-grpc`. `kyc-service` has `restart: on-failure` to self-heal the
+  cold-start race (it forces an eager gRPC dial at boot, by design; django-grpc
+  may not have bound :50051 within the 10s dial window on a cold `up`).
+- **`createbuckets` one-shot** (`minio/mc`) provisions `kyc-docs` +
+  `shiptrip-parcel`; without it kyc-service `/readyz` stays 503 on a fresh volume
+  (HeadBucket 404). App code must NOT create buckets (§G4), so this lives in
+  compose. kyc-service `depends_on: createbuckets (service_completed_successfully)`.
+- **`backend/.env.example` created** — it was *entirely absent* despite §7b's
+  `cp -n .env.example .env` flow and `config/settings/base.py:2` referencing it.
+  Root `.gitignore` gained `!.env.example` so the template is trackable under the
+  `.env.*` ignore. **Claude A:** Django settings read `GRPC_INTERNAL_TOKEN`
+  (base.py:153) but `runkycgrpc.py` reads `GRPC_BEARER_TOKEN` via `os.getenv` —
+  the runner wins, so `.env.example` sets `GRPC_BEARER_TOKEN`. The unused
+  `GRPC_INTERNAL_TOKEN` in settings is a latent inconsistency on your side.
+- **`pkg/storage/s3.go` PutObject was broken against any plain-http S3 endpoint**
+  (real bug, every upload). aws-sdk-go-v2 (≥v1.36) defaults
+  `RequestChecksumCalculation=when_supported`, which appends a CRC32 *trailing*
+  checksum; for an unseekable Body over non-TLS the SDK aborts with "unseekable
+  stream is not supported without TLS and trailing checksum". Fix: set
+  `when_required` at config load AND pass the seekable `multipart.File` straight
+  through `Put` (it was wrapped in a plain-Reader `limitErrReader` that stripped
+  `io.Seeker`). The fail-fast wrapper is kept only for non-seekable bodies. Would
+  have broken MinIO/Backblaze/Hetzner over http — exactly the §G4 "providers
+  differ" caution. `go test -race ./...` green.
+
+**Pre-existing wart (flagged, not fixed — owner's call).** `imageKey()`
+(`internal/kyc/handler.go:328`) hardcodes a `kyc-docs/` prefix *inside* the
+object key while the bucket is also `kyc-docs`, so objects land at
+`kyc-docs/kyc-docs/<uid>/…`. Functional (deterministic keys, store+fetch
+consistent) but the doubled segment is ugly. Dropping the literal prefix is a
+stored-key change — coordinate, existing rows reference the old keys.
+
 **WS handler shutdown drain (2026-06-01).** Both WS services now track in-flight
 WS handler goroutines with a per-service `sync.WaitGroup` (`connWG`) passed into
 `WSHandler`. Hijacked WS conns are invisible to `http.Server.Shutdown`, so
