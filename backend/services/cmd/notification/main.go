@@ -182,14 +182,19 @@ func run() error {
 	fcmErr := make(chan error, 2)
 	fcmAlive := 0
 	if fcmCfg.Enabled {
+		// Build the real Firebase sender from the service-account JSON.
+		// Fail loud at boot on bad/unreadable credentials (CLAUDE.md §9)
+		// rather than discovering it on the first push. LoadFCM already
+		// guarantees ProjectID + CredentialsPath are set when Enabled.
+		sender, err := notification.NewFirebaseSender(rootCtx, fcmCfg.ProjectID, fcmCfg.CredentialsPath, log)
+		if err != nil {
+			return err
+		}
 		fcm := notification.NewConsumer(rdb, notification.ConsumerConfig{
 			Stream:        fcmCfg.Stream,
 			ConsumerGroup: fcmCfg.ConsumerGroup,
 			ConsumerName:  fcmCfg.ConsumerName,
-			// Sender is nil for now — LogOnlySender is installed by
-			// NewConsumer. Wire the real Firebase Admin SDK client here
-			// once the publisher lands.
-			Sender: nil,
+			Sender:        sender,
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()

@@ -208,6 +208,30 @@ services:
       timeout: 3s
       retries: 6
 
+  # Email/SMTP sender. Pure stream consumer (no Postgres, no public route) —
+  # drains the durable `email:send` stream Django XADDs onto and sends over SMTP.
+  # Ships dark behind EMAIL_ENABLED=false until Django's publisher + OTP model
+  # land; while disabled it still boots and serves /healthz, so it sits here
+  # harmlessly. To exercise locally, add a `mailhog` service and set the
+  # EMAIL_* vars in .env (see .env.example).
+  email-service:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: email
+    env_file: .env
+    environment:
+      EMAIL_HTTP_ADDR: ":8085"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
   caddy:
     image: caddy:2-alpine
     ports:
@@ -221,6 +245,7 @@ services:
       - kyc-service
       - notification-service
       - chat-service
+      - email-service
 
 volumes:
   pgdata:

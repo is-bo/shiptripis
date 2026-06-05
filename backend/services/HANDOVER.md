@@ -268,13 +268,76 @@ consistent.
 
 ---
 
+## email-service (4th service) — landed Go-side 2026-06-05, gated dark
+
+`cmd/email` consumes a durable `email:send` Redis Stream and sends transactional
+mail (signup-verify OTP + password-reset OTP) over SMTP via `internal/email`
+(go-mail). It's the **4th** Go service — under the §5 "no 6th" cap, and it uses
+**no Postgres** (Django owns OTP gen/verify; Go is pure transport), so it does
+**not** touch the §3 connection-pool budget. Mirrors the FCM consumer pattern
+minus the grace-wait / `delivered:` dedup. Ships **dark** behind
+`EMAIL_ENABLED=false`; verified booting green (health 200, `consumer disabled`,
+clean shutdown) against a throwaway Redis. Build/vet/gofmt/`test -race ./...`
+all green.
+
+**The A/B contract (build Django side to this):**
+
+Durable stream `email:send`, `MAXLEN ~ 10000` (G1), group `email-send-workers`.
+Stream entry fields: `event_id` (denormalised) + `payload` (JSON string). The
+`payload` JSON is:
+```json
+{ "event_id":"…", "to":"u@x.com", "subject":"…", "body":"…(rendered plaintext)…", "kind":"verify|reset" }
+```
+**Django renders subject + body.** Go is a pure transport — it never templates
+and never branches on `kind` (log/metric label only). Go dedups on a self-owned
+`email:sent:<event_id>` key (10-min TTL), so a sweeper re-delivery won't double
+-send. The send path is at-least-once; a rare duplicate carries the *same still-
+valid* code.
+
+### Spec for Claude A (Islam) — 5 pieces
+
+1. **Stream publisher** (NEW — `redis_bus` is pub/sub-only today). Add
+   `apps/core/redis_bus.py::enqueue_email_after_commit(to, subject, body, *, kind)`:
+   inside `transaction.on_commit`, `XADD email:send` with `MAXLEN ~ 10000`
+   (approx), fields `{event_id: uuid4().hex, payload: json.dumps({event_id, to,
+   subject, body, kind})}`, and INSERT the `PublishedEvent` audit row (G6/G6b).
+   Reuse `get_client()`. This is the **first XADD in Django** — model it on the
+   existing `publish_after_commit` envelope discipline.
+2. **`EmailVerificationCode` model** — near-clone of `PasswordResetCode`
+   (`apps/accounts/models.py:66-109`): `issue()`/`verify()`/`is_active()`, argon2
+   `make_password`, 6-digit, with new `EMAIL_VERIFY_CODE_TTL_SECONDS` /
+   `EMAIL_VERIFY_MAX_ATTEMPTS` settings mirroring `PASSWORD_RESET_*`
+   (`config/settings/base.py:135`). Reversible migration + `task contract:sync-db`
+   (§4). Go does **not** read this table → no sqlc rerun.
+3. **Signup** (`apps/accounts/views.py:28` / `serializers.py:30`): after user
+   create, `EmailVerificationCode.issue(user)` then
+   `enqueue_email_after_commit(user.email, subject, body, kind="verify")`. Add
+   `POST /accounts/verify-email` that verifies the code and sets
+   `is_email_verified=True` (the field at `models.py:27` is currently only ever
+   set by Google OAuth).
+4. **Password reset** (`apps/accounts/views.py:135`): replace the synchronous
+   `send_mail(...)` with `enqueue_email_after_commit(..., kind="reset")`. Keep the
+   always-202 anti-enumeration response.
+5. **Settings**: add real SMTP `EMAIL_*` to `prod.py` + `DEFAULT_FROM_EMAIL`
+   (both currently absent — dev is `console`). For local end-to-end, add a
+   `mailhog` service to compose (smtp :1025 / UI :8025) and set the `EMAIL_*`
+   vars per `.env.example`.
+
+**When this lands:** flip `EMAIL_ENABLED=true` + set `EMAIL_SMTP_*`; no Go change
+needed (the real `smtpSender` is already wired in `cmd/email/main.go`). Verify per
+the plan: signup → XADD on `email:send` → email-service logs "email sent" →
+message in MailHog; kill+restart email-service mid-flow to prove durability.
+
+---
+
 ## What needs Islam (Claude A) — keep this list current
 
 | # | Item | Why we're blocked |
 |---|---|---|
-| 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then; flip `FCM_ENABLED=true` + wire a real `FCMSender` once it lands |
-| 2 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
-| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC runs on dev bearer; `grpc_client.go` errors in `mtls` mode until certs exist (CLAUDE.md §G5). Shared scope — coordinate, get explicit approval |
+| 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then. **Real `FCMSender` is now wired** (`internal/notification/fcm_firebase.go`, firebase-admin v4) — just flip `FCM_ENABLED=true` + set `FCM_PROJECT_ID`/`FCM_CREDENTIALS_PATH` once the publisher + tokens land |
+| 2 | `email:send` stream publisher + `EmailVerificationCode` model + SMTP settings | email-service ships dark until then. Full spec above. Flip `EMAIL_ENABLED=true` + `EMAIL_SMTP_*` once it lands — no Go change needed |
+| 3 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
+| 4 | mTLS pipeline (cert-manager / mkcert) | gRPC runs on dev bearer; `grpc_client.go` errors in `mtls` mode until certs exist (CLAUDE.md §G5). Shared scope — coordinate, get explicit approval |
 
 When any lands, **update this table** and the §0a handoff in `../../CLAUDE.md`
 in the same commit as the Go work that consumes it.

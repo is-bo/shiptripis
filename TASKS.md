@@ -23,6 +23,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 - [ ] **Mobile: traveler "enter pickup code" entry surface** — traveler gets a notification after payment ("ready for pickup, enter code"); deep-link routes to `/handover/verify/<match_id>?kind=pickup`.
 - [ ] **Mobile: sender follow-package screen after pickup code accepted** — when `match.in_transit` fires, sender's notification deep-links to `/tracking/<match_id>` (the progress screen).
 - [ ] **Mobile: counter-offer flow only when sender requested a specific traveler** — if the sender posted a *general* request, traveler offer is accept/decline only (price was sender-computed). If the sender targeted *this traveler*, traveler can counter.
+- [ ] **Email-service Django side: `email:send` stream publisher + `EmailVerificationCode` model + SMTP settings** — Go email-service is built and gated dark (Alaa, 2026-06-05). Full 5-piece spec in `backend/services/HANDOVER.md` (email-service section). In short: (1) add `redis_bus.enqueue_email_after_commit(to,subject,body,*,kind)` doing `XADD email:send MAXLEN ~ 10000` + PublishedEvent (first XADD in Django — redis_bus is pub/sub-only today); (2) `EmailVerificationCode` model (clone `PasswordResetCode`) + reversible migration + `task contract:sync-db`; (3) signup issues a verify code + publishes `kind="verify"`, add `POST /accounts/verify-email` that sets `is_email_verified=True`; (4) password-reset view: swap synchronous `send_mail` → `enqueue_email_after_commit(kind="reset")`; (5) prod SMTP `EMAIL_*` + `DEFAULT_FROM_EMAIL` + a `mailhog` compose service for local e2e. When it lands: flip `EMAIL_ENABLED=true` + `EMAIL_SMTP_*` — no Go change needed.
 - [x] 2026-05-28 `78ac9e4` ~~**Audit Django publish targets**~~ — confirmed: all 14 publish sites already pass `targets=[uid,...]` as kwarg via `redis_bus.publish_after_commit`. Go now reads only `targets`; legacy `recipient_id`/`sender_id`/`traveler_id` in payloads are forwarded raw to mobile but no longer consulted for routing.
 
 ### Soon
@@ -42,7 +43,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Now (blocking demo polish)
 
-- [ ] **FCM consumer** is scaffolded behind `FCM_ENABLED=false`. Needs `fcm_token` schema from Islam before unblocking.
+- [ ] (none unblocked) — FCM real sender + email-service are both built and gated dark; both wait on Islam (see below + the Islam section).
 
 ### Soon
 
@@ -50,6 +51,8 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-06-05 **email-service (4th Go service)** — `cmd/email` + `internal/email` (sender iface, go-mail `smtpSender`, FCM-cloned stream consumer w/o grace-wait, `email:sent:<id>` dedup), `config.LoadEmail`, compose `email-service` block + `.env.example` `EMAIL_*` + `go.mod` go-mail v0.7.2. Gated `EMAIL_ENABLED=false`; verified booting green (health 200, consumer-disabled, clean shutdown) vs throwaway Redis. No Postgres (off §3 budget). Build/vet/gofmt/`test -race ./...` green. Django spec handed to Islam.
+- [x] 2026-06-05 **FCM real sender wired** — `internal/notification/fcm_firebase.go` (firebase-admin-go v4 `SendEachForMulticast`, partial-failure tolerant, flags unregistered/invalid tokens), replaces `Sender:nil` in `cmd/notification/main.go`. Still behind `FCM_ENABLED=false`. Build/vet/`test -race ./internal/notification` green.
 - [x] 2026-05-30 Production hardening pass (final-product reframe): new `pkg/metrics` (expvar Group, `/debug/vars` on both services); SetEX retry on `delivered:<event_id>`; bounded dispatch worker pool (128/pod, drop-on-saturation with event_id); pubsub buffer 64→1024 + drop event_id/counter; presence initial-write retry. All build/vet/race green.
 - [x] 2026-05-28 `78ac9e4` Dispatcher: subscribe to all 16 Django channels via generic `targets=[uid,...]` envelope. Per-channel structs dropped; `dispatch` now fans by `targets` for every channel uniformly. Existing audit/receipt path unchanged.
 - [x] 2026-05-22 `c7e80a8` Hardened Go services from senior review.
