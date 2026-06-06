@@ -59,6 +59,27 @@ services:
       timeout: 3s
       retries: 6
 
+  # One-shot bucket provisioning. App code must NOT create buckets (CLAUDE.md
+  # §G4: "Never call MinIO admin APIs from app code"), so the kyc-service's
+  # /readyz HeadBucket check stays red until these exist. mc runs, makes the
+  # buckets idempotently (`mb -p` no-ops if present), then exits 0. Keep bucket
+  # names in sync with KYC_S3_BUCKET (kyc-service) + S3_BUCKET_* (Django).
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" &&
+        mc mb -p local/kyc-docs local/shiptrip-parcel &&
+        echo "buckets ready"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+
   django:
     build:
       context: ./monolith
@@ -69,7 +90,6 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.dev
     ports:
       - "8000:8000"
-      - "50051:50051"
     volumes:
       - ./monolith:/app:cached
     depends_on:
@@ -79,32 +99,114 @@ services:
         condition: service_healthy
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
-  notification:
+  # KYC gRPC server (Django side). The `django` service above only runs the
+  # HTTP dev server, so without this the 50051 port was mapped but nothing
+  # listened — the Go kyc-service's RecordSubmission dial would hang. Same
+  # image + code, different entrypoint. Dev auth is bearer (CLAUDE.md §G5);
+  # GRPC_AUTH_MODE + GRPC_BEARER_TOKEN come from .env, shared with kyc-service.
+  django-grpc:
+    build:
+      context: ./monolith
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./monolith:/app:cached
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "manage.py", "runkycgrpc", "--addr", "0.0.0.0:50051"]
+
+  # ── Go services (backend/services) ──────────────────────────────────────
+  # All three share one parameterized Dockerfile (SERVICE build-arg picks the
+  # cmd/<SERVICE> binary). They read the SAME .env as Django — pkg/config
+  # accepts Django's split POSTGRES_*/REDIS_URL/JWT_HS256_SECRET/S3_* vars, so
+  # no Go-only DATABASE_URL is needed. Inside the compose network they reach
+  # postgres:5432 and redis:6379 (NOT the host's 6380 remap). Per-service
+  # _DB_MAX_CONNS defaults live in each main.go and honour the §3 pool budget;
+  # override here only when scaling pod count.
+  #
+  # Required in .env for these to boot (fail-loud at startup if missing):
+  #   POSTGRES_HOST=postgres  POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
+  #   REDIS_URL=redis://redis:6379/0
+  #   JWT_HS256_SECRET=<same secret Django signs with>
+  #   S3_ENDPOINT_URL=http://minio:9000  S3_ACCESS_KEY / S3_SECRET_KEY
+  #   KYC_GRPC_TARGET=django-grpc:50051  GRPC_AUTH_MODE=bearer  GRPC_BEARER_TOKEN=<shared>
+
+  kyc-service:
     build:
       context: ./services
-      dockerfile: Dockerfile.notification
+      dockerfile: Dockerfile
+      args:
+        SERVICE: kyc
+    env_file: .env
+    # The kyc-service forces an eager gRPC connection at boot (fail-fast on a
+    # bad KYC_GRPC_TARGET, by design — cmd/kyc/main.go). On a cold `up` the
+    # django-grpc server may not have bound :50051 within the 10s dial window,
+    # so the first boot can lose the race and exit. on-failure self-heals that
+    # transient race; a genuinely wrong target keeps crash-looping (visible).
+    restart: on-failure
     environment:
-      # Per-pod budget (CLAUDE.md §3): notif gets 10 conns.
-      NOTIF_DB_MAX_CONNS: "10"
+      KYC_HTTP_ADDR: ":8083"
+      KYC_GRPC_TARGET: "django-grpc:50051"
+      KYC_S3_BUCKET: "kyc-docs"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+      django-grpc:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  notification-service:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: notification
+    env_file: .env
+    environment:
       NOTIF_HTTP_ADDR: ":8082"
-      # Reuse Django's split Postgres vars; pkg/config builds the URL.
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      REDIS_URL: redis://redis:6379/0
-      JWT_HS256_SECRET: ${JWT_HS256_SECRET}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      # FCM stays gated until fcm_token schema + Django publisher land.
-      FCM_ENABLED: "false"
-    ports:
-      - "8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  chat-service:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: chat
+    env_file: .env
+    environment:
+      CHAT_HTTP_ADDR: ":8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
 
   caddy:
     image: caddy:2-alpine
@@ -116,7 +218,9 @@ services:
       - caddyconfig:/config
     depends_on:
       - django
-      - notification
+      - kyc-service
+      - notification-service
+      - chat-service
 
 volumes:
   pgdata:

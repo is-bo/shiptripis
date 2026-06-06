@@ -108,6 +108,12 @@ func (g *Group) floatVar(name string) *expvar.Float {
 	return v
 }
 
+// Sanitize exposes the name-folding rule (lowercase + [a-z0-9_]) used to
+// build the full expvar key. Callers that need to reconstruct a published
+// metric's key — e.g. tests reading /debug/vars — use this so they don't
+// hardcode the transform.
+func Sanitize(s string) string { return sanitize(s) }
+
 // sanitize lowercases and replaces anything outside [a-z0-9_] with _ so
 // metric names are safe Prometheus identifiers when we eventually export.
 func sanitize(s string) string {

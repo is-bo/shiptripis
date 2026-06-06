@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"io"
 	"log/slog"
 	"maps"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/wsproto"
 )
@@ -109,6 +112,55 @@ func eventuallyTrue(t *testing.T, pred func() bool) bool {
 		time.Sleep(2 * time.Millisecond)
 	}
 	return pred()
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// testMetrics wraps a metrics.Group with readback helpers. Each test uses a
+// unique service prefix so the process-global expvar map doesn't collide.
+type testMetrics struct {
+	g      *metrics.Group
+	prefix string
+}
+
+func newTestMetrics(service string) *testMetrics {
+	return &testMetrics{g: metrics.Register(service), prefix: metrics.Sanitize(service)}
+}
+
+func (m *testMetrics) read(t *testing.T, name string) int64 {
+	t.Helper()
+	full := m.prefix + "_" + metrics.Sanitize(name)
+	v := expvar.Get("shiptrip")
+	root, ok := v.(*expvar.Map)
+	if !ok {
+		t.Fatalf("shiptrip expvar is %T, want *expvar.Map", v)
+	}
+	got := root.Get(full)
+	if got == nil {
+		t.Fatalf("expvar %q not published", full)
+	}
+	n, err := strconv.ParseInt(got.(*expvar.Int).String(), 10, 64)
+	if err != nil {
+		t.Fatalf("parse %q: %v", full, err)
+	}
+	return n
+}
+
+// readMaybe returns 0 if the metric was never published (delta never added).
+func (m *testMetrics) readMaybe(name string) int64 {
+	full := m.prefix + "_" + metrics.Sanitize(name)
+	root, ok := expvar.Get("shiptrip").(*expvar.Map)
+	if !ok {
+		return 0
+	}
+	got := root.Get(full)
+	if got == nil {
+		return 0
+	}
+	n, _ := strconv.ParseInt(got.(*expvar.Int).String(), 10, 64)
+	return n
 }
 
 // ── routing ─────────────────────────────────────────────────────────────────────
@@ -323,5 +375,104 @@ func TestScheduleDispatch_ReturnsOnCancelledCtx(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("scheduleDispatch did not return on cancelled ctx")
+	}
+}
+
+// ── dbReceiptStore SetEX retry (the G1 duplicate-push guard) ─────────────────────
+
+// flakyExpirer fails its first n SetEX calls, then succeeds. Records the
+// total attempt count so the test can assert exactly one retry happened.
+type flakyExpirer struct {
+	failFirst int
+	attempts  atomic.Int32
+}
+
+func (f *flakyExpirer) SetEX(_ context.Context, _ string, _ any, _ time.Duration) error {
+	n := f.attempts.Add(1)
+	if int(n) <= f.failFirst {
+		return errors.New("redis blip")
+	}
+	return nil
+}
+
+// recordingExecer records whether the UPDATE ran and can return an error.
+type recordingExecer struct {
+	ran atomic.Bool
+	err error
+}
+
+func (e *recordingExecer) exec(_ context.Context, _ string) error {
+	e.ran.Store(true)
+	return e.err
+}
+
+func TestDBReceiptStore_SetEXRetrySucceedsSecondTry(t *testing.T) {
+	m := newTestMetrics("notif_receipt_retry_ok")
+	exp := &flakyExpirer{failFirst: 1}
+	ex := &recordingExecer{}
+	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: m.g}
+
+	if err := s.MarkDelivered(context.Background(), "evt-retry"); err != nil {
+		t.Fatalf("MarkDelivered returned %v, want nil", err)
+	}
+	if got := exp.attempts.Load(); got != 2 {
+		t.Errorf("SetEX attempts = %d, want 2 (one fail + one retry)", got)
+	}
+	// First failure counted; final-failure counter must NOT move (retry won).
+	if got := m.read(t, "delivered_setex_failures_total"); got != 1 {
+		t.Errorf("delivered_setex_failures_total = %d, want 1", got)
+	}
+	if got := m.readMaybe("delivered_setex_failures_final_total"); got != 0 {
+		t.Errorf("delivered_setex_failures_final_total = %d, want 0", got)
+	}
+	// The UPDATE must still run after a recovered SetEX.
+	if !ex.ran.Load() {
+		t.Error("UPDATE did not run after SetEX recovered")
+	}
+}
+
+func TestDBReceiptStore_SetEXBothAttemptsFailButUpdateStillRuns(t *testing.T) {
+	m := newTestMetrics("notif_receipt_retry_fail")
+	exp := &flakyExpirer{failFirst: 2} // both attempts fail
+	ex := &recordingExecer{}
+	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: m.g}
+
+	// MarkDelivered returns the UPDATE result, not the SetEX failure — a
+	// missing delivered key risks a duplicate FCM but the receipt row is
+	// still authoritative, so we proceed to the UPDATE and return its error.
+	if err := s.MarkDelivered(context.Background(), "evt-both-fail"); err != nil {
+		t.Fatalf("MarkDelivered returned %v, want nil (UPDATE succeeded)", err)
+	}
+	if got := exp.attempts.Load(); got != 2 {
+		t.Errorf("SetEX attempts = %d, want 2", got)
+	}
+	if got := m.read(t, "delivered_setex_failures_total"); got != 1 {
+		t.Errorf("delivered_setex_failures_total = %d, want 1", got)
+	}
+	if got := m.read(t, "delivered_setex_failures_final_total"); got != 1 {
+		t.Errorf("delivered_setex_failures_final_total = %d, want 1", got)
+	}
+	if !ex.ran.Load() {
+		t.Error("UPDATE must run even when both SetEX attempts fail")
+	}
+}
+
+func TestDBReceiptStore_CtxCancelledDuringRetryBackoffSkipsUpdate(t *testing.T) {
+	m := newTestMetrics("notif_receipt_retry_cancel")
+	exp := &flakyExpirer{failFirst: 1} // first fails → enters backoff
+	ex := &recordingExecer{}
+	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: m.g}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled → the retry backoff select takes ctx.Done()
+
+	if err := s.MarkDelivered(ctx, "evt-cancel"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("MarkDelivered err = %v, want context.Canceled", err)
+	}
+	if got := exp.attempts.Load(); got != 1 {
+		t.Errorf("SetEX attempts = %d, want 1 (retry skipped on cancel)", got)
+	}
+	if ex.ran.Load() {
+		t.Error("UPDATE must NOT run when ctx cancelled during retry backoff")
 	}
 }

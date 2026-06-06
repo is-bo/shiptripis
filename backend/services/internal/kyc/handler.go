@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"shiptrip/pkg/auth"
-	"shiptrip/pkg/storage"
 )
 
 // MaxImageBytes caps each uploaded image. Per ARCHITECTURE.md §11 the
@@ -63,12 +63,20 @@ var allowedContentTypes = map[string]string{
 	"image/png":  ".png",
 }
 
+// objectStore is the subset of *storage.Client the handler needs. Narrowed
+// to an interface so unit tests can inject a fake without a live MinIO/S3 —
+// *storage.Client satisfies it unchanged, so production wiring is identical.
+type objectStore interface {
+	Put(ctx context.Context, bucket, key string, body io.Reader, contentType string) error
+	Delete(ctx context.Context, bucket, key string) error
+}
+
 // Handler bundles the HTTP-side dependencies. The auth validator turns
 // the bearer token into a user_id; the storage client owns the MinIO
 // uploads; the recorder is the gRPC client to Django.
 type Handler struct {
 	Validator *auth.Validator
-	Storage   *storage.Client
+	Storage   objectStore
 	Bucket    string
 	Recorder  Recorder
 	Log       *slog.Logger

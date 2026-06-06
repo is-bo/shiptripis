@@ -109,7 +109,7 @@ func NewDispatcher(rdb *redisbus.Client, pool *pgxpool.Pool, hub *Hub, log *slog
 	return &Dispatcher{
 		rdb:         rdb,
 		hub:         hub,
-		receipts:    &dbReceiptStore{rdb: rdb, pool: pool, log: log, metrics: m},
+		receipts:    newDBReceiptStore(rdb, pool, log, m),
 		log:         log,
 		metrics:     m,
 		dispatchSem: make(chan struct{}, dispatchConcurrency),
@@ -275,11 +275,43 @@ func (d *Dispatcher) markDelivered(eventID string, sockets int) {
 // dbReceiptStore is the production receiptStore: SET delivered:<id> EX
 // 60 + UPDATE core_published_event. Mirrors notification's path so the
 // G6b sweep treats either service's delivery identically.
+//
+// keyExpirer + receiptExecer are micro-seams over the Redis SETEX and the
+// Postgres UPDATE so a test can fail the first SETEX and assert the retry
+// + its counters (same pattern as notification's dbReceiptStore).
 type dbReceiptStore struct {
-	rdb     *redisbus.Client
-	pool    *pgxpool.Pool
+	rdb     keyExpirer
+	exec    receiptExecer
 	log     *slog.Logger
 	metrics *metrics.Group
+}
+
+// keyExpirer is the SETEX surface (satisfied by *redisbus.Client).
+type keyExpirer interface {
+	SetEX(ctx context.Context, key string, value any, ttl time.Duration) error
+}
+
+// receiptExecer runs the delivered_at UPDATE (returns only error; 0
+// rows-affected is a valid second-pod case, not acted on).
+type receiptExecer interface {
+	exec(ctx context.Context, eventID string) error
+}
+
+type poolExecer struct{ pool *pgxpool.Pool }
+
+func (p poolExecer) exec(ctx context.Context, eventID string) error {
+	_, err := p.pool.Exec(ctx,
+		`UPDATE core_published_event
+		    SET delivered_at = now()
+		  WHERE event_id = $1
+		    AND delivered_at IS NULL`,
+		eventID,
+	)
+	return err
+}
+
+func newDBReceiptStore(rdb *redisbus.Client, pool *pgxpool.Pool, log *slog.Logger, m *metrics.Group) *dbReceiptStore {
+	return &dbReceiptStore{rdb: rdb, exec: poolExecer{pool: pool}, log: log, metrics: m}
 }
 
 func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) error {
@@ -303,13 +335,7 @@ func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) erro
 				"event_id", eventID, "err", err)
 		}
 	}
-	_, err := s.pool.Exec(ctx,
-		`UPDATE core_published_event
-		    SET delivered_at = now()
-		  WHERE event_id = $1
-		    AND delivered_at IS NULL`,
-		eventID,
-	)
+	err := s.exec.exec(ctx, eventID)
 	if err != nil && s.metrics != nil {
 		s.metrics.Counter("receipt_update_failures_total", 1)
 	}

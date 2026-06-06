@@ -137,25 +137,74 @@ don't ship regenerated stubs fail CI.
 
 ## Known gaps (highest-value unblocked work)
 
-`go test -race ./...` is green, but three packages where the hardening pass
-added real logic have **no tests**:
+**Test-coverage gap closed (2026-06-01).** The three previously-untested
+packages now have unit tests; `go test -race ./...` exercises them:
 
-| Package | Untested logic |
+| Package | Now covered |
 |---|---|
-| `internal/notification` | dispatch pool saturation/drop, SetEX retry, targets routing, receipt scheduling |
-| `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_*` counters |
-| `pkg/metrics` | `Counter`/`Gauge`/`sanitize` contract everything else meters against |
+| `internal/notification` | targets routing (100%), multi-target fan-out w/ uid-0 skip, bad-envelope drops, dispatch + receipt pool saturation/drop, ctx-cancel on saturated pool, `dbReceiptStore.MarkDelivered` SetEX retry (succeed-on-2nd / both-fail / cancel-during-backoff) |
+| `internal/chat` | same SetEX-retry coverage added (`receipt_test.go`) + UPDATE-error metering; routing already covered |
+| `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_total` / per-channel counters, nil-metrics safety, unparseable-payload tolerance |
+| `pkg/metrics` | `Counter`/`Gauge`/`GaugeAdd`/`Sanitize` + folded-label names (100%) |
+| `internal/kyc` | `handleSubmit` happy path (201) + idempotent replay (200), passport-no-back, 401 unauth, full validation-rejection table (bad/missing doc_type, short/non-hex idem key, missing front/back/selfie, bad content type, empty file, too-many-parts), recorder-not-configured (503), recorder error (502), partial-upload orphan cleanup (500). `handleSubmit` 96.6%, `uploadImage` 95.7%, validation paths 100% (2026-06-03) |
 
-To test the notification SetEX-retry you must first give the dispatcher the
-same `router` + `receiptStore` seams `chat` already has (mechanical, behaviour-
-preserving): copy the `router`/`receiptStore` interfaces and `dbReceiptStore`
-struct from `internal/chat/dispatcher.go`, change `Dispatcher.hub` to the
-`router` type, move the SetEX-retry + `UPDATE core_published_event` body into
-`dbReceiptStore.MarkDelivered`, then model the test on
-`internal/chat/dispatcher_test.go` (stubRouter / stubReceipts / `newTestDispatcher`).
-To cover the retry *inside* the store (chat's is currently untested too), give
-`dbReceiptStore` micro-seams over `SetEX` and `Exec` so a stub can fail the
-first SetEX and assert the `*_delivered_setex_failures_*` counters move.
+`internal/kyc` test seam: `Handler.Storage` was narrowed from `*storage.Client`
+to an `objectStore` interface (`Put`/`Delete`) so a `fakeStore` injects without
+live MinIO — `*storage.Client` satisfies it unchanged, so prod wiring is identical.
+
+Both `dbReceiptStore`s now expose `keyExpirer` + `receiptExecer` micro-seams
+(behaviour-preserving) so the SetEX retry is testable without live Redis/PG.
+`metrics.Sanitize` was exported so tests can reconstruct a published var's key.
+
+What still can't be unit-tested without integration infra (live Redis/PG/gRPC):
+`Dispatcher.Run`, `redisbus.Subscribe`/`pump`, the FCM consumer's
+`XReadGroup`/`Sweep` loop, and `kyc.GRPCClient` dial. The compose harness below
+now exists to exercise these end-to-end.
+
+**Compose harness landed (2026-06-03).** The Go services are now in
+`backend/docker-compose.yml` and actually runnable:
+- One parameterized `services/Dockerfile` (`SERVICE` build-arg → `cmd/<SERVICE>`)
+  builds all three; `kyc-service` / `notification-service` / `chat-service`
+  blocks each `env_file: .env` + healthcheck on their `/healthz`.
+- New `django-grpc` service runs `manage.py runkycgrpc` so port 50051 actually
+  serves — previously the `django` block mapped 50051 but only ran `runserver`,
+  so the kyc gRPC dial had nothing to talk to. The 50051 mapping moved here.
+- `backend/.env.example` created (was entirely absent despite CLAUDE.md §7b's
+  `cp -n .env.example .env` flow + base.py:2 referencing it). Root `.gitignore`
+  gained `!.env.example` so the template is trackable under the `.env.*` ignore.
+- **Heads-up for Claude A:** Django settings read `GRPC_INTERNAL_TOKEN`
+  (base.py:153) but `runkycgrpc.py` reads `GRPC_BEARER_TOKEN` via `os.getenv`.
+  The runner wins for the gRPC bearer flow, so `.env.example` sets
+  `GRPC_BEARER_TOKEN`. The unused `GRPC_INTERNAL_TOKEN` in settings is a latent
+  inconsistency on the Django side — not touched (Claude A scope).
+
+**KYC verified end-to-end (2026-06-04).** Full cold-start stack came up and a
+real multipart POST through Caddy → kyc-service → MinIO → gRPC → Django →
+Postgres returned 201 (first) then 200 (idempotent replay on same key); the 3
+images landed in MinIO and the `kyc_submission` row was inserted. Two fixes the
+live run surfaced (both committed):
+- **`pkg/storage/s3.go` PutObject was broken against any plain-http S3 endpoint.**
+  aws-sdk-go-v2 (≥v1.36) defaults `RequestChecksumCalculation=when_supported`,
+  which appends a CRC32 *trailing* checksum; for an unseekable Body over non-TLS
+  the SDK aborts with "unseekable stream is not supported without TLS and
+  trailing checksum". Fix: set `when_required` at config load AND pass the
+  seekable `multipart.File` straight through `Put` (was wrapped in a plain-Reader
+  `limitErrReader`, which stripped `io.Seeker` and forced the SDK to fail). The
+  fail-fast wrapper is kept only for non-seekable bodies. This was a real prod
+  bug — it would have failed every upload against MinIO/Backblaze/Hetzner over
+  http; exactly the §G4 "providers differ" caution. `go test -race ./...` green.
+- **`createbuckets` compose job** provisions `kyc-docs` (+`shiptrip-parcel`) via
+  `minio/mc`; without it kyc-service `/readyz` stays 503 on a fresh volume
+  (HeadBucket 404). App code must not create buckets (§G4), so this lives in
+  compose.
+
+**Pre-existing wart (not fixed — flagged for owner):** `imageKey()`
+(handler.go:328) hardcodes a `kyc-docs/` prefix *inside* the object key while
+the bucket is also `kyc-docs`, so objects land at `kyc-docs/kyc-docs/<uid>/…`.
+Functional (keys are deterministic, store+fetch stay consistent) but the doubled
+segment is ugly. Drop the literal prefix from `imageKey` if you want clean paths
+— but it's a stored-key change, so coordinate: existing rows reference the old
+keys.
 
 ---
 
@@ -207,8 +256,9 @@ consistent.
 
 1. `git pull` then `cd backend/services && go build ./... && go vet ./...` —
    must be clean.
-2. `go test -race -count=1 ./...` — `chat`, `auth`, `storage` should be `ok`;
-   `notification`, `redisbus`, `metrics` show `[no test files]` (the gap).
+2. `go test -race -count=1 ./...` — `chat`, `notification`, `auth`, `storage`,
+   `redisbus`, `metrics` should be `ok`. The `cmd/*`, `internal/kyc`, and the
+   pure-wiring `pkg/*` (config/db/health/logger/wsproto) show `[no test files]`.
 3. `gofmt -l .` — must be empty.
 4. Skim `cmd/notification/main.go` + `cmd/kyc/main.go` for the wiring template;
    `internal/notification/dispatcher.go` for the G1+G6b + pool pattern;
