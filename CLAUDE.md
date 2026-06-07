@@ -47,12 +47,15 @@ returned 201 (first) then 200 (idempotent replay); images landed in MinIO and th
   have broken MinIO/Backblaze/Hetzner over http — exactly the §G4 "providers
   differ" caution. `go test -race ./...` green.
 
-**Pre-existing wart (flagged, not fixed — owner's call).** `imageKey()`
-(`internal/kyc/handler.go:328`) hardcodes a `kyc-docs/` prefix *inside* the
-object key while the bucket is also `kyc-docs`, so objects land at
-`kyc-docs/kyc-docs/<uid>/…`. Functional (deterministic keys, store+fetch
-consistent) but the doubled segment is ugly. Dropping the literal prefix is a
-stored-key change — coordinate, existing rows reference the old keys.
+**imageKey doubled-prefix fixed (2026-06-07).** `imageKey()`
+(`internal/kyc/handler.go`) used to hardcode a `kyc-docs/` prefix *inside* the
+object key while the bucket is also `kyc-docs`, so objects landed at the doubled
+`kyc-docs/kyc-docs/<uid>/…`. Keys are now bucket-relative
+(`<user_id>/<idempotency_key>-<field>.<ext>`). **Claude A:** this is a stored-key
+change — before shipping to any env with real KYC data, run a one-time migration
+(strip the leading `kyc-docs/` from existing `kyc_submission` key columns + `mc
+mv` existing MinIO objects up one level). No migration needed on a fresh/dev
+volume. Full spec in `services/HANDOVER.md` ("imageKey prefix fix").
 
 **WS handler shutdown drain (2026-06-01).** Both WS services now track in-flight
 WS handler goroutines with a per-service `sync.WaitGroup` (`connWG`) passed into

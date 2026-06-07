@@ -205,9 +205,14 @@ func TestSubmit_HappyPathCreated(t *testing.T) {
 	if len(keys) != 3 {
 		t.Fatalf("uploaded %d keys, want 3: %v", len(keys), keys)
 	}
+	// Keys are relative to the bucket — `<uid>/<idem>-<field>.<ext>`, with NO
+	// leading `kyc-docs/` (the bucket name is not repeated in the object key).
 	for _, k := range keys {
-		if !strings.HasPrefix(k, "kyc-docs/42/"+validIdemKey+"-") {
-			t.Errorf("key %q lacks deterministic prefix", k)
+		if !strings.HasPrefix(k, "42/"+validIdemKey+"-") {
+			t.Errorf("key %q lacks deterministic prefix %q", k, "42/"+validIdemKey+"-")
+		}
+		if strings.HasPrefix(k, "kyc-docs/") {
+			t.Errorf("key %q repeats the bucket name; want bucket-relative path", k)
 		}
 	}
 	// Success → no orphan cleanup.

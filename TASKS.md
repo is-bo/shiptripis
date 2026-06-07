@@ -18,6 +18,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 ### Now (blocking demo polish)
 
 - [ ] **Regenerate `contracts/sql/schema.sql`** — TripMedia + role-default migrations not reflected; CI `check-drift` fails. Run `task contract:sync-db`, commit the diff.
+- [ ] **KYC key migration (only before real KYC data ships)** — Alaa fixed `imageKey` to drop the doubled `kyc-docs/` prefix (keys are now `<uid>/<idem>-<field>.<ext>`, bucket-relative). New uploads are clean; existing data is not. One-time migration: (1) strip leading `kyc-docs/` from existing `kyc_submission` key columns in a reversible data migration; (2) `mc mv --recursive local/kyc-docs/kyc-docs/ local/kyc-docs/` for existing objects. No-op on a fresh/dev volume. Full spec in `services/HANDOVER.md` → "imageKey prefix fix".
 - [ ] **Pickup code: don't regenerate on re-fetch** — the code is currently rotated on every issue call. Should be saved once on the accepted match and shown to the sender from "My requests" until the traveler enters it.
 - [ ] **Mobile: post-payment screen → "your code is X" + push to sender** — after sender pays, they land on a screen showing the pickup code with copy button; same code is pushed via notification.
 - [ ] **Mobile: traveler "enter pickup code" entry surface** — traveler gets a notification after payment ("ready for pickup, enter code"); deep-link routes to `/handover/verify/<match_id>?kind=pickup`.
@@ -50,6 +51,8 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-06-07 Fix `imageKey` doubled `kyc-docs/` prefix — keys are now bucket-relative (`<uid>/<idem>-<field>.<ext>`) instead of `kyc-docs/kyc-docs/<uid>/…`. Handler test asserts no bucket-name repeat. Flagged the stored-key migration for Islam (see Islam/Now). `go test -race ./internal/kyc/` green.
+- [x] 2026-06-07 Test coverage for the untested shared `pkg/*`: `pkg/config` (99%, every env loader incl. URL build + GRPC/FCM validation tables), `pkg/health` (97%, liveness/readiness/MarkReady/panic-containment), `pkg/logger` (100%), `pkg/wsproto` (bearerToken + Send drop semantics + Close once-guard + envelope JSON + ping<TTL invariant), `pkg/db` (NewPool fail-fast validation + orDefault). Now every package is tested except `cmd/*` (wiring-only) and `kycpb` (generated). `go test -race ./...` green. HANDOVER.md gap table + day-one checklist updated.
 - [x] 2026-05-30 Production hardening pass (final-product reframe): new `pkg/metrics` (expvar Group, `/debug/vars` on both services); SetEX retry on `delivered:<event_id>`; bounded dispatch worker pool (128/pod, drop-on-saturation with event_id); pubsub buffer 64→1024 + drop event_id/counter; presence initial-write retry. All build/vet/race green.
 - [x] 2026-05-28 `78ac9e4` Dispatcher: subscribe to all 16 Django channels via generic `targets=[uid,...]` envelope. Per-channel structs dropped; `dispatch` now fans by `targets` for every channel uniformly. Existing audit/receipt path unchanged.
 - [x] 2026-05-22 `c7e80a8` Hardened Go services from senior review.
