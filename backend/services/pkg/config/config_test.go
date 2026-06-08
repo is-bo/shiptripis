@@ -20,6 +20,7 @@ func clearConfigEnv(t *testing.T) {
 		"S3_ENDPOINT_URL", "S3_REGION", "S3_ACCESS_KEY", "S3_SECRET_KEY",
 		"S3_USE_PATH_STYLE",
 		"KYC_GRPC_TARGET", "GRPC_AUTH_MODE", "GRPC_BEARER_TOKEN",
+		"GRPC_TLS_CA_CERT", "GRPC_TLS_CLIENT_CERT", "GRPC_TLS_CLIENT_KEY",
 		"FCM_ENABLED", "FCM_STREAM", "FCM_CONSUMER_GROUP", "FCM_CONSUMER_NAME",
 		"FCM_PROJECT_ID", "FCM_CREDENTIALS_PATH", "HOSTNAME",
 		"LOG_LEVEL", "CHAT_DB_MAX_CONNS",
@@ -213,19 +214,30 @@ func TestLoadS3_MissingKeysError(t *testing.T) {
 // ── KYC gRPC ───────────────────────────────────────────────────────────────
 
 func TestLoadKYCGRPC(t *testing.T) {
+	// caTriple supplies the three mtls cert paths; the loader only checks
+	// they're non-empty (file existence/validity is grpc_client.go's job).
+	const ca, crt, key = "/c/ca.pem", "/c/client.pem", "/c/client.key"
+
 	tests := []struct {
-		name    string
-		target  string
-		mode    string
-		token   string
-		wantErr bool
+		name                  string
+		target, mode, token   string
+		caCert, clCert, clKey string
+		wantErr               bool
 	}{
 		{name: "missing target", target: "", mode: "bearer", token: "t", wantErr: true},
-		{name: "default mode is mtls", target: "django:50051", mode: "", token: "", wantErr: false},
 		{name: "bearer without token", target: "django:50051", mode: "bearer", token: "", wantErr: true},
 		{name: "bearer with token", target: "django:50051", mode: "bearer", token: "t", wantErr: false},
-		{name: "mode case-insensitive", target: "django:50051", mode: "MTLS", token: "", wantErr: false},
-		{name: "unknown mode", target: "django:50051", mode: "kerberos", token: "", wantErr: true},
+		{name: "unknown mode", target: "django:50051", mode: "kerberos", wantErr: true},
+
+		// mtls is the default mode → with no certs it must error (not pass
+		// like the old stub-less version did).
+		{name: "default mode mtls needs certs", target: "django:50051", mode: "", wantErr: true},
+		{name: "mtls missing all certs", target: "django:50051", mode: "mtls", wantErr: true},
+		{name: "mtls missing ca", target: "django:50051", mode: "mtls", clCert: crt, clKey: key, wantErr: true},
+		{name: "mtls missing client cert", target: "django:50051", mode: "mtls", caCert: ca, clKey: key, wantErr: true},
+		{name: "mtls missing client key", target: "django:50051", mode: "mtls", caCert: ca, clCert: crt, wantErr: true},
+		{name: "mtls all certs present", target: "django:50051", mode: "mtls", caCert: ca, clCert: crt, clKey: key, wantErr: false},
+		{name: "mtls case-insensitive", target: "django:50051", mode: "MTLS", caCert: ca, clCert: crt, clKey: key, wantErr: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -233,6 +245,9 @@ func TestLoadKYCGRPC(t *testing.T) {
 			t.Setenv("KYC_GRPC_TARGET", tt.target)
 			t.Setenv("GRPC_AUTH_MODE", tt.mode)
 			t.Setenv("GRPC_BEARER_TOKEN", tt.token)
+			t.Setenv("GRPC_TLS_CA_CERT", tt.caCert)
+			t.Setenv("GRPC_TLS_CLIENT_CERT", tt.clCert)
+			t.Setenv("GRPC_TLS_CLIENT_KEY", tt.clKey)
 
 			got, err := LoadKYCGRPC()
 			if tt.wantErr {
@@ -246,6 +261,9 @@ func TestLoadKYCGRPC(t *testing.T) {
 			}
 			if tt.mode == "" && got.AuthMode != "mtls" {
 				t.Errorf("AuthMode = %q, want default mtls", got.AuthMode)
+			}
+			if got.AuthMode == "mtls" && (got.CACert != ca || got.ClientCert != crt || got.ClientKey != key) {
+				t.Errorf("cert paths not threaded through: %+v", got)
 			}
 		})
 	}

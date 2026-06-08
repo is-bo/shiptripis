@@ -126,8 +126,15 @@ backend/services/
   `KYC_GRPC_TARGET` is **required at boot** — missing config fails start.
   `NoopRecorder` retained for unit-test scaffolding only.
 - Auth: `GRPC_AUTH_MODE` defaults to `mtls` (prod); **`bearer` is dev-only** and
-  must be set explicitly with `GRPC_BEARER_TOKEN`. mTLS is still a TODO on both
-  sides (`grpc_client.go` returns an explicit error in `mtls` mode today).
+  must be set explicitly with `GRPC_BEARER_TOKEN`. The **Go client side of mtls
+  is wired** (2026-06-08): `grpc_client.go:tlsCredentials` loads the client
+  cert/key + CA from `GRPC_TLS_CA_CERT`/`GRPC_TLS_CLIENT_CERT`/`GRPC_TLS_CLIENT_KEY`
+  (all required when `GRPC_AUTH_MODE=mtls`; missing/bad certs fail boot, §9) and
+  builds `credentials.NewTLS` with the private CA as the only trusted root.
+  **Still TODO (shared / Claude A):** the Django SERVER branch in
+  `runkycgrpc.py` (also a `raise SystemExit` stub today) + the cert-issuing
+  pipeline (mkcert local / cert-manager K3s). Until both land, mtls builds valid
+  client credentials but has no server to dial — keep dev on `bearer`.
 
 **Codegen:** `task contract:go-grpc` regenerates `internal/kyc/kycpb/`;
 `task check-drift` runs it + `git diff --exit-code`, so proto changes that
@@ -302,7 +309,7 @@ consistent.
 |---|---|---|
 | 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then; flip `FCM_ENABLED=true` + wire a real `FCMSender` once it lands |
 | 2 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
-| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC runs on dev bearer; `grpc_client.go` errors in `mtls` mode until certs exist (CLAUDE.md §G5). Shared scope — coordinate, get explicit approval |
+| 3 | mTLS **server branch** (`runkycgrpc.py`) + cert pipeline (mkcert / cert-manager) | Go **client** side of mtls is done + tested (2026-06-08). What remains: the Django server's `grpc.ssl_server_credentials(require_client_auth=True)` branch (still a `raise SystemExit` stub) + a way to issue the shared-CA certs. Shared scope — coordinate, get explicit approval. Until both land, keep `GRPC_AUTH_MODE=bearer` in dev. |
 
 When any lands, **update this table** and the §0a handoff in `../../CLAUDE.md`
 in the same commit as the Go work that consumes it.
