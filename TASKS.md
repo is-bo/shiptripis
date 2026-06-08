@@ -13,6 +13,19 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ---
 
+## Open PRs (awaiting review/merge — as of 2026-06-08)
+
+- **PR #1** `feat/kyc-mtls-client` → `main` — imageKey doubled-prefix fix +
+  shared `pkg/*` test coverage (`b5f4bbe`) **and** Go-client mTLS for the KYC
+  gRPC dial (`f88259a`). **Merging this is what delivers the imageKey migration
+  note to Islam** (see Islam/Now). Mergeable, all Go tests green.
+- **PR #2** `feat/email-service-and-fcm-sender` → `main` — 4th Go service, the
+  SMTP email transport, shipped gated dark (`EMAIL_ENABLED=false`). Independent;
+  needs Islam's Django `enqueue_email_after_commit` publisher before it does
+  anything live. Mergeable.
+
+---
+
 ## Islam (Claude A — Django + mobile)
 
 ### Now (blocking demo polish)
