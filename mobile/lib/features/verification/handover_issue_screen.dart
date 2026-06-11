@@ -6,6 +6,7 @@ import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/verification/verification_providers.dart';
 import '../../core/verification/verification_repository.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/primary_button.dart';
 
 /// Sender's screen for issuing a handover code.
@@ -78,6 +79,10 @@ class _HandoverIssueScreenState extends ConsumerState<HandoverIssueScreen> {
         backgroundColor: AppColors.parchment,
         foregroundColor: AppColors.ink,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => safeBack(context),
+        ),
         title: Text(_title, style: AppType.display(18)),
       ),
       body: SafeArea(

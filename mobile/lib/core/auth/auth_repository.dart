@@ -17,6 +17,10 @@ class AuthUser {
     required this.phone,
     required this.wilaya,
     required this.role,
+    required this.isKycVerified,
+    required this.isPhoneVerified,
+    required this.isEmailVerified,
+    this.dateJoined,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> j) => AuthUser(
@@ -26,6 +30,12 @@ class AuthUser {
         phone: (j['phone'] as String?) ?? '',
         wilaya: (j['wilaya'] as String?) ?? '',
         role: (j['role'] as String?) ?? 'sender',
+        isKycVerified: (j['is_kyc_verified'] as bool?) ?? false,
+        isPhoneVerified: (j['is_phone_verified'] as bool?) ?? false,
+        isEmailVerified: (j['is_email_verified'] as bool?) ?? false,
+        dateJoined: j['date_joined'] is String
+            ? DateTime.tryParse(j['date_joined'] as String)
+            : null,
       );
 
   final int id;
@@ -34,6 +44,19 @@ class AuthUser {
   final String phone;
   final String wilaya;
   final String role;
+  final bool isKycVerified;
+  final bool isPhoneVerified;
+  final bool isEmailVerified;
+  final DateTime? dateJoined;
+
+  String get initials {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) {
+      return email.isNotEmpty ? email[0].toUpperCase() : '?';
+    }
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
 }
 
 class AuthRepository {

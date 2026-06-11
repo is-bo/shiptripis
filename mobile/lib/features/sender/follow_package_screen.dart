@@ -3,13 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../core/matching/matching_providers.dart';
 import '../../core/matching/matching_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/ws/live_event_router.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
 /// Follow-package — 3 loading circles bound to live Match.status.
@@ -143,7 +142,7 @@ class _FollowPackageScreenState extends ConsumerState<FollowPackageScreen> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => context.pop(),
+            onPressed: () => safeBack(context, fallback: '/sender/requests'),
             icon: const Icon(Icons.arrow_back_rounded),
             style: IconButton.styleFrom(
               backgroundColor: AppColors.parchmentSoft,

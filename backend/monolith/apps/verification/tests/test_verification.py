@@ -136,6 +136,25 @@ class VerifyCodeServiceTests(APITestCase):
         match.refresh_from_db()
         assert match.status == Match.Status.IN_TRANSIT
 
+    def test_pickup_verify_auto_issues_delivery_code_to_sender(self):
+        sender, traveler, match, _, _ = _accepted_match_with_intent()
+        issued = issue_code(
+            match=match, kind=HandoverCode.Kind.PICKUP, issued_to=sender
+        )
+        verify_code(
+            match=match,
+            kind=HandoverCode.Kind.PICKUP,
+            submitted_code=issued.code,
+            used_by=traveler,
+        )
+        delivery = HandoverCode.objects.filter(
+            match=match,
+            kind=HandoverCode.Kind.DELIVERY,
+            status=HandoverCode.Status.ACTIVE,
+        ).first()
+        assert delivery is not None
+        assert delivery.issued_to_id == sender.id
+
     def test_delivery_verify_releases_escrow_to_traveler(self):
         sender, traveler, match, offer, intent = _accepted_match_with_intent(
             total_dzd=5000, base_amount=4000, commission=1000

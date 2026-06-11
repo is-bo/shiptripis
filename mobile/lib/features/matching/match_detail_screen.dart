@@ -7,6 +7,7 @@ import '../../core/matching/matching_repository.dart';
 import '../../core/auth/auth_notifier.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/primary_button.dart';
 
@@ -124,6 +125,10 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
         backgroundColor: AppColors.parchment,
         foregroundColor: AppColors.ink,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => safeBack(context),
+        ),
         title: Text('Negotiation', style: AppType.display(18)),
       ),
       body: detailAsync.when(
@@ -203,11 +208,7 @@ class _MatchBody extends StatelessWidget {
         myId != null &&
         currentPending.proposerId == myId;
 
-    // Counter is only legal on direct (targeted) requests. Server enforces
-    // this with 409; we hide the button so it doesn't look broken on broadcast.
-    final canCounter =
-        match.parcel?.targetTravelerId != null &&
-            match.parcel?.targetTravelerId == myId;
+    final canCounter = match.parcel?.targetTravelerId != null;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),

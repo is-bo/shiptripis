@@ -150,17 +150,20 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
         final code = p['code'] as String?;
         final issuedTo = (p['issued_to_id'] as num?)?.toInt();
         if (mid != null && kind != null && code != null) {
-          state = state.withCode(LiveHandoverCode(
-            matchId: mid,
-            kind: kind,
-            code: code,
-            issuedAt: DateTime.now(),
-          ));
+          // Only cache the plaintext for the side it was issued to. The
+          // server fans the event to both parties so the counterparty
+          // can invalidate UI, but they must never see the digits.
+          final isHolder = viewerId != null && issuedTo == viewerId;
+          if (isHolder) {
+            state = state.withCode(LiveHandoverCode(
+              matchId: mid,
+              kind: kind,
+              code: code,
+              issuedAt: DateTime.now(),
+            ));
+          }
           ref.invalidate(matchDetailProvider(mid));
-          // Surface a banner to the user who holds the code (the issued_to
-          // side). The counterparty doesn't need a banner — they'll enter
-          // the code in person.
-          if (viewerId != null && issuedTo == viewerId) {
+          if (isHolder) {
             final label = kind == 'pickup' ? 'pickup' : 'delivery';
             state = state.withBanner(
               title: 'Your $label code is ready',
@@ -202,7 +205,8 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
           } else if (viewerId == travelerId) {
             state = state.withBanner(
               title: 'Pickup confirmed',
-              body: 'Safe travels — deliver to complete the run.',
+              body: 'Tap when you arrive to enter the delivery code.',
+              deepLink: '/handover/verify/$mid?kind=delivery',
               tone: LiveBannerTone.info,
             );
           }

@@ -30,9 +30,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     ];
     final canSwitch = ref.watch(canSwitchRoleProvider);
     final role = ref.watch(effectiveRoleProvider);
-    // Keep the live event router alive while the shell is mounted so banners
-    // and code caching can land regardless of which tab is active.
-    ref.watch(liveEventProvider);
+    // Keep the live event router alive while the shell is mounted, but don't
+    // rebuild the shell on every WS tick — the banner stack watches its own
+    // selector. listen with an empty callback is enough to hold the provider.
+    ref.listen(liveEventProvider, (_, __) {});
     return Scaffold(
       backgroundColor: AppColors.parchment,
       extendBody: true,
@@ -145,9 +146,14 @@ class _LiveBannerStackState extends ConsumerState<LiveBannerStack> {
     if (_timers.containsKey(id)) return;
     _timers[id] = _BannerTimer(() {
       if (!mounted) return;
-      ref.read(liveEventProvider.notifier).dismissBanner(id);
       _timers.remove(id);
+      ref.read(liveEventProvider.notifier).dismissBanner(id);
     });
+  }
+
+  void _dismiss(int id) {
+    _timers.remove(id)?.cancel();
+    ref.read(liveEventProvider.notifier).dismissBanner(id);
   }
 
   @override
@@ -156,6 +162,12 @@ class _LiveBannerStackState extends ConsumerState<LiveBannerStack> {
     final visible =
         banners.take(2).toList(growable: false); // newest first
 
+    final liveIds = banners.map((b) => b.id).toSet();
+    _timers.removeWhere((id, t) {
+      if (liveIds.contains(id)) return false;
+      t.cancel();
+      return true;
+    });
     for (final b in visible) {
       _ensureTimer(b.id);
     }
@@ -174,14 +186,13 @@ class _LiveBannerStackState extends ConsumerState<LiveBannerStack> {
                 child: _LiveBannerCard(
                   banner: b,
                   onTap: () {
-                    ref.read(liveEventProvider.notifier).dismissBanner(b.id);
                     final link = b.deepLink;
+                    _dismiss(b.id);
                     if (link != null) {
                       GoRouter.of(context).push(link);
                     }
                   },
-                  onDismiss: () =>
-                      ref.read(liveEventProvider.notifier).dismissBanner(b.id),
+                  onDismiss: () => _dismiss(b.id),
                 ),
               ),
           ],

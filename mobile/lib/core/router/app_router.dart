@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,7 @@ import '../../core/verification/verification_repository.dart';
 import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
+import '../../features/chat/chat_stub_screen.dart';
 import '../../features/matching/match_detail_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -15,6 +17,7 @@ import '../../features/sender/follow_package_screen.dart';
 import '../../features/sender/make_request_screen.dart';
 import '../../features/sender/my_requests_screen.dart';
 import '../../features/sender/payment_screen.dart';
+import '../../features/sender/request_detail_screen.dart';
 import '../../features/sender/search_filter_screen.dart';
 import '../../features/shell/app_shell.dart';
 import '../../features/traveler/create_trip_screen.dart';
@@ -24,13 +27,35 @@ import '../../features/verification/handover_issue_screen.dart';
 import '../../features/verification/handover_verify_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  // Re-evaluate redirects every time auth state changes — so sign-out
+  // immediately bounces the user to /auth/sign-in regardless of which
+  // screen they were on.
+  final refresh = ValueNotifier<int>(0);
+  ref.listen<AuthState>(authNotifierProvider, (_, __) => refresh.value++);
+  ref.onDispose(refresh.dispose);
+
+  const publicPaths = {
+    '/',
+    '/benefits',
+    '/auth/sign-in',
+    '/auth/sign-up',
+    '/auth/forgot',
+  };
+
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: refresh,
     redirect: (context, state) {
       final auth = ref.read(authNotifierProvider);
+      final loc = state.matchedLocation;
+      final onPublic = publicPaths.contains(loc);
+
+      // Signed-out users can only see public/auth screens.
+      if (auth is AuthSignedOut || auth is AuthError) {
+        return onPublic ? null : '/auth/sign-in';
+      }
       if (auth is! AuthSignedIn) return null;
 
-      final loc = state.matchedLocation;
       final serverRole = auth.user.role;
 
       // Pure-sender server role cannot enter traveler-only screens.
@@ -66,6 +91,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/sender/requests',
           builder: (_, _) => const MyRequestsScreen()),
+      GoRoute(
+        path: '/sender/requests/:parcelId',
+        builder: (_, state) => RequestDetailScreen(
+          parcelId: int.parse(state.pathParameters['parcelId']!),
+        ),
+      ),
+      GoRoute(
+        path: '/chat/:matchId',
+        builder: (_, state) => ChatStubScreen(
+          matchId: int.parse(state.pathParameters['matchId']!),
+        ),
+      ),
       GoRoute(
           path: '/sender/search',
           builder: (_, _) => const SearchFilterScreen()),

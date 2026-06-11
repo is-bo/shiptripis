@@ -44,6 +44,85 @@ def _refetch(pk: int) -> ParcelRequest:
     )
 
 
+def _auto_match_targeted_traveler(parcel: ParcelRequest) -> None:
+    # When a sender directs a parcel at a specific traveler, find that
+    # traveler's first bookable trip on the same corridor and create a
+    # sender-proposed Match + Offer. Without this the parcel sits idle and
+    # the traveler never sees it. If no trip matches, the parcel still lives
+    # as a targeted broadcast (no Match yet) — the traveler can apply later
+    # when they post a trip on the corridor.
+    if parcel.target_traveler_id is None:
+        return
+    from apps.matching.models import Match, MatchEvent, Offer
+    from apps.matching.views import _quote_for_parcel
+    from apps.trips.models import Trip
+
+    trip = (
+        Trip.objects.filter(
+            traveler_id=parcel.target_traveler_id,
+            origin_id=parcel.origin_id,
+            destination_id=parcel.destination_id,
+            status__in=[Trip.Status.DRAFT, Trip.Status.ACTIVE],
+        )
+        .order_by("departure_at")
+        .first()
+    )
+    if trip is None:
+        return
+
+    pricing = _quote_for_parcel(parcel, None)
+    match = Match.objects.create(
+        parcel=parcel,
+        trip=trip,
+        sender_id=parcel.sender_id,
+        traveler_id=parcel.target_traveler_id,
+        status=Match.Status.PENDING,
+    )
+    offer = Offer.objects.create(
+        match=match,
+        proposed_by=Offer.ProposedBy.SENDER,
+        proposer_id=parcel.sender_id,
+        note="",
+        **pricing,
+    )
+    MatchEvent.objects.create(
+        match=match,
+        offer=offer,
+        actor_id=parcel.sender_id,
+        kind=MatchEvent.Kind.MATCH_CREATED,
+        payload={"trip_id": trip.id, "parcel_id": parcel.id, "directed": True},
+    )
+    MatchEvent.objects.create(
+        match=match,
+        offer=offer,
+        actor_id=parcel.sender_id,
+        kind=MatchEvent.Kind.OFFER_CREATED,
+        payload={"by": "sender", "total_dzd": offer.total_dzd},
+    )
+    redis_bus.publish_after_commit(
+        channels.MATCH_CREATED,
+        {
+            "match_id": match.id,
+            "parcel_id": parcel.id,
+            "trip_id": trip.id,
+            "sender_id": match.sender_id,
+            "traveler_id": match.traveler_id,
+        },
+        targets=[match.sender_id, match.traveler_id],
+    )
+    redis_bus.publish_after_commit(
+        channels.OFFER_CREATED,
+        {
+            "match_id": match.id,
+            "offer_id": offer.id,
+            "proposed_by": offer.proposed_by,
+            "total_dzd": offer.total_dzd,
+            "recipient_id": match.traveler_id,
+        },
+        targets=[match.traveler_id],
+    )
+
+
 class ParcelListView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -128,6 +207,7 @@ class DeliveryCreateView(APIView):
                 },
                 targets=[request.user.id],
             )
+            _auto_match_targeted_traveler(parcel)
 
         return Response(
             ParcelRequestSerializer(_refetch(parcel.pk)).data,
@@ -171,6 +251,7 @@ class ProductCreateView(APIView):
                 },
                 targets=[request.user.id],
             )
+            _auto_match_targeted_traveler(parcel)
 
         return Response(
             ParcelRequestSerializer(_refetch(parcel.pk)).data,

@@ -185,9 +185,19 @@ def _advance_match_to_in_transit(match: Match) -> None:
     )
     redis_bus.publish_after_commit(
         channels.MATCH_IN_TRANSIT,
-        {"match_id": match.id, "sender_id": match.sender_id, "traveler_id": match.traveler_id},
+        {
+            "match_id": match.id,
+            "parcel_id": match.parcel_id,
+            "sender_id": match.sender_id,
+            "traveler_id": match.traveler_id,
+        },
         targets=[match.sender_id, match.traveler_id],
     )
+    # Auto-issue the DELIVERY code now that pickup has happened. Sender holds
+    # this code and shows it to the traveler at drop-off; verifying it
+    # releases escrow. Issuing here means the code lives in the sender's
+    # detail screen the moment the package is on the road.
+    issue_code(match=match, kind=HandoverCode.Kind.DELIVERY, issued_to=match.sender)
 
 
 def _advance_match_to_delivered_and_release(match: Match) -> None:
@@ -232,6 +242,7 @@ def _advance_match_to_delivered_and_release(match: Match) -> None:
         channels.MATCH_COMPLETED,
         {
             "match_id": match.id,
+            "parcel_id": match.parcel_id,
             "sender_id": match.sender_id,
             "traveler_id": match.traveler_id,
             "payee_amount_minor": payee_amount,

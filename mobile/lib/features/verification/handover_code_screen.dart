@@ -8,6 +8,7 @@ import '../../core/theme/typography.dart';
 import '../../core/verification/verification_providers.dart';
 import '../../core/verification/verification_repository.dart';
 import '../../core/ws/live_event_router.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/primary_button.dart';
 
 /// Read-only "show your pickup code" screen.
@@ -117,6 +118,10 @@ class _HandoverCodeScreenState extends ConsumerState<HandoverCodeScreen> {
         backgroundColor: AppColors.parchment,
         foregroundColor: AppColors.ink,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => safeBack(context, fallback: '/sender/requests'),
+        ),
         title: Text(_title, style: AppType.display(18)),
       ),
       body: SafeArea(

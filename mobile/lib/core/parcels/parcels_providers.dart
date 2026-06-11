@@ -121,6 +121,11 @@ class MyParcelsNotifier extends AsyncNotifier<List<Parcel>> {
 final myParcelsProvider =
     AsyncNotifierProvider<MyParcelsNotifier, List<Parcel>>(MyParcelsNotifier.new);
 
+final parcelByIdProvider =
+    FutureProvider.autoDispose.family<Parcel, int>((ref, id) async {
+  return ref.read(parcelsRepositoryProvider).getById(id);
+});
+
 class OpenParcelSearchParams {
   const OpenParcelSearchParams({
     this.originIata,

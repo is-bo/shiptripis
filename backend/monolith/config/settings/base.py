@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.wallet",
     "apps.verification",
+    "apps.notifications",
     "apps.admin_panel",
 ]
 

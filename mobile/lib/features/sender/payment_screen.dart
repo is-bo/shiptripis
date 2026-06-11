@@ -8,6 +8,7 @@ import '../../core/payments/payments_providers.dart';
 import '../../core/payments/payments_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
@@ -174,7 +175,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => context.pop(),
+            onPressed: () => safeBack(context, fallback: '/sender/requests'),
             icon: const Icon(Icons.arrow_back_rounded),
             style: IconButton.styleFrom(
               backgroundColor: AppColors.parchmentSoft,

@@ -97,6 +97,35 @@ def publish_after_commit(
                 event_id,
             )
             return
+        # Persist a per-recipient inbox row for every target user. This is the
+        # source of truth the mobile inbox reads on cold start; the live WS
+        # fan-out via Go is a same-event mirror, not a replacement. We
+        # deliberately swallow errors here so a notification-write failure
+        # does NOT stop the live Redis publish below.
+        if targets:
+            try:
+                from apps.notifications.models import (  # noqa: WPS433 (late import)
+                    Notification,
+                )
+
+                Notification.objects.bulk_create(
+                    [
+                        Notification(
+                            recipient_id=int(uid),
+                            channel=channel,
+                            event_id=event_id,
+                            payload=enriched,
+                        )
+                        for uid in targets
+                    ],
+                    ignore_conflicts=True,  # (recipient, event_id) is unique
+                )
+            except Exception:
+                logger.exception(
+                    "redis_bus: failed to persist inbox rows for %s/%s",
+                    channel,
+                    event_id,
+                )
         try:
             get_client().publish(channel, serialized)
         except redis.RedisError:

@@ -158,6 +158,14 @@ class ParcelsRepository {
     throw ParcelsFailure(_extractMessage(r) ?? 'Could not load requests.');
   }
 
+  Future<Parcel> getById(int id) async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/parcels/$id');
+    if (r.statusCode == 200 && r.data != null) {
+      return Parcel.fromJson(r.data!);
+    }
+    throw ParcelsFailure(_extractMessage(r) ?? 'Could not load request.');
+  }
+
   Future<Parcel> createDelivery({
     required String originIata,
     required String destinationIata,
