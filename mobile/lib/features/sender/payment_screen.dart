@@ -34,10 +34,10 @@ class PaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  final _cardCtl = TextEditingController(text: "4242 4242 4242 4242");
-  final _expCtl = TextEditingController(text: "04/29");
-  final _cvcCtl = TextEditingController(text: "123");
-  final _nameCtl = TextEditingController(text: "Sami Boudiaf");
+  final _cardCtl = TextEditingController();
+  final _expCtl = TextEditingController();
+  final _cvcCtl = TextEditingController();
+  final _nameCtl = TextEditingController();
   String _method = "card";
   bool _processing = false;
 

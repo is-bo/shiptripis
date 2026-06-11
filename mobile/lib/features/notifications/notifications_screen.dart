@@ -167,6 +167,7 @@ class NotificationsScreen extends ConsumerWidget {
         if (matchId != null) return '/tracking/$matchId';
         return null;
       case 'match.completed':
+      case 'match.created':
         if (isSender && parcelId != null) return '/sender/requests/$parcelId';
         if (matchId != null) return '/match/$matchId';
         return null;
@@ -179,9 +180,14 @@ class NotificationsScreen extends ConsumerWidget {
         if (matchId == null) return null;
         return '/match/$matchId';
       case 'parcel.created':
+      case 'parcel.cancelled':
+        if (parcelId != null) return '/sender/requests/$parcelId';
         return '/sender/requests';
+      // The traveler's posted trips live on the home shell (no dedicated
+      // trips route), so trip lifecycle notifications land there.
       case 'trip.created':
-        return '/traveler/trips';
+      case 'trip.cancelled':
+        return '/app';
       default:
         return null;
     }

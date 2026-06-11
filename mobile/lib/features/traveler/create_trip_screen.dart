@@ -33,7 +33,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   String? _ticketPath;
   String? _ticketName;
   int? _ticketBytes;
-  final _flightCtl = TextEditingController(text: "AH 1004");
+  final _flightCtl = TextEditingController();
   bool _submitting = false;
   String? _error;
 

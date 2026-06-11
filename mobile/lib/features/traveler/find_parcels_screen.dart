@@ -208,6 +208,7 @@ class _ApplySheetState extends State<_ApplySheet> {
   late Trip _trip;
   late final TextEditingController _amountController;
   final _noteController = TextEditingController();
+  String? _amountError;
 
   @override
   void initState() {
@@ -287,6 +288,9 @@ class _ApplySheetState extends State<_ApplySheet> {
                 controller: _amountController,
                 keyboardType: TextInputType.number,
                 style: AppType.mono(18, w: FontWeight.w700),
+                onChanged: _amountError == null
+                    ? null
+                    : (_) => setState(() => _amountError = null),
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: AppColors.parchmentSoft,
@@ -296,7 +300,11 @@ class _ApplySheetState extends State<_ApplySheet> {
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppRadius.md),
-                    borderSide: const BorderSide(color: AppColors.hairline),
+                    borderSide: BorderSide(
+                      color: _amountError == null
+                          ? AppColors.hairline
+                          : AppColors.danger,
+                    ),
                   ),
                   hintText:
                       isProduct ? "What you'll pay at the store" : "Your asking price",
@@ -304,6 +312,11 @@ class _ApplySheetState extends State<_ApplySheet> {
                       AppType.body(13, color: AppColors.inkMute),
                 ),
               ),
+              if (_amountError != null) ...[
+                const SizedBox(height: 6),
+                Text(_amountError!,
+                    style: AppType.body(12, color: AppColors.danger)),
+              ],
               const SizedBox(height: AppSpacing.x4),
               Text("NOTE (OPTIONAL)", style: AppType.eyebrow()),
               const SizedBox(height: 6),
@@ -340,7 +353,19 @@ class _ApplySheetState extends State<_ApplySheet> {
                     ),
                   ),
                   onPressed: () {
-                    final amt = int.tryParse(_amountController.text.trim());
+                    final raw = _amountController.text.trim();
+                    // Empty is allowed — backend falls back to the parcel's
+                    // default price. Only validate when the user typed something.
+                    int? amt;
+                    if (raw.isNotEmpty) {
+                      amt = int.tryParse(raw);
+                      if (amt == null || amt < 100) {
+                        setState(() => _amountError = amt == null
+                            ? "Enter a valid amount in DZD."
+                            : "Amount must be at least 100 DZD.");
+                        return;
+                      }
+                    }
                     Navigator.of(context).pop(_ApplyResult(
                       tripId: _trip.id,
                       baseAmountDzd: amt,
