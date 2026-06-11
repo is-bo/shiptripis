@@ -28,9 +28,14 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 - [ ] **`auth_storage.dart` role hydration race** — first frame paints sender UI, then hydration may flip to traveler. Acceptable but worth a splash gate.
 - [ ] **Sender flow: counter-offer UI in `match_detail_screen`**.
+- [ ] **Real traveler names on offer/traveler cards** — `_OfferRow` + `_TravelerCard` in `request_detail_screen.dart` (and the incoming-match cards) still render `Traveler #<id>`. Needs `MatchSummary` to carry the traveler's display name (Django join in `apps/matching` serializer → `parcels`/`matching` providers). KYC badge intentionally out of scope for now.
+- [ ] **WS-driven live offer updates** — when a sender accepts while the traveler is on `match_detail_screen` (or vice-versa), the screen doesn't auto-refresh; `offer.created`/`offer.accepted`/`offer.updated` WS events should invalidate `offerListProvider(matchId)` + `matchDetailProvider`. Today only user actions call `_refreshAll()`. Also: no pull-to-refresh on that screen.
+- [ ] **Notifications UX polish** — unread badge on the notifications bottom-nav tab; clear stale `error` on successful refresh; surface a spinner on subsequent (non-initial) refreshes. (From 2026-06-11 UX audit.)
+- [ ] **Post-apply refresh** — after a traveler applies in `find_parcels_screen`, `match_detail_screen` should invalidate its offer list on first load so the new offer shows without a manual back-and-forth.
 
 ### Done
 
+- [x] 2026-06-11 UX bug-fix pass (sender + traveler smoothness, `ee44d58`): fixed 3 dead notification deep-links (`trip.created`→nonexistent `/traveler/trips`, plus silent `parcel.cancelled`/`trip.cancelled`/`match.created`); removed pre-filled demo values from payment + create-trip forms (test card / `AH 1004`); added inline validation to the apply-to-carry asking-price field (empty allowed = backend default; non-empty `<100` DZD blocked inline to match serializer `min_value=100`). `flutter analyze` clean. Follow-ups logged under Soon. Also reconciled git: merged Alaa's KYC branch (`c1b8de3`), restored coordination files (CLAUDE.md/.claude/session docs) that had been deleted on-disk, recovered prior-session WIP.
 - [x] 2026-06-02 Bug bash + product-grade pass: sign-out, sender "All" tab, notifications persistence (server-backed inbox + WS dedupe), traveler "on the road" surface, profile real data. Notification model + GET/POST endpoints + WS hooks landed; mobile notifications screen rewritten with deep-link routing + mark-read.
 - [x] 2026-05-28 `78ac9e4` ~~**Audit Django publish targets**~~ — confirmed: all 14 publish sites already pass `targets=[uid,...]` as kwarg via `redis_bus.publish_after_commit`. Go now reads only `targets`; legacy `recipient_id`/`sender_id`/`traveler_id` in payloads are forwarded raw to mobile but no longer consulted for routing.
 - [x] 2026-05-23 `9c4ce7f` Merge demo → main, dispatcher conflict resolved in Alaa's favor.
