@@ -9,6 +9,30 @@ across the two contributors. ARCHITECTURE.md is the *what*; this file is the
 
 ## 0a. Open notes (Claude B → Claude A handoff)
 
+**email-service (4th Go service) + real FCM sender landed, both gated dark
+(2026-06-05).** Two pieces of Go work shipped behind their enable-flags so they're
+safe in `main` before the Django side lands:
+- **`cmd/email` + `internal/email`** — consumes a durable `email:send` Redis
+  Stream and sends signup-verify + password-reset OTP mail over SMTP (go-mail).
+  Mirrors the FCM consumer (XReadGroup→send→XAck + XAUTOCLAIM sweeper) minus the
+  grace-wait/`delivered:` dedup; uses its own `email:sent:<event_id>` dedup key.
+  **No Postgres** (Django owns OTP gen/verify) → off the §3 pool budget; it's the
+  4th service, under the §5 "no 6th" cap. In `docker-compose.yml` as
+  `email-service` (port :8085, no Caddy route — pure consumer). Gated
+  `EMAIL_ENABLED=false`. **Claude A:** the full 5-piece Django spec (the
+  `email:send` XADD publisher — *first XADD in Django*, redis_bus is pub/sub-only
+  today — plus `EmailVerificationCode` model, signup/reset wiring, SMTP settings)
+  is in `backend/services/HANDOVER.md` → "email-service" section and `TASKS.md`
+  (Islam). The pub/sub→**stream** choice is load-bearing: `publish_after_commit`
+  is fire-and-forget, which would *lose* an OTP if the consumer blinks.
+- **Real `FCMSender`** (`internal/notification/fcm_firebase.go`, firebase-admin
+  v4) now replaces the `Sender:nil` stub in `cmd/notification/main.go`. Still
+  behind `FCM_ENABLED=false`; flip it + set `FCM_PROJECT_ID`/`FCM_CREDENTIALS_PATH`
+  once the `fcm_token` schema + `notif:fcm` publisher land. No Go change needed then.
+
+All build/vet/gofmt/`go test -race ./...` green; email-service verified booting
+green (health 200, "consumer disabled", clean shutdown) against a throwaway Redis.
+
 **KYC verified end-to-end in compose + two prod bugs fixed (2026-06-04).** The
 three Go services are now wired into `backend/docker-compose.yml` and a real
 `POST /kyc/submit` through Caddy → kyc-service → MinIO → gRPC → Django → Postgres

@@ -333,6 +333,77 @@ func LoadFCM() (FCM, error) {
 	}, nil
 }
 
+// ── Email (SMTP transactional sender) ────────────────────────────────────────
+
+// Email holds the email-service settings. Django XADDs rendered messages onto
+// the `email:send` stream; the consumer sends them over SMTP.
+//
+// Disabled by default — ships dark until Django's stream publisher + OTP model
+// land (mirrors FCM). Flipping EMAIL_ENABLED=true once both sides land is a
+// one-knob change.
+type Email struct {
+	Enabled       bool
+	Stream        string
+	ConsumerGroup string
+	ConsumerName  string
+
+	SMTPHost     string // required when Enabled
+	SMTPPort     int    // required when Enabled
+	SMTPUsername string // optional (dev sinks like MailHog need no auth)
+	SMTPPassword string
+	FromAddr     string // required when Enabled
+	FromName     string // optional display name
+	UseTLS       bool   // STARTTLS (587) / implicit TLS (465); false for dev (25/1025)
+}
+
+// LoadEmail reads EMAIL_* env vars. When EMAIL_ENABLED is false (the default)
+// every other field is optional and the struct can be passed to the consumer
+// for a no-op idle state. When true, SMTP host/port + from address are required
+// so a half-configured mail deploy fails loud at boot per CLAUDE.md §9.
+func LoadEmail() (Email, error) {
+	var b errBuilder
+	enabled := optBool(&b, "EMAIL_ENABLED", false)
+	stream := optString("EMAIL_STREAM", "email:send")
+	group := optString("EMAIL_CONSUMER_GROUP", "email-send-workers")
+	name := optString("EMAIL_CONSUMER_NAME", optString("HOSTNAME", "email-1"))
+
+	host := optString("EMAIL_SMTP_HOST", "")
+	port := optInt(&b, "EMAIL_SMTP_PORT", 0)
+	user := optString("EMAIL_SMTP_USERNAME", "")
+	pass := optString("EMAIL_SMTP_PASSWORD", "")
+	from := optString("EMAIL_FROM_ADDR", "")
+	fromName := optString("EMAIL_FROM_NAME", "")
+	useTLS := optBool(&b, "EMAIL_USE_TLS", true)
+
+	if enabled {
+		if host == "" {
+			b.addf("EMAIL_SMTP_HOST is required when EMAIL_ENABLED=true")
+		}
+		if port == 0 {
+			b.addf("EMAIL_SMTP_PORT is required when EMAIL_ENABLED=true")
+		}
+		if from == "" {
+			b.addf("EMAIL_FROM_ADDR is required when EMAIL_ENABLED=true")
+		}
+	}
+	if err := b.err(); err != nil {
+		return Email{}, err
+	}
+	return Email{
+		Enabled:       enabled,
+		Stream:        stream,
+		ConsumerGroup: group,
+		ConsumerName:  name,
+		SMTPHost:      host,
+		SMTPPort:      port,
+		SMTPUsername:  user,
+		SMTPPassword:  pass,
+		FromAddr:      from,
+		FromName:      fromName,
+		UseTLS:        useTLS,
+	}, nil
+}
+
 // ── logger / service identity ────────────────────────────────────────────────
 
 type Logger struct {
