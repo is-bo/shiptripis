@@ -236,10 +236,10 @@ func (h *Handler) authenticate(r *http.Request) (*auth.Claims, error) {
 }
 
 // uploadImage reads one multipart file part, validates type + size, and
-// streams it to S3 under `kyc-docs/<user_id>/<idempotency_key>-<field>.<ext>`.
-// The key is deterministic in (user, idempotency_key, field) so retries
-// overwrite rather than orphan. Returns the S3 key, or "" if the part is
-// absent and !required.
+// streams it to S3 at key `<user_id>/<idempotency_key>-<field>.<ext>` inside
+// the kyc-docs bucket. The key is deterministic in (user, idempotency_key,
+// field) so retries overwrite rather than orphan. Returns the S3 key, or ""
+// if the part is absent and !required.
 func (h *Handler) uploadImage(
 	ctx context.Context,
 	userID int64,
@@ -325,8 +325,16 @@ func writeUploadError(w http.ResponseWriter, field string, err error) {
 // same idempotency_key overwrite rather than orphan; Django dedupes the
 // row on idempotency_key, so the second upload's keys reuse the first
 // row and the bytes are simply the latest attempt.
+//
+// The key is relative to the bucket (h.Bucket, "kyc-docs") and must NOT
+// repeat the bucket name — doing so produced the legacy doubled
+// `kyc-docs/kyc-docs/<uid>/…` path. Objects now land at
+// `<user_id>/<idempotency_key>-<field>.<ext>`. NOTE: this changed the
+// stored-key shape — existing kyc_submission rows + MinIO objects from
+// before this fix reference the old doubled path and need a one-time
+// migration (see HANDOVER.md "imageKey prefix fix").
 func imageKey(userID int64, idemKey, field, ext string) string {
-	return path.Join("kyc-docs", fmt.Sprintf("%d", userID), idemKey+"-"+field+ext)
+	return path.Join(fmt.Sprintf("%d", userID), idemKey+"-"+field+ext)
 }
 
 // isValidIdempotencyKey accepts 32-char hex (Flutter sends UUID v4 hex,

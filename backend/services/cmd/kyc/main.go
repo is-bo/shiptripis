@@ -11,9 +11,13 @@
 // fails the service start — half-built deploys should never reach prod
 // (CLAUDE.md §9).
 //
+// The gRPC dial supports both bearer (dev) and mTLS (prod) auth. The Go
+// client side of mTLS is wired (kyc.tlsCredentials); enabling it in prod
+// also needs the Django server branch in runkycgrpc.py + the cert pipeline
+// (CLAUDE.md §G5), which are still TODO on the shared side.
+//
 // Deferred:
 //   - GET /kyc/me (status lookup) — needs sqlc-generated repo.
-//   - mTLS for the gRPC dial (CLAUDE.md §G5). Bearer is dev-only.
 //
 // Listens on KYC_HTTP_ADDR (default :8083, matches Caddy's
 // kyc-service:8083 upstream in backend/gateway/Caddyfile); Caddy routes
@@ -121,9 +125,12 @@ func run() error {
 	bucket := config.String(bucketEnvKey, bucketEnvFallback)
 
 	recorder, err := kyc.NewGRPCClient(rootCtx, kyc.GRPCClientConfig{
-		Target:      grpcCfg.Target,
-		AuthMode:    kyc.GRPCAuthMode(grpcCfg.AuthMode),
-		BearerToken: grpcCfg.BearerToken,
+		Target:         grpcCfg.Target,
+		AuthMode:       kyc.GRPCAuthMode(grpcCfg.AuthMode),
+		BearerToken:    grpcCfg.BearerToken,
+		CACertPath:     grpcCfg.CACert,
+		ClientCertPath: grpcCfg.ClientCert,
+		ClientKeyPath:  grpcCfg.ClientKey,
 	}, log)
 	if err != nil {
 		return err

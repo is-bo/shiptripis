@@ -13,11 +13,25 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ---
 
+## Open PRs (awaiting review/merge — as of 2026-06-08)
+
+- **PR #1** `feat/kyc-mtls-client` → `main` — imageKey doubled-prefix fix +
+  shared `pkg/*` test coverage (`b5f4bbe`) **and** Go-client mTLS for the KYC
+  gRPC dial (`f88259a`). **Merging this is what delivers the imageKey migration
+  note to Islam** (see Islam/Now). Mergeable, all Go tests green.
+- **PR #2** `feat/email-service-and-fcm-sender` → `main` — 4th Go service, the
+  SMTP email transport, shipped gated dark (`EMAIL_ENABLED=false`). Independent;
+  needs Islam's Django `enqueue_email_after_commit` publisher before it does
+  anything live. Mergeable.
+
+---
+
 ## Islam (Claude A — Django + mobile)
 
 ### Now (blocking demo polish)
 
 - [ ] **Regenerate `contracts/sql/schema.sql`** — TripMedia + role-default migrations not reflected; CI `check-drift` fails. Run `task contract:sync-db`, commit the diff.
+- [ ] **KYC key migration (only before real KYC data ships)** — Alaa fixed `imageKey` to drop the doubled `kyc-docs/` prefix (keys are now `<uid>/<idem>-<field>.<ext>`, bucket-relative). New uploads are clean; existing data is not. One-time migration: (1) strip leading `kyc-docs/` from existing `kyc_submission` key columns in a reversible data migration; (2) `mc mv --recursive local/kyc-docs/kyc-docs/ local/kyc-docs/` for existing objects. No-op on a fresh/dev volume. Full spec in `services/HANDOVER.md` → "imageKey prefix fix".
 - [ ] **Pickup code: don't regenerate on re-fetch** — the code is currently rotated on every issue call. Should be saved once on the accepted match and shown to the sender from "My requests" until the traveler enters it.
 - [ ] **Mobile: post-payment screen → "your code is X" + push to sender** — after sender pays, they land on a screen showing the pickup code with copy button; same code is pushed via notification.
 - [ ] **Mobile: traveler "enter pickup code" entry surface** — traveler gets a notification after payment ("ready for pickup, enter code"); deep-link routes to `/handover/verify/<match_id>?kind=pickup`.
@@ -56,6 +70,9 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-06-08 Wire Go-client mTLS for KYC gRPC (`grpc_client.go:tlsCredentials`): loads client cert/key + private CA from `GRPC_TLS_CA_CERT`/`GRPC_TLS_CLIENT_CERT`/`GRPC_TLS_CLIENT_KEY` (all required when `GRPC_AUTH_MODE=mtls`; missing/bad certs fail boot, §9), builds `credentials.NewTLS` with the CA as the only trusted root. `pkg/config.LoadKYCGRPC` reads + validates the trio; `cmd/kyc/main.go` threads them through. Tests generate a throwaway CA+client cert with `crypto/x509` and cover valid creds + 5 failure modes + mtls-fail-fast-at-boot. `.env.example` documents the vars. **Server half (runkycgrpc.py) + cert pipeline remain Islam/shared** (see Shared below). `go test -race ./...` green.
+- [x] 2026-06-07 Fix `imageKey` doubled `kyc-docs/` prefix — keys are now bucket-relative (`<uid>/<idem>-<field>.<ext>`) instead of `kyc-docs/kyc-docs/<uid>/…`. Handler test asserts no bucket-name repeat. Flagged the stored-key migration for Islam (see Islam/Now). `go test -race ./internal/kyc/` green.
+- [x] 2026-06-07 Test coverage for the untested shared `pkg/*`: `pkg/config` (99%, every env loader incl. URL build + GRPC/FCM validation tables), `pkg/health` (97%, liveness/readiness/MarkReady/panic-containment), `pkg/logger` (100%), `pkg/wsproto` (bearerToken + Send drop semantics + Close once-guard + envelope JSON + ping<TTL invariant), `pkg/db` (NewPool fail-fast validation + orDefault). Now every package is tested except `cmd/*` (wiring-only) and `kycpb` (generated). `go test -race ./...` green. HANDOVER.md gap table + day-one checklist updated.
 - [x] 2026-05-30 Production hardening pass (final-product reframe): new `pkg/metrics` (expvar Group, `/debug/vars` on both services); SetEX retry on `delivered:<event_id>`; bounded dispatch worker pool (128/pod, drop-on-saturation with event_id); pubsub buffer 64→1024 + drop event_id/counter; presence initial-write retry. All build/vet/race green.
 - [x] 2026-05-28 `78ac9e4` Dispatcher: subscribe to all 16 Django channels via generic `targets=[uid,...]` envelope. Per-channel structs dropped; `dispatch` now fans by `targets` for every channel uniformly. Existing audit/receipt path unchanged.
 - [x] 2026-05-23 Notification service added to `docker-compose.yml` + `Dockerfile.notification`; Caddy upstream renamed `notification-service` → `notification` (fixes 502 on `/ws/notifications`).
@@ -67,4 +84,6 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ## Shared / cross-cutting
 
-- [ ] **mTLS for gRPC** (CLAUDE.md G5) — both sides still on bearer in dev. Production gate before V1 launch.
+- [ ] **mTLS for gRPC** (CLAUDE.md G5) — production gate before V1 launch. **Go client side DONE** (2026-06-08, Alaa). Remaining:
+  - [ ] **Islam:** Django mTLS server branch in `runkycgrpc.py` — replace the `raise SystemExit` stub with `grpc.ssl_server_credentials([(server_key, server_cert)], root_certificates=ca, require_client_auth=True)` + `add_secure_port`.
+  - [ ] **Shared:** cert-issuing pipeline — mkcert (local) / cert-manager (K3s) to mint the shared self-signed CA + a cert per service (90-day, auto-renew per §G5). Mount cert paths into the kyc-service + django-grpc containers; set `GRPC_AUTH_MODE=mtls` + the `GRPC_TLS_*` paths.

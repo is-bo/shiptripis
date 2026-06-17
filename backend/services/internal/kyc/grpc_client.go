@@ -2,14 +2,18 @@ package kyc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
@@ -64,6 +68,18 @@ type GRPCClientConfig struct {
 	// BearerToken is the shared secret when AuthMode == "bearer". Empty
 	// in mtls mode.
 	BearerToken string
+	// CACertPath, ClientCertPath, ClientKeyPath are the PEM file paths used
+	// when AuthMode == "mtls". The client presents the client cert/key and
+	// verifies the Django server's cert against the shared CA (§G5). Empty
+	// in bearer mode.
+	CACertPath     string
+	ClientCertPath string
+	ClientKeyPath  string
+	// ServerNameOverride, if set, is the expected server certificate SAN.
+	// Leave empty to use the host portion of Target (the normal case). Only
+	// needed when dialling by IP or through a name that differs from the
+	// cert's SAN (e.g. a compose service alias).
+	ServerNameOverride string
 	// DialTimeout caps how long NewGRPCClient blocks waiting for the
 	// initial connection. Boot deadline, not per-RPC.
 	DialTimeout time.Duration
@@ -102,9 +118,18 @@ func NewGRPCClient(ctx context.Context, cfg GRPCClientConfig, log *slog.Logger) 
 		transport = grpc.WithTransportCredentials(insecure.NewCredentials())
 		authMD = metadata.Pairs("authorization", "Bearer "+cfg.BearerToken)
 	case GRPCAuthMTLS:
-		// TODO(claude-b): load CA + client cert when cert-manager / mkcert
-		// pipeline lands. Mirror runkycgrpc.py's mTLS branch.
-		return nil, errors.New("kyc grpc: mtls mode is not yet wired (CLAUDE.md §G5 TODO)")
+		// Production mode. Present the client cert/key, verify the Django
+		// server's cert against the shared CA. Cert loading fails loud here
+		// so a bad/missing cert surfaces at boot, not on the first upload
+		// (§9). The matching Django server branch (runkycgrpc.py) + the
+		// cert-issuing pipeline are still TODO — until both land, this path
+		// builds valid credentials but has nothing to dial against.
+		creds, err := tlsCredentials(cfg)
+		if err != nil {
+			return nil, err
+		}
+		transport = grpc.WithTransportCredentials(creds)
+		// No per-RPC auth metadata in mtls mode — the peer cert IS the auth.
 	default:
 		return nil, fmt.Errorf("kyc grpc: unknown auth mode %q", cfg.AuthMode)
 	}
@@ -147,6 +172,42 @@ func NewGRPCClient(ctx context.Context, cfg GRPCClientConfig, log *slog.Logger) 
 		log:    log,
 		authMD: authMD,
 	}, nil
+}
+
+// tlsCredentials builds mutual-TLS transport credentials from the cert
+// paths in cfg: it loads the client cert/key pair the Go service presents,
+// and the CA the Django server's cert is verified against. Every failure
+// returns an error so NewGRPCClient aborts boot rather than dialling with
+// broken credentials (§9). RootCAs is set explicitly (not the system pool)
+// so only the shared self-signed CA is trusted — §G5 is a private CA, not
+// a public chain.
+func tlsCredentials(cfg GRPCClientConfig) (credentials.TransportCredentials, error) {
+	if cfg.ClientCertPath == "" || cfg.ClientKeyPath == "" || cfg.CACertPath == "" {
+		return nil, errors.New("kyc grpc: mtls mode requires CA, client cert, and client key paths")
+	}
+
+	clientCert, err := tls.LoadX509KeyPair(cfg.ClientCertPath, cfg.ClientKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("kyc grpc: load client keypair: %w", err)
+	}
+
+	caPEM, err := os.ReadFile(cfg.CACertPath)
+	if err != nil {
+		return nil, fmt.Errorf("kyc grpc: read CA cert %s: %w", cfg.CACertPath, err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("kyc grpc: CA cert %s contains no valid PEM certificate", cfg.CACertPath)
+	}
+
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      caPool,
+		MinVersion:   tls.VersionTLS12,
+		// ServerName defaults to the dial target's host; override only when
+		// the cert SAN differs from the dial name (IP / compose alias).
+		ServerName: cfg.ServerNameOverride,
+	}), nil
 }
 
 // waitForReady blocks until the connection reaches Ready, or the

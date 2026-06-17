@@ -126,8 +126,15 @@ backend/services/
   `KYC_GRPC_TARGET` is **required at boot** — missing config fails start.
   `NoopRecorder` retained for unit-test scaffolding only.
 - Auth: `GRPC_AUTH_MODE` defaults to `mtls` (prod); **`bearer` is dev-only** and
-  must be set explicitly with `GRPC_BEARER_TOKEN`. mTLS is still a TODO on both
-  sides (`grpc_client.go` returns an explicit error in `mtls` mode today).
+  must be set explicitly with `GRPC_BEARER_TOKEN`. The **Go client side of mtls
+  is wired** (2026-06-08): `grpc_client.go:tlsCredentials` loads the client
+  cert/key + CA from `GRPC_TLS_CA_CERT`/`GRPC_TLS_CLIENT_CERT`/`GRPC_TLS_CLIENT_KEY`
+  (all required when `GRPC_AUTH_MODE=mtls`; missing/bad certs fail boot, §9) and
+  builds `credentials.NewTLS` with the private CA as the only trusted root.
+  **Still TODO (shared / Claude A):** the Django SERVER branch in
+  `runkycgrpc.py` (also a `raise SystemExit` stub today) + the cert-issuing
+  pipeline (mkcert local / cert-manager K3s). Until both land, mtls builds valid
+  client credentials but has no server to dial — keep dev on `bearer`.
 
 **Codegen:** `task contract:go-grpc` regenerates `internal/kyc/kycpb/`;
 `task check-drift` runs it + `git diff --exit-code`, so proto changes that
@@ -147,6 +154,18 @@ packages now have unit tests; `go test -race ./...` exercises them:
 | `pkg/redisbus` | `recordDrop` event_id parsing + `pubsub_drops_total` / per-channel counters, nil-metrics safety, unparseable-payload tolerance |
 | `pkg/metrics` | `Counter`/`Gauge`/`GaugeAdd`/`Sanitize` + folded-label names (100%) |
 | `internal/kyc` | `handleSubmit` happy path (201) + idempotent replay (200), passport-no-back, 401 unauth, full validation-rejection table (bad/missing doc_type, short/non-hex idem key, missing front/back/selfie, bad content type, empty file, too-many-parts), recorder-not-configured (503), recorder error (502), partial-upload orphan cleanup (500). `handleSubmit` 96.6%, `uploadImage` 95.7%, validation paths 100% (2026-06-03) |
+
+**Shared `pkg/*` coverage closed (2026-06-07).** The pure-wiring packages that
+the day-one checklist listed as `[no test files]` now have unit tests
+(`go test -race ./...` green):
+
+| Package | Now covered |
+|---|---|
+| `pkg/config` | every loader (`LoadPostgres` split-var URL build + url-encoding, `DATABASE_URL`-wins, missing-field joins, bad-URL/non-positive/non-int max-conns; `LoadRedis`/`LoadJWT` trim+required; `LoadS3` path-style default on/off/override + missing-keys; `LoadKYCGRPC` table incl. mtls default + case-fold + unknown mode; `LoadFCM` disabled-default/enabled-requires-creds/HOSTNAME fallback/bad-bool; `HTTPAddr`/`String`/`LoadLogger`). **99.0%** |
+| `pkg/health` | `Liveness` always-200 + `no-store` header; `Readiness` 503-before-`MarkReady`, 200 all-pass, 503 on a failing check (error surfaced), panicking-check contained, ready-with-no-checks, `Register` ignores empty/nil, `New` timeout+logger defaults. **97.3%** |
+| `pkg/logger` | `parseLevel` table (case-fold/trim/aliases/default), service-field rendered, `WithLogger`/`FromContext` round-trip + nil/empty fallback. **100%** |
+| `pkg/wsproto` | `bearerToken` table (case-insensitive scheme, empty/wrong-scheme/empty-token/too-short), `Send` queue + deterministic drop-when-full-and-closed + drop-on-overflow, `Close` `sync.Once` guard, `Done` signal, `Envelope` omitempty JSON round-trip, ping-tighter-than-presence-TTL invariant (§5). Pure-logic only — `Upgrade`/`writer`/`pinger` need a live WS (integration). |
+| `pkg/db` | `NewPool` fail-fast validation (empty URL / non-positive MaxConns / unparseable URL — all reject before any dial) + `orDefault` generic. Happy path needs live Postgres (integration). |
 
 `internal/kyc` test seam: `Handler.Storage` was narrowed from `*storage.Client`
 to an `objectStore` interface (`Put`/`Delete`) so a `fakeStore` injects without
@@ -198,13 +217,28 @@ live run surfaced (both committed):
   (HeadBucket 404). App code must not create buckets (§G4), so this lives in
   compose.
 
-**Pre-existing wart (not fixed — flagged for owner):** `imageKey()`
-(handler.go:328) hardcodes a `kyc-docs/` prefix *inside* the object key while
-the bucket is also `kyc-docs`, so objects land at `kyc-docs/kyc-docs/<uid>/…`.
-Functional (keys are deterministic, store+fetch stay consistent) but the doubled
-segment is ugly. Drop the literal prefix from `imageKey` if you want clean paths
-— but it's a stored-key change, so coordinate: existing rows reference the old
-keys.
+**imageKey prefix fix (2026-06-07).** `imageKey()` (handler.go) used to hardcode
+a `kyc-docs/` prefix *inside* the object key while the bucket is also `kyc-docs`,
+so objects landed at the doubled `kyc-docs/kyc-docs/<uid>/…`. **Fixed:** the key
+is now bucket-relative — `<user_id>/<idempotency_key>-<field>.<ext>`. The handler
+test asserts no `kyc-docs/` prefix on the key.
+
+**→ Claude A (Islam): one-time migration needed before this ships to any env with
+real KYC data.** New uploads use the clean key; existing data still references
+the old doubled path, so without a migration old submissions would 404 on fetch
+and the bytes would be orphaned. Two parts:
+1. **MinIO objects** — move existing objects from `kyc-docs/kyc-docs/<uid>/…` to
+   `kyc-docs/<uid>/…` (e.g. `mc mv --recursive local/kyc-docs/kyc-docs/
+   local/kyc-docs/`). One-shot, idempotent on an empty/dev volume.
+2. **`kyc_submission` rows** — any stored key column (`front_image_key`,
+   `back_image_key`, `selfie_image_key`, whatever the model persists) that begins
+   with `kyc-docs/` must have that leading segment stripped, in a reversible data
+   migration. Confirm the actual column names on the Django side — Go forwards the
+   keys via gRPC and doesn't own the schema.
+
+On a **fresh/dev volume with no real submissions**, no migration is required —
+the change is purely forward-looking. The above only matters once production KYC
+rows exist.
 
 ---
 
@@ -256,9 +290,10 @@ consistent.
 
 1. `git pull` then `cd backend/services && go build ./... && go vet ./...` —
    must be clean.
-2. `go test -race -count=1 ./...` — `chat`, `notification`, `auth`, `storage`,
-   `redisbus`, `metrics` should be `ok`. The `cmd/*`, `internal/kyc`, and the
-   pure-wiring `pkg/*` (config/db/health/logger/wsproto) show `[no test files]`.
+2. `go test -race -count=1 ./...` — every package is `ok` except `cmd/*`
+   (wiring-only by convention) and `internal/kyc/kycpb` (generated stubs),
+   which show `[no test files]`. `internal/kyc`, `pkg/config`, `pkg/db`,
+   `pkg/health`, `pkg/logger`, and `pkg/wsproto` are all covered now.
 3. `gofmt -l .` — must be empty.
 4. Skim `cmd/notification/main.go` + `cmd/kyc/main.go` for the wiring template;
    `internal/notification/dispatcher.go` for the G1+G6b + pool pattern;
@@ -274,7 +309,7 @@ consistent.
 |---|---|---|
 | 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then; flip `FCM_ENABLED=true` + wire a real `FCMSender` once it lands |
 | 2 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
-| 3 | mTLS pipeline (cert-manager / mkcert) | gRPC runs on dev bearer; `grpc_client.go` errors in `mtls` mode until certs exist (CLAUDE.md §G5). Shared scope — coordinate, get explicit approval |
+| 3 | mTLS **server branch** (`runkycgrpc.py`) + cert pipeline (mkcert / cert-manager) | Go **client** side of mtls is done + tested (2026-06-08). What remains: the Django server's `grpc.ssl_server_credentials(require_client_auth=True)` branch (still a `raise SystemExit` stub) + a way to issue the shared-CA certs. Shared scope — coordinate, get explicit approval. Until both land, keep `GRPC_AUTH_MODE=bearer` in dev. |
 
 When any lands, **update this table** and the §0a handoff in `../../CLAUDE.md`
 in the same commit as the Go work that consumes it.

@@ -213,14 +213,26 @@ type KYCGRPC struct {
 	Target      string
 	AuthMode    string
 	BearerToken string
+
+	// TLS cert paths, used only when AuthMode == "mtls". The Go client
+	// presents ClientCert/ClientKey and verifies the Django server's cert
+	// against CACert (the shared self-signed CA per §G5). Empty in bearer
+	// mode.
+	CACert     string
+	ClientCert string
+	ClientKey  string
 }
 
-// LoadKYCGRPC reads KYC_GRPC_TARGET + GRPC_AUTH_MODE + GRPC_BEARER_TOKEN.
-// Target is required — a half-built deploy without the gRPC dependency
-// should fail loud at boot rather than ship a NoopRecorder to prod
-// (CLAUDE.md §9). GRPC_AUTH_MODE defaults to "mtls" per §G5 so a missing
-// value in prod surfaces as a startup error (mtls is not yet wired)
-// rather than silently downgrading to bearer.
+// LoadKYCGRPC reads KYC_GRPC_TARGET + GRPC_AUTH_MODE and the auth-mode
+// specific vars: GRPC_BEARER_TOKEN in bearer mode, or the
+// GRPC_TLS_CA_CERT/GRPC_TLS_CLIENT_CERT/GRPC_TLS_CLIENT_KEY trio in mtls
+// mode. Target is required — a half-built deploy without the gRPC
+// dependency should fail loud at boot rather than ship a NoopRecorder to
+// prod (CLAUDE.md §9). GRPC_AUTH_MODE defaults to "mtls" per §G5 so a
+// missing value in prod surfaces as a config error (missing certs)
+// rather than silently downgrading to bearer. The Go client side of mtls
+// is wired (grpc_client.go); the Django server branch + cert pipeline are
+// still TODO (see HANDOVER.md).
 func LoadKYCGRPC() (KYCGRPC, error) {
 	var b errBuilder
 	target := mustString(&b, "KYC_GRPC_TARGET", "")
@@ -235,10 +247,35 @@ func LoadKYCGRPC() (KYCGRPC, error) {
 	if mode == "bearer" && token == "" {
 		b.addf("GRPC_BEARER_TOKEN is required when GRPC_AUTH_MODE=bearer")
 	}
+
+	caCert := optString("GRPC_TLS_CA_CERT", "")
+	clientCert := optString("GRPC_TLS_CLIENT_CERT", "")
+	clientKey := optString("GRPC_TLS_CLIENT_KEY", "")
+	if mode == "mtls" {
+		// All three are mandatory in mtls mode — a half-configured TLS
+		// deploy must fail loud at boot, not silently fall back (§9, §G5).
+		if caCert == "" {
+			b.addf("GRPC_TLS_CA_CERT is required when GRPC_AUTH_MODE=mtls")
+		}
+		if clientCert == "" {
+			b.addf("GRPC_TLS_CLIENT_CERT is required when GRPC_AUTH_MODE=mtls")
+		}
+		if clientKey == "" {
+			b.addf("GRPC_TLS_CLIENT_KEY is required when GRPC_AUTH_MODE=mtls")
+		}
+	}
+
 	if err := b.err(); err != nil {
 		return KYCGRPC{}, err
 	}
-	return KYCGRPC{Target: target, AuthMode: mode, BearerToken: token}, nil
+	return KYCGRPC{
+		Target:      target,
+		AuthMode:    mode,
+		BearerToken: token,
+		CACert:      caCert,
+		ClientCert:  clientCert,
+		ClientKey:   clientKey,
+	}, nil
 }
 
 // ── FCM (push fallback) ──────────────────────────────────────────────────────

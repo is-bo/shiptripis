@@ -47,12 +47,15 @@ returned 201 (first) then 200 (idempotent replay); images landed in MinIO and th
   have broken MinIO/Backblaze/Hetzner over http — exactly the §G4 "providers
   differ" caution. `go test -race ./...` green.
 
-**Pre-existing wart (flagged, not fixed — owner's call).** `imageKey()`
-(`internal/kyc/handler.go:328`) hardcodes a `kyc-docs/` prefix *inside* the
-object key while the bucket is also `kyc-docs`, so objects land at
-`kyc-docs/kyc-docs/<uid>/…`. Functional (deterministic keys, store+fetch
-consistent) but the doubled segment is ugly. Dropping the literal prefix is a
-stored-key change — coordinate, existing rows reference the old keys.
+**imageKey doubled-prefix fixed (2026-06-07).** `imageKey()`
+(`internal/kyc/handler.go`) used to hardcode a `kyc-docs/` prefix *inside* the
+object key while the bucket is also `kyc-docs`, so objects landed at the doubled
+`kyc-docs/kyc-docs/<uid>/…`. Keys are now bucket-relative
+(`<user_id>/<idempotency_key>-<field>.<ext>`). **Claude A:** this is a stored-key
+change — before shipping to any env with real KYC data, run a one-time migration
+(strip the leading `kyc-docs/` from existing `kyc_submission` key columns + `mc
+mv` existing MinIO objects up one level). No migration needed on a fresh/dev
+volume. Full spec in `services/HANDOVER.md` ("imageKey prefix fix").
 
 **WS handler shutdown drain (2026-06-01).** Both WS services now track in-flight
 WS handler goroutines with a per-service `sync.WaitGroup` (`connWG`) passed into
@@ -152,8 +155,8 @@ attaches to every envelope. Now:
 - **Keepalive**: 30s pings / 10s timeout / `PermitWithoutStream: true` so idle TCP between rare KYC submissions isn't silently dropped by conntrack/NAT.
 - **Retry policy** via gRPC service-config: 4 attempts on `UNAVAILABLE`/`DEADLINE_EXCEEDED`, 0.2s→2s exponential. Safe because Django dedupes on `idempotency_key` (commit `d6f4dc6`).
 - `cmd/kyc/main.go` dials at boot via `LoadKYCGRPC()` — `KYC_GRPC_TARGET` is **required**, missing config fails service start (§9 "evidence > assertions"). `NoopRecorder` is retained for unit-test scaffolding but no longer the default.
-- `GRPC_AUTH_MODE` defaults to `mtls` per §G5 — missing value in prod surfaces as a startup error (mtls is still TODO) instead of silently downgrading to bearer.
-- mTLS still a TODO in both `grpc_client.go` and `runkycgrpc.py` (§G5).
+- `GRPC_AUTH_MODE` defaults to `mtls` per §G5 — missing value in prod surfaces as a startup error instead of silently downgrading to bearer.
+- **mTLS Go-client half DONE (2026-06-08).** `grpc_client.go:tlsCredentials` loads client cert/key + private CA from `GRPC_TLS_{CA_CERT,CLIENT_CERT,CLIENT_KEY}` (all required in mtls mode; bad/missing certs fail boot) and builds `credentials.NewTLS` trusting only the shared CA. **Still TODO on the shared side:** the Django mTLS server branch in `runkycgrpc.py` (still a `raise SystemExit` stub) + the cert-issuing pipeline (mkcert / cert-manager). Until both land, keep dev on `bearer`.
 
 **Set in dev `.env`:** `KYC_GRPC_TARGET=django:50051`, `GRPC_AUTH_MODE=bearer` (must be set explicitly — no implicit default), `GRPC_BEARER_TOKEN=<shared with Django>`.
 
