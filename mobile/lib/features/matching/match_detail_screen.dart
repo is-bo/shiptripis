@@ -107,6 +107,18 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
     ref.invalidate(chatEligibilityProvider(widget.matchId));
   }
 
+  Future<void> _refreshAndWait() async {
+    ref.invalidate(matchDetailProvider(widget.matchId));
+    ref.invalidate(offerListProvider(widget.matchId));
+    ref.invalidate(chatEligibilityProvider(widget.matchId));
+    // Hold the RefreshIndicator spinner until the two primary providers
+    // have actually refetched (eligibility is best-effort, not awaited).
+    await Future.wait([
+      ref.read(matchDetailProvider(widget.matchId).future),
+      ref.read(offerListProvider(widget.matchId).future),
+    ]);
+  }
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -139,21 +151,25 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) =>
                 _ErrorView(message: e.toString(), onRetry: _refreshAll),
-            data: (offers) => _MatchBody(
-              match: match,
-              offers: offers,
-              myId: myId,
-              busy: _busy,
-              counterOpen: _counterOpen,
-              counterCtl: _counterCtl,
-              onAccept: _doAccept,
-              onDecline: _doDecline,
-              onWithdraw: _doWithdraw,
-              onCounterToggle: () =>
-                  setState(() => _counterOpen = !_counterOpen),
-              onCounterSubmit: _doCounter,
-              onGoToPayment: (offerId) =>
-                  context.push('/payment/$offerId?match=${match.id}'),
+            data: (offers) => RefreshIndicator(
+              onRefresh: _refreshAndWait,
+              color: AppColors.ink,
+              child: _MatchBody(
+                match: match,
+                offers: offers,
+                myId: myId,
+                busy: _busy,
+                counterOpen: _counterOpen,
+                counterCtl: _counterCtl,
+                onAccept: _doAccept,
+                onDecline: _doDecline,
+                onWithdraw: _doWithdraw,
+                onCounterToggle: () =>
+                    setState(() => _counterOpen = !_counterOpen),
+                onCounterSubmit: _doCounter,
+                onGoToPayment: (offerId) =>
+                    context.push('/payment/$offerId?match=${match.id}'),
+              ),
             ),
           );
         },
@@ -211,6 +227,7 @@ class _MatchBody extends StatelessWidget {
     final canCounter = match.parcel?.targetTravelerId != null;
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         _StatusStrip(status: match.status),
