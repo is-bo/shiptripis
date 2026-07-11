@@ -269,3 +269,12 @@ class TripSearchTests(APITestCase):
         c = APIClient()
         r = c.get(reverse("trips-search"))
         assert r.status_code in (401, 403)
+
+    def test_trip_search_includes_traveler_name(self):
+        self.other_traveler.full_name = "Yacine Bensalah"
+        self.other_traveler.save(update_fields=["full_name"])
+        c = _auth_client(self.sender)
+        r = c.get(reverse("trips-search"))
+        assert r.status_code == 200
+        assert isinstance(r.data, list)
+        assert any(t["traveler_name"] == "Yacine Bensalah" for t in r.data)

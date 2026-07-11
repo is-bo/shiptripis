@@ -70,12 +70,16 @@ class TripSerializer(serializers.ModelSerializer):
     destination = AirportSerializer(read_only=True)
     stopovers = StopoverOutputSerializer(many=True, read_only=True)
     traveler_id = serializers.IntegerField(source="traveler.id", read_only=True)
+    traveler_name = serializers.CharField(
+        source="traveler.full_name", read_only=True
+    )
 
     class Meta:
         model = Trip
         fields = (
             "id",
             "traveler_id",
+            "traveler_name",
             "origin",
             "destination",
             "departure_at",

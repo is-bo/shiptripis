@@ -55,7 +55,7 @@ class TripListCreateView(APIView):
     def get(self, request: Request) -> Response:
         qs = (
             Trip.objects.filter(traveler=request.user)
-            .select_related("origin", "destination")
+            .select_related("origin", "destination", "traveler")
             .prefetch_related("stopovers__airport")
         )
         status_filter = request.query_params.get("status")
@@ -98,7 +98,7 @@ class TripListCreateView(APIView):
             )
 
         trip = (
-            Trip.objects.select_related("origin", "destination")
+            Trip.objects.select_related("origin", "destination", "traveler")
             .prefetch_related("stopovers__airport")
             .get(pk=trip.pk)
         )
@@ -177,7 +177,7 @@ class TripCancelView(APIView):
                 targets=[trip.traveler_id],
             )
         trip = (
-            Trip.objects.select_related("origin", "destination")
+            Trip.objects.select_related("origin", "destination", "traveler")
             .prefetch_related("stopovers__airport")
             .get(pk=trip.pk)
         )

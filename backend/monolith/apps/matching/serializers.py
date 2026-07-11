@@ -68,6 +68,8 @@ class _MatchParcelMini(serializers.Serializer):
 class MatchSerializer(serializers.ModelSerializer):
     sender_id = serializers.IntegerField(read_only=True)
     traveler_id = serializers.IntegerField(read_only=True)
+    sender_name = serializers.SerializerMethodField()
+    traveler_name = serializers.SerializerMethodField()
     parcel_id = serializers.IntegerField(read_only=True)
     trip_id = serializers.IntegerField(read_only=True)
 
@@ -83,6 +85,8 @@ class MatchSerializer(serializers.ModelSerializer):
             "trip_id",
             "sender_id",
             "traveler_id",
+            "sender_name",
+            "traveler_name",
             "status",
             "parcel",
             "latest_offer",
@@ -91,6 +95,12 @@ class MatchSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_sender_name(self, obj: Match) -> str:
+        return obj.sender.full_name
+
+    def get_traveler_name(self, obj: Match) -> str:
+        return obj.traveler.full_name
 
     def get_latest_offer(self, obj: Match) -> dict | None:
         offer = obj.offers.order_by("-created_at").first()

@@ -418,6 +418,29 @@ class MatchListAndDetailTests(APITestCase):
         assert r.data["latest_offer"]["total_dzd"] == 5000
         assert r.data["accepted_offer"] is None
 
+    def test_match_detail_includes_full_names(self):
+        self.sender.full_name = "Amine Khelifi"
+        self.sender.save(update_fields=["full_name"])
+        self.traveler.full_name = "Yacine Bensalah"
+        self.traveler.save(update_fields=["full_name"])
+        c = _client(self.sender)
+        r = c.get(reverse("matches-detail", args=[self.match.id]))
+        assert r.status_code == 200
+        assert r.data["sender_name"] == "Amine Khelifi"
+        assert r.data["traveler_name"] == "Yacine Bensalah"
+
+    def test_match_list_includes_full_names(self):
+        self.sender.full_name = "Amine Khelifi"
+        self.sender.save(update_fields=["full_name"])
+        self.traveler.full_name = "Yacine Bensalah"
+        self.traveler.save(update_fields=["full_name"])
+        c = _client(self.sender)
+        r = c.get(reverse("matches-list"))
+        assert r.status_code == 200
+        row = next(m for m in r.data if m["id"] == self.match.id)
+        assert row["sender_name"] == "Amine Khelifi"
+        assert row["traveler_name"] == "Yacine Bensalah"
+
 
 class ChatEligibilityTests(APITestCase):
     """GET /api/matches/<id>/chat-eligibility — payment-gated chat."""
