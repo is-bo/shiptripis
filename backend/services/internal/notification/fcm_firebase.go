@@ -11,6 +11,14 @@ import (
 	"google.golang.org/api/option"
 )
 
+// multicaster is the one method firebaseSender needs from the Firebase
+// messaging client. *messaging.Client satisfies it via its promoted
+// SendEachForMulticast; a test fake satisfies it to exercise the
+// batch-response branches without a live FCM project.
+type multicaster interface {
+	SendEachForMulticast(ctx context.Context, message *messaging.MulticastMessage) (*messaging.BatchResponse, error)
+}
+
 // firebaseSender is the production FCMSender backed by the Firebase Admin
 // SDK. It is the concrete swap for LogOnlySender (fcm.go) and is wired in
 // cmd/notification/main.go when FCM_ENABLED=true.
@@ -20,7 +28,7 @@ import (
 // holds a pooled HTTP/2 connection to FCM, so a single instance serves the
 // whole handleConcurrency fan-out.
 type firebaseSender struct {
-	client *messaging.Client
+	client multicaster
 	log    *slog.Logger
 }
 

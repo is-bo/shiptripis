@@ -13,19 +13,6 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ---
 
-## Open PRs (awaiting review/merge — as of 2026-06-08)
-
-- **PR #1** `feat/kyc-mtls-client` → `main` — imageKey doubled-prefix fix +
-  shared `pkg/*` test coverage (`b5f4bbe`) **and** Go-client mTLS for the KYC
-  gRPC dial (`f88259a`). **Merging this is what delivers the imageKey migration
-  note to Islam** (see Islam/Now). Mergeable, all Go tests green.
-- **PR #2** `feat/email-service-and-fcm-sender` → `main` — 4th Go service, the
-  SMTP email transport, shipped gated dark (`EMAIL_ENABLED=false`). Independent;
-  needs Islam's Django `enqueue_email_after_commit` publisher before it does
-  anything live. Mergeable.
-
----
-
 ## Islam (Claude A — Django + mobile)
 
 ### Now (blocking demo polish)
@@ -71,6 +58,7 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 ### Done
 
+- [x] 2026-07-11 Test coverage for `internal/notification/fcm_firebase.go` (the real Firebase Admin SDK sender Islam merged via PR #2, previously untested). Added a one-method `multicaster` seam (`*messaging.Client` satisfies it via promoted `SendEachForMulticast`) so `Send` is testable without a live FCM project. `fcm_firebase_test.go` covers: `NewFirebaseSender` fail-loud paths (empty/unreadable/invalid creds → boot error, §9); `Send` branches — empty tokens no-op, all-succeed→nil, partial-failure→nil (no full-batch resend = no duplicate push), all-failed→err (stays in PEL for sweep), transport-error→err with event_id; payload→MulticastMessage field mapping; FCMSender interface satisfaction. Reviewed FCM wiring in `cmd/notification/main.go` — `LogOnlySender`→`firebaseSender` swap leaves the `fcmAlive`/`fcmErr` shutdown drain correct; no change needed. `go test -race ./...` green. Still gated dark (`FCM_ENABLED=false`) pending Islam's `fcm_token` schema + `notif:fcm` publisher.
 - [x] 2026-06-08 Wire Go-client mTLS for KYC gRPC (`grpc_client.go:tlsCredentials`): loads client cert/key + private CA from `GRPC_TLS_CA_CERT`/`GRPC_TLS_CLIENT_CERT`/`GRPC_TLS_CLIENT_KEY` (all required when `GRPC_AUTH_MODE=mtls`; missing/bad certs fail boot, §9), builds `credentials.NewTLS` with the CA as the only trusted root. `pkg/config.LoadKYCGRPC` reads + validates the trio; `cmd/kyc/main.go` threads them through. Tests generate a throwaway CA+client cert with `crypto/x509` and cover valid creds + 5 failure modes + mtls-fail-fast-at-boot. `.env.example` documents the vars. **Server half (runkycgrpc.py) + cert pipeline remain Islam/shared** (see Shared below). `go test -race ./...` green.
 - [x] 2026-06-07 Fix `imageKey` doubled `kyc-docs/` prefix — keys are now bucket-relative (`<uid>/<idem>-<field>.<ext>`) instead of `kyc-docs/kyc-docs/<uid>/…`. Handler test asserts no bucket-name repeat. Flagged the stored-key migration for Islam (see Islam/Now). `go test -race ./internal/kyc/` green.
 - [x] 2026-06-07 Test coverage for the untested shared `pkg/*`: `pkg/config` (99%, every env loader incl. URL build + GRPC/FCM validation tables), `pkg/health` (97%, liveness/readiness/MarkReady/panic-containment), `pkg/logger` (100%), `pkg/wsproto` (bearerToken + Send drop semantics + Close once-guard + envelope JSON + ping<TTL invariant), `pkg/db` (NewPool fail-fast validation + orDefault). Now every package is tested except `cmd/*` (wiring-only) and `kycpb` (generated). `go test -race ./...` green. HANDOVER.md gap table + day-one checklist updated.
