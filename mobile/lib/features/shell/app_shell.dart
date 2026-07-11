@@ -6,6 +6,7 @@ import '../../core/state/role_provider.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/ws/live_event_router.dart';
+import '../../core/ws/notifications_providers.dart';
 import '../chat/chat_list_screen.dart';
 import '../home/home_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -302,7 +303,7 @@ class _LiveBannerCard extends StatelessWidget {
   }
 }
 
-class _BottomNav extends StatelessWidget {
+class _BottomNav extends ConsumerWidget {
   const _BottomNav({required this.index, required this.onChange});
   final int index;
   final ValueChanged<int> onChange;
@@ -315,7 +316,10 @@ class _BottomNav extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(
+      notificationsNotifierProvider.select((s) => s.unreadCount),
+    );
     return SafeArea(
       top: false,
       child: Padding(
@@ -367,10 +371,10 @@ class _BottomNav extends StatelessWidget {
                               ]
                             : null,
                       ),
-                      child: Icon(
-                        _icons[i],
-                        size: 22,
-                        color: selected ? AppColors.ink : AppColors.inkMute,
+                      child: _NavIcon(
+                        icon: _icons[i],
+                        selected: selected,
+                        badgeCount: i == 2 && !selected ? unread : 0,
                       ),
                     ),
                   ),
@@ -380,6 +384,58 @@ class _BottomNav extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({
+    required this.icon,
+    required this.selected,
+    required this.badgeCount,
+  });
+  final IconData icon;
+  final bool selected;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = Icon(
+      icon,
+      size: 22,
+      color: selected ? AppColors.ink : AppColors.inkMute,
+    );
+    if (badgeCount <= 0) return iconWidget;
+    final label = badgeCount > 9 ? '9+' : '$badgeCount';
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        iconWidget,
+        Positioned(
+          top: -4,
+          right: -6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 16),
+            decoration: BoxDecoration(
+              color: AppColors.terracotta,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
