@@ -395,7 +395,7 @@ class _OfferRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Traveler #${match.travelerId}',
+                  Text(match.travelerLabel(),
                       style: AppType.body(13.5, w: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text(
@@ -664,7 +664,7 @@ class _TravelerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Traveler #${match.travelerId}',
+                Text(match.travelerLabel(),
                     style: AppType.body(14, w: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(

@@ -187,7 +187,7 @@ class _FollowPackageScreenState extends ConsumerState<FollowPackageScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text("Traveler #${match.travelerId}",
+            Text(match.travelerLabel(),
                 style: AppType.display(22,
                     color: AppColors.parchment,
                     w: FontWeight.w400,

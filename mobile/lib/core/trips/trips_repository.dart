@@ -32,6 +32,7 @@ class Trip {
   const Trip({
     required this.id,
     required this.travelerId,
+    this.travelerName,
     required this.origin,
     required this.destination,
     required this.departureAt,
@@ -44,6 +45,7 @@ class Trip {
   factory Trip.fromJson(Map<String, dynamic> j) => Trip(
         id: j['id'] as int,
         travelerId: j['traveler_id'] as int,
+        travelerName: j['traveler_name'] as String?,
         origin: Airport.fromJson(Map<String, dynamic>.from(j['origin'] as Map)),
         destination:
             Airport.fromJson(Map<String, dynamic>.from(j['destination'] as Map)),
@@ -56,6 +58,7 @@ class Trip {
 
   final int id;
   final int travelerId;
+  final String? travelerName;
   final Airport origin;
   final Airport destination;
   final DateTime departureAt;
@@ -63,6 +66,12 @@ class Trip {
   final String flightNumber;
   final String notes;
   final String status;
+
+  /// Display label for the traveler — real name when set, else `Traveler #id`.
+  String get travelerLabel {
+    final n = travelerName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Traveler #$travelerId';
+  }
 }
 
 class TripsRepository {

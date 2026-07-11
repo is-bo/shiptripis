@@ -167,6 +167,8 @@ class MatchSummary {
     required this.tripId,
     required this.senderId,
     required this.travelerId,
+    this.senderName,
+    this.travelerName,
     required this.status,
     required this.parcel,
     required this.latestOffer,
@@ -180,6 +182,8 @@ class MatchSummary {
         tripId: j['trip_id'] as int,
         senderId: j['sender_id'] as int,
         travelerId: j['traveler_id'] as int,
+        senderName: j['sender_name'] as String?,
+        travelerName: j['traveler_name'] as String?,
         status: MatchStatus.fromString(j['status'] as String),
         parcel: j['parcel'] == null
             ? null
@@ -200,11 +204,25 @@ class MatchSummary {
   final int tripId;
   final int senderId;
   final int travelerId;
+  final String? senderName;
+  final String? travelerName;
   final MatchStatus status;
   final MatchParcelMini? parcel;
   final Offer? latestOffer;
   final Offer? acceptedOffer;
   final DateTime createdAt;
+
+  /// Display label for the traveler — real name when set, else `Traveler #id`.
+  String travelerLabel() {
+    final n = travelerName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Traveler #$travelerId';
+  }
+
+  /// Display label for the sender — real name when set, else `Sender #id`.
+  String senderLabel() {
+    final n = senderName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Sender #$senderId';
+  }
 }
 
 class ChatEligibility {
