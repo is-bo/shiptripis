@@ -22,4 +22,5 @@ urlpatterns = [
     path("api/", include("apps.wallet.urls")),
     path("api/", include("apps.verification.urls")),
     path("api/", include("apps.notifications.urls")),
+    path("api/", include("apps.chat.urls")),
 ]

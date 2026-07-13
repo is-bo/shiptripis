@@ -34,3 +34,6 @@ HANDOVER_CODE_ISSUED = "handover.code_issued"
 
 # kyc (Go owns the API, Django reflects status updates)
 KYC_STATUS_CHANGED = "kyc.status_changed"
+
+# chat (Django owns persistence; Go chat-service relays this to live sockets)
+CHAT_MESSAGE_NEW = "chat.message.new"

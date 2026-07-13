@@ -1,0 +1,113 @@
+"""Chat write + history endpoints (payment-gated 1:1 on a Match).
+
+Django owns persistence. On send we:
+  1. gate on `matching.services.chat_eligibility` (payment-gated — the same
+     rule the pre-flight `chat-eligibility` endpoint returns);
+  2. persist a `ChatMessage`;
+  3. publish `chat.message.new` after commit with `targets=[other_member]`.
+
+The Go chat-service subscribes to `chat.message.new` and fans the raw payload
+to the recipient's live WebSocket. It never writes `chat_message` itself.
+"""
+
+from __future__ import annotations
+
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from rest_framework import status as http
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.core import channels, redis_bus
+from apps.matching.models import Match
+from apps.matching.services import (
+    REASON_NOT_A_PARTY,
+    chat_eligibility,
+    is_party,
+)
+
+from .models import ChatMessage
+from .serializers import ChatMessageSerializer, ChatSendSerializer
+
+
+class _Pagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class ChatMessagesView(ListAPIView, APIView):
+    """GET  /api/matches/<id>/chat/messages — thread history, oldest first.
+    POST /api/matches/<id>/chat/messages — send a message.
+    """
+
+    serializer_class = ChatMessageSerializer
+    permission_classes = (IsAuthenticated,)
+    pagination_class = _Pagination
+
+    def get_queryset(self):
+        match = get_object_or_404(
+            Match.objects.only("id", "sender_id", "traveler_id"),
+            pk=self.kwargs["pk"],
+        )
+        if not is_party(match, self.request.user.id):
+            # DRF turns this into a 403; parties only.
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied("Not a party to this match.")
+        return (
+            ChatMessage.objects.filter(match_id=match.id)
+            .select_related("sender")
+            .order_by("created_at")
+        )
+
+    def post(self, request: Request, pk: int) -> Response:
+        match = get_object_or_404(
+            Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk
+        )
+        eligible, reason = chat_eligibility(match, request.user.id)
+        if not eligible:
+            # not_a_party is an authorization failure (403); every other reason
+            # is "the deal isn't ready for chat yet" (402 payment-required, with
+            # the stable reason code so the client can render the right copy).
+            code = (
+                http.HTTP_403_FORBIDDEN
+                if reason == REASON_NOT_A_PARTY
+                else http.HTTP_402_PAYMENT_REQUIRED
+            )
+            return Response({"reason": reason, "match_id": match.id}, status=code)
+
+        s = ChatSendSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+
+        other_id = (
+            match.traveler_id
+            if request.user.id == match.sender_id
+            else match.sender_id
+        )
+
+        with transaction.atomic():
+            msg = ChatMessage.objects.create(
+                match=match,
+                sender=request.user,
+                body=s.validated_data["body"],
+            )
+            redis_bus.publish_after_commit(
+                channels.CHAT_MESSAGE_NEW,
+                {
+                    "message_id": msg.id,
+                    "match_id": match.id,
+                    "sender_id": request.user.id,
+                    "body": msg.body,
+                    "created_at": msg.created_at.isoformat(),
+                },
+                targets=[other_id],
+            )
+
+        return Response(
+            ChatMessageSerializer(msg).data, status=http.HTTP_201_CREATED
+        )

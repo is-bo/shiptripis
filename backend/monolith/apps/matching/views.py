@@ -39,6 +39,7 @@ from .serializers import (
     OfferSerializer,
     TravelerApplySerializer,
 )
+from .services import chat_eligibility
 
 
 # ---------- helpers ----------
@@ -540,41 +541,15 @@ class MatchChatEligibilityView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request, pk: int) -> Response:
-        match = get_object_or_404(Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk)
-        if not _is_party(match, request.user.id):
-            # 200 with eligible=false (not 403) -- caller is the Go chat-service
-            # calling on behalf of a user; we want a uniform shape it can cache.
-            return Response(
-                {"eligible": False, "reason": "not_a_party", "match_id": match.id}
-            )
-
-        if match.status in (Match.Status.CANCELLED, Match.Status.EXPIRED):
-            return Response(
-                {"eligible": False, "reason": "match_closed", "match_id": match.id}
-            )
-
-        accepted = (
-            Offer.objects.filter(match_id=match.id, status=Offer.Status.ACCEPTED)
-            .only("id")
-            .first()
+        match = get_object_or_404(
+            Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk
         )
-        if accepted is None:
-            return Response(
-                {"eligible": False, "reason": "no_accepted_offer", "match_id": match.id}
-            )
-
-        # Lazy import: payments depends on matching, not vice versa.
-        from apps.payments.models import PaymentIntent
-
-        succeeded = PaymentIntent.objects.filter(
-            offer_id=accepted.id, status=PaymentIntent.Status.SUCCEEDED
-        ).exists()
-        if not succeeded:
-            return Response(
-                {"eligible": False, "reason": "payment_pending", "match_id": match.id}
-            )
-
-        return Response({"eligible": True, "reason": "ok", "match_id": match.id})
+        # 200 with eligible=false (not 403) -- caller may be the Go chat-service
+        # calling on behalf of a user; we want a uniform shape it can cache.
+        eligible, reason = chat_eligibility(match, request.user.id)
+        return Response(
+            {"eligible": eligible, "reason": reason, "match_id": match.id}
+        )
 
 
 class OfferWithdrawView(APIView):

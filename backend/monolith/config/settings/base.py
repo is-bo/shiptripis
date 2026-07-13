@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.wallet",
     "apps.verification",
     "apps.notifications",
+    "apps.chat",
     "apps.admin_panel",
 ]
 
