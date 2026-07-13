@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../state/role_provider.dart';
 import 'auth_repository.dart';
 import 'auth_storage.dart';
 
@@ -61,6 +62,17 @@ class AuthNotifier extends Notifier<AuthState> {
     state = const AuthLoading();
     try {
       final user = await _repo.me();
+      // Seed the saved UI role BEFORE the shell mounts so "both" users don't
+      // see a first-frame flip (pure roles are server-locked downstream).
+      // Reading roleProvider.notifier here also triggers RoleNotifier.build()
+      // → _hydrate(), which reads the same storage key and lands on the same
+      // value, so there's no late flip that would undo this seed.
+      final savedRole = await _storage.readRole();
+      if (savedRole == 'traveler') {
+        ref.read(roleProvider.notifier).seed(AppRole.traveler);
+      } else if (savedRole == 'sender') {
+        ref.read(roleProvider.notifier).seed(AppRole.sender);
+      }
       state = AuthSignedIn(user);
     } catch (_) {
       await _storage.clear();

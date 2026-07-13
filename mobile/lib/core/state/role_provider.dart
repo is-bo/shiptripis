@@ -30,6 +30,12 @@ class RoleNotifier extends Notifier<AppRole> {
     ref.read(authStorageProvider).writeRole(r.name);
   }
 
+  /// Seed the role synchronously from an already-read storage value.
+  /// Called from auth bootstrap BEFORE the shell mounts so a "both" user
+  /// lands on the correct first frame (no async flip). Pure-role users
+  /// ignore this — effectiveRoleProvider server-locks them.
+  void seed(AppRole r) => state = r;
+
   void toggle() => set(state == AppRole.sender ? AppRole.traveler : AppRole.sender);
 }
 
