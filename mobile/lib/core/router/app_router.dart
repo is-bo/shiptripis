@@ -7,7 +7,7 @@ import '../../core/verification/verification_repository.dart';
 import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
-import '../../features/chat/chat_stub_screen.dart';
+import '../../features/chat/chat_thread_screen.dart';
 import '../../features/matching/match_detail_screen.dart';
 import '../../features/onboarding/benefits_carousel_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -99,7 +99,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/chat/:matchId',
-        builder: (_, state) => ChatStubScreen(
+        builder: (_, state) => ChatThreadScreen(
           matchId: int.parse(state.pathParameters['matchId']!),
         ),
       ),
