@@ -1,0 +1,29 @@
+# Local Python virtualenv — host-built (Windows), useless and huge inside the
+# Linux image; streaming its ~12k files as build context OOMs the WSL2 9p mount.
+.venv/
+venv/
+env/
+
+# Bytecode / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Throwaway local test settings (SQLite in-memory) — never in the image.
+config/settings/test_local.py
+
+# Local dev artifacts
+*.sqlite3
+db.sqlite3
+.env
+.env.*
+!.env.example
+
+# Editor / VCS noise
+.git/
+.gitignore
+.idea/
+.vscode/
+*.log
