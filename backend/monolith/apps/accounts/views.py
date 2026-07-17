@@ -1,4 +1,3 @@
-from django.core.mail import send_mail
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -7,8 +6,10 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.core import redis_bus
+
 from .google import GoogleAuthError, verify_id_token
-from .models import OAuthIdentity, PasswordResetCode, User
+from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
 from .serializers import (
     GoogleSignInSerializer,
     MeSerializer,
@@ -16,6 +17,7 @@ from .serializers import (
     PasswordResetRequestSerializer,
     SignInSerializer,
     SignUpSerializer,
+    VerifyEmailSerializer,
 )
 
 
@@ -25,6 +27,20 @@ def _tokens_for_user(user: User) -> dict[str, str]:
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
+def _send_verify_email(user: User) -> None:
+    """Issue a signup-verification OTP and enqueue it onto the email stream."""
+    _, code = EmailVerificationCode.issue(user)
+    redis_bus.enqueue_email_after_commit(
+        user.email,
+        subject="Confirm your ShipTrip email",
+        body=(
+            f"Welcome to ShipTrip! Your email verification code is: {code}\n"
+            "It expires in 15 minutes."
+        ),
+        kind="verify",
+    )
+
+
 class SignUpView(APIView):
     permission_classes = (AllowAny,)
 
@@ -32,6 +48,7 @@ class SignUpView(APIView):
         s = SignUpSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         user = s.save()
+        _send_verify_email(user)
         return Response(
             {"user": MeSerializer(user).data, **_tokens_for_user(user)},
             status=status.HTTP_201_CREATED,
@@ -132,15 +149,14 @@ class PasswordResetRequestView(APIView):
         user = User.objects.filter(email__iexact=email).first()
         if user is not None:
             _, plaintext = PasswordResetCode.issue(user)
-            send_mail(
+            redis_bus.enqueue_email_after_commit(
+                user.email,
                 subject="ShipTrip password reset code",
-                message=(
+                body=(
                     f"Your ShipTrip reset code is: {plaintext}\n"
                     "It expires in 15 minutes. If you did not request this, ignore."
                 ),
-                from_email=None,
-                recipient_list=[user.email],
-                fail_silently=True,
+                kind="reset",
             )
         return Response(status=status.HTTP_202_ACCEPTED)
 
@@ -173,6 +189,45 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(new_password)
         user.save(update_fields=("password",))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class VerifyEmailView(APIView):
+    """Confirm a signup email with the 6-digit OTP → is_email_verified=True.
+
+    Uses the same invalid-code 400 for both unknown-email and wrong-code so
+    the endpoint doesn't leak which emails exist. Idempotent: re-verifying an
+    already-verified account with a still-valid code returns 204.
+    """
+
+    permission_classes = (AllowAny,)
+
+    def post(self, request: Request) -> Response:
+        s = VerifyEmailSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        email = s.validated_data["email"].lower().strip()
+        code = s.validated_data["code"]
+
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response(
+                {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if user.is_email_verified:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        active = (
+            user.email_verification_codes.filter(used_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
+        if active is None or not active.verify(code):
+            return Response(
+                {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.is_email_verified = True
+        user.save(update_fields=("is_email_verified",))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

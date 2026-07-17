@@ -142,6 +142,81 @@ def publish_after_commit(
     return event_id
 
 
+_EMAIL_STREAM = "email:send"
+_EMAIL_STREAM_MAXLEN = 10_000
+_EMAIL_KINDS = frozenset({"verify", "reset"})
+
+
+def enqueue_email_after_commit(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    kind: str,
+) -> str:
+    """Schedule a transactional email onto the durable `email:send` stream.
+
+    This is the FIRST XADD in Django — the rest of redis_bus is pub/sub.
+    A stream (not pub/sub) is deliberate: `publish_after_commit` is
+    fire-and-forget and would silently LOSE an OTP if the Go email-service
+    happened to be down. A stream persists until a consumer XACKs it.
+
+    Django renders `subject` + `body`; the Go email-service is pure transport
+    (it never templates and only uses `kind` as a log/metric label). Fires on
+    commit (G6) and writes a `PublishedEvent` audit row (G6b) exactly like
+    `publish_after_commit`. Returns the `event_id` (UUID4 hex).
+    """
+    if not to or not isinstance(to, str):
+        raise ValueError("to must be a non-empty string")
+    if kind not in _EMAIL_KINDS:
+        raise ValueError(f"kind must be one of {sorted(_EMAIL_KINDS)}, got {kind!r}")
+
+    event_id = uuid.uuid4().hex
+    payload = {
+        "event_id": event_id,
+        "to": to,
+        "subject": subject,
+        "body": body,
+        "kind": kind,
+    }
+    serialized = json.dumps(payload, separators=(",", ":"))
+    digest = _payload_hash(payload)
+
+    def _fire() -> None:
+        try:
+            PublishedEvent.objects.create(
+                channel=_EMAIL_STREAM,
+                event_id=event_id,
+                payload_hash=digest,
+            )
+        except Exception:
+            logger.exception(
+                "redis_bus: failed to record PublishedEvent for %s/%s — skipping XADD",
+                _EMAIL_STREAM,
+                event_id,
+            )
+            return
+        try:
+            get_client().xadd(
+                _EMAIL_STREAM,
+                {"event_id": event_id, "payload": serialized},
+                maxlen=_EMAIL_STREAM_MAXLEN,
+                approximate=True,
+            )
+        except redis.RedisError:
+            # Audit row already exists; the daily sweep will surface this as
+            # undelivered. Don't re-raise — the caller's commit already happened
+            # and a request shouldn't fail because Redis is sick.
+            logger.exception(
+                "redis_bus: XADD %s failed; PublishedEvent %s will surface in sweep",
+                _EMAIL_STREAM,
+                event_id,
+            )
+
+    transaction.on_commit(_fire)
+    return event_id
+
+
 def mark_delivered(event_id: str) -> bool:
     """Mark a `PublishedEvent` as delivered. Idempotent.
 

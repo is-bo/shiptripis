@@ -85,6 +85,96 @@ class PublishAfterCommitValidationTests(TestCase):
             redis_bus.publish_after_commit("ch", [1, 2, 3])  # type: ignore[arg-type]
 
 
+class EnqueueEmailAfterCommitTests(TransactionTestCase):
+    """The email stream publisher (first XADD in Django) mirrors the
+    publish_after_commit discipline: fire only after commit, write a
+    PublishedEvent audit row, swallow Redis errors so the sweep catches misses.
+    """
+
+    def test_returns_event_id(self):
+        with patch.object(redis_bus, "get_client") as gc:
+            gc.return_value.xadd.return_value = b"1-0"
+            with transaction.atomic():
+                eid = redis_bus.enqueue_email_after_commit(
+                    "u@example.com", "Subj", "Body", kind="verify"
+                )
+        assert isinstance(eid, str)
+        assert len(eid) == 32  # uuid4 hex
+
+    def test_xadds_after_commit_with_audit_row(self):
+        with patch.object(redis_bus, "get_client") as gc:
+            gc.return_value.xadd.return_value = b"1-0"
+            with transaction.atomic():
+                eid = redis_bus.enqueue_email_after_commit(
+                    "u@example.com", "Subj", "Body", kind="verify"
+                )
+                # Inside the block: nothing enqueued, no audit row yet.
+                assert PublishedEvent.objects.count() == 0
+                gc.return_value.xadd.assert_not_called()
+            # After commit: audit row on the email:send channel + one XADD.
+            row = PublishedEvent.objects.get(event_id=eid)
+            assert row.channel == "email:send"
+            gc.return_value.xadd.assert_called_once()
+            args, kwargs = gc.return_value.xadd.call_args
+            assert args[0] == "email:send"
+            fields = args[1]
+            assert fields["event_id"] == eid
+            # payload is a JSON string carrying the render + routing metadata.
+            import json
+
+            payload = json.loads(fields["payload"])
+            assert payload == {
+                "event_id": eid,
+                "to": "u@example.com",
+                "subject": "Subj",
+                "body": "Body",
+                "kind": "verify",
+            }
+            # MAXLEN ~ 10000 (approximate trimming) per G1.
+            assert kwargs.get("maxlen") == 10000
+            assert kwargs.get("approximate") is True
+
+    def test_rollback_enqueues_nothing(self):
+        class _Boom(Exception):
+            pass
+
+        with patch.object(redis_bus, "get_client") as gc:
+            try:
+                with transaction.atomic():
+                    redis_bus.enqueue_email_after_commit(
+                        "u@example.com", "S", "B", kind="reset"
+                    )
+                    raise _Boom()
+            except _Boom:
+                pass
+            gc.return_value.xadd.assert_not_called()
+        assert PublishedEvent.objects.count() == 0
+
+    def test_xadd_failure_keeps_audit_row_for_sweep(self):
+        import redis as redis_pkg
+
+        with patch.object(redis_bus, "get_client") as gc:
+            gc.return_value.xadd.side_effect = redis_pkg.RedisError("nope")
+            with transaction.atomic():
+                eid = redis_bus.enqueue_email_after_commit(
+                    "u@example.com", "S", "B", kind="reset"
+                )
+        # Audit row stays so the daily sweep flags it as undelivered.
+        assert PublishedEvent.objects.filter(event_id=eid).exists()
+
+    def test_rejects_bad_kind(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            redis_bus.enqueue_email_after_commit("u@x.com", "S", "B", kind="spam")
+
+    def test_rejects_empty_recipient(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            redis_bus.enqueue_email_after_commit("", "S", "B", kind="verify")
+
+
 class MarkDeliveredTests(TestCase):
     def test_marks_delivered_once(self):
         ev = PublishedEvent.objects.create(

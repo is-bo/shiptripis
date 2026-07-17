@@ -84,6 +84,11 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return value
 
 
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(regex=r"^\d{6}$")
+
+
 class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

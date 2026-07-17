@@ -139,6 +139,19 @@ PASSWORD_RESET_CODE_TTL_SECONDS = env.int(
 )
 PASSWORD_RESET_MAX_ATTEMPTS = env.int("PASSWORD_RESET_MAX_ATTEMPTS", default=5)
 
+# --- Email verification (signup OTP) ---
+EMAIL_VERIFY_CODE_TTL_SECONDS = env.int(
+    "EMAIL_VERIFY_CODE_TTL_SECONDS", default=900  # 15 minutes
+)
+EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
+
+# --- Email ---
+# Transactional OTP mail (verify/reset) is rendered here and enqueued onto the
+# `email:send` Redis stream — the Go email-service does the actual SMTP send.
+# Django's own EMAIL_BACKEND is only used for any incidental mail; prod.py wires
+# it to SMTP. DEFAULT_FROM_EMAIL is the sender address on all outbound mail.
+DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", default="ShipTrip <noreply@shiptrip.dz>")
+
 # --- Redis ---
 REDIS_URL = env.str("REDIS_URL", default="redis://redis:6379/0")
 

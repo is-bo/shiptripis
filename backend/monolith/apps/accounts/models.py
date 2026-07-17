@@ -107,3 +107,51 @@ class PasswordResetCode(models.Model):
             self.used_at = timezone.now()
         self.save(update_fields=("attempts", "used_at"))
         return ok
+
+
+class EmailVerificationCode(models.Model):
+    """Argon2-hashed 6-digit signup-verification code — a near-clone of
+    PasswordResetCode. Django owns generation + verification; the Go
+    email-service only transports the rendered message."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="email_verification_codes",
+    )
+    code_hash = models.CharField(max_length=200)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("user", "used_at", "expires_at"))]
+
+    @classmethod
+    def issue(cls, user: "User") -> tuple["EmailVerificationCode", str]:
+        plaintext = f"{secrets.randbelow(1_000_000):06d}"
+        ttl = timedelta(seconds=settings.EMAIL_VERIFY_CODE_TTL_SECONDS)
+        obj = cls.objects.create(
+            user=user,
+            code_hash=make_password(plaintext),
+            expires_at=timezone.now() + ttl,
+        )
+        return obj, plaintext
+
+    def is_active(self) -> bool:
+        return (
+            self.used_at is None
+            and self.expires_at > timezone.now()
+            and self.attempts < settings.EMAIL_VERIFY_MAX_ATTEMPTS
+        )
+
+    def verify(self, plaintext: str) -> bool:
+        if not self.is_active():
+            return False
+        ok = check_password(plaintext, self.code_hash)
+        self.attempts += 1
+        if ok:
+            self.used_at = timezone.now()
+        self.save(update_fields=("attempts", "used_at"))
+        return ok

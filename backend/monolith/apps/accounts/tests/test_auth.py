@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-from django.core import mail
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -100,14 +99,14 @@ class PasswordResetTests(APITestCase):
 
     def setUp(self):
         self.client.post(reverse("auth-sign-up"), SIGN_UP_PAYLOAD, format="json")
-        mail.outbox = []
 
-    def test_request_for_known_email_sends_mail_and_returns_202(self):
+    def test_request_for_known_email_issues_code_and_returns_202(self):
+        # Reset mail now goes onto the `email:send` Redis stream (not send_mail);
+        # the observable effect here is the issued PasswordResetCode row.
         resp = self.client.post(
             self.request_url, {"email": SIGN_UP_PAYLOAD["email"]}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(PasswordResetCode.objects.count(), 1)
 
     def test_request_for_unknown_email_still_returns_202(self):
@@ -115,7 +114,6 @@ class PasswordResetTests(APITestCase):
             self.request_url, {"email": "nobody@example.com"}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(len(mail.outbox), 0)
         self.assertEqual(PasswordResetCode.objects.count(), 0)
 
     def test_confirm_with_valid_code_updates_password(self):
