@@ -159,7 +159,7 @@ class RequestDetailScreen extends ConsumerWidget {
         return [
           _AwaitingPaymentCard(match: active!),
           const SizedBox(height: 16),
-          _TravelerCard(match: active),
+          _TravelerCard(match: active, chatEnabled: false),
           const SizedBox(height: 16),
           _ParcelInfoCard(parcel: parcel),
           const SizedBox(height: 24),
@@ -645,8 +645,15 @@ class _CodePlaceholder extends ConsumerWidget {
 }
 
 class _TravelerCard extends StatelessWidget {
-  const _TravelerCard({required this.match});
+  const _TravelerCard({required this.match, this.chatEnabled = true});
   final MatchSummary match;
+
+  /// Chat is payment-gated server-side (`chat_eligibility`). Before the
+  /// accepted offer is paid, sending returns 402 — so we don't surface the
+  /// Message affordance yet, and show a muted hint instead. This mirrors the
+  /// server rule at the entry point rather than letting the user open a thread
+  /// that can't send.
+  final bool chatEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -674,31 +681,43 @@ class _TravelerCard extends StatelessWidget {
               ],
             ),
           ),
-          Material(
-            color: AppColors.parchmentSoft,
-            shape: const StadiumBorder(),
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: () => context.push('/chat/${match.id}'),
-              child: const Padding(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.chat_bubble_outline_rounded,
-                        size: 14, color: AppColors.ink),
-                    SizedBox(width: 6),
-                    Text('Message',
-                        style: TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700)),
-                  ],
+          if (chatEnabled)
+            Material(
+              color: AppColors.parchmentSoft,
+              shape: const StadiumBorder(),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => context.push('/chat/${match.id}'),
+                child: const Padding(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.chat_bubble_outline_rounded,
+                          size: 14, color: AppColors.ink),
+                      SizedBox(width: 6),
+                      Text('Message',
+                          style: TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                 ),
               ),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline_rounded,
+                    size: 13, color: AppColors.inkSoft),
+                const SizedBox(width: 5),
+                Text('Chat after payment',
+                    style: AppType.body(11, color: AppColors.inkSoft)),
+              ],
             ),
-          ),
         ],
       ),
     );
