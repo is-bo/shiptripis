@@ -151,3 +151,78 @@ final chatThreadProvider =
   ChatThreadNotifier.new,
 );
 
+// --- Mailroom inbox (the Conversations tab) ---------------------------------
+
+class ChatThreadsState {
+  ChatThreadsState({
+    required List<ChatThread> threads,
+    required this.loading,
+    this.error,
+  }) : threads = UnmodifiableListView(threads);
+
+  final UnmodifiableListView<ChatThread> threads;
+  final bool loading;
+  final String? error;
+
+  int get totalUnread =>
+      threads.fold(0, (sum, t) => sum + t.unreadCount);
+
+  static ChatThreadsState initial() =>
+      ChatThreadsState(threads: const [], loading: true);
+
+  ChatThreadsState copy({
+    List<ChatThread>? threads,
+    bool? loading,
+    Object? error = _sentinel,
+  }) {
+    return ChatThreadsState(
+      threads: threads ?? this.threads,
+      loading: loading ?? this.loading,
+      error: identical(error, _sentinel) ? this.error : error as String?,
+    );
+  }
+}
+
+/// The Mailroom inbox notifier. Loads the paid-match thread list and refetches
+/// whenever a `chat.message.new` lands on the shared socket, so snippet +
+/// unread counts stay live without polling.
+class ChatThreadsNotifier extends Notifier<ChatThreadsState> {
+  StreamSubscription<NotificationEnvelope>? _sub;
+
+  @override
+  ChatThreadsState build() {
+    final client = ref.watch(chatWsClientProvider);
+    _sub?.cancel();
+    _sub = client.events.listen(_onEnvelope);
+    ref.onDispose(() => _sub?.cancel());
+
+    Future.microtask(_load);
+    return ChatThreadsState.initial();
+  }
+
+  Future<void> _load() async {
+    try {
+      final threads = await ref.read(chatRepositoryProvider).listThreads();
+      state = state.copy(threads: threads, loading: false, error: null);
+    } on ChatFailure catch (e) {
+      state = state.copy(loading: false, error: e.message);
+    } catch (_) {
+      state = state.copy(loading: false, error: 'Could not load conversations.');
+    }
+  }
+
+  Future<void> refresh() => _load();
+
+  void _onEnvelope(NotificationEnvelope env) {
+    if (env.type != 'chat.message.new') return;
+    // A new message shifts snippets/unread/ordering — cheapest correct move is
+    // to refetch the (small) inbox.
+    _load();
+  }
+}
+
+final chatThreadsProvider =
+    NotifierProvider<ChatThreadsNotifier, ChatThreadsState>(
+  ChatThreadsNotifier.new,
+);
+

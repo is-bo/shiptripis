@@ -32,6 +32,10 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   void dispose() {
     _ctl.dispose();
     _scroll.dispose();
+    // Opening the thread marked the counterparty's messages read server-side
+    // (the GET history call does this). Refresh the Mailroom inbox so the
+    // unread badge + snippet reflect that once the user backs out.
+    ref.read(chatThreadsProvider.notifier).refresh();
     super.dispose();
   }
 

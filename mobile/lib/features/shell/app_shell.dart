@@ -7,6 +7,7 @@ import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/ws/live_event_router.dart';
 import '../../core/ws/notifications_providers.dart';
+import '../../core/chat/chat_providers.dart';
 import '../chat/chat_list_screen.dart';
 import '../home/home_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -320,6 +321,9 @@ class _BottomNav extends ConsumerWidget {
     final unread = ref.watch(
       notificationsNotifierProvider.select((s) => s.unreadCount),
     );
+    final chatUnread = ref.watch(
+      chatThreadsProvider.select((s) => s.totalUnread),
+    );
     return SafeArea(
       top: false,
       child: Padding(
@@ -374,7 +378,13 @@ class _BottomNav extends ConsumerWidget {
                       child: _NavIcon(
                         icon: _icons[i],
                         selected: selected,
-                        badgeCount: i == 2 && !selected ? unread : 0,
+                        badgeCount: !selected
+                            ? (i == 1
+                                ? chatUnread
+                                : i == 2
+                                    ? unread
+                                    : 0)
+                            : 0,
                       ),
                     ),
                   ),

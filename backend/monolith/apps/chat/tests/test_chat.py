@@ -189,3 +189,101 @@ class ChatListTests(APITestCase):
         intruder = _user("intruder-chat2@example.com", "6")
         r = _client(intruder).get(self._url())
         assert r.status_code == 403
+
+    def test_opening_thread_marks_counterparty_messages_read(self):
+        mine = ChatMessage.objects.create(
+            match=self.match, sender=self.sender, body="mine"
+        )
+        theirs = ChatMessage.objects.create(
+            match=self.match, sender=self.traveler, body="theirs"
+        )
+        # Sender opens the thread → the traveler's message is marked read,
+        # the sender's own message is left alone.
+        r = _client(self.sender).get(self._url())
+        assert r.status_code == 200
+        theirs.refresh_from_db()
+        mine.refresh_from_db()
+        assert theirs.read_at is not None
+        assert mine.read_at is None
+
+
+class ChatThreadsTests(APITestCase):
+    """GET /api/chat/threads — the Mailroom inbox: only paid matches, with
+    counterparty name, route, last-message snippet, and viewer unread count."""
+
+    def setUp(self):
+        self.sender = _user("threadsender@example.com", "7")
+        self.traveler = _user("threadtraveler@example.com", "8")
+
+    def _url(self):
+        return reverse("chat-threads")
+
+    def test_lists_only_paid_matches(self):
+        # Paid match — should appear.
+        paid = _make_match(self.sender, self.traveler)
+        paid_offer = _accepted_offer(paid, self.traveler)
+        _pay(paid_offer, self.sender)
+        # Accepted-but-unpaid match — should NOT appear.
+        unpaid = _make_match(self.sender, self.traveler)
+        _accepted_offer(unpaid, self.traveler)
+
+        r = _client(self.sender).get(self._url())
+        assert r.status_code == 200, r.data
+        ids = [t["match_id"] for t in r.data["results"]]
+        assert ids == [paid.id]
+
+    def test_thread_row_shape_and_counterparty(self):
+        match = _make_match(self.sender, self.traveler)
+        offer = _accepted_offer(match, self.traveler)
+        _pay(offer, self.sender)
+        ChatMessage.objects.create(
+            match=match, sender=self.traveler, body="on my way"
+        )
+
+        # Sender sees the traveler as counterparty.
+        r = _client(self.sender).get(self._url())
+        row = r.data["results"][0]
+        assert row["match_id"] == match.id
+        assert row["counterparty_id"] == self.traveler.id
+        assert row["counterparty_name"] == self.traveler.full_name
+        assert row["route"] == "ALG → CDG"
+        assert row["last_message"] == "on my way"
+        assert row["unread_count"] == 1  # the traveler's message, unread
+
+        # Traveler sees the sender as counterparty, and their own message
+        # doesn't count as unread for them.
+        r2 = _client(self.traveler).get(self._url())
+        row2 = r2.data["results"][0]
+        assert row2["counterparty_id"] == self.sender.id
+        assert row2["unread_count"] == 0
+
+    def test_empty_thread_still_listed(self):
+        match = _make_match(self.sender, self.traveler)
+        offer = _accepted_offer(match, self.traveler)
+        _pay(offer, self.sender)
+        r = _client(self.sender).get(self._url())
+        row = r.data["results"][0]
+        assert row["match_id"] == match.id
+        assert row["last_message"] is None
+        assert row["unread_count"] == 0
+
+    def test_ordered_by_recent_activity(self):
+        older = _make_match(self.sender, self.traveler)
+        _pay(_accepted_offer(older, self.traveler), self.sender)
+        newer = _make_match(self.sender, self.traveler)
+        _pay(_accepted_offer(newer, self.traveler), self.sender)
+        # Give `older` the most recent message → it should sort first.
+        ChatMessage.objects.create(match=older, sender=self.sender, body="hi")
+
+        r = _client(self.sender).get(self._url())
+        ids = [t["match_id"] for t in r.data["results"]]
+        assert ids[0] == older.id
+        assert set(ids) == {older.id, newer.id}
+
+    def test_non_party_sees_nothing(self):
+        match = _make_match(self.sender, self.traveler)
+        _pay(_accepted_offer(match, self.traveler), self.sender)
+        intruder = _user("threadintruder@example.com", "9")
+        r = _client(intruder).get(self._url())
+        assert r.status_code == 200
+        assert r.data["results"] == []

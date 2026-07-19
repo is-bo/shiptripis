@@ -42,6 +42,57 @@ class ChatMessage {
   final DateTime? readAt;
 }
 
+/// One row in the Mailroom inbox — a paid match the viewer can chat on.
+class ChatThread {
+  const ChatThread({
+    required this.matchId,
+    required this.counterpartyId,
+    required this.counterpartyName,
+    required this.route,
+    required this.status,
+    required this.unreadCount,
+    this.lastMessage,
+    this.lastMessageAt,
+  });
+
+  factory ChatThread.fromJson(Map<String, dynamic> j) => ChatThread(
+        matchId: j['match_id'] as int,
+        counterpartyId: j['counterparty_id'] as int,
+        counterpartyName: (j['counterparty_name'] as String?) ?? '',
+        route: (j['route'] as String?) ?? '',
+        status: (j['status'] as String?) ?? '',
+        unreadCount: (j['unread_count'] as num?)?.toInt() ?? 0,
+        lastMessage: j['last_message'] as String?,
+        lastMessageAt: j['last_message_at'] == null
+            ? null
+            : DateTime.tryParse(j['last_message_at'] as String),
+      );
+
+  final int matchId;
+  final int counterpartyId;
+  final String counterpartyName;
+  final String route;
+  final String status;
+  final int unreadCount;
+  final String? lastMessage;
+  final DateTime? lastMessageAt;
+
+  /// Two-letter monogram for the avatar tile, from the counterparty name.
+  String get initials {
+    final parts = counterpartyName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      final p = parts.first;
+      return (p.length >= 2 ? p.substring(0, 2) : p).toUpperCase();
+    }
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+}
+
 class ChatRepository {
   ChatRepository(this._dio);
   final Dio _dio;
@@ -64,6 +115,19 @@ class ChatRepository {
           .toList();
     }
     throw ChatFailure(_extractMessage(r) ?? 'Could not load messages.');
+  }
+
+  /// Fetch the viewer's Mailroom inbox: paid matches they can chat on,
+  /// newest activity first, with counterparty + last-message snippet + unread.
+  Future<List<ChatThread>> listThreads() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/chat/threads');
+    if (r.statusCode == 200 && r.data != null) {
+      final results = (r.data!['results'] as List?) ?? const [];
+      return results
+          .map((e) => ChatThread.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    }
+    throw ChatFailure(_extractMessage(r) ?? 'Could not load conversations.');
   }
 
   /// Send a message. Returns the persisted [ChatMessage] on success.

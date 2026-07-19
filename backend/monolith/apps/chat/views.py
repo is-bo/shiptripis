@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status as http
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -22,16 +23,23 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.db.models import Count, OuterRef, Q, Subquery
+
 from apps.core import channels, redis_bus
 from apps.matching.models import Match
 from apps.matching.services import (
     REASON_NOT_A_PARTY,
+    REASON_OK,
     chat_eligibility,
     is_party,
 )
 
 from .models import ChatMessage
-from .serializers import ChatMessageSerializer, ChatSendSerializer
+from .serializers import (
+    ChatMessageSerializer,
+    ChatSendSerializer,
+    ChatThreadSerializer,
+)
 
 
 class _Pagination(PageNumberPagination):
@@ -64,6 +72,16 @@ class ChatMessagesView(ListAPIView, APIView):
             .select_related("sender")
             .order_by("created_at")
         )
+
+    def list(self, request, *args, **kwargs):
+        # Opening the thread marks the counterparty's messages as read, so the
+        # Mailroom unread badge clears. Only the OTHER party's messages — a
+        # user never "reads" their own. Idempotent; touches nothing already read.
+        response = super().list(request, *args, **kwargs)
+        ChatMessage.objects.filter(
+            match_id=self.kwargs["pk"], read_at__isnull=True
+        ).exclude(sender_id=request.user.id).update(read_at=timezone.now())
+        return response
 
     def post(self, request: Request, pk: int) -> Response:
         match = get_object_or_404(
@@ -111,3 +129,54 @@ class ChatMessagesView(ListAPIView, APIView):
         return Response(
             ChatMessageSerializer(msg).data, status=http.HTTP_201_CREATED
         )
+
+
+class ChatThreadsView(APIView):
+    """GET /api/chat/threads — the viewer's Mailroom inbox.
+
+    Returns every match the viewer may currently chat on (i.e. `chat_eligibility`
+    is OK — accepted + paid, not closed), newest activity first, with the
+    counterparty name, route, last-message snippet, and the viewer's unread
+    count. Eligibility is checked per-row through the same `chat_eligibility`
+    helper the send path uses, so the inbox never lists a thread the user can't
+    actually open.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        uid = request.user.id
+
+        last_msg = ChatMessage.objects.filter(match_id=OuterRef("pk")).order_by(
+            "-created_at"
+        )
+        matches = (
+            Match.objects.filter(Q(sender_id=uid) | Q(traveler_id=uid))
+            .select_related("sender", "traveler", "parcel")
+            .annotate(
+                last_body=Subquery(last_msg.values("body")[:1]),
+                last_at=Subquery(last_msg.values("created_at")[:1]),
+                unread=Count(
+                    "chat_messages",
+                    filter=Q(chat_messages__read_at__isnull=True)
+                    & ~Q(chat_messages__sender_id=uid),
+                ),
+            )
+        )
+
+        # Gate each candidate through the single source of truth. Cheap enough
+        # for an inbox (a user has a handful of active matches); keeps the list
+        # exactly in step with what `POST .../chat/messages` will accept.
+        eligible = [
+            m for m in matches if chat_eligibility(m, uid)[1] == REASON_OK
+        ]
+        # Most recent conversation first; matches with no messages yet sort by
+        # match recency (last_at is null → fall back to created_at).
+        eligible.sort(
+            key=lambda m: m.last_at or m.created_at, reverse=True
+        )
+
+        data = ChatThreadSerializer(
+            eligible, many=True, context={"viewer_id": uid}
+        ).data
+        return Response({"results": data})
