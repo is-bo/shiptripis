@@ -56,6 +56,46 @@ CLAUDE.md). Don't claim a task that's `in-progress` for the other owner.
 
 - [ ] (none unblocked) — FCM real sender + email-service are both built and gated dark; both wait on Islam (see below + the Islam section).
 
+> **Claude A → Claude B handoff (2026-07-24).** Read before your next session.
+>
+> 1. **Chat is now wired end-to-end — your chat-service needs NO change.** Django
+>    now persists `chat_message`, gates send/list on payment (`chat_eligibility`),
+>    and publishes `chat.message.new` via `publish_after_commit(..., targets=[other_member_uid])`
+>    — exactly the generic `targets` envelope your dispatcher already fans on
+>    (confirmed against `apps/chat/views.py`). No `recipient_id`. The relay is
+>    correct as-is. This session also shipped the mobile "Mailroom" inbox on top
+>    of a new **Django** endpoint `GET /api/chat/threads` (paid matches + last
+>    snippet + unread). Mobile reads all chat history from Django
+>    (`GET /api/matches/<id>/chat/messages`), NOT sqlc — so a chat sqlc repo stays
+>    a **V1-deferred nicety**; don't build it unless asked.
+>
+> 2. **Heads-up: `contracts/sql/schema.sql` is stale (Django-side) — `check-drift`
+>    will be RED, and it's NOT your fault.** Migration `accounts/0004_emailverificationcode.py`
+>    added the `email_verification_code` table (for the email-service Django side,
+>    landed `13dd535`) but the schema wasn't re-exported — Islam couldn't run
+>    `pg_dump` (no Docker up in the code-only sessions). It is **NOT a Go-read
+>    table** (Go never touches `email_verification_code`), so there is **no sqlc
+>    rerun for you** — do not regenerate against it. Islam will `task contract:sync-db`
+>    once Docker is back up. If you see the drift gate red on only that table,
+>    that's the reason; don't chase it.
+>
+> 3. **Nothing blocks you right now.** Your two dark-gated pieces (real `FCMSender`,
+>    `email-service`) are both still waiting on Islam-side + shared-scope work, NOT
+>    on Go code:
+>    - **email-service**: Django side is **DONE** — verify + reset OTPs now XADD to
+>      the `email:send` stream (`enqueue_email_after_commit`, first XADD in Django,
+>      `MAXLEN ~10000`, fields `{event_id, payload:json}`, kind ∈ {verify,reset}).
+>      Payload contract matches your consumer. To light up e2e needs **shared-scope
+>      + user approval** (mailhog service in `docker-compose.yml`, `EMAIL_*` in
+>      `.env.example`, then flip `EMAIL_ENABLED=true`) — no Go change.
+>    - **FCM**: still needs Islam's `fcm_token` schema + `notif:fcm` publisher
+>      before you flip `FCM_ENABLED=true`. Not started Islam-side yet.
+>
+> So: if the user wants you productive, the highest-value Go-side move is to **help
+> Islam bring the compose stack up** and run the email e2e (mailhog) — but that's a
+> shared-scope change needing the user's OK first. Otherwise you're genuinely
+> caught up; no queued Go work.
+
 ### Soon
 
 - [ ] (none)
