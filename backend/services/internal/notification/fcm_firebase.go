@@ -49,7 +49,14 @@ func NewFirebaseSender(ctx context.Context, projectID, credentialsPath string, l
 	}
 
 	cfg := &firebase.Config{ProjectID: projectID}
-	app, err := firebase.NewApp(ctx, cfg, option.WithCredentialsFile(credentialsPath))
+	// Pin the credential type to a service account rather than using the
+	// deprecated WithCredentialsFile, which accepts any credential-config
+	// shape. FCM credentials are always a service-account JSON, so anything
+	// else in FCM_CREDENTIALS_PATH is a misconfiguration (or a swapped-in
+	// external-account config pointing at a URL we don't control) and should
+	// fail here instead of being loaded.
+	app, err := firebase.NewApp(ctx, cfg,
+		option.WithAuthCredentialsFile(option.ServiceAccount, credentialsPath))
 	if err != nil {
 		return nil, fmt.Errorf("fcm: init firebase app: %w", err)
 	}

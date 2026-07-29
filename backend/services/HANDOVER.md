@@ -274,6 +274,39 @@ consistent.
 - **All env reads via `pkg/config`.** Never `os.Getenv` in `main.go`/handlers.
 - **No business logic in `cmd/`.** `main.go` is wiring only. Everything testable
   lives in `internal/<service>/` behind interface seams.
+- **Two test tiers: default unit, `-tags integration` for real infra.**
+  Unit tests use the interface seams and need nothing running — `go test ./...`
+  must stay fast and infra-free. Tests that need a real Redis go behind
+  `//go:build integration` and run via `./scripts/integration-test.sh`, which
+  starts a throwaway Redis on :6399 and removes it on exit (including on
+  failure/Ctrl-C). Pass a package to narrow: `./scripts/integration-test.sh
+  ./internal/chat`. Integration tests **skip loudly** when `REDIS_TEST_URL` is
+  unset, so a bare `go test -tags integration ./...` can never report a false
+  success.
+
+  What lives in the integration tier (added 2026-07-28) and why it can't be a
+  unit test:
+  - `internal/email/integration_test.go` — the Redis Stream contract:
+    consumer-group read, `email:sent:` dedup, XAck, and the PEL +
+    `XAUTOCLAIM` retry after a send failure. This is the guarantee that an
+    SMTP blip doesn't lose someone's OTP, and it only exists in real Redis.
+  - `internal/chat/integration_test.go` — real pub/sub → JWT-authenticated WS
+    upgrade → `Hub` fan-out, plus the `delivered:<event_id>` marker that
+    suppresses the duplicate FCM push, and the no-leak-to-untargeted-user
+    rule. `dispatcher_test.go` already covers the routing *logic* with stubs;
+    this covers the wiring the stubs replace.
+
+  Two traps these tests hit, worth knowing before writing more:
+  - **Unique event ids per run.** The email consumer dedupes on
+    `email:sent:<event_id>`, so a hardcoded id makes the *second* run a
+    correct no-op skip and the test hangs waiting for a send. Use a
+    per-run-unique id and clean the keys in `t.Cleanup`.
+  - **Wait for the subscriber before publishing.** Redis pub/sub has no
+    backlog; publishing before `SUBSCRIBE` lands drops the message silently.
+    The chat test polls `PUBSUB NUMSUB` before publishing. Likewise, don't
+    probe the PEL with `XAutoClaim` — it *reassigns* entries and resets their
+    idle timer, which starves the sweeper you're trying to test. Use
+    read-only `XPENDING`.
 
 ## Conventions NOT to copy
 
