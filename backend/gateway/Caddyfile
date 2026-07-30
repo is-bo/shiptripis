@@ -20,7 +20,7 @@
 
 	@notif path /ws/notifications /ws/notifications/*
 	handle @notif {
-		reverse_proxy notification:8082
+		reverse_proxy notification-service:8082
 	}
 
 	@kyc path /kyc/* /api/kyc/*
