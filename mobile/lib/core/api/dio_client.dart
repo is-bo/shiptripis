@@ -16,7 +16,14 @@ Dio buildDioClient(AuthStorage storage) {
       baseUrl: ApiConfig.baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        // ngrok's free tier serves an HTML interstitial to anything it thinks
+        // is a browser; this header opts out. Harmless against any other host,
+        // and it's the difference between JSON and an unparseable HTML body
+        // when the dev tunnel is in play.
+        'ngrok-skip-browser-warning': 'true',
+      },
       // Don't throw on 4xx — let callers inspect the response.
       validateStatus: (s) => s != null && s < 500,
     ),

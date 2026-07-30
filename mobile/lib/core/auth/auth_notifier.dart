@@ -80,6 +80,20 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Re-read `/me` and swap the cached user in place. Used after a flow that
+  /// changes server-side profile flags (e.g. a KYC submission that flips
+  /// `is_kyc_verified`) so badges update without a restart. Deliberately
+  /// silent: a failure leaves the existing user alone rather than bouncing
+  /// the session, since the caller's own operation already succeeded.
+  Future<void> refreshUser() async {
+    if (state is! AuthSignedIn) return;
+    try {
+      state = AuthSignedIn(await _repo.me());
+    } catch (_) {
+      // Keep the current user; the caller's flow isn't invalidated by this.
+    }
+  }
+
   Future<bool> signUp({
     required String fullName,
     required String email,

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Identity verification captures the user's document + face. iOS hard
+	     crashes on first camera/library access without these strings, and they
+	     are what the permission sheet shows, so they name the actual purpose. -->
+	<key>NSCameraUsageDescription</key>
+	<string>ShipTrip uses your camera to photograph your ID document and your face so we can verify your identity.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ShipTrip lets you pick an existing photo of your ID document instead of taking a new one.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

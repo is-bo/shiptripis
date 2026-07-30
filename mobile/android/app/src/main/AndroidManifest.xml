@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- KYC document capture. image_picker delegates to the system camera app
+         (ACTION_IMAGE_CAPTURE), so no runtime CAMERA permission is required —
+         but the hardware is optional so the app still installs on devices
+         without one (they can upload an existing scan instead). -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <application
         android:label="shiptrip"
         android:name="${applicationName}"

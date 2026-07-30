@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_notifier.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/constants/wilayas.dart';
+import '../../core/kyc/kyc_providers.dart';
 import '../../core/state/role_provider.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
@@ -282,8 +284,18 @@ class _SettingsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final kycLabel =
-        user?.isKycVerified == true ? "Approved" : "Not submitted";
+    // `is_kyc_verified` only flips on approval, and the kyc-service exposes no
+    // status-read endpoint — so we can't distinguish "never submitted" from
+    // "pending review" across restarts. Don't claim either: show the approved
+    // state when we have it, the in-review state when this session submitted,
+    // and otherwise an invitation to act.
+    final submittedThisSession =
+        ref.watch(kycDraftProvider.select((d) => d.result != null));
+    final kycLabel = user?.isKycVerified == true
+        ? "Approved"
+        : submittedThisSession
+            ? "In review"
+            : "Verify now";
 
     final rows = <_Row>[
       _Row(
@@ -299,10 +311,10 @@ class _SettingsList extends ConsumerWidget {
         enabled: false,
       ),
       _Row(
-        label: "KYC documents",
+        label: "Identity verification",
         icon: Icons.fingerprint_rounded,
         trailing: kycLabel,
-        enabled: false, // KYC flow still stubbed per scope
+        onTap: () => context.push('/kyc'),
       ),
       _Row(
         label: "Help center",
