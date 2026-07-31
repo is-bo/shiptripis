@@ -295,11 +295,28 @@ consistent.
     suppresses the duplicate FCM push, and the no-leak-to-untargeted-user
     rule. `dispatcher_test.go` already covers the routing *logic* with stubs;
     this covers the wiring the stubs replace.
+  - `internal/notification/integration_test.go` (added 2026-07-31) — the full
+    G1 anti-duplicate-push loop, which spans two components that only meet
+    through Redis: the dispatcher writes `delivered:<event_id>` after a WS
+    send, and the FCM consumer reads it after its grace period. Neither half
+    can prove the guarantee alone (`dispatcher_test.go` stubs the receipt
+    store so it never writes the key; `fcm_firebase_test.go` stubs the
+    multicaster so it never reads it). Also covers the offline case — no
+    socket means the push MUST happen — the sweeper retry after an FCM
+    outage, and the presence key lifecycle.
+  - `pkg/redisbus/integration_test.go` (added 2026-07-31) — the Redis
+    semantics the whole bus rests on: `XGroupCreate` swallowing BUSYGROUP
+    (every pod calls it at boot), `XAddCapped` actually applying MAXLEN, an
+    empty `XReadGroup` returning nil rather than an error, `XAutoClaim`
+    honouring MinIdle so the sweeper can't steal live work, and the pub/sub
+    pump dropping rather than blocking under backpressure. A fake would only
+    prove the fake works.
 
-  Two traps these tests hit, worth knowing before writing more:
+  Traps these tests hit, worth knowing before writing more:
   - **Unique event ids per run.** The email consumer dedupes on
     `email:sent:<event_id>`, so a hardcoded id makes the *second* run a
-    correct no-op skip and the test hangs waiting for a send. Use a
+    correct no-op skip and the test hangs waiting for a send. Same applies to
+    `delivered:<event_id>` (60s TTL) in the notification tests. Use a
     per-run-unique id and clean the keys in `t.Cleanup`.
   - **Wait for the subscriber before publishing.** Redis pub/sub has no
     backlog; publishing before `SUBSCRIBE` lands drops the message silently.
@@ -307,6 +324,26 @@ consistent.
     probe the PEL with `XAutoClaim` — it *reassigns* entries and resets their
     idle timer, which starves the sweeper you're trying to test. Use
     read-only `XPENDING`.
+  - **"PEL is empty" does NOT mean "the consumer handled it."** `XPENDING`
+    counts only delivered-but-unacked entries, so it reads 0 both *before*
+    the consumer reads an entry and *after* it acks one. Waiting on
+    `pending == 0` and then asserting "no push happened" passes even when the
+    code is broken — verified by sabotage. Gate on `XINFO GROUPS`
+    `entries-read` advancing as well (see `itWaitProcessed` in the
+    notification tests).
+  - **`ws.Close` costs 5s when the peer isn't reading.** coder/websocket's
+    `Close` runs a close handshake with a hardcoded 5s timeout
+    (`close.go waitCloseHandshake`). In tests that deliberately stall the
+    peer, use `CloseNow()` or drain the client — this alone took
+    `pkg/wsproto` from 41s to 2s. It also silently invalidates timing
+    assertions: a "Close unblocks in-flight writes in < WriteTimeout(10s)"
+    test passed at 5.19s while measuring the handshake, not the write cancel.
+
+  **Write the sabotage test.** Both new files had a green test that proved
+  nothing until deliberately breaking the production code showed it still
+  passed. Before trusting a test that asserts an *absence* ("no duplicate
+  push", "not reclaimed", "stream bounded"), break the thing it guards and
+  confirm it goes red. Two of the four such assertions written here did not.
 
 ## Conventions NOT to copy
 
