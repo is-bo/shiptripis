@@ -90,9 +90,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (intent == null || intent.succeeded) {
       final mid = widget.matchId;
       if (mid != null) {
-        context.go('/handover/code/$mid?kind=pickup');
+        // pushReplacement, NOT go: `go` replaces the whole stack, so the code
+        // screen would have nothing beneath it and the system back gesture
+        // would exit the app. Replacing just this route keeps the request
+        // detail below us while dropping the now-spent payment form (going
+        // back to a completed "Pay" button would invite a double charge).
+        context.pushReplacement('/handover/code/$mid?kind=pickup');
       } else {
-        context.go('/');
+        // No match to show a code for — fall back to the shell, which owns its
+        // own nav and is a legitimate stack root.
+        context.go('/app');
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

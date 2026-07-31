@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/state/role_provider.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/util/safe_back.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
@@ -29,7 +30,9 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               IconButton(
-                onPressed: () => context.pop(),
+                // Reached via `context.go('/role')` from sign-in/sign-up, so
+                // the stack is empty here and a bare pop() would exit the app.
+                onPressed: () => safeBack(context),
                 icon: const Icon(Icons.arrow_back_rounded),
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.parchmentSoft,

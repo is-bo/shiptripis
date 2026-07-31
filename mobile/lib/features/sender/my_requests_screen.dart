@@ -9,6 +9,7 @@ import '../../core/parcels/parcels_repository.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/ws/live_event_router.dart';
+import '../../shared/util/safe_back.dart';
 
 /// "All my requests" — a clean summary list.
 ///
@@ -34,7 +35,10 @@ class MyRequestsScreen extends ConsumerWidget {
         title: const Text('My requests'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
+          // safeBack, not a bare pop: this screen is also a fallback target
+          // (handover code "Done", deep links), so the stack can legitimately
+          // be empty here — a bare pop() would fall through and exit the app.
+          onPressed: () => safeBack(context),
         ),
       ),
       body: RefreshIndicator(

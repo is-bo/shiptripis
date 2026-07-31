@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
@@ -147,7 +146,13 @@ class _HandoverCodeScreenState extends ConsumerState<HandoverCodeScreen> {
                 PrimaryButton(
                   label: 'Done',
                   expand: true,
-                  onTap: () => context.go('/sender/requests'),
+                  // Same contract as the AppBar back arrow: pop when there's a
+                  // screen below, else fall back. Previously this did
+                  // `context.go('/sender/requests')`, which replaced the stack
+                  // and left the user on a top-level route with nothing to pop
+                  // — the next back press quit the app.
+                  onTap: () =>
+                      safeBack(context, fallback: '/sender/requests'),
                 ),
             ],
           ),
