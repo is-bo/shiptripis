@@ -24,7 +24,6 @@ import '../../features/shell/app_shell.dart';
 import '../../features/traveler/create_trip_screen.dart';
 import '../../features/traveler/find_parcels_screen.dart';
 import '../../features/verification/handover_code_screen.dart';
-import '../../features/verification/handover_issue_screen.dart';
 import '../../features/verification/handover_verify_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -144,15 +143,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/handover/code/:id',
         builder: (_, state) => HandoverCodeScreen(
-          matchId: int.parse(state.pathParameters['id']!),
-          kind: (state.uri.queryParameters['kind'] == 'delivery')
-              ? HandoverKind.delivery
-              : HandoverKind.pickup,
-        ),
-      ),
-      GoRoute(
-        path: '/handover/issue/:id',
-        builder: (_, state) => HandoverIssueScreen(
           matchId: int.parse(state.pathParameters['id']!),
           kind: (state.uri.queryParameters['kind'] == 'delivery')
               ? HandoverKind.delivery

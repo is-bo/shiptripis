@@ -12,21 +12,22 @@ import '../../shared/widgets/primary_button.dart';
 
 /// Read-only "show your pickup code" screen.
 ///
-/// Unlike [HandoverIssueScreen], this screen never rotates the code. It
-/// verifies an ACTIVE code exists on the server and renders the plaintext
-/// from the WS-delivered cache in [LiveEventState.codesByMatch]. The user
-/// can return to this screen as many times as they want and always see
-/// the same digits.
+/// This screen never rotates the code on its own. It verifies an ACTIVE code
+/// exists on the server and renders the plaintext from
+/// [LiveEventState.codesByMatch] — seeded by the WS issue event and persisted
+/// to the keystore, so it survives a restart. The user can return here as many
+/// times as they want and always see the same digits.
 ///
 /// Flow:
 ///   1. Sender pays → server auto-issues a PICKUP code and publishes
 ///      `handover.code_issued` over WS → mobile caches plaintext.
 ///   2. Sender lands here, taps "View pickup code" from My Requests, or
 ///      navigates from Match Detail — all paths show the same plaintext.
-///   3. If plaintext isn't in the cache (cold reinstall, app killed before
-///      the WS event arrived), the GET endpoint confirms a code exists
-///      but we can't show the digits — surface a clear empty-state with
-///      a one-tap "regenerate" escape hatch.
+///   3. If the plaintext isn't on this device (reinstall, or the WS event
+///      never landed here), the GET endpoint still confirms a code is active.
+///      We say so plainly rather than pushing a rotate — their code is valid,
+///      and rotating would break it for the counterparty. Issuing a new one is
+///      available, but demoted and behind a confirmation.
 class HandoverCodeScreen extends ConsumerStatefulWidget {
   const HandoverCodeScreen({
     super.key,
@@ -105,6 +106,37 @@ class _HandoverCodeScreenState extends ConsumerState<HandoverCodeScreen> {
     }
   }
 
+  /// Rotating invalidates the code the counterparty may already be holding,
+  /// so it never happens on a single tap. Say plainly what breaks.
+  Future<void> _confirmRotate() async {
+    final other = widget.kind == HandoverKind.pickup ? 'traveler' : 'sender';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.parchment,
+        title: Text('Issue a new code?', style: AppType.display(20)),
+        content: Text(
+          'Your current code stops working straight away. If the $other '
+          'already wrote it down, they won\'t be able to use it — you\'ll '
+          'need to give them the new one.',
+          style: AppType.body(14, color: AppColors.inkSoft),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep current code'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Issue new',
+                style: TextStyle(color: AppColors.terracotta)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _rotate();
+  }
+
   @override
   Widget build(BuildContext context) {
     final live = liveCodeFor(ref, widget.matchId);
@@ -135,25 +167,31 @@ class _HandoverCodeScreenState extends ConsumerState<HandoverCodeScreen> {
                 child: Center(child: _buildBody(hasMatchingLive, live)),
               ),
               const SizedBox(height: 16),
-              if (_info != null && !hasMatchingLive)
-                PrimaryButton(
-                  label: _rotating ? 'Regenerating…' : 'Regenerate code',
-                  expand: true,
-                  color: AppColors.terracotta,
-                  onTap: _rotating ? null : _rotate,
-                )
-              else
-                PrimaryButton(
-                  label: 'Done',
-                  expand: true,
-                  // Same contract as the AppBar back arrow: pop when there's a
-                  // screen below, else fall back. Previously this did
-                  // `context.go('/sender/requests')`, which replaced the stack
-                  // and left the user on a top-level route with nothing to pop
-                  // — the next back press quit the app.
-                  onTap: () =>
-                      safeBack(context, fallback: '/sender/requests'),
+              // Done is ALWAYS the primary action. Regenerating is a recovery
+              // path, not a normal step: the code is issued once and stored,
+              // and rotating it invalidates the digits the counterparty may
+              // already have written down. It lives below, as quiet text,
+              // behind a confirmation — see `_confirmRotate`.
+              PrimaryButton(
+                label: 'Done',
+                expand: true,
+                // Same contract as the AppBar back arrow: pop when there's a
+                // screen below, else fall back. Previously this did
+                // `context.go('/sender/requests')`, which replaced the stack
+                // and left the user on a top-level route with nothing to pop
+                // — the next back press quit the app.
+                onTap: () => safeBack(context, fallback: '/sender/requests'),
+              ),
+              if (_info != null && !hasMatchingLive) ...[
+                const SizedBox(height: 4),
+                TextButton(
+                  onPressed: _rotating ? null : _confirmRotate,
+                  child: Text(
+                    _rotating ? 'Issuing a new code…' : 'Issue a new code',
+                    style: AppType.body(12.5, color: AppColors.inkMute),
+                  ),
                 ),
+              ],
             ],
           ),
         ),
@@ -231,7 +269,9 @@ class _NoCodeYet extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'We auto-issue your pickup code right after payment. If you don\'t see it in a moment, generate one manually.',
+            'Your pickup code is issued automatically right after payment and '
+            'then stays the same. If it hasn\'t arrived in a moment, you can '
+            'ask for it now.',
             style: AppType.body(13, color: AppColors.inkMute),
             textAlign: TextAlign.center,
           ),
@@ -247,8 +287,11 @@ class _NoCodeYet extends StatelessWidget {
   }
 }
 
-/// Server says a code is active but mobile lost the plaintext (cold install,
-/// missed WS event). Single, friendly path: regenerate.
+/// Server confirms an active code exists but this device doesn't have the
+/// digits. Now rare — codes are persisted to the keystore on arrival, so this
+/// only happens after a reinstall, a sign-out, or if the WS event never landed
+/// on this device. Deliberately does NOT push the user to rotate: their code is
+/// still valid, and rotating would break it for the counterparty.
 class _CodeLostState extends StatelessWidget {
   const _CodeLostState({required this.info});
   final ActiveCodeInfo info;
@@ -261,7 +304,7 @@ class _CodeLostState extends StatelessWidget {
         Icon(Icons.lock_outline, size: 48, color: AppColors.goldDeep),
         const SizedBox(height: 12),
         Text(
-          'Your code is safe on the server',
+          'Your code is still active',
           style: AppType.display(16),
           textAlign: TextAlign.center,
         ),
@@ -269,7 +312,9 @@ class _CodeLostState extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'For your security we only show pickup codes once. Tap below to issue a fresh one — the old one becomes invalid.',
+            'We only ever show the digits on the device they were sent to, and '
+            'this one doesn\'t have them — that usually means a reinstall. If '
+            'you noted the code down it still works.',
             style: AppType.body(13, color: AppColors.inkMute),
             textAlign: TextAlign.center,
           ),

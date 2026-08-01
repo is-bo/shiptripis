@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 import '../state/role_provider.dart';
+import '../verification/handover_code_store.dart';
 import 'auth_repository.dart';
 import 'auth_storage.dart';
 
@@ -138,6 +139,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> signOut() async {
     await _repo.signOut();
+    // Handover codes are per-user secrets held outside the token store, so
+    // clear them here too — otherwise the next person to sign in on this
+    // device could read the previous user's pickup codes.
+    await ref.read(handoverCodeStoreProvider).clear();
     state = const AuthSignedOut();
   }
 

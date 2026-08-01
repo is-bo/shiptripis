@@ -12,6 +12,7 @@ import '../auth/auth_notifier.dart';
 import '../matching/matching_providers.dart';
 import '../parcels/parcels_providers.dart';
 import '../trips/trips_providers.dart';
+import '../verification/handover_code_store.dart';
 import 'notification_envelope.dart';
 import 'notifications_providers.dart';
 
@@ -132,7 +133,30 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
     ref.onDispose(() {
       _sub?.cancel();
     });
+    // The server only ever sends a code's plaintext once (it stores an argon2
+    // hash), so a cold start has nothing in memory. Re-seed from disk before
+    // the first frame reads the cache — otherwise the code screen shows its
+    // "lost the plaintext" state and pushes the user to rotate, invalidating a
+    // code the counterparty may already have.
+    _hydrateCodes();
     return const LiveEventState();
+  }
+
+  Future<void> _hydrateCodes() async {
+    final stored = await ref.read(handoverCodeStoreProvider).readAll();
+    if (stored.isEmpty) return;
+    var next = state;
+    for (final c in stored.values) {
+      // Don't clobber a code that arrived over WS while we were reading disk.
+      if (next.codesByMatch.containsKey(c.matchId)) continue;
+      next = next.withCode(LiveHandoverCode(
+        matchId: c.matchId,
+        kind: c.kind,
+        code: c.code,
+        issuedAt: c.issuedAt,
+      ));
+    }
+    state = next;
   }
 
   int? _viewerId() {
@@ -155,12 +179,25 @@ class LiveEventNotifier extends Notifier<LiveEventState> {
           // can invalidate UI, but they must never see the digits.
           final isHolder = viewerId != null && issuedTo == viewerId;
           if (isHolder) {
+            final issuedAt = DateTime.now();
             state = state.withCode(LiveHandoverCode(
               matchId: mid,
               kind: kind,
               code: code,
-              issuedAt: DateTime.now(),
+              issuedAt: issuedAt,
             ));
+            // Persist immediately: this is the only time the plaintext ever
+            // crosses the wire. Fire-and-forget — a failed write costs us the
+            // post-restart convenience, not the code itself, so it must not
+            // block or fail the in-memory update the UI is about to render.
+            unawaited(ref.read(handoverCodeStoreProvider).save(
+                  StoredHandoverCode(
+                    matchId: mid,
+                    kind: kind,
+                    code: code,
+                    issuedAt: issuedAt,
+                  ),
+                ));
           }
           ref.invalidate(matchDetailProvider(mid));
           if (isHolder) {
