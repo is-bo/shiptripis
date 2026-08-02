@@ -24,6 +24,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _pw = TextEditingController();
+  final _pw2 = TextEditingController();
   bool _showPw = false;
   bool _agree = false;
   Wilaya? _wilaya;
@@ -36,8 +37,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     _email.dispose();
     _phone.dispose();
     _pw.dispose();
+    _pw2.dispose();
     super.dispose();
   }
+
+  /// Only a mismatch once the confirm field has content — an empty second box
+  /// is "not finished yet", not an error.
+  bool get _pwMismatch => _pw2.text.isNotEmpty && _pw2.text != _pw.text;
 
   bool get _canSubmit =>
       _agree &&
@@ -46,6 +52,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       _email.text.contains('@') &&
       _phone.text.trim().length >= 6 &&
       _pw.text.length >= 8 &&
+      _pw2.text == _pw.text &&
       _wilaya != null;
 
   Future<void> _submit() async {
@@ -155,6 +162,24 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   ),
                 ),
               ).animate().fadeIn(delay: 340.ms).moveY(begin: 6, end: 0),
+              const SizedBox(height: AppSpacing.x4),
+              AppInput(
+                controller: _pw2,
+                hint: "Type it once more",
+                label: "Confirm password",
+                icon: Icons.lock_outline_rounded,
+                // Follows the same show/hide toggle as the field above —
+                // revealing one and masking the other defeats the check.
+                obscure: !_showPw,
+                onChanged: (_) => setState(() {}),
+              ).animate().fadeIn(delay: 355.ms).moveY(begin: 6, end: 0),
+              // Only complain once they've actually started the second field —
+              // flagging a mismatch against an empty box is just noise.
+              if (_pwMismatch) ...[
+                const SizedBox(height: 6),
+                Text("Passwords don't match",
+                    style: AppType.body(12, color: AppColors.danger)),
+              ],
               const SizedBox(height: AppSpacing.x4),
               GestureDetector(
                 onTap: () => setState(() => _agree = !_agree),
