@@ -766,11 +766,57 @@ class _ErrorTile extends StatelessWidget {
   }
 }
 
-class _MyTripCard extends StatelessWidget {
+class _MyTripCard extends ConsumerWidget {
   const _MyTripCard({required this.t});
   final Trip t;
+
+  /// Mirrors the server guard (`TripCancelView`): only DRAFT and ACTIVE trips
+  /// can be cancelled. Once a parcel is riding along the trip is somebody
+  /// else's plan too, and the backend answers 409.
+  bool get _canCancel => t.status == 'draft' || t.status == 'active';
+
+  Future<void> _confirmCancel(BuildContext context, WidgetRef ref) async {
+    // Grab the messenger before the dialog await — the card can be rebuilt out
+    // from under us by the trip list refreshing while the dialog is open.
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.parchment,
+        title: Text('Cancel this trip?', style: AppType.display(20)),
+        content: Text(
+          'Senders will stop seeing it, and any pending requests to carry '
+          'with you are voided. You can\'t undo this.',
+          style: AppType.body(14, color: AppColors.inkSoft),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep trip'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Cancel trip',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(myTripsProvider.notifier).cancel(t.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Trip cancelled.')));
+    } catch (e) {
+      // Most likely a 409: the trip moved on (a match locked it) between the
+      // list render and the tap. Surfacing the server's reason beats a
+      // generic failure, and the refresh re-syncs the stale card.
+      messenger.showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
+      await ref.read(myTripsProvider.notifier).refresh();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return BoardingCard(
       color: AppColors.ink,
       child: Column(
@@ -782,6 +828,30 @@ class _MyTripCard extends StatelessWidget {
               const Spacer(),
               Text("Trip #${t.id}",
                   style: AppType.mono(11, color: AppColors.parchmentDeep)),
+              if (_canCancel)
+                // Destructive, so it stays a small overflow menu rather than a
+                // button sitting next to the everyday taps.
+                SizedBox(
+                  height: 24,
+                  width: 28,
+                  child: PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    icon: Icon(Icons.more_horiz_rounded,
+                        color: AppColors.parchmentDeep),
+                    color: AppColors.parchment,
+                    onSelected: (_) => _confirmCancel(context, ref),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'cancel',
+                        child: Text('Cancel trip',
+                            style: AppType.body(13.5,
+                                color: AppColors.danger,
+                                w: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.x4),
