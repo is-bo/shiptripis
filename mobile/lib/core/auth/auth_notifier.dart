@@ -56,7 +56,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> bootstrap() async {
     final access = await _storage.readAccess();
-    if (access == null) {
+    // An expired access token is normal on a cold start — the refresh
+    // interceptor swaps it out on the first 401. Only a missing REFRESH token
+    // means there's no session left to restore.
+    final refresh = await _storage.readRefresh();
+    if (access == null && refresh == null) {
       state = const AuthSignedOut();
       return;
     }
@@ -75,10 +79,37 @@ class AuthNotifier extends Notifier<AuthState> {
         ref.read(roleProvider.notifier).seed(AppRole.sender);
       }
       state = AuthSignedIn(user);
-    } catch (_) {
+    } on AuthFailure {
+      // The server answered and refused us. `validateStatus` lets 4xx through
+      // as a normal response, so a rejected token surfaces here rather than as
+      // a DioException — and the refresh interceptor has already tried (and
+      // failed) to swap the token before we got here. The session really is
+      // dead: drop the credentials.
       await _storage.clear();
       state = const AuthSignedOut();
+    } catch (_) {
+      // Anything else — connect/receive timeout, DNS, connection refused, 5xx
+      // (those DO throw, since validateStatus only tolerates <500). None of it
+      // says our credentials are bad. Previously this branch cleared storage
+      // too, so a single launch with no signal or a sleeping dev tunnel
+      // silently destroyed a valid refresh token and forced a full re-login.
+      // Keep the tokens and let the user retry.
+      _offlineSession = true;
+      state = const AuthSignedOut();
     }
+  }
+
+  /// True when bootstrap gave up because the network was unreachable rather
+  /// than because the session was rejected. The stored refresh token is still
+  /// intact, so [bootstrap] can simply be called again.
+  bool _offlineSession = false;
+  bool get couldNotReachServer => _offlineSession;
+
+  /// Retry a bootstrap that failed offline. No-op once signed in.
+  Future<void> retryBootstrap() async {
+    if (state is AuthSignedIn) return;
+    _offlineSession = false;
+    await bootstrap();
   }
 
   /// Re-read `/me` and swap the cached user in place. Used after a flow that

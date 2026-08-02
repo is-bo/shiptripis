@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_notifier.dart';
+import '../../core/state/role_provider.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../shared/widgets/app_input.dart';
@@ -47,7 +48,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (ok) {
-      context.go('/role');
+      // Only ask for a side when we genuinely don't know it: pure-role accounts
+      // are server-locked, and a "both" user who already picked has it saved.
+      final needsRole = ref.read(canSwitchRoleProvider) &&
+          await ref.read(authStorageProvider).readRole() == null;
+      if (!mounted) return;
+      context.go(needsRole ? '/role' : '/app');
     } else {
       final s = ref.read(authNotifierProvider);
       setState(() => _error = s is AuthError ? s.message : 'Sign-in failed.');
