@@ -318,7 +318,11 @@ class _MatchBody extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'A 25% platform commission is added on top — the sender sees the total.',
+              // Both sides can counter, so "the sender sees the total" was
+              // wrong half the time — say it from the reader's own side.
+              myId == match.senderId
+                  ? 'A 25% platform commission is added on top — that total is what you pay.'
+                  : 'A 25% platform commission is added on top — the sender sees the total.',
               style: AppType.body(12, color: AppColors.inkMute),
             ),
             const SizedBox(height: 10),
@@ -436,6 +440,14 @@ class _OfferCard extends StatelessWidget {
   final Offer offer;
   final int? viewerId;
 
+  /// "They" is ambiguous once both sides can open a negotiation — name the
+  /// side instead, using the offer's own proposed_by rather than guessing
+  /// from ids.
+  String get _who {
+    if (viewerId == offer.proposerId) return 'You';
+    return offer.proposedBy == 'sender' ? 'The sender' : 'The traveler';
+  }
+
   @override
   Widget build(BuildContext context) {
     final mine = viewerId == offer.proposerId;
@@ -460,7 +472,7 @@ class _OfferCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${mine ? 'You' : 'They'} proposed',
+                  '$_who proposed',
                   style: AppType.body(12, color: AppColors.inkMute),
                 ),
               ),

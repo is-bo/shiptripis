@@ -322,10 +322,20 @@ class _InboxTile extends StatelessWidget {
               : "A traveler accepted your offer.",
         );
       case 'offer.created':
+        // Either side can open a negotiation, so the copy can't assume a
+        // traveler. And the price is the whole point of the notification —
+        // burying it meant opening the match just to learn the number.
+        final offerTotal = p['total_dzd'];
+        final fromSender = p['proposed_by'] == 'sender';
+        final who = fromSender
+            ? "A sender wants you to carry their parcel"
+            : "A traveler applied to your parcel";
         return (
           Icons.mark_email_unread_outlined,
-          "New offer",
-          "A traveler applied to your parcel.",
+          offerTotal != null ? "New offer — $offerTotal DZD" : "New offer",
+          offerTotal != null
+              ? "$who for $offerTotal DZD. Accept, decline or counter."
+              : "$who.",
         );
       case 'offer.updated':
         return (
