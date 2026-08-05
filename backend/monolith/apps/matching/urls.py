@@ -14,12 +14,18 @@ from .views import (
     OfferDeclineView,
     OfferListView,
     OfferWithdrawView,
+    SenderApplyView,
     TravelerApplyView,
 )
 
 urlpatterns = [
     path("matches", MatchListView.as_view(), name="matches-list"),
     path("matches/apply", TravelerApplyView.as_view(), name="matches-apply"),
+    path(
+        "matches/apply-to-trip",
+        SenderApplyView.as_view(),
+        name="matches-apply-to-trip",
+    ),
     path("matches/<int:pk>", MatchDetailView.as_view(), name="matches-detail"),
     path("matches/<int:pk>/cancel", MatchCancelView.as_view(), name="matches-cancel"),
     path(

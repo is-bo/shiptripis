@@ -4,6 +4,7 @@ Endpoints:
   GET  /api/matches                          — list (mine, ?role=sender|traveler, ?status=)
   GET  /api/matches/<id>                     — detail (party-only)
   POST /api/matches/apply                    — traveler creates Match + first Offer
+  POST /api/matches/apply-to-trip            — sender applies existing parcel to a trip
   POST /api/matches/<id>/cancel              — either party cancels (only while pending)
   GET  /api/matches/<id>/offers              — list offers on a match (party-only)
   POST /api/matches/<id>/offers/counter      — counter the current pending offer
@@ -37,6 +38,7 @@ from .serializers import (
     CounterOfferSerializer,
     MatchSerializer,
     OfferSerializer,
+    SenderApplySerializer,
     TravelerApplySerializer,
 )
 from .services import chat_eligibility
@@ -242,6 +244,131 @@ class TravelerApplyView(APIView):
                     "recipient_id": match.sender_id,
                 },
                 targets=[match.sender_id],
+            )
+
+        return Response(
+            MatchSerializer(_refetch_match(match.pk)).data, status=http.HTTP_201_CREATED
+        )
+
+
+class SenderApplyView(APIView):
+    """Sender applies an existing parcel to one specific traveler's trip.
+
+    The mirror image of `TravelerApplyView`: the sender is the proposer and
+    the traveler must accept/decline/counter. This is what makes a suggested
+    trip actionable — the parcel is already posted, so the sender picks a
+    trip instead of filling the request form again.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        s = SenderApplySerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+
+        parcel = get_object_or_404(ParcelRequest, pk=d["parcel_id"])
+        trip = get_object_or_404(Trip, pk=d["trip_id"])
+
+        if parcel.sender_id != request.user.id:
+            return Response(
+                {"detail": "Only the parcel's sender can apply with it."},
+                status=http.HTTP_403_FORBIDDEN,
+            )
+        if trip.traveler_id == request.user.id:
+            return Response(
+                {"detail": "Cannot apply to your own trip."},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+        if parcel.status != ParcelRequest.Status.OPEN:
+            return Response(
+                {"detail": f"Parcel is not open (status={parcel.status})."},
+                status=http.HTTP_409_CONFLICT,
+            )
+        if trip.status not in {Trip.Status.DRAFT, Trip.Status.ACTIVE}:
+            return Response(
+                {"detail": f"Trip is not bookable (status={trip.status})."},
+                status=http.HTTP_409_CONFLICT,
+            )
+        if (parcel.origin_id, parcel.destination_id) != (trip.origin_id, trip.destination_id):
+            return Response(
+                {"detail": "Parcel and trip must share origin and destination."},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
+        pricing = _quote_for_parcel(parcel, d.get("base_amount_dzd"))
+
+        with transaction.atomic():
+            existing = Match.objects.filter(
+                parcel=parcel, trip=trip, status=Match.Status.PENDING
+            ).first()
+            if existing is not None:
+                return Response(
+                    {"detail": "A pending match already exists.", "match_id": existing.id},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            # Reaching out to one named traveler makes this a direct request,
+            # not a broadcast — and CounterOfferView only permits countering on
+            # direct requests. Without this the traveler could accept or decline
+            # but never negotiate, which is precisely the flow the sender is
+            # opening here. Only set it when the parcel is still un-targeted so
+            # we never retarget a parcel the sender aimed elsewhere.
+            if parcel.target_traveler_id is None:
+                parcel.target_traveler_id = trip.traveler_id
+                parcel.save(update_fields=["target_traveler", "updated_at"])
+
+            match = Match.objects.create(
+                parcel=parcel,
+                trip=trip,
+                sender_id=parcel.sender_id,
+                traveler_id=trip.traveler_id,
+                status=Match.Status.PENDING,
+            )
+            offer = Offer.objects.create(
+                match=match,
+                proposed_by=Offer.ProposedBy.SENDER,
+                proposer=request.user,
+                note=d.get("note", ""),
+                **pricing,
+            )
+            MatchEvent.objects.create(
+                match=match,
+                offer=offer,
+                actor=request.user,
+                kind=MatchEvent.Kind.MATCH_CREATED,
+                payload={"trip_id": trip.id, "parcel_id": parcel.id, "directed": True},
+            )
+            MatchEvent.objects.create(
+                match=match,
+                offer=offer,
+                actor=request.user,
+                kind=MatchEvent.Kind.OFFER_CREATED,
+                payload={"by": "sender", "total_dzd": offer.total_dzd},
+            )
+
+            redis_bus.publish_after_commit(
+                channels.MATCH_CREATED,
+                {
+                    "match_id": match.id,
+                    "parcel_id": parcel.id,
+                    "trip_id": trip.id,
+                    "sender_id": match.sender_id,
+                    "traveler_id": match.traveler_id,
+                },
+                targets=[match.sender_id, match.traveler_id],
+            )
+            # The traveler is the one who must respond, so they get the ping.
+            redis_bus.publish_after_commit(
+                channels.OFFER_CREATED,
+                {
+                    "match_id": match.id,
+                    "offer_id": offer.id,
+                    "proposed_by": offer.proposed_by,
+                    "total_dzd": offer.total_dzd,
+                    "recipient_id": match.traveler_id,
+                },
+                targets=[match.traveler_id],
             )
 
         return Response(

@@ -201,6 +201,120 @@ class TravelerApplyTests(APITestCase):
         assert r2.status_code == 409
 
 
+class SenderApplyTests(APITestCase):
+    """Sender applies an existing parcel to a suggested trip (no form re-fill)."""
+
+    def setUp(self):
+        self.sender = _user("sender-apply@example.com", "1")
+        self.traveler = _user("traveler-apply@example.com", "2")
+        self.parcel = _make_delivery(self.sender)
+        self.trip = _make_trip(self.traveler)
+
+    @patch("apps.matching.views.redis_bus.publish_after_commit")
+    def test_sender_apply_creates_sender_proposed_offer(self, pub):
+        c = _client(self.sender)
+        r = c.post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": self.trip.id},
+            format="json",
+        )
+        assert r.status_code == 201, r.data
+        assert r.data["sender_id"] == self.sender.id
+        assert r.data["traveler_id"] == self.traveler.id
+
+        offer = Match.objects.get(pk=r.data["id"]).offers.get()
+        assert offer.proposed_by == "sender"
+        assert offer.proposer_id == self.sender.id
+        assert offer.total_dzd == 5000
+
+        channels_called = [args.args[0] for args in pub.call_args_list]
+        assert "match.created" in channels_called
+        assert "offer.created" in channels_called
+
+    def test_sender_apply_targets_the_parcel_so_counter_is_legal(self):
+        """Reaching out to one traveler makes it a direct request.
+
+        CounterOfferView 409s on broadcast parcels, so without this the
+        traveler could only accept or decline — never negotiate.
+        """
+        assert self.parcel.target_traveler_id is None
+        c = _client(self.sender)
+        r = c.post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": self.trip.id},
+            format="json",
+        )
+        assert r.status_code == 201, r.data
+        self.parcel.refresh_from_db()
+        assert self.parcel.target_traveler_id == self.traveler.id
+
+        # The traveler can now actually counter.
+        rc = _client(self.traveler).post(
+            reverse("matches-offers-counter", args=[r.data["id"]]),
+            {"base_amount_dzd": 6000},
+            format="json",
+        )
+        assert rc.status_code == 201, rc.data
+
+    def test_sender_apply_does_not_retarget_a_parcel_aimed_elsewhere(self):
+        other = _user("other-traveler@example.com", "3")
+        parcel = _make_delivery(self.sender, target_traveler=other)
+        c = _client(self.sender)
+        r = c.post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": parcel.id, "trip_id": self.trip.id},
+            format="json",
+        )
+        assert r.status_code == 201, r.data
+        parcel.refresh_from_db()
+        assert parcel.target_traveler_id == other.id
+
+    def test_sender_apply_with_custom_amount(self):
+        c = _client(self.sender)
+        r = c.post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": self.trip.id, "base_amount_dzd": 8000},
+            format="json",
+        )
+        assert r.status_code == 201, r.data
+        offer = Match.objects.get(pk=r.data["id"]).offers.get()
+        assert offer.base_amount_dzd == 8000
+        assert offer.total_dzd == 10000
+
+    def test_non_owner_cannot_apply_with_someone_elses_parcel(self):
+        r = _client(self.traveler).post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": self.trip.id},
+            format="json",
+        )
+        assert r.status_code == 403
+
+    def test_cannot_apply_to_own_trip(self):
+        own_trip = _make_trip(self.sender)
+        r = _client(self.sender).post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": own_trip.id},
+            format="json",
+        )
+        assert r.status_code == 400
+
+    def test_corridor_must_match(self):
+        other_trip = _make_trip(self.traveler, origin="CDG", destination="ALG")
+        r = _client(self.sender).post(
+            reverse("matches-apply-to-trip"),
+            {"parcel_id": self.parcel.id, "trip_id": other_trip.id},
+            format="json",
+        )
+        assert r.status_code == 400
+
+    def test_duplicate_pending_match_is_409(self):
+        c = _client(self.sender)
+        body = {"parcel_id": self.parcel.id, "trip_id": self.trip.id}
+        assert c.post(reverse("matches-apply-to-trip"), body, format="json").status_code == 201
+        r2 = c.post(reverse("matches-apply-to-trip"), body, format="json")
+        assert r2.status_code == 409
+
+
 class CounterAcceptTests(APITestCase):
     """Counter chain + accept transitions."""
 

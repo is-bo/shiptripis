@@ -115,6 +115,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             originIata: q['from'] ?? '',
             destinationIata: q['to'] ?? '',
             minCapacityKg: int.tryParse(q['kg'] ?? '') ?? 1,
+            // Present when the sender already posted this parcel and is
+            // shopping it around: tapping a trip then applies with it
+            // instead of reopening the request form.
+            parcelId: int.tryParse(q['parcel'] ?? ''),
           );
         },
       ),

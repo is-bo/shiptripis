@@ -147,7 +147,7 @@ class RequestDetailScreen extends ConsumerWidget {
             .toList();
         return [
           if (pending.isEmpty)
-            const _WaitingCard()
+            _WaitingCard(parcel: parcel)
           else
             _OffersSection(offers: pending),
           const SizedBox(height: 16),
@@ -297,37 +297,63 @@ class _Header extends StatelessWidget {
 }
 
 class _WaitingCard extends StatelessWidget {
-  const _WaitingCard();
+  const _WaitingCard({required this.parcel});
+  final Parcel parcel;
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.sun.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.hourglass_top_rounded,
-                size: 22, color: AppColors.ink),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Waiting for travelers',
-                    style: AppType.body(14.5, w: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(
-                  'We\'ll notify you the moment someone applies to carry your parcel.',
-                  style: AppType.body(12,
-                      color: AppColors.inkSoft, height: 1.45),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.sun.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
                 ),
-              ],
+                child: const Icon(Icons.hourglass_top_rounded,
+                    size: 22, color: AppColors.ink),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Waiting for travelers',
+                        style: AppType.body(14.5, w: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'We\'ll notify you the moment someone applies to carry your parcel.',
+                      style: AppType.body(12,
+                          color: AppColors.inkSoft, height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Waiting shouldn't be the only option. The request is already
+          // posted, so reaching out to a traveler costs nothing more than
+          // naming a price — carry the parcel id through so they never see
+          // the request form again.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => context.push(
+                '/sender/results?from=${parcel.origin.iata}'
+                '&to=${parcel.destination.iata}'
+                '&kg=${parcel.weightKg}'
+                '&parcel=${parcel.id}',
+              ),
+              icon: const Icon(Icons.travel_explore_rounded, size: 18),
+              label: Text("Don't wait — find a traveler",
+                  style: AppType.body(13, w: FontWeight.w700)),
+              style: TextButton.styleFrom(foregroundColor: AppColors.emerald),
             ),
           ),
         ],

@@ -127,6 +127,20 @@ class TravelerApplySerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
 
 
+class SenderApplySerializer(serializers.Serializer):
+    """Sender applies an existing parcel to one specific traveler's trip.
+
+    Mirrors `TravelerApplySerializer`; the difference is who proposes. The
+    parcel already exists, so the sender re-enters nothing — they only
+    optionally restate their price for this particular trip.
+    """
+
+    parcel_id = serializers.IntegerField()
+    trip_id = serializers.IntegerField()
+    base_amount_dzd = serializers.IntegerField(required=False, min_value=100)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+
+
 class CounterOfferSerializer(serializers.Serializer):
     """Counter the current pending offer with a new amount."""
 

@@ -295,6 +295,31 @@ class MatchingRepository {
     throw MatchingFailure(_msg(r) ?? 'Could not apply to parcel.');
   }
 
+  /// Sender applies an existing parcel to one traveler's trip — the mirror of
+  /// [apply]. Nothing about the parcel is re-sent because it already exists;
+  /// the sender only optionally restates their price for this trip.
+  /// 409 if a pending Match already exists for (parcel, trip).
+  Future<MatchSummary> applyToTrip({
+    required int parcelId,
+    required int tripId,
+    int? baseAmountDzd,
+    String note = '',
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/matches/apply-to-trip',
+      data: {
+        'parcel_id': parcelId,
+        'trip_id': tripId,
+        if (baseAmountDzd != null) 'base_amount_dzd': baseAmountDzd,
+        if (note.isNotEmpty) 'note': note,
+      },
+    );
+    if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {
+      return MatchSummary.fromJson(r.data!);
+    }
+    throw MatchingFailure(_msg(r) ?? 'Could not apply to this trip.');
+  }
+
   /// Counter the current pending offer with a new asking amount.
   /// The new offer's pricing is computed server-side; we just send the base.
   Future<Offer> counter({

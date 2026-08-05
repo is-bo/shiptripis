@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/matching/matching_providers.dart';
+import '../../core/matching/matching_repository.dart';
+import '../../core/parcels/parcels_providers.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/trips/trips_providers.dart';
@@ -12,22 +15,39 @@ import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stamp_chip.dart';
 
 /// Results page for `search_filter_screen`. The sender narrows by route +
-/// capacity, sees matching trips, and taps one to start a request scoped to
-/// that traveler's route.
-class FindTravelersScreen extends ConsumerWidget {
+/// capacity, sees matching trips, and taps one.
+///
+/// Two modes, decided by [parcelId]:
+///   null — browsing before posting. Tapping opens the request form, scoped
+///          to that traveler.
+///   set  — the parcel already exists (they came from "find a traveler" on a
+///          posted request). Tapping applies with it directly; making them
+///          re-type everything they already submitted would be absurd.
+class FindTravelersScreen extends ConsumerStatefulWidget {
   const FindTravelersScreen({
     super.key,
     required this.originIata,
     required this.destinationIata,
     required this.minCapacityKg,
+    this.parcelId,
   });
 
   final String originIata;
   final String destinationIata;
   final int minCapacityKg;
+  final int? parcelId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FindTravelersScreen> createState() =>
+      _FindTravelersScreenState();
+}
+
+class _FindTravelersScreenState extends ConsumerState<FindTravelersScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final originIata = widget.originIata;
+    final destinationIata = widget.destinationIata;
+    final minCapacityKg = widget.minCapacityKg;
     final params = TripSearchParams(
       originIata: originIata,
       destinationIata: destinationIata,
@@ -106,8 +126,16 @@ class FindTravelersScreen extends ConsumerWidget {
                           const SizedBox(height: AppSpacing.x3),
                       itemBuilder: (_, i) => _TripTile(
                         trip: trips[i],
-                        onTap: () => context.push(
-                            '/sender/new?traveler=${trips[i].travelerId}'),
+                        applyingWithParcel: widget.parcelId != null,
+                        onTap: () {
+                          final pid = widget.parcelId;
+                          if (pid != null) {
+                            _openApplySheet(pid, trips[i]);
+                          } else {
+                            context.push(
+                                '/sender/new?traveler=${trips[i].travelerId}');
+                          }
+                        },
                       ),
                     ),
                   );
@@ -140,12 +168,189 @@ class FindTravelersScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// The parcel already exists, so this only asks for the one thing that is
+  /// genuinely per-trip: the price the sender is willing to pay this traveler.
+  Future<void> _openApplySheet(int parcelId, Trip trip) async {
+    final result = await showModalBottomSheet<_ApplyResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SenderApplySheet(trip: trip),
+    );
+    if (result == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final match = await ref.read(matchingRepositoryProvider).applyToTrip(
+            parcelId: parcelId,
+            tripId: trip.id,
+            baseAmountDzd: result.baseAmountDzd,
+            note: result.note,
+          );
+      if (!mounted) return;
+      ref.invalidate(matchListProvider);
+      ref.invalidate(myParcelsProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.emerald,
+          content: Text('Request sent to ${trip.travelerLabel}.',
+              style: AppType.body(13,
+                  color: AppColors.parchment, w: FontWeight.w600)),
+        ),
+      );
+      context.push('/match/${match.id}');
+    } on MatchingFailure catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.terracotta,
+          content: Text(e.message,
+              style: AppType.body(13,
+                  color: AppColors.parchment, w: FontWeight.w600)),
+        ),
+      );
+    }
+  }
+}
+
+class _ApplyResult {
+  const _ApplyResult({this.baseAmountDzd, this.note = ''});
+  final int? baseAmountDzd;
+  final String note;
+}
+
+/// Price-and-note sheet. Deliberately tiny: everything else about the parcel
+/// was already submitted when it was posted.
+class _SenderApplySheet extends StatefulWidget {
+  const _SenderApplySheet({required this.trip});
+  final Trip trip;
+
+  @override
+  State<_SenderApplySheet> createState() => _SenderApplySheetState();
+}
+
+class _SenderApplySheetState extends State<_SenderApplySheet> {
+  final _amount = TextEditingController();
+  final _note = TextEditingController();
+  String? _amountError;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final raw = _amount.text.trim();
+    int? amount;
+    if (raw.isNotEmpty) {
+      amount = int.tryParse(raw);
+      // Mirrors the server's `min_value=100` so the user sees the problem
+      // here rather than as a 400 after the round trip.
+      if (amount == null || amount < 100) {
+        setState(() => _amountError = 'Enter an amount of at least 100 DZD.');
+        return;
+      }
+    }
+    Navigator.of(context).pop(
+      _ApplyResult(baseAmountDzd: amount, note: _note.text.trim()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.x6),
+        decoration: const BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.lg)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('SEND TO THIS TRAVELER', style: AppType.eyebrow()),
+            const SizedBox(height: 6),
+            Text(widget.trip.travelerLabel,
+                style: AppType.display(22, w: FontWeight.w500)),
+            const SizedBox(height: 4),
+            Text(
+              'Your request is already filled in — just confirm what you want to pay.',
+              style: AppType.body(13, color: AppColors.inkMute),
+            ),
+            const SizedBox(height: AppSpacing.x5),
+            Text('YOUR PRICE (DZD)', style: AppType.eyebrow()),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _amount,
+              keyboardType: TextInputType.number,
+              onChanged: (_) {
+                if (_amountError != null) setState(() => _amountError = null);
+              },
+              decoration: InputDecoration(
+                hintText: 'Leave empty to keep your posted price',
+                hintStyle: AppType.body(13, color: AppColors.inkMute),
+                filled: true,
+                fillColor: AppColors.parchmentSoft,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  borderSide: const BorderSide(color: AppColors.hairline),
+                ),
+              ),
+            ),
+            if (_amountError != null) ...[
+              const SizedBox(height: 6),
+              Text(_amountError!,
+                  style: AppType.body(12, color: AppColors.danger)),
+            ],
+            const SizedBox(height: AppSpacing.x4),
+            Text('NOTE (OPTIONAL)', style: AppType.eyebrow()),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _note,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Anything the traveler should know',
+                hintStyle: AppType.body(13, color: AppColors.inkMute),
+                filled: true,
+                fillColor: AppColors.parchmentSoft,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  borderSide: const BorderSide(color: AppColors.hairline),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x5),
+            Center(
+              child: PrimaryButton(
+                label: 'Send request',
+                icon: Icons.send_rounded,
+                onTap: _submit,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x2),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _TripTile extends StatelessWidget {
-  const _TripTile({required this.trip, required this.onTap});
+  const _TripTile({
+    required this.trip,
+    required this.onTap,
+    this.applyingWithParcel = false,
+  });
   final Trip trip;
   final VoidCallback onTap;
+  final bool applyingWithParcel;
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +423,10 @@ class _TripTile extends StatelessWidget {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: Text('Tap to request →',
+              child: Text(
+                  applyingWithParcel
+                      ? 'Send your request →'
+                      : 'Tap to request →',
                   style: AppType.body(12,
                       color: AppColors.emerald, w: FontWeight.w700)),
             ),
