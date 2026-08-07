@@ -1,6 +1,8 @@
 from django.contrib.auth import authenticate, password_validation
 from rest_framework import serializers
 
+from apps.kyc.models import KycSubmission
+
 from .models import User
 from .wilayas import WILAYA_CODES
 
@@ -90,6 +92,18 @@ class VerifyEmailSerializer(serializers.Serializer):
 
 
 class MeSerializer(serializers.ModelSerializer):
+    """Profile payload.
+
+    `is_kyc_verified` stays the authority for *access* — one source of truth
+    for "may this user transact". `kyc_status` exists purely so the UI can say
+    something true: without it a user who submitted an hour ago is
+    indistinguishable from one who never started, so the app would keep
+    prompting them to verify and they'd re-upload to no effect.
+    """
+
+    kyc_status = serializers.SerializerMethodField()
+    kyc_rejection_reason = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -102,6 +116,34 @@ class MeSerializer(serializers.ModelSerializer):
             "is_phone_verified",
             "is_email_verified",
             "is_kyc_verified",
+            "kyc_status",
+            "kyc_rejection_reason",
             "date_joined",
         )
         read_only_fields = fields
+
+    def _latest_submission(self, obj: User):
+        # Cached per serialization so the two method fields don't each query.
+        if not hasattr(obj, "_latest_kyc"):
+            obj._latest_kyc = obj.kyc_submissions.order_by("-created_at").first()
+        return obj._latest_kyc
+
+    def get_kyc_status(self, obj: User) -> str:
+        if obj.is_kyc_verified:
+            return "verified"
+        sub = self._latest_submission(obj)
+        if sub is None:
+            return "unverified"
+        if sub.status == KycSubmission.Status.PENDING:
+            return "pending"
+        if sub.status == KycSubmission.Status.REJECTED:
+            return "rejected"
+        # approved-but-boolean-not-set shouldn't happen (approval flips both),
+        # and `expired` means they must start over — both read as "unverified".
+        return "unverified"
+
+    def get_kyc_rejection_reason(self, obj: User) -> str | None:
+        sub = self._latest_submission(obj)
+        if sub is not None and sub.status == KycSubmission.Status.REJECTED:
+            return sub.rejection_reason or ""
+        return None
