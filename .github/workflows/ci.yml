@@ -1,0 +1,341 @@
+# ShipTrip CI — the machine-checked half of CLAUDE.md §4 ("before merging").
+#
+# Until this landed, 109 commits had shipped with zero automated verification;
+# every check depended on a human remembering to run it. Two bugs in this
+# repo's own history are what that cost:
+#
+#   - f2edb4d put `reverse_proxy notification:8082` in the Caddyfile (the
+#     compose service is `notification-service`). Every WS notification
+#     through the gateway 502'd for 68 days until someone hit it by hand.
+#   - 13dd535 added a table without re-exporting schema.sql. The drift sat
+#     undetected for 12 days — despite `check-drift` already existing,
+#     fully written, in Taskfile.yml. It was simply never run.
+#
+# Jobs are independent so one red does not mask another. Each one is either
+# infra-free (fast) or brings its own service containers — nothing here
+# depends on a developer's laptop being up.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # so a red gate can be re-run without an empty commit
+
+# A newer push to the same branch makes the older run irrelevant. Cancel it
+# rather than queueing — except on main, where every commit's result is a
+# historical record worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  GO_VERSION: "1.26"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ── Go: default tier ────────────────────────────────────────────────────
+  # Infra-free by design (CLAUDE.md: `go test ./...` must stay fast and need
+  # nothing running). Includes gofmt and vet, since a build that compiles can
+  # still be unformatted or contain a vet-detectable bug.
+  go-unit:
+    name: Go — build, vet, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend/services
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/services/go.sum
+
+      - name: gofmt
+        run: |
+          # gofmt -l prints offending files and exits 0, so the exit code
+          # alone proves nothing — check for output instead.
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race because every service here is concurrent (WS hubs, bounded
+      # worker pools, stream consumers); a data race that only shows under
+      # load is exactly what CI should catch instead of production.
+      - name: go test -race
+        run: go test -race -count=1 ./...
+
+  # ── Go: integration tier ────────────────────────────────────────────────
+  # These need a real Redis: they cover the G1 anti-duplicate-push handshake
+  # (dispatcher writes delivered:<event_id>, FCM consumer reads it), the
+  # email stream's PEL/XAUTOCLAIM durability, and redisbus's actual Redis
+  # semantics. A fake would only prove the fake works.
+  #
+  # A service container replaces scripts/integration-test.sh here — the
+  # script exists for laptops, where it manages its own throwaway container.
+  go-integration:
+    name: Go — integration tests (real Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend/services
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6399:6379"]
+        # Without this the job can start testing before Redis accepts
+        # connections, producing a flaky failure that looks like a code bug.
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/services/go.sum
+
+      # REDIS_TEST_URL is what un-skips the tier; without it every test calls
+      # t.Skip and the job proves nothing.
+      #
+      # -v is required, not cosmetic. Without it a fully-skipped run prints
+      # exactly `ok shiptrip/internal/notification 0.630s` — indistinguishable
+      # from a real run except by duration. (Verified: an earlier version of
+      # this guard matched `^ok` and passed against a run where every single
+      # test had skipped.) With -v, each skip prints `--- SKIP:`, which the
+      # next step can actually detect.
+      - name: go test -tags integration -race
+        env:
+          REDIS_TEST_URL: redis://localhost:6399/0
+        run: |
+          set -o pipefail
+          go test -tags integration -race -count=1 -v ./... 2>&1 | tee /tmp/it.log
+
+      - name: Fail if the integration tier skipped instead of running
+        run: |
+          # A green run that skipped everything is worse than a red one: it
+          # reports success while proving nothing.
+          if grep -q -- "--- SKIP:" /tmp/it.log; then
+            echo "::error::integration tests SKIPPED — REDIS_TEST_URL was not honoured by the test binary"
+            grep -- "--- SKIP:" /tmp/it.log | head -20
+            exit 1
+          fi
+          # And confirm the packages that carry the guardrail tests actually
+          # reported passing tests, so a rename or a build-tag typo that
+          # silently drops a whole file is caught too.
+          for pkg in internal/notification internal/chat internal/email pkg/redisbus; do
+            if ! grep -qE "^ok[[:space:]]+shiptrip/${pkg}[[:space:]]" /tmp/it.log; then
+              echo "::error::no passing test output for $pkg — the tier did not run it"
+              exit 1
+            fi
+          done
+          echo "integration tier ran: $(grep -c -- '--- PASS:' /tmp/it.log) tests passed, 0 skipped"
+
+  # ── Django ──────────────────────────────────────────────────────────────
+  # Runs against a real Postgres rather than SQLite: the schema uses
+  # partial unique constraints and multi-table inheritance, so SQLite would
+  # pass tests that Postgres rejects.
+  django:
+    name: Django — migrations + tests + lint
+    runs-on: ubuntu-latest
+    # The suite takes ~8.5 min locally, dominated by Argon2 password hashing
+    # (settings/base.py:101 — deliberately slow, with no test-time override).
+    # 30 min leaves headroom on a slower runner while still failing a hang
+    # instead of burning GitHub's 6h default.
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend/monolith
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shiptrip
+          POSTGRES_USER: shiptrip
+          POSTGRES_PASSWORD: shiptrip-ci-pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      # base.py reads these with no default, so they are required at import
+      # time — a missing one fails as ImproperlyConfigured, not a test error.
+      DJANGO_SECRET_KEY: insecure-ci-key
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "*"
+      POSTGRES_DB: shiptrip
+      POSTGRES_USER: shiptrip
+      POSTGRES_PASSWORD: shiptrip-ci-pw
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_HS256_SECRET: insecure-ci-jwt-secret
+      S3_ENDPOINT_URL: http://localhost:9000
+      S3_ACCESS_KEY: ci-access
+      S3_SECRET_KEY: ci-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/monolith/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Advisory for now: ruff currently reports 8 pre-existing errors in
+      # backend/monolith (7 unused imports + one F405 in prod.py from the
+      # `from .base import *` star-import). Those are Claude A's scope, so
+      # this job reports them without blocking his PRs. `ruff check --fix`
+      # clears 7 of the 8; once the tree is clean, delete the
+      # continue-on-error and this comment.
+      - name: Lint (ruff) — advisory until the tree is clean
+        continue-on-error: true
+        run: ruff check .
+
+      # Catches a model changed without a migration — which would otherwise
+      # surface as a runtime error on someone else's machine after a pull.
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run migrations
+        run: python manage.py migrate
+
+      # pytest-django needs the settings module; there is no pytest.ini in
+      # the repo, so it is passed explicitly rather than relying on one.
+      - name: pytest
+        run: python -m pytest -q --ds=config.settings.dev
+
+  # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
+  # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the
+  # generators. Running only the generators would check Go against a stale
+  # schema file — precisely the failure this exists to prevent.
+  #
+  # continue-on-error: this reports without blocking for now. schema.sql is
+  # known-stale on the Django side (Islam re-exports when Docker is up), and
+  # a gate that is red on arrival gets ignored or bypassed. Flip this off —
+  # and add it to branch protection — once it is green.
+  check-drift:
+    name: Schema drift (advisory until green)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shiptrip
+          POSTGRES_USER: shiptrip
+          POSTGRES_PASSWORD: shiptrip-ci-pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_SECRET_KEY: insecure-ci-key
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "*"
+      POSTGRES_DB: shiptrip
+      POSTGRES_USER: shiptrip
+      POSTGRES_PASSWORD: shiptrip-ci-pw
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_HS256_SECRET: insecure-ci-jwt-secret
+      S3_ENDPOINT_URL: http://localhost:9000
+      S3_ACCESS_KEY: ci-access
+      S3_SECRET_KEY: ci-secret
+      PGPASSWORD: shiptrip-ci-pw
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/monolith/requirements.txt
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/services/go.sum
+
+      - name: Install Django dependencies
+        run: pip install -r backend/monolith/requirements.txt
+
+      # The Taskfile's contract:* targets shell into `docker compose`, which
+      # is not how this runner is laid out. The commands below are the same
+      # operations against the service containers directly — deliberately
+      # kept in lockstep with Taskfile.yml:81-131.
+      - name: Install codegen toolchain (sqlc, protoc plugins)
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler postgresql-client
+
+      - name: Migrate
+        working-directory: backend/monolith
+        run: python manage.py migrate
+
+      - name: Re-export schema.sql (contract:sync-db)
+        working-directory: backend
+        run: |
+          mkdir -p contracts/sql
+          pg_dump --schema-only --no-owner --no-privileges \
+            -h localhost -U shiptrip -d shiptrip \
+            > contracts/sql/schema.sql
+
+      - name: Regenerate sqlc repos (contract:generate)
+        working-directory: backend/contracts/sql
+        run: sqlc generate
+
+      - name: Regenerate Go gRPC stubs (contract:go-grpc)
+        working-directory: backend
+        run: |
+          mkdir -p services/internal/kyc/kycpb
+          protoc -I contracts/grpc \
+            --go_out=services/internal/kyc/kycpb --go_opt=paths=source_relative \
+            --go-grpc_out=services/internal/kyc/kycpb --go-grpc_opt=paths=source_relative \
+            contracts/grpc/kyc.proto
+
+      - name: Diff against committed state
+        working-directory: backend
+        run: |
+          if ! git diff --exit-code contracts/sql/ services/internal/; then
+            echo "::error::Generated contracts differ from what is committed."
+            echo "Fix: run \`task check-drift\` locally and commit the result."
+            echo "Per CLAUDE.md §4, the migration and schema.sql belong in the SAME PR."
+            exit 1
+          fi

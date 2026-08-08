@@ -370,6 +370,33 @@ consistent.
    `internal/chat/dispatcher.go` for the test-seam pattern.
 5. `git -C ../.. log --oneline -20` for what landed since last session.
 6. Read `../../TASKS.md` (Alaa section) + `../../.claude/MEMORY.md`.
+7. **Check CI before assuming anything is broken.** `.github/workflows/ci.yml`
+   (added 2026-08-08) runs all of the above on every push and PR, plus the
+   integration tier against a service-container Redis and the Django suite
+   against real Postgres. Two jobs are intentionally **advisory**
+   (`continue-on-error`) and will show as passed-with-warnings until the
+   underlying state is fixed: `check-drift` (schema.sql is stale Django-side)
+   and `ruff` (8 pre-existing errors under `backend/monolith`, Claude A's
+   scope). Do not "fix" those by editing his files; do not delete the jobs.
+   Flip each to blocking as it goes green.
+
+## mTLS certs (§G5)
+
+`./scripts/gen-mtls-certs.sh` mints everything the mtls path needs — private
+CA, a `django-grpc` server cert, a `kyc-service` client cert — into
+`backend/certs/` (git-ignored, and the script drops its own `.gitignore` there
+because the root rules cover `*.pem`/`*.key` but not openssl's `ca.srl`).
+
+Dev/local only. §G5 wants cert-manager on K3s in production; do not ship these
+files to a cluster.
+
+The Go client half is done and the certs are proven — a Go server using the
+same `tls.Config` shape as `grpc_client.go:tlsCredentials` completes a TLS 1.3
+mutual handshake with them and rejects both a certless client and a cert from
+a foreign CA. **What is still missing is the Django server half**:
+`runkycgrpc.py` is still `raise SystemExit("GRPC_AUTH_MODE=mtls is not yet
+wired")`. Until that lands, keep dev on `GRPC_AUTH_MODE=bearer` — mtls has
+nothing to dial.
 
 ---
 
