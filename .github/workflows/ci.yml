@@ -317,9 +317,30 @@ jobs:
             -h localhost -U shiptrip -d shiptrip \
             > contracts/sql/schema.sql
 
+      # sqlc.yaml declares four packages (chat/notif/kyc/media) whose query
+      # directories are all EMPTY, so `sqlc generate` exits 1 with "no queries
+      # contained in paths" — meaning `task contract:generate`, and therefore
+      # the whole §G3 gate, has never been able to run. No repos have ever been
+      # generated and no Go code imports them: every service talks to Postgres
+      # through raw pgxpool with inline SQL (see dispatcher.go poolExecer).
+      #
+      # sqlc.yaml is a correct template for when queries do land, so it stays.
+      # Skipping when there is nothing to generate is the honest behaviour —
+      # but it is skipped LOUDLY, because a silent skip here would be exactly
+      # the "green but proving nothing" failure this workflow exists to stop.
+      #
+      # NOTE for whoever adds the first .sql query: delete this guard's escape
+      # hatch and let it run for real. Taskfile.yml:91 needs the same guard —
+      # it is a shared file, so that change needs sign-off.
       - name: Regenerate sqlc repos (contract:generate)
         working-directory: backend/contracts/sql
-        run: sqlc generate
+        run: |
+          if ! find queries -name '*.sql' -type f | grep -q .; then
+            echo "::warning::sqlc SKIPPED — all queries/ dirs are empty, so there is nothing to generate."
+            echo "::warning::Services currently use raw pgxpool, not sqlc. This step becomes real when the first .sql query lands."
+            exit 0
+          fi
+          sqlc generate
 
       - name: Regenerate Go gRPC stubs (contract:go-grpc)
         working-directory: backend
