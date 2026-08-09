@@ -351,12 +351,69 @@ jobs:
             --go-grpc_out=services/internal/kyc/kycpb --go-grpc_opt=paths=source_relative \
             contracts/grpc/kyc.proto
 
-      - name: Diff against committed state
-        working-directory: backend
+      # A plain `git diff --exit-code` here can NEVER pass, and that is not a
+      # figure of speech — two of the lines these generators emit change on
+      # every run regardless of the schema:
+      #
+      #   1. `\restrict <token>` / `\unrestrict <token>`. pg_dump 16.10+ emits a
+      #      RANDOM per-invocation nonce here. Verified by dumping the same
+      #      untouched database twice: the two dumps differ on exactly these
+      #      two lines and nothing else.
+      #   2. `// protoc vX.Y.Z` version comments. This job installs the plugins
+      #      with @latest, so the recorded version drifts whenever upstream
+      #      releases — the observed diff was v7.34.1 vs v3.21.12 (apt's protoc),
+      #      and a third machine produced v7.35.1.
+      #
+      # Neither says anything about the schema, and a gate that is red 100% of
+      # the time for reasons nobody can fix is a gate everyone learns to ignore.
+      # So both constructs are normalised on BOTH sides before comparing. The
+      # normalisation is deliberately narrow: it rewrites the nonce and the
+      # version token only. A real column, table, or RPC change still fails.
+      - name: Diff against committed state (ignoring generator nonces)
         run: |
-          if ! git diff --exit-code contracts/sql/ services/internal/; then
+          set -euo pipefail
+
+          normalise() {
+            sed -E \
+              -e 's/^\\(restrict|unrestrict) [A-Za-z0-9]+$/\\\1 <nonce-normalised>/' \
+              -e 's/^-- Dumped by pg_dump version .*/-- Dumped by pg_dump version <normalised>/' \
+              -e 's|^(//.*protoc[A-Za-z-]*)[[:space:]]+v[0-9][^[:space:]]*$|\1 <normalised>|'
+          }
+
+          paths="backend/contracts/sql backend/services/internal"
+
+          # An untracked file under a generated path is always real drift —
+          # there is no committed version to compare it against.
+          untracked="$(git ls-files --others --exclude-standard -- $paths)"
+          if [ -n "$untracked" ]; then
+            echo "::error::generator produced files that are not committed:"
+            echo "$untracked"
+            exit 1
+          fi
+
+          changed="$(git diff --name-only -- $paths)"
+          if [ -z "$changed" ]; then
+            echo "no drift: regenerated output is byte-identical to what is committed"
+            exit 0
+          fi
+
+          real=0
+          for f in $changed; do
+            git show "HEAD:$f" | normalise > /tmp/committed.norm
+            normalise < "$f" > /tmp/regenerated.norm
+            if diff -u --label "committed/$f" --label "regenerated/$f" \
+                 /tmp/committed.norm /tmp/regenerated.norm; then
+              echo "ignored: $f differs only in generator version/nonce lines"
+            else
+              echo "::error::real drift in $f"
+              real=1
+            fi
+          done
+
+          if [ "$real" -ne 0 ]; then
             echo "::error::Generated contracts differ from what is committed."
             echo "Fix: run \`task check-drift\` locally and commit the result."
             echo "Per CLAUDE.md §4, the migration and schema.sql belong in the SAME PR."
             exit 1
           fi
+          echo "no real drift (only generator version/nonce noise)"
