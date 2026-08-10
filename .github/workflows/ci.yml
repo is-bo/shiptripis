@@ -211,12 +211,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Advisory for now: ruff currently reports 8 pre-existing errors in
+      # Advisory for now: ruff reports 8 pre-existing errors in
       # backend/monolith (7 unused imports + one F405 in prod.py from the
       # `from .base import *` star-import). Those are Claude A's scope, so
       # this job reports them without blocking his PRs. `ruff check --fix`
       # clears 7 of the 8; once the tree is clean, delete the
       # continue-on-error and this comment.
+      #
+      # That count is specifically ruff 0.8.4, the version pinned in
+      # requirements.txt — and the pin is load-bearing, because there is no
+      # ruff config anywhere in the repo, so ruff runs its DEFAULT rule set and
+      # the result moves with the version. A local ruff 0.16.1 reports 150
+      # errors on the same unchanged tree. Before "fixing" a number that does
+      # not match this job, check `ruff --version` against the pin.
       - name: Lint (ruff) — advisory until the tree is clean
         continue-on-error: true
         run: ruff check .
@@ -239,15 +246,16 @@ jobs:
   # generators. Running only the generators would check Go against a stale
   # schema file — precisely the failure this exists to prevent.
   #
-  # continue-on-error: this reports without blocking for now. schema.sql is
-  # known-stale on the Django side (Islam re-exports when Docker is up), and
-  # a gate that is red on arrival gets ignored or bypassed. Flip this off —
-  # and add it to branch protection — once it is green.
+  # This was advisory while it was red on arrival. It is green as of run
+  # 31343220129 — and the reason it had been red was never real drift, it was
+  # pg_dump's random per-run nonce (see the diff step below). With that
+  # normalised the job reports the schema is genuinely in sync, so it now
+  # blocks: an advisory gate that nobody has to satisfy is how 13dd535's drift
+  # sat undetected for 12 days with check-drift already written in Taskfile.yml.
   check-drift:
-    name: Schema drift (advisory until green)
+    name: Schema drift
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16-alpine
