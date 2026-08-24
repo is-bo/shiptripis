@@ -12,7 +12,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import grpc
-import pytest
 from django.test import TestCase
 
 from apps.accounts.models import User

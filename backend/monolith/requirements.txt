@@ -11,9 +11,11 @@ argon2-cffi==23.1.0
 google-auth==2.36.0
 requests==2.32.3
 boto3==1.35.92
+Pillow==11.1.0
 ulid-py==1.1.0
 sentry-sdk==2.19.2
 gunicorn==23.0.0
+whitenoise==6.8.2
 grpcio==1.68.1
 grpcio-tools==1.68.1
 ruff==0.8.4

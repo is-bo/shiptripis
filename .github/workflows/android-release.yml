@@ -1,0 +1,47 @@
+name: Android release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: HTTPS base URL of the deployed ShipTrip gateway
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.4"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build release APK
+        run: >-
+          flutter build apk --release
+          --dart-define=API_BASE_URL=${{ inputs.api_base_url }}
+
+      - name: Record checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk > build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shiptrip-android-release
+          path: |
+            mobile/build/app/outputs/flutter-apk/app-release.apk
+            mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

@@ -428,11 +428,17 @@ func LoadLogger(service string) Logger {
 
 // ── HTTP listen address ──────────────────────────────────────────────────────
 
-// HTTPAddr reads an addr env var with a sensible fallback. Each service
-// uses its own var (CHAT_HTTP_ADDR, NOTIF_HTTP_ADDR, KYC_HTTP_ADDR) so
-// they can run side-by-side in dev.
+// HTTPAddr reads a service-specific address, then Railway's injected PORT,
+// then the local fallback. Compose sets the service-specific values so the
+// binaries can run side-by-side on a developer machine.
 func HTTPAddr(envKey, fallback string) string {
-	return optString(envKey, fallback)
+	if addr := optString(envKey, ""); addr != "" {
+		return addr
+	}
+	if port := optString("PORT", ""); port != "" {
+		return ":" + port
+	}
+	return fallback
 }
 
 // String reads an arbitrary string env var with a fallback. Use for

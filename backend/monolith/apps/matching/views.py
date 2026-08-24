@@ -382,16 +382,18 @@ class MatchCancelView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        match = get_object_or_404(Match, pk=pk)
-        if not _is_party(match, request.user.id):
-            return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
-        if match.status != Match.Status.PENDING:
-            return Response(
-                {"detail": f"Cannot cancel match in status '{match.status}'."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
         with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk)
+            if not _is_party(match, request.user.id):
+                return Response(
+                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
+                )
+            if match.status != Match.Status.PENDING:
+                return Response(
+                    {"detail": f"Cannot cancel match in status '{match.status}'."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
             match.status = Match.Status.CANCELLED
             match.save(update_fields=["status", "updated_at"])
             # Cancel any still-pending offer.
@@ -447,45 +449,53 @@ class CounterOfferView(APIView):
         s.is_valid(raise_exception=True)
         d = s.validated_data
 
-        match = get_object_or_404(Match.objects.select_related("parcel"), pk=pk)
-        if not _is_party(match, request.user.id):
-            return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
-        if match.status != Match.Status.PENDING:
-            return Response(
-                {"detail": f"Match not pending (status={match.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
-        pending = match.offers.filter(status=Offer.Status.PENDING).first()
-        if pending is None:
-            return Response(
-                {"detail": "No pending offer to counter."}, status=http.HTTP_409_CONFLICT
-            )
-
-        # Only the counterparty (not the proposer) may counter.
-        if pending.proposer_id == request.user.id:
-            return Response(
-                {"detail": "Cannot counter your own offer; withdraw it instead."},
-                status=http.HTTP_403_FORBIDDEN,
-            )
-
-        # Counter is only legal on direct requests (sender posted targeting
-        # this traveler). Broadcast requests are priced by the sender so the
-        # traveler may only accept/decline. See parcels.models.ParcelRequest.
-        if match.parcel.target_traveler_id is None:
-            return Response(
-                {"detail": "Counter not allowed on broadcast requests; accept or decline."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
-        my_side = (
-            Offer.ProposedBy.SENDER
-            if request.user.id == match.sender_id
-            else Offer.ProposedBy.TRAVELER
-        )
-        pricing = _quote_for_parcel(match.parcel, d["base_amount_dzd"])
-
         with transaction.atomic():
+            # Lock the match and its current pending offer before validating
+            # the state machine. This prevents two counters from both
+            # replacing the same parent offer.
+            match = get_object_or_404(
+                Match.objects.select_for_update().select_related("parcel"), pk=pk
+            )
+            if not _is_party(match, request.user.id):
+                return Response(
+                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
+                )
+            if match.status != Match.Status.PENDING:
+                return Response(
+                    {"detail": f"Match not pending (status={match.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            pending = (
+                Offer.objects.select_for_update()
+                .filter(match=match, status=Offer.Status.PENDING)
+                .first()
+            )
+            if pending is None:
+                return Response(
+                    {"detail": "No pending offer to counter."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if pending.proposer_id == request.user.id:
+                return Response(
+                    {"detail": "Cannot counter your own offer; withdraw it instead."},
+                    status=http.HTTP_403_FORBIDDEN,
+                )
+            if match.parcel.target_traveler_id is None:
+                return Response(
+                    {
+                        "detail": "Counter not allowed on broadcast requests; "
+                        "accept or decline."
+                    },
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            my_side = (
+                Offer.ProposedBy.SENDER
+                if request.user.id == match.sender_id
+                else Offer.ProposedBy.TRAVELER
+            )
+            pricing = _quote_for_parcel(match.parcel, d["base_amount_dzd"])
             now = timezone.now()
             pending.status = Offer.Status.COUNTERED
             pending.responded_at = now
@@ -538,29 +548,51 @@ class OfferAcceptView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        offer = get_object_or_404(
-            Offer.objects.select_related("match", "match__parcel", "match__trip"), pk=pk
-        )
-        match = offer.match
-        if not _is_party(match, request.user.id):
-            return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
-        if offer.proposer_id == request.user.id:
-            return Response(
-                {"detail": "Cannot accept your own offer."},
-                status=http.HTTP_403_FORBIDDEN,
+        with transaction.atomic():
+            # The parcel row is the cross-match serialization point. The
+            # schema can enforce one accepted offer per Match, but only this
+            # lock can ensure that two different Matches for the same parcel
+            # are not accepted concurrently.
+            initial_offer = get_object_or_404(
+                Offer.objects.select_related("match"), pk=pk
             )
-        if offer.status != Offer.Status.PENDING:
-            return Response(
-                {"detail": f"Offer not pending (status={offer.status})."},
-                status=http.HTTP_409_CONFLICT,
+            parcel = get_object_or_404(
+                ParcelRequest.objects.select_for_update(),
+                pk=initial_offer.match.parcel_id,
             )
-        if match.status != Match.Status.PENDING:
-            return Response(
-                {"detail": f"Match not pending (status={match.status})."},
-                status=http.HTTP_409_CONFLICT,
+            match = get_object_or_404(
+                Match.objects.select_for_update().select_related("trip"),
+                pk=initial_offer.match_id,
+            )
+            offer = get_object_or_404(
+                Offer.objects.select_for_update(), pk=initial_offer.pk
             )
 
-        with transaction.atomic():
+            if not _is_party(match, request.user.id):
+                return Response(
+                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
+                )
+            if offer.proposer_id == request.user.id:
+                return Response(
+                    {"detail": "Cannot accept your own offer."},
+                    status=http.HTTP_403_FORBIDDEN,
+                )
+            if offer.status != Offer.Status.PENDING:
+                return Response(
+                    {"detail": f"Offer not pending (status={offer.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if match.status != Match.Status.PENDING:
+                return Response(
+                    {"detail": f"Match not pending (status={match.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if parcel.status != ParcelRequest.Status.OPEN:
+                return Response(
+                    {"detail": "Parcel request is already matched or closed."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
             now = timezone.now()
             offer.status = Offer.Status.ACCEPTED
             offer.responded_at = now
@@ -569,10 +601,8 @@ class OfferAcceptView(APIView):
             match.status = Match.Status.ACCEPTED
             match.save(update_fields=["status", "updated_at"])
 
-            parcel = match.parcel
-            if parcel.status == ParcelRequest.Status.OPEN:
-                parcel.status = ParcelRequest.Status.MATCHED
-                parcel.save(update_fields=["status", "updated_at"])
+            parcel.status = ParcelRequest.Status.MATCHED
+            parcel.save(update_fields=["status", "updated_at"])
 
             MatchEvent.objects.create(
                 match=match,
@@ -604,22 +634,29 @@ class OfferDeclineView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        offer = get_object_or_404(Offer.objects.select_related("match"), pk=pk)
-        match = offer.match
-        if not _is_party(match, request.user.id):
-            return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
-        if offer.proposer_id == request.user.id:
-            return Response(
-                {"detail": "Cannot decline your own offer; withdraw instead."},
-                status=http.HTTP_403_FORBIDDEN,
-            )
-        if offer.status != Offer.Status.PENDING:
-            return Response(
-                {"detail": f"Offer not pending (status={offer.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
         with transaction.atomic():
+            initial_offer = get_object_or_404(Offer, pk=pk)
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=initial_offer.match_id
+            )
+            offer = get_object_or_404(
+                Offer.objects.select_for_update(), pk=initial_offer.pk
+            )
+            if not _is_party(match, request.user.id):
+                return Response(
+                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
+                )
+            if offer.proposer_id == request.user.id:
+                return Response(
+                    {"detail": "Cannot decline your own offer; withdraw instead."},
+                    status=http.HTTP_403_FORBIDDEN,
+                )
+            if offer.status != Offer.Status.PENDING:
+                return Response(
+                    {"detail": f"Offer not pending (status={offer.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
             offer.status = Offer.Status.DECLINED
             offer.responded_at = timezone.now()
             offer.save(update_fields=["status", "responded_at", "updated_at"])
@@ -685,19 +722,31 @@ class OfferWithdrawView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        offer = get_object_or_404(Offer.objects.select_related("match"), pk=pk)
-        if offer.proposer_id != request.user.id:
-            return Response(
-                {"detail": "Only the proposer can withdraw."},
-                status=http.HTTP_403_FORBIDDEN,
-            )
-        if offer.status != Offer.Status.PENDING:
-            return Response(
-                {"detail": f"Offer not pending (status={offer.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
         with transaction.atomic():
+            initial_offer = get_object_or_404(Offer, pk=pk)
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=initial_offer.match_id
+            )
+            offer = get_object_or_404(
+                Offer.objects.select_for_update().select_related("match"),
+                pk=initial_offer.pk,
+            )
+            if offer.proposer_id != request.user.id:
+                return Response(
+                    {"detail": "Only the proposer can withdraw."},
+                    status=http.HTTP_403_FORBIDDEN,
+                )
+            if offer.status != Offer.Status.PENDING:
+                return Response(
+                    {"detail": f"Offer not pending (status={offer.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if match.status != Match.Status.PENDING:
+                return Response(
+                    {"detail": f"Match not pending (status={match.status})."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
             offer.status = Offer.Status.WITHDRAWN
             offer.responded_at = timezone.now()
             offer.save(update_fields=["status", "responded_at", "updated_at"])

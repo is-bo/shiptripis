@@ -11,14 +11,13 @@ Endpoints:
 
 from __future__ import annotations
 
-from django.shortcuts import get_object_or_404
 from rest_framework import status as http
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Hold, Wallet, Withdrawal
+from .models import Wallet, Withdrawal
 from .serializers import (
     HoldSerializer,
     WalletEntrySerializer,

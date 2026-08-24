@@ -162,8 +162,6 @@ services:
     build:
       context: ./services
       dockerfile: Dockerfile
-      args:
-        SERVICE: kyc
     env_file: .env
     # The kyc-service forces an eager gRPC connection at boot (fail-fast on a
     # bad KYC_GRPC_TARGET, by design — cmd/kyc/main.go). On a cold `up` the
@@ -172,6 +170,7 @@ services:
     # transient race; a genuinely wrong target keeps crash-looping (visible).
     restart: on-failure
     environment:
+      SHIPTRIP_SERVICE: "kyc"
       KYC_HTTP_ADDR: ":8083"
       KYC_GRPC_TARGET: "django-grpc:50051"
       KYC_S3_BUCKET: "kyc-docs"
@@ -194,10 +193,9 @@ services:
     build:
       context: ./services
       dockerfile: Dockerfile
-      args:
-        SERVICE: notification
     env_file: .env
     environment:
+      SHIPTRIP_SERVICE: "notification"
       NOTIF_HTTP_ADDR: ":8082"
     depends_on:
       postgres:
@@ -214,10 +212,9 @@ services:
     build:
       context: ./services
       dockerfile: Dockerfile
-      args:
-        SERVICE: chat
     env_file: .env
     environment:
+      SHIPTRIP_SERVICE: "chat"
       CHAT_HTTP_ADDR: ":8081"
     depends_on:
       postgres:
@@ -240,10 +237,9 @@ services:
     build:
       context: ./services
       dockerfile: Dockerfile
-      args:
-        SERVICE: email
     env_file: .env
     environment:
+      SHIPTRIP_SERVICE: "email"
       EMAIL_HTTP_ADDR: ":8085"
     depends_on:
       redis:

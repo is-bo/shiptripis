@@ -1,15 +1,9 @@
-# Multi-stage build for any ShipTrip Go service.
-#
-# One Dockerfile builds all three binaries; compose selects which via the
-# SERVICE build-arg (kyc | notification | chat), matching the cmd/<SERVICE>
-# package. Keeps the build context (the whole Go workspace) shared so the
-# layer cache is reused across services on a rebuild.
+# Multi-stage build for all ShipTrip Go services. Building every small static
+# binary makes one immutable image usable by Railway's chat, notification,
+# KYC, and email services without relying on provider-specific build args.
 
 # ---- build ----------------------------------------------------------------
 FROM golang:1.26-alpine AS build
-
-# Which cmd/<SERVICE> to compile. Override per service in docker-compose.
-ARG SERVICE=kyc
 
 WORKDIR /src
 
@@ -20,10 +14,11 @@ RUN go mod download
 # Then the source. A change here doesn't bust the module-download layer.
 COPY . .
 
-# CGO off → a static binary that runs on the scratch-ish runtime image.
-# Build only the selected command.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
-    -o /out/service ./cmd/${SERVICE}
+# CGO off → static binaries that run on the small runtime image.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/chat ./cmd/chat && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/notification ./cmd/notification && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/kyc ./cmd/kyc && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/email ./cmd/email
 
 # ---- runtime --------------------------------------------------------------
 # alpine (not scratch) so the compose healthcheck has a wget (busybox ships
@@ -39,6 +34,7 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 RUN adduser -D -u 10001 app
 USER app
 
-COPY --from=build /out/service /usr/local/bin/service
+COPY --from=build /out/ /usr/local/bin/
+COPY railway-entrypoint.sh /usr/local/bin/railway-entrypoint
 
-ENTRYPOINT ["/usr/local/bin/service"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/railway-entrypoint"]

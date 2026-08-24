@@ -3,11 +3,10 @@ from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
-from apps.trips.models import Airport, Trip
+from apps.trips.models import Trip
 
 
 def _future(days: int = 7) -> str:

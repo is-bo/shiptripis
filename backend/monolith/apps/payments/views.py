@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import secrets
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status as http
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -241,19 +243,23 @@ class PaymentIntentCancelView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        intent = get_object_or_404(PaymentIntent, pk=pk)
-        if intent.payer_id != request.user.id:
-            return Response({"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN)
-        if intent.status not in {
-            PaymentIntent.Status.REQUIRES_PAYMENT_METHOD,
-            PaymentIntent.Status.PROCESSING,
-        }:
-            return Response(
-                {"detail": f"Cannot cancel intent in status '{intent.status}'."},
-                status=http.HTTP_409_CONFLICT,
-            )
-
         with transaction.atomic():
+            intent = get_object_or_404(
+                PaymentIntent.objects.select_for_update(), pk=pk
+            )
+            if intent.payer_id != request.user.id:
+                return Response(
+                    {"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN
+                )
+            if intent.status not in {
+                PaymentIntent.Status.REQUIRES_PAYMENT_METHOD,
+                PaymentIntent.Status.PROCESSING,
+            }:
+                return Response(
+                    {"detail": f"Cannot cancel intent in status '{intent.status}'."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
             intent.status = PaymentIntent.Status.CANCELLED
             intent.save(update_fields=["status", "updated_at"])
             PaymentEvent.objects.create(
@@ -298,23 +304,41 @@ class PaymentIntentRefundView(APIView):
                 status=http.HTTP_400_BAD_REQUEST,
             )
 
-        refunded_so_far = sum(
-            r.amount_minor for r in intent.refunds.filter(status=Refund.Status.SUCCEEDED)
-        )
-        if refunded_so_far + amount > intent.amount_minor:
-            return Response(
-                {
-                    "detail": "Refund exceeds captured amount.",
-                    "captured_minor": intent.amount_minor,
-                    "already_refunded_minor": refunded_so_far,
-                },
-                status=http.HTTP_409_CONFLICT,
-            )
-
-        provider = get_provider(intent.provider)
         reason = request.data.get("reason", "")[:64] if request.data.get("reason") else ""
 
         with transaction.atomic():
+            # Serialize refunds for one intent. Without this row lock, two
+            # requests can both observe the same refunded total and together
+            # refund more than the captured amount.
+            intent = PaymentIntent.objects.select_for_update().get(pk=intent.pk)
+            if intent.payer_id != request.user.id:
+                return Response({"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN)
+            if intent.status not in {
+                PaymentIntent.Status.SUCCEEDED,
+                PaymentIntent.Status.REFUND_PENDING,
+            }:
+                return Response(
+                    {"detail": f"Cannot refund intent in status '{intent.status}'."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            refunded_so_far = (
+                intent.refunds.filter(status=Refund.Status.SUCCEEDED).aggregate(
+                    total=Sum("amount_minor")
+                )["total"]
+                or 0
+            )
+            if refunded_so_far + amount > intent.amount_minor:
+                return Response(
+                    {
+                        "detail": "Refund exceeds captured amount.",
+                        "captured_minor": intent.amount_minor,
+                        "already_refunded_minor": refunded_so_far,
+                    },
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            provider = get_provider(intent.provider)
             result = provider.refund(
                 provider_intent_id=intent.provider_intent_id,
                 amount_minor=amount,
@@ -391,6 +415,11 @@ class MockWebhookView(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request: Request) -> Response:
+        if not settings.PAYMENTS_MOCK_WEBHOOK_ENABLED:
+            # Deliberately hide the development-only mutation endpoint in
+            # hosted environments instead of advertising it with a 403.
+            return Response(status=http.HTTP_404_NOT_FOUND)
+
         pid = request.data.get("provider_intent_id")
         event = request.data.get("event")
         if not pid or event not in {"succeeded", "failed"}:

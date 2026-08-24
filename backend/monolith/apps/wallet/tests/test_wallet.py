@@ -145,20 +145,15 @@ class LedgerServiceTests(APITestCase):
             platform_fee_minor=1000,
             release_source="handover", release_source_id=2,
         )
-        # Second call (e.g. webhook replay) — manually flip back to OPEN
-        # would be the only way to invoke it; entries are key-protected.
-        # Verify ledger doesn't grow when called with a fresh idempotency
-        # key by ensuring keys actually prevent dupes.
+        # A webhook replay with the stale in-memory OPEN hold is a no-op.
         wallet = Wallet.objects.get(user=self.sender, currency="DZD")
         n = wallet.entries.count()
-        # Try to insert the same release manually — should be a no-op.
-        from apps.wallet.services import _record_entry
-        ret = _record_entry(
-            wallet=wallet, kind=WalletEntry.Kind.RELEASE,
-            amount_minor=10000, currency="DZD",
-            key=f"handover:2:release:{hold.id}",
+        result = release_hold_to_payee(
+            hold=hold, payee=self.traveler, payee_amount_minor=9000,
+            platform_fee_minor=1000,
+            release_source="handover", release_source_id=2,
         )
-        assert ret is None
+        assert result.status == Hold.Status.RELEASED
         assert wallet.entries.count() == n
 
     def test_reverse_hold_for_refund(self):

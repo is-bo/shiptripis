@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
@@ -287,3 +288,14 @@ class MockWebhookTests(APITestCase):
             format="json",
         )
         assert r.status_code == 404
+
+    @override_settings(PAYMENTS_MOCK_WEBHOOK_ENABLED=False)
+    def test_mock_webhook_is_hidden_when_disabled(self):
+        r = APIClient().post(
+            reverse("payments-webhook-mock"),
+            {"provider_intent_id": self.intent.provider_intent_id, "event": "failed"},
+            format="json",
+        )
+        assert r.status_code == 404
+        self.intent.refresh_from_db()
+        assert self.intent.status == PaymentIntent.Status.PROCESSING

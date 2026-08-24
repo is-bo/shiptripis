@@ -25,3 +25,4 @@ build/
 
 # AI
 .claude
+docs/claude-sessions/*.jsonl

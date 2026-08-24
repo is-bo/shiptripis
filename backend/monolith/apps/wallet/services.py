@@ -157,15 +157,18 @@ def open_hold(
         note=note or f"Hold for {source}#{source_id}",
     )
     try:
-        return Hold.objects.create(
-            wallet=wallet,
-            amount_minor=amount_minor,
-            currency=currency,
-            source=source,
-            source_id=source_id,
-            status=Hold.Status.OPEN,
-        )
+        with transaction.atomic():
+            return Hold.objects.create(
+                wallet=wallet,
+                amount_minor=amount_minor,
+                currency=currency,
+                source=source,
+                source_id=source_id,
+                status=Hold.Status.OPEN,
+            )
     except IntegrityError:
+        # Isolate the uniqueness race in a savepoint so the outer transaction
+        # can safely read and return the winning row.
         return Hold.objects.get(source=source, source_id=source_id)
 
 
@@ -195,6 +198,13 @@ def release_hold_to_payee(
     confirmation), used as the idempotency key suffix. Re-calling with the
     same trigger is a no-op.
     """
+    hold = (
+        Hold.objects.select_for_update()
+        .select_related("wallet")
+        .get(pk=hold.pk)
+    )
+    if hold.status == Hold.Status.RELEASED:
+        return hold
     if hold.status != Hold.Status.OPEN:
         raise ValueError(f"Hold {hold.id} is not open (status={hold.status}).")
     if payee_amount_minor + platform_fee_minor > hold.amount_minor:
@@ -259,6 +269,11 @@ def reverse_hold_for_refund(
 
     Idempotent.
     """
+    hold = (
+        Hold.objects.select_for_update()
+        .select_related("wallet")
+        .get(pk=hold.pk)
+    )
     if hold.status != Hold.Status.OPEN:
         return hold
 

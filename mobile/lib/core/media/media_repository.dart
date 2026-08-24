@@ -63,7 +63,13 @@ class MediaRepository {
     });
     try {
       final r = await _dio.post<Map<String, dynamic>>(path, data: form);
+      if (r.statusCode == null || r.statusCode! < 200 || r.statusCode! >= 300) {
+        throw MediaFailure(_extractMessage(r) ?? 'Upload failed.');
+      }
       final data = r.data ?? const {};
+      if (data['id'] is! int) {
+        throw MediaFailure('Upload returned an invalid response.');
+      }
       return MediaUploadResult(
         id: data['id'] as int,
         objectKey: data['object_key'] as String? ?? '',
@@ -72,6 +78,8 @@ class MediaRepository {
     } on DioException catch (e) {
       final msg = _extractMessage(e.response) ?? 'Upload failed.';
       throw MediaFailure(msg);
+    } on MediaFailure {
+      rethrow;
     }
   }
 

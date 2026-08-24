@@ -13,18 +13,23 @@ Per CLAUDE.md G6: every state change publishes via
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
-from apps.core.storage import ext_for_content_type, make_key, put_object
-from django.conf import settings
-from rest_framework.parsers import MultiPartParser
+from apps.core.storage import (
+    ext_for_content_type,
+    image_bytes_match_extension,
+    make_key,
+    put_object,
+)
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
 from .serializers import (
@@ -387,6 +392,11 @@ class ParcelMediaUploadView(APIView):
                 status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             )
         body = f.read()
+        if not image_bytes_match_extension(body, ext):
+            return Response(
+                {"detail": "File content is not a valid image of the declared type."},
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            )
         bucket = settings.S3_BUCKET_PARCEL
         key = make_key(f"parcels/{parcel.id}", ext)
         put_object(

@@ -32,6 +32,7 @@ concurrency:
 env:
   GO_VERSION: "1.26"
   PYTHON_VERSION: "3.12"
+  FLUTTER_VERSION: "3.38.4"
 
 jobs:
   # ── Go: default tier ────────────────────────────────────────────────────
@@ -199,6 +200,8 @@ jobs:
       S3_ENDPOINT_URL: http://localhost:9000
       S3_ACCESS_KEY: ci-access
       S3_SECRET_KEY: ci-secret
+      DRF_ANON_THROTTLE_RATE: 10000/min
+      DRF_USER_THROTTLE_RATE: 10000/min
     steps:
       - uses: actions/checkout@v4
 
@@ -211,21 +214,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Advisory for now: ruff reports 8 pre-existing errors in
-      # backend/monolith (7 unused imports + one F405 in prod.py from the
-      # `from .base import *` star-import). Those are Claude A's scope, so
-      # this job reports them without blocking his PRs. `ruff check --fix`
-      # clears 7 of the 8; once the tree is clean, delete the
-      # continue-on-error and this comment.
-      #
-      # That count is specifically ruff 0.8.4, the version pinned in
-      # requirements.txt — and the pin is load-bearing, because there is no
-      # ruff config anywhere in the repo, so ruff runs its DEFAULT rule set and
-      # the result moves with the version. A local ruff 0.16.1 reports 150
-      # errors on the same unchanged tree. Before "fixing" a number that does
-      # not match this job, check `ruff --version` against the pin.
-      - name: Lint (ruff) — advisory until the tree is clean
-        continue-on-error: true
+      - name: Lint (ruff)
         run: ruff check .
 
       # Catches a model changed without a migration — which would otherwise
@@ -240,6 +229,35 @@ jobs:
       # the repo, so it is passed explicitly rather than relying on one.
       - name: pytest
         run: python -m pytest -q --ds=config.settings.dev
+
+  # ── Flutter ─────────────────────────────────────────────────────────────
+  flutter:
+    name: Flutter — format, analyze, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+
+      - name: Test
+        run: flutter test
 
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
   # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the

@@ -23,7 +23,8 @@ func clearConfigEnv(t *testing.T) {
 		"GRPC_TLS_CA_CERT", "GRPC_TLS_CLIENT_CERT", "GRPC_TLS_CLIENT_KEY",
 		"FCM_ENABLED", "FCM_STREAM", "FCM_CONSUMER_GROUP", "FCM_CONSUMER_NAME",
 		"FCM_PROJECT_ID", "FCM_CREDENTIALS_PATH", "HOSTNAME",
-		"LOG_LEVEL", "CHAT_DB_MAX_CONNS",
+		"LOG_LEVEL", "CHAT_DB_MAX_CONNS", "PORT",
+		"CHAT_HTTP_ADDR", "NOTIF_HTTP_ADDR", "KYC_HTTP_ADDR", "EMAIL_HTTP_ADDR",
 	} {
 		t.Setenv(k, "")
 	}
@@ -350,6 +351,14 @@ func TestHTTPAddrAndString(t *testing.T) {
 	}
 	if got := String("BUCKET", "fallback"); got != "fallback" {
 		t.Errorf("String fallback = %q", got)
+	}
+}
+
+func TestHTTPAddrUsesRailwayPort(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("PORT", "4321")
+	if got := HTTPAddr("CHAT_HTTP_ADDR", ":8081"); got != ":4321" {
+		t.Errorf("HTTPAddr Railway PORT = %q, want :4321", got)
 	}
 }
 

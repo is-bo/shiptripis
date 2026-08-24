@@ -1,4 +1,5 @@
-# ShipTrip API gateway (dev).
+# ShipTrip API gateway. Upstreams default to docker-compose service names and
+# are overridden with Railway private-network addresses when hosted.
 # Per ARCHITECTURE.md §3: Caddy does NOT validate JWTs — services do their own.
 # Production sets shutdown_timeout 30s for graceful WS drain on rolling deploys.
 
@@ -7,7 +8,7 @@
 	auto_https off
 }
 
-:80 {
+:{$PORT:80} {
 	respond /healthz "ok" 200
 
 	# More specific Go-service paths must be evaluated BEFORE the generic
@@ -15,24 +16,23 @@
 
 	@chat path /ws/chat /ws/chat/*
 	handle @chat {
-		reverse_proxy chat-service:8081
+		reverse_proxy {$CHAT_UPSTREAM:chat-service:8081}
 	}
 
 	@notif path /ws/notifications /ws/notifications/*
 	handle @notif {
-		reverse_proxy notification-service:8082
+		reverse_proxy {$NOTIFICATION_UPSTREAM:notification-service:8082}
 	}
 
 	@kyc path /kyc/* /api/kyc/*
 	handle @kyc {
-		reverse_proxy kyc-service:8083
-	}
-
-	@media path /media-svc/* /api/media/*
-	handle @media {
-		reverse_proxy media-service:8084
+		reverse_proxy {$KYC_UPSTREAM:kyc-service:8083}
 	}
 
 	# Django REST + admin + static (catch-all).
-	reverse_proxy django:8000
+	reverse_proxy {$DJANGO_UPSTREAM:django:8000} {
+		# Railway terminates TLS before this container. Preserve the edge
+		# scheme so Django's production HTTPS redirect does not loop.
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	}
 }

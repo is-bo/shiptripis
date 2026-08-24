@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import secrets
 from functools import lru_cache
+from io import BytesIO
 
 import boto3
 from botocore.client import Config
 from django.conf import settings
+from PIL import Image, UnidentifiedImageError
 
 
 @lru_cache(maxsize=1)
@@ -50,3 +52,21 @@ _EXT_BY_CT = {
 
 def ext_for_content_type(ct: str) -> str | None:
     return _EXT_BY_CT.get((ct or "").lower())
+
+
+def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
+    """Verify decoded image bytes match the declared upload type.
+
+    Browser-supplied content types are untrusted. Pillow parses only the
+    header/structure here; the pixel limit also rejects decompression bombs.
+    """
+    format_to_ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+    try:
+        with Image.open(BytesIO(body)) as image:
+            if image.width * image.height > 40_000_000:
+                return False
+            actual_ext = format_to_ext.get(image.format or "")
+            image.verify()
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError):
+        return False
+    return actual_ext == expected_ext

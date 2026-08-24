@@ -2,6 +2,7 @@ import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
 from .base import *  # noqa: F401,F403
+from .base import env
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
@@ -11,6 +12,15 @@ SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+if DEBUG:  # noqa: F405
+    raise RuntimeError("DJANGO_DEBUG must be false in production.")
+if len(SECRET_KEY) < 32 or SECRET_KEY.startswith("insecure-"):  # noqa: F405
+    raise RuntimeError("DJANGO_SECRET_KEY must be a strong production secret.")
+if "*" in ALLOWED_HOSTS:  # noqa: F405
+    raise RuntimeError("DJANGO_ALLOWED_HOSTS must not contain '*' in production.")
+if len(SIMPLE_JWT["SIGNING_KEY"]) < 32:  # noqa: F405
+    raise RuntimeError("JWT_HS256_SECRET must be at least 32 characters.")
+
 if dsn := env.str("SENTRY_DSN", default=""):
     sentry_sdk.init(
         dsn=dsn,
@@ -19,10 +29,25 @@ if dsn := env.str("SENTRY_DSN", default=""):
         send_default_pii=False,
     )
 
-# In prod, gRPC must be mTLS — bearer is dev-only.
-if GRPC_AUTH_MODE != "mtls":  # noqa: F405
+# mTLS is the normal production transport. Railway can explicitly opt into a
+# strong bearer token because the service is reachable only over its private
+# project network; this exception fails closed unless both safeguards are set.
+if GRPC_AUTH_MODE == "bearer":  # noqa: F405
+    if not env.bool("GRPC_ALLOW_PRIVATE_BEARER", default=False):  # noqa: F405
+        raise RuntimeError(
+            "Production bearer gRPC requires GRPC_ALLOW_PRIVATE_BEARER=true."
+        )
+    if len(GRPC_BEARER_TOKEN) < 32:  # noqa: F405
+        raise RuntimeError("GRPC_BEARER_TOKEN must be at least 32 characters.")
+elif GRPC_AUTH_MODE == "mtls":  # noqa: F405
+    if not all((GRPC_TLS_CA_CERT, GRPC_TLS_SERVER_CERT, GRPC_TLS_SERVER_KEY)):  # noqa: F405
+        raise RuntimeError(
+            "mTLS requires GRPC_TLS_CA_CERT, GRPC_TLS_SERVER_CERT and "
+            "GRPC_TLS_SERVER_KEY paths."
+        )
+else:
     raise RuntimeError(
-        "GRPC_AUTH_MODE must be 'mtls' in production. See CLAUDE.md G5."
+        "GRPC_AUTH_MODE must be 'mtls' or the explicit private-network bearer mode."
     )
 
 # --- Email (SMTP) ---

@@ -1,4 +1,9 @@
 from .base import *  # noqa: F401,F403
+from .base import env
+
+PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool(
+    "PAYMENTS_MOCK_WEBHOOK_ENABLED", default=True
+)
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

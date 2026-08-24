@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -110,6 +111,14 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env.str("DRF_ANON_THROTTLE_RATE", default="60/min"),
+        "user": env.str("DRF_USER_THROTTLE_RATE", default="600/min"),
+    },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }
@@ -165,8 +174,17 @@ S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
 
 # --- gRPC ---
 GRPC_AUTH_MODE = env.str("GRPC_AUTH_MODE", default="bearer")
-GRPC_INTERNAL_TOKEN = env.str("GRPC_INTERNAL_TOKEN", default="")
+GRPC_BEARER_TOKEN = env.str("GRPC_BEARER_TOKEN", default="")
 GRPC_DJANGO_BIND = env.str("GRPC_DJANGO_BIND", default="0.0.0.0:50051")
+GRPC_TLS_CA_CERT = env.str("GRPC_TLS_CA_CERT", default="")
+GRPC_TLS_SERVER_CERT = env.str("GRPC_TLS_SERVER_CERT", default="")
+GRPC_TLS_SERVER_KEY = env.str("GRPC_TLS_SERVER_KEY", default="")
+
+# Development/QA only. Hosted environments leave this disabled so an
+# unauthenticated caller cannot synthesize payment state transitions.
+PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool(
+    "PAYMENTS_MOCK_WEBHOOK_ENABLED", default=False
+)
 
 # --- I18n ---
 LANGUAGE_CODE = "en-us"
@@ -177,6 +195,12 @@ USE_TZ = True
 # --- Static ---
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 
 # --- CORS (dev only) ---
 CORS_ALLOW_ALL_ORIGINS = DEBUG

@@ -134,39 +134,50 @@ def verify_code(
     Raises CodeInvalid on bad codes (after locking on too many attempts) or
     CodeNotActive if no active code exists.
 
-    Note: NOT wrapped in @transaction.atomic at the outer scope so that an
-    incorrect-code attempt can persist (attempts++ / LOCKED) even when we
-    `raise CodeInvalid`. The success path uses an explicit inner atomic block.
+    An incorrect attempt is committed before CodeInvalid is raised. The code
+    row is locked while checking/updating it so concurrent submissions cannot
+    lose attempt increments or use the same code twice.
     """
-    row = (
-        HandoverCode.objects.filter(
-            match=match, kind=kind, status=HandoverCode.Status.ACTIVE
-        )
-        .order_by("-id")
-        .first()
-    )
-    if row is None:
-        raise CodeNotActive(f"No active {kind} code for match #{match.id}.")
-
-    try:
-        _PH.verify(row.code_hash, submitted_code)
-    except VerifyMismatchError:
-        row.attempts += 1
-        if row.attempts >= _MAX_ATTEMPTS:
-            row.status = HandoverCode.Status.LOCKED
-        row.save(update_fields=["attempts", "status", "updated_at"])
-        raise CodeInvalid("Wrong code.")
-
+    invalid = False
     with transaction.atomic():
-        row.status = HandoverCode.Status.USED
-        row.used_at = timezone.now()
-        row.used_by = used_by
-        row.save(update_fields=["status", "used_at", "used_by", "updated_at"])
+        row = (
+            HandoverCode.objects.select_for_update()
+            .filter(match=match, kind=kind, status=HandoverCode.Status.ACTIVE)
+            .order_by("-id")
+            .first()
+        )
+        if row is None:
+            raise CodeNotActive(f"No active {kind} code for match #{match.id}.")
 
-        if kind == HandoverCode.Kind.PICKUP:
-            _advance_match_to_in_transit(match)
-        elif kind == HandoverCode.Kind.DELIVERY:
-            _advance_match_to_delivered_and_release(match)
+        try:
+            _PH.verify(row.code_hash, submitted_code)
+        except VerifyMismatchError:
+            row.attempts += 1
+            if row.attempts >= _MAX_ATTEMPTS:
+                row.status = HandoverCode.Status.LOCKED
+            row.save(update_fields=["attempts", "status", "updated_at"])
+            invalid = True
+        else:
+            # Serialize the Match transition as well as the code. Pickup and
+            # delivery verification touch the same state machine and must not
+            # run from stale in-memory Match objects.
+            match = (
+                Match.objects.select_for_update()
+                .select_related("sender", "traveler", "parcel")
+                .get(pk=match.pk)
+            )
+            row.status = HandoverCode.Status.USED
+            row.used_at = timezone.now()
+            row.used_by = used_by
+            row.save(update_fields=["status", "used_at", "used_by", "updated_at"])
+
+            if kind == HandoverCode.Kind.PICKUP:
+                _advance_match_to_in_transit(match)
+            elif kind == HandoverCode.Kind.DELIVERY:
+                _advance_match_to_delivered_and_release(match)
+
+    if invalid:
+        raise CodeInvalid("Wrong code.")
 
     return row
 

@@ -416,6 +416,36 @@ class CounterAcceptTests(APITestCase):
         r = c.post(reverse("offers-accept", args=[self.first.id]), format="json")
         assert r.status_code == 403
 
+    def test_same_parcel_cannot_be_accepted_on_two_matches(self):
+        other_traveler = _user("traveler-second@example.com", "51")
+        other_trip = _make_trip(other_traveler)
+        other_match = Match.objects.create(
+            parcel=self.parcel,
+            trip=other_trip,
+            sender=self.sender,
+            traveler=other_traveler,
+            status=Match.Status.PENDING,
+        )
+        other_offer = Offer.objects.create(
+            match=other_match,
+            proposed_by=Offer.ProposedBy.TRAVELER,
+            proposer=other_traveler,
+            base_amount_dzd=4000,
+            commission_dzd=1000,
+            total_dzd=5000,
+        )
+
+        c = _client(self.sender)
+        first = c.post(reverse("offers-accept", args=[self.first.id]), format="json")
+        second = c.post(reverse("offers-accept", args=[other_offer.id]), format="json")
+
+        assert first.status_code == 200
+        assert second.status_code == 409
+        other_offer.refresh_from_db()
+        other_match.refresh_from_db()
+        assert other_offer.status == Offer.Status.PENDING
+        assert other_match.status == Match.Status.PENDING
+
     def test_decline_keeps_match_pending(self):
         c = _client(self.sender)
         r = c.post(reverse("offers-decline", args=[self.first.id]), format="json")
