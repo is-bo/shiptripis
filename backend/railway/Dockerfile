@@ -40,4 +40,3 @@ USER app
 EXPOSE 8080
 
 CMD ["python", "/usr/local/bin/shiptrip-start"]
-

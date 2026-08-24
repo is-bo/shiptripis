@@ -2,7 +2,6 @@
 	admin off
 	auto_https off
 }
-
 :{$PORT:8080} {
 	# Health is served by Django, so Railway does not mark the deployment
 	# healthy merely because the edge proxy started.
@@ -28,4 +27,3 @@
 		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
 	}
 }
-
