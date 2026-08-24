@@ -92,7 +92,7 @@ class _WilayaSheetState extends State<_WilayaSheet> {
               child: ListView.separated(
                 controller: ctrl,
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                separatorBuilder: (_, _) => const SizedBox(height: 4),
                 itemBuilder: (_, i) {
                   final w = filtered[i];
                   final isSel = widget.selected?.code == w.code;

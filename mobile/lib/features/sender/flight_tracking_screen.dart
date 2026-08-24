@@ -70,12 +70,12 @@ class _FlightTrackingScreenState extends State<FlightTrackingScreen>
                   const SizedBox(height: AppSpacing.x6),
                   AnimatedBuilder(
                     animation: _ctl,
-                    builder: (_, __) => _routeCard(_ctl.value),
+                    builder: (_, _) => _routeCard(_ctl.value),
                   ),
                   const SizedBox(height: AppSpacing.x5),
                   AnimatedBuilder(
                     animation: _ctl,
-                    builder: (_, __) => _statsRow(_ctl.value),
+                    builder: (_, _) => _statsRow(_ctl.value),
                   ),
                   const SizedBox(height: AppSpacing.x5),
                   _label("Flight"),
@@ -86,7 +86,7 @@ class _FlightTrackingScreenState extends State<FlightTrackingScreen>
                   const SizedBox(height: 10),
                   AnimatedBuilder(
                     animation: _ctl,
-                    builder: (_, __) => _timeline(_ctl.value),
+                    builder: (_, _) => _timeline(_ctl.value),
                   ),
                   const SizedBox(height: AppSpacing.x4),
                   _liveBadge(),

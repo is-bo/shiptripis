@@ -39,7 +39,11 @@ class _PrimaryButtonState extends State<PrimaryButton> {
       child: AnimatedContainer(
         duration: AppDurations.fast,
         curve: kAppCurve,
-        transform: Matrix4.identity()..scale(_down ? 0.98 : 1.0),
+        transform: Matrix4.diagonal3Values(
+          _down ? 0.98 : 1.0,
+          _down ? 0.98 : 1.0,
+          1.0,
+        ),
         transformAlignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
         decoration: BoxDecoration(

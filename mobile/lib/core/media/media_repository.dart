@@ -59,7 +59,7 @@ class MediaRepository {
   }) async {
     final form = FormData.fromMap({
       'photo': await MultipartFile.fromFile(filePath, filename: filename),
-      if (extra != null) ...extra,
+      ...?extra,
     });
     try {
       final r = await _dio.post<Map<String, dynamic>>(path, data: form);

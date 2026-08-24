@@ -65,7 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                       const SizedBox(height: AppSpacing.x8),
                       AnimatedBuilder(
                         animation: _route,
-                        builder: (_, __) => CustomPaint(
+                        builder: (_, _) => CustomPaint(
                           painter: _RoutePainter(_route.value),
                           size: Size(double.infinity, heroHeight),
                         ),

@@ -31,7 +31,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   // immediately bounces the user to /auth/sign-in regardless of which
   // screen they were on.
   final refresh = ValueNotifier<int>(0);
-  ref.listen<AuthState>(authNotifierProvider, (_, __) => refresh.value++);
+  ref.listen<AuthState>(authNotifierProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
 
   const publicPaths = {

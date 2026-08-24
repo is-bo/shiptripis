@@ -621,7 +621,7 @@ class _CodePlaceholder extends ConsumerWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      error: (_, __) => Text(
+      error: (_, _) => Text(
         'Code unavailable right now.',
         style: AppType.body(12.5,
             color: AppColors.inkSoft, height: 1.4),

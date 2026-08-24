@@ -122,7 +122,7 @@ class _FindTravelersScreenState extends ConsumerState<FindTravelersScreen> {
                       padding: const EdgeInsets.fromLTRB(AppSpacing.x6,
                           AppSpacing.x2, AppSpacing.x6, AppSpacing.x6),
                       itemCount: trips.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.x3),
                       itemBuilder: (_, i) => _TripTile(
                         trip: trips[i],

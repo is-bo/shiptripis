@@ -35,7 +35,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // Keep the live event router alive while the shell is mounted, but don't
     // rebuild the shell on every WS tick — the banner stack watches its own
     // selector. listen with an empty callback is enough to hold the provider.
-    ref.listen(liveEventProvider, (_, __) {});
+    ref.listen(liveEventProvider, (_, _) {});
     return Scaffold(
       backgroundColor: AppColors.parchment,
       extendBody: true,

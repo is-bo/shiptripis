@@ -243,8 +243,8 @@ class MatchingRepository {
     final r = await _dio.get<dynamic>(
       '/api/matches',
       queryParameters: {
-        if (role != null) 'role': role,
-        if (status != null) 'status': status,
+        'role': ?role,
+        'status': ?status,
       },
     );
     if (r.statusCode == 200 && r.data is List) {
@@ -285,7 +285,7 @@ class MatchingRepository {
       data: {
         'parcel_id': parcelId,
         'trip_id': tripId,
-        if (baseAmountDzd != null) 'base_amount_dzd': baseAmountDzd,
+        'base_amount_dzd': ?baseAmountDzd,
         if (note.isNotEmpty) 'note': note,
       },
     );
@@ -310,7 +310,7 @@ class MatchingRepository {
       data: {
         'parcel_id': parcelId,
         'trip_id': tripId,
-        if (baseAmountDzd != null) 'base_amount_dzd': baseAmountDzd,
+        'base_amount_dzd': ?baseAmountDzd,
         if (note.isNotEmpty) 'note': note,
       },
     );

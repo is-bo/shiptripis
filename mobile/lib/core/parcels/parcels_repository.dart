@@ -146,8 +146,8 @@ class ParcelsRepository {
     final r = await _dio.get<dynamic>(
       '/api/parcels',
       queryParameters: {
-        if (status != null) 'status': status,
-        if (kind != null) 'kind': kind,
+        'status': ?status,
+        'kind': ?kind,
       },
     );
     if (r.statusCode == 200 && r.data is List) {
@@ -191,7 +191,7 @@ class ParcelsRepository {
         'base_amount_dzd': baseAmountDzd,
         if (deadlineAt != null)
           'deadline_at': deadlineAt.toUtc().toIso8601String(),
-        if (targetTravelerId != null) 'target_traveler_id': targetTravelerId,
+        'target_traveler_id': ?targetTravelerId,
       },
     );
     if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {
@@ -229,7 +229,7 @@ class ParcelsRepository {
         'delivery_city': deliveryCity,
         if (deadlineAt != null)
           'deadline_at': deadlineAt.toUtc().toIso8601String(),
-        if (targetTravelerId != null) 'target_traveler_id': targetTravelerId,
+        'target_traveler_id': ?targetTravelerId,
       },
     );
     if ((r.statusCode == 200 || r.statusCode == 201) && r.data != null) {

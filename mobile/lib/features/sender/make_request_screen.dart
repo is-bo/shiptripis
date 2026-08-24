@@ -670,7 +670,7 @@ class _MakeRequestScreenState extends ConsumerState<MakeRequestScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _photos.length + 1,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
             itemBuilder: (_, i) {
               if (i == _photos.length) {
                 return GestureDetector(
@@ -812,7 +812,7 @@ class _DeliveryQuoteHint extends ConsumerWidget {
           ],
         ),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (q) {
         final differs = currentAmount != q.suggestedBaseDzd;
         final outOfBand = currentAmount > 0 &&
