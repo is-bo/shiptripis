@@ -1,0 +1,2 @@
+[tool.ruff]
+exclude = ["apps/kyc/grpc_gen"]

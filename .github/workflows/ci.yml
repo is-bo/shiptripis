@@ -402,6 +402,7 @@ jobs:
           normalise() {
             sed -E \
               -e 's/^\\(restrict|unrestrict) [A-Za-z0-9]+$/\\\1 <nonce-normalised>/' \
+              -e 's/^-- Dumped from database version .*/-- Dumped from database version <normalised>/' \
               -e 's/^-- Dumped by pg_dump version .*/-- Dumped by pg_dump version <normalised>/' \
               -e 's|^(//.*protoc[A-Za-z-]*)[[:space:]]+v[0-9][^[:space:]]*$|\1 <normalised>|'
           }
