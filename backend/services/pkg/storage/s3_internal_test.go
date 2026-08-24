@@ -2,11 +2,28 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 )
+
+func TestNewHonorsVirtualHostedStyleWithCustomEndpoint(t *testing.T) {
+	client, err := New(context.Background(), Config{
+		Endpoint:     "https://storage.example.test",
+		Region:       "auto",
+		AccessKey:    "access",
+		SecretKey:    "secret",
+		UsePathStyle: false,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if client.s3.Options().UsePathStyle {
+		t.Fatal("UsePathStyle = true, want false for virtual-host-only provider")
+	}
+}
 
 func TestLimitErrReader_ExactFit(t *testing.T) {
 	body := strings.Repeat("a", 10)

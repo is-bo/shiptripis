@@ -41,8 +41,8 @@ type Config struct {
 	SecretKey string
 
 	// UsePathStyle forces path-style addressing (bucket in URL path,
-	// not virtual-host). MinIO requires this; most production S3-compat
-	// providers also accept it. Default true if Endpoint is set.
+	// not virtual-host). Config.LoadS3 defaults it on for custom endpoints
+	// while still allowing virtual-host-only providers to override it.
 	UsePathStyle bool
 
 	Logger *slog.Logger
@@ -100,7 +100,7 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 
-	pathStyle := cfg.UsePathStyle || cfg.Endpoint != ""
+	pathStyle := cfg.UsePathStyle
 
 	s3client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		if cfg.Endpoint != "" {

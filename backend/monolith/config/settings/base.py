@@ -169,6 +169,9 @@ S3_ENDPOINT_URL = env.str("S3_ENDPOINT_URL")
 S3_REGION = env.str("S3_REGION", default="us-east-1")
 S3_ACCESS_KEY = env.str("S3_ACCESS_KEY")
 S3_SECRET_KEY = env.str("S3_SECRET_KEY")
+S3_USE_PATH_STYLE = env.bool(
+    "S3_USE_PATH_STYLE", default=bool(S3_ENDPOINT_URL)
+)
 S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
 S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
 

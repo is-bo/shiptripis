@@ -32,10 +32,16 @@ analysis, and tests.
 
 ## Railway deployment
 
-The hosted topology is one public `gateway` service plus private `django-web`,
-`django-grpc`, `chat`, `notification`, `kyc`, and `email` services, backed by
-Railway Postgres, Redis, and private object-storage buckets. Service-level
-Railway configuration is versioned next to each Docker build:
+The root `railway.json` builds `backend/railway/Dockerfile`, a free-plan layout
+that runs the gateway, Django, gRPC, Go workers, and loopback-only Redis in one
+compute service backed by managed Railway Postgres and two private buckets.
+Redis pub/sub/stream data is ephemeral in this constrained layout, while all
+authoritative records remain in Postgres.
+
+Paid deployments can split the same processes into one public `gateway` service
+plus private `django-web`, `django-grpc`, `chat`, `notification`, `kyc`, and
+`email` services backed by managed Redis. Their service-level configuration is
+versioned next to each Docker build:
 
 - `backend/gateway/railway.json`
 - `backend/monolith/railway.web.json`

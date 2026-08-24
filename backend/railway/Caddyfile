@@ -1,0 +1,31 @@
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	# Health is served by Django, so Railway does not mark the deployment
+	# healthy merely because the edge proxy started.
+	reverse_proxy /healthz 127.0.0.1:8000
+
+	@chat path /ws/chat /ws/chat/*
+	handle @chat {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	@notif path /ws/notifications /ws/notifications/*
+	handle @notif {
+		reverse_proxy 127.0.0.1:8082
+	}
+
+	@kyc path /kyc/* /api/kyc/*
+	handle @kyc {
+		reverse_proxy 127.0.0.1:8083
+	}
+
+	# Django REST, admin, and static files.
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	}
+}
+
