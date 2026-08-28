@@ -1,0 +1,7 @@
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: L
+nullable-getter: false
+# A missing translation is a product defect, not a warning to scroll past.
+untranslated-messages-file: l10n_untranslated.json

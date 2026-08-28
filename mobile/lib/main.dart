@@ -2,53 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/auth/auth_notifier.dart';
-import 'core/router/app_router.dart';
-import 'core/theme/app_theme.dart';
-import 'core/theme/tokens.dart';
-import 'core/ws/live_event_router.dart';
-import 'core/ws/notifications_providers.dart';
+import 'app/app.dart';
+import 'core/format/locale_formats.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    systemNavigationBarColor: AppColors.parchment,
-    systemNavigationBarIconBrightness: Brightness.dark,
-  ));
+
+  // Edge-to-edge, per Material 3 and the iOS safe-area contract. The bars are
+  // transparent and every screen lays out inside the real insets rather than
+  // guessing at their height — see design/layout/app_scaffold.dart.
+  await SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.edgeToEdge,
+    overlays: SystemUiOverlay.values,
+  );
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
+
+  // Month names and number patterns for fr and ar_DZ. Must land before the
+  // first DateFormat call, so it is awaited rather than fired and forgotten.
+  await LocaleFormats.ensureInitialized();
+
   runApp(const ProviderScope(child: ShipTripApp()));
-}
-
-class ShipTripApp extends ConsumerStatefulWidget {
-  const ShipTripApp({super.key});
-  @override
-  ConsumerState<ShipTripApp> createState() => _ShipTripAppState();
-}
-
-class _ShipTripAppState extends ConsumerState<ShipTripApp> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(authNotifierProvider.notifier).bootstrap();
-      // Instantiate the WS client so its auth-state listener is live
-      // for the first sign-in transition. The provider keeps the
-      // socket alive while signed in and tears it down on sign-out.
-      ref.read(notificationWsClientProvider);
-      // Kick the live event router so it subscribes to incoming
-      // envelopes and starts invalidating providers.
-      ref.read(liveEventProvider);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'ShipTrip',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      routerConfig: ref.watch(appRouterProvider),
-    );
-  }
 }

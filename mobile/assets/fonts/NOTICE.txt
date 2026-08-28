@@ -1,0 +1,11 @@
+Fonts bundled with the ShipTrip mobile app.
+
+All four families are licensed under the SIL Open Font License 1.1.
+Per-family license texts are the OFL-*.txt files in this directory.
+
+  Fraunces            (c) The Fraunces Project Authors
+  DM Sans             (c) The DM Sans Project Authors
+  Noto Sans Arabic    (c) The Noto Project Authors
+  JetBrains Mono      (c) The JetBrains Mono Project Authors
+
+Source: https://github.com/google/fonts
