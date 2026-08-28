@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass
 from typing import Protocol
 
+from django.conf import settings
+
 
 @dataclass(frozen=True, slots=True)
 class CreateIntentResult:
@@ -112,8 +114,20 @@ class MockProvider:
 _REGISTRY: dict[str, PaymentProvider] = {"mock": MockProvider()}
 
 
+class LegacyPaymentDisabled(RuntimeError):
+    """The historical instant-mock payment engine is not executable."""
+
+
+def _require_legacy_mutations() -> None:
+    if not getattr(settings, "PAYMENTS_LEGACY_MUTATIONS_ENABLED", False):
+        raise LegacyPaymentDisabled(
+            "The historical DZD payment mutation engine is retired."
+        )
+
+
 def get_provider(name: str) -> PaymentProvider:
     """Return the named provider. V1 only knows `mock`; V2 will add stripe/edahabia."""
+    _require_legacy_mutations()
     if name not in _REGISTRY:
         raise ValueError(f"Unknown payment provider: {name!r}")
     return _REGISTRY[name]
@@ -124,4 +138,5 @@ def choose_provider(currency: str) -> PaymentProvider:
 
     V1: always mock. V2: EUR→Stripe, DZD→Edahabia.
     """
+    _require_legacy_mutations()
     return _REGISTRY["mock"]

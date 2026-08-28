@@ -25,4 +25,15 @@ build/
 
 # AI
 .claude
+.agentbridge/
 docs/claude-sessions/*.jsonl
+
+# Local toolchain downloads (Flutter SDK fetched for verification runs)
+.codex-temp/
+
+# Local-only test settings modules. `test_local.py` runs the suite on in-memory
+# SQLite; `test_pg.py` boots an embedded PostgreSQL (the `pgserver` package, a
+# developer aid that is deliberately not in requirements.txt) so the
+# PostgreSQL-only gates — SKIP LOCKED, partial unique indexes, concurrency —
+# can run on a workstation without Docker. CI uses a real server.
+backend/monolith/config/settings/test_pg.py

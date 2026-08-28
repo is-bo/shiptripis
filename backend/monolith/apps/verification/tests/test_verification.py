@@ -78,6 +78,8 @@ def _accepted_match_with_intent(
         base_amount_dzd=base_amount,
         commission_dzd=commission,
         total_dzd=total_dzd,
+        economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+        currency=Offer.Currency.DZD,
         status=Offer.Status.ACCEPTED,
         responded_at=timezone.now(),
     )

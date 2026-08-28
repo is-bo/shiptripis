@@ -6,7 +6,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.core import redis_bus
+from apps.notifications.models import OutboundMessage
+from apps.notifications.outbox import enqueue_secret_message
 
 from .google import GoogleAuthError, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
@@ -28,16 +29,15 @@ def _tokens_for_user(user: User) -> dict[str, str]:
 
 
 def _send_verify_email(user: User) -> None:
-    """Issue a signup-verification OTP and enqueue it onto the email stream."""
-    _, code = EmailVerificationCode.issue(user)
-    redis_bus.enqueue_email_after_commit(
-        user.email,
-        subject="Confirm your ShipTrip email",
-        body=(
-            f"Welcome to ShipTrip! Your email verification code is: {code}\n"
-            "It expires in 15 minutes."
-        ),
-        kind="verify",
+    """Issue a signup OTP and arm its PostgreSQL-backed email obligation."""
+    code_row, code = EmailVerificationCode.issue(user)
+    enqueue_secret_message(
+        kind=OutboundMessage.Kind.EMAIL_VERIFICATION,
+        key=f"email_verification:{code_row.pk}",
+        to_email=user.email,
+        recipient_user_id=user.pk,
+        secret=code,
+        secret_expires_at=code_row.expires_at,
     )
 
 
@@ -148,15 +148,14 @@ class PasswordResetRequestView(APIView):
         email = s.validated_data["email"].lower().strip()
         user = User.objects.filter(email__iexact=email).first()
         if user is not None:
-            _, plaintext = PasswordResetCode.issue(user)
-            redis_bus.enqueue_email_after_commit(
-                user.email,
-                subject="ShipTrip password reset code",
-                body=(
-                    f"Your ShipTrip reset code is: {plaintext}\n"
-                    "It expires in 15 minutes. If you did not request this, ignore."
-                ),
-                kind="reset",
+            code_row, plaintext = PasswordResetCode.issue(user)
+            enqueue_secret_message(
+                kind=OutboundMessage.Kind.PASSWORD_RESET,
+                key=f"password_reset:{code_row.pk}",
+                to_email=user.email,
+                recipient_user_id=user.pk,
+                secret=plaintext,
+                secret_expires_at=code_row.expires_at,
             )
         return Response(status=status.HTTP_202_ACCEPTED)
 

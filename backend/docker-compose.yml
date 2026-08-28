@@ -242,6 +242,8 @@ services:
       SHIPTRIP_SERVICE: "email"
       EMAIL_HTTP_ADDR: ":8085"
     depends_on:
+	  postgres:
+		condition: service_healthy
       redis:
         condition: service_healthy
       # Dev convenience: with EMAIL_SMTP_HOST=mailhog the first send would fail
@@ -262,6 +264,7 @@ services:
       - "8080:80"
     volumes:
       - ./gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../web:/srv/shiptrip-web:ro
       - caddydata:/data
       - caddyconfig:/config
     depends_on:

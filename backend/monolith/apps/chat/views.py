@@ -31,6 +31,7 @@ from apps.matching.services import (
     REASON_NOT_A_PARTY,
     REASON_OK,
     chat_eligibility,
+    chat_history_visible,
     is_party,
 )
 
@@ -59,7 +60,14 @@ class ChatMessagesView(ListAPIView, APIView):
 
     def get_queryset(self):
         match = get_object_or_404(
-            Match.objects.only("id", "sender_id", "traveler_id"),
+            Match.objects.select_related("parcel").only(
+                "id",
+                "sender_id",
+                "traveler_id",
+                "status",
+                "journey_id",
+                "parcel__kind",
+            ),
             pk=self.kwargs["pk"],
         )
         if not is_party(match, self.request.user.id):
@@ -67,6 +75,15 @@ class ChatMessagesView(ListAPIView, APIView):
             from rest_framework.exceptions import PermissionDenied
 
             raise PermissionDenied("Not a party to this match.")
+
+        # Reading is broader than sending: a closed or disputed delivery is
+        # exactly when a party needs to re-read what was agreed. Sending stays
+        # gated by `chat_eligibility` in `post`.
+        visible, reason = chat_history_visible(match, self.request.user.id)
+        if not visible:
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied(reason)
         return (
             ChatMessage.objects.filter(match_id=match.id)
             .select_related("sender")
@@ -85,7 +102,15 @@ class ChatMessagesView(ListAPIView, APIView):
 
     def post(self, request: Request, pk: int) -> Response:
         match = get_object_or_404(
-            Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk
+            Match.objects.select_related("parcel").only(
+                "id",
+                "sender_id",
+                "traveler_id",
+                "status",
+                "journey_id",
+                "parcel__kind",
+            ),
+            pk=pk,
         )
         eligible, reason = chat_eligibility(match, request.user.id)
         if not eligible:
@@ -152,7 +177,10 @@ class ChatThreadsView(APIView):
         )
         matches = (
             Match.objects.filter(Q(sender_id=uid) | Q(traveler_id=uid))
-            .select_related("sender", "traveler", "parcel")
+            # `deal` is the V1 chat gate, so it is joined rather than looked up
+            # per row — without it every inbox render costs one extra query per
+            # match.
+            .select_related("sender", "traveler", "parcel", "deal")
             .annotate(
                 last_body=Subquery(last_msg.values("body")[:1]),
                 last_at=Subquery(last_msg.values("created_at")[:1]),
@@ -164,12 +192,17 @@ class ChatThreadsView(APIView):
             )
         )
 
-        # Gate each candidate through the single source of truth. Cheap enough
-        # for an inbox (a user has a handful of active matches); keeps the list
-        # exactly in step with what `POST .../chat/messages` will accept.
-        eligible = [
-            m for m in matches if chat_eligibility(m, uid)[1] == REASON_OK
-        ]
+        # Gate each candidate through the single source of truth. A thread is
+        # listed when its history is visible — which outlives the Deal — and
+        # carries `can_send` so the client knows whether to render a live
+        # composer or a read-only thread.
+        eligible = []
+        for m in matches:
+            if chat_history_visible(m, uid)[0] is not True:
+                continue
+            m._can_send = chat_eligibility(m, uid)[1] == REASON_OK
+            m._prefetched_deal = getattr(m, "deal", None)
+            eligible.append(m)
         # Most recent conversation first; matches with no messages yet sort by
         # match recency (last_at is null → fall back to created_at).
         eligible.sort(

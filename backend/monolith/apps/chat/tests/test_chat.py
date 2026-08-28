@@ -78,6 +78,8 @@ def _accepted_offer(match: Match, traveler: User) -> Offer:
         base_amount_dzd=4000,
         commission_dzd=1000,
         total_dzd=5000,
+        economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+        currency=Offer.Currency.DZD,
         status=Offer.Status.ACCEPTED,
     )
 

@@ -50,11 +50,61 @@ else:
         "GRPC_AUTH_MODE must be 'mtls' or the explicit private-network bearer mode."
     )
 
+# --- V1 payments: production safety ---
+# The mock rail must never be reachable in production. This is a boot-time
+# refusal rather than a runtime check, so a deployment that sets the flag never
+# starts and cannot take a single payment.
+if PAYMENTS_ALLOW_MOCK_PROVIDER:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_ALLOW_MOCK_PROVIDER must be false in production; the mock "
+        "payment provider is for tests and local development only."
+    )
+if PAYMENTS_MOCK_WEBHOOK_ENABLED:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_MOCK_WEBHOOK_ENABLED must be false in production."
+    )
+if PAYMENTS_LEGACY_MUTATIONS_ENABLED:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_LEGACY_MUTATIONS_ENABLED must be false in production."
+    )
+# A checkout cannot be created without a public base URL for the provider's
+# success/failure redirects and its webhook endpoint. Fail at boot rather than
+# at the first payment.
+if not PAYMENTS_PUBLIC_BASE_URL:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_PUBLIC_BASE_URL must be set so providers can reach the "
+        "webhook and redirect endpoints."
+    )
+if not PAYMENTS_PUBLIC_BASE_URL.startswith("https://"):  # noqa: F405
+    raise RuntimeError("PAYMENTS_PUBLIC_BASE_URL must be an https:// origin.")
+# Credentials are optional at boot: a provider that is not configured is simply
+# reported unavailable and its checkouts are refused. What is forbidden is a
+# half-configured Stripe, where a checkout could be created but its webhook
+# could never be verified.
+if bool(STRIPE_SECRET_KEY) != bool(STRIPE_WEBHOOK_SECRET):  # noqa: F405
+    raise RuntimeError(
+        "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set together."
+    )
+
+# --- V1 handover: production safety ---
+# Without its own secret the handover key derivation falls back to SECRET_KEY.
+# That is a fine developer convenience and an unacceptable production posture:
+# it would tie parcel-code secrecy to the same value used for session signing.
+if len(HANDOVER_CODE_SECRET) < 32:  # noqa: F405
+    raise RuntimeError(
+        "HANDOVER_CODE_SECRET must be set to at least 32 characters in "
+        "production; pickup and delivery code secrecy depends on it."
+    )
+if HANDOVER_CODE_SECRET == SECRET_KEY:  # noqa: F405
+    raise RuntimeError(
+        "HANDOVER_CODE_SECRET must differ from DJANGO_SECRET_KEY."
+    )
+
 # --- Email (SMTP) ---
-# The Go email-service is the primary transactional sender (verify/reset OTPs
-# via the `email:send` stream). Django's own SMTP backend covers incidental
-# mail. All EMAIL_* come from the environment; DEFAULT_FROM_EMAIL falls back to
-# the base.py value when EMAIL_FROM_ADDR is unset.
+# The Go email-service carries ordinary transactional mail from `email:send`.
+# Django's SMTP backend is also the trusted final boundary for secret-bearing
+# messages that must never be serialized into Redis. Both use environment-only
+# credentials; DEFAULT_FROM_EMAIL falls back to base.py when unset.
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env.str("EMAIL_SMTP_HOST", default="")  # noqa: F405
 EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)  # noqa: F405

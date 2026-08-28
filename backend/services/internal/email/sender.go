@@ -98,7 +98,6 @@ func (s LogOnlySender) Send(_ context.Context, p EmailPayload) error {
 	}
 	log.Info("email: would-send (stub)",
 		"event_id", p.EventID,
-		"to", p.To,
 		"subject", p.Subject,
 		"kind", p.Kind,
 	)

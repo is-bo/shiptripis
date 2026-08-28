@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipTrip — send a parcel, carry a little farther</title>
+  <meta name="description" content="ShipTrip connects senders with verified travelers heading their way between Europe and Algeria. Payment protected, route-aware, and human.">
+  <link rel="canonical" href="/en/">
+  <link rel="alternate" hreflang="en" href="/en/">
+  <link rel="alternate" hreflang="fr" href="/fr/">
+  <link rel="alternate" hreflang="ar" href="/ar/">
+  <link rel="alternate" hreflang="x-default" href="/en/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ShipTrip — send a parcel, carry a little farther">
+  <meta property="og:description" content="A route-aware parcel marketplace for the Europe ↔ Algeria corridor.">
+  <meta property="og:url" content="/en/">
+  <meta property="og:site_name" content="ShipTrip">
+  <link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<!-- THESIS: A route board is the hero, so visitors understand the mechanism before the promise; no generic app-store hero.
+OWN-WORLD: Mediterranean wayfinding in emerald, lapis and terracotta on warm paper, with a single route line carrying every section.
+STORY: A sender or traveler sees their job, the safety rails, and a clear next step in under a minute.
+FIRST VIEWPORT: Large statement at left; Paris → Algiers → Jijel route board at right; two role CTAs below the statement.
+FORM: Grounded direction 6, the route ledger / wayfinding board; seed key 7accc8d5.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md -->
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <nav class="nav shell" aria-label="Main navigation">
+      <a class="brand" href="/en/" aria-label="ShipTrip home"><span class="brand-mark" aria-hidden="true"><span>S</span></span> ShipTrip</a>
+      <div class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#safety">Safety</a>
+        <a href="#faq">FAQ</a>
+        <span class="language" aria-label="Language"><a href="/fr/">FR</a><a href="/ar/">عربي</a><a href="/en/" aria-current="page">EN</a></span>
+        <a class="button button-primary" href="#download">Get started</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Europe ↔ Algeria · delivery only</p>
+          <h1 id="hero-title">Your route has room for one more.</h1>
+          <p class="hero-copy">ShipTrip helps senders move a parcel with a verified traveler who is already going that way. Share a route, agree a fair reward, and keep payment protected until delivery is confirmed.</p>
+          <div class="hero-actions"><a class="button button-primary" href="#sender">I need to send a parcel</a><a class="button button-quiet" href="#traveler">I have room to carry</a></div>
+        </div>
+        <div class="route-board" aria-label="Example route from Paris to Algiers to Jijel">
+          <span class="route-stamp">one journey · two legs</span>
+          <span class="route-line" aria-hidden="true"></span>
+          <div class="route-stop one"><small>start</small><strong>Paris</strong></div>
+          <div class="route-stop two"><small>transfer</small><strong>Algiers</strong></div>
+          <div class="route-stop three"><small>arrival</small><strong>Jijel</strong></div>
+          <span class="route-mode flight">Flight leg</span><span class="route-mode drive">Drive leg</span>
+          <p class="board-note">One traveler can offer capacity on every feasible part of a journey — not only the full trip.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-tight" id="how" aria-labelledby="how-title">
+      <div class="shell">
+        <div class="section-head"><div><p class="eyebrow">A simple handoff</p><h2 id="how-title">The route does the matching.</h2></div><p>ShipTrip looks at timing, capacity, distance and safety before an opportunity reaches either side. You choose whether it feels right.</p></div>
+        <div class="route-explainer">
+          <div class="steps" aria-label="How ShipTrip works">
+            <div class="step"><span class="step-number">1</span><div><h3>Share the need or the journey</h3><p>Senders add a parcel and city-level route. Travelers publish ordered flight or drive legs and available capacity.</p></div></div>
+            <div class="step"><span class="step-number">2</span><div><h3>Find a compatible path</h3><p>The sender proposes a traveler reward. Both sides can ask questions and agree terms before payment.</p></div></div>
+            <div class="step"><span class="step-number">3</span><div><h3>Hand over, then confirm</h3><p>Secure pickup and delivery codes mark the real-world handoffs. The recipient gets their code after the safety buffer.</p></div></div>
+          </div>
+          <div class="role-grid">
+            <article class="role" id="sender"><h3>Send a parcel</h3><p>Create a request, pay a small posting deposit when enabled, and compare compatible travelers. Your exact addresses stay private until the deal is funded.</p><a href="#download">Plan a delivery <span aria-hidden="true">→</span></a></article>
+            <article class="role" id="traveler"><h3>Carry parcels while traveling</h3><p>Verify your identity, add your route and per-leg capacity, then choose requests that fit the trip you already have planned.</p><a href="#download">Share your journey <span aria-hidden="true">→</span></a></article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="safety" aria-labelledby="safety-title">
+      <div class="shell">
+        <div class="section-head"><div><p class="eyebrow">Trust in the details</p><h2 id="safety-title">A little more certainty at every stop.</h2></div><p>Identity and transport checks support the people using the marketplace. They do not replace your judgment or the reporting process.</p></div>
+        <div class="trust-grid">
+          <article class="trust-item"><h3>Verified travelers</h3><p>Travelers complete KYC before their journey can be matched. Flight legs also need transport proof.</p></article>
+          <article class="trust-item"><h3>Private addresses</h3><p>Before funding, people see cities and broad areas. Exact pickup and delivery details unlock only to the deal.</p></article>
+          <article class="trust-item"><h3>Protected payment</h3><p>Funds are held pending delivery confirmation. A dispute freezes payout while the evidence is reviewed.</p></article>
+          <article class="trust-item"><h3>Human handoffs</h3><p>Pickup and delivery codes are used at the physical handoff. The recipient receives their code only after the 30-minute safety buffer.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-tight" aria-labelledby="fee-title">
+      <div class="shell fee"><div><p class="eyebrow">Clear economics</p><h2 id="fee-title">The traveler reward stays whole.</h2><p class="hero-copy">ShipTrip adds its commission on top of the reward you agree. The marketplace price is in EUR; Chargily may show a server-calculated DZD amount at checkout when available.</p><p class="fineprint">Providers are introduced as they become available. No provider is represented as live until activation is complete.</p></div><table class="fee-table"><caption class="sr-only">Example ShipTrip fee breakdown</caption><thead><tr><th scope="col">Example</th><th scope="col">Amount</th></tr></thead><tbody><tr><td>Traveler reward</td><td>€30.00</td></tr><tr><td>ShipTrip fee</td><td>€7.50</td></tr><tr><td>You pay</td><td>€37.50</td></tr></tbody></table></div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title"><div class="shell faq"><div class="section-head"><div><p class="eyebrow">Questions before the first trip</p><h2 id="faq-title">Good to know.</h2></div></div>
+      <details><summary>What can I send?</summary><p>Only legal, accurately described items that comply with the prohibited-items policy and applicable customs rules. The sender remains responsible for the declaration.</p></details>
+      <details><summary>Who can carry a parcel?</summary><p>A traveler must pass identity checks before publishing a matchable journey. A flight leg also needs approved flight proof; drive legs do not require a vehicle document at launch.</p></details>
+      <details><summary>How are refunds and cancellations handled?</summary><p>Rules depend on the deal stage and the configured cancellation policy. Eligible refunds are recorded in your payment history; after pickup, a dispute is the normal path.</p></details>
+      <details><summary>When does a traveler get paid?</summary><p>Delivery confirmation starts a 48-hour protection window. Payout is eligible only after that window, unless a dispute keeps it frozen. Some payout methods may require manual settlement.</p></details>
+      <details><summary>Is ShipTrip available now?</summary><p>The website is a product preview for the EU ↔ Algeria launch scope. App access and payment providers will be announced as each release is activated.</p></details>
+    </div></section>
+
+    <section class="section-tight shell" id="download" aria-labelledby="download-title"><div class="cta-band"><div><h2 id="download-title">Ready when your route is.</h2><p>Join the launch list for app availability and practical updates. No parcel details are needed here.</p></div><a class="button button-primary" href="/support.html">Contact the team <span aria-hidden="true">→</span></a></div></section>
+  </main>
+
+  <footer class="site-footer"><div class="shell"><div class="footer-grid"><div><a class="brand" href="/en/"><span class="brand-mark" aria-hidden="true"><span>S</span></span> ShipTrip</a><p class="fineprint">A route-aware parcel marketplace for journeys between Europe and Algeria.</p></div><div><h3>Explore</h3><a href="#how">How it works</a><a href="#safety">Safety</a><a href="#faq">FAQ</a></div><div><h3>Read</h3><a href="/terms.html">Terms of Service</a><a href="/privacy.html">Privacy Policy</a><a href="/prohibited-items.html">Prohibited items</a></div><div><h3>Help</h3><a href="/support.html">Support & contact</a></div></div><p class="footer-note">© <span data-year>2026</span> ShipTrip. Product and legal pages are drafts pending final French, EU and Algerian legal review.</p></div></footer>
+  <script src="/assets/site.js" defer></script>
+</body>
+</html>

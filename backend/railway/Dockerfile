@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.prod \
     HOME=/tmp/shiptrip
 
 RUN apt-get update \
@@ -31,6 +32,7 @@ COPY backend/monolith/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
 COPY --chown=app:app backend/monolith/ /app/
+COPY --chown=app:app web/ /web/
 COPY --from=go-build /out/ /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 COPY backend/railway/Caddyfile /etc/caddy/Caddyfile

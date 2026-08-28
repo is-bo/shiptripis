@@ -30,6 +30,7 @@ import (
 type Consumer struct {
 	rdb           *redisbus.Client
 	sender        EmailSender
+	receipts      ReceiptStore
 	stream        string
 	group         string
 	name          string
@@ -55,6 +56,9 @@ type ConsumerConfig struct {
 	// the consumer never panics on nil. cmd/email passes the real smtpSender
 	// when EMAIL_ENABLED=true.
 	Sender EmailSender
+	// Receipts is the durable PostgreSQL acknowledgement boundary. Production
+	// always supplies it; tests may omit it to use the no-op implementation.
+	Receipts ReceiptStore
 }
 
 const (
@@ -103,9 +107,14 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 	if sender == nil {
 		sender = LogOnlySender{Log: log}
 	}
+	receipts := cfg.Receipts
+	if receipts == nil {
+		receipts = noopReceiptStore{}
+	}
 	return &Consumer{
 		rdb:           rdb,
 		sender:        sender,
+		receipts:      receipts,
 		stream:        cfg.Stream,
 		group:         cfg.ConsumerGroup,
 		name:          cfg.ConsumerName,
@@ -244,6 +253,18 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 
 	sentKey := "email:sent:" + p.EventID
 	if p.EventID != "" {
+		delivered, err := c.receipts.Delivered(sendCtx, p.EventID)
+		if err != nil {
+			c.log.Warn("email: durable receipt check failed; leaving in PEL",
+				"event_id", p.EventID, "err", err)
+			return
+		}
+		if delivered {
+			c.log.Debug("email: skip; PostgreSQL receipt already recorded", "event_id", p.EventID)
+			c.ack(m.ID)
+			return
+		}
+
 		already, err := c.rdb.Exists(sendCtx, sentKey)
 		if err != nil {
 			c.log.Warn("email: dedup check failed", "event_id", p.EventID, "err", err)
@@ -251,7 +272,15 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 			return
 		}
 		if already {
-			c.log.Debug("email: skip; already sent", "event_id", p.EventID)
+			// SMTP accepted this event on an earlier attempt but the durable
+			// receipt failed. Repair PostgreSQL before acknowledging the stream;
+			// otherwise Django would retry the logical obligation forever.
+			if err := c.receipts.MarkDelivered(sendCtx, p.EventID); err != nil {
+				c.log.Warn("email: durable receipt repair failed; leaving in PEL",
+					"event_id", p.EventID, "err", err)
+				return
+			}
+			c.log.Debug("email: repaired durable receipt for prior send", "event_id", p.EventID)
 			c.ack(m.ID)
 			return
 		}
@@ -259,16 +288,23 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 
 	if err := c.sender.Send(sendCtx, p); err != nil {
 		c.log.Warn("email send failed; leaving in PEL for sweep",
-			"event_id", p.EventID, "to", p.To, "err", err)
+			"event_id", p.EventID, "kind", p.Kind, "err", err)
 		return
 	}
 
-	// Record the send before acking. If this SETEX fails we still ack (the
-	// mail went out); the worst case on a later sweeper re-delivery is one
-	// duplicate, which is preferable to never acking a delivered mail.
+	// Record the short-lived send marker before the durable receipt. If the
+	// PostgreSQL write fails, the PEL retry repairs the receipt without sending
+	// again. A simultaneous Redis restart and receipt failure can still produce
+	// one duplicate; SMTP offers no idempotency primitive, so at-least-once is
+	// the honest boundary.
 	if p.EventID != "" {
 		if err := c.rdb.SetEX(sendCtx, sentKey, "1", sentKeyTTL); err != nil {
 			c.log.Warn("email: sent-marker write failed", "event_id", p.EventID, "err", err)
+		}
+		if err := c.receipts.MarkDelivered(sendCtx, p.EventID); err != nil {
+			c.log.Warn("email: durable receipt write failed; leaving in PEL",
+				"event_id", p.EventID, "err", err)
+			return
 		}
 	}
 	c.ack(m.ID)

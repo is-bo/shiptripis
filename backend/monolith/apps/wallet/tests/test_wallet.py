@@ -73,6 +73,8 @@ def _accepted_offer(total_dzd: int = 5000) -> tuple[User, User, Offer]:
         base_amount_dzd=total_dzd - 1000,
         commission_dzd=1000,
         total_dzd=total_dzd,
+        economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+        currency=Offer.Currency.DZD,
         status=Offer.Status.ACCEPTED,
         responded_at=timezone.now(),
     )

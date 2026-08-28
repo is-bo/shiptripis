@@ -25,6 +25,17 @@
 		reverse_proxy 127.0.0.1:8083
 	}
 
+	# Public marketing and policy pages are static and deliberately isolated
+	# from the authenticated Django/admin surface. Keep this matcher before
+	# the API catch-all so a missing public asset can never be proxied into an
+	# admin endpoint.
+	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms.html /privacy.html /prohibited-items.html /support.html /robots.txt /sitemap.xml
+	handle @public {
+		root * /web
+		encode gzip
+		file_server
+	}
+
 	# Django REST, admin, and static files.
 	reverse_proxy 127.0.0.1:8000 {
 		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}

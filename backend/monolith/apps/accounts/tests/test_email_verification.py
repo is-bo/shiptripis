@@ -1,8 +1,7 @@
 """EmailVerificationCode model + signup verify-email flow.
 
-The email is enqueued onto the durable `email:send` Redis stream via
-`redis_bus.enqueue_email_after_commit`; tests patch `get_client` so no real
-Redis is needed and assert the OTP lifecycle (issue → verify → is_email_verified).
+The email is armed as a PostgreSQL-backed outbound obligation; tests patch the
+outbox boundary so no real Redis/SMTP is needed.
 """
 
 from datetime import timedelta
@@ -15,6 +14,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import EmailVerificationCode, User
+from apps.notifications.models import OutboundMessage
 
 SIGN_UP_PAYLOAD = {
     "full_name": "Amina Test",
@@ -84,27 +84,19 @@ class SignUpEnqueuesVerifyEmailTests(TransactionTestCase):
 
     url = reverse("auth-sign-up")
 
-    def test_signup_issues_code_and_enqueues_email(self):
-        with patch("apps.accounts.views.redis_bus.get_client") as gc:
-            gc.return_value.xadd.return_value = b"1-0"
+    def test_signup_issues_code_and_arms_durable_email(self):
+        with patch("apps.accounts.views.enqueue_secret_message") as enqueue:
             resp = self.client.post(self.url, SIGN_UP_PAYLOAD, format="json")
         assert resp.status_code == status.HTTP_201_CREATED
         user = User.objects.get(email=SIGN_UP_PAYLOAD["email"])
         assert user.is_email_verified is False
         assert EmailVerificationCode.objects.filter(user=user).count() == 1
-        # One verify email enqueued to the stream.
-        gc.return_value.xadd.assert_called_once()
-        args, _ = gc.return_value.xadd.call_args
-        assert args[0] == "email:send"
-        import json
-
-        payload = json.loads(args[1]["payload"])
-        assert payload["kind"] == "verify"
-        assert payload["to"] == SIGN_UP_PAYLOAD["email"]
+        enqueue.assert_called_once()
+        assert enqueue.call_args.kwargs["kind"] == OutboundMessage.Kind.EMAIL_VERIFICATION
+        assert enqueue.call_args.kwargs["to_email"] == SIGN_UP_PAYLOAD["email"]
 
     def test_signup_still_succeeds_returns_tokens(self):
-        with patch("apps.accounts.views.redis_bus.get_client") as gc:
-            gc.return_value.xadd.return_value = b"1-0"
+        with patch("apps.accounts.views.enqueue_secret_message"):
             resp = self.client.post(self.url, SIGN_UP_PAYLOAD, format="json")
         assert "access" in resp.data
         assert "refresh" in resp.data

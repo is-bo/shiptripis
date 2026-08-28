@@ -20,6 +20,7 @@ CLAUDE.md G6: every state change publishes via `redis_bus.publish_after_commit`.
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status as http
@@ -70,6 +71,8 @@ def _quote_for_parcel(parcel: ParcelRequest, base_amount_dzd: int | None) -> dic
             "base_fee_dzd": 0,
             "commission_dzd": q.commission_dzd,
             "total_dzd": q.total_dzd,
+            "economics_version": Offer.EconomicsVersion.LEGACY_DZD,
+            "currency": Offer.Currency.DZD,
         }
 
     # product
@@ -83,6 +86,8 @@ def _quote_for_parcel(parcel: ParcelRequest, base_amount_dzd: int | None) -> dic
         "base_fee_dzd": q.base_fee_dzd,
         "commission_dzd": q.commission_dzd,
         "total_dzd": q.total_dzd,
+        "economics_version": Offer.EconomicsVersion.LEGACY_DZD,
+        "currency": Offer.Currency.DZD,
     }
 
 
@@ -90,11 +95,58 @@ def _is_party(match: Match, user_id: int) -> bool:
     return user_id in (match.sender_id, match.traveler_id)
 
 
+def _product_retired_response() -> Response:
+    return _domain_error(
+        code="product_request_retired",
+        detail="ProductRequest/Kaba business flows are retired in ShipTrip V1.",
+        status_code=http.HTTP_410_GONE,
+    )
+
+
+def _domain_error(
+    *,
+    code: str,
+    detail: str,
+    status_code: int,
+    **extra: object,
+) -> Response:
+    """Emit the V1 structured negotiation-failure envelope.
+
+    Decline and withdraw share the machine-code vocabulary defined by
+    `apps.matching.v1_services` (`not_authorized`, `offer_not_pending`,
+    `match_not_pending`, ...) so a client switches on `code` and never parses
+    an English sentence. The status split is unchanged: 403 separates
+    authorization from 409 state, and 410 marks a retired contract.
+    """
+
+    payload: dict[str, object] = {"code": code, "detail": detail}
+    payload.update(extra)
+    return Response(payload, status=status_code)
+
+
 def _refetch_match(pk: int) -> Match:
     return (
-        Match.objects.select_related("parcel", "trip", "sender", "traveler")
-        .prefetch_related("offers")
+        _match_read_queryset()
         .get(pk=pk)
+    )
+
+
+def _match_read_queryset():
+    return Match.objects.select_related(
+        "parcel",
+        "parcel__deliveryrequest",
+        "parcel__deliveryrequest__pickup_location",
+        "parcel__deliveryrequest__delivery_location",
+        "trip",
+        "sender",
+        "traveler",
+        "deal",
+    ).prefetch_related(
+        Prefetch(
+            "offers",
+            queryset=Offer.objects.order_by("-created_at"),
+            to_attr="_ordered_offers",
+        )
     )
 
 
@@ -106,9 +158,7 @@ class MatchListView(APIView):
 
     def get(self, request: Request) -> Response:
         role = request.query_params.get("role")
-        qs = Match.objects.select_related("parcel", "trip", "sender", "traveler").prefetch_related(
-            "offers"
-        )
+        qs = _match_read_queryset().filter(parcel__kind=ParcelRequest.Kind.DELIVERY)
         if role == "sender":
             qs = qs.filter(sender=request.user)
         elif role == "traveler":
@@ -117,7 +167,11 @@ class MatchListView(APIView):
             qs = qs.filter(sender=request.user) | qs.filter(traveler=request.user)
         if (s := request.query_params.get("status")):
             qs = qs.filter(status=s)
-        return Response(MatchSerializer(qs.distinct(), many=True).data)
+        return Response(
+            MatchSerializer(
+                qs.distinct()[:100], many=True, context={"request": request}
+            ).data
+        )
 
 
 class MatchDetailView(APIView):
@@ -125,16 +179,19 @@ class MatchDetailView(APIView):
 
     def get(self, request: Request, pk: int) -> Response:
         match = get_object_or_404(
-            Match.objects.select_related("parcel", "trip", "sender", "traveler").prefetch_related(
-                "offers"
-            ),
+            _match_read_queryset(),
             pk=pk,
         )
+        if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+            return Response(
+                {"detail": "ProductRequest history is admin-only in ShipTrip V1."},
+                status=http.HTTP_410_GONE,
+            )
         if not _is_party(match, request.user.id):
             return Response(
                 {"detail": "Not a party to this match."}, status=http.HTTP_403_FORBIDDEN
             )
-        return Response(MatchSerializer(match).data)
+        return Response(MatchSerializer(match, context={"request": request}).data)
 
 
 class TravelerApplyView(APIView):
@@ -247,7 +304,10 @@ class TravelerApplyView(APIView):
             )
 
         return Response(
-            MatchSerializer(_refetch_match(match.pk)).data, status=http.HTTP_201_CREATED
+            MatchSerializer(
+                _refetch_match(match.pk), context={"request": request}
+            ).data,
+            status=http.HTTP_201_CREATED,
         )
 
 
@@ -372,7 +432,10 @@ class SenderApplyView(APIView):
             )
 
         return Response(
-            MatchSerializer(_refetch_match(match.pk)).data, status=http.HTTP_201_CREATED
+            MatchSerializer(
+                _refetch_match(match.pk), context={"request": request}
+            ).data,
+            status=http.HTTP_201_CREATED,
         )
 
 
@@ -383,11 +446,15 @@ class MatchCancelView(APIView):
 
     def post(self, request: Request, pk: int) -> Response:
         with transaction.atomic():
-            match = get_object_or_404(Match.objects.select_for_update(), pk=pk)
+            match = get_object_or_404(
+                Match.objects.select_for_update().select_related("parcel"), pk=pk
+            )
             if not _is_party(match, request.user.id):
                 return Response(
                     {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
                 )
+            if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+                return _product_retired_response()
             if match.status != Match.Status.PENDING:
                 return Response(
                     {"detail": f"Cannot cancel match in status '{match.status}'."},
@@ -422,18 +489,28 @@ class MatchCancelView(APIView):
                 targets=[recipient],
             )
 
-        return Response(MatchSerializer(_refetch_match(match.pk)).data)
+        return Response(
+            MatchSerializer(
+                _refetch_match(match.pk), context={"request": request}
+            ).data
+        )
 
 
 class OfferListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request, pk: int) -> Response:
-        match = get_object_or_404(Match, pk=pk)
+        match = get_object_or_404(Match.objects.select_related("parcel"), pk=pk)
         if not _is_party(match, request.user.id):
             return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
+        if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+            return _product_retired_response()
         offers = match.offers.all()
-        return Response(OfferSerializer(offers, many=True).data)
+        return Response(
+            OfferSerializer(
+                offers, many=True, context={"request": request, "match": match}
+            ).data
+        )
 
 
 class CounterOfferView(APIView):
@@ -531,7 +608,12 @@ class CounterOfferView(APIView):
                 targets=[recipient],
             )
 
-        return Response(OfferSerializer(child).data, status=http.HTTP_201_CREATED)
+        return Response(
+            OfferSerializer(
+                child, context={"request": request, "match": match}
+            ).data,
+            status=http.HTTP_201_CREATED,
+        )
 
 
 class OfferAcceptView(APIView):
@@ -625,7 +707,11 @@ class OfferAcceptView(APIView):
                 targets=[match.sender_id, match.traveler_id],
             )
 
-        return Response(OfferSerializer(offer).data)
+        return Response(
+            OfferSerializer(
+                offer, context={"request": request, "match": match}
+            ).data
+        )
 
 
 class OfferDeclineView(APIView):
@@ -635,7 +721,9 @@ class OfferDeclineView(APIView):
 
     def post(self, request: Request, pk: int) -> Response:
         with transaction.atomic():
-            initial_offer = get_object_or_404(Offer, pk=pk)
+            initial_offer = get_object_or_404(
+                Offer.objects.select_related("match__parcel"), pk=pk
+            )
             match = get_object_or_404(
                 Match.objects.select_for_update(), pk=initial_offer.match_id
             )
@@ -643,23 +731,38 @@ class OfferDeclineView(APIView):
                 Offer.objects.select_for_update(), pk=initial_offer.pk
             )
             if not _is_party(match, request.user.id):
-                return Response(
-                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
+                return _domain_error(
+                    code="not_authorized",
+                    detail="Only a party to this match may decline its offer.",
+                    status_code=http.HTTP_403_FORBIDDEN,
                 )
+            if initial_offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+                return _product_retired_response()
             if offer.proposer_id == request.user.id:
-                return Response(
-                    {"detail": "Cannot decline your own offer; withdraw instead."},
-                    status=http.HTTP_403_FORBIDDEN,
+                return _domain_error(
+                    code="not_authorized",
+                    detail="Cannot decline your own offer; withdraw instead.",
+                    status_code=http.HTTP_403_FORBIDDEN,
                 )
             if offer.status != Offer.Status.PENDING:
-                return Response(
-                    {"detail": f"Offer not pending (status={offer.status})."},
-                    status=http.HTTP_409_CONFLICT,
+                return _domain_error(
+                    code="offer_not_pending",
+                    detail="The offer is no longer pending.",
+                    status_code=http.HTTP_409_CONFLICT,
+                    offer_status=offer.status,
                 )
 
             offer.status = Offer.Status.DECLINED
             offer.responded_at = timezone.now()
             offer.save(update_fields=["status", "responded_at", "updated_at"])
+            if offer.economics_version == Offer.EconomicsVersion.V1_EUR:
+                # A declined and a withdrawn negotiation are the same
+                # user-visible outcome, so both terminate the Match as
+                # CANCELLED. EXPIRED is reserved for system-driven endings
+                # (superseded by a competing acceptance, reservation lapse).
+                # Who ended it stays recorded on the MatchEvent and the Offer.
+                match.status = Match.Status.CANCELLED
+                match.save(update_fields=["status", "updated_at"])
             MatchEvent.objects.create(
                 match=match,
                 offer=offer,
@@ -678,14 +781,19 @@ class OfferDeclineView(APIView):
                 targets=[offer.proposer_id],
             )
 
-        return Response(OfferSerializer(offer).data)
+        return Response(
+            OfferSerializer(
+                offer, context={"request": request, "match": match}
+            ).data
+        )
 
 
 class MatchChatEligibilityView(APIView):
     """Whether the caller may open chat for this match.
 
-    Chat is gated on a succeeded payment for the match's accepted offer:
-    no payment, no chat. This protects both parties (no pre-payment harassment
+    Chat is gated on funding for the match's accepted offer: V1 checks the
+    Deal's ``funded_at`` and legacy matches check a succeeded PaymentIntent.
+    No funding, no chat. This protects both parties (no pre-payment harassment
     funnel) and matches our user-privacy obligation -- counterparty PII flows
     only after both have committed money + acceptance.
 
@@ -698,7 +806,7 @@ class MatchChatEligibilityView(APIView):
       ok                    -- chat allowed
       not_a_party           -- caller is not sender/traveler on this match
       no_accepted_offer     -- match has no accepted offer yet
-      payment_pending       -- accepted offer exists but no succeeded PI
+      payment_pending       -- accepted offer exists but its payment is not funded
       match_closed          -- match cancelled / expired
     """
 
@@ -706,7 +814,15 @@ class MatchChatEligibilityView(APIView):
 
     def get(self, request: Request, pk: int) -> Response:
         match = get_object_or_404(
-            Match.objects.only("id", "sender_id", "traveler_id", "status"), pk=pk
+            Match.objects.select_related("parcel").only(
+                "id",
+                "sender_id",
+                "traveler_id",
+                "status",
+                "journey_id",
+                "parcel__kind",
+            ),
+            pk=pk,
         )
         # 200 with eligible=false (not 403) -- caller may be the Go chat-service
         # calling on behalf of a user; we want a uniform shape it can cache.
@@ -723,7 +839,9 @@ class OfferWithdrawView(APIView):
 
     def post(self, request: Request, pk: int) -> Response:
         with transaction.atomic():
-            initial_offer = get_object_or_404(Offer, pk=pk)
+            initial_offer = get_object_or_404(
+                Offer.objects.select_related("match__parcel"), pk=pk
+            )
             match = get_object_or_404(
                 Match.objects.select_for_update(), pk=initial_offer.match_id
             )
@@ -732,24 +850,34 @@ class OfferWithdrawView(APIView):
                 pk=initial_offer.pk,
             )
             if offer.proposer_id != request.user.id:
-                return Response(
-                    {"detail": "Only the proposer can withdraw."},
-                    status=http.HTTP_403_FORBIDDEN,
+                return _domain_error(
+                    code="not_authorized",
+                    detail="Only the proposer may withdraw this offer.",
+                    status_code=http.HTTP_403_FORBIDDEN,
                 )
+            if initial_offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+                return _product_retired_response()
             if offer.status != Offer.Status.PENDING:
-                return Response(
-                    {"detail": f"Offer not pending (status={offer.status})."},
-                    status=http.HTTP_409_CONFLICT,
+                return _domain_error(
+                    code="offer_not_pending",
+                    detail="The offer is no longer pending.",
+                    status_code=http.HTTP_409_CONFLICT,
+                    offer_status=offer.status,
                 )
             if match.status != Match.Status.PENDING:
-                return Response(
-                    {"detail": f"Match not pending (status={match.status})."},
-                    status=http.HTTP_409_CONFLICT,
+                return _domain_error(
+                    code="match_not_pending",
+                    detail="The match is no longer pending.",
+                    status_code=http.HTTP_409_CONFLICT,
+                    match_status=match.status,
                 )
 
             offer.status = Offer.Status.WITHDRAWN
             offer.responded_at = timezone.now()
             offer.save(update_fields=["status", "responded_at", "updated_at"])
+            if offer.economics_version == Offer.EconomicsVersion.V1_EUR:
+                match.status = Match.Status.CANCELLED
+                match.save(update_fields=["status", "updated_at"])
             MatchEvent.objects.create(
                 match=offer.match,
                 offer=offer,
@@ -773,4 +901,8 @@ class OfferWithdrawView(APIView):
                 targets=[recipient],
             )
 
-        return Response(OfferSerializer(offer).data)
+        return Response(
+            OfferSerializer(
+                offer, context={"request": request, "match": match}
+            ).data
+        )

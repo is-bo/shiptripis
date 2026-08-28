@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from rest_framework import generics, status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.matching.models import Match
+from apps.parcels.models import ParcelRequest
 
 from .models import HandoverCode
 from .serializers import (
@@ -26,9 +27,24 @@ from .services import (
 )
 
 
+class V1HandoverUnavailable(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "V1 Deal handover is not available until the Phase 2 funded handover "
+        "state machine is implemented."
+    )
+    default_code = "v1_deal_handover_not_available"
+
+
+class ProductHandoverRetired(APIException):
+    status_code = status.HTTP_410_GONE
+    default_detail = "ProductRequest/Kaba handover is retired in ShipTrip V1."
+    default_code = "product_request_retired"
+
+
 def _get_match_for_party(match_id: int, user) -> Match:
     match = (
-        Match.objects.select_related("sender", "traveler")
+        Match.objects.select_related("sender", "traveler", "parcel")
         .filter(id=match_id)
         .first()
     )
@@ -36,6 +52,10 @@ def _get_match_for_party(match_id: int, user) -> Match:
         raise ValidationError({"match": "Not found."})
     if user not in (match.sender, match.traveler):
         raise PermissionDenied("Only the match parties can use this endpoint.")
+    if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+        raise ProductHandoverRetired()
+    if match.journey_id is not None:
+        raise V1HandoverUnavailable()
     return match
 
 

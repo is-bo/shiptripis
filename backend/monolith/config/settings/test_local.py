@@ -28,3 +28,7 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+# The mock payment rail is a test fixture. Production refuses to boot with it.
+PAYMENTS_ALLOW_MOCK_PROVIDER = True
+PAYMENTS_PUBLIC_BASE_URL = "https://test.shiptrip.invalid"

@@ -1,16 +1,14 @@
-"""KYC admin — operators review pending submissions.
+"""Read-only KYC inspection for the Django admin.
 
-Per CLAUDE.md §1, Go owns the runtime KYC API. The Django admin is the
-**ops review surface**: operators approve / reject pending submissions
-here, and the change is observed by Go via the `kyc.status_changed`
-Redis channel (or, in V2, a status webhook).
+Per CLAUDE.md §1, Go owns the runtime KYC API. Phase 6A's authenticated
+operations API is the review surface: operators approve/reject pending
+submissions through the domain service, which updates the account witness and
+writes an audit record. The Django admin remains a read-only inspection view.
 """
 
 from __future__ import annotations
 
 from django.contrib import admin
-from django.utils import timezone
-
 from .models import KycSubmission
 
 
@@ -32,35 +30,23 @@ class KycSubmissionAdmin(admin.ModelAdmin):
         "front_image_key",
         "back_image_key",
         "selfie_image_key",
+        "status",
+        "rejection_reason",
         "created_at",
         "updated_at",
         "reviewed_at",
         "reviewed_by_id",
     )
-    actions = ("approve_submissions", "reject_submissions")
     date_hierarchy = "created_at"
 
-    @admin.action(description="Approve selected (set status=approved)")
-    def approve_submissions(self, request, queryset):
-        now = timezone.now()
-        queryset.filter(status=KycSubmission.Status.PENDING).update(
-            status=KycSubmission.Status.APPROVED,
-            reviewed_at=now,
-            reviewed_by_id=request.user.id,
-        )
-        # Also flip is_kyc_verified on the user — operators expect this.
-        from apps.accounts.models import User
+    def has_add_permission(self, request):
+        # KYC submissions are created by the verification service.  Review
+        # decisions must use the Phase 6A API/service so they validate a
+        # reason, update the account witness, and write an audit record.
+        return False
 
-        user_ids = list(
-            queryset.filter(status=KycSubmission.Status.APPROVED)
-            .values_list("user_id", flat=True)
-        )
-        User.objects.filter(id__in=user_ids).update(is_kyc_verified=True)
+    def has_change_permission(self, request, obj=None):
+        return False
 
-    @admin.action(description="Reject selected (set status=rejected)")
-    def reject_submissions(self, request, queryset):
-        queryset.filter(status=KycSubmission.Status.PENDING).update(
-            status=KycSubmission.Status.REJECTED,
-            reviewed_at=timezone.now(),
-            reviewed_by_id=request.user.id,
-        )
+    def has_delete_permission(self, request, obj=None):
+        return False

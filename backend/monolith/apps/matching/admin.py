@@ -39,7 +39,14 @@ class MatchAdmin(admin.ModelAdmin):
     list_display = ("id", "parcel", "trip", "sender", "traveler", "status", "created_at")
     list_filter = ("status",)
     search_fields = ("parcel__id", "trip__id", "sender__email", "traveler__email")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = (
+        "matching_version",
+        "matched_distance_meters",
+        "compatibility_snapshot",
+        "ranking_snapshot",
+        "created_at",
+        "updated_at",
+    )
     inlines = (OfferInline, MatchEventInline)
 
 

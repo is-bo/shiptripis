@@ -1,0 +1,594 @@
+"""V1 payment API.
+
+    GET  /api/payments/providers                          server-authoritative rails
+    GET  /api/payments/orders                             my obligations
+    GET  /api/payments/orders/<reference>                 one obligation
+    POST /api/payments/orders/<reference>/checkout        open a hosted checkout
+    POST /api/payments/orders/<reference>/guest-link      invite someone else to pay
+    POST /api/payments/orders/<reference>/guest-link/revoke
+    GET  /api/parcels/<id>/posting-deposit                deposit quote + status
+    GET  /api/deals/<id>/payment                          outstanding balance
+    GET  /api/payouts                                     my traveler earnings
+    POST /api/admin/payouts/<id>/complete                 admin manual settlement
+    POST /api/admin/payments/orders/<reference>/refund    admin refund
+    GET  /api/payments/guest/<token>                      minimal guest surface
+    POST /api/payments/guest/<token>/checkout             guest checkout
+
+Authorization is object-level everywhere: an order is visible to its owner and
+to staff, a payout to its traveler and to staff, and the guest surface is
+reachable only by presenting an unguessable capability that carries no identity.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from django.db.models import Prefetch
+from django.shortcuts import get_object_or_404
+from rest_framework import status as http
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
+from rest_framework.views import APIView
+
+from apps.core.business_settings import NoActiveBusinessSettings
+from apps.core.permissions import CanSettlePayouts
+from apps.deals.models import Deal
+from apps.parcels.models import DeliveryRequest
+
+from .models import (
+    PaymentAttempt,
+    PaymentOrder,
+    PaymentRefund,
+    Payout,
+)
+from .policy import InvalidPaymentPolicy, phase3_policy
+from .providers import ProviderError, available_providers
+from .serializers import (
+    CheckoutCreateSerializer,
+    GuestLinkCreateSerializer,
+    ManualPayoutCompleteSerializer,
+    ManualRefundSettleSerializer,
+    PaymentAttemptSerializer,
+    PaymentOrderSerializer,
+    PaymentOrderSummarySerializer,
+    PayoutSerializer,
+    RefundRequestSerializer,
+)
+from .services import (
+    FinanceError,
+    GuestLinkInvalid,
+    NotAuthorized,
+    chargily_display,
+    create_guest_link,
+    ensure_posting_deposit_order,
+    guest_payment_view,
+    quote_posting_deposit,
+    request_refund,
+    resolve_guest_link,
+    settle_refund_manually,
+    revoke_guest_link,
+    start_checkout,
+    complete_manual_payout,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class GuestPaymentThrottle(AnonRateThrottle):
+    """Bound token-guessing attempts against the unauthenticated surface."""
+
+    scope = "guest_payment"
+
+
+def _finance_error_response(exc: Exception) -> Response:
+    """Map a domain failure to its machine code and structured detail.
+
+    Every branch is explicit, and an unrecognised exception becomes a generic
+    `internal_error` with its message suppressed rather than echoed.
+    """
+
+    if isinstance(exc, NotAuthorized):
+        status_code = http.HTTP_403_FORBIDDEN
+    elif isinstance(exc, GuestLinkInvalid):
+        # Uniform 404 for every invalid-link reason so a prober cannot tell
+        # "expired" from "never existed".
+        return Response(
+            {"code": exc.code, "detail": "This payment link is not valid."},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+    elif isinstance(exc, FinanceError):
+        status_code = http.HTTP_409_CONFLICT
+    elif isinstance(exc, (NoActiveBusinessSettings, InvalidPaymentPolicy)):
+        status_code = http.HTTP_503_SERVICE_UNAVAILABLE
+    elif isinstance(exc, ProviderError):
+        status_code = http.HTTP_503_SERVICE_UNAVAILABLE
+    else:
+        logger.error("Unmapped finance failure", exc_info=True)
+        return Response(
+            {"code": "internal_error", "detail": "The request could not be completed."},
+            status=http.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    payload = {"code": getattr(exc, "code", "finance_error"), "detail": str(exc)}
+    details = getattr(exc, "details", None)
+    if callable(details):
+        payload.update(details())
+    return Response(payload, status=status_code)
+
+
+def _order_queryset():
+    return PaymentOrder.objects.select_related("deal", "delivery_request").prefetch_related(
+        Prefetch("attempts", queryset=PaymentAttempt.objects.order_by("-created_at")),
+        Prefetch("refunds", queryset=PaymentRefund.objects.order_by("-created_at")),
+    )
+
+
+def _owned_order(request: Request, reference: str) -> PaymentOrder:
+    order = get_object_or_404(_order_queryset(), public_reference=reference)
+    if order.owner_id != request.user.id and not request.user.is_staff:
+        raise NotAuthorized("This payment does not belong to you.")
+    return order
+
+
+# --- provider availability ---------------------------------------------------
+
+
+class PaymentProvidersView(APIView):
+    """What this caller may actually pay with, decided by the server.
+
+    A provider appears as available only when policy enables it *and* the
+    deployment holds its credentials *and* it is accepting new checkouts. A
+    button in the client is not a capability.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        try:
+            policy = phase3_policy()
+        except (NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        rows = available_providers(policy)
+        payload = {
+            "timing_mode": policy.timing_mode,
+            "canonical_currency": "EUR",
+            "providers": [row.as_dict() for row in rows],
+        }
+        chargily = next(
+            (row for row in rows if row.provider == "chargily"), None
+        )
+        if chargily is not None and chargily.enabled:
+            payload["chargily_rate"] = {
+                "eur_dzd_rate": chargily_display(
+                    amount_eur_cents=100, policy=policy
+                )["eur_dzd_rate"],
+                "rate_settings_version": policy.settings_version.version,
+            }
+        return Response(payload)
+
+
+# --- orders ------------------------------------------------------------------
+
+
+class PaymentOrderListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        queryset = PaymentOrder.objects.filter(owner=request.user)
+        if purpose := request.query_params.get("purpose"):
+            queryset = queryset.filter(purpose=purpose)
+        if order_status := request.query_params.get("status"):
+            queryset = queryset.filter(status=order_status)
+        return Response(
+            PaymentOrderSummarySerializer(queryset[:100], many=True).data
+        )
+
+
+class PaymentOrderDetailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, reference: str) -> Response:
+        try:
+            order = _owned_order(request, reference)
+        except NotAuthorized as exc:
+            return _finance_error_response(exc)
+        payload = PaymentOrderSerializer(order).data
+        try:
+            policy = phase3_policy()
+        except (NoActiveBusinessSettings, InvalidPaymentPolicy):
+            return Response(payload)
+        if order.outstanding_eur_cents > 0:
+            payload["providers"] = [
+                row.as_dict() for row in available_providers(policy)
+            ]
+            if policy.providers.chargily_enabled:
+                payload["chargily_quote"] = chargily_display(
+                    amount_eur_cents=order.outstanding_eur_cents, policy=policy
+                )
+        return Response(payload)
+
+
+class PaymentCheckoutView(APIView):
+    """Open a hosted checkout for an obligation the caller owns."""
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "payment_checkout"
+
+    def post(self, request: Request, reference: str) -> Response:
+        serializer = CheckoutCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            order = _owned_order(request, reference)
+            if order.owner_id != request.user.id:
+                raise NotAuthorized("Only the owner may pay this obligation.")
+            session = start_checkout(
+                order_id=order.pk,
+                provider=serializer.validated_data["provider"],
+                actor_id=request.user.id,
+            )
+        except (FinanceError, ProviderError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        return Response(
+            PaymentAttemptSerializer(session.attempt).data,
+            status=http.HTTP_201_CREATED if session.created else http.HTTP_200_OK,
+        )
+
+
+class GuestLinkCreateView(APIView):
+    """Issue a 'have someone else pay' capability.
+
+    The plaintext token is returned exactly once, here. It is never stored, so
+    it cannot be recovered later — the owner reissues instead, which revokes the
+    previous link.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "payment_checkout"
+
+    def post(self, request: Request, reference: str) -> Response:
+        serializer = GuestLinkCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            order = _owned_order(request, reference)
+            issued = create_guest_link(
+                order_id=order.pk,
+                actor_id=request.user.id,
+                label=serializer.validated_data.get("label", ""),
+            )
+        except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        return Response(
+            {
+                "token": issued.token,
+                "expires_at": issued.link.expires_at,
+                "amount_eur_cents": order.outstanding_eur_cents,
+                "currency": "EUR",
+            },
+            status=http.HTTP_201_CREATED,
+        )
+
+
+class GuestLinkRevokeView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, reference: str) -> Response:
+        try:
+            order = _owned_order(request, reference)
+            revoked = revoke_guest_link(order_id=order.pk, actor_id=request.user.id)
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        return Response({"revoked": revoked})
+
+
+# --- guest surface -----------------------------------------------------------
+
+
+class GuestPaymentView(APIView):
+    """The unauthenticated payer's view of one obligation.
+
+    Holding the token permits exactly one thing: paying. It confers no Deal
+    ownership, no chat, no dispute authority and no sight of the recipient or
+    the counterparty — and this payload is the proof, because there is nothing
+    else in it.
+    """
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+    throttle_classes = (GuestPaymentThrottle,)
+
+    def get(self, request: Request, token: str) -> Response:
+        try:
+            link = resolve_guest_link(token)
+            policy = phase3_policy()
+        except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        return Response(guest_payment_view(link, policy=policy))
+
+
+class GuestCheckoutView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+    throttle_classes = (GuestPaymentThrottle,)
+
+    def post(self, request: Request, token: str) -> Response:
+        serializer = CheckoutCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            link = resolve_guest_link(token)
+            session = start_checkout(
+                order_id=link.order_id,
+                provider=serializer.validated_data["provider"],
+                actor_id=None,
+                guest_link=link,
+            )
+        except (FinanceError, ProviderError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        attempt = session.attempt
+        # A guest sees the URL they must visit and the amount they will be
+        # charged. Nothing about the order, the deal or the parties.
+        return Response(
+            {
+                "checkout_url": attempt.checkout_url,
+                "amount_eur_cents": attempt.amount_eur_cents,
+                "payment_currency": attempt.payment_currency,
+                "provider": attempt.provider,
+                "expires_at": attempt.expires_at,
+            },
+            status=http.HTTP_201_CREATED if session.created else http.HTTP_200_OK,
+        )
+
+
+# --- posting deposit ---------------------------------------------------------
+
+
+class PostingDepositView(APIView):
+    """The sender's deposit quote and its payment state for one request."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        delivery_request = get_object_or_404(
+            DeliveryRequest.objects.select_related(
+                "pickup_location", "delivery_location"
+            ),
+            pk=pk,
+        )
+        if delivery_request.sender_id != request.user.id and not request.user.is_staff:
+            return _finance_error_response(
+                NotAuthorized("Only the sender may see this deposit.")
+            )
+        try:
+            policy = phase3_policy()
+        except (NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+
+        payload: dict = {
+            "timing_mode": policy.timing_mode,
+            "deposit_required": policy.deposit_required,
+            "request_status": delivery_request.status,
+        }
+        order = (
+            PaymentOrder.objects.filter(
+                delivery_request_id=delivery_request.pk,
+                purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
+            )
+            .exclude(status=PaymentOrder.Status.CANCELLED)
+            .first()
+        )
+        if order is not None:
+            payload["order"] = PaymentOrderSummarySerializer(order).data
+            return Response(payload)
+        if not policy.deposit_required:
+            return Response(payload)
+        try:
+            payload["quote"] = quote_posting_deposit(
+                delivery_request=delivery_request, policy=policy
+            ).as_dict()
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        return Response(payload)
+
+    def post(self, request: Request, pk: int) -> Response:
+        """Create (or return) the deposit obligation for a request."""
+
+        delivery_request = get_object_or_404(
+            DeliveryRequest.objects.select_related(
+                "pickup_location", "delivery_location"
+            ),
+            pk=pk,
+        )
+        if delivery_request.sender_id != request.user.id:
+            return _finance_error_response(
+                NotAuthorized("Only the sender may create this deposit.")
+            )
+        try:
+            order = ensure_posting_deposit_order(delivery_request=delivery_request)
+        except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return _finance_error_response(exc)
+        return Response(
+            PaymentOrderSummarySerializer(order).data, status=http.HTTP_201_CREATED
+        )
+
+
+# --- deal balance ------------------------------------------------------------
+
+
+class DealPaymentView(APIView):
+    """The Deal's outstanding balance, computed entirely server-side."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        deal = get_object_or_404(
+            Deal.objects.select_related("terms"), pk=pk
+        )
+        if request.user.id not in (deal.sender_id, deal.traveler_id) and not request.user.is_staff:
+            return _finance_error_response(
+                NotAuthorized("Only a party may see this deal's payment state.")
+            )
+        order = (
+            _order_queryset()
+            .filter(deal_id=deal.pk, purpose=PaymentOrder.Purpose.DEAL_BALANCE)
+            .exclude(status=PaymentOrder.Status.CANCELLED)
+            .first()
+        )
+        terms = getattr(deal, "terms", None)
+        payload: dict = {
+            "deal_id": deal.pk,
+            "deal_status": deal.status,
+            "currency": "EUR",
+            "sender_total_eur_cents": int(terms.sender_total_minor) if terms else None,
+            "traveler_reward_eur_cents": (
+                int(terms.traveler_reward_minor) if terms else None
+            ),
+            "platform_fee_eur_cents": int(terms.platform_fee_minor) if terms else None,
+        }
+        if order is None:
+            payload["order"] = None
+            return Response(payload)
+
+        # The traveler is a party to the Deal but not to the sender's payment.
+        # They learn that it is funded, not how it was paid.
+        if request.user.id == deal.traveler_id and not request.user.is_staff:
+            payload["order"] = {
+                "status": order.status,
+                "outstanding_eur_cents": order.outstanding_eur_cents,
+            }
+            return Response(payload)
+
+        payload["order"] = PaymentOrderSerializer(order).data
+        return Response(payload)
+
+
+# --- payouts -----------------------------------------------------------------
+
+
+class PayoutListView(APIView):
+    """A traveler's own earnings state. Always gated in Phase 3."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        queryset = Payout.objects.filter(traveler=request.user).order_by("-created_at")
+        if payout_status := request.query_params.get("status"):
+            queryset = queryset.filter(status=payout_status)
+        return Response(PayoutSerializer(queryset[:100], many=True).data)
+
+
+class AdminManualPayoutView(APIView):
+    """Record an operator settlement. Refused until Phase 4 releases the payout."""
+
+    permission_classes = (CanSettlePayouts,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        serializer = ManualPayoutCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            payout = complete_manual_payout(
+                payout_id=pk,
+                admin_actor_id=request.user.id,
+                payout_currency=data["payout_currency"],
+                payout_amount_minor=data["payout_amount_minor"],
+                reference=data["reference"],
+                fx_rate_micros=data.get("fx_rate_micros"),
+                receipt_url=data.get("receipt_url", ""),
+                notes=data.get("notes", ""),
+            )
+        except Payout.DoesNotExist:
+            return Response(
+                {"code": "payout_not_found", "detail": "No such payout."},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        return Response(PayoutSerializer(payout).data)
+
+
+class AdminRefundView(APIView):
+    """Administrative refund against one captured attempt."""
+
+    permission_classes = (IsAdminUser,)
+
+    def post(self, request: Request, reference: str) -> Response:
+        serializer = RefundRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        order = get_object_or_404(PaymentOrder, public_reference=reference)
+        try:
+            refund = request_refund(
+                order_id=order.pk,
+                attempt_id=data["attempt_id"],
+                amount_eur_cents=data["amount_eur_cents"],
+                reason=data["reason"],
+                requested_by_id=request.user.id,
+                idempotency_key=(
+                    f"admin_refund:order:{order.pk}:attempt:{data['attempt_id']}"
+                    f":{data['amount_eur_cents']}"
+                ),
+            )
+        except PaymentAttempt.DoesNotExist:
+            return Response(
+                {"code": "attempt_not_found", "detail": "No such payment attempt."},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+        except (FinanceError, ProviderError) as exc:
+            return _finance_error_response(exc)
+        order.refresh_from_db()
+        return Response(
+            {
+                "refund": {
+                    "id": refund.pk,
+                    "status": refund.status,
+                    "amount_eur_cents": refund.amount_eur_cents,
+                    "reason": refund.reason,
+                },
+                "order": PaymentOrderSummarySerializer(order).data,
+            },
+            status=http.HTTP_201_CREATED,
+        )
+
+
+class AdminRefundSettleView(APIView):
+    """Record an operator settlement of a refund the provider cannot make.
+
+    Chargily has no refund API, so its refunds leave the platform as bank
+    transfers. Without this route such a refund would stay `pending` and its
+    order `refund_pending` forever: an obligation the system could see and not
+    discharge. The reference is mandatory, and the database refuses a settled
+    refund that does not carry one.
+    """
+
+    permission_classes = (IsAdminUser,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        serializer = ManualRefundSettleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            refund = settle_refund_manually(
+                refund_id=pk,
+                admin_actor_id=request.user.id,
+                settlement_reference=serializer.validated_data[
+                    "settlement_reference"
+                ],
+                settlement_note=serializer.validated_data.get(
+                    "settlement_note", ""
+                ),
+            )
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        order = PaymentOrder.objects.get(pk=refund.order_id)
+        return Response(
+            {
+                "refund": {
+                    "id": refund.pk,
+                    "status": refund.status,
+                    "amount_eur_cents": refund.amount_eur_cents,
+                    "settlement_reference": refund.settlement_reference,
+                },
+                "order": PaymentOrderSummarySerializer(order).data,
+            }
+        )

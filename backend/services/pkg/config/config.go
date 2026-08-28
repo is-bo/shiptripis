@@ -338,10 +338,13 @@ func LoadFCM() (FCM, error) {
 // Email holds the email-service settings. Django XADDs rendered messages onto
 // the `email:send` stream; the consumer sends them over SMTP.
 //
-// Disabled by default — ships dark until Django's stream publisher + OTP model
-// land (mirrors FCM). Flipping EMAIL_ENABLED=true once both sides land is a
-// one-knob change.
+// Disabled by default. Flipping EMAIL_ENABLED=true activates ordinary
+// non-secret stream delivery once the SMTP environment is complete.
 type Email struct {
+	// Provider is a transport label used for health/metrics and configuration
+	// review. Sender.net uses the same standards-compliant SMTP seam as any
+	// other relay; the Go worker deliberately does not couple to a vendor SDK.
+	Provider      string
 	Enabled       bool
 	Stream        string
 	ConsumerGroup string
@@ -363,6 +366,16 @@ type Email struct {
 func LoadEmail() (Email, error) {
 	var b errBuilder
 	enabled := optBool(&b, "EMAIL_ENABLED", false)
+	provider := strings.ToLower(optString("EMAIL_PROVIDER", "smtp"))
+	switch provider {
+	case "smtp", "sender_net", "sender.net":
+		// Sender.net is an SMTP relay adapter, not a separate delivery path.
+		if provider == "sender.net" {
+			provider = "sender_net"
+		}
+	default:
+		b.addf("EMAIL_PROVIDER must be 'smtp' or 'sender_net' (got %q)", provider)
+	}
 	stream := optString("EMAIL_STREAM", "email:send")
 	group := optString("EMAIL_CONSUMER_GROUP", "email-send-workers")
 	name := optString("EMAIL_CONSUMER_NAME", optString("HOSTNAME", "email-1"))
@@ -385,11 +398,23 @@ func LoadEmail() (Email, error) {
 		if from == "" {
 			b.addf("EMAIL_FROM_ADDR is required when EMAIL_ENABLED=true")
 		}
+		if provider == "sender_net" {
+			if user == "" {
+				b.addf("EMAIL_SMTP_USERNAME is required for Sender.net")
+			}
+			if pass == "" {
+				b.addf("EMAIL_SMTP_PASSWORD is required for Sender.net")
+			}
+			if !useTLS {
+				b.addf("EMAIL_USE_TLS must be true for Sender.net")
+			}
+		}
 	}
 	if err := b.err(); err != nil {
 		return Email{}, err
 	}
 	return Email{
+		Provider:      provider,
 		Enabled:       enabled,
 		Stream:        stream,
 		ConsumerGroup: group,

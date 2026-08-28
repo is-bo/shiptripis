@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 class PublishedEvent(models.Model):
@@ -46,3 +48,91 @@ class PublishedEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.channel}/{self.event_id}"
+
+
+class BusinessSettingsVersion(models.Model):
+    """Versioned, auditable business inputs used by new V1 economics.
+
+    Policy/economic fields become immutable after creation. Lifecycle state
+    may move from draft to active to retired through the service boundary.
+    Offers and Deals copy the values they use, so a later active revision
+    cannot mutate historical economics.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        RETIRED = "retired", "Retired"
+
+    version = models.PositiveIntegerField(unique=True)
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    canonical_currency = models.CharField(max_length=3, default="EUR", editable=False)
+    commission_rate_bps = models.PositiveSmallIntegerField(default=2500)
+    pricing_version = models.CharField(max_length=32, default="v1")
+    policy = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="business_settings_versions_created",
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "core_business_settings_version"
+        ordering = ["-version"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(canonical_currency="EUR"),
+                name="core_settings_currency_eur",
+            ),
+            models.CheckConstraint(
+                condition=Q(commission_rate_bps__lte=10_000),
+                name="core_settings_commission_bps",
+            ),
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=Q(status="active"),
+                name="core_settings_one_active",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "-version"], name="core_settings_status_idx"
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            previous = type(self).objects.get(pk=self.pk)
+            immutable_fields = (
+                "version",
+                "canonical_currency",
+                "commission_rate_bps",
+                "pricing_version",
+                "policy",
+                "created_by_id",
+            )
+            if any(
+                getattr(previous, field) != getattr(self, field)
+                for field in immutable_fields
+            ):
+                raise ValidationError(
+                    "Business setting values are immutable; create a new version."
+                )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Business settings revisions are append-only and cannot be deleted."
+        )
+
+    def __str__(self) -> str:
+        return f"Business settings v{self.version} ({self.status})"

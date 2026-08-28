@@ -6,14 +6,14 @@
 //   - Sends each over SMTP via internal/email. Django owns the copy/templates;
 //     this service is a pure transport.
 //
-// It is intentionally minimal: NO Postgres (Django owns OTP generation +
-// verification, so this service touches no DB — it is off the §3 connection-pool
-// budget), NO JWT, NO WebSocket. Just a Redis stream consumer + an HTTP admin
-// surface (/healthz, /readyz, /debug/vars).
+// It is intentionally minimal: no JWT or WebSocket. It uses a small PostgreSQL
+// pool only for durable SMTP delivery receipts; Django still owns OTP
+// generation, verification and the transactional outbox. The service exposes
+// a Redis stream consumer plus an HTTP admin surface (/healthz, /readyz,
+// /debug/vars).
 //
-// Gated by EMAIL_ENABLED (default false). It ships dark until Claude A adds the
-// Django stream publisher + EmailVerificationCode model; flipping
-// EMAIL_ENABLED=true + supplying EMAIL_SMTP_* activates the consumer + sweeper.
+// Gated by EMAIL_ENABLED (default false). Flipping EMAIL_ENABLED=true and
+// supplying EMAIL_SMTP_* activates the consumer + sweeper.
 // While disabled the process still boots and serves health, so it can sit in
 // compose harmlessly.
 //
@@ -35,6 +35,7 @@ import (
 
 	"shiptrip/internal/email"
 	"shiptrip/pkg/config"
+	"shiptrip/pkg/db"
 	"shiptrip/pkg/health"
 	"shiptrip/pkg/logger"
 	"shiptrip/pkg/metrics"
@@ -43,6 +44,8 @@ import (
 
 const (
 	serviceName = "email"
+	dbMaxConnsKey = "EMAIL_DB_MAX_CONNS"
+	dbMaxConnsDefault int32 = 5
 
 	httpAddrKey      = "EMAIL_HTTP_ADDR"
 	httpAddrFallback = ":8085"
@@ -64,6 +67,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	pgCfg, err := config.LoadPostgres(dbMaxConnsKey, dbMaxConnsDefault)
+	if err != nil {
+		return err
+	}
 	emailCfg, err := config.LoadEmail()
 	if err != nil {
 		return err
@@ -78,6 +85,16 @@ func run() error {
 	rootCtx, rootCancel := context.WithCancel(signalCtx)
 	defer rootCancel()
 
+	pool, err := db.NewPool(rootCtx, db.Config{
+		URL:      pgCfg.URL,
+		MaxConns: pgCfg.MaxConns,
+		Logger:   log,
+	})
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
 	m := metrics.Register(serviceName)
 
 	rdb, err := redisbus.NewClient(rootCtx, redisbus.Config{
@@ -91,6 +108,7 @@ func run() error {
 	defer func() { _ = rdb.Close() }()
 
 	healthH := health.New(health.Config{Logger: log})
+	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
 	healthH.Register("redis", func(ctx context.Context) error {
 		// Small probe touching the same SetEX code path the consumer uses.
 		return rdb.SetEX(ctx, "healthz:email", "1", 5*time.Second)
@@ -133,11 +151,16 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		receipts, err := email.NewPostgresReceiptStore(pool)
+		if err != nil {
+			return err
+		}
 		consumer := email.NewConsumer(rdb, email.ConsumerConfig{
 			Stream:        emailCfg.Stream,
 			ConsumerGroup: emailCfg.ConsumerGroup,
 			ConsumerName:  emailCfg.ConsumerName,
 			Sender:        sender,
+			Receipts:      receipts,
 		}, log)
 		go func() { emailErr <- consumer.Run(rootCtx) }()
 		go func() { emailErr <- consumer.Sweep(rootCtx) }()

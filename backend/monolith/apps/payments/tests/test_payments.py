@@ -12,7 +12,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
 from apps.matching.models import Match, Offer
-from apps.parcels.models import DeliveryRequest, ParcelRequest
+from apps.parcels.models import DeliveryRequest, ParcelRequest, ProductRequest
 from apps.payments.models import PaymentIntent, Refund
 from apps.trips.models import Trip
 
@@ -68,12 +68,15 @@ def _setup_accepted_offer(total_dzd: int = 5000) -> tuple[User, User, Offer]:
         base_amount_dzd=total_dzd - 1000,
         commission_dzd=1000,
         total_dzd=total_dzd,
+        economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+        currency=Offer.Currency.DZD,
         status=Offer.Status.ACCEPTED,
         responded_at=timezone.now(),
     )
     return sender, traveler, offer
 
 
+@override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=True)
 class CreateIntentTests(APITestCase):
     def setUp(self):
         self.sender, self.traveler, self.offer = _setup_accepted_offer()
@@ -167,6 +170,86 @@ class CreateIntentTests(APITestCase):
         assert active.get().issued_to_id == self.sender.id
 
 
+@override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=True)
+class RetiredProductBoundaryTests(APITestCase):
+    def setUp(self):
+        self.sender = _user("product_sender@example.com", "110")
+        self.traveler = _user("product_traveler@example.com", "111")
+        product = ProductRequest.objects.create(
+            sender=self.sender,
+            kind=ParcelRequest.Kind.PRODUCT,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=1,
+            product_price_dzd=20_000,
+        )
+        trip = Trip.objects.create(
+            traveler=self.traveler,
+            origin_id="ALG",
+            destination_id="CDG",
+            departure_at=timezone.now() + timedelta(days=2),
+            capacity_kg=10,
+        )
+        self.match = Match.objects.create(
+            parcel=product,
+            trip=trip,
+            sender=self.sender,
+            traveler=self.traveler,
+            status=Match.Status.ACCEPTED,
+        )
+        self.offer = Offer.objects.create(
+            match=self.match,
+            proposed_by=Offer.ProposedBy.TRAVELER,
+            proposer=self.traveler,
+            base_amount_dzd=20_000,
+            base_fee_dzd=2_500,
+            commission_dzd=5_000,
+            total_dzd=27_500,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
+            status=Offer.Status.ACCEPTED,
+        )
+
+    def test_product_cannot_reenter_payment_handover_or_chat(self):
+        from apps.verification.models import HandoverCode
+
+        payment = _client(self.sender).post(
+            reverse("payments-create"),
+            {"offer_id": self.offer.pk, "currency": "DZD"},
+            format="json",
+        )
+        handover = _client(self.sender).post(
+            reverse("handover-issue", args=[self.match.pk]),
+            {"kind": HandoverCode.Kind.PICKUP},
+            format="json",
+        )
+        chat = _client(self.sender).get(
+            reverse("matches-chat-eligibility", args=[self.match.pk])
+        )
+        counter = _client(self.sender).post(
+            reverse("offers-counter-v1", args=[self.offer.pk]),
+            {"traveler_reward_eur_cents": 500},
+            format="json",
+        )
+        accept = _client(self.sender).post(
+            reverse("offers-accept", args=[self.offer.pk]), format="json"
+        )
+
+        assert payment.status_code == 410
+        assert handover.status_code == 410
+        assert chat.status_code == 200
+        assert counter.status_code == 410
+        assert accept.status_code == 410
+        assert chat.data == {
+            "eligible": False,
+            "reason": "product_request_retired",
+            "match_id": self.match.pk,
+        }
+        assert PaymentIntent.objects.count() == 0
+        assert HandoverCode.objects.count() == 0
+
+
+@override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=True)
 class DetailAndCancelTests(APITestCase):
     def setUp(self):
         self.sender, self.traveler, self.offer = _setup_accepted_offer()
@@ -195,6 +278,7 @@ class DetailAndCancelTests(APITestCase):
         assert r.status_code == 409
 
 
+@override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=True)
 class RefundTests(APITestCase):
     def setUp(self):
         self.sender, self.traveler, self.offer = _setup_accepted_offer(total_dzd=10000)
@@ -239,6 +323,10 @@ class RefundTests(APITestCase):
         assert r.status_code == 409
 
 
+@override_settings(
+    PAYMENTS_MOCK_WEBHOOK_ENABLED=True,
+    PAYMENTS_LEGACY_MUTATIONS_ENABLED=True,
+)
 class MockWebhookTests(APITestCase):
     """The dev/QA webhook endpoint can flip an intent to succeeded/failed."""
 
@@ -288,6 +376,8 @@ class MockWebhookTests(APITestCase):
             format="json",
         )
         assert r.status_code == 404
+        self.intent.refresh_from_db()
+        assert self.intent.status == PaymentIntent.Status.PROCESSING
 
     @override_settings(PAYMENTS_MOCK_WEBHOOK_ENABLED=False)
     def test_mock_webhook_is_hidden_when_disabled(self):
@@ -297,5 +387,22 @@ class MockWebhookTests(APITestCase):
             format="json",
         )
         assert r.status_code == 404
-        self.intent.refresh_from_db()
-        assert self.intent.status == PaymentIntent.Status.PROCESSING
+
+
+class RetiredLegacyMutationFirewallTests(APITestCase):
+    def setUp(self):
+        self.sender, _traveler, self.offer = _setup_accepted_offer()
+
+    @override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=False)
+    def test_historical_offer_cannot_reach_instant_mock_payment(self):
+        before = PaymentIntent.objects.count()
+
+        response = _client(self.sender).post(
+            reverse("payments-create"),
+            {"offer_id": self.offer.pk, "currency": "DZD"},
+            format="json",
+        )
+
+        assert response.status_code == 410
+        assert response.data["code"] == "legacy_payment_retired"
+        assert PaymentIntent.objects.count() == before

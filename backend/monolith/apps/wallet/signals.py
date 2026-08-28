@@ -14,6 +14,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from apps.payments.models import PaymentIntent, Refund
+from apps.parcels.models import ParcelRequest
 
 from .models import Hold
 from .services import open_hold, reverse_hold_for_refund
@@ -27,6 +28,13 @@ def _on_payment_intent_saved(sender, instance: PaymentIntent, created: bool, **_
     later, when the handover confirms — wallet just locks the money now.
     """
     if instance.status != PaymentIntent.Status.SUCCEEDED:
+        return
+    offer = instance.offer
+    if (
+        offer.economics_version == "v1_eur"
+        or offer.match.journey_id is not None
+        or offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT
+    ):
         return
     open_hold(
         user=instance.payer,

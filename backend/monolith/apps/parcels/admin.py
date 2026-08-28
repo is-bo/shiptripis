@@ -8,6 +8,30 @@ class ParcelMediaInline(admin.TabularInline):
     extra = 0
     readonly_fields = ("created_at",)
 
+    @staticmethod
+    def _is_retired_product(obj):
+        return obj is not None and obj.kind == ParcelRequest.Kind.PRODUCT
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._is_retired_product(obj):
+            return tuple(field.name for field in self.model._meta.fields)
+        return super().get_readonly_fields(request, obj)
+
+    def has_add_permission(self, request, obj=None):
+        if self._is_retired_product(obj):
+            return False
+        return super().has_add_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if self._is_retired_product(obj):
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if self._is_retired_product(obj):
+            return False
+        return super().has_delete_permission(request, obj)
+
 
 @admin.register(ParcelRequest)
 class ParcelRequestAdmin(admin.ModelAdmin):
@@ -27,13 +51,50 @@ class ParcelRequestAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     inlines = [ParcelMediaInline]
 
+    def has_add_permission(self, request):
+        # Concrete DeliveryRequest creation remains available through its own
+        # admin.  The polymorphic parent must never create a bare Product row.
+        return False
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.kind == ParcelRequest.Kind.PRODUCT:
+            return tuple(field.name for field in self.model._meta.fields)
+        return ()
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.kind == ParcelRequest.Kind.PRODUCT:
+            return False
+        return super().has_delete_permission(request, obj)
+
 
 @admin.register(DeliveryRequest)
 class DeliveryRequestAdmin(admin.ModelAdmin):
-    list_display = ("id", "sender", "origin", "destination", "base_amount_dzd", "status")
-    list_filter = ("status",)
-    search_fields = ("sender__email",)
-    autocomplete_fields = ("sender", "origin", "destination")
+    list_display = (
+        "id",
+        "sender",
+        "schema_version",
+        "origin",
+        "destination",
+        "pickup_location",
+        "delivery_location",
+        "base_amount_dzd",
+        "traveler_reward_eur_cents",
+        "status",
+    )
+    list_filter = ("schema_version", "status")
+    search_fields = ("sender__email", "title")
+    autocomplete_fields = (
+        "sender",
+        "origin",
+        "destination",
+        "pickup_location",
+        "delivery_location",
+    )
 
 
 @admin.register(ProductRequest)
@@ -50,3 +111,12 @@ class ProductRequestAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("sender__email", "store_name", "product_url")
     autocomplete_fields = ("sender", "origin", "destination")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

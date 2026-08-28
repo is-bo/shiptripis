@@ -1,5 +1,6 @@
 """Base Django settings shared by dev/prod. Reads from environment via
 `environ`. See backend/.env.example for the full set of variables."""
+
 from datetime import timedelta
 from pathlib import Path
 
@@ -32,8 +33,15 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.kyc",
     "apps.trips",
+    "apps.locations",
     "apps.parcels",
     "apps.matching",
+    "apps.deals",
+    "apps.finance",
+    "apps.handover",
+    "apps.disputes",
+    "apps.ratings",
+    "apps.boosts",
     "apps.payments",
     "apps.wallet",
     "apps.verification",
@@ -92,8 +100,10 @@ AUTH_USER_MODEL = "accounts.User"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-     "OPTIONS": {"min_length": 8}},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -108,9 +118,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -118,6 +126,34 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": env.str("DRF_ANON_THROTTLE_RATE", default="60/min"),
         "user": env.str("DRF_USER_THROTTLE_RATE", default="600/min"),
+        "matching_discovery": env.str(
+            "DRF_MATCHING_DISCOVERY_THROTTLE_RATE", default="10/min"
+        ),
+        "journey_routes": env.str("DRF_JOURNEY_ROUTES_THROTTLE_RATE", default="10/min"),
+        # A guest link is an unauthenticated capability, so the surface that
+        # accepts it is throttled hard against token guessing.
+        "guest_payment": env.str("DRF_GUEST_PAYMENT_THROTTLE_RATE", default="20/min"),
+        "payment_checkout": env.str(
+            "DRF_PAYMENT_CHECKOUT_THROTTLE_RATE", default="20/min"
+        ),
+        # Generous: a provider retry storm must not be throttled into loss.
+        "payment_webhook": env.str(
+            "DRF_PAYMENT_WEBHOOK_THROTTLE_RATE", default="1200/min"
+        ),
+        # Submitting a handover code is a guessing surface. The per-code
+        # attempt budget and the sliding window in `apps.handover.services` are
+        # the authoritative limits; this is the cheap outer bound that stops a
+        # flood before it reaches a row lock.
+        "handover_submit": env.str(
+            "DRF_HANDOVER_SUBMIT_THROTTLE_RATE", default="12/min"
+        ),
+        # Revealing a code decrypts a stored secret and writes an audit row.
+        "handover_reveal": env.str(
+            "DRF_HANDOVER_REVEAL_THROTTLE_RATE", default="30/min"
+        ),
+        "dispute_evidence": env.str(
+            "DRF_DISPUTE_EVIDENCE_THROTTLE_RATE", default="20/min"
+        ),
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
@@ -127,8 +163,12 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     "ALGORITHM": "HS256",
     "SIGNING_KEY": env.str("JWT_HS256_SECRET"),
-    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=env.int("JWT_ACCESS_TTL_SECONDS", default=300)),
-    "REFRESH_TOKEN_LIFETIME": timedelta(seconds=env.int("JWT_REFRESH_TTL_SECONDS", default=2592000)),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        seconds=env.int("JWT_ACCESS_TTL_SECONDS", default=300)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        seconds=env.int("JWT_REFRESH_TTL_SECONDS", default=2592000)
+    ),
     "LEEWAY": timedelta(seconds=env.int("JWT_LEEWAY_SECONDS", default=30)),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
@@ -144,34 +184,87 @@ GOOGLE_OAUTH_CLIENT_IDS = env.list("GOOGLE_OAUTH_CLIENT_IDS", default=[])
 
 # --- Password reset ---
 PASSWORD_RESET_CODE_TTL_SECONDS = env.int(
-    "PASSWORD_RESET_CODE_TTL_SECONDS", default=900  # 15 minutes
+    "PASSWORD_RESET_CODE_TTL_SECONDS",
+    default=900,  # 15 minutes
 )
 PASSWORD_RESET_MAX_ATTEMPTS = env.int("PASSWORD_RESET_MAX_ATTEMPTS", default=5)
 
 # --- Email verification (signup OTP) ---
 EMAIL_VERIFY_CODE_TTL_SECONDS = env.int(
-    "EMAIL_VERIFY_CODE_TTL_SECONDS", default=900  # 15 minutes
+    "EMAIL_VERIFY_CODE_TTL_SECONDS",
+    default=900,  # 15 minutes
 )
 EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 
 # --- Email ---
-# Transactional OTP mail (verify/reset) is rendered here and enqueued onto the
-# `email:send` Redis stream — the Go email-service does the actual SMTP send.
-# Django's own EMAIL_BACKEND is only used for any incidental mail; prod.py wires
-# it to SMTP. DEFAULT_FROM_EMAIL is the sender address on all outbound mail.
-DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", default="ShipTrip <noreply@shiptrip.dz>")
+# Transactional obligations live in PostgreSQL. Ordinary rendered mail uses the
+# `email:send` stream and Go SMTP worker; secret-bearing verification, reset,
+# invitation and delivery-code messages use Django's trusted final SMTP adapter
+# so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
+DEFAULT_FROM_EMAIL = env.str(
+    "DEFAULT_FROM_EMAIL", default="ShipTrip <noreply@shiptrip.dz>"
+)
+# Public links and support identity used by transactional templates. These are
+# intentionally non-secret; SMTP/API credentials remain in the email worker's
+# environment and are never exposed to request handlers.
+FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="")
+EMAIL_SUPPORT_ADDR = env.str("EMAIL_SUPPORT_ADDR", default="")
+TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
+TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").lower()
+# Separate encryption root for short-lived OTP/invitation delivery copies.
+# When unset, the outbox derives a key from SECRET_KEY; production deployments
+# should provide a rotated, dedicated secret instead.
+TRANSACTIONAL_EMAIL_SECRET = env.str("TRANSACTIONAL_EMAIL_SECRET", default="")
+EMAIL_SENDING_DOMAIN_VERIFIED = env.bool(
+    "EMAIL_SENDING_DOMAIN_VERIFIED", default=False
+)
 
 # --- Redis ---
 REDIS_URL = env.str("REDIS_URL", default="redis://redis:6379/0")
+
+# --- Route/location provider -------------------------------------------------
+# The domain depends only on apps.routing.providers.RouteProvider. Production
+# deliberately has no synthetic fallback provider: missing configuration is
+# surfaced by /api/routes/provider-status and matching labels its conservative
+# spatial fallback explicitly.
+ROUTE_PROVIDER_CLASS = env.str("ROUTE_PROVIDER_CLASS", default="")
+ROUTE_PROVIDER_OPTIONS = env.json("ROUTE_PROVIDER_OPTIONS", default={})
+ROUTE_PROVIDER_CACHE_TTL_SECONDS = env.int(
+    "ROUTE_PROVIDER_CACHE_TTL_SECONDS", default=86400
+)
+ROUTE_PROVIDER_CACHE_ALIAS = "routing"
+ROUTE_PROVIDER_CACHE_URL = env.str("ROUTE_PROVIDER_CACHE_URL", default="")
+ROUTE_PROVIDER_CACHE_NAMESPACE = env.str(
+    "ROUTE_PROVIDER_CACHE_NAMESPACE", default="v1"
+)
+ROUTE_PROVIDER_MAX_EXTERNAL_CALLS_PER_MATCHING_REQUEST = env.int(
+    "ROUTE_PROVIDER_MAX_EXTERNAL_CALLS_PER_MATCHING_REQUEST", default=50
+)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "shiptrip-default",
+    },
+    "routing": (
+        {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": ROUTE_PROVIDER_CACHE_URL,
+            "KEY_PREFIX": "shiptrip-routing",
+        }
+        if ROUTE_PROVIDER_CACHE_URL
+        else {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "shiptrip-routing",
+        }
+    ),
+}
 
 # --- Object storage ---
 S3_ENDPOINT_URL = env.str("S3_ENDPOINT_URL")
 S3_REGION = env.str("S3_REGION", default="us-east-1")
 S3_ACCESS_KEY = env.str("S3_ACCESS_KEY")
 S3_SECRET_KEY = env.str("S3_SECRET_KEY")
-S3_USE_PATH_STYLE = env.bool(
-    "S3_USE_PATH_STYLE", default=bool(S3_ENDPOINT_URL)
-)
+S3_USE_PATH_STYLE = env.bool("S3_USE_PATH_STYLE", default=bool(S3_ENDPOINT_URL))
 S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
 S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
 
@@ -185,8 +278,56 @@ GRPC_TLS_SERVER_KEY = env.str("GRPC_TLS_SERVER_KEY", default="")
 
 # Development/QA only. Hosted environments leave this disabled so an
 # unauthenticated caller cannot synthesize payment state transitions.
-PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool(
-    "PAYMENTS_MOCK_WEBHOOK_ENABLED", default=False
+PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool("PAYMENTS_MOCK_WEBHOOK_ENABLED", default=False)
+# Historical DZD PaymentIntent rows remain readable, but their old instant-mock
+# mutation surface is retired by default. Tests that exercise archival behavior
+# must opt in explicitly.
+PAYMENTS_LEGACY_MUTATIONS_ENABLED = env.bool(
+    "PAYMENTS_LEGACY_MUTATIONS_ENABLED", default=False
+)
+
+# --- V1 payments -------------------------------------------------------------
+# Credentials only. Everything commercial (which providers are on, the deposit
+# formula, the EUR->DZD rate) lives in the versioned BusinessSettingsVersion
+# policy, not here, so it is audited and snapshotted rather than redeployed.
+#
+# `PAYMENTS_ALLOW_MOCK_PROVIDER` is the single switch that makes the test rail
+# reachable at all. It defaults off, `config.settings.prod` refuses to start
+# when it is on, and nothing anywhere falls back to mock when a real provider
+# is misconfigured — a missing credential fails the checkout instead.
+PAYMENTS_ALLOW_MOCK_PROVIDER = env.bool("PAYMENTS_ALLOW_MOCK_PROVIDER", default=False)
+PAYMENTS_PUBLIC_BASE_URL = env.str("PAYMENTS_PUBLIC_BASE_URL", default="")
+
+# --- V1 handover codes ---
+# Root secret for pickup/delivery code hashing and sealing. Deliberately its own
+# variable: rotating or losing the Django SECRET_KEY is a session/signing event,
+# not a parcel-handover event, and the two should not share a blast radius.
+# Production refuses to boot without it; development and tests derive a
+# deterministic fallback from SECRET_KEY (see apps.handover.codes).
+HANDOVER_CODE_SECRET = env.str("HANDOVER_CODE_SECRET", default="")
+S3_BUCKET_DISPUTE = env.str("S3_BUCKET_DISPUTE", default="shiptrip-dispute")
+#: Lifetime of a signed dispute-evidence download URL, in seconds.
+DISPUTE_EVIDENCE_URL_TTL_SECONDS = env.int(
+    "DISPUTE_EVIDENCE_URL_TTL_SECONDS", default=300
+)
+PAYMENTS_PROVIDER_TIMEOUT_SECONDS = env.int(
+    "PAYMENTS_PROVIDER_TIMEOUT_SECONDS", default=15
+)
+
+STRIPE_SECRET_KEY = env.str("STRIPE_SECRET_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env.str("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_API_BASE = env.str("STRIPE_API_BASE", default="https://api.stripe.com")
+STRIPE_API_VERSION = env.str("STRIPE_API_VERSION", default="")
+STRIPE_WEBHOOK_TOLERANCE_SECONDS = env.int(
+    "STRIPE_WEBHOOK_TOLERANCE_SECONDS", default=300
+)
+
+# Chargily signs webhooks with the API secret key; the separate override exists
+# so the two can be rotated independently if Chargily ever splits them.
+CHARGILY_SECRET_KEY = env.str("CHARGILY_SECRET_KEY", default="")
+CHARGILY_WEBHOOK_SECRET = env.str("CHARGILY_WEBHOOK_SECRET", default="")
+CHARGILY_API_BASE = env.str(
+    "CHARGILY_API_BASE", default="https://pay.chargily.net/api/v2"
 )
 
 # --- I18n ---

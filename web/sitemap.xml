@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://shiptrip.example/en/</loc></url>
+  <url><loc>https://shiptrip.example/fr/</loc></url>
+  <url><loc>https://shiptrip.example/ar/</loc></url>
+  <url><loc>https://shiptrip.example/terms.html</loc></url>
+  <url><loc>https://shiptrip.example/privacy.html</loc></url>
+  <url><loc>https://shiptrip.example/prohibited-items.html</loc></url>
+  <url><loc>https://shiptrip.example/support.html</loc></url>
+</urlset>

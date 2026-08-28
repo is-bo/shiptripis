@@ -1,17 +1,23 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.admin.sites import AdminSite
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.test import RequestFactory, SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
+from apps.locations.models import Location
 from apps.parcels.models import (
     DeliveryRequest,
     ParcelMedia,
     ParcelRequest,
     ProductRequest,
 )
+from apps.parcels.admin import ParcelMediaInline, ParcelRequestAdmin
 
 
 def _make_user(email: str = "sender@example.com") -> User:
@@ -30,6 +36,30 @@ def _auth_client(user: User) -> APIClient:
     c = APIClient()
     c.force_authenticate(user=user)
     return c
+
+
+class ProductAdminRetirementTests(SimpleTestCase):
+    def setUp(self):
+        self.request = RequestFactory().get("/admin/parcels/")
+        self.product = ParcelRequest(kind=ParcelRequest.Kind.PRODUCT)
+        site = AdminSite()
+        self.parent_admin = ParcelRequestAdmin(ParcelRequest, site)
+        self.media_inline = ParcelMediaInline(ParcelRequest, site)
+
+    def test_parent_admin_cannot_create_bare_product_rows(self):
+        assert self.parent_admin.has_add_permission(self.request) is False
+
+    def test_historical_product_media_is_read_only(self):
+        assert self.media_inline.has_add_permission(self.request, self.product) is False
+        assert (
+            self.media_inline.has_change_permission(self.request, self.product) is False
+        )
+        assert (
+            self.media_inline.has_delete_permission(self.request, self.product) is False
+        )
+        assert set(
+            self.media_inline.get_readonly_fields(self.request, self.product)
+        ) == {field.name for field in ParcelMedia._meta.fields}
 
 
 def _delivery_payload(**overrides) -> dict:
@@ -61,6 +91,97 @@ def _product_payload(**overrides) -> dict:
     return base
 
 
+def _make_location(
+    owner: User,
+    *,
+    city: str,
+    suffix: str,
+    country_code: str = "FR",
+) -> Location:
+    return Location.objects.create(
+        owner=owner,
+        created_by=owner,
+        kind=Location.Kind.EXACT_ADDRESS,
+        normalized_label=f"12 {suffix} Street, {city}",
+        public_label=city,
+        private_label=f"Apartment 4, 12 {suffix} Street, {city}",
+        city=city,
+        region="",
+        country_code=country_code,
+        latitude="48.856600",
+        longitude="2.352200",
+        coarse_latitude="48.850000",
+        coarse_longitude="2.350000",
+        source="manual",
+        precision=Location.Precision.ROOFTOP,
+    )
+
+
+def _delivery_v1_payload(pickup: Location, delivery: Location, **overrides) -> dict:
+    now = timezone.now()
+    base = {
+        "pickup_location_id": pickup.id,
+        "delivery_location_id": delivery.id,
+        "ready_window_start": (now + timedelta(days=1)).isoformat(),
+        "ready_window_end": (now + timedelta(days=1, hours=2)).isoformat(),
+        "deadline_at": (now + timedelta(days=3)).isoformat(),
+        "actual_weight_kg": "2.50",
+        "length_cm": "20.00",
+        "width_cm": "10.00",
+        "height_cm": "5.00",
+        "declared_value_eur_cents": 12_500,
+        "sender_proposed_reward_eur_cents": 3_000,
+        "title": "Documents for Algiers",
+        "description": "A sealed folder of personal documents.",
+        "category": "documents",
+        "handling_notes": "Keep dry.",
+        "fragile": False,
+        "description_is_accurate": True,
+        "item_is_legal": True,
+        "no_prohibited_goods": True,
+        "declared_value_is_accurate": True,
+        "customs_responsibilities_understood": True,
+    }
+    base.update(overrides)
+    return base
+
+
+def _create_v1_delivery(
+    sender: User,
+    pickup: Location,
+    delivery: Location,
+    **overrides,
+) -> DeliveryRequest:
+    now = timezone.now()
+    values = {
+        "sender": sender,
+        "kind": ParcelRequest.Kind.DELIVERY,
+        "schema_version": 2,
+        "pickup_location": pickup,
+        "delivery_location": delivery,
+        "item_type": ParcelRequest.ItemType.DOCUMENTS,
+        "description": "A sealed folder.",
+        "deadline_at": now + timedelta(days=3),
+        "ready_window_start": now + timedelta(days=1),
+        "ready_window_end": now + timedelta(days=1, hours=2),
+        "actual_weight_kg": "2.50",
+        "length_cm": "30.00",
+        "width_cm": "20.00",
+        "height_cm": "5.00",
+        "declared_value_eur_cents": 12_500,
+        "traveler_reward_eur_cents": 3_000,
+        "title": "Documents",
+        "category": ParcelRequest.ItemType.DOCUMENTS,
+        "description_is_accurate": True,
+        "item_is_legal": True,
+        "no_prohibited_goods": True,
+        "declared_value_is_accurate": True,
+        "customs_responsibilities_understood": True,
+    }
+    values.update(overrides)
+    return DeliveryRequest.objects.create(**values)
+
+
 class DeliveryCreateTests(APITestCase):
     def setUp(self):
         self.user = _make_user()
@@ -68,52 +189,20 @@ class DeliveryCreateTests(APITestCase):
 
     def test_unauth_rejected(self):
         c = APIClient()
-        r = c.post(reverse("parcels-delivery-create"), _delivery_payload(), format="json")
+        r = c.post(
+            reverse("parcels-delivery-create"), _delivery_payload(), format="json"
+        )
         assert r.status_code == 401
 
     @patch("apps.parcels.views.redis_bus.publish_after_commit")
-    def test_creates_delivery_and_publishes(self, pub):
+    def test_legacy_delivery_creation_is_gone(self, pub):
         r = self.client.post(
             reverse("parcels-delivery-create"), _delivery_payload(), format="json"
         )
-        assert r.status_code == 201, r.data
-        assert r.data["kind"] == "delivery"
-        assert r.data["base_amount_dzd"] == 3000
-        assert r.data["product_price_dzd"] is None
-        assert r.data["origin"]["iata"] == "ALG"
-        assert DeliveryRequest.objects.count() == 1
-        pub.assert_called_once()
-        ch, payload = pub.call_args.args
-        assert ch == "parcel.created"
-        assert payload["kind"] == "delivery"
-
-    def test_rejects_same_origin_destination(self):
-        r = self.client.post(
-            reverse("parcels-delivery-create"),
-            _delivery_payload(origin="ALG", destination="ALG"),
-            format="json",
-        )
-        assert r.status_code == 400
-        assert "destination" in r.data
-
-    def test_rejects_unknown_iata(self):
-        r = self.client.post(
-            reverse("parcels-delivery-create"),
-            _delivery_payload(origin="ZZZ"),
-            format="json",
-        )
-        assert r.status_code == 400
-        assert "airports" in r.data
-
-    def test_rejects_past_deadline(self):
-        past = (timezone.now() - timedelta(days=1)).isoformat()
-        r = self.client.post(
-            reverse("parcels-delivery-create"),
-            _delivery_payload(deadline_at=past),
-            format="json",
-        )
-        assert r.status_code == 400
-        assert "deadline_at" in r.data
+        assert r.status_code == 410, r.data
+        assert r.data["code"] == "legacy_delivery_flow_retired"
+        assert DeliveryRequest.objects.count() == 0
+        pub.assert_not_called()
 
 
 class ProductCreateTests(APITestCase):
@@ -122,17 +211,220 @@ class ProductCreateTests(APITestCase):
         self.client = _auth_client(self.user)
 
     @patch("apps.parcels.views.redis_bus.publish_after_commit")
-    def test_creates_product(self, pub):
+    def test_product_creation_is_gone_and_does_not_publish(self, pub):
         r = self.client.post(
             reverse("parcels-product-create"), _product_payload(), format="json"
         )
-        assert r.status_code == 201, r.data
-        assert r.data["kind"] == "product"
-        assert r.data["product_price_dzd"] == 45000
-        assert r.data["base_amount_dzd"] is None
-        assert r.data["store_name"] == "Fnac"
-        assert ProductRequest.objects.count() == 1
-        pub.assert_called_once()
+        assert r.status_code == 410, r.data
+        assert ProductRequest.objects.count() == 0
+        pub.assert_not_called()
+
+
+class DeliveryV1CreateTests(APITestCase):
+    def setUp(self):
+        self.sender = _make_user("v1-sender@example.com")
+        self.client = _auth_client(self.sender)
+        self.pickup = _make_location(self.sender, city="Paris", suffix="Pickup")
+        self.delivery = _make_location(
+            self.sender,
+            city="Algiers",
+            suffix="Delivery",
+            country_code="DZ",
+        )
+
+    def test_requires_authentication(self):
+        response = APIClient().post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(self.pickup, self.delivery),
+            format="json",
+        )
+        assert response.status_code == 401
+
+    @patch("apps.parcels.views.redis_bus.publish_after_commit")
+    def test_creates_location_based_eur_request_without_legacy_values(self, publish):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(self.pickup, self.delivery),
+            format="json",
+        )
+
+        assert response.status_code == 201, response.data
+        parcel = DeliveryRequest.objects.get()
+        assert parcel.schema_version == 2
+        assert parcel.origin_id is None
+        assert parcel.destination_id is None
+        assert parcel.weight_kg is None
+        assert parcel.base_amount_dzd is None
+        assert parcel.actual_weight_kg == 2.5
+        assert parcel.traveler_reward_eur_cents == 3_000
+        assert response.data["origin"] is None
+        assert response.data["destination"] is None
+        assert response.data["base_amount_dzd"] is None
+        assert response.data["sender_proposed_reward_eur_cents"] == 3_000
+        assert "traveler_reward_eur_cents" not in response.data
+        assert response.data["pickup_location"]["private_label"].startswith(
+            "Apartment 4"
+        )
+        assert "latitude" in response.data["pickup_location"]
+        publish.assert_called_once()
+        assert publish.call_args.args[1]["currency"] == "EUR"
+        assert "base_amount_dzd" not in publish.call_args.args[1]
+
+    def test_rejects_unconfirmed_safety_declaration(self):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(
+                self.pickup,
+                self.delivery,
+                no_prohibited_goods=False,
+            ),
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "no_prohibited_goods" in response.data
+        assert DeliveryRequest.objects.count() == 0
+
+    def test_rejects_legacy_dzd_input(self):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(
+                self.pickup,
+                self.delivery,
+                base_amount_dzd=99_999,
+            ),
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "base_amount_dzd" in response.data
+        assert DeliveryRequest.objects.count() == 0
+
+    def test_rejects_location_owned_by_another_user(self):
+        other = _make_user("location-owner@example.com")
+        private_location = _make_location(
+            other,
+            city="Lyon",
+            suffix="Secret",
+        )
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(private_location, self.delivery),
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "pickup_location_id" in response.data
+        assert DeliveryRequest.objects.count() == 0
+
+    def test_rejects_incomplete_dimensions_and_invalid_window(self):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(
+                self.pickup,
+                self.delivery,
+                width_cm=None,
+            ),
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "width_cm" in response.data
+
+        now = timezone.now()
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            _delivery_v1_payload(
+                self.pickup,
+                self.delivery,
+                ready_window_start=(now + timedelta(days=2)).isoformat(),
+                ready_window_end=(now + timedelta(days=1)).isoformat(),
+            ),
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "ready_window_end" in response.data
+
+    def test_model_and_database_reject_mixed_v1_legacy_fields(self):
+        with self.assertRaises(ValidationError):
+            _create_v1_delivery(
+                self.sender,
+                self.pickup,
+                self.delivery,
+                pickup_city="Exact legacy city leak",
+            )
+
+        valid = _create_v1_delivery(self.sender, self.pickup, self.delivery)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeliveryRequest.objects.filter(pk=valid.pk).update(base_amount_dzd=1)
+
+
+class DeliveryV1PrivacyAndAuthorizationTests(APITestCase):
+    def setUp(self):
+        self.sender = _make_user("privacy-sender@example.com")
+        self.traveler = _make_user("privacy-traveler@example.com")
+        self.outsider = _make_user("privacy-outsider@example.com")
+        self.pickup = _make_location(self.sender, city="Paris", suffix="Private")
+        self.delivery = _make_location(
+            self.sender,
+            city="Algiers",
+            suffix="Recipient",
+            country_code="DZ",
+        )
+        self.open_request = _create_v1_delivery(
+            self.sender,
+            self.pickup,
+            self.delivery,
+        )
+        self.targeted_request = _create_v1_delivery(
+            self.sender,
+            self.pickup,
+            self.delivery,
+            target_traveler=self.traveler,
+        )
+
+    def test_owner_receives_private_location_fields(self):
+        response = _auth_client(self.sender).get(
+            reverse("parcels-detail", args=[self.open_request.pk])
+        )
+        assert response.status_code == 200
+        assert response.data["pickup_location"]["private_label"].startswith(
+            "Apartment 4"
+        )
+        assert "latitude" in response.data["pickup_location"]
+        assert "provider_metadata" in response.data["pickup_location"]
+
+    def test_other_user_receives_only_coarse_location_fields(self):
+        response = _auth_client(self.outsider).get(
+            reverse("parcels-detail", args=[self.open_request.pk])
+        )
+        assert response.status_code == 200
+        pickup = response.data["pickup_location"]
+        assert pickup["public_label"] == "Paris"
+        assert pickup["coarse_latitude"] == "48.850000"
+        for exact_field in (
+            "normalized_label",
+            "private_label",
+            "latitude",
+            "longitude",
+            "provider_place_id",
+            "provider_metadata",
+        ):
+            assert exact_field not in pickup
+
+    def test_only_owner_or_target_can_read_targeted_request(self):
+        target_response = _auth_client(self.traveler).get(
+            reverse("parcels-detail", args=[self.targeted_request.pk])
+        )
+        assert target_response.status_code == 200
+        assert "private_label" not in target_response.data["pickup_location"]
+
+        outsider_response = _auth_client(self.outsider).get(
+            reverse("parcels-detail", args=[self.targeted_request.pk])
+        )
+        assert outsider_response.status_code == 403
+
+    def test_open_feed_excludes_targeted_requests_and_keeps_locations_coarse(self):
+        response = _auth_client(self.outsider).get(reverse("parcels-open-search"))
+        assert response.status_code == 200
+        assert [row["id"] for row in response.data] == [self.open_request.id]
+        assert "private_label" not in response.data[0]["pickup_location"]
 
 
 class ParcelListTests(APITestCase):
@@ -163,19 +455,26 @@ class ParcelListTests(APITestCase):
         assert len(r.data) == 1
         assert r.data[0]["sender_id"] == self.user.id
 
-    def test_filter_by_kind(self):
+    def test_product_kind_is_excluded_from_live_list(self):
         DeliveryRequest.objects.create(
-            sender=self.user, kind="delivery",
-            origin_id="ALG", destination_id="CDG", weight_kg=2, base_amount_dzd=2000,
+            sender=self.user,
+            kind="delivery",
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            base_amount_dzd=2000,
         )
         ProductRequest.objects.create(
-            sender=self.user, kind="product",
-            origin_id="ALG", destination_id="CDG", weight_kg=2, product_price_dzd=10000,
+            sender=self.user,
+            kind="product",
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            product_price_dzd=10000,
         )
         r = self.client.get(reverse("parcels-list"), {"kind": "product"})
         assert r.status_code == 200
-        assert len(r.data) == 1
-        assert r.data[0]["kind"] == "product"
+        assert r.data == []
 
 
 class ParcelCancelTests(APITestCase):
@@ -184,8 +483,12 @@ class ParcelCancelTests(APITestCase):
         self.other = _make_user(email="other@example.com")
         self.client = _auth_client(self.user)
         self.parcel = DeliveryRequest.objects.create(
-            sender=self.user, kind="delivery",
-            origin_id="ALG", destination_id="CDG", weight_kg=2, base_amount_dzd=2000,
+            sender=self.user,
+            kind="delivery",
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            base_amount_dzd=2000,
         )
 
     @patch("apps.parcels.views.redis_bus.publish_after_commit")
@@ -211,15 +514,25 @@ class ParcelCancelTests(APITestCase):
 class ParcelDetailTests(APITestCase):
     def setUp(self):
         self.user = _make_user()
+        self.other = _make_user("history-outsider@example.com")
         self.client = _auth_client(self.user)
         self.delivery = DeliveryRequest.objects.create(
-            sender=self.user, kind="delivery",
-            origin_id="ALG", destination_id="CDG", weight_kg=2, base_amount_dzd=2000,
+            sender=self.user,
+            kind="delivery",
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            base_amount_dzd=2000,
         )
         self.product = ProductRequest.objects.create(
-            sender=self.user, kind="product",
-            origin_id="CDG", destination_id="ALG", weight_kg=1, product_price_dzd=20000,
-            store_name="Apple", product_url="https://apple.com/x",
+            sender=self.user,
+            kind="product",
+            origin_id="CDG",
+            destination_id="ALG",
+            weight_kg=1,
+            product_price_dzd=20000,
+            store_name="Apple",
+            product_url="https://apple.com/x",
         )
 
     def test_delivery_detail_includes_base_amount(self):
@@ -228,12 +541,15 @@ class ParcelDetailTests(APITestCase):
         assert r.data["base_amount_dzd"] == 2000
         assert r.data["product_price_dzd"] is None
 
-    def test_product_detail_includes_product_fields(self):
+    def test_product_detail_is_retired_even_for_owner(self):
         r = self.client.get(reverse("parcels-detail", args=[self.product.pk]))
-        assert r.status_code == 200
-        assert r.data["product_price_dzd"] == 20000
-        assert r.data["store_name"] == "Apple"
-        assert r.data["base_amount_dzd"] is None
+        assert r.status_code == 410
+
+    def test_product_history_is_not_visible_to_other_users(self):
+        r = _auth_client(self.other).get(
+            reverse("parcels-detail", args=[self.product.pk])
+        )
+        assert r.status_code == 410
 
     def test_404_for_unknown(self):
         r = self.client.get(reverse("parcels-detail", args=[9999]))
@@ -241,7 +557,7 @@ class ParcelDetailTests(APITestCase):
 
 
 class DeliveryQuoteTests(APITestCase):
-    """GET /api/parcels/quote/delivery — weight + route suggestion."""
+    """The legacy DZD quote cannot participate in the V1 EUR flow."""
 
     def setUp(self):
         self.user = _make_user("quote@example.com")
@@ -252,64 +568,14 @@ class DeliveryQuoteTests(APITestCase):
         r = c.get(reverse("parcels-quote-delivery"), {"weight_kg": 2})
         assert r.status_code == 401
 
-    def test_dz_fr_route_returns_multiplied_suggestion(self):
+    def test_legacy_dzd_quote_is_gone(self):
         r = self.client.get(
             reverse("parcels-quote-delivery"),
             {"weight_kg": 3, "origin": "ALG", "destination": "CDG"},
         )
-        assert r.status_code == 200, r.data
-        # 1500 + 600*3 = 3300; * 1.6 = 5280
-        assert r.data["weight_kg"] == 3
-        assert r.data["route_multiplier_x100"] == 160
-        assert r.data["suggested_base_dzd"] == 5_280
-        # +25% commission = 6600
-        assert r.data["suggested_total_dzd"] == 6_600
-        assert r.data["currency"] == "DZD"
-
-    def test_no_route_returns_1x_multiplier(self):
-        r = self.client.get(reverse("parcels-quote-delivery"), {"weight_kg": 5})
-        assert r.status_code == 200
-        assert r.data["route_multiplier_x100"] == 100
-        # 1500 + 600*5 = 4500
-        assert r.data["suggested_base_dzd"] == 4_500
-
-    def test_missing_weight_rejected(self):
-        r = self.client.get(reverse("parcels-quote-delivery"))
-        assert r.status_code == 400
-
-    def test_non_int_weight_rejected(self):
-        r = self.client.get(
-            reverse("parcels-quote-delivery"), {"weight_kg": "heavy"}
-        )
-        assert r.status_code == 400
-
-    def test_zero_weight_rejected(self):
-        r = self.client.get(
-            reverse("parcels-quote-delivery"), {"weight_kg": 0}
-        )
-        assert r.status_code == 400
-
-    def test_over_cap_weight_rejected(self):
-        r = self.client.get(
-            reverse("parcels-quote-delivery"), {"weight_kg": 999}
-        )
-        assert r.status_code == 400
-
-    def test_unknown_iata_treated_as_no_route(self):
-        # Airport lookup misses → empty country → frozenset({""}) → no multiplier
-        r = self.client.get(
-            reverse("parcels-quote-delivery"),
-            {"weight_kg": 2, "origin": "ZZZ", "destination": "QQQ"},
-        )
-        assert r.status_code == 200
-        assert r.data["route_multiplier_x100"] == 100
-
-    def test_band_returned(self):
-        r = self.client.get(reverse("parcels-quote-delivery"), {"weight_kg": 5})
-        assert r.status_code == 200
-        # base 4500: floor 2700, ceiling 6300
-        assert r.data["min_floor_dzd"] == 2_700
-        assert r.data["max_ceiling_dzd"] == 6_300
+        assert r.status_code == 410
+        assert r.data["code"] == "legacy_dzd_quote_retired"
+        assert "suggested_base_dzd" not in r.data
 
 
 class ParcelMediaPrivacyTests(APITestCase):
@@ -382,13 +648,44 @@ class OpenParcelSearchTests(APITestCase):
             base_amount_dzd=3000,
             status=ParcelRequest.Status.MATCHED,
         )
+        self.p_targeted = DeliveryRequest.objects.create(
+            sender=self.other_sender,
+            target_traveler=self.traveler,
+            kind=ParcelRequest.Kind.DELIVERY,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            item_type="documents",
+            base_amount_dzd=3000,
+        )
+        self.p_product = ProductRequest.objects.create(
+            sender=self.other_sender,
+            kind=ParcelRequest.Kind.PRODUCT,
+            origin_id="ALG",
+            destination_id="CDG",
+            weight_kg=2,
+            item_type="electronics",
+            product_price_dzd=20_000,
+        )
 
-    def test_returns_only_open_not_owned_by_caller(self):
+    def test_legacy_open_requests_are_not_in_v1_feed(self):
         c = _auth_client(self.sender)
-        r = c.get(reverse("parcels-open-search") + "?origin=ALG&destination=CDG")
+        r = c.get(reverse("parcels-open-search"))
         assert r.status_code == 200
         ids = {row["id"] for row in r.data}
-        assert ids == {self.p_open.id}
+        assert ids == set()
+
+    def test_retired_airport_filters_are_rejected_instead_of_returning_nothing(self):
+        c = _auth_client(self.sender)
+
+        both = c.get(reverse("parcels-open-search") + "?origin=ALG&destination=CDG")
+        origin_only = c.get(reverse("parcels-open-search") + "?origin=ALG")
+
+        assert both.status_code == 400
+        assert both.data["code"] == "airport_filter_retired"
+        assert both.data["retired_parameters"] == ["destination", "origin"]
+        assert origin_only.status_code == 400
+        assert origin_only.data["retired_parameters"] == ["origin"]
 
     def test_filters_by_max_weight(self):
         c = _auth_client(self.traveler)

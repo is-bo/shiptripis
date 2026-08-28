@@ -251,7 +251,7 @@ jobs:
         run: flutter pub get
 
       - name: Format runner sources
-        run: dart format --output=none lib test
+        run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Analyze
         run: flutter analyze --fatal-infos

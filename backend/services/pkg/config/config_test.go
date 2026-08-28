@@ -25,6 +25,10 @@ func clearConfigEnv(t *testing.T) {
 		"FCM_PROJECT_ID", "FCM_CREDENTIALS_PATH", "HOSTNAME",
 		"LOG_LEVEL", "CHAT_DB_MAX_CONNS", "PORT",
 		"CHAT_HTTP_ADDR", "NOTIF_HTTP_ADDR", "KYC_HTTP_ADDR", "EMAIL_HTTP_ADDR",
+		"EMAIL_ENABLED", "EMAIL_PROVIDER", "EMAIL_STREAM", "EMAIL_CONSUMER_GROUP",
+		"EMAIL_CONSUMER_NAME", "EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT",
+		"EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD", "EMAIL_FROM_ADDR",
+		"EMAIL_FROM_NAME", "EMAIL_USE_TLS", "EMAIL_DB_MAX_CONNS",
 	} {
 		t.Setenv(k, "")
 	}
@@ -335,6 +339,68 @@ func TestLoadFCM_BadEnabledBoolError(t *testing.T) {
 	t.Setenv("FCM_ENABLED", "maybe")
 	if _, err := LoadFCM(); err == nil {
 		t.Error("expected error for non-bool FCM_ENABLED")
+	}
+}
+
+// ── Email / Sender.net SMTP adapter ────────────────────────────────────────
+
+func TestLoadEmail_DisabledDefaultsToGenericSMTP(t *testing.T) {
+	clearConfigEnv(t)
+	got, err := LoadEmail()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Enabled || got.Provider != "smtp" {
+		t.Errorf("unexpected disabled email config: %+v", got)
+	}
+	if got.Stream != "email:send" || got.ConsumerGroup != "email-send-workers" {
+		t.Errorf("unexpected email defaults: %+v", got)
+	}
+}
+
+func TestLoadEmail_SenderNetUsesSMTPContract(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("EMAIL_ENABLED", "true")
+	t.Setenv("EMAIL_PROVIDER", "sender_net")
+	t.Setenv("EMAIL_SMTP_HOST", "smtp.sender.net")
+	t.Setenv("EMAIL_SMTP_PORT", "587")
+	t.Setenv("EMAIL_USE_TLS", "true")
+	t.Setenv("EMAIL_SMTP_USERNAME", "smtp-user")
+	t.Setenv("EMAIL_SMTP_PASSWORD", "smtp-password")
+	t.Setenv("EMAIL_FROM_ADDR", "noreply@example.com")
+	got, err := LoadEmail()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Provider != "sender_net" || got.SMTPHost != "smtp.sender.net" || got.SMTPPort != 587 || !got.UseTLS {
+		t.Errorf("unexpected Sender.net config: %+v", got)
+	}
+}
+
+func TestLoadEmail_RejectsUnknownProvider(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("EMAIL_PROVIDER", "mailchimp")
+	if _, err := LoadEmail(); err == nil || !strings.Contains(err.Error(), "EMAIL_PROVIDER") {
+		t.Fatalf("expected provider validation error, got %v", err)
+	}
+}
+
+func TestLoadEmail_SenderNetRequiresAuthAndTLS(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("EMAIL_ENABLED", "true")
+	t.Setenv("EMAIL_PROVIDER", "sender_net")
+	t.Setenv("EMAIL_SMTP_HOST", "smtp.sender.net")
+	t.Setenv("EMAIL_SMTP_PORT", "587")
+	t.Setenv("EMAIL_FROM_ADDR", "noreply@example.com")
+	t.Setenv("EMAIL_USE_TLS", "false")
+	_, err := LoadEmail()
+	if err == nil {
+		t.Fatal("expected Sender.net without auth/TLS to fail")
+	}
+	for _, want := range []string{"EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD", "EMAIL_USE_TLS"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing mention of %s", err, want)
+		}
 	}
 }
 

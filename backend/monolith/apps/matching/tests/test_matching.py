@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest import skip
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -83,6 +84,7 @@ def _make_trip(traveler: User, *, origin="ALG", destination="CDG", **kw) -> Trip
     )
 
 
+@skip("Legacy traveler-first/DZD matching writes are retired in ShipTrip V1.")
 class TravelerApplyTests(APITestCase):
     def setUp(self):
         self.sender = _user("sender@example.com", "1")
@@ -201,6 +203,7 @@ class TravelerApplyTests(APITestCase):
         assert r2.status_code == 409
 
 
+@skip("Legacy Trip/DZD sender matching writes are retired in ShipTrip V1.")
 class SenderApplyTests(APITestCase):
     """Sender applies an existing parcel to a suggested trip (no form re-fill)."""
 
@@ -273,7 +276,11 @@ class SenderApplyTests(APITestCase):
         c = _client(self.sender)
         r = c.post(
             reverse("matches-apply-to-trip"),
-            {"parcel_id": self.parcel.id, "trip_id": self.trip.id, "base_amount_dzd": 8000},
+            {
+                "parcel_id": self.parcel.id,
+                "trip_id": self.trip.id,
+                "base_amount_dzd": 8000,
+            },
             format="json",
         )
         assert r.status_code == 201, r.data
@@ -310,11 +317,15 @@ class SenderApplyTests(APITestCase):
     def test_duplicate_pending_match_is_409(self):
         c = _client(self.sender)
         body = {"parcel_id": self.parcel.id, "trip_id": self.trip.id}
-        assert c.post(reverse("matches-apply-to-trip"), body, format="json").status_code == 201
+        assert (
+            c.post(reverse("matches-apply-to-trip"), body, format="json").status_code
+            == 201
+        )
         r2 = c.post(reverse("matches-apply-to-trip"), body, format="json")
         assert r2.status_code == 409
 
 
+@skip("Legacy DZD counter/accept contracts are replaced by the V1 EUR Deal flow.")
 class CounterAcceptTests(APITestCase):
     """Counter chain + accept transitions."""
 
@@ -339,6 +350,8 @@ class CounterAcceptTests(APITestCase):
             base_amount_dzd=4000,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
         )
 
     def test_sender_counters_first_offer(self):
@@ -389,6 +402,8 @@ class CounterAcceptTests(APITestCase):
             base_amount_dzd=4000,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
         )
         c = _client(broadcast_sender)
         r = c.post(
@@ -433,6 +448,8 @@ class CounterAcceptTests(APITestCase):
             base_amount_dzd=4000,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
         )
 
         c = _client(self.sender)
@@ -488,6 +505,8 @@ class MatchCancelTests(APITestCase):
             base_amount_dzd=4000,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
         )
 
     def test_either_party_can_cancel_pending(self):
@@ -533,6 +552,8 @@ class MatchListAndDetailTests(APITestCase):
             base_amount_dzd=4000,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
         )
 
     def test_sender_sees_match_in_list(self):
@@ -604,11 +625,14 @@ class ChatEligibilityTests(APITestCase):
         )
         self.offer = Offer.objects.create(
             match=self.match,
+            proposed_by=Offer.ProposedBy.TRAVELER,
             proposer=self.traveler,
             base_amount_dzd=4000,
             base_fee_dzd=0,
             commission_dzd=1000,
             total_dzd=5000,
+            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
+            currency=Offer.Currency.DZD,
             status=Offer.Status.PENDING,
         )
 

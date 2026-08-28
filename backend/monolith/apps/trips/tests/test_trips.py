@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest import skip
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -49,6 +50,7 @@ class AirportListTests(APITestCase):
         assert any(a["iata"] == "ALG" for a in r.data)
 
 
+@skip("Legacy airport-pair Trip creation is retired in favor of V1 Journeys.")
 class TripCreateTests(APITestCase):
     def setUp(self):
         self.user = _make_user()
@@ -177,23 +179,23 @@ class TripCancelTests(APITestCase):
         self.client = _auth_client(self.user)
 
     @patch("apps.core.redis_bus.publish_after_commit")
-    def test_owner_can_cancel(self, pub):
+    def test_legacy_cancel_is_retired_without_mutation(self, pub):
         r = self.client.post(reverse("trips-cancel", kwargs={"pk": self.trip.id}))
-        assert r.status_code == 200
-        assert r.data["status"] == "cancelled"
-        pub.assert_called_once()
-        assert pub.call_args.args[0] == "trip.cancelled"
+        assert r.status_code == 410
+        self.trip.refresh_from_db()
+        assert self.trip.status == Trip.Status.ACTIVE
+        pub.assert_not_called()
 
     def test_non_owner_rejected(self):
         c = _auth_client(self.other)
         r = c.post(reverse("trips-cancel", kwargs={"pk": self.trip.id}))
-        assert r.status_code == 403
+        assert r.status_code == 410
 
     def test_already_cancelled_returns_409(self):
         self.trip.status = Trip.Status.CANCELLED
         self.trip.save(update_fields=["status"])
         r = self.client.post(reverse("trips-cancel", kwargs={"pk": self.trip.id}))
-        assert r.status_code == 409
+        assert r.status_code == 410
 
 
 class TripDetailTests(APITestCase):
@@ -214,11 +216,19 @@ class TripDetailTests(APITestCase):
         assert r.data["id"] == self.trip.id
         assert r.data["origin"]["iata"] == "ALG"
 
+    def test_non_owner_cannot_retrieve_legacy_trip(self):
+        other = _make_user("legacy-trip-outsider@example.com")
+        response = _auth_client(other).get(
+            reverse("trips-detail", kwargs={"pk": self.trip.id})
+        )
+        assert response.status_code == 403
+
     def test_404_for_unknown(self):
         r = self.client.get(reverse("trips-detail", kwargs={"pk": 999_999}))
         assert r.status_code == 404
 
 
+@skip("Legacy Trip discovery is retired in favor of V1 Journey search.")
 class TripSearchTests(APITestCase):
     def setUp(self):
         self.traveler = _make_user("trav1@example.com")

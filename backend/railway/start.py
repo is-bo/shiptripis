@@ -111,7 +111,10 @@ def kyc_env() -> dict[str, str]:
 
 
 def run() -> int:
-    base_env = child_env(REDIS_URL="redis://127.0.0.1:6379/0")
+    base_env = child_env(
+        REDIS_URL="redis://127.0.0.1:6379/0",
+        DJANGO_SETTINGS_MODULE="config.settings.prod",
+    )
 
     redis = spawn(
         "redis",
@@ -174,6 +177,35 @@ def run() -> int:
     )
     wait_for_port(grpc, 50051)
 
+    spawn(
+        "reservation-releaser",
+        [
+            sys.executable,
+            "manage.py",
+            "run_reservation_releaser",
+            "--interval",
+            os.environ.get("RESERVATION_RELEASE_INTERVAL_SECONDS", "60"),
+        ],
+        env=base_env,
+    )
+
+    # Durable financial work: deposit expiry refunds, checkout expiry, provider
+    # reconciliation for webhooks that never arrived, and the Phase 4 payout
+    # release gate. The `finance_scheduled_job` table is the obligation store,
+    # so this process holds no state — killing it loses nothing, and a second
+    # one is safe because claiming is row-locked.
+    spawn(
+        "finance-jobs",
+        [
+            sys.executable,
+            "manage.py",
+            "run_finance_worker",
+            "--interval",
+            os.environ.get("FINANCE_JOB_INTERVAL_SECONDS", "30"),
+        ],
+        env=base_env,
+    )
+
     chat = spawn(
         "chat",
         ["/usr/local/bin/chat"],
@@ -191,7 +223,9 @@ def run() -> int:
     email = spawn(
         "email",
         ["/usr/local/bin/email"],
-        env=child_env(REDIS_URL=base_env["REDIS_URL"], EMAIL_HTTP_ADDR="127.0.0.1:8085"),
+        env=child_env(
+            REDIS_URL=base_env["REDIS_URL"], EMAIL_HTTP_ADDR="127.0.0.1:8085"
+        ),
     )
     for child, port in (
         (chat, 8081),

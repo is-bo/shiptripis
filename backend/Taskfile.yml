@@ -89,9 +89,15 @@ tasks:
           > contracts/sql/schema.sql
 
   contract:generate:
-    desc: "Run sqlc to regenerate Go repos from schema.sql"
+    desc: "Regenerate sqlc repos, or loudly skip while query dirs are empty"
     cmds:
-      - cd contracts/sql && sqlc generate
+      - |
+        cd contracts/sql
+        if ! find queries -name '*.sql' -type f | grep -q .; then
+          echo "sqlc SKIPPED — all queries/ dirs are empty; services still use raw pgxpool."
+          exit 0
+        fi
+        sqlc generate
 
   contract:python-grpc:
     desc: "Regenerate Python grpc stubs for Django (kyc only for now)"

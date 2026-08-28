@@ -115,7 +115,9 @@ func (s *smtpSender) Send(ctx context.Context, p EmailPayload) error {
 	if err := s.client.DialAndSendWithContext(ctx, msg); err != nil {
 		return fmt.Errorf("email: smtp send (event %s): %w", p.EventID, err)
 	}
-	s.log.Debug("email sent", "event_id", p.EventID, "to", p.To, "kind", p.Kind)
+	// Recipient addresses are PII. Event id + template kind are sufficient for
+	// correlation with the PostgreSQL outbox and provider diagnostics.
+	s.log.Debug("email sent", "event_id", p.EventID, "kind", p.Kind)
 	return nil
 }
 

@@ -36,6 +36,7 @@ from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
 from apps.matching.models import Match, Offer
+from apps.parcels.models import ParcelRequest
 from apps.verification.models import HandoverCode
 from apps.verification.services import issue_code
 
@@ -54,6 +55,56 @@ from .serializers import (
 def _refetch(pk: int) -> PaymentIntent:
     return PaymentIntent.objects.select_related("offer", "offer__match", "payer").get(
         pk=pk
+    )
+
+
+def _uses_v1_deal_flow(offer: Offer) -> bool:
+    return (
+        offer.economics_version == Offer.EconomicsVersion.V1_EUR
+        or offer.match.journey_id is not None
+    )
+
+
+def _v1_payment_unavailable() -> Response:
+    return Response(
+        {
+            "detail": (
+                "V1 Deal funding is not available until the real Phase 2 "
+                "payment and escrow flow is implemented."
+            ),
+            "code": "v1_deal_payment_not_available",
+        },
+        status=http.HTTP_409_CONFLICT,
+    )
+
+
+def _product_payment_unavailable() -> Response:
+    return Response(
+        {
+            "detail": "ProductRequest/Kaba payments are retired in ShipTrip V1.",
+            "code": "product_request_retired",
+        },
+        status=http.HTTP_410_GONE,
+    )
+
+
+def _unsupported_payment_flow(offer: Offer) -> Response | None:
+    if offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT:
+        return _product_payment_unavailable()
+    if _uses_v1_deal_flow(offer):
+        return _v1_payment_unavailable()
+    return None
+
+
+def _legacy_mutation_retired() -> Response | None:
+    if getattr(settings, "PAYMENTS_LEGACY_MUTATIONS_ENABLED", False):
+        return None
+    return Response(
+        {
+            "detail": "The historical DZD payment mutation API is retired.",
+            "code": "legacy_payment_retired",
+        },
+        status=http.HTTP_410_GONE,
     )
 
 
@@ -120,7 +171,7 @@ class PaymentIntentListView(APIView):
     def get(self, request: Request) -> Response:
         qs = PaymentIntent.objects.filter(payer=request.user).select_related(
             "offer", "offer__match"
-        )
+        ).exclude(offer__match__parcel__kind=ParcelRequest.Kind.PRODUCT)
         if (s := request.query_params.get("status")):
             qs = qs.filter(status=s)
         return Response(PaymentIntentSerializer(qs, many=True).data)
@@ -143,7 +194,7 @@ class PaymentIntentCreateView(APIView):
         d = s.validated_data
 
         offer = get_object_or_404(
-            Offer.objects.select_related("match"), pk=d["offer_id"]
+            Offer.objects.select_related("match", "match__parcel"), pk=d["offer_id"]
         )
         match: Match = offer.match
 
@@ -152,6 +203,14 @@ class PaymentIntentCreateView(APIView):
                 {"detail": "Only the sender pays."},
                 status=http.HTTP_403_FORBIDDEN,
             )
+        # Order matters. A V1 Deal or a retired ProductRequest gets its own
+        # domain code so the client can tell "wrong rail for this offer" from
+        # "this whole API is gone". Both refuse before any legacy mutation
+        # runs, so neither ordering can reach the mock engine.
+        if (blocked := _unsupported_payment_flow(offer)) is not None:
+            return blocked
+        if (blocked := _legacy_mutation_retired()) is not None:
+            return blocked
         if offer.status != Offer.Status.ACCEPTED:
             return Response(
                 {"detail": f"Offer is not accepted (status={offer.status})."},
@@ -236,6 +295,8 @@ class PaymentIntentDetailView(APIView):
         )
         if intent.payer_id != request.user.id:
             return Response({"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN)
+        if (blocked := _unsupported_payment_flow(intent.offer)) is not None:
+            return blocked
         return Response(PaymentIntentSerializer(intent).data)
 
 
@@ -245,12 +306,19 @@ class PaymentIntentCancelView(APIView):
     def post(self, request: Request, pk: int) -> Response:
         with transaction.atomic():
             intent = get_object_or_404(
-                PaymentIntent.objects.select_for_update(), pk=pk
+                PaymentIntent.objects.select_for_update().select_related(
+                    "offer__match__parcel"
+                ),
+                pk=pk,
             )
             if intent.payer_id != request.user.id:
                 return Response(
                     {"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN
                 )
+            if (blocked := _unsupported_payment_flow(intent.offer)) is not None:
+                return blocked
+            if (blocked := _legacy_mutation_retired()) is not None:
+                return blocked
             if intent.status not in {
                 PaymentIntent.Status.REQUIRES_PAYMENT_METHOD,
                 PaymentIntent.Status.PROCESSING,
@@ -279,9 +347,19 @@ class PaymentIntentRefundView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        intent = get_object_or_404(PaymentIntent, pk=pk)
+        intent = get_object_or_404(
+            PaymentIntent.objects.select_related("offer__match__parcel"), pk=pk
+        )
         if intent.payer_id != request.user.id:
             return Response({"detail": "Forbidden."}, status=http.HTTP_403_FORBIDDEN)
+        if (blocked := _unsupported_payment_flow(intent.offer)) is not None:
+            return blocked
+        # The provider refund below runs inside a row-locked transaction. That
+        # is historical shape, and it is unreachable in production because this
+        # gate refuses before it: `PAYMENTS_LEGACY_MUTATIONS_ENABLED` is false
+        # by default and `config.settings.prod` refuses to boot with it set.
+        if (blocked := _legacy_mutation_retired()) is not None:
+            return blocked
         if intent.status not in {
             PaymentIntent.Status.SUCCEEDED,
             PaymentIntent.Status.REFUND_PENDING,
@@ -415,7 +493,10 @@ class MockWebhookView(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request: Request) -> Response:
-        if not settings.PAYMENTS_MOCK_WEBHOOK_ENABLED:
+        if (
+            not settings.PAYMENTS_MOCK_WEBHOOK_ENABLED
+            or not settings.PAYMENTS_LEGACY_MUTATIONS_ENABLED
+        ):
             # Deliberately hide the development-only mutation endpoint in
             # hosted environments instead of advertising it with a 403.
             return Response(status=http.HTTP_404_NOT_FOUND)
@@ -427,12 +508,18 @@ class MockWebhookView(APIView):
                 {"detail": "Need provider_intent_id and event in {succeeded,failed}."},
                 status=http.HTTP_400_BAD_REQUEST,
             )
-        intent = PaymentIntent.objects.filter(provider_intent_id=pid).first()
+        intent = (
+            PaymentIntent.objects.select_related("offer__match__parcel")
+            .filter(provider_intent_id=pid)
+            .first()
+        )
         if intent is None:
             return Response(
                 {"detail": "No intent with that provider id."},
                 status=http.HTTP_404_NOT_FOUND,
             )
+        if (blocked := _unsupported_payment_flow(intent.offer)) is not None:
+            return blocked
         if intent.status == PaymentIntent.Status.SUCCEEDED and event == "succeeded":
             return Response(PaymentIntentSerializer(intent).data, status=http.HTTP_200_OK)
 

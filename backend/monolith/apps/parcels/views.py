@@ -2,8 +2,9 @@
 
 Endpoints:
   GET  /api/parcels                    — list (mine, ?status=, ?kind=)
-  POST /api/parcels/delivery           — create a delivery request
-  POST /api/parcels/product            — create a product request
+  POST /api/parcels/delivery           — legacy airport/DZD compatibility write
+  POST /api/parcels/delivery/v1        — create a V1 location/EUR delivery request
+  POST /api/parcels/product            — retired (410 Gone)
   GET  /api/parcels/<id>               — retrieve
   POST /api/parcels/<id>/cancel        — cancel (owner only, while open)
 
@@ -13,9 +14,13 @@ Per CLAUDE.md G6: every state change publishes via
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -24,6 +29,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
+from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.storage import (
     ext_for_content_type,
     image_bytes_match_extension,
@@ -31,100 +37,48 @@ from apps.core.storage import (
     put_object,
 )
 
-from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
+from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
+from apps.finance.serializers import PaymentOrderSummarySerializer
+from apps.finance.services import (
+    ensure_posting_deposit_order,
+)
+
+from .models import DeliveryRequest, ParcelMedia, ParcelRequest
 from .serializers import (
-    DeliveryCreateSerializer,
+    DeliveryV1CreateSerializer,
     ParcelRequestSerializer,
-    ProductCreateSerializer,
+)
+from .services import (
+    ParcelCancellationForbidden,
+    ParcelHasDeal,
+    ParcelNotCancellable,
+    cancel_delivery_request,
 )
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB cap, V1 (client should pre-resize)
 
 
+def _read_queryset():
+    return ParcelRequest.objects.select_related(
+        "origin",
+        "destination",
+        "sender",
+        "deliveryrequest",
+        "deliveryrequest__pickup_location",
+        "deliveryrequest__delivery_location",
+        "productrequest",
+    ).prefetch_related("media", "deliveryrequest__deals")
+
+
 def _refetch(pk: int) -> ParcelRequest:
-    return (
-        ParcelRequest.objects.select_related("origin", "destination")
-        .prefetch_related("media")
-        .get(pk=pk)
-    )
+    return _read_queryset().get(pk=pk)
 
 
-def _auto_match_targeted_traveler(parcel: ParcelRequest) -> None:
-    # When a sender directs a parcel at a specific traveler, find that
-    # traveler's first bookable trip on the same corridor and create a
-    # sender-proposed Match + Offer. Without this the parcel sits idle and
-    # the traveler never sees it. If no trip matches, the parcel still lives
-    # as a targeted broadcast (no Match yet) — the traveler can apply later
-    # when they post a trip on the corridor.
-    if parcel.target_traveler_id is None:
-        return
-    from apps.matching.models import Match, MatchEvent, Offer
-    from apps.matching.views import _quote_for_parcel
-    from apps.trips.models import Trip
-
-    trip = (
-        Trip.objects.filter(
-            traveler_id=parcel.target_traveler_id,
-            origin_id=parcel.origin_id,
-            destination_id=parcel.destination_id,
-            status__in=[Trip.Status.DRAFT, Trip.Status.ACTIVE],
-        )
-        .order_by("departure_at")
-        .first()
-    )
-    if trip is None:
-        return
-
-    pricing = _quote_for_parcel(parcel, None)
-    match = Match.objects.create(
-        parcel=parcel,
-        trip=trip,
-        sender_id=parcel.sender_id,
-        traveler_id=parcel.target_traveler_id,
-        status=Match.Status.PENDING,
-    )
-    offer = Offer.objects.create(
-        match=match,
-        proposed_by=Offer.ProposedBy.SENDER,
-        proposer_id=parcel.sender_id,
-        note="",
-        **pricing,
-    )
-    MatchEvent.objects.create(
-        match=match,
-        offer=offer,
-        actor_id=parcel.sender_id,
-        kind=MatchEvent.Kind.MATCH_CREATED,
-        payload={"trip_id": trip.id, "parcel_id": parcel.id, "directed": True},
-    )
-    MatchEvent.objects.create(
-        match=match,
-        offer=offer,
-        actor_id=parcel.sender_id,
-        kind=MatchEvent.Kind.OFFER_CREATED,
-        payload={"by": "sender", "total_dzd": offer.total_dzd},
-    )
-    redis_bus.publish_after_commit(
-        channels.MATCH_CREATED,
-        {
-            "match_id": match.id,
-            "parcel_id": parcel.id,
-            "trip_id": trip.id,
-            "sender_id": match.sender_id,
-            "traveler_id": match.traveler_id,
-        },
-        targets=[match.sender_id, match.traveler_id],
-    )
-    redis_bus.publish_after_commit(
-        channels.OFFER_CREATED,
-        {
-            "match_id": match.id,
-            "offer_id": offer.id,
-            "proposed_by": offer.proposed_by,
-            "total_dzd": offer.total_dzd,
-            "recipient_id": match.traveler_id,
-        },
-        targets=[match.traveler_id],
+def _serialize(parcel, request: Request, *, many: bool = False):
+    return ParcelRequestSerializer(
+        parcel,
+        many=many,
+        context={"request": request},
     )
 
 
@@ -132,25 +86,26 @@ class ParcelListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        qs = (
-            ParcelRequest.objects.filter(sender=request.user)
-            .select_related("origin", "destination")
-            .prefetch_related("media")
+        qs = _read_queryset().filter(
+            sender=request.user,
+            kind=ParcelRequest.Kind.DELIVERY,
         )
-        if (s := request.query_params.get("status")):
+        if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
-        if (k := request.query_params.get("kind")):
+        if k := request.query_params.get("kind"):
             qs = qs.filter(kind=k)
-        return Response(ParcelRequestSerializer(qs, many=True).data)
+        return Response(_serialize(qs[:100], request, many=True).data)
 
 
 class OpenParcelSearchView(APIView):
     """Public open-parcel feed for travelers looking for shipments to carry.
 
-    Returns OPEN parcels not owned by the caller. Filters:
-      ?origin=ALG&destination=CDG     IATA codes
-      ?max_weight_kg=5                integer (parcel weight <= cap)
-      ?kind=delivery|product
+    Returns untargeted OPEN delivery requests not owned by the caller. Filters:
+      ?max_weight_kg=5                decimal (parcel weight <= cap)
+    `?origin=`/`?destination=` IATA filtering is retired and returns 400: V1
+    requests carry Locations, not airports. Route-aware discovery lives at
+    GET /api/matches/compatible-requests.
+    ProductRequest history and targeted requests are never part of this feed.
     Results ordered newest-first; capped at 100 rows.
     """
 
@@ -158,109 +113,165 @@ class OpenParcelSearchView(APIView):
 
     def get(self, request: Request) -> Response:
         qs = (
-            ParcelRequest.objects.filter(status=ParcelRequest.Status.OPEN)
+            _read_queryset()
+            .filter(
+                status=ParcelRequest.Status.OPEN,
+                kind=ParcelRequest.Kind.DELIVERY,
+                deliveryrequest__schema_version=2,
+                deadline_at__gt=timezone.now(),
+                target_traveler__isnull=True,
+            )
             .exclude(sender=request.user)
-            .select_related("origin", "destination")
-            .prefetch_related("media")
         )
-        if (o := request.query_params.get("origin")):
-            qs = qs.filter(origin_id=o.upper())
-        if (d := request.query_params.get("destination")):
-            qs = qs.filter(destination_id=d.upper())
-        if (k := request.query_params.get("kind")):
-            qs = qs.filter(kind=k)
-        if (w := request.query_params.get("max_weight_kg")):
+        # V1 delivery requests are created with origin/destination NULL and are
+        # routed by Location instead, so an IATA filter could only ever return
+        # an empty list. Reject it loudly rather than answering 200 with a
+        # silently impossible result set.
+        retired_filters = sorted(
+            {"origin", "destination"}.intersection(request.query_params)
+        )
+        if retired_filters:
+            return Response(
+                {
+                    "code": "airport_filter_retired",
+                    "detail": (
+                        "Airport origin/destination filtering is retired for V1 "
+                        "delivery requests. Use GET /api/matches/compatible-requests."
+                    ),
+                    "retired_parameters": retired_filters,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if w := request.query_params.get("max_weight_kg"):
             try:
-                qs = qs.filter(weight_kg__lte=int(w))
-            except ValueError:
+                max_weight = Decimal(w)
+                qs = qs.filter(
+                    Q(weight_kg__lte=max_weight)
+                    | Q(deliveryrequest__actual_weight_kg__lte=max_weight)
+                )
+            except (InvalidOperation, ValueError):
                 pass
         qs = qs.order_by("-created_at")[:100]
-        return Response(ParcelRequestSerializer(qs, many=True).data)
+        return Response(_serialize(qs, request, many=True).data)
 
 
 class DeliveryCreateView(APIView):
+    """Retired legacy airport/DZD write endpoint."""
+
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request) -> Response:
-        s = DeliveryCreateSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = s.validated_data
+        return Response(
+            {
+                "code": "legacy_delivery_flow_retired",
+                "detail": "Use POST /api/parcels/delivery/v1 with Location IDs and EUR cents.",
+            },
+            status=status.HTTP_410_GONE,
+        )
+
+
+class DeliveryV1CreateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        serializer = DeliveryV1CreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        pickup_location = data["pickup_location"]
+        delivery_location = data["delivery_location"]
+
+        # Publication timing is a server decision read from versioned policy.
+        # In posting-deposit mode the request is created unpublished and only
+        # becomes discoverable when a reconciled payment says so — the client
+        # never asserts that it paid.
+        try:
+            payment_policy = phase3_policy()
+        except (NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+            return Response(
+                {"code": getattr(exc, "code", "payment_policy_unavailable"),
+                 "detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        deposit_required = payment_policy.deposit_required
+        initial_status = (
+            ParcelRequest.Status.AWAITING_DEPOSIT
+            if deposit_required
+            else ParcelRequest.Status.OPEN
+        )
 
         with transaction.atomic():
             parcel = DeliveryRequest.objects.create(
                 sender=request.user,
                 kind=ParcelRequest.Kind.DELIVERY,
-                origin_id=d["origin"],
-                destination_id=d["destination"],
-                pickup_city=d.get("pickup_city", ""),
-                delivery_city=d.get("delivery_city", ""),
-                weight_kg=d["weight_kg"],
-                item_type=d["item_type"],
-                description=d.get("description", ""),
-                deadline_at=d.get("deadline_at"),
-                target_traveler_id=d.get("target_traveler_id"),
-                base_amount_dzd=d["base_amount_dzd"],
+                schema_version=2,
+                status=initial_status,
+                origin=None,
+                destination=None,
+                pickup_location=pickup_location,
+                delivery_location=delivery_location,
+                weight_kg=None,
+                item_type=data["category"],
+                description=data["description"],
+                deadline_at=data["deadline_at"],
+                target_traveler=data.get("target_traveler"),
+                ready_window_start=data["ready_window_start"],
+                ready_window_end=data["ready_window_end"],
+                actual_weight_kg=data["actual_weight_kg"],
+                length_cm=data.get("length_cm"),
+                width_cm=data.get("width_cm"),
+                height_cm=data.get("height_cm"),
+                declared_value_eur_cents=data["declared_value_eur_cents"],
+                traveler_reward_eur_cents=data["traveler_reward_eur_cents"],
+                title=data["title"],
+                category=data["category"],
+                handling_notes=data.get("handling_notes", ""),
+                fragile=data.get("fragile", False),
+                description_is_accurate=data["description_is_accurate"],
+                item_is_legal=data["item_is_legal"],
+                no_prohibited_goods=data["no_prohibited_goods"],
+                declared_value_is_accurate=data["declared_value_is_accurate"],
+                customs_responsibilities_understood=data[
+                    "customs_responsibilities_understood"
+                ],
+                base_amount_dzd=None,
             )
+            deposit_order = None
+            if deposit_required:
+                deposit_order = ensure_posting_deposit_order(
+                    delivery_request=parcel, policy=payment_policy
+                )
             redis_bus.publish_after_commit(
                 channels.PARCEL_CREATED,
                 {
                     "parcel_id": parcel.id,
                     "kind": parcel.kind,
                     "sender_id": request.user.id,
-                    "origin": parcel.origin_id,
-                    "destination": parcel.destination_id,
+                    "schema_version": parcel.schema_version,
+                    "currency": "EUR",
+                    "status": parcel.status,
                 },
                 targets=[request.user.id],
             )
-            _auto_match_targeted_traveler(parcel)
 
-        return Response(
-            ParcelRequestSerializer(_refetch(parcel.pk)).data,
-            status=status.HTTP_201_CREATED,
+        payload = _serialize(_refetch(parcel.pk), request).data
+        payload["posting_deposit"] = (
+            PaymentOrderSummarySerializer(deposit_order).data
+            if deposit_order is not None
+            else None
         )
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class ProductCreateView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request) -> Response:
-        s = ProductCreateSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = s.validated_data
-
-        with transaction.atomic():
-            parcel = ProductRequest.objects.create(
-                sender=request.user,
-                kind=ParcelRequest.Kind.PRODUCT,
-                origin_id=d["origin"],
-                destination_id=d["destination"],
-                pickup_city=d.get("pickup_city", ""),
-                delivery_city=d.get("delivery_city", ""),
-                weight_kg=d["weight_kg"],
-                item_type=d["item_type"],
-                description=d.get("description", ""),
-                deadline_at=d.get("deadline_at"),
-                target_traveler_id=d.get("target_traveler_id"),
-                product_url=d.get("product_url", ""),
-                store_name=d.get("store_name", ""),
-                product_price_dzd=d["product_price_dzd"],
-            )
-            redis_bus.publish_after_commit(
-                channels.PARCEL_CREATED,
-                {
-                    "parcel_id": parcel.id,
-                    "kind": parcel.kind,
-                    "sender_id": request.user.id,
-                    "origin": parcel.origin_id,
-                    "destination": parcel.destination_id,
-                },
-                targets=[request.user.id],
-            )
-            _auto_match_targeted_traveler(parcel)
-
         return Response(
-            ParcelRequestSerializer(_refetch(parcel.pk)).data,
-            status=status.HTTP_201_CREATED,
+            {"detail": "ProductRequest creation is retired in ShipTrip V1."},
+            status=status.HTTP_410_GONE,
         )
 
 
@@ -269,37 +280,56 @@ class ParcelDetailView(APIView):
 
     def get(self, request: Request, pk: int) -> Response:
         parcel = get_object_or_404(
-            ParcelRequest.objects.select_related("origin", "destination", "sender")
-            .prefetch_related("media"),
+            _read_queryset(),
             pk=pk,
         )
-        return Response(ParcelRequestSerializer(parcel).data)
+        if parcel.kind == ParcelRequest.Kind.PRODUCT:
+            return Response(
+                {"detail": "ProductRequest history is admin-only in ShipTrip V1."},
+                status=status.HTTP_410_GONE,
+            )
+        if (
+            parcel.target_traveler_id is not None
+            and request.user.id not in {parcel.sender_id, parcel.target_traveler_id}
+        ):
+            return Response(
+                {"detail": "This targeted request is private."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return Response(_serialize(parcel, request).data)
 
 
 class ParcelCancelView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
-        parcel = get_object_or_404(ParcelRequest, pk=pk)
-        if parcel.sender_id != request.user.id:
+        base = get_object_or_404(ParcelRequest.objects.only("kind"), pk=pk)
+        if base.kind == ParcelRequest.Kind.PRODUCT:
             return Response(
-                {"detail": "Only the sender can cancel."},
-                status=status.HTTP_403_FORBIDDEN,
+                {
+                    "detail": "ProductRequest is retired and preserved as read-only history."
+                },
+                status=status.HTTP_410_GONE,
             )
-        if parcel.status not in {ParcelRequest.Status.OPEN, ParcelRequest.Status.MATCHED}:
+        try:
+            result = cancel_delivery_request(request_id=pk, actor_id=request.user.id)
+        except ParcelCancellationForbidden as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except ParcelHasDeal as exc:
             return Response(
-                {"detail": f"Cannot cancel a parcel in status '{parcel.status}'."},
+                {"detail": str(exc), "code": exc.code},
                 status=status.HTTP_409_CONFLICT,
             )
-        with transaction.atomic():
-            parcel.status = ParcelRequest.Status.CANCELLED
-            parcel.save(update_fields=["status", "updated_at"])
-            redis_bus.publish_after_commit(
-                channels.PARCEL_CANCELLED,
-                {"parcel_id": parcel.id, "sender_id": parcel.sender_id},
-                targets=[parcel.sender_id],
+        except ParcelNotCancellable as exc:
+            return Response(
+                {
+                    "code": exc.code,
+                    "detail": str(exc),
+                    "parcel_status": exc.parcel_status,
+                },
+                status=status.HTTP_409_CONFLICT,
             )
-        return Response(ParcelRequestSerializer(_refetch(parcel.pk)).data)
+        return Response(_serialize(_refetch(result.parcel_id), request).data)
 
 
 class DeliveryQuoteView(APIView):
@@ -316,50 +346,12 @@ class DeliveryQuoteView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        from apps.core.pricing import suggest_delivery_quote
-        from apps.trips.models import Airport
-
-        try:
-            weight_kg = int(request.query_params.get("weight_kg", ""))
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "weight_kg must be a positive integer."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if weight_kg < 1 or weight_kg > 50:
-            return Response(
-                {"detail": "weight_kg must be between 1 and 50."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        origin_iata = (request.query_params.get("origin") or "").upper()
-        dest_iata = (request.query_params.get("destination") or "").upper()
-        origin_country = ""
-        dest_country = ""
-        if origin_iata:
-            o = Airport.objects.filter(iata=origin_iata).only("country").first()
-            if o:
-                origin_country = o.country
-        if dest_iata:
-            d = Airport.objects.filter(iata=dest_iata).only("country").first()
-            if d:
-                dest_country = d.country
-
-        q = suggest_delivery_quote(
-            weight_kg=weight_kg,
-            origin_country=origin_country,
-            destination_country=dest_country,
-        )
         return Response(
             {
-                "weight_kg": q.weight_kg,
-                "suggested_base_dzd": q.suggested_base_dzd,
-                "suggested_total_dzd": q.suggested_total_dzd,
-                "min_floor_dzd": q.min_floor_dzd,
-                "max_ceiling_dzd": q.max_ceiling_dzd,
-                "route_multiplier_x100": q.route_multiplier_x100,
-                "currency": "DZD",
-            }
+                "code": "legacy_dzd_quote_retired",
+                "detail": "DZD pricing is not a ShipTrip V1 marketplace contract.",
+            },
+            status=status.HTTP_410_GONE,
         )
 
 
@@ -369,6 +361,13 @@ class ParcelMediaUploadView(APIView):
 
     def post(self, request: Request, pk: int) -> Response:
         parcel = get_object_or_404(ParcelRequest, pk=pk)
+        if parcel.kind == ParcelRequest.Kind.PRODUCT:
+            return Response(
+                {
+                    "detail": "ProductRequest is retired and preserved as read-only history."
+                },
+                status=status.HTTP_410_GONE,
+            )
         if parcel.sender_id != request.user.id:
             return Response(
                 {"detail": "Only the sender can attach photos."},
@@ -399,9 +398,7 @@ class ParcelMediaUploadView(APIView):
             )
         bucket = settings.S3_BUCKET_PARCEL
         key = make_key(f"parcels/{parcel.id}", ext)
-        put_object(
-            bucket=bucket, key=key, body=body, content_type=f.content_type
-        )
+        put_object(bucket=bucket, key=key, body=body, content_type=f.content_type)
         media = ParcelMedia.objects.create(
             parcel=parcel,
             bucket=bucket,

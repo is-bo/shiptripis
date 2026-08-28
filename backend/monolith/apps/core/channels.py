@@ -27,6 +27,10 @@ OFFER_ACCEPTED = "offer.accepted"
 # payments / wallet
 PAYMENT_CAPTURED = "payment.captured"
 PAYMENT_REFUNDED = "payment.refunded"
+#: A checkout attempt ended without money. Distinct from `payment.captured` on
+#: purpose: a client that sees `payment.captured` may legitimately render
+#: success, so a failure must never travel on that channel.
+PAYMENT_FAILED = "payment.failed"
 
 # verification (handover)
 HANDOVER_CONFIRMED = "handover.confirmed"

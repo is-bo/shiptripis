@@ -29,6 +29,15 @@
 		reverse_proxy {$KYC_UPSTREAM:kyc-service:8083}
 	}
 
+	# Keep the public marketing bundle static and outside Django's authenticated
+	# routes. The compose deployment mounts ../web read-only at this path.
+	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms.html /privacy.html /prohibited-items.html /support.html /robots.txt /sitemap.xml
+	handle @public {
+		root * /srv/shiptrip-web
+		encode gzip
+		file_server
+	}
+
 	# Django REST + admin + static (catch-all).
 	reverse_proxy {$DJANGO_UPSTREAM:django:8000} {
 		# Railway terminates TLS before this container. Preserve the edge
