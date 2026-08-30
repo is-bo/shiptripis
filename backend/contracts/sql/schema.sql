@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 8BoGMXGw9sQNfbf0y0tXlPWQmaEkdaMNkMHUsRi2j41NSrcEd79XR6n7ZvbdUsD
+\restrict hK0um9R4s3GL29kxlvrbWfvjl2GGlppaNaiFEfe3tSmxViaR8qFU1xaSNZpvaZ5
 
 -- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
@@ -133,7 +133,8 @@ CREATE TABLE public.accounts_user (
     is_phone_verified boolean NOT NULL,
     is_email_verified boolean NOT NULL,
     is_kyc_verified boolean NOT NULL,
-    is_banned boolean NOT NULL
+    is_banned boolean NOT NULL,
+    preferred_language character varying(2) NOT NULL
 );
 
 
@@ -572,6 +573,7 @@ CREATE TABLE public.deals_recipient (
     created_by_id bigint NOT NULL,
     deal_id bigint NOT NULL,
     updated_by_id bigint,
+    communication_language character varying(2) NOT NULL,
     CONSTRAINT deals_recipient_email_required CHECK ((NOT ((email)::text = ''::text))),
     CONSTRAINT deals_recipient_name_required CHECK ((NOT ((full_name)::text = ''::text))),
     CONSTRAINT deals_recipient_revision_check CHECK ((revision >= 0))
@@ -854,7 +856,8 @@ CREATE TABLE public.finance_guest_payment_link (
     consumed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     created_by_id bigint NOT NULL,
-    order_id bigint NOT NULL
+    order_id bigint NOT NULL,
+    communication_language character varying(2) NOT NULL
 );
 
 
@@ -1624,6 +1627,7 @@ CREATE TABLE public.notification_outbound_message (
     updated_at timestamp with time zone NOT NULL,
     deal_id bigint,
     recipient_user_id bigint,
+    language character varying(2) NOT NULL,
     CONSTRAINT notification_outbound_message_attempts_check CHECK ((attempts >= 0)),
     CONSTRAINT notification_outbound_message_max_attempts_check CHECK ((max_attempts >= 0)),
     CONSTRAINT outbound_dispatched_requires_timestamp CHECK ((((status)::text = 'pending'::text) OR ((status)::text = 'cancelled'::text) OR (dispatched_at IS NOT NULL) OR ((status)::text = 'failed'::text)))
@@ -5332,6 +5336,20 @@ CREATE INDEX notification_outbound_message_kind_f18207d6_like ON public.notifica
 
 
 --
+-- Name: notification_outbound_message_language_95ecda7b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notification_outbound_message_language_95ecda7b ON public.notification_outbound_message USING btree (language);
+
+
+--
+-- Name: notification_outbound_message_language_95ecda7b_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notification_outbound_message_language_95ecda7b_like ON public.notification_outbound_message USING btree (language varchar_pattern_ops);
+
+
+--
 -- Name: notification_outbound_message_next_attempt_at_e5b9fab7; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7274,5 +7292,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 8BoGMXGw9sQNfbf0y0tXlPWQmaEkdaMNkMHUsRi2j41NSrcEd79XR6n7ZvbdUsD
+\unrestrict hK0um9R4s3GL29kxlvrbWfvjl2GGlppaNaiFEfe3tSmxViaR8qFU1xaSNZpvaZ5
 

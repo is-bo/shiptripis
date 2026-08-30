@@ -97,7 +97,7 @@ class TripListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response(TripSerializer(qs, many=True).data)
+        return Response(TripSerializer(qs[:100], many=True).data)
 
     def post(self, request: Request) -> Response:
         del request
@@ -424,6 +424,8 @@ class JourneyCancelView(APIView):
 class JourneyLegProofCreateView(APIView):
     permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "media_upload"
 
     _ALLOWED_KINDS = {
         "ticket",

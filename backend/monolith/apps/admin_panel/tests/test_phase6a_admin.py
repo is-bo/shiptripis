@@ -1,13 +1,18 @@
 import os
+from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
+from apps.locations.models import Location
+from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from ..models import AdminAuditLog, AdminInvitation, hash_invitation_token
 from ..permissions import (
@@ -187,6 +192,59 @@ class SuperAdminBootstrapTests(TestCase):
 
 
 class AdminEndpointAuthorizationTests(APITestCase):
+    def test_role_matrix_is_enforced_at_representative_endpoints(self):
+        samples = {
+            AdminRole.OPS: {
+                "/api/admin/requests": 200,
+                "/api/admin/users": 403,
+                "/api/admin/payment-orders": 403,
+                "/api/admin/kyc": 403,
+                "/api/admin/settings": 403,
+            },
+            AdminRole.SUPPORT: {
+                "/api/admin/users": 200,
+                "/api/admin/requests": 200,
+                "/api/admin/payment-orders": 403,
+                "/api/admin/kyc": 403,
+                "/api/admin/settings": 403,
+            },
+            AdminRole.FINANCE: {
+                "/api/admin/payment-orders": 200,
+                "/api/admin/disputes": 200,
+                "/api/admin/users": 403,
+                "/api/admin/kyc": 403,
+                "/api/admin/settings": 403,
+            },
+            AdminRole.TRUST: {
+                "/api/admin/users": 200,
+                "/api/admin/kyc": 200,
+                "/api/admin/flight-proofs": 200,
+                "/api/admin/payment-orders": 403,
+                "/api/admin/settings": 403,
+            },
+            AdminRole.SUPER_ADMIN: {
+                "/api/admin/users": 200,
+                "/api/admin/kyc": 200,
+                "/api/admin/payment-orders": 200,
+                "/api/admin/settings": 200,
+                "/api/admin/roles": 200,
+            },
+        }
+
+        for role, endpoints in samples.items():
+            with self.subTest(role=role):
+                user = make_user(f"{role}@matrix.example.test", staff=True)
+                assign_admin_roles(
+                    user,
+                    (role,),
+                    elevate_super_admin=role == AdminRole.SUPER_ADMIN,
+                )
+                self.client.force_authenticate(user)
+                for endpoint, expected in endpoints.items():
+                    with self.subTest(role=role, endpoint=endpoint):
+                        response = self.client.get(endpoint)
+                        assert response.status_code == expected, response.data
+
     def test_dashboard_requires_named_admin_permission(self):
         user = make_user("ops-endpoint@example.test", staff=True)
         assign_admin_roles(user, (AdminRole.OPS,))
@@ -210,3 +268,66 @@ class AdminEndpointAuthorizationTests(APITestCase):
         assert "average_rating" in response.data
         assert "no_show_count" in response.data
         assert "phone" not in response.data
+
+
+class AdminJourneyContractTests(APITestCase):
+    def test_leg_proof_counts_are_present_and_server_calculated(self):
+        operator = make_user("ops-journey@example.test", staff=True)
+        assign_admin_roles(operator, (AdminRole.OPS,))
+        traveler = make_user("traveler-journey@example.test")
+        paris = Location.objects.create(
+            kind=Location.Kind.CITY,
+            normalized_label="paris",
+            public_label="Paris",
+            city="Paris",
+            country_code="FR",
+            latitude=Decimal("48.856600"),
+            longitude=Decimal("2.352200"),
+        )
+        algiers = Location.objects.create(
+            kind=Location.Kind.CITY,
+            normalized_label="algiers",
+            public_label="Algiers",
+            city="Algiers",
+            country_code="DZ",
+            latitude=Decimal("36.753800"),
+            longitude=Decimal("3.058800"),
+        )
+        journey = Journey.objects.create(
+            traveler=traveler,
+            start_location=paris,
+            destination_location=algiers,
+        )
+        departure = timezone.now() + timedelta(days=2)
+        leg = JourneyLeg.objects.create(
+            journey=journey,
+            position=0,
+            mode=JourneyLeg.Mode.FLIGHT,
+            origin=paris,
+            destination=algiers,
+            depart_at=departure,
+            arrive_at=departure + timedelta(hours=2),
+            capacity_kg=Decimal("10.00"),
+            flight_number="AH1007",
+        )
+        JourneyLegProof.objects.create(
+            leg=leg,
+            bucket="private-proof",
+            object_key="journeys/contract/pending.jpg",
+        )
+        JourneyLegProof.objects.create(
+            leg=leg,
+            bucket="private-proof",
+            object_key="journeys/contract/approved.jpg",
+            status=JourneyLegProof.Status.APPROVED,
+            reviewer=operator,
+            reviewed_at=timezone.now(),
+        )
+
+        self.client.force_authenticate(operator)
+        response = self.client.get("/api/admin/journeys")
+
+        assert response.status_code == 200
+        serialized_leg = response.data["results"][0]["legs"][0]
+        assert serialized_leg["proof_count"] == 2
+        assert serialized_leg["pending_proof_count"] == 1

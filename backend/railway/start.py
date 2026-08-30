@@ -1,13 +1,14 @@
 """Run ShipTrip's production processes in one Railway service.
 
-Railway's free plan limits this account to two compute/database resources. This
-launcher preserves the normal ports and gateway routing inside one container,
-with managed Postgres as the second resource. Redis listens only on loopback;
-its pub/sub/stream state is intentionally ephemeral in this constrained layout.
+This launcher preserves the normal ports and gateway routing inside one
+container. Pub/sub/stream Redis listens only on loopback and is intentionally
+ephemeral in this constrained layout. KYC upload limiting is storage-abuse
+control, so it separately requires Redis shared by every application replica.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import signal
 import socket
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 
 ROOT = "/app"
@@ -91,9 +93,33 @@ def request_stop(_signum: int, _frame: object) -> None:
 
 
 def kyc_env() -> dict[str, str]:
+    shared_redis_url = os.environ.get("KYC_RATE_LIMIT_REDIS_URL", "").strip()
+    if not shared_redis_url:
+        raise RuntimeError(
+            "KYC_RATE_LIMIT_REDIS_URL must point at Redis shared by every KYC replica"
+        )
+    parsed = urlparse(shared_redis_url)
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise RuntimeError("KYC_RATE_LIMIT_REDIS_URL has an invalid port") from exc
+    if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
+        raise RuntimeError(
+            "KYC_RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL"
+        )
+    hostname = parsed.hostname.lower()
+    try:
+        loopback = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        loopback = hostname == "localhost"
+    if loopback:
+        raise RuntimeError(
+            "KYC_RATE_LIMIT_REDIS_URL must not use per-container loopback Redis"
+        )
     env = child_env(
         KYC_HTTP_ADDR="127.0.0.1:8083",
         KYC_GRPC_TARGET="127.0.0.1:50051",
+        REDIS_URL=shared_redis_url,
     )
     # The combined container still gives KYC its own bucket credentials.
     # Mapping is per child, so Django continues to use the parcel-media bucket.
@@ -111,6 +137,11 @@ def kyc_env() -> dict[str, str]:
 
 
 def run() -> int:
+    # Resolve the external KYC limiter dependency before migrations or child
+    # processes start. The loopback Redis below remains intentionally local for
+    # the constrained combined topology; it must never back a cross-replica
+    # storage-abuse budget.
+    kyc_process_env = kyc_env()
     base_env = child_env(
         REDIS_URL="redis://127.0.0.1:6379/0",
         DJANGO_SETTINGS_MODULE="config.settings.prod",
@@ -219,7 +250,7 @@ def run() -> int:
             NOTIF_HTTP_ADDR="127.0.0.1:8082",
         ),
     )
-    kyc = spawn("kyc", ["/usr/local/bin/kyc"], env=kyc_env())
+    kyc = spawn("kyc", ["/usr/local/bin/kyc"], env=kyc_process_env)
     email = spawn(
         "email",
         ["/usr/local/bin/email"],

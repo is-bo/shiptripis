@@ -118,7 +118,10 @@ class RouteLine extends StatelessWidget {
 
     return Semantics(
       container: true,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
     );
   }
 }
@@ -206,7 +209,7 @@ class _StopRow extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

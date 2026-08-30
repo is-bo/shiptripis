@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from apps.core.admin_display import money, status
+
 from .models import BoostPurchase
 
 
@@ -29,9 +31,9 @@ class BoostPurchaseAdmin(admin.ModelAdmin):
         "delivery_request",
         "buyer",
         "package_code",
-        "status",
+        "status_chip",
         "ranking_effect_display",
-        "price_eur_cents",
+        "price_display",
         "ranking_weight",
         "activated_at",
         "expires_at",
@@ -78,6 +80,9 @@ class BoostPurchaseAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):  # noqa: ARG002
         return False
+
+    status_chip = status("status", "Status")
+    price_display = money("price_eur_cents", "Price")
 
     @admin.display(boolean=True, description="Ranking effect")
     def ranking_effect_display(self, obj: BoostPurchase) -> bool:

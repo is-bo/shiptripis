@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -236,6 +237,127 @@ func (c *Client) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 	return n > 0, nil
+}
+
+// FixedWindowBucket describes one independent budget consumed by an atomic
+// fixed-window operation. Keys are supplied by the caller so a domain package
+// can choose a stable, versioned namespace without exposing the Redis client.
+type FixedWindowBucket struct {
+	Key    string
+	Limit  int64
+	Window time.Duration
+}
+
+// FixedWindowDecision is the result of ConsumeFixedWindow. RetryAfter is only
+// meaningful when Allowed is false and is derived from the longest remaining
+// TTL among the exhausted buckets.
+type FixedWindowDecision struct {
+	Allowed    bool
+	RetryAfter time.Duration
+}
+
+// fixedWindowScript checks every bucket before incrementing any of them, then
+// increments all buckets in one Redis Lua invocation. This makes the
+// multi-dimensional user+IP budget all-or-nothing and closes read-then-write
+// races when several service instances receive the same user's requests.
+// Each key is a fixed window anchored by its first request; PTTL is returned
+// for Retry-After. A missing/invalid TTL is treated as a full window so a
+// manually altered key cannot become an unbounded lockout.
+var fixedWindowScript = redis.NewScript(`
+local retry_after = 0
+local bucket_count = #KEYS
+for i = 1, bucket_count do
+  local arg = (i - 1) * 2
+  local current = tonumber(redis.call("GET", KEYS[i]) or "0")
+  local limit = tonumber(ARGV[arg + 1])
+  local window = tonumber(ARGV[arg + 2])
+  if current >= limit then
+    local ttl = redis.call("PTTL", KEYS[i])
+    if ttl <= 0 then
+      ttl = window
+      redis.call("PEXPIRE", KEYS[i], window)
+    end
+    if ttl > retry_after then
+      retry_after = ttl
+    end
+  end
+end
+
+if retry_after > 0 then
+  return {0, retry_after}
+end
+
+for i = 1, bucket_count do
+  local arg = (i - 1) * 2
+  local value = redis.call("INCR", KEYS[i])
+  local ttl = redis.call("PTTL", KEYS[i])
+  if value == 1 or ttl <= 0 then
+    redis.call("PEXPIRE", KEYS[i], tonumber(ARGV[arg + 2]))
+  end
+end
+return {1, 0}
+`)
+
+// ConsumeFixedWindow atomically checks and consumes one request from every
+// supplied bucket. It is intentionally a low-level Redis primitive: callers
+// must validate and namespace keys before reaching this method. Empty buckets
+// and non-positive limits/windows are rejected instead of silently disabling a
+// protection policy.
+func (c *Client) ConsumeFixedWindow(ctx context.Context, buckets ...FixedWindowBucket) (FixedWindowDecision, error) {
+	if len(buckets) == 0 {
+		return FixedWindowDecision{}, errors.New("redis fixed window: at least one bucket is required")
+	}
+	keys := make([]string, len(buckets))
+	args := make([]any, 0, len(buckets)*2)
+	for i, bucket := range buckets {
+		if bucket.Key == "" {
+			return FixedWindowDecision{}, errors.New("redis fixed window: bucket key is required")
+		}
+		if bucket.Limit <= 0 {
+			return FixedWindowDecision{}, fmt.Errorf("redis fixed window: bucket %q limit must be positive", bucket.Key)
+		}
+		windowMS := bucket.Window.Milliseconds()
+		if windowMS <= 0 {
+			return FixedWindowDecision{}, fmt.Errorf("redis fixed window: bucket %q window must be positive", bucket.Key)
+		}
+		keys[i] = bucket.Key
+		args = append(args, bucket.Limit, windowMS)
+	}
+
+	result, err := fixedWindowScript.Run(ctx, c.rdb, keys, args...).Result()
+	if err != nil {
+		return FixedWindowDecision{}, err
+	}
+	values, ok := result.([]any)
+	if !ok || len(values) != 2 {
+		return FixedWindowDecision{}, errors.New("redis fixed window: malformed script response")
+	}
+	allowed, ok := redisScriptInt(values[0])
+	if !ok {
+		return FixedWindowDecision{}, errors.New("redis fixed window: malformed allow result")
+	}
+	retryMS, ok := redisScriptInt(values[1])
+	if !ok {
+		return FixedWindowDecision{}, errors.New("redis fixed window: malformed retry result")
+	}
+	return FixedWindowDecision{
+		Allowed:    allowed == 1,
+		RetryAfter: time.Duration(retryMS) * time.Millisecond,
+	}, nil
+}
+
+func redisScriptInt(value any) (int64, bool) {
+	switch n := value.(type) {
+	case int64:
+		return n, true
+	case int:
+		return int64(n), true
+	case string:
+		parsed, err := strconv.ParseInt(n, 10, 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 // ── Streams (G1: FCM queue) ──────────────────────────────────────────────────

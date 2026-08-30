@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.core.languages import CommunicationLanguage
+
 from apps.matching.public_contract import public_terms_snapshot
 
 from .models import Deal, DealLegAllocation, DealTermsSnapshot
@@ -311,4 +313,8 @@ class DealRecipientWriteSerializer(serializers.Serializer):
     )
     delivery_note = serializers.CharField(
         max_length=1_000, required=False, allow_blank=True, default=""
+    )
+    communication_language = serializers.ChoiceField(
+        choices=CommunicationLanguage.choices,
+        required=False,
     )

@@ -230,6 +230,64 @@ jobs:
       - name: pytest
         run: python -m pytest -q --ds=config.settings.dev
 
+  # ── Production/static configuration ────────────────────────────────────
+  production-safety:
+    name: Production config + static web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/monolith/requirements.txt
+
+      - name: Install Django dependencies
+        run: pip install -r backend/monolith/requirements.txt
+
+      - name: Production entrypoint and fail-closed tests
+        working-directory: backend/monolith
+        run: python -m pytest -q apps/finance/tests/test_deployment_safety.py --ds=config.settings.test_local
+
+      - name: Django deployment checks under the production profile
+        working-directory: backend/monolith
+        env:
+          SHIPTRIP_ENVIRONMENT: production
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_SECRET_KEY: ci-only-7Xf2-Nq9-Lp4-Vz8-Rm3-Tk6-Wb1-Hs5-Qe0-Yu7-Pc2
+          DJANGO_DEBUG: "false"
+          DJANGO_ALLOWED_HOSTS: api.shiptrip.invalid,localhost
+          POSTGRES_DB: shiptrip
+          POSTGRES_USER: shiptrip
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_HOST: db.invalid
+          REDIS_URL: redis://redis.invalid:6379/0
+          JWT_HS256_SECRET: ci-jwt-3Mp8-Wa2-Ty7-Kb5-Qe9-Nr4-Hs6-Zx1
+          S3_ENDPOINT_URL: https://storage.invalid
+          S3_ACCESS_KEY: test
+          S3_SECRET_KEY: test
+          GRPC_AUTH_MODE: bearer
+          GRPC_ALLOW_PRIVATE_BEARER: "true"
+          GRPC_BEARER_TOKEN: ci-grpc-5Vk2-Nr8-Wp4-Ty9-Lm1-Qe7-Hs3-Za6
+          PAYMENTS_PUBLIC_BASE_URL: https://api.shiptrip.invalid
+          HANDOVER_CODE_SECRET: ci-hand-6Yp3-Lm9-Qr2-Vx7-Nk4-Ts8-Wa1-He5
+          TRANSACTIONAL_EMAIL_SECRET: ci-mail-9Tr2-Vk7-Qp4-Nx8-Hm1-Ws6-Za3-Le5
+        run: python manage.py check --deploy --fail-level WARNING
+
+      - name: Static routes, links, and CSP compatibility
+        run: python tools/check_static_web.py
+
+      - name: Validate Caddy configurations
+        run: |
+          docker run --rm \
+            -v "$PWD/backend/railway/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm \
+            -v "$PWD/backend/gateway/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
   # ── Flutter ─────────────────────────────────────────────────────────────
   flutter:
     name: Flutter — format, analyze, tests

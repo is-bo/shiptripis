@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/auth_repository.dart';
 import '../../domain/account.dart';
+import '../../domain/communication_language.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import 'token_store.dart';
@@ -84,7 +85,10 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 });
 
 final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => AuthRepository(ref.watch(apiClientProvider), ref.watch(tokenStoreProvider)),
+  (ref) => AuthRepository(
+    ref.watch(apiClientProvider),
+    ref.watch(tokenStoreProvider),
+  ),
 );
 
 final sessionProvider = NotifierProvider<SessionController, SessionState>(
@@ -119,8 +123,23 @@ final canSwitchRoleProvider = Provider<bool>(
 // ---------------------------------------------------------------------------
 
 class SessionController extends Notifier<SessionState> {
+  /// How long to wait on secure storage before giving up on it.
+  ///
+  /// Generous — a cold keystore unlock is genuinely slow on an older Android
+  /// device — but bounded, because a platform channel that never answers must
+  /// not be able to hold the app on its splash screen indefinitely.
+  static const _storageBudget = Duration(seconds: 5);
+
   @override
-  SessionState build() => const SessionRestoring();
+  SessionState build() {
+    // Kicked off here rather than from a screen: the router's guard reads this
+    // state before any screen is built, so a restore that only started when
+    // the splash mounted would leave the very first redirect deciding on a
+    // value nothing had yet produced. The splash's retry re-enters the same
+    // method.
+    unawaited(restore());
+    return const SessionRestoring();
+  }
 
   AuthRepository get _auth => ref.read(authRepositoryProvider);
   TokenStore get _tokens => ref.read(tokenStoreProvider);
@@ -132,11 +151,22 @@ class SessionController extends Notifier<SessionState> {
   /// entering the app on a blacklisted refresh token means every screen fails
   /// at once. One `/api/me` up front is worth that.
   Future<void> restore() async {
-    // Deletes handover-code plaintext left by the retired build, before
-    // anything else touches storage.
-    await _tokens.purgeLegacyArtifacts();
+    final String? refresh;
+    try {
+      // Deletes handover-code plaintext left by the retired build, before
+      // anything else touches storage.
+      await _tokens.purgeLegacyArtifacts().timeout(_storageBudget);
+      refresh = await _tokens.readRefresh().timeout(_storageBudget);
+    } on Object {
+      // The keystore failed or never answered — an Android keystore that
+      // cannot unwrap after a backup restore, a wedged platform channel, a
+      // platform with no secure storage at all. A store we cannot read is
+      // indistinguishable from an empty one, and asking for a fresh sign-in
+      // is a recoverable outcome; hanging on the splash forever is not.
+      state = const SessionSignedOut();
+      return;
+    }
 
-    final refresh = await _tokens.readRefresh();
     if (refresh == null) {
       state = const SessionSignedOut();
       return;
@@ -168,7 +198,8 @@ class SessionController extends Notifier<SessionState> {
     required String email,
     required String password,
     required String phone,
-    required String wilaya,
+    String? wilaya,
+    required CommunicationLanguage preferredLanguage,
   }) async {
     final account = await _auth.signUp(
       fullName: fullName,
@@ -176,6 +207,7 @@ class SessionController extends Notifier<SessionState> {
       password: password,
       phone: phone,
       wilaya: wilaya,
+      preferredLanguage: preferredLanguage,
     );
     await _adoptRoleContextFor(account);
     state = SessionSignedIn(account);
@@ -185,14 +217,29 @@ class SessionController extends Notifier<SessionState> {
     required String idToken,
     String? phone,
     String? wilaya,
+    CommunicationLanguage? preferredLanguage,
   }) async {
     final account = await _auth.signInWithGoogle(
       idToken: idToken,
       phone: phone,
       wilaya: wilaya,
+      preferredLanguage: preferredLanguage,
     );
     await _adoptRoleContextFor(account);
     state = SessionSignedIn(account);
+  }
+
+  /// Changes the language ShipTrip writes to this account in.
+  ///
+  /// Deliberately not swallowed the way [refreshAccount] is: this one is a
+  /// user action with a visible result, so the screen has to be able to say
+  /// "that did not save" rather than silently keeping a value the server never
+  /// accepted. The state moves only once the server has answered, and it moves
+  /// to the profile the server returned — never to the value that was asked
+  /// for.
+  Future<void> updatePreferredLanguage(CommunicationLanguage language) async {
+    if (state is! SessionSignedIn) return;
+    state = SessionSignedIn(await _auth.updatePreferredLanguage(language));
   }
 
   /// Re-reads `/api/me`. Called after KYC submission, on resume, and whenever

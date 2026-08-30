@@ -1,14 +1,18 @@
 # ShipTrip V1 Implementation Status
 
-Current phase: Phase 5 **PAUSED / IN PROGRESS**; Phase 6A engineering foundations **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**
+Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
 delivery code stays sealed for 30 minutes after pickup, payout waits 48 hours
 and is frozen by any active dispute, and every delayed obligation is a
-PostgreSQL row rather than a timer. The unfinished Phase 5 Flutter rebuild is
-preserved at commit `58e79f9` and remains paused; it is not complete and Phase
-6A does not modify it.
+PostgreSQL row rather than a timer. The Phase 5 Flutter V1 rebuild is now
+implemented against the real V1 contracts: the client uses no retired endpoint,
+computes no authoritative money, and cannot put a delivery code in front of a
+traveler. `flutter analyze --fatal-infos` is clean and the mobile suite passes.
+What remains before Phase 5 can be called finished is rendering on real
+devices — every layout claim is currently backed by widget tests at real device
+metrics rather than by hardware.
 
 ## Completed
 
@@ -605,10 +609,43 @@ existing suite structurally could not:
 
 ## In progress
 
-- **Phase 5: PAUSED / IN PROGRESS.** Flutter V1 rebuild, frontend integration,
-  UX/RTL/accessibility audit, final mobile testing, and cross-stack findings
-  remain assigned to Claude after its usage reset. The work is checkpointed and
-  must not be reformatted, rewritten, or marked complete by Phase 6A
+- **Phase 5: IMPLEMENTED / DEVICE REVIEW PENDING.** The Flutter V1 client is
+  rebuilt end to end against the real V1 contracts, extracted from the URL
+  configuration and serializers rather than from documentation. Engineering
+  detail is in `docs/PHASE5_FLUTTER_V1.md`. Summary:
+  - Final navigation is Home / Deliveries / Chat / Profile, with notifications
+    on the header bell. The bottom-overlap bug is fixed *structurally* — a
+    docked bar plus one shared inset — and no screen carries a hand-tuned
+    bottom padding
+  - One account, one identity: role context reorders Home and re-points the
+    primary action, and hides nothing
+  - Complete sender and traveler lifecycles: request creation with the five
+    separate safety declarations, posting deposit, discovery, sender-first
+    proposal and counter, funding, recipient, pickup, the 30-minute delivery
+    buffer, delivery confirmation, the 48-hour protection window, disputes with
+    evidence, cancellation quotes, bidirectional blind ratings, boosts, chat,
+    notifications, KYC, multi-leg FLIGHT/DRIVE journeys with flight proof
+  - Money is server-authoritative by construction: `Money` defines no
+    arithmetic operators, so a client-side total is a compile error
+  - The traveler can never obtain the delivery code. `revealDeliveryCode` has
+    exactly one call site, guarded by the sender branch and the server's own
+    `can_reveal_delivery_code`; codes are never persisted, never logged, and
+    redact themselves in `toString()`
+  - English, French and Arabic catalogues at 928 keys each, machine-verified
+    for key parity, placeholder survival, Arabic's six ICU plural categories
+    and the absence of embedded bidi control characters
+  - `flutter analyze --fatal-infos` clean; 107 mobile tests green across six
+    device profiles including small Android, gesture navigation, iPhone home
+    indicator, landscape and 1.6x text
+  - A temporary web build against a live local backend was used to actually
+    look at the app, there being no Android/iOS toolchain on this machine. It
+    found four defects no test had caught, including a **BLOCKER**:
+    `restore()` was never called, so the app sat on its splash screen forever.
+    All four are fixed and the harness removed
+  - **Not yet done:** rendering on real Android/iOS hardware, and a
+    native-speaker review of the French and Arabic catalogues
+  - One backend BLOCKER found and fixed (V1 chat eligibility); further MAJOR and
+    MINOR findings are listed in `docs/PHASE5_FLUTTER_V1.md` for Codex
 - **Phase 6A: engineering foundation implemented; release gates remain.** Fixed admin roles, secure
   invitations, audit/operations APIs, dashboard and health visibility,
   versioned settings administration, Sender.net through the durable generic
@@ -641,7 +678,15 @@ existing suite structurally could not:
 
 ## Next
 
-- Phase 5 resume: complete the paused Flutter V1 redesign using `docs/PHASE1_API_CHANGES.md`,
+- Phase 5 close-out: render the client on representative devices and fix any
+  visual regressions; have the French and Arabic catalogues reviewed by native
+  speakers; wire pagination for `/api/deals`, `/api/notifications` and chat
+  history before users accumulate long histories
+- Phase 5 backend follow-ups for Codex: the MAJOR findings in
+  `docs/PHASE5_FLUTTER_V1.md` — handover/dispute/rating events publish no
+  notifications, the guest payer has no post-payment status endpoint, and
+  `kyc_status` cannot distinguish "never submitted" from "expired"
+- Superseded: Phase 5 resume using `docs/PHASE1_API_CHANGES.md`,
   `docs/PHASE2_MATCHING_PRICING.md` and `docs/PHASE4_HANDOVER_DISPUTES.md`.
   The Phase 4 API exposes every authoritative timestamp the client needs, so no
   deadline or amount is ever computed on the device
@@ -732,6 +777,525 @@ may be described as LIVE-PROVIDER VERIFIED.
 
 At the time of this historical Phase 3 review, Phase 4 had not yet been
 implemented. The Phase 4 sections above record its later completion.
+
+## Phase 7A — production hardening and release engineering (2026-08-29)
+
+Implemented locally without touching `mobile/`, activating providers, or
+deploying production:
+
+**Phase 5C is IMPLEMENTED / HARDWARE QA PENDING.** The original ShipTrip
+visual identity has been restored on top of the Phase 5 V1 engineering, using
+commit `76ce129` as the reference rather than recollection: parchment ground
+with paper grain, the original ink and terracotta, the sun accent, ink pill
+buttons, passport stamps, boarding-pass cards, wax seals, perforated postage
+marks, the animated flight path, and the staggered entrance choreography. The
+welcome screen and the three-chapter benefits carousel are restored; the auth
+screens use the original masthead instead of an app bar. Two MAJOR findings
+were fixed — the app defaulted to dark mode (the original had no dark theme,
+so every dark-mode device saw a product that looked nothing like ShipTrip),
+and the ink/terracotta ramps had drifted from the original values. Details,
+including the deliberate accessibility deviation on the tertiary grey and the
+confirmation that the original had no gradients or image assets, are in
+`docs/PHASE5C_VISUAL_RESTORATION.md`. `dart format` clean,
+`flutter analyze --fatal-infos` clean, 107 tests green, no behavioural
+assertion weakened. Phase 7A introduced no breaking response-shape change for
+mobile; the client now reads `Retry-After` and `X-Request-ID`. Rendering on
+real Android/iOS hardware remains the outstanding gate.
+
+- production boot now requires an explicit production environment label,
+  database/Redis/HTTPS object-storage configuration, safe hosts/origins, strong
+  independent secrets, and all payment escape hatches closed; Stripe/Chargily
+  credentials remain optional while disabled
+- public liveness and database/migration readiness probes plus a granular,
+  permissioned deep-health endpoint for Redis, durable jobs, provider-event
+  recovery, email backlog, provider configuration and storage configuration
+- shared Redis-backed production throttles for authentication/OTP, discovery,
+  payment, handover, upload/evidence, chat, and admin-invitation surfaces;
+  global request-body bounds at Django and Caddy
+- server-generated request IDs, allow-listed JSON production logging, release
+  metadata, Sentry PII-off environment/release metadata, secure cookies/origins,
+  gateway/static security headers and CSP
+- defensive fixes for Google unverified-email account linking, concurrent OTP
+  attempt-budget bypass, legacy finance/dispute granular authorization/audit,
+  parcel bucket/key response leakage, and unbounded legacy list responses
+- validated PostgreSQL/Redis Go connection URLs, an authoritative expanded
+  `.env.example`, and a loopback-only read-only load probe
+- release artifacts: `docs/PHASE7A_PRODUCTION_READINESS.md`,
+  `docs/DEPLOYMENT_RUNBOOK.md`, `docs/ROLLBACK_RUNBOOK.md`, and
+  `docs/PROVIDER_ACTIVATION_RUNBOOK.md`
+
+Local Phase 7A verification is green: the complete SQLite application suite
+passed **943 tests / 65 expected infrastructure-specific skips**, and the
+full PostgreSQL 16 suite passed **974 tests / 34 expected skips** against the
+local server (using the repository's ignored `config/settings/test_pg.py`
+helper only for the earlier collection setup, not as a test module). A clean
+fresh-migration PostgreSQL schema dump matched `contracts/sql/schema.sql` after
+the CI-documented generator-noise normalization; the temporary schema database
+was verified empty of active connections and dropped. Ruff, Django checks,
+migration checks, explicit production `check --deploy`, Python compilation, Go
+format/build/vet/unit tests, static route/link/CSP checks, Railway JSON parsing,
+and diff integrity passed. A bounded authenticated local read probe completed
+500/500 requests successfully at concurrency 10 (140.87 req/s, 13.95 ms
+median, 466.39 ms p95) on Django's development server and file-backed SQLite;
+this is stability evidence, not a production capacity claim. No schema/model
+migration was added.
+
+Phase 7A remains **NO-GO for public launch**. External Railway backup/restore
+and production-sized migration rehearsal, real-Redis and Caddy container
+validation, legal/support content, provider activation, monitoring/on-call
+ownership, and Phase 5C mobile/device compatibility approval remain required.
+Stripe, Chargily, and Sender.net are still not configured or live-verified.
+
+### Phase 7A release-hardening continuation — 2026-08-30
+
+- The authenticated Go KYC upload now has a Redis-backed, atomic fixed-window
+  account budget before multipart parsing/storage (default 6/hour). Multiple
+  service instances consume one shared counter; concurrent calls cannot exceed
+  the budget; denial is structured HTTP 429 with `Retry-After`; missing or
+  failed Redis is a safe HTTP 503 with no object/recorder work. The optional
+  hashed-IP budget is off by default and requires an explicit trusted client-IP
+  source when enabled.
+- The combined Railway launcher now requires a validated non-loopback
+  `KYC_RATE_LIMIT_REDIS_URL` and maps it into only the KYC child. The existing
+  loopback Redis remains isolated to the combined container's ordinary
+  pub/sub/cache work and cannot accidentally become a per-replica KYC limiter.
+- KYC image verification now completes a full decode after signature, decoder
+  format and 48-megapixel checks, closing header-valid truncated-image uploads.
+  Private object keys were also removed from orphan-cleanup logs.
+- A real PostgreSQL gate exposed a payment/cancellation interleaving that could
+  mark captured money cancelled with no refund obligation. `cancel_order` now
+  becomes a no-op when captured applied cents are not fully covered by durable
+  refund rows; the focused PostgreSQL race and deterministic regression pass.
+- Focused gates are green: Go KYC/config/Redis packages, 26 production
+  boot/launcher refusal tests, 61 finance/deployment tests, the isolated
+  PostgreSQL account suite (25 tests), and the focused PostgreSQL financial
+  race/regression. Full PostgreSQL (974/34), full SQLite (943/65), and fresh
+  migration schema drift are now complete; ordinary Go build/vet/tests and
+  final lint/check evidence are recorded above and in
+  `docs/PHASE7A_PRODUCTION_READINESS.md`.
+
+Phase 7A remains **NO-GO for public launch**. Distributed limiter code is no
+longer the blocker; provisioning the shared managed Redis and exercising the
+tagged real-Redis outage/recovery suite are. Caddy container validation, the Go
+CGO race gate, production-sized migration/restore rehearsal, external legal and
+operational approval, provider activation, and mobile/device compatibility also
+remain open. No provider was activated, no production system was deployed, and
+`mobile/` was not modified by this continuation.
+
+## Phase 6B stabilization continuation handoff — 2026-08-29
+
+Phase 6B is **not visually complete**. Claude's established public, admin, and
+email visual direction is preserved for a later Impeccable pass. The engineering
+stabilization found and fixed the admin journey proof-count contract and made
+the Go email consumer reject messages that still lack a durable event ID after
+stream backfill; it did not redesign any surface. On the supported Python 3.12
+runtime, the complete SQLite suite passes 871 tests with 65 expected
+infrastructure-specific skips.
+
+### ENGINEERING ISSUE
+
+- Authenticated Django-admin template integration is green on the project's
+  supported Python 3.12 runtime. A login capture exists, but representative
+  authenticated admin screenshots with populated data remain a visual-review
+  task; the available browser harness does not automate the login flow.
+- This stabilization pass could not independently recapture exact 320 px,
+  375 px, and 430 px viewports because the available headless Edge build clamps
+  the layout viewport to roughly 500 px. Claude's Phase 6B notes record a
+  passing 375 px emulated-browser review; desktop and 500 px narrow captures
+  also show no horizontal overflow. Exact-width evidence should be repeated
+  during the continuation pass.
+
+### DESIGN REVIEW NEEDED
+
+- Resume Claude's final Impeccable review of the complete EN/FR/AR landing
+  composition, including exact phone, tablet, desktop, and wide-desktop sizes.
+- Review authenticated admin dashboard, users, KYC, proofs, marketplace,
+  disputes, finance, settings, and health states with representative data,
+  especially dense/empty/error rows and financially important statuses.
+- Review the shared transactional email shell and representative messages in
+  Gmail, Outlook, and Apple Mail at desktop and narrow widths; RTL/localized
+  email presentation has not been implemented.
+- Revisit Terms, Privacy, Prohibited Items, and Support only after qualified
+  legal review and native FR/AR copy are supplied. They remain English-only
+  product/legal drafts and must not be treated as approved legal text.
+
+## Phase 6B final visual/product review — 2026-08-29 (Claude)
+
+The continuation pass the stabilization handoff asked for is **done**. Every
+surface was reviewed as rendered, at the sizes and in the states it will be met
+in, and the visual BLOCKER/MAJOR findings are fixed. Full detail, with severities
+and before/after reasoning, is in `docs/PHASE6B_VISUAL_PRODUCT_QUALITY.md` §15.
+
+### What was reviewed, and how
+
+- **Public site**: `/en/`, `/fr/`, `/ar/` at 320, 375, 430, 768, 1024, 1440 and
+  1600 CSS px, plus the four document pages at 375 and 1440. Phone widths were
+  measured in an emulated viewport at 2× — this closes the exact-width evidence
+  gap the stabilization handoff recorded, which was a limitation of headless
+  Edge (no layout below ~492 px), not of the site. At every width and locale
+  `scrollWidth == clientWidth`.
+- **Admin**: rendered against a seeded database carrying four deals driven
+  through the real services, an open dispute with evidence and timeline, a
+  resolved dispute, a failed attempt, an unapplied payment, a refund needing
+  manual action, an unverified provider event, three job states, pending and
+  rejected KYC, three flight proofs and a failed outbound email. Pages were
+  produced with `force_login` server-side rather than by typing credentials into
+  the login form, which is also the answer to the handoff's "harness does not
+  automate the login flow" note. `tools/preview/` holds the seed, dump and
+  render scripts, with a README.
+- **Email**: all 24 documents rendered to files and reviewed at desktop and
+  375 px, plus a mechanical audit of every document for client-hostile
+  constructs.
+
+### Visual fixes landed
+
+Public site — hero italic collision; Arabic FAQ arrow pointing up while closed;
+six trust items leaving a two-cell hole; the FAQ leaving half a band empty; a
+three-row 149 px sticky header at 320 px; the eyebrow rule sliding between lines
+of a wrapped eyebrow; the mobile table of contents reading as damage; the
+policy pages not marking the current language; the two boarding-pass seams
+sitting at different heights in French.
+
+Admin — a **Needs attention** queue panel on the dashboard (nine queues, each a
+count linked to the changelist filtered to exactly those rows); a read-only
+`OutboundMessage` admin, which is the first operator visibility of transactional
+email at all; worded status chips replacing boolean icons on the user queue,
+where a red cross under IS BANNED meant the account was fine; a confirmation
+step on the bulk ban action; the scheduled-job change form frozen so `requeue`
+is the only mutation, as its own docstring already claimed; a **Key values**
+reading of the settings policy in operator units; a **Where the money is** panel
+on the dispute page.
+
+Email — the plain-text part now carries the anti-phishing and transactional
+footer the HTML part always had; two sentences that interpolated a context value
+mid-sentence now stand alone when the value is absent, which a durable outbox
+makes a real case.
+
+### Decisions recorded
+
+- **Email localization is not presentation work** and was not implemented:
+  there is no `LANGUAGES`, no catalogue, no `gettext` call, no language on
+  `User` and none on `OutboundMessage`. `docs/PHASE6B_VISUAL_PRODUCT_QUALITY.md`
+  §15.4 specifies the required launch behaviour (FR + AR + EN for every
+  user-facing kind, `ADMIN_INVITATION` excepted), the priority order, and
+  exactly what a focused Codex task has to cover — including RTL email
+  rendering and the guest/recipient language resolution, which has no user row
+  to read from.
+- **Six unwired templates are LAUNCH REQUIRED**: `KYC_STATUS`,
+  `FLIGHT_PROOF_STATUS`, `SECURITY_EVENT`, `PAYMENT_FAILED`, `REFUND_STATUS`,
+  and `GUEST_PAYMENT` if the guest rail ships. `PROTECTION_ENDING` is strongly
+  recommended. `PAYMENT_PROCESSING` is NOT NEEDED. §15.5 has the reasoning per
+  template. **No backend event was wired in this pass.**
+- `SECURITY_EVENT` is the sharpest of them: `PasswordResetConfirmView` sets a
+  new password and notifies nobody, so an attacker with mailbox access takes an
+  account over silently. The template is already written.
+
+### Still open after this pass
+
+- Native French and Arabic review of both the site and the email copy. Mechanical
+  RTL is verified; linguistic quality is not claimed.
+- No real email client was used. Gmail, Outlook desktop and Outlook.com, Apple
+  Mail and a narrow Android client remain unverified; the construct audit is
+  what the design is built to survive, not evidence that it did.
+- Model `verbose_name_plural` is unset on several models, so the admin reads
+  "O auth identitys", "Matchs", "Ledger entrys", "Wallet entrys", "Handover code
+  accesss", "Kyc submissions". Fixing it touches model `Meta` and generates
+  migrations, so it was left out of a visual pass.
+- Policy pages remain unapproved English-only drafts, and support mailboxes
+  remain placeholders. Neither was changed.
+- No provider was activated, no webhook registered, no DNS or deploy touched,
+  and no Flutter file was read or written.
+
+## Phase 6C — transactional email wiring and localization (2026-08-29)
+
+Phase 6C is implemented with external sending inactive. `User.preferred_language`
+and Deal-scoped `DealRecipient.communication_language` accept only `en`, `fr`,
+or `ar`; historical blanks resolve to English without rewriting intent. Guest
+payment links snapshot an explicit language (or the owner's resolved language).
+`OutboundMessage.language` snapshots the locale at enqueue time, so profile
+changes cannot mutate queued obligations.
+
+French and Arabic Django gettext catalogues provide localized subjects,
+preheaders, bodies, CTAs, footers, plain text and conservative HTML. Arabic
+documents are RTL with explicit LTR isolation for codes, URLs and money. The
+delivery-code path remains `secret_ref` to trusted final renderer to SMTP; the
+plaintext code is absent from all persisted context, events, logs and jobs.
+
+Authoritative, deterministic, idempotent wiring now covers KYC approval/action
+required, flight-proof approval/action required, password-reset security
+notification, actual payment failure, refund pending/completed, guest payment
+failure/receipt, and one protection-ending reminder 24 hours before expiry.
+Opening a dispute cancels pending protection-ending reminders. Transient
+payment processing, payment-required/succeeded, and evidence-request mail stay
+deliberately unwired; admin invitation remains English-only for launch.
+
+The four additive migrations and PostgreSQL schema contract were regenerated
+and repeat-dump checked. Phase 6C tests cover language snapshots/fallbacks,
+three-locale delivery-code secrecy, event idempotency, security notification
+confidentiality, late payment success cancellation, refund/guest privacy,
+protection cancellation, migration reversibility and Redis-independent outbox
+durability. Required Flutter selectors and guest receipt-email collection are
+documented follow-up; `mobile/` was untouched.
+
+Verification completed locally: full SQLite application suite **937 passed / 65
+skipped**; fresh PostgreSQL Phase 6C, recovery and localization suite **34
+passed**, plus PostgreSQL migration forward/reverse rehearsal **1 passed**;
+Ruff, Django checks, migration drift, Python compilation, static email rendering,
+Go build/vet/tests and normalized PostgreSQL schema repeat-dump all pass.
+
+### Local toolchain note
+
+This machine runs Python 3.14.3 while CI and the image pin 3.12. Django 5.1.4
+copies a template context with `copy(super())`, which returns the proxy from
+3.14, so every admin render raises inside `InclusionAdminNode` — two admin tests
+were failing here for that reason alone. `backend/monolith/conftest.py` restores
+the pre-3.14 behaviour behind a version guard; on 3.12 it does nothing.
+
+## Phase 6D — mobile communication-language integration (2026-08-30)
+
+Phase 6D is a bounded Flutter compatibility patch closing the client-side gap
+Phase 6C left open. No backend file, no email template, no landing or admin
+surface, no payment logic and no handover cryptography was touched, and no
+provider, webhook, DNS record or deployment was configured. The Phase 5C visual
+identity is unchanged; no screen was redesigned.
+
+### App language and communication language are now two named settings
+
+`Profile -> Language` holds both, one under the other, because they are one
+question to a user and two different answers in the system:
+
+- **App language** is the interface. It is a device setting, it never leaves
+  the phone, and it is the only thing that decides text direction.
+- **Email language** is what ShipTrip writes to the account in — payment and
+  refund receipts, KYC and flight-proof decisions, dispute, cancellation and
+  payout notices, account-security mail. It is stored on the account and
+  follows the user to every device.
+
+Each carries a one-line explanation naming that difference, and every option is
+written in its own language so a user who landed in the wrong interface can
+still recognise theirs. Splitting them into two Profile rows was rejected: two
+rows offering the same three languages is the confusing duplicate the
+distinction exists to prevent.
+
+The two settings are independent after account creation. Changing the interface
+language sends nothing to the server and cannot overwrite a stored preference.
+The one legitimate synchronisation is at sign-up, where the account does not
+exist yet: `POST /api/auth/sign-up` now carries `preferred_language` resolved
+from the language the form was filled in. Google sign-in accepts the same
+optional field, which the server applies only when it creates a fresh account.
+
+Selecting Arabic email does not mirror the app. Only the app-language setting
+does, and the Arabic option label is direction-scoped to itself.
+
+### API mapping used
+
+Verified against the Phase 6C serializers rather than assumed:
+
+| Surface | Call | Field |
+|---|---|---|
+| Profile read | `GET /api/me` | `preferred_language` (resolved by the server) |
+| Profile write | `PATCH /api/me` | `preferred_language` — the only writable field |
+| Recipient write | `PUT /api/deals/{id}/recipient` | optional `communication_language` |
+| Recipient read | deal aggregate, sender projection | `communication_language` |
+| Guest link | `POST /api/payments/orders/{ref}/guest-link` | optional `communication_language`, echoed back |
+
+Values are exactly `en`, `fr`, `ar`. The client never sends a region tag, a
+`Locale`, or a null.
+
+### Legacy behaviour
+
+`CommunicationLanguage.parse` mirrors
+`apps.core.languages.normalize_communication_language`: a blank, missing,
+unknown or wrongly-cased value resolves to English. Accounts created before the
+preference existed therefore show English selected rather than an empty
+selector, and a deployment that omits the key entirely still parses. No
+migration-time intent is invented on the client.
+
+### Recipient language
+
+The recipient form gained an EN/FR/AR row directly under the email address it
+governs, using the existing `AppSegmentedChoice` — the app's own selector, not
+a Material dropdown. `AppSegmentedChoice` gained `helper`, `errorText` and
+`enabled` so it keeps the form's footnote rhythm and stays visible-but-inert on
+a form the server has locked after pickup.
+
+- A **new** recipient defaults to the sender's stored communication language,
+  which is what the server snapshots when the field is omitted.
+- An **existing** recipient loads the stored server value and keeps it unless
+  the sender changes it. Correcting a phone number cannot rewrite the language
+  of an email somebody is waiting for.
+- A **legacy blank** recipient row, and a deployment that omits the field, both
+  edit as English — the server's own fallback — not as the sender's preference.
+- The language is never inferred from a name, an email address, its domain, a
+  nationality, or a city. The sender chooses; that is the only input.
+
+### Guest payment
+
+`PaymentRepository.createGuestLink` now accepts and forwards
+`communication_language`, and `GuestPaymentLink` parses the snapshot the server
+returns. There is still no guest-link issuing screen in the mobile build, so
+today the server's own snapshot of the owner's resolved preference is what
+applies; the client no longer prevents an explicit choice when that screen
+lands. No guest-payer UI was added and no guest authority was granted.
+
+### Delivery-code isolation is unchanged
+
+`secret_ref -> trusted localized renderer -> SMTP` is untouched. Flutter renders
+no transactional email and receives no delivery-code secret as traveler. The
+traveller's recipient projection still carries no email, no phone and no
+language, `RecipientView.toString()` still redacts, and the sender reveal
+endpoint still has exactly one call site. Regression coverage for all four is in
+`mobile/test/handover_isolation_test.dart`.
+
+### Verification
+
+`mobile/test/support/fake_api.dart` installs a fake Dio adapter under the real
+`ApiClient`, repositories, session controller and screens, so the tests assert
+on the JSON that would actually reach Django rather than on a stubbed
+repository.
+
+- `dart format --set-exit-if-changed lib test` — clean, 109 files, 0 changed.
+- `flutter analyze --fatal-infos` — no issues.
+- `flutter test` — **192 passed**, up from the 107 that passed before this
+  phase; every pre-existing Phase 5C test remains green.
+- ARB key parity: 975 keys in each of EN, FR and AR; `l10n_untranslated.json`
+  is empty.
+
+New coverage: profile blank/EN/FR/AR/change/persisted-PATCH/server-error;
+recipient default-from-sender, explicit EN/FR/AR, edit-preserves, legacy blank,
+missing field, change-existing, payload shape; the AR-app/EN-mail,
+AR-app/FR-mail, EN-app/AR-mail and FR-app/AR-mail combinations; guest-link
+propagation and omission; sign-up language; and a render matrix over six device
+profiles times three locales for both screens.
+
+### Findings
+
+- **Historical MINOR — resolved in the final bounded closeout.**
+  `SkeletonDetail` overflowed a short landscape viewport. The shared component
+  now scrolls only when its parent supplies a finite height; list-hosted uses
+  keep their natural column layout. The old landscape exception is gone.
+- **Historical MAJOR, not MINOR — resolved in the final bounded closeout.**
+  Guest checkout sent no payer `email`. With transactional email enabled the
+  server rejected every anonymous checkout before creating an attempt, so the
+  launch-enabled guest rail could not work in its intended configuration.
+- **Historical BLOCKER, not MINOR — resolved in the final bounded closeout.**
+  Normal email sign-up required an Algerian `wilaya`, which blocked legitimate
+  France/EU-side senders and travelers from the active mobile account path.
+  The backend Google endpoint did not require it, but the Flutter application
+  exposes no social-sign-in trigger, so that was not a launch workaround. The
+  V1 specification contains no residence-wilaya requirement.
+
+## Final bounded application closeout (2026-08-30)
+
+This is a closeout pass over the three findings above, not a new product phase.
+No provider, webhook, DNS record, production environment or deployment was
+configured or activated.
+
+### Sign-up domain correction
+
+The wilaya control was stale Algeria-only onboarding. The account model already
+allowed a blank value, but the normal sign-up serializer and Flutter form made
+it mandatory. That field is not a KYC input and no matching, Journey, payment
+or marketplace policy reads it. Actual V1 pickup and delivery locations carry
+their country and region on delivery requests and Journeys.
+
+Normal email sign-up now omits wilaya. Django accepts an omitted or blank value
+and keeps validating a supplied two-character Algerian code for older clients.
+Google registration was already optional; it now applies the same allowlist
+validation when a legacy value is supplied. No speculative residence-country
+or profile-region field was added. New accounts remain `BOTH`, so the same
+France/EU-side or Algeria-side account can act as Sender, Traveler or switch
+between those contexts. No migration was required because the model column was
+already blank-capable.
+
+### Guest payer receipt email
+
+ShipTrip owns the receipt-email input before redirect; the hosted provider owns
+payment credentials. The anonymous screen now requires and validates a
+localized payer email, then sends only `provider` plus the trimmed `email` to
+the existing guest checkout endpoint. The guest-link language snapshot still
+selects receipt/failure/refund language; the payer does not gain a language or
+identity mutation surface.
+
+The server stores the address only on the payment attempt and never echoes it
+from the guest response. The anonymous contract still exposes no Deal id,
+counterparty, recipient, exact location, chat, dispute, refund, payout or
+handover authority. Focused tests cover the enabled-email requirement, invalid
+input, accepted input, minimal response, localized payment facts and all guest
+authority denials.
+
+### Shared responsive loading state
+
+`SkeletonDetail` was a fixed natural-height `Column` placed directly into a
+short finite viewport. The shared component now detects that finite constraint
+and supplies its own vertical scroll root, while preserving the Phase 5C
+spacing, shape and unbounded list-hosted behavior. A selected guest provider
+also exposed the shared `AppCard` accent rail stretching inside an unbounded
+`ListView`; the rail now takes the card's intrinsic height instead of requesting
+infinite height.
+
+Coverage includes 320-pixel narrow portrait, Android and iPhone safe areas,
+large text, 844x390 landscape, and a deliberately short 844x240 landscape with
+both a top bar and pinned footer. The recipient landscape test no longer
+suppresses the old overflow.
+
+### Closeout verification
+
+- `dart format --set-exit-if-changed lib test` — clean, 112 files, 0 changed.
+- `flutter analyze --fatal-infos` — no issues.
+- `flutter test` — **205 passed**.
+- Django account/auth regression suite — **29 passed**.
+- Django guest checkout/email/privacy/authority suites — **20 passed**.
+- Ruff — clean.
+- Django system check — no issues.
+- `makemigrations --check --dry-run` — no changes detected.
+
+Final application finding state for this bounded pass: wilaya requirement
+**BLOCKER resolved**; guest payer email **MAJOR resolved**; shared skeleton
+overflow **MINOR resolved**. No application BLOCKER, MAJOR or MINOR finding from
+the three-item closeout remains open. Provider credentials and the other
+external release-activation prerequisites below remain intentionally untouched.
+
+## Pre-launch release checkpoint (2026-08-30)
+
+The release candidate now has an operator-triggered **Build Android** GitHub
+Actions workflow. It derives artifact names from the authoritative Flutter
+version (or an explicit RC label), accepts only a credential-free HTTPS API
+origin, and produces a signed release APK plus AAB when the four documented
+GitHub signing secrets are present. The keystore exists only in the runner's
+temporary directory. A separately selected, clearly named debug APK remains
+available for controlled installation before signing is configured; release
+builds never fall back to the debug key.
+
+Normal CI now includes production-profile fail-closed tests, Django deployment
+checks, static route/link/CSP validation, and both Railway Caddyfile validation
+in addition to the existing Flutter, Django/PostgreSQL, Ruff, migration/schema,
+and Go gates. Root Railway health routing now targets `/readyz` rather than
+liveness alone.
+
+The seeded immutable Business Settings version 5 is the pre-launch provider
+baseline: Stripe, Chargily, mock payments, new Chargily checkouts, and automatic
+Stripe payouts are disabled. Transactional email dispatch also honors
+`EMAIL_ENABLED=false` before touching either transport and retains the durable
+outbox obligation for later replay. No provider credential or signing material
+is stored in the repository.
+
+Local release evidence after the final safety edits:
+
+- Flutter format/analyze/tests: clean, **205 passed**.
+- Django application suite: **987 passed**, 65 intentional skips.
+- Ruff, Django system check, and migration drift: clean.
+- Deployment fail-closed suite and production `check --deploy`: clean.
+- Go format/build/vet/tests: clean.
+- Static web validation: clean (8 HTML files, 1 stylesheet).
+- Railway configuration JSON: valid.
+- Local Android packaging is unavailable on this workstation because no
+  Android SDK is installed; the GitHub runner is the authoritative packaging
+  environment.
+
+This checkpoint does not authorize public launch. Provider credentials,
+provider webhooks, outbound email, Google Play submission, and public
+announcement remain disabled or pending explicit operator action.
 
 ## External dependencies/blockers
 

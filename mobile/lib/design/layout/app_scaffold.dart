@@ -34,6 +34,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../identity.dart';
 import '../tokens.dart';
 
 // ---------------------------------------------------------------------------
@@ -88,6 +89,7 @@ class AppScaffold extends StatelessWidget {
     this.floating,
     this.padBodyHorizontally = false,
     this.extendBodyBehindTopBar = false,
+    this.textured = true,
     super.key,
   });
 
@@ -117,6 +119,12 @@ class AppScaffold extends StatelessWidget {
   /// itself instead of being pushed below the bar.
   final bool extendBodyBehindTopBar;
 
+  /// Draws the ShipTrip paper grain behind the body. On by default: the
+  /// texture is the ground the whole identity sits on, and a screen that
+  /// opts out looks like it belongs to another app. Turn it off only where
+  /// something else owns the full surface — a map, a photo viewer.
+  final bool textured;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -134,11 +142,7 @@ class AppScaffold extends StatelessWidget {
     // Horizontal-only safe area. Vertical insets are handled deliberately:
     // the top by the app bar, the bottom by the footer and the shell's
     // navigation bar. Consuming them here as well would double-pad.
-    content = SafeArea(
-      top: false,
-      bottom: false,
-      child: content,
-    );
+    content = SafeArea(top: false, bottom: false, child: content);
 
     if (floating != null) {
       content = Stack(
@@ -148,10 +152,7 @@ class AppScaffold extends StatelessWidget {
             textDirection: Directionality.of(context),
             end: AppSpace.gutter,
             bottom: AppSpace.gutter,
-            child: SafeArea(
-              top: false,
-              child: floating!,
-            ),
+            child: SafeArea(top: false, child: floating!),
           ),
         ],
       );
@@ -167,10 +168,17 @@ class AppScaffold extends StatelessWidget {
       // underneath the very field the user is typing into.
       resizeToAvoidBottomInset: true,
 
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: content),
-          if (footer != null) AppFooterBar(child: footer!),
+          // Behind everything, and behind the footer's own opaque bar, so it
+          // is texture rather than an overlay on top of type.
+          if (textured) const Positioned.fill(child: PaperGrain()),
+          Column(
+            children: [
+              Expanded(child: content),
+              if (footer != null) AppFooterBar(child: footer!),
+            ],
+          ),
         ],
       ),
     );
@@ -205,17 +213,24 @@ class AppFooterBar extends StatelessWidget {
             ? Border(top: BorderSide(color: colors.hairline))
             : null,
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.gutter,
-            AppSpace.md,
-            AppSpace.gutter,
-            AppSpace.md,
+      child: Stack(
+        children: [
+          // The bar is opaque, so it would otherwise be the one flat patch on
+          // an otherwise textured screen.
+          const Positioned.fill(child: PaperGrain()),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.gutter,
+                AppSpace.md,
+                AppSpace.gutter,
+                AppSpace.md,
+              ),
+              child: child,
+            ),
           ),
-          child: child,
-        ),
+        ],
       ),
     );
   }

@@ -230,7 +230,9 @@ class ApiClient {
         // arrive at the server as one spike.
         final ceiling = 400 * (1 << attempt);
         await Future<void>.delayed(
-          Duration(milliseconds: ceiling ~/ 2 + _random.nextInt(ceiling ~/ 2 + 1)),
+          Duration(
+            milliseconds: ceiling ~/ 2 + _random.nextInt(ceiling ~/ 2 + 1),
+          ),
         );
         attempt++;
       }

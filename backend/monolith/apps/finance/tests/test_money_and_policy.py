@@ -74,9 +74,7 @@ class MoneyArithmeticTests(TestCase):
         """A rate that a float would mangle still converts exactly."""
 
         # 0.1 + 0.2 style error would show up here as an off-by-one.
-        assert (
-            convert_eur_cents(300, to_currency="DZD", rate_micros=100_000_000) == 300
-        )
+        assert convert_eur_cents(300, to_currency="DZD", rate_micros=100_000_000) == 300
 
     def test_conversion_rejects_a_nonsense_rate(self):
         for bad in (0, -1, True):
@@ -129,10 +127,10 @@ class PaymentPolicyTests(TestCase):
         assert policy.posting_deposit.percent_bps == 1_000
         assert policy.posting_deposit.min_eur_cents == 300
         assert policy.posting_deposit.max_eur_cents == 700
-        assert policy.providers.stripe_enabled is True
-        assert policy.providers.chargily_enabled is True
+        assert policy.providers.stripe_enabled is False
+        assert policy.providers.chargily_enabled is False
         assert policy.providers.mock_enabled is False
-        assert policy.chargily.new_checkouts_enabled is True
+        assert policy.chargily.new_checkouts_enabled is False
         assert policy.payout.protection_window_seconds == 172_800
         assert policy.payout.auto_stripe_enabled is False
 
@@ -202,9 +200,7 @@ class PaymentPolicyTests(TestCase):
 
         activate_business_settings(candidate)
 
-        assert (
-            BusinessSettingsVersion.objects.filter(status="active").count() == 1
-        )
+        assert BusinessSettingsVersion.objects.filter(status="active").count() == 1
         assert get_active_business_settings().pk == candidate.pk
 
 
@@ -233,9 +229,7 @@ class LegacyRevisionCompatibilityTests(TestCase):
         # this phase carries.
         phase2 = BusinessSettingsVersion.objects.get(version=2)
         assert "payments" not in phase2.policy
-        type(offer).objects.filter(pk=offer.pk).update(
-            business_settings_version=phase2
-        )
+        type(offer).objects.filter(pk=offer.pk).update(business_settings_version=phase2)
         offer.refresh_from_db()
 
         deal = scenario.accept()

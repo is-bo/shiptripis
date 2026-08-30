@@ -1,0 +1,3378 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Arabic (`ar`).
+class LAr extends L {
+  LAr([String locale = 'ar']) : super(locale);
+
+  @override
+  String get appName => 'ShipTrip';
+
+  @override
+  String get actionContinue => 'متابعة';
+
+  @override
+  String get actionCancel => 'إلغاء';
+
+  @override
+  String get actionSave => 'حفظ';
+
+  @override
+  String get actionRetry => 'إعادة المحاولة';
+
+  @override
+  String get actionClose => 'إغلاق';
+
+  @override
+  String get actionDone => 'تم';
+
+  @override
+  String get actionBack => 'رجوع';
+
+  @override
+  String get actionNext => 'التالي';
+
+  @override
+  String get actionConfirm => 'تأكيد';
+
+  @override
+  String get actionEdit => 'تعديل';
+
+  @override
+  String get actionRemove => 'إزالة';
+
+  @override
+  String get actionShare => 'مشاركة';
+
+  @override
+  String get actionCopy => 'نسخ';
+
+  @override
+  String get actionCopied => 'تم النسخ';
+
+  @override
+  String get actionRefresh => 'تحديث';
+
+  @override
+  String get actionSeeAll => 'عرض الكل';
+
+  @override
+  String get actionLearnMore => 'معرفة المزيد';
+
+  @override
+  String get actionGoBack => 'العودة';
+
+  @override
+  String get actionNotNow => 'ليس الآن';
+
+  @override
+  String get actionUnderstood => 'فهمت';
+
+  @override
+  String get actionOpen => 'فتح';
+
+  @override
+  String get actionAdd => 'إضافة';
+
+  @override
+  String get actionChange => 'تغيير';
+
+  @override
+  String get actionSelect => 'اختيار';
+
+  @override
+  String get actionSearch => 'بحث';
+
+  @override
+  String get actionClear => 'مسح';
+
+  @override
+  String get actionApply => 'تطبيق';
+
+  @override
+  String get actionReport => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get actionContactSupport => 'التواصل مع الدعم';
+
+  @override
+  String get navHome => 'الرئيسية';
+
+  @override
+  String get navDeliveries => 'التوصيلات';
+
+  @override
+  String get navChat => 'المحادثة';
+
+  @override
+  String get navProfile => 'الحساب';
+
+  @override
+  String get navNotifications => 'الإشعارات';
+
+  @override
+  String navNotificationsWithCount(int count) {
+    return 'الإشعارات، $count غير مقروءة';
+  }
+
+  @override
+  String get roleSender => 'الإرسال';
+
+  @override
+  String get roleTraveler => 'السفر';
+
+  @override
+  String get roleSwitchLabel => 'تبديل الدور';
+
+  @override
+  String get roleSwitchTitle => 'ماذا تفعل اليوم؟';
+
+  @override
+  String get roleSenderDescription => 'أرسل طردًا مع مسافر';
+
+  @override
+  String get roleTravelerDescription => 'احمل طرودًا في رحلة تقوم بها';
+
+  @override
+  String get roleSwitchedToSender => 'تم التبديل إلى الإرسال';
+
+  @override
+  String get roleSwitchedToTraveler => 'تم التبديل إلى السفر';
+
+  @override
+  String get authSignIn => 'تسجيل الدخول';
+
+  @override
+  String get authSignUp => 'إنشاء حساب';
+
+  @override
+  String get authSignOut => 'تسجيل الخروج';
+
+  @override
+  String get authEmail => 'البريد الإلكتروني';
+
+  @override
+  String get authPassword => 'كلمة المرور';
+
+  @override
+  String get authFullName => 'الاسم الكامل';
+
+  @override
+  String get authForgotPassword => 'نسيت كلمة المرور؟';
+
+  @override
+  String get authResetPassword => 'إعادة تعيين كلمة المرور';
+
+  @override
+  String get authResetSent =>
+      'إذا كان هذا البريد الإلكتروني مرتبطًا بحساب، فقد أرسلنا إليه رمز إعادة التعيين.';
+
+  @override
+  String get authNoAccount => 'جديد على ShipTrip؟';
+
+  @override
+  String get authHaveAccount => 'لديك حساب بالفعل؟';
+
+  @override
+  String get authVerifyEmailTitle => 'أكّد بريدك الإلكتروني';
+
+  @override
+  String authVerifyEmailBody(String email) {
+    return 'أرسلنا رابطًا إلى $email. أكّده للحفاظ على أمان حسابك.';
+  }
+
+  @override
+  String get authSignOutConfirmTitle => 'تسجيل الخروج؟';
+
+  @override
+  String get authSignOutConfirmBody =>
+      'ستحتاج إلى تسجيل الدخول مرة أخرى لرؤية توصيلاتك.';
+
+  @override
+  String get validationRequired => 'هذا الحقل مطلوب';
+
+  @override
+  String get validationEmailInvalid => 'أدخل عنوان بريد إلكتروني صالحًا';
+
+  @override
+  String get validationPasswordTooShort => 'استخدم 8 أحرف على الأقل';
+
+  @override
+  String get validationNumberInvalid => 'أدخل رقمًا';
+
+  @override
+  String get validationMustBePositive => 'أدخل رقمًا أكبر من صفر';
+
+  @override
+  String validationTooLong(int max) {
+    return 'اجعل هذا أقل من $max حرفًا';
+  }
+
+  @override
+  String get validationSelectOne => 'اختر واحدًا';
+
+  @override
+  String get validationDateInPast => 'اختر تاريخًا في المستقبل';
+
+  @override
+  String get validationDeadlineBeforeReady =>
+      'يجب أن يكون الموعد النهائي بعد جاهزية الطرد';
+
+  @override
+  String get stateLoading => 'جارٍ التحميل…';
+
+  @override
+  String get stateOfflineTitle => 'أنت غير متصل بالإنترنت';
+
+  @override
+  String get stateOfflineBody => 'تحقق من اتصالك. سنُحمّل هذا فور عودتك.';
+
+  @override
+  String get stateTimeoutTitle => 'استغرق هذا وقتًا طويلاً';
+
+  @override
+  String get stateTimeoutBody => 'لم يستجب الخادم في الوقت المحدد.';
+
+  @override
+  String get stateServerErrorTitle => 'حدث خطأ من جانبنا';
+
+  @override
+  String get stateServerErrorBody => 'هذا ليس خطأك. أعد المحاولة بعد قليل.';
+
+  @override
+  String get stateNotFoundTitle => 'غير موجود';
+
+  @override
+  String get stateNotFoundBody =>
+      'ربما تمت إزالة هذا، أو أنه لم يكن مخصصًا لك أصلاً.';
+
+  @override
+  String get stateForbiddenTitle => 'لا يمكنك فعل ذلك هنا';
+
+  @override
+  String get stateForbiddenBody => 'لا يملك حسابك صلاحية الوصول إلى هذا.';
+
+  @override
+  String get stateSessionExpiredTitle => 'يُرجى تسجيل الدخول مرة أخرى';
+
+  @override
+  String get stateSessionExpiredBody =>
+      'انتهت جلستك. سجّل الدخول لمتابعة ما كنت تفعله.';
+
+  @override
+  String get stateRateLimitedTitle => 'عدد كبير جدًا من المحاولات';
+
+  @override
+  String get stateRateLimitedBody => 'انتظر قليلاً قبل إعادة المحاولة.';
+
+  @override
+  String get stateUnexpectedTitle => 'حدث أمر غير متوقع';
+
+  @override
+  String get stateUnexpectedBody =>
+      'لم نتمكن من إتمام ذلك. أعد المحاولة، وأخبرنا إذا استمر حدوث هذا.';
+
+  @override
+  String get stateAppOutdatedTitle => 'هذا الإصدار قديم';
+
+  @override
+  String get stateAppOutdatedBody =>
+      'حدّث ShipTrip للمتابعة. لم يعد هذا الجزء من التطبيق يعمل مع هذا الإصدار.';
+
+  @override
+  String get staleTitle => 'تغيّر هذا';
+
+  @override
+  String get staleRefreshAction => 'تحديث';
+
+  @override
+  String get staleRequestNotOpen => 'لم يعد هذا الطلب مفتوحًا.';
+
+  @override
+  String get staleRequestAlreadyMatched =>
+      'تمت مطابقة هذا الطلب بالفعل مع مسافر.';
+
+  @override
+  String get staleJourneyNotActive => 'لم تعد هذه الرحلة نشطة.';
+
+  @override
+  String get staleOfferNotPending => 'تمت الإجابة على هذا العرض بالفعل.';
+
+  @override
+  String get staleMatchNotPending => 'لم تعد هذه المطابقة بانتظار أحد.';
+
+  @override
+  String get staleCapacityExceeded => 'لم تعد هناك مساحة كافية في هذه الرحلة.';
+
+  @override
+  String get staleCapacityExceededDetail =>
+      'قام شخص آخر بحجز المساحة أثناء اتخاذك القرار.';
+
+  @override
+  String get staleRewardBelowMinimum => 'تغيّر الحد الأدنى للمكافأة.';
+
+  @override
+  String staleRewardBelowMinimumDetail(String amount) {
+    return 'الحد الأدنى الآن هو $amount.';
+  }
+
+  @override
+  String get staleRouteChanged => 'تغيّرت تفاصيل المسار. لقد حدّثنا السعر.';
+
+  @override
+  String get staleKycInvalid =>
+      'يحتاج التحقق من هويتك إلى الانتباه قبل أن تتمكن من فعل هذا.';
+
+  @override
+  String get staleFlightProofInvalid =>
+      'يحتاج إثبات رحلتك الجوية إلى الانتباه قبل أن تتمكن هذه الرحلة من المطابقة.';
+
+  @override
+  String get staleReservationExpired => 'انتهت صلاحية المساحة المحجوزة لك.';
+
+  @override
+  String get staleDealClosed => 'تم إغلاق هذا التوصيل.';
+
+  @override
+  String get staleOfferExpired => 'لم يعد هذا العرض متاحًا.';
+
+  @override
+  String get moneyYouPay => 'المبلغ الذي تدفعه';
+
+  @override
+  String get moneyTravelerReceives => 'يحصل المسافر على';
+
+  @override
+  String get moneyPlatformFee => 'رسوم ShipTrip';
+
+  @override
+  String get moneyMinimumReward => 'الحد الأدنى للمكافأة';
+
+  @override
+  String get moneyRecommendedReward => 'يقترح ShipTrip';
+
+  @override
+  String get moneyYourReward => 'مكافأتك';
+
+  @override
+  String get moneyYourOffer => 'عرضك';
+
+  @override
+  String get moneyTotal => 'الإجمالي';
+
+  @override
+  String get moneyDepositPaid => 'العربون مدفوع بالفعل';
+
+  @override
+  String get moneyRemainingToPay => 'المتبقي للدفع';
+
+  @override
+  String get moneyRefundToYou => 'الاسترجاع لك';
+
+  @override
+  String get moneyTravelerCompensation => 'تعويض المسافر';
+
+  @override
+  String get moneyBreakdownTitle => 'كيف يُحسب هذا المبلغ';
+
+  @override
+  String get moneyRewardNotReduced =>
+      'يحصل المسافر على هذا المبلغ كاملاً. تُضاف رسوم ShipTrip فوقه، ولا تُخصم منه.';
+
+  @override
+  String get moneyDepositNotExtra =>
+      'يُخصم هذا من دفعتك النهائية. إنه ليس رسمًا إضافيًا.';
+
+  @override
+  String get moneyAmountCharged => 'سيتم خصم';
+
+  @override
+  String moneyExchangeRate(String rate) {
+    return 'سعر الصرف: 1€ = $rate دج';
+  }
+
+  @override
+  String get moneyChargedInDinars =>
+      'تفرض Chargily الرسوم بالدينار الجزائري. يبقى سعر التوصيل باليورو.';
+
+  @override
+  String get moneyFree => 'مجاني';
+
+  @override
+  String get homeSenderGreeting => 'أرسل شيئًا إلى الوطن';
+
+  @override
+  String get homeTravelerGreeting => 'اربح من رحلة تقوم بها أصلاً';
+
+  @override
+  String get homeCreateRequest => 'أرسل طردًا';
+
+  @override
+  String get homeCreateJourney => 'أضف رحلة';
+
+  @override
+  String get homeNeedsYourAction => 'يحتاج انتباهك';
+
+  @override
+  String get homeInProgress => 'قيد التنفيذ';
+
+  @override
+  String get homeRecentActivity => 'النشاط الأخير';
+
+  @override
+  String get homeNothingNeedsYou => 'لا شيء يحتاج انتباهك الآن';
+
+  @override
+  String get homeEmptySenderTitle => 'لا شيء في الطريق بعد';
+
+  @override
+  String get homeEmptySenderBody =>
+      'انشر ما تريد إرساله وسيراه المسافرون المتجهون إلى تلك الوجهة.';
+
+  @override
+  String get homeEmptyTravelerTitle => 'لا توجد رحلات بعد';
+
+  @override
+  String get homeEmptyTravelerBody =>
+      'أضف الرحلة التي تقوم بها وسنعرض عليك الطرود الموجودة على مسارك.';
+
+  @override
+  String get deliveriesTitle => 'التوصيلات';
+
+  @override
+  String get deliveriesFilterActive => 'نشطة';
+
+  @override
+  String get deliveriesFilterAwaitingYou => 'يحتاج انتباهك';
+
+  @override
+  String get deliveriesFilterHistory => 'السجل';
+
+  @override
+  String get deliveriesSenderSection => 'الإرسال';
+
+  @override
+  String get deliveriesTravelerSection => 'الحمل';
+
+  @override
+  String get deliveriesJourneysSection => 'رحلاتي';
+
+  @override
+  String get deliveriesEmptyActiveTitle => 'لا شيء نشط';
+
+  @override
+  String get deliveriesEmptyActiveBody =>
+      'ستظهر هنا التوصيلات التي ترسلها أو تحملها.';
+
+  @override
+  String get deliveriesEmptyHistoryTitle => 'لا يوجد سجل بعد';
+
+  @override
+  String get deliveriesEmptyHistoryBody =>
+      'تبقى هنا التوصيلات المكتملة والملغاة.';
+
+  @override
+  String get deliveriesEmptyAwaitingTitle => 'أنت على اطلاع بكل شيء';
+
+  @override
+  String get deliveriesEmptyAwaitingBody => 'لا شيء بانتظارك.';
+
+  @override
+  String get requestStatusAwaitingDeposit => 'العربون مطلوب';
+
+  @override
+  String get requestStatusOpen => 'جارٍ البحث عن مسافر';
+
+  @override
+  String get requestStatusMatched => 'تمت المطابقة';
+
+  @override
+  String get requestStatusInTransit => 'في الطريق';
+
+  @override
+  String get requestStatusDelivered => 'تم التوصيل';
+
+  @override
+  String get requestStatusCompleted => 'مكتمل';
+
+  @override
+  String get requestStatusCancelled => 'ملغى';
+
+  @override
+  String get requestStatusExpired => 'منتهي الصلاحية';
+
+  @override
+  String get dealStatusOfferAccepted => 'تم قبول العرض';
+
+  @override
+  String get dealStatusPaymentRequired => 'الدفع مطلوب';
+
+  @override
+  String get dealStatusPaymentProcessing => 'جارٍ تأكيد الدفع';
+
+  @override
+  String get dealStatusFunded => 'مدفوع ومحمي';
+
+  @override
+  String get dealStatusPickupReady => 'جاهز للاستلام';
+
+  @override
+  String get dealStatusPickedUp => 'تم الاستلام';
+
+  @override
+  String get dealStatusInTransit => 'في الطريق';
+
+  @override
+  String get dealStatusDeliveryReady => 'جاهز للتوصيل';
+
+  @override
+  String get dealStatusDeliveryConfirmed => 'تم التوصيل';
+
+  @override
+  String get dealStatusProtection => 'الدفع محمي';
+
+  @override
+  String get dealStatusCompleted => 'مكتمل';
+
+  @override
+  String get dealStatusCancelled => 'ملغى';
+
+  @override
+  String get dealStatusDisputed => 'قيد النزاع';
+
+  @override
+  String get dealStatusRefunded => 'تم الاسترجاع';
+
+  @override
+  String get dealStatusPartiallyRefunded => 'استرجاع جزئي';
+
+  @override
+  String get dealStatusPaymentFailed => 'فشل الدفع';
+
+  @override
+  String get dealStatusExpired => 'منتهي الصلاحية';
+
+  @override
+  String get requestCreateTitle => 'أرسل طردًا';
+
+  @override
+  String get requestStepRoute => 'المسار';
+
+  @override
+  String get requestStepParcel => 'الطرد';
+
+  @override
+  String get requestStepTiming => 'التوقيت';
+
+  @override
+  String get requestStepReview => 'المراجعة';
+
+  @override
+  String get requestPickupLocation => 'الاستلام من';
+
+  @override
+  String get requestDeliveryLocation => 'التوصيل إلى';
+
+  @override
+  String get requestPickupHint => 'المكان الذي يستلم منه المسافر الطرد';
+
+  @override
+  String get requestDeliveryHint =>
+      'المكان الذي يُسلَّم فيه الطرد إلى المستلِم';
+
+  @override
+  String get requestReadyFrom => 'جاهز ابتداءً من';
+
+  @override
+  String get requestDeadline => 'يجب أن يصل قبل';
+
+  @override
+  String get requestTitle => 'ماذا ترسل؟';
+
+  @override
+  String get requestTitleHint => 'وثائق، أدوية، ملابس…';
+
+  @override
+  String get requestDescription => 'الوصف';
+
+  @override
+  String get requestDescriptionHint =>
+      'صِفه بدقة. هذا ما يوافق المسافر على حمله.';
+
+  @override
+  String get requestCategory => 'الفئة';
+
+  @override
+  String get requestWeight => 'الوزن';
+
+  @override
+  String get requestWeightUnit => 'كغ';
+
+  @override
+  String get requestDimensions => 'الحجم';
+
+  @override
+  String get requestLength => 'الطول';
+
+  @override
+  String get requestWidth => 'العرض';
+
+  @override
+  String get requestHeight => 'الارتفاع';
+
+  @override
+  String get requestDimensionUnit => 'سم';
+
+  @override
+  String get requestDeclaredValue => 'القيمة المصرح بها';
+
+  @override
+  String get requestDeclaredValueHelp =>
+      'التكلفة التي يتطلبها استبداله. تُستخدم في حال حدوث خطأ ما.';
+
+  @override
+  String get requestPhotos => 'الصور';
+
+  @override
+  String get requestPhotosHelp =>
+      'تحمي الصور كلا الطرفين في حال حدوث نزاع لاحقًا.';
+
+  @override
+  String get requestAddPhoto => 'إضافة صورة';
+
+  @override
+  String get requestHandlingNotes => 'ملاحظات التعامل';
+
+  @override
+  String get requestHandlingNotesHint => 'أي شيء يجب أن يعرفه المسافر';
+
+  @override
+  String get requestFragile => 'قابل للكسر';
+
+  @override
+  String get requestAcknowledgementsTitle => 'قبل نشر هذا';
+
+  @override
+  String get requestAckDescriptionAccurate => 'وصفي لهذا الطرد دقيق';
+
+  @override
+  String get requestAckItemLegal => 'هذا الغرض قانوني للإرسال والاستلام';
+
+  @override
+  String get requestAckNoProhibited => 'لا يحتوي على أي سلع محظورة';
+
+  @override
+  String get requestAckValueAccurate => 'القيمة المصرح بها دقيقة';
+
+  @override
+  String get requestAckCustoms =>
+      'أفهم أنني مسؤول عن أي قواعد جمركية أو قواعد استيراد سارية';
+
+  @override
+  String get requestProhibitedItemsLink => 'اطّلع على ما لا يمكن إرساله';
+
+  @override
+  String get requestSizeExplainer =>
+      'الحجم لا يقل أهمية عن الوزن. نحتسب الرسوم على أساس الأكبر منهما.';
+
+  @override
+  String get requestCreated => 'تم النشر';
+
+  @override
+  String get depositTitle => 'انشر طلبك';
+
+  @override
+  String get depositExplainer =>
+      'ادفع عربونًا صغيرًا لنشر هذا الطلب للمسافرين.';
+
+  @override
+  String get depositAmount => 'العربون';
+
+  @override
+  String get depositCreditedNote =>
+      'يُخصم من دفعتك النهائية عند قبول مسافر للعرض.';
+
+  @override
+  String get depositRefundNote =>
+      'إذا لم يقبله أحد، أو ألغيت الطلب قبل قبول أي عرض، فسيُرد إليك بالكامل.';
+
+  @override
+  String get depositPayAction => 'ادفع العربون وانشر';
+
+  @override
+  String get depositPending => 'جارٍ تأكيد عربونك…';
+
+  @override
+  String get depositPendingBody =>
+      'ننتظر تأكيد مزود الدفع الخاص بك. عادةً ما يستغرق هذا بضع ثوانٍ.';
+
+  @override
+  String get depositPaidTitle => 'تم النشر';
+
+  @override
+  String get depositPaidBody =>
+      'يمكن للمسافرين المتجهين إلى وجهتك رؤية هذا الآن.';
+
+  @override
+  String get journeyTitle => 'الرحلة';
+
+  @override
+  String get journeyCreateTitle => 'أضف رحلة';
+
+  @override
+  String get journeyOverallRoute => 'إلى أين أنت ذاهب؟';
+
+  @override
+  String get journeyFrom => 'من';
+
+  @override
+  String get journeyTo => 'إلى';
+
+  @override
+  String get journeyLegs => 'المراحل';
+
+  @override
+  String get journeyAddLeg => 'أضف مرحلة';
+
+  @override
+  String journeyLegPosition(int position) {
+    return 'المرحلة $position';
+  }
+
+  @override
+  String get journeyModeFlight => 'طيران';
+
+  @override
+  String get journeyModeDrive => 'قيادة';
+
+  @override
+  String get journeyDeparts => 'المغادرة';
+
+  @override
+  String get journeyArrives => 'الوصول';
+
+  @override
+  String get journeyCapacity => 'المساحة التي يمكنك حملها';
+
+  @override
+  String get journeyCapacityHelp =>
+      'حدد هذا لكل مرحلة على حدة. يمكنك حمل كميات مختلفة في أجزاء مختلفة من الرحلة.';
+
+  @override
+  String get journeyFlightNumber => 'رقم الرحلة الجوية';
+
+  @override
+  String get journeyFlightNumberHint => 'مثال: AH1006';
+
+  @override
+  String get journeyPublish => 'نشر الرحلة';
+
+  @override
+  String get journeyCancel => 'إلغاء الرحلة';
+
+  @override
+  String get journeySuggestLegTitle => 'أضف مرحلة الطريق البري؟';
+
+  @override
+  String journeySuggestLegBody(String arrival, String destination) {
+    return 'تهبط رحلتك الجوية في $arrival، لكنك متجه إلى $destination. أضف مرحلة القيادة حتى يمكن مطابقة الطرود طوال الطريق.';
+  }
+
+  @override
+  String get journeySuggestLegAccept => 'أضف مرحلة القيادة';
+
+  @override
+  String get journeySuggestLegDecline => 'لا، سأتوقف هناك';
+
+  @override
+  String get journeyStatusDraft => 'مسودة';
+
+  @override
+  String get journeyStatusPendingVerification => 'قيد التحقق';
+
+  @override
+  String get journeyStatusActive => 'منشورة';
+
+  @override
+  String get journeyStatusInProgress => 'جارية';
+
+  @override
+  String get journeyStatusCompleted => 'مكتملة';
+
+  @override
+  String get journeyStatusCancelled => 'ملغاة';
+
+  @override
+  String get journeyStatusExpired => 'منتهية الصلاحية';
+
+  @override
+  String get journeyEmptyLegsTitle => 'أضف مرحلتك الأولى';
+
+  @override
+  String get journeyEmptyLegsBody =>
+      'تتكون الرحلة من مراحل. من باريس إلى الجزائر العاصمة بالطائرة، ثم من الجزائر العاصمة إلى جيجل بالطريق البري.';
+
+  @override
+  String get journeyRouteShape => 'مسارك';
+
+  @override
+  String get journeyModeLabel => 'طريقة سفرك';
+
+  @override
+  String get journeyLegStartsAt => 'تبدأ في';
+
+  @override
+  String get journeyLegEndsAt => 'تنتهي في';
+
+  @override
+  String get journeyLegEndPlaceholder => 'اختر أين تنتهي هذه المرحلة';
+
+  @override
+  String get journeyChooseDateTime => 'اختر التاريخ والوقت';
+
+  @override
+  String get journeyArriveOptionalHelp =>
+      'اختياري. يتيح لنا التحقق من أن المرحلة التالية تنطلق في الوقت المناسب.';
+
+  @override
+  String get journeyRemoveLeg => 'إزالة هذه المرحلة';
+
+  @override
+  String get journeyAddLegDestinationTitle => 'أين تنتهي هذه المرحلة؟';
+
+  @override
+  String get journeyMaxLegsReached =>
+      'يمكن أن تحتوي الرحلة على 20 مرحلة كحد أقصى.';
+
+  @override
+  String get journeyCapacityInvalid =>
+      'أدخل 0.01 كغ على الأقل، بدقة رقمين عشريين.';
+
+  @override
+  String get journeyLegDepartRequired => 'حدّد وقت مغادرة هذه المرحلة.';
+
+  @override
+  String get journeyLegDepartNotAfterPrevious =>
+      'يجب أن تنطلق هذه المرحلة بعد المرحلة التي تسبقها.';
+
+  @override
+  String get journeyLegDepartBeforePreviousArrival =>
+      'تنطلق هذه المرحلة قبل وصول المرحلة السابقة.';
+
+  @override
+  String get journeyLegArriveBeforeDepart => 'يجب أن يكون الوصول بعد المغادرة.';
+
+  @override
+  String get journeyNotesLabel => 'أي شيء يجب أن يعرفه المُرسِلون';
+
+  @override
+  String get journeyNotesHint => 'لا سوائل، طرود صغيرة فقط، اللقاء قرب المطار…';
+
+  @override
+  String get journeySaveDraft => 'حفظ الرحلة';
+
+  @override
+  String get journeyCreatedDraft =>
+      'تم الحفظ كمسودة. أضف إثبات الرحلة الجوية، ثم انشرها.';
+
+  @override
+  String get journeyDraftNextSteps =>
+      'لا شيء مرئي للمُرسِلين بعد. انشرها عند الموافقة على إثبات رحلتك الجوية.';
+
+  @override
+  String get journeyLegsNeedProofTitle => 'الرحلات الجوية التي تحتاج إثباتًا';
+
+  @override
+  String get journeyPublishBlockedProof =>
+      'تحتاج كل مرحلة جوية إلى إثبات معتمد قبل أن يمكن نشر هذه الرحلة.';
+
+  @override
+  String get journeyPublished =>
+      'رحلتك منشورة الآن. يمكن للمُرسِلين المتجهين إلى وجهتك رؤيتها.';
+
+  @override
+  String get journeyErrorNotPublishable =>
+      'لا يمكن نشر هذه الرحلة من حالتها الحالية.';
+
+  @override
+  String get journeyErrorNoLegs =>
+      'لا تحتوي هذه الرحلة على أي مراحل، فلا يوجد ما يمكن نشره.';
+
+  @override
+  String get journeyErrorLegPositions =>
+      'تم ترقيم المراحل بشكل خاطئ. ألغِ هذه الرحلة وأنشئها من جديد.';
+
+  @override
+  String get journeyErrorEndpointsMismatch =>
+      'لا تتطابق المرحلتان الأولى والأخيرة مع نقطتي انطلاق الرحلة ووجهتها.';
+
+  @override
+  String get journeyErrorLegEndpoints =>
+      'تبدأ إحدى المراحل أو تنتهي في مكان لا يمر به المسار.';
+
+  @override
+  String get journeyErrorLegTime => 'تصل إحدى المراحل قبل أن تنطلق.';
+
+  @override
+  String get journeyErrorLegsDisconnected =>
+      'لا تتصل المراحل ببعضها لتشكّل مسارًا واحدًا.';
+
+  @override
+  String get journeyErrorLegTimeOrder => 'المراحل ليست مرتبة زمنيًا.';
+
+  @override
+  String get journeyErrorNotOwned => 'هذه الرحلة تخص شخصًا آخر.';
+
+  @override
+  String get journeyRebuildHint =>
+      'ألغِ هذه الرحلة وأنشئها من جديد بالتفاصيل الصحيحة.';
+
+  @override
+  String get journeyCancelConfirmTitle => 'إلغاء هذه الرحلة؟';
+
+  @override
+  String get journeyCancelConfirmBody =>
+      'لن يراها المُرسِلون بعد الآن، وستُحرَّر أي مساحة كانوا يحجزونها. لا يمكن التراجع عن هذا.';
+
+  @override
+  String get journeyCancelled => 'تم إلغاء الرحلة.';
+
+  @override
+  String journeyReleasedAllocations(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم تحرير $count مساحة محجوزة',
+      many: 'تم تحرير $count مساحة محجوزة',
+      few: 'تم تحرير $count مساحات محجوزة',
+      two: 'تم تحرير مساحتين محجوزتين',
+      one: 'تم تحرير مساحة محجوزة واحدة',
+      zero: 'لم تكن هناك أي مساحة محجوزة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyErrorNotCancellable =>
+      'لا يمكن إلغاء هذه الرحلة من حالتها الحالية.';
+
+  @override
+  String get journeyErrorHasFundedDeal =>
+      'هناك توصيل مدفوع يعتمد على هذه الرحلة. عالج ذلك التوصيل أولاً.';
+
+  @override
+  String get journeyMatchesInfoTitle => 'المُرسِلون يبادرون أولاً';
+
+  @override
+  String get journeyMatchesInfoBody =>
+      'لا يمكنك تقديم عرض على هؤلاء. إذا اختارك أحد هؤلاء المُرسِلين، سيصلك عرضه في التوصيلات.';
+
+  @override
+  String get journeyMatchesLoadFailed =>
+      'تعذّر علينا تحميل الطرود الخاصة بهذه الرحلة.';
+
+  @override
+  String get proofTitle => 'إثبات الرحلة الجوية';
+
+  @override
+  String get proofExplainer =>
+      'ارفع بطاقة الصعود إلى الطائرة أو تأكيد الحجز. نتحقق منها قبل أن تتمكن رحلتك من مطابقة الطرود.';
+
+  @override
+  String get proofDriveNotRequired => 'لا تحتاج مراحل القيادة إلى أي إثبات.';
+
+  @override
+  String get proofUpload => 'رفع الإثبات';
+
+  @override
+  String get proofStatusMissing => 'لم يُرفع';
+
+  @override
+  String get proofStatusPending => 'قيد المراجعة';
+
+  @override
+  String get proofStatusApproved => 'معتمد';
+
+  @override
+  String get proofStatusRejected => 'غير مقبول';
+
+  @override
+  String proofRejectedReason(String reason) {
+    return 'السبب: $reason';
+  }
+
+  @override
+  String get proofReplace => 'ارفع واحدًا جديدًا';
+
+  @override
+  String get proofKindLabel => 'ماذا ترفع؟';
+
+  @override
+  String get proofKindTicket => 'تذكرة';
+
+  @override
+  String get proofKindBoardingPass => 'بطاقة صعود الطائرة';
+
+  @override
+  String get proofKindBookingConfirmation => 'تأكيد الحجز';
+
+  @override
+  String get proofFormatRule =>
+      'JPEG أو PNG أو WebP، بحجم أقصى 10 ميغابايت. نتحقق من الملف نفسه، لذا لن تفيد إعادة تسميته.';
+
+  @override
+  String get proofFileTooLarge =>
+      'حجم هذه الصورة يتجاوز 10 ميغابايت. اختر صورة أصغر.';
+
+  @override
+  String get proofFileTypeNotAllowed => 'لا تُقبل إلا صور JPEG وPNG وWebP.';
+
+  @override
+  String get proofChooseImage => 'اختر صورة';
+
+  @override
+  String get proofTakePhoto => 'التقط صورة';
+
+  @override
+  String get proofSelectedFile => 'جاهز للرفع';
+
+  @override
+  String get proofUploading => 'جارٍ رفع إثباتك…';
+
+  @override
+  String get proofUploaded => 'تم استلام الإثبات. سنراجعه قريبًا.';
+
+  @override
+  String get proofExistingTitle => 'ما أرسلته سابقًا';
+
+  @override
+  String get proofErrorUploadClosed =>
+      'تجاوزت هذه الرحلة المرحلة التي يمكن فيها إضافة إثبات.';
+
+  @override
+  String proofLegLabel(int position, String from, String to) {
+    return 'المرحلة $position: من $from إلى $to';
+  }
+
+  @override
+  String get kycTitle => 'التحقق من الهوية';
+
+  @override
+  String get kycWhyTitle => 'لماذا نطلب هذا';
+
+  @override
+  String get kycWhyBody =>
+      'يسلّم المُرسِلون شيئًا يهمهم إلى شخص غريب. التحقق من المسافرين هو ما يجعل ذلك أمرًا معقولاً.';
+
+  @override
+  String get kycStatusNotStarted => 'لم يبدأ';
+
+  @override
+  String get kycStatusInProgress => 'قيد التنفيذ';
+
+  @override
+  String get kycStatusPending => 'قيد المراجعة';
+
+  @override
+  String get kycStatusApproved => 'تم التحقق';
+
+  @override
+  String get kycStatusRejected => 'غير معتمد';
+
+  @override
+  String get kycStatusActionRequired => 'يحتاج انتباهك';
+
+  @override
+  String get kycStartAction => 'ابدأ التحقق من الهوية';
+
+  @override
+  String get kycResumeAction => 'أكمل التحقق من الهوية';
+
+  @override
+  String get kycRetryAction => 'إعادة المحاولة';
+
+  @override
+  String get kycPendingBody => 'نراجع مستنداتك. يستغرق هذا عادةً أقل من يوم.';
+
+  @override
+  String get kycApprovedBody =>
+      'تم التحقق من هويتك. يمكنك نشر الرحلات وحمل الطرود.';
+
+  @override
+  String get kycRejectedBody =>
+      'تعذّر علينا التحقق من مستنداتك. يمكنك إعادة الإرسال.';
+
+  @override
+  String get kycRequiredForJourney =>
+      'يجب أن يتم التحقق من هويتك قبل أن تتمكن من نشر رحلة.';
+
+  @override
+  String get kycDocumentType => 'نوع المستند';
+
+  @override
+  String get kycFrontImage => 'الوجه الأمامي للمستند';
+
+  @override
+  String get kycBackImage => 'الوجه الخلفي للمستند';
+
+  @override
+  String get kycSelfie => 'صورة شخصية';
+
+  @override
+  String get discoveryTravelersTitle => 'المسافرون المناسبون لهذا الطرد';
+
+  @override
+  String get discoveryRequestsTitle => 'الطرود على مسارك';
+
+  @override
+  String get discoveryEmptyTravelersTitle => 'لا يوجد مسافرون بعد';
+
+  @override
+  String get discoveryEmptyTravelersBody =>
+      'لا أحد متجه إلى وجهتك الآن. سنُعلمك عندما يتوفر أحد.';
+
+  @override
+  String get discoveryEmptyRequestsTitle => 'لا توجد طرود بعد';
+
+  @override
+  String get discoveryEmptyRequestsBody =>
+      'لا شيء يطابق رحلتك الآن. سنُعلمك عندما يتوفر شيء.';
+
+  @override
+  String discoveryCoveredLegs(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مرحلة',
+      many: '$count مرحلة',
+      few: '$count مراحل',
+      two: 'مرحلتين',
+      one: 'مرحلة واحدة',
+      zero: 'لا مراحل',
+    );
+    return 'يغطي $_temp0';
+  }
+
+  @override
+  String get discoveryDetourSmall => 'انحراف طفيف جدًا عن المسار';
+
+  @override
+  String get discoveryDetourModerate => 'انحراف بسيط عن المسار';
+
+  @override
+  String get discoveryDetourLarge => 'انحراف ملحوظ عن المسار';
+
+  @override
+  String get discoveryVerifiedTraveler => 'مسافر موثّق';
+
+  @override
+  String get discoveryBoosted => 'مُعزَّز';
+
+  @override
+  String get discoveryBoostedExplainer =>
+      'دفع المُرسِل ليظهر لعدد أكبر من المسافرين. هذا لا يغيّر ما إذا كنت مطابقًا له أم لا.';
+
+  @override
+  String discoveryRatingCount(String rating, int count) {
+    return '$rating ($count)';
+  }
+
+  @override
+  String get discoveryNoRatingsYet => 'لا توجد تقييمات بعد';
+
+  @override
+  String get offerProposeTitle => 'قدّم عرضًا';
+
+  @override
+  String get offerProposeExplainer =>
+      'أنت تحدد ما سيربحه المسافر. يمكنه القبول أو الرفض أو الرد بمبلغ مختلف.';
+
+  @override
+  String get offerRewardLabel => 'مكافأة المسافر';
+
+  @override
+  String get offerUseRecommended => 'استخدم المقترح';
+
+  @override
+  String get offerSend => 'إرسال العرض';
+
+  @override
+  String get offerCounter => 'عرض مضاد';
+
+  @override
+  String get offerAccept => 'قبول';
+
+  @override
+  String get offerDecline => 'رفض';
+
+  @override
+  String get offerWithdraw => 'سحب';
+
+  @override
+  String get offerAwaitingTraveler => 'بانتظار المسافر';
+
+  @override
+  String get offerAwaitingSender => 'بانتظار المُرسِل';
+
+  @override
+  String get offerAwaitingYou => 'دورك';
+
+  @override
+  String offerYouProposed(String amount) {
+    return 'عرضت $amount';
+  }
+
+  @override
+  String offerTheyProposed(String amount) {
+    return 'عرضوا $amount';
+  }
+
+  @override
+  String get offerHistoryTitle => 'سجل العروض';
+
+  @override
+  String get offerStatusPending => 'بانتظار الرد';
+
+  @override
+  String get offerStatusAccepted => 'مقبول';
+
+  @override
+  String get offerStatusDeclined => 'مرفوض';
+
+  @override
+  String get offerStatusWithdrawn => 'مسحوب';
+
+  @override
+  String get offerStatusExpired => 'منتهي الصلاحية';
+
+  @override
+  String get offerDeclineConfirmTitle => 'رفض هذا العرض؟';
+
+  @override
+  String get offerDeclineConfirmBody =>
+      'سيتم إعلام الطرف الآخر. لا يزال بإمكانكما التفاوض بعد ذلك.';
+
+  @override
+  String offerAcceptConfirmTitle(String amount) {
+    return 'قبول $amount؟';
+  }
+
+  @override
+  String get offerAcceptTravelerBody =>
+      'تُحجز المساحة في رحلتك فور موافقتك. بعدها يتعين على المُرسِل الدفع.';
+
+  @override
+  String get offerAcceptSenderBody =>
+      'بمجرد موافقتك، سيُطلب منك الدفع لبدء التوصيل.';
+
+  @override
+  String offerBelowMinimum(String amount) {
+    return 'اعرض $amount على الأقل';
+  }
+
+  @override
+  String get offerEmptyTitle => 'لا توجد عروض بعد';
+
+  @override
+  String get offerEmptyBody => 'عندما يقدم أحدهم عرضًا، سيظهر هنا.';
+
+  @override
+  String get paymentTitle => 'الدفع';
+
+  @override
+  String get paymentChooseProvider => 'كيف تريد الدفع؟';
+
+  @override
+  String get paymentProviderStripe => 'بطاقة';
+
+  @override
+  String get paymentProviderStripeSubtitle => 'فيزا وماستركارد وغيرها، باليورو';
+
+  @override
+  String get paymentProviderChargily => 'Chargily';
+
+  @override
+  String get paymentProviderChargilySubtitle =>
+      'البطاقات الجزائرية، بالدينار الجزائري';
+
+  @override
+  String get paymentProviderUnavailable => 'غير متاح حاليًا';
+
+  @override
+  String get paymentProviderNotConfigured => 'غير متاح بعد';
+
+  @override
+  String get paymentProviderDisabled => 'معطّل مؤقتًا';
+
+  @override
+  String get paymentNoProvidersTitle => 'لا توجد وسيلة دفع متاحة';
+
+  @override
+  String get paymentNoProvidersBody =>
+      'الدفع غير متاح مؤقتًا. لم يتم خصم أي مبلغ ولم يتأثر توصيلك.';
+
+  @override
+  String paymentPayAction(String amount) {
+    return 'ادفع $amount';
+  }
+
+  @override
+  String get paymentOpeningProvider => 'جارٍ فتح صفحة الدفع الآمنة…';
+
+  @override
+  String get paymentConfirmingTitle => 'جارٍ تأكيد دفعتك';
+
+  @override
+  String get paymentConfirmingBody =>
+      'أخبرنا بنكك بذلك، ونحن نؤكده مع ShipTrip. لا تدفع مرة أخرى، فهذا يستغرق عادةً بضع ثوانٍ.';
+
+  @override
+  String get paymentSucceededTitle => 'تم الدفع';
+
+  @override
+  String get paymentSucceededBody => 'يُحتفظ بأموالك إلى حين توصيل الطرد.';
+
+  @override
+  String get paymentFailedTitle => 'لم تكتمل عملية الدفع';
+
+  @override
+  String get paymentFailedBody =>
+      'لم يُخصم أي مبلغ. يمكنك إعادة المحاولة أو استخدام وسيلة أخرى.';
+
+  @override
+  String get paymentExpiredTitle => 'انتهت صلاحية صفحة الدفع';
+
+  @override
+  String get paymentExpiredBody =>
+      'انتهت صلاحية رابط الدفع هذا. ابدأ من جديد عندما تكون جاهزًا.';
+
+  @override
+  String get paymentStatusRequired => 'الدفع مطلوب';
+
+  @override
+  String get paymentStatusStarted => 'صفحة الدفع مفتوحة';
+
+  @override
+  String get paymentStatusProcessing => 'قيد المعالجة';
+
+  @override
+  String get paymentStatusPaid => 'مدفوع';
+
+  @override
+  String get paymentStatusFailed => 'فشل';
+
+  @override
+  String get paymentStatusRefundPending => 'الاسترجاع في الطريق';
+
+  @override
+  String get paymentStatusPartiallyRefunded => 'استرجاع جزئي';
+
+  @override
+  String get paymentStatusRefunded => 'تم الاسترجاع';
+
+  @override
+  String get paymentReturnedTitle => 'مرحبًا بعودتك';
+
+  @override
+  String get paymentRedirectNotProof =>
+      'نؤكد كل عملية دفع مع مزود الخدمة قبل اعتبارها مدفوعة.';
+
+  @override
+  String get guestPayTitle => 'اطلب من شخص آخر الدفع';
+
+  @override
+  String get guestPayExplainer =>
+      'شارك رابطًا ليتمكن أي شخص من دفع هذا المبلغ نيابة عنك. لا يحتاجون إلى حساب ShipTrip.';
+
+  @override
+  String get guestPayCreateLink => 'إنشاء رابط دفع';
+
+  @override
+  String get guestPayLinkReady => 'الرابط جاهز';
+
+  @override
+  String get guestPayCopyLink => 'نسخ الرابط';
+
+  @override
+  String get guestPayShareLink => 'مشاركة الرابط';
+
+  @override
+  String get guestPayRevoke => 'إلغاء هذا الرابط';
+
+  @override
+  String get guestPayRevoked => 'تم إلغاء الرابط';
+
+  @override
+  String guestPayExpiresAt(String when) {
+    return 'تنتهي صلاحيته $when';
+  }
+
+  @override
+  String get guestPayWarning =>
+      'يمكن لأي شخص يملك هذا الرابط دفع هذا المبلغ. لن يحصل على أي شيء آخر — لا وصول إلى توصيلك أو محادثتك أو بياناتك.';
+
+  @override
+  String get guestPayPayerEmail => 'بريدك الإلكتروني للإيصال';
+
+  @override
+  String get guestPayPayerEmailHelp =>
+      'نستخدمه لإيصال الدفع وإشعارات فشل الدفع وأي مراسلات عن الاسترداد. لا يؤدي ذلك إلى إنشاء حساب ShipTrip.';
+
+  @override
+  String get guestPayAmountDue => 'المبلغ المستحق';
+
+  @override
+  String get guestPayForDelivery => 'دفع مقابل توصيل عبر ShipTrip';
+
+  @override
+  String get guestPayThanksTitle => 'شكرًا لك';
+
+  @override
+  String get guestPayThanksBody => 'تم تأكيد الدفع. لا حاجة لأي شيء آخر منك.';
+
+  @override
+  String get guestPayInvalidTitle => 'هذا الرابط غير صالح';
+
+  @override
+  String get guestPayInvalidBody =>
+      'ربما انتهت صلاحيته، أو تم إلغاؤه، أو تم دفعه بالفعل.';
+
+  @override
+  String get recipientTitle => 'من سيستلم هذا؟';
+
+  @override
+  String get recipientExplainer =>
+      'نرسل رمز التوصيل بالبريد الإلكتروني إلى المستلِم. لا يمكن للمسافر إتمام التوصيل إلا إذا أعطاه المستلِم ذلك الرمز.';
+
+  @override
+  String get recipientName => 'اسم المستلِم';
+
+  @override
+  String get recipientEmail => 'البريد الإلكتروني للمستلِم';
+
+  @override
+  String get recipientEmailHelp =>
+      'يُرسل رمز التوصيل إلى هذا العنوان. تأكد من صحته.';
+
+  @override
+  String get recipientLanguage => 'لغة المستلِم';
+
+  @override
+  String get recipientLanguageHelp =>
+      'هذه هي اللغة التي سنستخدمها في رسالة التوصيل إلى المستلِم.';
+
+  @override
+  String get recipientPhone => 'الهاتف (اختياري)';
+
+  @override
+  String get recipientNote => 'ملاحظة للمستلِم (اختياري)';
+
+  @override
+  String get recipientSave => 'حفظ المستلِم';
+
+  @override
+  String get recipientSaved => 'تم حفظ المستلِم';
+
+  @override
+  String get recipientRequiredTitle => 'المستلِم مطلوب';
+
+  @override
+  String get recipientRequiredBody =>
+      'أضف المستلِم قبل الاستلام حتى نتمكن من إرسال رمز التوصيل إليه.';
+
+  @override
+  String get recipientRecordedForTraveler => 'قدّم المُرسِل بيانات المستلِم.';
+
+  @override
+  String get pickupSenderTitle => 'رمز الاستلام';
+
+  @override
+  String get pickupSenderExplainer =>
+      'أعطِ هذا الرمز للمسافر فقط عند تسليمه الطرد فعليًا. بهذا يؤكد أنه استلمه.';
+
+  @override
+  String get pickupSenderReveal => 'إظهار رمز الاستلام';
+
+  @override
+  String get pickupSenderWarning =>
+      'لا ترسل هذا الرمز في رسالة. قله شفهيًا عند التسليم.';
+
+  @override
+  String get pickupTravelerTitle => 'تأكيد الاستلام';
+
+  @override
+  String get pickupTravelerExplainer =>
+      'اطلب من المُرسِل رمز الاستلام عند تسليمه الطرد لك.';
+
+  @override
+  String get pickupCodeLabel => 'رمز الاستلام';
+
+  @override
+  String get pickupConfirmAction => 'تأكيد الاستلام';
+
+  @override
+  String get pickupConfirmedTitle => 'تم تأكيد الاستلام';
+
+  @override
+  String get pickupConfirmedBody => 'أنت تحمل هذا الطرد الآن.';
+
+  @override
+  String get pickupAwaitingTitle => 'بانتظار الاستلام';
+
+  @override
+  String get pickupAwaitingSenderBody =>
+      'سيطلب منك المسافر رمز الاستلام عند اللقاء.';
+
+  @override
+  String get pickupAwaitingTravelerBody =>
+      'قابل المُرسِل واطلب منه رمز الاستلام.';
+
+  @override
+  String get deliveryTravelerTitle => 'تأكيد التوصيل';
+
+  @override
+  String get deliveryTravelerExplainer =>
+      'اطلب من المستلِم الرمز الذي أُرسل إليه بالبريد الإلكتروني.';
+
+  @override
+  String get deliveryCodeLabel => 'رمز التوصيل';
+
+  @override
+  String get deliveryConfirmAction => 'تأكيد التوصيل';
+
+  @override
+  String get deliveryConfirmedTitle => 'تم التوصيل';
+
+  @override
+  String get deliveryConfirmedTravelerBody => 'شكرًا لك. جارٍ تجهيز دفعتك.';
+
+  @override
+  String get deliveryConfirmedSenderBody =>
+      'وصل طردك. تبقى دفعتك محمية لفترة قصيرة إضافية.';
+
+  @override
+  String get deliverySenderTitle => 'رمز التوصيل';
+
+  @override
+  String deliveryCodeLockedTitle(String countdown) {
+    return 'متاح خلال $countdown';
+  }
+
+  @override
+  String get deliveryCodeLockedBody =>
+      'لأسباب أمنية، يبقى رمز التوصيل مقفلاً لمدة 30 دقيقة بعد الاستلام. كما لم يُرسل بعد بالبريد الإلكتروني إلى المستلِم.';
+
+  @override
+  String get deliveryCodeLockedWhy => 'لماذا هذا الانتظار؟';
+
+  @override
+  String get deliveryCodeLockedWhyBody =>
+      'يعني هذا التوقف أنه لا يمكن تسليم الرمز في نفس لحظة تسليم الطرد. هذا ما يمنع تسجيل التوصيل كمكتمل قبل أن يحدث فعلاً.';
+
+  @override
+  String get deliveryCodeReadyTitle => 'رمز التوصيل جاهز';
+
+  @override
+  String deliveryCodeSentToRecipient(String recipient) {
+    return 'أرسلنا الرمز بالبريد الإلكتروني إلى $recipient.';
+  }
+
+  @override
+  String get deliveryCodeReveal => 'إظهار رمز التوصيل';
+
+  @override
+  String get deliveryCodeSenderWarning =>
+      'يعطي المستلِم هذا الرمز للمسافر عند الباب. شاركه فقط مع المستلِم.';
+
+  @override
+  String get deliveryCodeTravelerNever =>
+      'المستلِم وحده يملك هذا الرمز. اطلبه منه عند وصولك.';
+
+  @override
+  String codeAttemptsRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count محاولة متبقية',
+      many: '$count محاولة متبقية',
+      few: '$count محاولات متبقية',
+      two: 'محاولتان متبقيتان',
+      one: 'محاولة واحدة متبقية',
+      zero: 'لا محاولات متبقية',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get codeIncorrect => 'هذا الرمز غير صحيح';
+
+  @override
+  String get codeLockedTitle => 'عدد كبير جدًا من المحاولات الخاطئة';
+
+  @override
+  String codeLockedBody(String when) {
+    return 'أعد المحاولة $when. إذا تعثرت، اطلب رمزًا جديدًا.';
+  }
+
+  @override
+  String get codeRotate => 'احصل على رمز جديد';
+
+  @override
+  String get codeRotated => 'تم إصدار رمز جديد. لم يعد الرمز القديم صالحًا.';
+
+  @override
+  String get codeRotateConfirmTitle => 'إصدار رمز جديد؟';
+
+  @override
+  String get codeRotateConfirmBody =>
+      'سيتوقف الرمز الذي شاركته بالفعل عن العمل فورًا.';
+
+  @override
+  String get codeNotAvailableYet => 'هذا الرمز غير متاح بعد';
+
+  @override
+  String get codeCopyForReading => 'اقرأ الرمز بصوت مسموع بدلاً من إرساله.';
+
+  @override
+  String get protectionTitle => 'الدفع محمي';
+
+  @override
+  String protectionSenderBody(String when) {
+    return 'يُحتفظ بدفعتك حتى $when. إذا كان هناك خطأ في التوصيل، افتح نزاعًا قبل ذلك.';
+  }
+
+  @override
+  String protectionTravelerBody(String when) {
+    return 'تم التوصيل. تُطلق دفعتك بعد $when، بمجرد إغلاق فترة الحماية.';
+  }
+
+  @override
+  String protectionEndsIn(String countdown) {
+    return 'تنتهي خلال $countdown';
+  }
+
+  @override
+  String get protectionEnded => 'أُغلقت فترة الحماية';
+
+  @override
+  String get protectionExplainerTitle => 'ماذا يعني هذا';
+
+  @override
+  String get protectionExplainerBody =>
+      'تُحتفظ الأموال ريثما يتم تأكيد التوصيل ولمدة 48 ساعة إضافية. هذا ليس حساب ضمان بنكي — بل ShipTrip من يحتفظ بالدفعة إلى أن يتم التسوية بين الطرفين.';
+
+  @override
+  String get payoutTitle => 'الدفعة';
+
+  @override
+  String get payoutStatusNotEligible => 'ليس بعد';
+
+  @override
+  String get payoutStatusEligible => 'جاهزة';
+
+  @override
+  String get payoutStatusScheduled => 'مجدولة';
+
+  @override
+  String get payoutStatusProcessing => 'في الطريق';
+
+  @override
+  String get payoutStatusPaid => 'مدفوعة';
+
+  @override
+  String get payoutStatusFailed => 'فشلت';
+
+  @override
+  String get payoutStatusCancelled => 'ملغاة';
+
+  @override
+  String get payoutStatusFrozen => 'معلّقة';
+
+  @override
+  String get payoutFrozenBody =>
+      'هناك نزاع مفتوح على هذا التوصيل، لذا الدفعة معلّقة إلى حين حل النزاع.';
+
+  @override
+  String get payoutPendingTitle => 'الدفعة قيد الانتظار';
+
+  @override
+  String get payoutEmptyTitle => 'لا توجد دفعات بعد';
+
+  @override
+  String get payoutEmptyBody => 'أكمل توصيلاً وستظهر أرباحك هنا.';
+
+  @override
+  String get disputeOpenTitle => 'فتح نزاع';
+
+  @override
+  String get disputeOpenExplainer =>
+      'أخبرنا بما حدث من خطأ. فتح نزاع يعلّق دفعة المسافر ريثما ننظر في الأمر.';
+
+  @override
+  String get disputeCategory => 'ماذا حدث؟';
+
+  @override
+  String get disputeDescription => 'صِف المشكلة';
+
+  @override
+  String get disputeDescriptionHint => 'ما كنت تتوقعه، وما حدث فعلاً';
+
+  @override
+  String get disputeSubmit => 'فتح النزاع';
+
+  @override
+  String get disputeStatusOpen => 'مفتوح';
+
+  @override
+  String get disputeStatusAwaitingEvidence => 'بانتظار الأدلة';
+
+  @override
+  String get disputeStatusUnderReview => 'قيد المراجعة';
+
+  @override
+  String get disputeStatusResolved => 'تمت التسوية';
+
+  @override
+  String get disputeStatusClosed => 'مغلق';
+
+  @override
+  String get disputeEvidenceTitle => 'الأدلة';
+
+  @override
+  String get disputeEvidenceExplainer =>
+      'تساعدنا الصور ومقاطع الفيديو على فهم ما حدث.';
+
+  @override
+  String get disputeAddPhoto => 'إضافة صورة';
+
+  @override
+  String get disputeAddVideo => 'إضافة فيديو';
+
+  @override
+  String get disputeAddNote => 'إضافة ملاحظة';
+
+  @override
+  String disputeUploading(int percent) {
+    return 'جارٍ الرفع… $percent%';
+  }
+
+  @override
+  String get disputeUploadFailed => 'فشل الرفع';
+
+  @override
+  String get disputeUploadRetry => 'إعادة محاولة الرفع';
+
+  @override
+  String disputeFileTooLarge(String limit) {
+    return 'هذا الملف كبير جدًا. الحد الأقصى هو $limit.';
+  }
+
+  @override
+  String get disputeFileTypeNotAllowed =>
+      'نوع هذا الملف غير مدعوم. استخدم JPEG أو PNG أو WebP أو MP4 أو MOV.';
+
+  @override
+  String get disputeEvidenceLimitReached => 'لقد أضفت الحد الأقصى من العناصر.';
+
+  @override
+  String get disputeResolutionTitle => 'النتيجة';
+
+  @override
+  String get disputeResolutionRefunded => 'تم الاسترجاع للمُرسِل';
+
+  @override
+  String get disputeResolutionTravelerPaid => 'تم الدفع للمسافر';
+
+  @override
+  String get disputeResolutionPartial => 'تم التقسيم بين الطرفين';
+
+  @override
+  String get disputeWindowClosedTitle => 'أُغلقت فترة النزاع';
+
+  @override
+  String get disputeWindowClosedBody =>
+      'يمكن فتح النزاعات خلال 48 ساعة بعد التوصيل. تواصل مع الدعم إذا كنت لا تزال بحاجة إلى مساعدة.';
+
+  @override
+  String get disputeEmptyTitle => 'لا توجد نزاعات';
+
+  @override
+  String get disputeEmptyBody => 'لا شيء قيد النزاع.';
+
+  @override
+  String get cancelTitle => 'إلغاء هذا التوصيل';
+
+  @override
+  String get cancelConfirmAction => 'إلغاء التوصيل';
+
+  @override
+  String get cancelKeepAction => 'الإبقاء عليه';
+
+  @override
+  String get cancelFullRefund => 'سيُسترجع لك المبلغ كاملاً.';
+
+  @override
+  String get cancelWithCompensation =>
+      'لأن الوقت اقترب من الاستلام، يُعوَّض المسافر عن حجزه للمساحة.';
+
+  @override
+  String get cancelNotAllowedTitle => 'لا يمكن إلغاء هذا هنا';
+
+  @override
+  String get cancelAfterPickupBody =>
+      'تم استلام الطرد بالفعل. إذا كان هناك خطأ ما، افتح نزاعًا بدلاً من ذلك.';
+
+  @override
+  String get cancelOutcomeTitle => 'ماذا سيحدث';
+
+  @override
+  String get cancelCancelledTitle => 'ملغى';
+
+  @override
+  String get cancelRefundOnWay => 'استرجاعك في الطريق.';
+
+  @override
+  String get ratingTitle => 'كيف سارت الأمور؟';
+
+  @override
+  String get ratingSenderPrompt => 'قيّم المسافر';
+
+  @override
+  String get ratingTravelerPrompt => 'قيّم المُرسِل';
+
+  @override
+  String ratingScoreLabel(int score) {
+    return '$score من 5';
+  }
+
+  @override
+  String get ratingTagsLabel => 'ما الذي لفت انتباهك؟';
+
+  @override
+  String get ratingCommentLabel => 'أي شيء آخر؟ (اختياري)';
+
+  @override
+  String get ratingSubmit => 'إرسال التقييم';
+
+  @override
+  String get ratingSubmitted => 'شكرًا على تقييمك';
+
+  @override
+  String get ratingWaitingForOther =>
+      'تم حفظ تقييمك. ستراه بمجرد أن يقيّمك الطرف الآخر أيضًا.';
+
+  @override
+  String get ratingHiddenUntilBoth => 'مخفي حتى تقيّما كلاكما';
+
+  @override
+  String get ratingWindowClosed => 'أُغلقت فترة التقييم.';
+
+  @override
+  String get ratingEmptyTitle => 'لا توجد تقييمات بعد';
+
+  @override
+  String get ratingEmptyBody => 'تظهر التقييمات بعد اكتمال التوصيل.';
+
+  @override
+  String get boostTitle => 'عزّز هذا الطلب';
+
+  @override
+  String get boostExplainer =>
+      'يرفع التعزيز طلبك في القائمة أمام المسافرين المطابقين له بالفعل.';
+
+  @override
+  String get boostDoesNotGuarantee =>
+      'لا يغيّر ذلك من تتطابق معه، ولا يضمن حدوث توصيل.';
+
+  @override
+  String get boostChoosePackage => 'اختر تعزيزًا';
+
+  @override
+  String boostDuration(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours ساعة',
+      many: '$hours ساعة',
+      few: '$hours ساعات',
+      two: 'ساعتان',
+      one: 'ساعة واحدة',
+      zero: 'لا ساعات',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String boostDurationDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days يوم',
+      many: '$days يومًا',
+      few: '$days أيام',
+      two: 'يومان',
+      one: 'يوم واحد',
+      zero: 'لا أيام',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get boostActive => 'التعزيز نشط';
+
+  @override
+  String boostActiveUntil(String when) {
+    return 'نشط حتى $when';
+  }
+
+  @override
+  String get boostPendingPayment => 'بانتظار الدفع';
+
+  @override
+  String get boostExpired => 'انتهى التعزيز';
+
+  @override
+  String boostPurchase(String amount) {
+    return 'عزّز مقابل $amount';
+  }
+
+  @override
+  String get boostNotEligible => 'لا يمكن تعزيز هذا الطلب الآن.';
+
+  @override
+  String get chatTitle => 'المحادثة';
+
+  @override
+  String get chatEmptyTitle => 'لا توجد محادثات';
+
+  @override
+  String get chatEmptyBody => 'تُفتح المحادثة بمجرد دفع التوصيل.';
+
+  @override
+  String get chatThreadEmptyTitle => 'ابدأ بالسلام';
+
+  @override
+  String get chatThreadEmptyBody => 'اتفقا على مكان اللقاء ووقته.';
+
+  @override
+  String get chatComposerHint => 'اكتب رسالة';
+
+  @override
+  String get chatSend => 'إرسال';
+
+  @override
+  String get chatSendFailed => 'لم تُرسل';
+
+  @override
+  String get chatRetrySend => 'اضغط لإعادة المحاولة';
+
+  @override
+  String get chatSending => 'جارٍ الإرسال…';
+
+  @override
+  String get chatClosedTitle => 'هذه المحادثة مغلقة';
+
+  @override
+  String get chatClosedBody =>
+      'لا يزال بإمكانك قراءتها، لكن لا يمكن إرسال رسائل جديدة.';
+
+  @override
+  String get chatUnavailableTitle => 'المحادثة غير متاحة بعد';
+
+  @override
+  String get chatUnavailableBody =>
+      'تُفتح المحادثة لهذا التوصيل بمجرد تأكيد الدفع.';
+
+  @override
+  String get chatNeverShareCodes =>
+      'لا ترسل أبدًا رمز الاستلام أو التوصيل عبر المحادثة.';
+
+  @override
+  String get notificationsTitle => 'الإشعارات';
+
+  @override
+  String get notificationsMarkAllRead => 'تعليم الكل كمقروء';
+
+  @override
+  String get notificationsEmptyTitle => 'لا شيء جديد';
+
+  @override
+  String get notificationsEmptyBody =>
+      'تظهر هنا العروض والمدفوعات وتحديثات التوصيل.';
+
+  @override
+  String notificationsUnreadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count إشعار غير مقروء',
+      many: '$count إشعارًا غير مقروء',
+      few: '$count إشعارات غير مقروءة',
+      two: 'إشعاران غير مقروءين',
+      one: 'إشعار واحد غير مقروء',
+      zero: 'لا إشعارات غير مقروءة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get profileTitle => 'الحساب';
+
+  @override
+  String get profileAccount => 'الحساب';
+
+  @override
+  String get profileRoles => 'ما تقوم به';
+
+  @override
+  String get profileVerification => 'التحقق';
+
+  @override
+  String get profileRatings => 'التقييمات';
+
+  @override
+  String get profilePayments => 'المدفوعات والدفعات';
+
+  @override
+  String get profileNotificationSettings => 'الإشعارات';
+
+  @override
+  String get profileLanguage => 'اللغة';
+
+  @override
+  String get profileLanguageSystem => 'لغة الجهاز';
+
+  @override
+  String get profileAppLanguage => 'لغة التطبيق';
+
+  @override
+  String get profileAppLanguageHelp =>
+      'ما تقرأه داخل ShipTrip. محفوظ على هذا الهاتف.';
+
+  @override
+  String get profileEmailLanguage => 'لغة الرسائل';
+
+  @override
+  String get profileEmailLanguageHelp =>
+      'اللغة التي نراسلك بها — المدفوعات والتحقق والتوصيل والنزاعات وأمان الحساب. محفوظة في حسابك.';
+
+  @override
+  String get profileEmailLanguageSaved => 'تم تحديث لغة الرسائل';
+
+  @override
+  String get profileSupport => 'المساعدة والدعم';
+
+  @override
+  String get profileTerms => 'شروط الخدمة';
+
+  @override
+  String get profilePrivacy => 'سياسة الخصوصية';
+
+  @override
+  String get profileAppearance => 'المظهر';
+
+  @override
+  String get profileAppearanceSystem => 'مطابقة الجهاز';
+
+  @override
+  String get profileAppearanceLight => 'فاتح';
+
+  @override
+  String get profileAppearanceDark => 'داكن';
+
+  @override
+  String get profileEmailVerified => 'تم التحقق من البريد الإلكتروني';
+
+  @override
+  String get profileEmailUnverified => 'لم يتم التحقق من البريد الإلكتروني';
+
+  @override
+  String profileMemberSince(String date) {
+    return 'مع ShipTrip منذ $date';
+  }
+
+  @override
+  String profileVersion(String version) {
+    return 'الإصدار $version';
+  }
+
+  @override
+  String get locationSearchTitle => 'اختر موقعًا';
+
+  @override
+  String get locationSearchHint => 'ابحث عن مدينة أو عنوان';
+
+  @override
+  String get locationUseMap => 'اختر من الخريطة';
+
+  @override
+  String get locationConfirmPoint => 'استخدم هذه النقطة';
+
+  @override
+  String get locationRecent => 'الأخيرة';
+
+  @override
+  String get locationSaved => 'الأماكن المحفوظة';
+
+  @override
+  String get locationCityOnly => 'المدينة فقط';
+
+  @override
+  String get locationExactAddress => 'العنوان الدقيق';
+
+  @override
+  String get locationPrivacyBeforeFunding =>
+      'لا تُشارَك سوى المدينة إلى أن يُدفع ثمن التوصيل.';
+
+  @override
+  String get locationPrivacyAfterFunding =>
+      'يُشارَك العنوان الكامل مع المسافر.';
+
+  @override
+  String get locationHiddenUntilFunded => 'العنوان الدقيق متاح بعد الدفع';
+
+  @override
+  String get locationSearchEmptyTitle => 'لا توجد نتائج';
+
+  @override
+  String get locationSearchEmptyBody =>
+      'جرّب إملاءً مختلفًا، أو حدد النقطة على الخريطة.';
+
+  @override
+  String mapAttribution(String attribution) {
+    return 'بيانات الخريطة $attribution';
+  }
+
+  @override
+  String get locationYourPlaces => 'أماكنك';
+
+  @override
+  String get locationAirports => 'المطارات';
+
+  @override
+  String get locationExactRequiredNotice =>
+      'يتطلب هذا أحد عناوينك الخاصة. المطارات على مستوى المدينة فقط، لذا لا يمكن استخدامها هنا.';
+
+  @override
+  String get locationExactRequiredRow => 'على مستوى المدينة فقط';
+
+  @override
+  String get locationEmptyTitle => 'لا توجد أماكن محفوظة بعد';
+
+  @override
+  String get locationEmptyBody => 'ضع دبوسًا على الخريطة لحفظ عنوانك الأول.';
+
+  @override
+  String get locationDropPinHelp =>
+      'حرّك الخريطة حتى تستقر علامة التصويب في المكان المقصود، ثم أكّد.';
+
+  @override
+  String get locationNamePlaceTitle => 'سمِّ هذا المكان';
+
+  @override
+  String get locationNamePlaceBody =>
+      'أنت فقط من يرى هذا الاسم. يرى الآخرون المدينة فقط إلى حين دفع ثمن التوصيل.';
+
+  @override
+  String get locationLabelField => 'الاسم';
+
+  @override
+  String get locationLabelHint => 'المنزل، بيت الوالدة، المكتب';
+
+  @override
+  String get locationCityField => 'المدينة';
+
+  @override
+  String get locationCountryField => 'رمز الدولة';
+
+  @override
+  String get locationCountryHint => 'FR, DZ, ES';
+
+  @override
+  String get locationCountryInvalid => 'استخدم رمز الدولة المكوّن من حرفين.';
+
+  @override
+  String get locationSavePlace => 'احفظ هذا المكان';
+
+  @override
+  String get locationPlaceSaved => 'تم حفظ المكان.';
+
+  @override
+  String get mapZoomIn => 'تكبير';
+
+  @override
+  String get mapZoomOut => 'تصغير';
+
+  @override
+  String get timelineTitle => 'التقدّم';
+
+  @override
+  String get timelineWaitingOnYou => 'بانتظارك';
+
+  @override
+  String get timelineWaitingOnThem => 'بانتظارهم';
+
+  @override
+  String get timelineDone => 'تم';
+
+  @override
+  String get timelineUpcoming => 'التالي';
+
+  @override
+  String get a11yStatusPrefix => 'الحالة';
+
+  @override
+  String get a11yMoneyAmount => 'المبلغ';
+
+  @override
+  String get a11yRequiredField => 'مطلوب';
+
+  @override
+  String get a11yCloseSheet => 'إغلاق';
+
+  @override
+  String get a11yBack => 'العودة';
+
+  @override
+  String get a11yLoadingContent => 'جارٍ تحميل المحتوى';
+
+  @override
+  String get a11yImageOfParcel => 'صورة الطرد';
+
+  @override
+  String get a11ySelected => 'محدد';
+
+  @override
+  String get a11yNotSelected => 'غير محدد';
+
+  @override
+  String get a11yExpandSection => 'توسيع';
+
+  @override
+  String get a11yCollapseSection => 'طيّ';
+
+  @override
+  String get disputeCategoryNotDelivered => 'لم يصل أبدًا';
+
+  @override
+  String get disputeCategoryDamaged => 'وصل تالفًا';
+
+  @override
+  String get disputeCategoryWrongItem => 'غرض خاطئ';
+
+  @override
+  String get disputeCategoryLate => 'وصل متأخرًا جدًا';
+
+  @override
+  String get disputeCategoryNoShow => 'لم يحضر الطرف الآخر';
+
+  @override
+  String get disputeCategoryPayment => 'هناك خطأ ما يتعلق بالمال';
+
+  @override
+  String get disputeCategoryOther => 'شيء آخر';
+
+  @override
+  String unitWeightKg(String value) {
+    return '$value كغ';
+  }
+
+  @override
+  String unitDimensions(String length, String width, String height) {
+    return '$length × $width × $height سم';
+  }
+
+  @override
+  String unitCapacityKg(String value) {
+    return '$value كغ متاحة';
+  }
+
+  @override
+  String unitDurationHm(int hours, int minutes) {
+    return '$hours س $minutes د';
+  }
+
+  @override
+  String unitDurationM(int minutes) {
+    return '$minutes د';
+  }
+
+  @override
+  String distanceUnder(String max) {
+    return 'أقل من $max كم';
+  }
+
+  @override
+  String distanceBetween(String min, String max) {
+    return '$min–$max كم';
+  }
+
+  @override
+  String distanceOver(String min) {
+    return 'أكثر من $min كم';
+  }
+
+  @override
+  String unitDistanceKm(String value) {
+    return '$value كم';
+  }
+
+  @override
+  String get weightChargeableVolumetric => 'السعر محسوب على الحجم لا الوزن';
+
+  @override
+  String get weightChargeableActual => 'السعر محسوب على الوزن';
+
+  @override
+  String get homeVerifyIdentityTitle => 'تحقق من هويتك';
+
+  @override
+  String get homeVerifyIdentityBody =>
+      'يجب التحقق من هوية المسافرين قبل أن تصبح الرحلة منشورة.';
+
+  @override
+  String get homeAttentionOfferAwaiting => 'هناك عرض بانتظار ردك';
+
+  @override
+  String get homeAttentionFunding => 'ادفع لتأكيد هذا التوصيل';
+
+  @override
+  String get homeAttentionRecipient => 'أضف من سيستلم الطرد';
+
+  @override
+  String get homeAttentionRevealPickup => 'أظهر رمز الاستلام لمسافرك';
+
+  @override
+  String get homeAttentionSubmitPickup => 'أدخل رمز الاستلام';
+
+  @override
+  String get homeAttentionRevealDelivery => 'رمز التوصيل جاهز';
+
+  @override
+  String get homeAttentionSubmitDelivery => 'أدخل رمز التوصيل';
+
+  @override
+  String get homeAttentionRating => 'قيّم هذا التوصيل';
+
+  @override
+  String get homeOpenAction => 'فتح';
+
+  @override
+  String get deliveriesTabAll => 'الكل';
+
+  @override
+  String get deliveryCardSending => 'إرسال';
+
+  @override
+  String get deliveryCardCarrying => 'حمل';
+
+  @override
+  String deliveryCardWith(String name) {
+    return 'مع $name';
+  }
+
+  @override
+  String journeyLegCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مرحلة',
+      many: '$count مرحلة',
+      few: '$count مراحل',
+      two: 'مرحلتان',
+      one: 'مرحلة واحدة',
+      zero: 'لا مراحل',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String journeyProofNeeded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count رحلة تحتاج إثباتًا',
+      many: '$count رحلة تحتاج إثباتًا',
+      few: '$count رحلات تحتاج إثباتًا',
+      two: 'رحلتان تحتاجان إثباتًا',
+      one: 'رحلة واحدة تحتاج إثباتًا',
+      zero: 'لا رحلات تحتاج إثباتًا',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String requestOffersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count عرض',
+      many: '$count عرضًا',
+      few: '$count عروض',
+      two: 'عرضان',
+      one: 'عرض واحد',
+      zero: 'لا عروض بعد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingSendTitle => 'أرسل شيئًا إلى الوطن';
+
+  @override
+  String get onboardingSendBody =>
+      'انشر ما تريد توصيله. يمكن للمسافرين المتجهين إلى تلك الوجهة حمله، وتتفقان على السعر بينكما.';
+
+  @override
+  String get onboardingCarryTitle => 'اربح من رحلة تقوم بها أصلاً';
+
+  @override
+  String get onboardingCarryBody =>
+      'أضف رحلتك، وسنعرض عليك الطرود التي تناسب مسارك وكيلوغراماتك المتاحة.';
+
+  @override
+  String get onboardingSafeTitle => 'المال ينتظر حتى الوصول';
+
+  @override
+  String get onboardingSafeBody =>
+      'نحتفظ بالدفعة من لحظة الحجز إلى 48 ساعة بعد تأكيد التوصيل.';
+
+  @override
+  String get onboardingGetStarted => 'إنشاء حساب';
+
+  @override
+  String get onboardingHaveAccount => 'لدي حساب بالفعل';
+
+  @override
+  String onboardingPageOf(int current, int total) {
+    return 'الصفحة $current من $total';
+  }
+
+  @override
+  String get authInvalidCredentials =>
+      'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+
+  @override
+  String get authShowPassword => 'إظهار كلمة المرور';
+
+  @override
+  String get authHidePassword => 'إخفاء كلمة المرور';
+
+  @override
+  String get authPhone => 'رقم الهاتف';
+
+  @override
+  String get authWilaya => 'الولاية';
+
+  @override
+  String get authWilayaHelp =>
+      'ولايتك في الجزائر. اختر الولاية التي ترتبط بها إذا كنت تعيش في أوروبا.';
+
+  @override
+  String get authWilayaSheetTitle => 'اختر ولاية';
+
+  @override
+  String get authResetCodeSent =>
+      'إذا كان هذا العنوان مرتبطًا بحساب، فقد أرسلنا إليه رمزًا مكونًا من ستة أرقام.';
+
+  @override
+  String get authResetCodeLabel => 'رمز من ستة أرقام';
+
+  @override
+  String get authNewPassword => 'كلمة المرور الجديدة';
+
+  @override
+  String get authResetDone => 'تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن.';
+
+  @override
+  String get authSendCode => 'إرسال الرمز';
+
+  @override
+  String get authResendCode => 'إرسال رمز جديد';
+
+  @override
+  String get authVerifyDone => 'تم التحقق من البريد الإلكتروني';
+
+  @override
+  String get authTermsNotice =>
+      'بإنشائك حسابًا، فإنك توافق على شروط الخدمة وسياسة الخصوصية.';
+
+  @override
+  String get authVerifyNoCode =>
+      'لم يصلك شيء؟ تحقق من مجلد الرسائل غير المرغوب فيها. إذا لم تجده هناك أيضًا، تواصل مع الدعم وسنحل الأمر.';
+
+  @override
+  String get kycDocIdCard => 'بطاقة التعريف الوطنية';
+
+  @override
+  String get kycDocPassport => 'جواز السفر';
+
+  @override
+  String get kycDocDrivingLicense => 'رخصة القيادة';
+
+  @override
+  String get kycAddPhoto => 'إضافة صورة';
+
+  @override
+  String get kycReplacePhoto => 'استبدال';
+
+  @override
+  String get kycFileTooLarge =>
+      'هذه الصورة كبيرة جدًا. يجب ألا يتجاوز حجم كل صورة 8 ميغابايت.';
+
+  @override
+  String get kycFileTypeNotAllowed => 'لا تُقبل إلا صور JPEG وPNG.';
+
+  @override
+  String get kycUploading => 'جارٍ إرسال مستنداتك…';
+
+  @override
+  String get kycSubmitAction => 'إرسال للمراجعة';
+
+  @override
+  String get kycSubmitted => 'تم استلام المستندات. سنراجعها قريبًا.';
+
+  @override
+  String get kycBackNotNeeded => 'لا يحتاج جواز السفر إلا إلى صفحة الصورة.';
+
+  @override
+  String get kycSelfieHelp => 'صورة واضحة لوجهك، تُلتقط الآن — تُقارن بمستندك.';
+
+  @override
+  String get kycUnavailable =>
+      'التحقق غير متاح مؤقتًا. يُرجى إعادة المحاولة قريبًا.';
+
+  @override
+  String get payoutEligibleIn => 'يُطلق خلال';
+
+  @override
+  String get notificationOffer => 'تحديث العرض';
+
+  @override
+  String get notificationMatch => 'مطابقة جديدة';
+
+  @override
+  String get notificationPayment => 'تحديث الدفع';
+
+  @override
+  String get notificationChat => 'رسالة جديدة';
+
+  @override
+  String get notificationRequest => 'تحديث الطلب';
+
+  @override
+  String get notificationDelivery => 'تحديث التوصيل';
+
+  @override
+  String get notificationOther => 'تحديث';
+
+  @override
+  String get chatBlockedPayAction => 'الذهاب إلى الدفع';
+
+  @override
+  String get chatLoadEarlier => 'تحميل الرسائل السابقة';
+
+  @override
+  String get chatToday => 'اليوم';
+
+  @override
+  String get chatYesterday => 'أمس';
+
+  @override
+  String get paymentProviderNewCheckoutsDisabled =>
+      'لا يتم قبول مدفوعات جديدة حاليًا';
+
+  @override
+  String get paymentProviderPickAnother => 'جرّب وسيلة دفع أخرى.';
+
+  @override
+  String get paymentContinueTitle => 'هناك عملية دفع مفتوحة بالفعل';
+
+  @override
+  String get paymentContinueBody =>
+      'أكمل عملية الدفع التي بدأتها بدلاً من فتح عملية ثانية.';
+
+  @override
+  String get paymentContinueAction => 'متابعة دفعتك';
+
+  @override
+  String get paymentCouldNotOpen =>
+      'تعذّر علينا فتح صفحة الدفع. تأكد من وجود متصفح مثبّت لديك.';
+
+  @override
+  String get paymentStillConfirmingTitle => 'لا يزال التأكيد جاريًا';
+
+  @override
+  String get paymentStillConfirmingBody =>
+      'يستغرق هذا وقتًا أطول من المعتاد. لم يضع شيء، ولم يُخصم منك المبلغ مرتين.';
+
+  @override
+  String get paymentCheckAgain => 'تحقق مرة أخرى';
+
+  @override
+  String get paymentNothingOutstandingTitle => 'لا يوجد ما يجب دفعه';
+
+  @override
+  String get paymentNothingOutstandingBody => 'تمت تسوية هذا بالفعل.';
+
+  @override
+  String get paymentOrderClosedTitle => 'لا يمكن دفع هذا الآن';
+
+  @override
+  String get paymentOrderClosedBody =>
+      'تم إغلاق هذا الدفع أو استرجاعه، لذا لا يمكن فتح عملية دفع جديدة.';
+
+  @override
+  String get requestReadyUntil => 'جاهز حتى';
+
+  @override
+  String get requestReadyWindow => 'فترة الجاهزية';
+
+  @override
+  String get requestReadyWindowHelp =>
+      'الفترة الزمنية التي يمكن للمسافر خلالها استلامه. حدد فترة، لا لحظة واحدة.';
+
+  @override
+  String get requestDeadlineHelp =>
+      'أقصى موعد يمكن أن يصل فيه. يجب أن يكون بعد إغلاق فترة الجاهزية.';
+
+  @override
+  String get requestWeightHelp => 'بين 0.01 و100 كغ.';
+
+  @override
+  String get requestDimensionsHelp =>
+      'اختياري. أدخل القياسات الثلاثة كلها، أو اتركها كلها فارغة.';
+
+  @override
+  String get requestDimensionsPartial =>
+      'أدخل القياسات الثلاثة كلها، أو امسحها كلها.';
+
+  @override
+  String get requestCategoryDocuments => 'وثائق';
+
+  @override
+  String get requestCategorySmallBox => 'صندوق صغير';
+
+  @override
+  String get requestCategoryElectronics => 'إلكترونيات';
+
+  @override
+  String get requestCategoryClothing => 'ملابس';
+
+  @override
+  String get requestCategoryOther => 'شيء آخر';
+
+  @override
+  String get requestProposedReward => 'ما تقترح دفعه';
+
+  @override
+  String get requestProposedRewardHelp =>
+      'نقطة انطلاق، لا سعر نهائي. يمكن للمسافرين قبوله أو الرد بمبلغ مختلف.';
+
+  @override
+  String get requestRewardIsIntent =>
+      'هذا ما اقترحته. يُحدد السعر النهائي عند قبول مسافر لعرض.';
+
+  @override
+  String get requestReviewTitle => 'راجع هذا';
+
+  @override
+  String get requestAckAllRequired => 'أكّد جميع النقاط الخمس قبل النشر.';
+
+  @override
+  String get requestPostAction => 'انشر هذا الطلب';
+
+  @override
+  String get requestDetailTitle => 'طلبك';
+
+  @override
+  String get requestParcelSection => 'الطرد';
+
+  @override
+  String get requestTimingSection => 'التوقيت';
+
+  @override
+  String get requestRouteSection => 'المسار';
+
+  @override
+  String get requestMatchesSection => 'المسافرون الذين تواصلت معهم';
+
+  @override
+  String get requestNoMatchesYet => 'لم تقترح على أحد بعد.';
+
+  @override
+  String get requestAwaitingDepositNotice =>
+      'لا يمكن للمسافرين رؤية هذا بعد. ادفع العربون لنشره.';
+
+  @override
+  String get requestFindTravelers => 'ابحث عن مسافرين';
+
+  @override
+  String get requestPayDepositAction => 'ادفع العربون';
+
+  @override
+  String get requestCancelAction => 'إلغاء الطلب';
+
+  @override
+  String get requestCancelConfirmTitle => 'إلغاء هذا الطلب؟';
+
+  @override
+  String get requestCancelConfirmBody =>
+      'لن يكون مرئيًا للمسافرين بعد الآن. سيُسترجع لك أي عربون دفعته.';
+
+  @override
+  String get requestCancelled => 'تم إلغاء الطلب';
+
+  @override
+  String get requestCancelNotCancellableBody =>
+      'تمت مطابقة مسافر مع هذا الطلب بالفعل، لذا لا يمكن إلغاؤه هنا.';
+
+  @override
+  String get requestCancelViaDealBody =>
+      'أصبح هذا الطلب توصيلاً. ألغِه من صفحة التوصيل بدلاً من ذلك.';
+
+  @override
+  String requestPhotoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتان',
+      one: 'صورة واحدة',
+      zero: 'لا صور',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get requestNotFragile => 'تعامل عادي';
+
+  @override
+  String get requestFragileYes => 'يُتعامل معه بحذر';
+
+  @override
+  String get requestTargetedNotice =>
+      'لقد وجّهت هذا الطلب إلى مسافر واحد. لا يمكن لأي شخص آخر رؤيته.';
+
+  @override
+  String get depositNotRequiredTitle => 'لا حاجة إلى عربون';
+
+  @override
+  String get depositNotRequiredBody =>
+      'يُنشر هذا الطلب دون عربون. لا يوجد ما يجب دفعه هنا.';
+
+  @override
+  String get depositClampedMin => 'هذا أصغر عربون نقبله.';
+
+  @override
+  String get depositClampedMax => 'هذا أكبر عربون نقبله، مهما كانت قيمة الطرد.';
+
+  @override
+  String get discoveryMatchedDistance => 'المسافة المحمولة';
+
+  @override
+  String get discoveryDetourLabel => 'انحراف المسافر عن مساره';
+
+  @override
+  String get discoveryFirstDeparture => 'المغادرة';
+
+  @override
+  String get discoveryProposeBlocked =>
+      'تعذّر علينا تحديد أي جزء من هذه الرحلة يناسب طردك. حدّث الصفحة وأعد المحاولة.';
+
+  @override
+  String get discoveryVolumetricExplainer =>
+      'هذا الطرد أكبر حجمًا منه وزنًا، لذا يحدد حجمه السعر.';
+
+  @override
+  String get discoveryBreakdownNote =>
+      'هكذا يُحسب المبلغ المقترح. اعرض مبلغًا مختلفًا وسيتغير الإجمالي تبعًا لذلك.';
+
+  @override
+  String get discoveryProposalSent => 'تم إرسال العرض';
+
+  @override
+  String get discoveryLegRangeMoved =>
+      'تغيّر مسار هذا المسافر بينما كنت تتصفح. لقد حدّثناه.';
+
+  @override
+  String discoveryIncompatibleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'لم يعد هذا المسافر يناسب طردك، لـ$count سبب.',
+      many: 'لم يعد هذا المسافر يناسب طردك، لـ$count سببًا.',
+      few: 'لم يعد هذا المسافر يناسب طردك، لـ$count أسباب.',
+      two: 'لم يعد هذا المسافر يناسب طردك، لسببين.',
+      one: 'لم يعد هذا المسافر يناسب طردك، لسبب واحد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get boostRankingLabel => 'الظهور';
+
+  @override
+  String get boostRankingModest => 'أعلى في القائمة';
+
+  @override
+  String get boostRankingStrong => 'أعلى بكثير في القائمة';
+
+  @override
+  String get boostRankingTop => 'أعلى القائمة';
+
+  @override
+  String get boostDurationLabel => 'يستمر لمدة';
+
+  @override
+  String get boostPriceLabel => 'السعر';
+
+  @override
+  String get boostCompatibilityNote =>
+      'لا يراه إلا المسافرون المطابقون لطردك بالفعل. التعزيز لا يغيّر هوية هؤلاء المسافرين.';
+
+  @override
+  String get boostActivatesOnPayment =>
+      'يبدأ التعزيز بمجرد تأكيد دفعتك، لا عند مغادرتك صفحة الدفع.';
+
+  @override
+  String get boostBuyAction => 'اشترِ هذا التعزيز';
+
+  @override
+  String get boostPayAction => 'ادفع مقابل هذا التعزيز';
+
+  @override
+  String get boostPurchasesSection => 'تعزيزاتك';
+
+  @override
+  String get boostNoPackagesTitle => 'لا توجد تعزيزات متاحة';
+
+  @override
+  String get boostNoPackagesBody =>
+      'لا توجد باقات تعزيز متاحة في الوقت الحالي.';
+
+  @override
+  String get boostDisabledTitle => 'التعزيزات معطّلة';
+
+  @override
+  String get boostDisabledBody =>
+      'لا يمكن لأحد شراء تعزيز الآن. طلبك غير متأثر.';
+
+  @override
+  String get boostLimitReachedTitle => 'تم بلوغ الحد الأقصى للتعزيز';
+
+  @override
+  String boostLimitReachedBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'يمكن أن يكون لديك $count تعزيز نشط على طلب في الوقت نفسه.',
+      many: 'يمكن أن يكون لديك $count تعزيزًا نشطًا على طلب في الوقت نفسه.',
+      few: 'يمكن أن يكون لديك $count تعزيزات نشطة على طلب في الوقت نفسه.',
+      two: 'يمكن أن يكون لديك تعزيزان نشطان على طلب في الوقت نفسه.',
+      one: 'يمكن أن يكون لديك تعزيز واحد نشط على طلب في الوقت نفسه.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get boostRequestExpiredBody =>
+      'انتهت صلاحية هذا الطلب، لذا لم يعد بالإمكان تعزيزه.';
+
+  @override
+  String get boostPackageUnknownBody => 'لم يعد هذا التعزيز متاحًا. اختر آخر.';
+
+  @override
+  String get boostStatusCancelled => 'ملغى';
+
+  @override
+  String get boostStatusUnusable =>
+      'تم الاسترجاع — لم يعد الطلب قابلاً للتعزيز';
+
+  @override
+  String get boostStatusRefunded => 'تم الاسترجاع';
+
+  @override
+  String get validationReadyWindowOrder =>
+      'يجب أن تنتهي فترة الجاهزية بعد بدايتها';
+
+  @override
+  String validationWeightRange(String min, String max) {
+    return 'أدخل وزنًا بين $min و$max كغ';
+  }
+
+  @override
+  String get dealStepAgreed => 'تم الاتفاق على الشروط';
+
+  @override
+  String get dealStepPaid => 'تم الاحتفاظ بالدفعة';
+
+  @override
+  String get dealStepRecipient => 'تمت إضافة المستلِم';
+
+  @override
+  String get dealStepPickedUp => 'تم استلام الطرد';
+
+  @override
+  String get dealStepDelivered => 'تم التوصيل';
+
+  @override
+  String get dealStepProtection => 'دفعة محمية';
+
+  @override
+  String get dealStepCompleted => 'مكتمل';
+
+  @override
+  String get dealOpenChat => 'مراسلة';
+
+  @override
+  String get dealParcelSection => 'الطرد';
+
+  @override
+  String get dealMoneySection => 'المال';
+
+  @override
+  String get dealActionPay => 'ادفع الآن';
+
+  @override
+  String get dealActionRecipient => 'إضافة مستلِم';
+
+  @override
+  String get dealActionPickup => 'الاستلام';
+
+  @override
+  String get dealActionDelivery => 'التوصيل';
+
+  @override
+  String get dealActionDispute => 'فتح نزاع';
+
+  @override
+  String get dealActionCancel => 'إلغاء هذا التوصيل';
+
+  @override
+  String get dealActionRate => 'إضافة تقييم';
+
+  @override
+  String dealFundingDeadline(String time) {
+    return 'ادفع قبل $time وإلا سيتم تحرير المساحة';
+  }
+
+  @override
+  String get dealLocationsHiddenUntilFunded =>
+      'تظهر العناوين الدقيقة بمجرد دفع ثمن التوصيل.';
+
+  @override
+  String get ratingBlindNote =>
+      'لن يرى أي منكما تقييم الآخر حتى تتركا كلاكما تقييمًا، أو تُغلق الفترة.';
+
+  @override
+  String get ratingSubmittedTitle => 'تم حفظ التقييم';
+
+  @override
+  String get pickupTitle => 'الاستلام';
+
+  @override
+  String get pickupNextTitle => 'ماذا سيحدث بعد ذلك';
+
+  @override
+  String get pickupConfirmedSenderNext =>
+      'يُفتح قفل رمز التوصيل بعد 30 دقيقة من الآن. سنرسله بالبريد الإلكتروني إلى المستلِم، وهو وحده من يمكنه تسليمه للمسافر.';
+
+  @override
+  String get pickupConfirmedTravelerNext =>
+      'احمل الطرد إلى المستلِم. سيقرأ لك رمز التوصيل عند الباب — لن يُعرض عليك هذا الرمز أبدًا.';
+
+  @override
+  String get pickupGoToDeliveryAction => 'الانتقال إلى التوصيل';
+
+  @override
+  String get pickupNotFundedBody =>
+      'لم يُموَّل هذا التوصيل بعد، لذا لا يوجد رمز استلام لعرضه.';
+
+  @override
+  String get pickupNotReadyBody => 'هذا التوصيل ليس جاهزًا للاستلام بعد.';
+
+  @override
+  String get pickupAlreadyConfirmedBody =>
+      'تم تأكيد الاستلام بالفعل على هذا التوصيل.';
+
+  @override
+  String get recipientRequiredTravelerBody =>
+      'لم يضف المُرسِل المستلِم بعد. اطلب منه فعل ذلك، ثم جرّب الرمز مرة أخرى.';
+
+  @override
+  String get codeRequiresNewCodeBody =>
+      'لا يمكن استخدام هذا الرمز مرة أخرى. يجب إصدار رمز جديد قبل أن تتمكن من التأكيد.';
+
+  @override
+  String codeRateLimitedBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'عدد كبير جدًا من المحاولات. انتظر $count ثانية وأعد المحاولة.',
+      many: 'عدد كبير جدًا من المحاولات. انتظر $count ثانية وأعد المحاولة.',
+      few: 'عدد كبير جدًا من المحاولات. انتظر $count ثوانٍ وأعد المحاولة.',
+      two: 'عدد كبير جدًا من المحاولات. انتظر ثانيتين وأعد المحاولة.',
+      one: 'عدد كبير جدًا من المحاولات. انتظر ثانية وأعد المحاولة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deliveryTitle => 'التوصيل';
+
+  @override
+  String get deliverySenderExplainer =>
+      'يستلم المستلِم هذا الرمز بالبريد الإلكتروني. يقرأه للمسافر عند الباب، وهذا ما يؤكد التوصيل.';
+
+  @override
+  String get deliveryCodeSentToRecipientUnknown =>
+      'أرسلنا الرمز بالبريد الإلكتروني إلى المستلِم.';
+
+  @override
+  String get deliveryCodeBufferOpenBody =>
+      'لا يزال رمز التوصيل مقفلاً. يُفتح قفله بعد 30 دقيقة من الاستلام.';
+
+  @override
+  String get deliveryNotInCarriageBody =>
+      'هذا التوصيل ليس في الطريق، لذا لا يمكن إصدار رمز جديد.';
+
+  @override
+  String get deliveryConfirmedTravelerNext =>
+      'بدأت فترة الحماية. تُطلق دفعتك بمجرد إغلاقها — لا يُدفع شيء قبل ذلك.';
+
+  @override
+  String get deliveryAwaitingTitle => 'ليس بعد';
+
+  @override
+  String get deliveryAwaitingSenderBody =>
+      'يظهر رمز التوصيل هنا بمجرد استلام الطرد.';
+
+  @override
+  String get deliveryAwaitingTravelerBody =>
+      'أكّد الاستلام أولاً. لا يمكن استخدام رمز التوصيل إلا بعد ذلك.';
+
+  @override
+  String get protectionEndsInLabel => 'تنتهي خلال';
+
+  @override
+  String get payoutAmountLabel => 'المبلغ';
+
+  @override
+  String get payoutEligibleLabel => 'متوقعة';
+
+  @override
+  String get disputeViewAction => 'عرض النزاع';
+
+  @override
+  String get disputeOpenAction => 'فتح نزاع';
+
+  @override
+  String get disputeOpened => 'تم فتح النزاع';
+
+  @override
+  String get disputeExistingOpenedBody =>
+      'لديك بالفعل نزاع مفتوح على هذا التوصيل. لقد أخذناك إليه.';
+
+  @override
+  String get disputeFreezesPayoutTitle => 'دفعة المسافر تُعلَّق';
+
+  @override
+  String get disputeFreezesPayoutBody =>
+      'لا يُدفع شيء ريثما ننظر في الأمر. يمكن لكلا الطرفين إضافة أدلة.';
+
+  @override
+  String get disputeNotAvailableTitle => 'لا يمكنك فتح نزاع بعد';
+
+  @override
+  String get disputeNotAvailableBody =>
+      'يمكن فتح نزاع بمجرد استلام الطرد. قبل ذلك، ألغِ التوصيل بدلاً من ذلك.';
+
+  @override
+  String get disputeAlreadyResolvedTitle => 'تم البت في هذا بالفعل';
+
+  @override
+  String get disputeAlreadyResolvedBody =>
+      'توجد بالفعل تسوية نزاع على هذا التوصيل.';
+
+  @override
+  String get disputeDetailTitle => 'النزاع';
+
+  @override
+  String get disputeReferenceLabel => 'المرجع';
+
+  @override
+  String get disputeCategoryTitle => 'الفئة';
+
+  @override
+  String get disputeReasonLabel => 'ما تم الإبلاغ عنه';
+
+  @override
+  String get disputeOpenedByLabel => 'فتحه';
+
+  @override
+  String get disputeOpenedBySender => 'المُرسِل';
+
+  @override
+  String get disputeOpenedByTraveler => 'المسافر';
+
+  @override
+  String get disputeOpenedAtLabel => 'تاريخ الفتح';
+
+  @override
+  String get disputeResolvedAtLabel => 'تاريخ البت';
+
+  @override
+  String get disputeProtectionEndsLabel => 'تنتهي فترة الحماية';
+
+  @override
+  String get disputePayoutFrozenTitle => 'الدفعة معلّقة';
+
+  @override
+  String get disputePayoutSettledBody =>
+      'كانت الدفعة قد صرفت بالفعل قبل فتح هذا النزاع.';
+
+  @override
+  String get disputeAmountsTitle => 'كيف تمت التسوية';
+
+  @override
+  String get disputeAmountsExplainer =>
+      'هذه المبالغ هي قرار ShipTrip. لا شيء هنا يُحسب على هاتفك.';
+
+  @override
+  String get disputeCollectedTotal => 'المحصَّل من المُرسِل';
+
+  @override
+  String get disputeResolutionNoteLabel => 'ملاحظة من ShipTrip';
+
+  @override
+  String get disputeTimelineTitle => 'ماذا حدث';
+
+  @override
+  String get disputeEventOpened => 'تم فتح النزاع';
+
+  @override
+  String disputeEventStatusChanged(String status) {
+    return 'تغيّرت الحالة إلى $status';
+  }
+
+  @override
+  String get disputeEventEvidenceAdded => 'تمت إضافة دليل';
+
+  @override
+  String get disputeEventResolved => 'تم اتخاذ القرار';
+
+  @override
+  String get disputeEventClosed => 'تم إغلاق النزاع';
+
+  @override
+  String get disputeEventPayoutFrozen => 'تم تعليق الدفعة';
+
+  @override
+  String get disputeEventNote => 'تمت إضافة ملاحظة';
+
+  @override
+  String get disputeEventOther => 'تحديث';
+
+  @override
+  String get disputeEvidenceNone => 'لم تُضف أي أدلة بعد';
+
+  @override
+  String get disputeEvidenceView => 'عرض';
+
+  @override
+  String get disputeEvidenceOpenFailed => 'تعذّر علينا فتح ذلك. أعد المحاولة.';
+
+  @override
+  String get disputeEvidenceKindText => 'ملاحظة';
+
+  @override
+  String get disputeEvidenceKindPhoto => 'صورة';
+
+  @override
+  String get disputeEvidenceKindVideo => 'فيديو';
+
+  @override
+  String disputeEvidenceCount(int count, int max) {
+    return 'تمت إضافة $count من $max';
+  }
+
+  @override
+  String get disputeEvidenceNoteHint => 'ما تريد أن نعرفه';
+
+  @override
+  String get disputeEvidenceAdded => 'تمت إضافة دليل';
+
+  @override
+  String get disputeEvidenceClosedBody =>
+      'هذا النزاع مغلق، لذا لا يمكن إضافة المزيد.';
+
+  @override
+  String get disputeEvidenceTypeMismatchBody =>
+      'لا يطابق هذا الملف النوع الذي اخترته.';
+
+  @override
+  String get disputeEvidenceContentMismatchBody =>
+      'هذا الملف ليس كما يدّعي. جرّب ملفًا آخر.';
+
+  @override
+  String get disputeEvidenceLinkNote =>
+      'تنتهي صلاحية روابط الأدلة بعد دقائق قليلة، لذا نجلب رابطًا جديدًا في كل مرة تفتح فيها شيئًا.';
+
+  @override
+  String get disputeEvidenceTextRequiredBody => 'اكتب شيئًا قبل إضافة ملاحظة.';
+
+  @override
+  String get disputeEvidenceFileRequiredBody => 'اختر ملفًا أولاً.';
+
+  @override
+  String unitFileSizeMb(String value) {
+    return '$value ميغابايت';
+  }
+
+  @override
+  String get paymentPollingHint =>
+      'قد يستغرق هذا لحظة. يمكنك مغادرة هذه الشاشة — سنواصل التحقق.';
+
+  @override
+  String get paymentOpenProvider => 'متابعة الدفع';
+
+  @override
+  String get guestPayPoweredBy => 'تم الدفع بأمان عبر ShipTrip';
+
+  @override
+  String get onboardingEyebrow => 'أهلاً بك';
+
+  @override
+  String get onboardingHeadline =>
+      'أرسل أي شيء،\nوالمسافرون\nيتكفّلون بالباقي.';
+
+  @override
+  String get onboardingBody =>
+      'ممر بين الجزائر وفرنسا. المسافرون ينقلون، والمرسلون يوفّرون، والمبلغ محجوز إلى حين الوصول.';
+
+  @override
+  String get onboardingStamp => 'منذ 2026 · الجزائر ↔ فرنسا';
+
+  @override
+  String get onboardingTrust => 'هوية موثّقة · مبلغ محجوز · التسعير باليورو';
+
+  @override
+  String get onboardingRouteFrom => 'الجزائر';
+
+  @override
+  String get onboardingRouteTo => 'باريس';
+
+  @override
+  String get onboardingRouteMeta => 'مباشر · 2س 25د';
+
+  @override
+  String get benefitsSkip => 'تخطّي';
+
+  @override
+  String benefitsIndex(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get benefitsChapterOneEyebrow => 'الفصل الأول · البريد';
+
+  @override
+  String get benefitsChapterOneTitle => 'أرسل إلى أي مكان،\nبجزء من التكلفة.';
+
+  @override
+  String get benefitsChapterOneAccent => 'إلى فرنسا والجزائر وأبعد.';
+
+  @override
+  String get benefitsChapterOneBody =>
+      'يحمل المسافرون طردك ضمن أمتعتهم، فتدفع جزءاً بسيطاً من تكلفة الشحن السريع.';
+
+  @override
+  String get benefitsChapterOneStamp => 'بريد جوي';
+
+  @override
+  String get benefitsChapterTwoEyebrow => 'الفصل الثاني · الحقيبة';
+
+  @override
+  String get benefitsChapterTwoTitle => 'اربح وأنت\nمسافر.';
+
+  @override
+  String get benefitsChapterTwoAccent => 'سافر. اربح.';
+
+  @override
+  String get benefitsChapterTwoBody =>
+      'متوجّه إلى الجزائر أو باريس أو وهران؟ املأ الكيلوغرامات غير المستعملة في حقيبتك.';
+
+  @override
+  String get benefitsChapterTwoStamp => 'الصعود';
+
+  @override
+  String get benefitsChapterThreeEyebrow => 'الفصل الثالث · الختم';
+
+  @override
+  String get benefitsChapterThreeTitle => 'مبنيّ على\nالثقة.';
+
+  @override
+  String get benefitsChapterThreeAccent => 'لا شيء يمضي بالكلام وحده.';
+
+  @override
+  String get benefitsChapterThreeBody =>
+      'هويات موثّقة، ومبلغ محجوز حتى التسليم، ورمز عند كل تسليم.';
+
+  @override
+  String get benefitsChapterThreeStamp => 'موثّق';
+
+  @override
+  String get benefitsHandoverCaption => 'التسليم · 6 رموز';
+
+  @override
+  String get benefitsKilosFree => 'كغ\nمتاح';
+
+  @override
+  String get authWelcomeBackStamp => 'أهلاً بعودتك';
+
+  @override
+  String get authSignInHeadline => 'سعداء برؤيتك\nمن جديد.';
+
+  @override
+  String get authSignInSubhead => 'سجّل الدخول لمتابعة شحناتك من حيث توقّفت.';
+
+  @override
+  String get authJoinStamp => 'انضمّ إلى الممر';
+
+  @override
+  String get authSignUpHeadline => 'أنشئ جواز\nسفرك.';
+
+  @override
+  String get authSignUpSubhead => 'دقيقتان — ثم يمكنك الإرسال أو السفر.';
+
+  @override
+  String get authForgotStamp => 'تعذّر الدخول';
+
+  @override
+  String get authForgotHeadline => 'لنُعِد لك\nالدخول.';
+
+  @override
+  String get authVerifyStamp => 'ختم أخير';
+
+  @override
+  String stateRateLimitedWait(int seconds) {
+    return 'انتظر نحو $seconds ثانية قبل المحاولة مجدداً.';
+  }
+
+  @override
+  String get authForgotSubhead =>
+      'أدخل البريد المرتبط بحسابك وسنرسل إليه رمزاً من ستة أرقام.';
+
+  @override
+  String get authVerifySubhead =>
+      'أدخل الرمز المكوّن من ستة أرقام الذي أرسلناه إليك. هذه الخطوة الأخيرة.';
+
+  @override
+  String get onboardingGetStartedShort => 'لنبدأ';
+}

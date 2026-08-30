@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/wneessen/go-mail"
 )
 
 // ── decodePayload ───────────────────────────────────────────────────────────
@@ -91,8 +93,16 @@ func TestDecodePayload(t *testing.T) {
 			},
 		},
 		{
-			name:   "kind optional",
-			values: streamValues(mustJSON(t, EmailPayload{To: "a@b.c", Subject: "s", Body: "b"}), nil),
+			name:    "missing event_id",
+			values:  streamValues(mustJSON(t, EmailPayload{To: "a@b.c", Subject: "s", Body: "b"}), nil),
+			wantErr: "missing event_id",
+		},
+		{
+			name: "kind optional",
+			values: streamValues(
+				mustJSON(t, EmailPayload{To: "a@b.c", Subject: "s", Body: "b"}),
+				map[string]any{"event_id": "kind-optional"},
+			),
 			check: func(t *testing.T, p EmailPayload) {
 				if p.Kind != "" {
 					t.Fatalf("kind = %q, want empty", p.Kind)
@@ -163,6 +173,47 @@ func TestBuildMessage(t *testing.T) {
 		_, err := s.buildMessage(EmailPayload{To: "not-an-email", Subject: "s", Body: "b"})
 		if err == nil {
 			t.Fatal("expected error on malformed recipient")
+		}
+	})
+
+	// A payload with no HTML must stay a single-part plain-text message: that
+	// is every message this stream carried before HTML existed, and a mail
+	// that claims to be multipart with an empty HTML part renders as blank in
+	// most clients.
+	t.Run("plain text only when no html supplied", func(t *testing.T) {
+		s := &smtpSender{from: "noreply@shiptrip.dz"}
+		msg, err := s.buildMessage(p)
+		if err != nil {
+			t.Fatalf("buildMessage: %v", err)
+		}
+		parts := msg.GetParts()
+		if len(parts) != 1 {
+			t.Fatalf("parts = %d, want 1", len(parts))
+		}
+		if parts[0].GetContentType() != mail.TypeTextPlain {
+			t.Fatalf("content type = %v, want text/plain", parts[0].GetContentType())
+		}
+	})
+
+	// With HTML the plain-text part must remain first: it is the part a client
+	// without HTML, a screen reader and a spam filter all read.
+	t.Run("html is attached as an alternative after the text part", func(t *testing.T) {
+		s := &smtpSender{from: "noreply@shiptrip.dz"}
+		withHTML := p
+		withHTML.HTML = "<html><body><p>Body text</p></body></html>"
+		msg, err := s.buildMessage(withHTML)
+		if err != nil {
+			t.Fatalf("buildMessage: %v", err)
+		}
+		parts := msg.GetParts()
+		if len(parts) != 2 {
+			t.Fatalf("parts = %d, want 2", len(parts))
+		}
+		if parts[0].GetContentType() != mail.TypeTextPlain {
+			t.Fatalf("first part = %v, want text/plain", parts[0].GetContentType())
+		}
+		if parts[1].GetContentType() != mail.TypeTextHTML {
+			t.Fatalf("second part = %v, want text/html", parts[1].GetContentType())
 		}
 	})
 }

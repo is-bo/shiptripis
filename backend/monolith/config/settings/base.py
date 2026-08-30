@@ -15,6 +15,7 @@ environ.Env.read_env(BASE_DIR.parent / ".env")
 SECRET_KEY = env.str("DJANGO_SECRET_KEY", default="insecure-dev-key")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+SHIPTRIP_ENVIRONMENT = env.str("SHIPTRIP_ENVIRONMENT", default="development").lower()
 
 # --- Apps ---
 INSTALLED_APPS = [
@@ -52,6 +53,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.middleware.RequestIDMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -69,7 +71,11 @@ ASGI_APPLICATION = "config.asgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Project templates take precedence over the ones shipped inside apps,
+        # which is what lets `templates/admin/base_site.html` re-brand the
+        # operations admin without vendoring any of Django's own admin
+        # templates.
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -154,6 +160,24 @@ REST_FRAMEWORK = {
         "dispute_evidence": env.str(
             "DRF_DISPUTE_EVIDENCE_THROTTLE_RATE", default="20/min"
         ),
+        # Authentication and capability endpoints are deliberately scoped
+        # rather than sharing the broad anonymous/user defaults.
+        "registration": env.str("DRF_REGISTRATION_THROTTLE_RATE", default="5/hour"),
+        "login": env.str("DRF_LOGIN_THROTTLE_RATE", default="10/min"),
+        "password_reset": env.str(
+            "DRF_PASSWORD_RESET_THROTTLE_RATE", default="5/hour"
+        ),
+        "email_verify": env.str(
+            "DRF_EMAIL_VERIFY_THROTTLE_RATE", default="10/hour"
+        ),
+        "google_signin": env.str(
+            "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="10/min"
+        ),
+        "media_upload": env.str("DRF_MEDIA_UPLOAD_THROTTLE_RATE", default="20/hour"),
+        "chat_message": env.str("DRF_CHAT_MESSAGE_THROTTLE_RATE", default="60/min"),
+        "admin_invitation": env.str(
+            "DRF_ADMIN_INVITATION_THROTTLE_RATE", default="20/hour"
+        ),
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
@@ -217,6 +241,12 @@ TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").lower()
 TRANSACTIONAL_EMAIL_SECRET = env.str("TRANSACTIONAL_EMAIL_SECRET", default="")
 EMAIL_SENDING_DOMAIN_VERIFIED = env.bool(
     "EMAIL_SENDING_DOMAIN_VERIFIED", default=False
+)
+# One durable reminder, scheduled from the Deal's already-snapshotted
+# protection deadline. Zero disables the reminder without changing lifecycle
+# policy; the V1 default is 24 hours before the 48-hour deadline.
+PROTECTION_ENDING_REMINDER_SECONDS = env.int(
+    "PROTECTION_ENDING_REMINDER_SECONDS", default=86_400
 )
 
 # --- Redis ---
@@ -331,7 +361,13 @@ CHARGILY_API_BASE = env.str(
 )
 
 # --- I18n ---
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "en"
+LANGUAGES = (
+    ("en", "English"),
+    ("fr", "French"),
+    ("ar", "Arabic"),
+)
+LOCALE_PATHS = (BASE_DIR / "locale",)
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
@@ -348,3 +384,19 @@ STORAGES = {
 
 # --- CORS (dev only) ---
 CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+# Injected by the release pipeline (git SHA, image digest, or release tag).
+# It is metadata only and is safe to expose on internal health responses.
+RELEASE_ID = env.str("RELEASE_ID", default="unknown")
+
+# Bound parsing before endpoint-level MIME/semantic validation. The private
+# media APIs enforce a 10 MiB object limit; two extra MiB cover multipart
+# framing without allowing arbitrary request bodies to spool indefinitely.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "DATA_UPLOAD_MAX_MEMORY_SIZE", default=12 * 1024 * 1024
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "FILE_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024
+)

@@ -1,0 +1,458 @@
+/* ShipTrip operations admin.
+ *
+ * This is an operations tool. It is not a postcard: an operator opening it at
+ * 02:00 to decide whether a refund is safe should meet a dense, quiet, legible
+ * table, not a brand experience. What it does take from the product identity is
+ * the part that helps — the ink, the parchment ground, the terracotta reserved
+ * for "you have to do something", and the display serif on page titles only.
+ *
+ * The implementation is deliberately small. Django's admin already carries a
+ * complete CSS-variable theme, including a dark scheme and a user-controlled
+ * toggle. Re-pointing those variables retunes every screen, keeps the toggle
+ * working, and leaves the DOM Django ships alone. Everything below the variable
+ * blocks is either a component the operations views actually need (status
+ * chips, aligned money, irreversible-action emphasis) or a legibility fix.
+ */
+
+/* --------------------------------------------------------------------------
+   1. Palette — the app's semantic tokens, mapped onto Django's variables
+   -------------------------------------------------------------------------- */
+
+html[data-theme="light"], :root {
+  --st-ink: #0e1f2c;
+  --st-ink-soft: #2a3b49;
+  --st-parchment: #f4efe6;
+  --st-paper: #fdfbf7;
+  --st-paper-sunken: #eae3d2;
+  --st-hairline: rgba(14, 31, 44, .14);
+
+  --st-ok: #0e5a4f;
+  --st-ok-soft: #e6f2ef;
+  --st-wait: #6b4a05;
+  --st-wait-soft: #fdf5e2;
+  --st-attn: #9b4318;
+  --st-attn-soft: #fcebe0;
+  --st-bad: #8c2b20;
+  --st-bad-soft: #fcedeb;
+  --st-info: #1b4477;
+  --st-info-soft: #eaf2fb;
+  --st-mute: #2a3b49;
+  --st-mute-soft: #eae3d2;
+  --st-seal: #c9a961;
+
+  /* Django's own variables, re-pointed. */
+  --primary: #1b2e3c;
+  --secondary: #0e1f2c;
+  --accent: #fbbc04;
+  --primary-fg: #faf6ee;
+
+  --body-fg: #0e1f2c;
+  --body-bg: #f4efe6;
+  --body-quiet-color: #616c79;
+  --body-medium-color: #2a3b49;
+  --body-loud-color: #0e1f2c;
+
+  --header-color: #d7cfbf;
+  --header-branding-color: #fbbc04;
+  --header-bg: #0e1f2c;
+  --header-link-color: #faf6ee;
+
+  --breadcrumbs-fg: #c2cdd5;
+  --breadcrumbs-link-fg: #faf6ee;
+  --breadcrumbs-bg: #1b2e3c;
+
+  --link-fg: #1b4477;
+  --link-hover-color: #102a4c;
+  --link-selected-fg: #0e1f2c;
+
+  --hairline-color: rgba(14, 31, 44, .12);
+  --border-color: rgba(14, 31, 44, .22);
+
+  --error-fg: #8c2b20;
+
+  --message-success-bg: #e6f2ef;
+  --message-warning-bg: #fdf5e2;
+  --message-error-bg: #fcedeb;
+
+  --darkened-bg: #ece5da;
+  --selected-bg: #e6ddcc;
+  --selected-row: #fff0c2;
+
+  --button-fg: #faf6ee;
+  --button-bg: #1b2e3c;
+  --button-hover-bg: #0e1f2c;
+  --default-button-bg: #0e5a4f;
+  --default-button-hover-bg: #0a4a40;
+  --close-button-bg: #616c79;
+  --close-button-hover-bg: #2a3b49;
+  --delete-button-bg: #8c2b20;
+  --delete-button-hover-bg: #6e2116;
+
+  --object-tools-fg: #0e1f2c;
+  --object-tools-bg: #e0cb9b;
+  --object-tools-hover-bg: #c9a961;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="auto"] {
+    --st-ink: #f2eee6;
+    --st-paper: #11212c;
+    --st-paper-sunken: #0d1b25;
+    --st-hairline: rgba(255, 255, 255, .16);
+    --st-ok: #4fa697;
+    --st-ok-soft: #0e332c;
+    --st-wait: #f6dfa4;
+    --st-wait-soft: #352706;
+    --st-attn: #f4b48d;
+    --st-attn-soft: #3a1e0e;
+    --st-bad: #f2bdb6;
+    --st-bad-soft: #361310;
+    --st-info: #b6d0eb;
+    --st-info-soft: #10243b;
+    --st-mute: #c2cdd5;
+    --st-mute-soft: #1b2c38;
+
+    --body-bg: #091620;
+    --body-fg: #f2eee6;
+    --body-quiet-color: #93a0ab;
+    --body-medium-color: #c2cdd5;
+    --body-loud-color: #ffffff;
+    --header-bg: #06101a;
+    --breadcrumbs-bg: #11212c;
+    --darkened-bg: #11212c;
+    --selected-bg: #172a37;
+    --selected-row: #3a2c05;
+    --hairline-color: rgba(255, 255, 255, .10);
+    --border-color: rgba(255, 255, 255, .22);
+    --link-fg: #8fb6e4;
+    --link-hover-color: #b6d0eb;
+    --message-success-bg: #0e332c;
+    --message-warning-bg: #352706;
+    --message-error-bg: #361310;
+    --object-tools-bg: #a88842;
+    --object-tools-fg: #0e1f2c;
+  }
+}
+
+html[data-theme="dark"] {
+  --st-ink: #f2eee6;
+  --st-paper: #11212c;
+  --st-paper-sunken: #0d1b25;
+  --st-hairline: rgba(255, 255, 255, .16);
+  --st-ok: #4fa697;
+  --st-ok-soft: #0e332c;
+  --st-wait: #f6dfa4;
+  --st-wait-soft: #352706;
+  --st-attn: #f4b48d;
+  --st-attn-soft: #3a1e0e;
+  --st-bad: #f2bdb6;
+  --st-bad-soft: #361310;
+  --st-info: #b6d0eb;
+  --st-info-soft: #10243b;
+  --st-mute: #c2cdd5;
+  --st-mute-soft: #1b2c38;
+
+  --body-bg: #091620;
+  --body-fg: #f2eee6;
+  --header-bg: #06101a;
+  --breadcrumbs-bg: #11212c;
+  --darkened-bg: #11212c;
+  --selected-bg: #172a37;
+  --selected-row: #3a2c05;
+  --link-fg: #8fb6e4;
+  --link-hover-color: #b6d0eb;
+  --message-success-bg: #0e332c;
+  --message-warning-bg: #352706;
+  --message-error-bg: #361310;
+  --object-tools-bg: #a88842;
+  --object-tools-fg: #0e1f2c;
+}
+
+/* --------------------------------------------------------------------------
+   2. Shell
+   -------------------------------------------------------------------------- */
+
+#header { padding: 12px 40px; }
+
+#site-name a {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  text-decoration: none;
+}
+
+.st-brand-seal {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e8763a;
+  box-shadow: 0 0 0 2px var(--st-seal);
+  color: #0e1f2c;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.st-brand-name {
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.15rem;
+  letter-spacing: -.01em;
+}
+
+/* Page titles read as the one serif on the screen. Everything else stays in
+   the system UI face, which is what a dense table wants. */
+#content h1, .module h2, #content-main > .module caption {
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+}
+#content h1 { font-weight: 600; letter-spacing: -.01em; }
+
+div.breadcrumbs { padding: 10px 40px; font-size: .78rem; letter-spacing: .01em; }
+
+/* No `overflow: hidden` here: Django's changelist relies on the results table
+   being able to spill under the filter rail, and clipping it silently truncates
+   a date column instead of scrolling it. */
+.module { border-radius: 8px; border: 1px solid var(--st-hairline); }
+#changelist .results { overflow-x: auto; }
+.module caption, .module h2 { letter-spacing: .01em; }
+
+/* --------------------------------------------------------------------------
+   3. Result tables — density and scanning
+   -------------------------------------------------------------------------- */
+
+#changelist table { font-variant-numeric: tabular-nums; }
+#changelist table thead th {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#changelist table tbody td, #changelist table tbody th { padding: 8px 10px; }
+#changelist tbody tr:hover > * { background: var(--selected-bg); }
+
+/* An id column is a reference, not prose. */
+#changelist table tbody th a, #changelist .field-id, #changelist .field-public_reference {
+  font-variant-numeric: tabular-nums;
+}
+
+#changelist-filter { border-inline-start: 1px solid var(--st-hairline); }
+
+/* --------------------------------------------------------------------------
+   4. Status chips
+   -------------------------------------------------------------------------- */
+
+.st-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: .72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.st-ok { background: var(--st-ok-soft); color: var(--st-ok); border-color: color-mix(in srgb, var(--st-ok) 28%, transparent); }
+.st-wait { background: var(--st-wait-soft); color: var(--st-wait); border-color: color-mix(in srgb, var(--st-wait) 28%, transparent); }
+.st-attn { background: var(--st-attn-soft); color: var(--st-attn); border-color: color-mix(in srgb, var(--st-attn) 34%, transparent); }
+.st-bad { background: var(--st-bad-soft); color: var(--st-bad); border-color: color-mix(in srgb, var(--st-bad) 30%, transparent); }
+.st-info { background: var(--st-info-soft); color: var(--st-info); border-color: color-mix(in srgb, var(--st-info) 28%, transparent); }
+.st-mute { background: var(--st-mute-soft); color: var(--st-mute); border-color: var(--st-hairline); }
+
+/* --------------------------------------------------------------------------
+   5. Money
+   -------------------------------------------------------------------------- */
+
+.st-money {
+  display: inline-block;
+  min-width: 5.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+/* The amount that carries the consequence of the row. */
+.st-money-lead { font-weight: 700; color: var(--body-loud-color); }
+
+td .st-money, th .st-money { width: 100%; }
+
+/* --------------------------------------------------------------------------
+   6. Irreversible actions
+   -------------------------------------------------------------------------- */
+
+.submit-row input[name="_delete"],
+.deletelink, .deletelink-box a, a.deletelink {
+  background: var(--delete-button-bg);
+  color: #fff;
+  font-weight: 700;
+}
+.delete-confirmation #content h1 { color: var(--st-bad); }
+.delete-confirmation .module { border-color: var(--st-bad); }
+
+/* A read-only financial page should say so rather than merely lack buttons. */
+.st-readonly-note {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px dashed var(--st-attn);
+  border-radius: 8px;
+  background: var(--st-attn-soft);
+  color: var(--st-attn);
+  font-size: .82rem;
+}
+
+/* --------------------------------------------------------------------------
+   7. Messages and focus
+   -------------------------------------------------------------------------- */
+
+ul.messagelist li { border-radius: 6px; }
+
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid #2a62a6;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+/* --------------------------------------------------------------------------
+   8. The dashboard queue panel
+   --------------------------------------------------------------------------
+   Density over decoration: nine rows, each a number, a name and a link. The
+   count is set large because the count is what is being scanned; the tone is a
+   second signal behind the number, never the only one — a queue at zero is
+   muted rather than green, so "nothing to do" and "not checked" cannot be
+   confused. */
+
+/* Django caps the dashboard column at 600px, which was right when the page
+   was only a directory. The queue panel is the first thing on it now and reads
+   as a row of tiles, so the column is allowed to use the screen — the sidebar
+   still hangs off the right on its own negative margin. */
+.dashboard #content { width: auto; max-width: 1080px; }
+
+.st-attention {
+  margin-bottom: 24px;
+  border: 1px solid var(--st-hairline);
+  border-radius: 8px;
+  background: var(--st-paper);
+  overflow: hidden;
+}
+
+.st-attention-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  background: var(--header-bg);
+  color: var(--header-link-color);
+}
+.st-attention-head h2 {
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: var(--header-link-color);
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  text-transform: none;
+}
+.st-attention-summary { margin: 0; color: var(--breadcrumbs-fg); font-size: .8rem; }
+.st-attention-raised { color: var(--accent); font-weight: 700; }
+
+.st-attention-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--st-paper);
+}
+/* Separators are drawn by the cells, not by a gap over a coloured backing: a
+   gap leaves the backing showing wherever the last row is short of a full
+   set, which reads as a tenth, empty queue. */
+.st-attention-row {
+  margin: 0;
+  list-style: none;
+  background: var(--st-paper);
+  border-block-start: 1px solid var(--st-hairline);
+  border-inline-end: 1px solid var(--st-hairline);
+}
+.st-attention-row::marker { content: ""; }
+.st-attention-row a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
+  padding: 12px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.st-attention-row a:hover { background: var(--selected-bg); }
+.st-attention-count {
+  grid-row: span 2;
+  align-self: center;
+  min-width: 1.6em;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--body-quiet-color);
+}
+.st-attention-label { font-weight: 700; font-size: .88rem; color: var(--body-loud-color); }
+.st-attention-hint { font-size: .78rem; color: var(--body-quiet-color); }
+
+.st-attention-bad .st-attention-count { color: var(--st-bad); }
+.st-attention-attn .st-attention-count { color: var(--st-attn); }
+.st-attention-bad { box-shadow: inset 3px 0 0 var(--st-bad); }
+.st-attention-attn { box-shadow: inset 3px 0 0 var(--st-attn); }
+
+.st-attention .st-readonly-note {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--st-hairline);
+  border-radius: 0;
+  background: var(--st-paper-sunken);
+  color: var(--body-quiet-color);
+  font-size: .76rem;
+}
+
+/* --------------------------------------------------------------------------
+   9. Key-value readings (settings revision)
+   -------------------------------------------------------------------------- */
+
+.st-keyvalues {
+  width: 100%;
+  margin: 0 0 14px;
+  border-collapse: collapse;
+  font-size: .84rem;
+}
+.st-keyvalues thead th {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--body-quiet-color);
+}
+.st-keyvalues tbody th {
+  width: 34%;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--st-hairline);
+  font-weight: 600;
+  text-align: left;
+}
+.st-keyvalues tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--st-hairline);
+  font-variant-numeric: tabular-nums;
+}
+.st-keyvalues code { font-size: .76rem; color: var(--body-quiet-color); }
+.st-keyvalues-note { margin: 0; color: var(--body-quiet-color); font-size: .78rem; }
+
+.st-confirm-list { margin: 0; padding: 10px 16px 16px 34px; }
+.st-confirm-list li { padding: 3px 0; }

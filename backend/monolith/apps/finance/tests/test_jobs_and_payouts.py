@@ -50,9 +50,7 @@ def _enable_mock():
     settings_version = get_active_business_settings()
     policy = deepcopy(settings_version.policy)
     policy["payments"]["providers"]["mock_enabled"] = True
-    BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(
-        policy=policy
-    )
+    BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(policy=policy)
 
 
 class ScheduledJobTests(TestCase):
@@ -161,6 +159,15 @@ class ScheduledJobTests(TestCase):
         row = ScheduledJob.objects.get(key="unknown-kind")
         assert row.status == ScheduledJob.Status.FAILED
         assert "No handler" in row.last_error
+
+    def test_disabled_email_does_not_discharge_the_durable_job(self):
+        with (
+            patch(
+                "apps.notifications.outbox.dispatch_message", return_value="disabled"
+            ),
+            self.assertRaises(jobs.JobFailed, msg="transactional email is disabled"),
+        ):
+            jobs.handle_outbound_message({"message_id": 1})
 
     def test_a_worker_that_died_mid_run_has_its_job_returned_to_the_queue(self):
         job = schedule_job(
@@ -280,6 +287,21 @@ class ScheduledJobTests(TestCase):
             status=ScheduledJob.Status.PENDING,
         ).exists()
 
+    def test_cancelling_after_payment_is_a_noop_without_a_refund_obligation(self):
+        from apps.finance.services import cancel_order
+
+        attempt = pay_order_with_mock(self.client, self.order)
+        self.order.refresh_from_db()
+        assert attempt.status == PaymentAttempt.Status.SUCCEEDED
+        assert self.order.status == PaymentOrder.Status.PAID
+
+        cancel_order(order_id=self.order.pk, reason="lost_race")
+
+        self.order.refresh_from_db()
+        assert self.order.cancelled_at is None
+        assert self.order.status == PaymentOrder.Status.PAID
+        assert not PaymentRefund.objects.filter(attempt=attempt).exists()
+
 
 class PayoutCapabilityTests(TestCase):
     def setUp(self):
@@ -335,11 +357,14 @@ class PayoutCapabilityTests(TestCase):
             is_default=True,
         )
 
-        with patch(
-            "apps.finance.providers.StripeGateway.is_configured", return_value=True
-        ), patch(
-            "apps.finance.providers.StripeGateway.payout_capability",
-            return_value=PayoutCapability(available=True, account_id="acct_live_1"),
+        with (
+            patch(
+                "apps.finance.providers.StripeGateway.is_configured", return_value=True
+            ),
+            patch(
+                "apps.finance.providers.StripeGateway.payout_capability",
+                return_value=PayoutCapability(available=True, account_id="acct_live_1"),
+            ),
         ):
             method, reason = resolve_payout_method(
                 traveler_id=self.scenario.traveler.pk,
@@ -360,12 +385,15 @@ class PayoutCapabilityTests(TestCase):
             is_default=True,
         )
 
-        with patch(
-            "apps.finance.providers.StripeGateway.is_configured", return_value=True
-        ), patch(
-            "apps.finance.providers.StripeGateway.payout_capability",
-            return_value=PayoutCapability(
-                available=False, reason="capability_inactive"
+        with (
+            patch(
+                "apps.finance.providers.StripeGateway.is_configured", return_value=True
+            ),
+            patch(
+                "apps.finance.providers.StripeGateway.payout_capability",
+                return_value=PayoutCapability(
+                    available=False, reason="capability_inactive"
+                ),
             ),
         ):
             method, reason = resolve_payout_method(
@@ -610,6 +638,9 @@ class ManualRefundSettlementTests(TestCase):
     def setUp(self):
         _enable_mock()
         self.scenario = build_scenario(prefix="manual-refund")
+        from apps.admin_panel.permissions import AdminRole, assign_admin_roles
+
+        assign_admin_roles(self.scenario.admin, (AdminRole.FINANCE,))
         self.scenario.accept(reward_eur_cents=3_200)
         self.order = self.scenario.balance_order()
         self.attempt = pay_order_with_mock(self.client, self.order)
@@ -676,6 +707,22 @@ class ManualRefundSettlementTests(TestCase):
             status=ScheduledJob.Status.SUCCEEDED,
         ).exists()
 
+    def test_an_unprivileged_staff_user_cannot_settle_a_refund(self):
+        from apps.finance.tests.factories import make_user
+
+        refund = self._pending_refund()
+        staff = make_user("manual-refund-unprivileged@example.com", is_staff=True)
+
+        response = self._client(staff).post(
+            reverse("finance-admin-refund-settle", args=[refund.pk]),
+            {"settlement_reference": "BANK-OUT-DENIED"},
+            format="json",
+        )
+
+        assert response.status_code == 403
+        refund.refresh_from_db()
+        assert refund.status == PaymentRefund.Status.PENDING
+
     def test_settlement_writes_exactly_one_ledger_refund(self):
         from apps.finance.models import LedgerTransaction
 
@@ -723,7 +770,11 @@ class ManualRefundSettlementTests(TestCase):
     def test_only_staff_may_settle_a_refund(self):
         refund = self._pending_refund()
 
-        for user in (self.scenario.sender, self.scenario.traveler, self.scenario.outsider):
+        for user in (
+            self.scenario.sender,
+            self.scenario.traveler,
+            self.scenario.outsider,
+        ):
             response = self._client(user).post(
                 reverse("finance-admin-refund-settle", args=[refund.pk]),
                 {"settlement_reference": "X"},

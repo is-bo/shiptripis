@@ -1,20 +1,22 @@
 from django.contrib import admin
-from django.http import JsonResponse
 from django.urls import include, path
+
+from apps.core.health import healthz, readyz
 
 admin.site.site_header = "ShipTrip Operations"
 admin.site.site_title = "ShipTrip Admin"
 admin.site.index_title = "Operations dashboard"
 
 
-def healthz(_request):
-    return JsonResponse({"status": "ok"})
-
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz", healthz),
+    path("readyz", readyz),
     path("api/", include("apps.accounts.urls")),
+    # The Phase 6A least-privilege operations surface owns every /api/admin/*
+    # route. Mount it before historical domain compatibility routes so a
+    # duplicate legacy path can never shadow granular permissions/auditing.
+    path("api/", include("apps.admin_panel.urls")),
     path("api/", include("apps.trips.urls")),
     path("api/", include("apps.locations.urls")),
     path("api/", include("apps.routing.urls")),
@@ -36,5 +38,4 @@ urlpatterns = [
     path("api/", include("apps.verification.urls")),
     path("api/", include("apps.notifications.urls")),
     path("api/", include("apps.chat.urls")),
-    path("api/", include("apps.admin_panel.urls")),
 ]

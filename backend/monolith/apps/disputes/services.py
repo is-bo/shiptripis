@@ -379,8 +379,22 @@ def open_dispute(
             },
             actor_id=actor_id,
         )
+        _cancel_protection_ending_reminders(aggregate)
         _notify_opened(aggregate, dispute)
     return dispute
+
+
+def _cancel_protection_ending_reminders(aggregate: LockedLifecycleAggregate) -> None:
+    """A dispute supersedes the still-open protection-window reminder."""
+
+    from apps.notifications.outbox import cancel_message
+
+    deal = aggregate.deal
+    for user_id in (deal.sender_id, deal.traveler_id):
+        cancel_message(
+            key=f"protection_ending:{deal.pk}:{user_id}:v1",
+            reason="superseded by an open dispute",
+        )
 
 
 def _notify_opened(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> None:
@@ -1412,7 +1426,7 @@ def _notify_resolved(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> N
     context = {
         "deal_reference": f"ST-{deal.pk}",
         "dispute_reference": f"DSP-{dispute.pk}",
-        "resolution_label": dispute.get_resolution_display(),
+        "resolution": dispute.resolution,
     }
     for user_id, email in (
         (deal.sender_id, getattr(deal.sender, "email", "")),

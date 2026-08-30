@@ -19,7 +19,10 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../domain/transport_mode.dart';
 import '../tokens.dart';
+
+export '../../domain/transport_mode.dart' show TransportMode;
 
 enum StatusTone { progress, action, waiting, good, bad, neutral }
 
@@ -162,23 +165,9 @@ class StatusDot extends StatelessWidget {
   );
 }
 
-/// Transport mode. Flight and drive are distinguished by icon and word first;
-/// the colour difference is a third signal.
-enum TransportMode {
-  flight,
-  drive,
-  unknown;
-
-  static TransportMode parse(Object? raw) {
-    // The API sends these uppercase, unlike every other enum in the domain.
-    final text = raw is String ? raw.toUpperCase() : '';
-    return switch (text) {
-      'FLIGHT' => TransportMode.flight,
-      'DRIVE' => TransportMode.drive,
-      _ => TransportMode.unknown,
-    };
-  }
-
+/// Icon for a transport mode. The enum itself lives in `domain/transport_mode.dart`
+/// so models can parse it without importing widgets; the glyph belongs here.
+extension TransportModeIcon on TransportMode {
   IconData get icon => switch (this) {
     TransportMode.flight => Icons.flight_takeoff_rounded,
     TransportMode.drive => Icons.directions_car_filled_rounded,

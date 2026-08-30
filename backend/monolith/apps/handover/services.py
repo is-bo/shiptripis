@@ -28,6 +28,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -359,10 +360,13 @@ def _arm_recipient_notification(
         to_email=recipient.email,
         deal_id=deal.pk,
         secret_ref=f"handover_code:{code.pk}",
+        language=recipient.communication_language,
         context={
             "recipient_name": recipient.full_name,
             "deal_reference": f"ST-{deal.pk}",
-            "sender_name": getattr(deal.sender, "full_name", "") or "Your sender",
+            # Leave a missing name blank so the final renderer can translate
+            # its own "Your sender" fallback in the snapshotted locale.
+            "sender_name": getattr(deal.sender, "full_name", ""),
         },
         max_attempts=12,
     )
@@ -997,6 +1001,27 @@ def _notify_delivery_confirmed(aggregate: LockedLifecycleAggregate) -> None:
             deal_id=deal.pk,
             context=context,
         )
+        reminder_seconds = max(
+            0,
+            int(getattr(settings, "PROTECTION_ENDING_REMINDER_SECONDS", 86_400)),
+        )
+        if deal.protection_ends_at and reminder_seconds:
+            reminder_at = deal.protection_ends_at - timedelta(
+                seconds=reminder_seconds
+            )
+            if reminder_at > timezone.now():
+                enqueue_message(
+                    kind=OutboundMessage.Kind.PROTECTION_ENDING,
+                    key=f"protection_ending:{deal.pk}:{user_id}:v1",
+                    to_email=email,
+                    recipient_user_id=user_id,
+                    deal_id=deal.pk,
+                    run_at=reminder_at,
+                    context={
+                        **context,
+                        "reminder_seconds": reminder_seconds,
+                    },
+                )
         # The review window opens at the same moment, so the invitation goes
         # out with the confirmation rather than waiting for a separate sweep.
         enqueue_message(

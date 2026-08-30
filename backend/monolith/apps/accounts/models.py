@@ -4,8 +4,10 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractUser
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
+
+from apps.core.languages import CommunicationLanguage
 
 from .wilayas import WILAYA_CHOICES
 
@@ -22,6 +24,16 @@ class User(AbstractUser):
     phone = models.CharField(max_length=32, blank=True, db_index=True)
     wilaya = models.CharField(max_length=2, choices=WILAYA_CHOICES, blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.BOTH)
+    preferred_language = models.CharField(
+        max_length=2,
+        choices=CommunicationLanguage.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Durable communication preference. Blank is a legacy/unselected "
+            "value and resolves to English when an outbound message is queued."
+        ),
+    )
 
     is_phone_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)
@@ -99,14 +111,20 @@ class PasswordResetCode(models.Model):
         )
 
     def verify(self, plaintext: str) -> bool:
-        if not self.is_active():
-            return False
-        ok = check_password(plaintext, self.code_hash)
-        self.attempts += 1
-        if ok:
-            self.used_at = timezone.now()
-        self.save(update_fields=("attempts", "used_at"))
-        return ok
+        # The attempt budget is a security boundary. Refetch under a row lock
+        # so concurrent guesses cannot both observe the same remaining slot.
+        with transaction.atomic():
+            current = type(self).objects.select_for_update().get(pk=self.pk)
+            if not current.is_active():
+                return False
+            ok = check_password(plaintext, current.code_hash)
+            current.attempts += 1
+            if ok:
+                current.used_at = timezone.now()
+            current.save(update_fields=("attempts", "used_at"))
+            self.attempts = current.attempts
+            self.used_at = current.used_at
+            return ok
 
 
 class EmailVerificationCode(models.Model):
@@ -147,11 +165,15 @@ class EmailVerificationCode(models.Model):
         )
 
     def verify(self, plaintext: str) -> bool:
-        if not self.is_active():
-            return False
-        ok = check_password(plaintext, self.code_hash)
-        self.attempts += 1
-        if ok:
-            self.used_at = timezone.now()
-        self.save(update_fields=("attempts", "used_at"))
-        return ok
+        with transaction.atomic():
+            current = type(self).objects.select_for_update().get(pk=self.pk)
+            if not current.is_active():
+                return False
+            ok = check_password(plaintext, current.code_hash)
+            current.attempts += 1
+            if ok:
+                current.used_at = timezone.now()
+            current.save(update_fields=("attempts", "used_at"))
+            self.attempts = current.attempts
+            self.used_at = current.used_at
+            return ok

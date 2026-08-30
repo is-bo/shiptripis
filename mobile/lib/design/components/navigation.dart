@@ -107,7 +107,11 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
-    final tint = isSelected ? c.brand : c.textTertiary;
+    // Ink on sun when selected. The original ShipTrip bar marked the current
+    // destination with a sun-filled lozenge under the glyph, and it is the
+    // one place the accent appears on every screen — which is what made the
+    // colour read as the app's rather than as one screen's.
+    final tint = isSelected ? c.onAccent : c.textTertiary;
 
     return Semantics(
       button: true,
@@ -135,8 +139,17 @@ class _NavItem extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected ? c.brandSoft : Colors.transparent,
+                      color: isSelected ? c.accent : Colors.transparent,
                       borderRadius: AppRadius.rPill,
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: c.accent.withValues(alpha: 0.35),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Icon(
                       isSelected ? destination.selectedIcon : destination.icon,
@@ -161,7 +174,10 @@ class _NavItem extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: text.labelSmall?.copyWith(
-                    color: tint,
+                    // Not `tint`: the label is on the bar, not on the sun
+                    // lozenge, so it takes ink rather than the on-accent
+                    // colour.
+                    color: isSelected ? c.textPrimary : c.textTertiary,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                   ),
                 ),
@@ -251,13 +267,16 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
     return AppBar(
       automaticallyImplyLeading: false,
-      leading: leading ??
+      leading:
+          leading ??
           (showBack
               ? AppIconButton(
                   // Directional: mirrors in Arabic, where "back" is the other
                   // way round.
                   icon: Icons.arrow_back_rounded,
-                  label: backLabel ?? MaterialLocalizations.of(context).backButtonTooltip,
+                  label:
+                      backLabel ??
+                      MaterialLocalizations.of(context).backButtonTooltip,
                   onPressed: onBack ?? () => Navigator.of(context).maybePop(),
                 )
               : null),

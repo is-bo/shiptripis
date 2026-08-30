@@ -19,7 +19,7 @@ class ShipTripApp extends ConsumerWidget {
     // The theme is locale-dependent: Arabic swaps the whole type stack rather
     // than falling back glyph-by-glyph, so it has to be rebuilt when the
     // language changes.
-    final resolved = locale ?? ref.watch(effectiveLocaleProvider);
+    final Locale resolved = locale ?? ref.watch(effectiveLocaleProvider);
 
     return MaterialApp.router(
       title: 'ShipTrip',

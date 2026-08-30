@@ -424,6 +424,8 @@ class ChargilyAvailabilityTests(TestCase):
     def _policy(self, mutate) -> Phase3Policy:
         settings_version = get_active_business_settings()
         policy = deepcopy(settings_version.policy)
+        policy["payments"]["providers"]["chargily_enabled"] = True
+        policy["payments"]["chargily"]["new_checkouts_enabled"] = True
         mutate(policy)
         settings_version.policy = policy
         return Phase3Policy.from_settings(settings_version)
@@ -440,9 +442,7 @@ class ChargilyAvailabilityTests(TestCase):
 
     def test_disabling_the_provider_entirely_refuses_a_new_checkout(self):
         policy = self._policy(
-            lambda p: p["payments"]["providers"].__setitem__(
-                "chargily_enabled", False
-            )
+            lambda p: p["payments"]["providers"].__setitem__("chargily_enabled", False)
         )
 
         with self.assertRaises(ProviderDisabled):
@@ -461,15 +461,18 @@ class ChargilyAvailabilityTests(TestCase):
             {
                 "id": "evt_after_disable",
                 "type": "checkout.paid",
-                "data": {"id": "c9", "status": "paid", "amount": 100, "currency": "dzd"},
+                "data": {
+                    "id": "c9",
+                    "status": "paid",
+                    "amount": 100,
+                    "currency": "dzd",
+                },
             },
             separators=(",", ":"),
         ).encode("utf-8")
         parsed = ChargilyGateway(
             secret_key=SECRET, webhook_secret=SECRET, session=_FakeSession([])
-        ).parse_webhook(
-            raw_body=body, headers={"signature": chargily_signature(body)}
-        )
+        ).parse_webhook(raw_body=body, headers={"signature": chargily_signature(body)})
 
         assert parsed.outcome == "succeeded"
 
@@ -522,6 +525,13 @@ class ChargilyRateDisplayTests(TestCase):
     def test_the_provider_list_publishes_the_active_rate(self):
         from rest_framework.test import APIClient
 
+        settings_version = get_active_business_settings()
+        policy = deepcopy(settings_version.policy)
+        policy["payments"]["providers"]["chargily_enabled"] = True
+        policy["payments"]["chargily"]["new_checkouts_enabled"] = True
+        BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(
+            policy=policy
+        )
         scenario = build_scenario(prefix="rate-display")
         client = APIClient()
         client.force_authenticate(user=scenario.sender)

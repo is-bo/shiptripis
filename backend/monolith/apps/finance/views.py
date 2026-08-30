@@ -23,10 +23,11 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import status as http
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
@@ -34,6 +35,8 @@ from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.permissions import CanSettlePayouts
+from apps.admin_panel.permissions import CanIssueRefunds, CanSettleManualRefunds
+from apps.admin_panel.services import record_admin_action
 from apps.deals.models import Deal
 from apps.parcels.models import DeliveryRequest
 
@@ -47,6 +50,7 @@ from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError, available_providers
 from .serializers import (
     CheckoutCreateSerializer,
+    GuestCheckoutCreateSerializer,
     GuestLinkCreateSerializer,
     ManualPayoutCompleteSerializer,
     ManualRefundSettleSerializer,
@@ -257,6 +261,9 @@ class GuestLinkCreateView(APIView):
                 order_id=order.pk,
                 actor_id=request.user.id,
                 label=serializer.validated_data.get("label", ""),
+                communication_language=serializer.validated_data.get(
+                    "communication_language"
+                ),
             )
         except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return _finance_error_response(exc)
@@ -266,6 +273,7 @@ class GuestLinkCreateView(APIView):
                 "expires_at": issued.link.expires_at,
                 "amount_eur_cents": order.outstanding_eur_cents,
                 "currency": "EUR",
+                "communication_language": issued.link.communication_language,
             },
             status=http.HTTP_201_CREATED,
         )
@@ -314,7 +322,7 @@ class GuestCheckoutView(APIView):
     throttle_classes = (GuestPaymentThrottle,)
 
     def post(self, request: Request, token: str) -> Response:
-        serializer = CheckoutCreateSerializer(data=request.data)
+        serializer = GuestCheckoutCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
             link = resolve_guest_link(token)
@@ -323,6 +331,7 @@ class GuestCheckoutView(APIView):
                 provider=serializer.validated_data["provider"],
                 actor_id=None,
                 guest_link=link,
+                guest_email=serializer.validated_data["email"],
             )
         except (FinanceError, ProviderError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return _finance_error_response(exc)
@@ -511,7 +520,7 @@ class AdminManualPayoutView(APIView):
 class AdminRefundView(APIView):
     """Administrative refund against one captured attempt."""
 
-    permission_classes = (IsAdminUser,)
+    permission_classes = (CanIssueRefunds,)
 
     def post(self, request: Request, reference: str) -> Response:
         serializer = RefundRequestSerializer(data=request.data)
@@ -519,17 +528,28 @@ class AdminRefundView(APIView):
         data = serializer.validated_data
         order = get_object_or_404(PaymentOrder, public_reference=reference)
         try:
-            refund = request_refund(
-                order_id=order.pk,
-                attempt_id=data["attempt_id"],
-                amount_eur_cents=data["amount_eur_cents"],
-                reason=data["reason"],
-                requested_by_id=request.user.id,
-                idempotency_key=(
-                    f"admin_refund:order:{order.pk}:attempt:{data['attempt_id']}"
-                    f":{data['amount_eur_cents']}"
-                ),
-            )
+            with transaction.atomic():
+                refund = request_refund(
+                    order_id=order.pk,
+                    attempt_id=data["attempt_id"],
+                    amount_eur_cents=data["amount_eur_cents"],
+                    reason=data["reason"],
+                    requested_by_id=request.user.id,
+                    idempotency_key=(
+                        f"admin_refund:order:{order.pk}:attempt:{data['attempt_id']}"
+                        f":{data['amount_eur_cents']}"
+                    ),
+                )
+                record_admin_action(
+                    actor=request.user,
+                    action="refund.requested",
+                    target=refund,
+                    after={
+                        "status": refund.status,
+                        "amount_eur_cents": refund.amount_eur_cents,
+                    },
+                    reason=data["reason"],
+                )
         except PaymentAttempt.DoesNotExist:
             return Response(
                 {"code": "attempt_not_found", "detail": "No such payment attempt."},
@@ -562,22 +582,30 @@ class AdminRefundSettleView(APIView):
     refund that does not carry one.
     """
 
-    permission_classes = (IsAdminUser,)
+    permission_classes = (CanSettleManualRefunds,)
 
     def post(self, request: Request, pk: int) -> Response:
         serializer = ManualRefundSettleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            refund = settle_refund_manually(
-                refund_id=pk,
-                admin_actor_id=request.user.id,
-                settlement_reference=serializer.validated_data[
-                    "settlement_reference"
-                ],
-                settlement_note=serializer.validated_data.get(
-                    "settlement_note", ""
-                ),
-            )
+            with transaction.atomic():
+                refund = settle_refund_manually(
+                    refund_id=pk,
+                    admin_actor_id=request.user.id,
+                    settlement_reference=serializer.validated_data[
+                        "settlement_reference"
+                    ],
+                    settlement_note=serializer.validated_data.get(
+                        "settlement_note", ""
+                    ),
+                )
+                record_admin_action(
+                    actor=request.user,
+                    action="refund.manually_settled",
+                    target=refund,
+                    after={"status": refund.status},
+                    reference=refund.settlement_reference,
+                )
         except FinanceError as exc:
             return _finance_error_response(exc)
         order = PaymentOrder.objects.get(pk=refund.order_id)

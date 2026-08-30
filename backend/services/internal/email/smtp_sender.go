@@ -122,8 +122,14 @@ func (s *smtpSender) Send(ctx context.Context, p EmailPayload) error {
 }
 
 // buildMessage is the pure (no-network) half of Send — unit-testable without
-// an SMTP server. It sets From (with optional display name), To, Subject, and
-// a plaintext body. V1 is plaintext only (no HTML/attachments — §out of scope).
+// an SMTP server. It sets From (with optional display name), To, Subject and
+// the body.
+//
+// The plain-text part is always the primary body: a client that cannot render
+// HTML, a screen reader, and a spam filter all read that one, and Django built
+// both parts from the same document so they cannot disagree. The HTML part is
+// attached as an alternative only when Django supplied one; there is still no
+// templating on this side.
 func (s *smtpSender) buildMessage(p EmailPayload) (*mail.Msg, error) {
 	msg := mail.NewMsg()
 	if s.name != "" {
@@ -140,5 +146,8 @@ func (s *smtpSender) buildMessage(p EmailPayload) (*mail.Msg, error) {
 	}
 	msg.Subject(p.Subject)
 	msg.SetBodyString(mail.TypeTextPlain, p.Body)
+	if p.HTML != "" {
+		msg.AddAlternativeString(mail.TypeTextHTML, p.HTML)
+	}
 	return msg, nil
 }

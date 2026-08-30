@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // clearConfigEnv blanks every env var the loaders read so a test starts from a
@@ -17,6 +18,9 @@ func clearConfigEnv(t *testing.T) {
 		"DATABASE_URL", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER",
 		"POSTGRES_PASSWORD", "POSTGRES_DB",
 		"REDIS_URL", "JWT_HS256_SECRET",
+		"KYC_UPLOAD_USER_LIMIT", "KYC_UPLOAD_USER_WINDOW_SECONDS",
+		"KYC_UPLOAD_IP_LIMIT", "KYC_UPLOAD_IP_WINDOW_SECONDS",
+		"KYC_UPLOAD_CLIENT_IP_SOURCE",
 		"S3_ENDPOINT_URL", "S3_REGION", "S3_ACCESS_KEY", "S3_SECRET_KEY",
 		"S3_USE_PATH_STYLE",
 		"KYC_GRPC_TARGET", "GRPC_AUTH_MODE", "GRPC_BEARER_TOKEN",
@@ -110,6 +114,16 @@ func TestLoadPostgres_BadDatabaseURLError(t *testing.T) {
 	}
 }
 
+func TestLoadPostgres_RejectsWrongSchemeAndMissingDatabase(t *testing.T) {
+	for _, value := range []string{"https://db.example/shiptrip", "postgres://db.example"} {
+		clearConfigEnv(t)
+		t.Setenv("DATABASE_URL", value)
+		if _, err := LoadPostgres("CHAT_DB_MAX_CONNS", 10); err == nil {
+			t.Fatalf("expected validation error for %q", value)
+		}
+	}
+}
+
 func TestLoadPostgres_NonPositiveMaxConnsError(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DATABASE_URL", "postgres://u:pw@host:5432/d")
@@ -142,6 +156,78 @@ func TestLoadRedis(t *testing.T) {
 	}
 	if got.URL != "redis://redis:6379/0" {
 		t.Errorf("URL = %q", got.URL)
+	}
+}
+
+func TestLoadRedisRejectsNonRedisURL(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("REDIS_URL", "https://cache.example")
+	if _, err := LoadRedis(); err == nil {
+		t.Fatal("expected validation error for non-Redis URL")
+	}
+}
+
+func TestLoadKYCUploadRateLimitDefaults(t *testing.T) {
+	clearConfigEnv(t)
+	got, err := LoadKYCUploadRateLimit()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.UserLimit != 6 || got.UserWindow != time.Hour {
+		t.Errorf("user budget = %d/%s, want 6/1h", got.UserLimit, got.UserWindow)
+	}
+	if got.IPLimit != 0 || got.IPWindow != 0 || got.ClientIPSource != "" {
+		t.Errorf("ip budget must default disabled, got %+v", got)
+	}
+}
+
+func TestLoadKYCUploadRateLimitOverridesAndCanEnableIPWithExplicitSource(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("KYC_UPLOAD_USER_LIMIT", "8")
+	t.Setenv("KYC_UPLOAD_USER_WINDOW_SECONDS", "900")
+	t.Setenv("KYC_UPLOAD_IP_LIMIT", "30")
+	t.Setenv("KYC_UPLOAD_IP_WINDOW_SECONDS", "3600")
+	t.Setenv("KYC_UPLOAD_CLIENT_IP_SOURCE", "X-Real-IP")
+	got, err := LoadKYCUploadRateLimit()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.UserLimit != 8 || got.UserWindow != 15*time.Minute || got.IPLimit != 30 || got.IPWindow != time.Hour || got.ClientIPSource != "x-real-ip" {
+		t.Errorf("unexpected config: %+v", got)
+	}
+}
+
+func TestLoadKYCUploadRateLimitRejectsUnsafeShape(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, value string
+	}{
+		{name: "zero user limit", key: "KYC_UPLOAD_USER_LIMIT", value: "0"},
+		{name: "short user window", key: "KYC_UPLOAD_USER_WINDOW_SECONDS", value: "10"},
+		{name: "negative ip limit", key: "KYC_UPLOAD_IP_LIMIT", value: "-1"},
+		{name: "long ip window", key: "KYC_UPLOAD_IP_WINDOW_SECONDS", value: "86401"},
+		{name: "source while ip disabled", key: "KYC_UPLOAD_CLIENT_IP_SOURCE", value: "remote"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			t.Setenv(tc.key, tc.value)
+			if _, err := LoadKYCUploadRateLimit(); err == nil {
+				t.Fatalf("expected validation error for %s=%s", tc.key, tc.value)
+			}
+		})
+	}
+}
+
+func TestLoadKYCUploadRateLimitRequiresValidSourceWhenIPEnabled(t *testing.T) {
+	for _, source := range []string{"", "untrusted-header"} {
+		t.Run(source, func(t *testing.T) {
+			clearConfigEnv(t)
+			t.Setenv("KYC_UPLOAD_IP_LIMIT", "30")
+			t.Setenv("KYC_UPLOAD_IP_WINDOW_SECONDS", "3600")
+			t.Setenv("KYC_UPLOAD_CLIENT_IP_SOURCE", source)
+			if _, err := LoadKYCUploadRateLimit(); err == nil {
+				t.Fatalf("expected validation error for source %q", source)
+			}
+		})
 	}
 }
 

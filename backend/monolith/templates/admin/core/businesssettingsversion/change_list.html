@@ -1,0 +1,15 @@
+{% extends "admin/change_list.html" %}
+
+{% block content %}
+<p class="st-readonly-note">
+  <strong>Read-only.</strong> A settings revision is created and activated
+  through <code>POST /api/admin/settings</code>, which checks the Phase&nbsp;6A
+  <em>manage settings</em> capability, validates the policy, requires a reason
+  and writes an audit record. Activating a revision changes the snapshot taken
+  by <em>new</em> Deals, offers and payment orders only — commission, deposits,
+  pricing bands, FX, cancellation terms, the pickup buffer, the protection
+  window and boost packages already snapshotted on an existing Deal are not
+  rewritten.
+</p>
+{{ block.super }}
+{% endblock %}

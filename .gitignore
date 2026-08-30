@@ -27,6 +27,16 @@ build/
 .claude
 .agentbridge/
 docs/claude-sessions/*.jsonl
+graphify-out/
+**/graphify-out/
+
+# Generated Python/tool state
+__pycache__/
+**/__pycache__/
+
+# Local screenshot helper copied into the mobile font asset tree.
+/mobile/assets/fonts/tools/
+/mobile/l10n_untranslated.json
 
 # Local toolchain downloads (Flutter SDK fetched for verification runs)
 .codex-temp/

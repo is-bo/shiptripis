@@ -89,7 +89,10 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             # It found a traveler. The deposit is credited into the deal
             # balance, not refunded.
             return "request_matched"
-        if request_row.deadline_at is not None and request_row.deadline_at > timezone.now():
+        if (
+            request_row.deadline_at is not None
+            and request_row.deadline_at > timezone.now()
+        ):
             raise JobFailed("The request has not reached its deadline yet.")
         if request_row.status == ParcelRequest.Status.OPEN:
             request_row.status = ParcelRequest.Status.EXPIRED
@@ -189,9 +192,7 @@ def handle_provider_reconcile(payload: dict) -> str:
             try:
                 recover_checkout_attempt(attempt_id=attempt.pk)
             except ProviderError as exc:
-                raise JobFailed(
-                    f"checkout handle recovery failed: {exc.code}"
-                ) from exc
+                raise JobFailed(f"checkout handle recovery failed: {exc.code}") from exc
             attempt.refresh_from_db()
         if not attempt.provider_session_id:
             # Chargily does not expose a documented idempotent checkout-create
@@ -234,7 +235,9 @@ def handle_provider_event_process(payload: dict) -> str:
         return process_provider_event(event_id=event_id)
     except Exception as exc:
         _mark_event_retryable(event_id, exc)
-        raise JobFailed(f"provider event application failed: {type(exc).__name__}") from exc
+        raise JobFailed(
+            f"provider event application failed: {type(exc).__name__}"
+        ) from exc
 
 
 def handle_refund_reconcile(payload: dict) -> str:
@@ -408,6 +411,11 @@ def handle_outbound_message(payload: dict) -> str:
         raise JobFailed(
             f"outbound message dispatch failed: {type(exc).__name__}"
         ) from exc
+    if result == "disabled":
+        # Do not discharge the durable job while the operator kill switch is
+        # active. The message row stays pending and the normal retry/sweep path
+        # can carry it after an approved activation.
+        raise JobFailed("transactional email is disabled")
     return result
 
 

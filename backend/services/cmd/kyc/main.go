@@ -40,6 +40,7 @@ import (
 	"shiptrip/pkg/db"
 	"shiptrip/pkg/health"
 	"shiptrip/pkg/logger"
+	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/storage"
 )
 
@@ -85,6 +86,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	redisCfg, err := config.LoadRedis()
+	if err != nil {
+		return err
+	}
+	rateLimitCfg, err := config.LoadKYCUploadRateLimit()
+	if err != nil {
+		return err
+	}
 	grpcCfg, err := config.LoadKYCGRPC()
 	if err != nil {
 		return err
@@ -104,6 +113,20 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+
+	rdb, err := redisbus.NewClient(rootCtx, redisbus.Config{
+		URL:          redisCfg.URL,
+		Logger:       log,
+		PoolSize:     5,
+		MinIdleConns: 1,
+		DialTimeout:  2 * time.Second,
+		ReadTimeout:  750 * time.Millisecond,
+		WriteTimeout: 750 * time.Millisecond,
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
 
 	store, err := storage.New(rootCtx, storage.Config{
 		Endpoint:     s3Cfg.Endpoint,
@@ -137,16 +160,31 @@ func run() error {
 	}
 	defer func() { _ = recorder.Close() }()
 
+	limiter, err := kyc.NewRedisUploadRateLimiter(rdb, kyc.UploadRateLimitConfig{
+		UserLimit:  rateLimitCfg.UserLimit,
+		UserWindow: rateLimitCfg.UserWindow,
+		IPLimit:    rateLimitCfg.IPLimit,
+		IPWindow:   rateLimitCfg.IPWindow,
+	})
+	if err != nil {
+		return err
+	}
+
 	handler := &kyc.Handler{
-		Validator: validator,
-		Storage:   store,
-		Bucket:    bucket,
-		Recorder:  recorder,
-		Log:       log,
+		Validator:      validator,
+		Limiter:        limiter,
+		ClientIPSource: kyc.ClientIPSource(rateLimitCfg.ClientIPSource),
+		Storage:        store,
+		Bucket:         bucket,
+		Recorder:       recorder,
+		Log:            log,
 	}
 
 	healthH := health.New(health.Config{Logger: log})
 	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
+	healthH.Register("redis", func(ctx context.Context) error {
+		return rdb.SetEX(ctx, "healthz:kyc", "1", 5*time.Second)
+	})
 	healthH.Register("s3", func(ctx context.Context) error { return store.Ping(ctx, bucket) })
 
 	mux := http.NewServeMux()

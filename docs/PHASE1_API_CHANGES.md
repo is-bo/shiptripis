@@ -162,3 +162,25 @@ pre-computed. A redirect back from a provider is **not** payment success — pol
 the order or wait for the `payment.captured` event; `payment.failed` is a
 separate channel and a failure never travels on the capture channel.
 
+---
+
+# Phase 6C addendum — communication language
+
+All language inputs are explicit choices: `en`, `fr`, or `ar`. Unsupported
+values are rejected at the API edge. Historical blank User/recipient values
+resolve to English.
+
+| Contract | Addition |
+|---|---|
+| `POST /api/auth/sign-up` | Optional `preferred_language`; default `en`. |
+| `POST /api/auth/oauth/google` | Optional `preferred_language` for a newly created account; default `en`. Existing accounts keep their stored preference. |
+| `GET /api/me` | Returns resolved `preferred_language`. |
+| `PATCH /api/me` | Updates `preferred_language`; no other profile field becomes writable. |
+| `PUT /api/deals/{id}/recipient` | Optional `communication_language`. New recipients omitted by an older client snapshot the sender's preference; updates that omit it preserve the existing choice. |
+| `POST /api/payments/orders/{public_reference}/guest-link` | Optional `communication_language`; omission snapshots the owner's preference. The response returns the resolved value. |
+| `POST /api/payments/guest/{token}/checkout` | Adds guest receipt `email`. It is required when transactional email is enabled and grants no account or Deal authority. |
+
+The server snapshots the resolved locale onto every outbound obligation.
+Clients must not expect a queued email to change language after a later profile
+update.
+

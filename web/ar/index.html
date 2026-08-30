@@ -1,22 +1,610 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShipTrip — أرسل طرداً، واحمله في طريقك</title>
-  <meta name="description" content="يربط ShipTrip بين المرسلين والمسافرين الموثّقين بين أوروبا والجزائر. دفع محمي ومسارات متوافقة.">
-  <link rel="canonical" href="/ar/"><link rel="alternate" hreflang="en" href="/en/"><link rel="alternate" hreflang="fr" href="/fr/"><link rel="alternate" hreflang="ar" href="/ar/"><link rel="alternate" hreflang="x-default" href="/en/"><meta property="og:type" content="website"><meta property="og:title" content="ShipTrip — أرسل طرداً، واحمله في طريقك"><meta property="og:description" content="سوق طرود لمسارات أوروبا ↔ الجزائر."><meta property="og:url" content="/ar/"><meta property="og:site_name" content="ShipTrip"><link rel="stylesheet" href="/assets/site.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipTrip — أرسل طردك مع مسافر في طريقه</title>
+  <meta name="description" content="يجمع ShipTrip بين المرسلين والمسافرين الموثّقين على ممرّ أوروبا ↔ الجزائر. يبقى الدفع محجوزاً حتى تأكيد التسليم، وتبقى العناوين الدقيقة خاصة حتى تمويل الصفقة.">
+  <meta name="theme-color" content="#F4EFE6">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="canonical" href="/ar/">
+  <link rel="alternate" hreflang="en" href="/en/">
+  <link rel="alternate" hreflang="fr" href="/fr/">
+  <link rel="alternate" hreflang="ar" href="/ar/">
+  <link rel="alternate" hreflang="x-default" href="/en/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ShipTrip — أرسل طردك مع مسافر في طريقه">
+  <meta property="og:description" content="سوق طرود لمسارات أوروبا ↔ الجزائر.">
+  <meta property="og:url" content="/ar/">
+  <meta property="og:locale" content="ar">
+  <meta property="og:site_name" content="ShipTrip">
+  <link rel="preload" href="/assets/fonts/notosansarabic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/site.css">
 </head>
 <body>
-<!-- THESIS: لوحة المسار تشرح الآلية قبل الوعد؛ لا واجهة تطبيق عامة.
-OWN-WORLD: إرشادات سفر متوسطية بالأخضر واللازورد والطوبي على ورق دافئ، وخط مسار واحد يصل كل قسم.
-STORY: يفهم المرسل أو المسافر دوره وحواجز الأمان والخطوة التالية خلال دقيقة.
-FIRST VIEWPORT: العبارة الكبيرة يميناً، ولوحة باريس ← الجزائر ← جيجل يساراً، وزران للدورين أسفل العبارة.
-FORM: الاتجاه 6، دفتر المسار ولوحة الإرشاد؛ seed 7accc8d5.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md -->
-<a class="skip-link" href="#main">تخطّي إلى المحتوى</a><header class="site-header"><nav class="nav shell" aria-label="التنقل الرئيسي"><a class="brand" href="/ar/" aria-label="الصفحة الرئيسية ShipTrip"><span class="brand-mark" aria-hidden="true"><span>S</span></span> ShipTrip</a><div class="nav-links"><a href="#how">كيف يعمل</a><a href="#safety">الأمان</a><a href="#faq">الأسئلة</a><span class="language" aria-label="اللغة"><a href="/fr/">FR</a><a href="/ar/" aria-current="page">عربي</a><a href="/en/">EN</a></span><a class="button button-primary" href="#download">ابدأ الآن</a></div></nav></header>
-<main id="main"><section class="hero shell" aria-labelledby="hero-title"><div class="hero-grid"><div><p class="eyebrow">أوروبا ↔ الجزائر · توصيل فقط</p><h1 id="hero-title">في طريقك متّسع لطرد آخر.</h1><p class="hero-copy">يساعد ShipTrip المرسلين على إرسال طرودهم مع مسافر موثّق يسلك الطريق نفسه. شارك المسار، اتفقا على مكافأة عادلة، وابقَ الدفع محمياً حتى تأكيد التسليم.</p><div class="hero-actions"><a class="button button-primary" href="#sender">أريد إرسال طرد</a><a class="button button-quiet" href="#traveler">لدي مساحة للحمل</a></div></div><div class="route-board" aria-label="مثال لمسار من باريس إلى الجزائر ثم جيجل"><span class="route-stamp">رحلة واحدة · مرحلتان</span><span class="route-line" aria-hidden="true"></span><div class="route-stop one"><small>البداية</small><strong>باريس</strong></div><div class="route-stop two"><small>محطة</small><strong>الجزائر</strong></div><div class="route-stop three"><small>الوصول</small><strong>جيجل</strong></div><span class="route-mode flight">طيران</span><span class="route-mode drive">برّاً</span><p class="board-note">يمكن للمسافر عرض سعة في كل جزء ممكن من رحلته.</p></div></div></section>
-<section class="section section-tight" id="how" aria-labelledby="how-title"><div class="shell"><div class="section-head"><div><p class="eyebrow">تسليم بسيط</p><h2 id="how-title">المسار هو نقطة الالتقاء.</h2></div><p>يفحص ShipTrip المواعيد والسعة والمسافة والأمان قبل عرض الفرصة. أنت من يقرر بعدها.</p></div><div class="route-explainer"><div class="steps" aria-label="طريقة عمل ShipTrip"><div class="step"><span class="step-number">١</span><div><h3>شارك الحاجة أو الرحلة</h3><p>يضيف المرسل الطرد والمدن. ينشر المسافر مراحله وسعته المتاحة لكل مقطع.</p></div></div><div class="step"><span class="step-number">٢</span><div><h3>اعثر على مسار مناسب</h3><p>يقترح المرسل مكافأة المسافر. يتبادل الطرفان الأسئلة ويتفقان على الشروط.</p></div></div><div class="step"><span class="step-number">٣</span><div><h3>سلّم ثم أكّد</h3><p>تؤمّن رموز الاستلام والتسليم نقاط التسليم الفعلية. يصل رمز المستلم بعد مهلة الأمان.</p></div></div></div><div class="role-grid"><article class="role" id="sender"><h3>أرسل طرداً</h3><p>أنشئ طلباً، وادفع عربون النشر عند تفعيله، ثم قارن المسافرين المتوافقين. تبقى العناوين الدقيقة خاصة حتى تمويل الصفقة.</p><a href="#download">خطط للتوصيل <span aria-hidden="true">←</span></a></article><article class="role" id="traveler"><h3>احمل طروداً أثناء السفر</h3><p>وثّق هويتك، أضف طريقك وسعتك لكل مقطع، ثم اختر الطلبات التي تناسب الرحلة المخطط لها.</p><a href="#download">شارك رحلتك <span aria-hidden="true">←</span></a></article></div></div></div></section>
-<section class="section" id="safety" aria-labelledby="safety-title"><div class="shell"><div class="section-head"><div><p class="eyebrow">الثقة في التفاصيل</p><h2 id="safety-title">يقين أكبر عند كل محطة.</h2></div><p>تدعم فحوص الهوية والنقل أفراد السوق. لكنها لا تستبدل حكمك أو إجراءات الإبلاغ.</p></div><div class="trust-grid"><article class="trust-item"><h3>مسافرون موثّقون</h3><p>يلزم توثيق الهوية قبل ظهور الرحلة للمطابقة. وتحتاج رحلة الطيران إلى إثبات نقل معتمد.</p></article><article class="trust-item"><h3>عناوين خاصة</h3><p>قبل التمويل تظهر المدن والمناطق العامة فقط. تفتح التفاصيل الدقيقة بعد تمويل الصفقة.</p></article><article class="trust-item"><h3>دفع محمي</h3><p>تبقى الأموال معلّقة حتى تأكيد التسليم. وتجمّد المنازعة صرف مكافأة المسافر أثناء المراجعة.</p></article><article class="trust-item"><h3>تسليم واقعي</h3><p>تُستخدم رموز الاستلام والتسليم عند التسليم الفعلي. يصل رمز المستلم بعد مهلة أمان قدرها ٣٠ دقيقة.</p></article></div></div></section>
-<section class="section section-tight" aria-labelledby="fee-title"><div class="shell fee"><div><p class="eyebrow">اقتصاد واضح</p><h2 id="fee-title">تبقى مكافأة المسافر كاملة.</h2><p class="hero-copy">تُضاف عمولة ShipTrip فوق المكافأة المتفق عليها. السعر الأساسي باليورو؛ وقد يعرض Chargily مبلغاً بالدينار الجزائري يحسبه الخادم عند توفره.</p><p class="fineprint">تظهر مزوّجات الدفع عند تفعيلها. لا نعلن أي مزوّد نشطاً قبل اكتمال التفعيل.</p></div><table class="fee-table"><caption class="sr-only">مثال على رسوم ShipTrip</caption><thead><tr><th>مثال</th><th>المبلغ</th></tr></thead><tbody><tr><td>مكافأة المسافر</td><td>€30.00</td></tr><tr><td>رسوم ShipTrip</td><td>€7.50</td></tr><tr><td>ما تدفعه</td><td>€37.50</td></tr></tbody></table></div></section>
-<section class="section" id="faq" aria-labelledby="faq-title"><div class="shell faq"><div class="section-head"><div><p class="eyebrow">قبل الرحلة الأولى</p><h2 id="faq-title">معلومات مهمة.</h2></div></div><details><summary>ما الذي يمكن إرساله؟</summary><p>الأغراض القانونية الموصوفة بدقة والمتوافقة مع سياسة الممنوعات وقواعد الجمارك المعمول بها.</p></details><details><summary>من يستطيع حمل طرد؟</summary><p>يجب على المسافر توثيق هويته قبل نشر رحلة قابلة للمطابقة. وتحتاج رحلة الطيران إلى إثبات نقل معتمد.</p></details><details><summary>كيف تعمل المبالغ المستردة والإلغاء؟</summary><p>تعتمد القواعد على مرحلة الصفقة وسياسة الإلغاء المهيأة. بعد الاستلام تكون المنازعة هي المسار المعتاد.</p></details><details><summary>متى يحصل المسافر على مكافأته؟</summary><p>يبدأ تأكيد التسليم نافذة حماية مدتها ٤٨ ساعة. وقد تبقى المكافأة مجمدة إذا فُتحت منازعة.</p></details><details><summary>هل ShipTrip متاح الآن؟</summary><p>يعرض هذا الموقع نطاق إطلاق أوروبا ↔ الجزائر. سنعلن عن التطبيق ومزوّجات الدفع عند تفعيل كل إصدار.</p></details></div></section><section class="section-tight shell" id="download" aria-labelledby="download-title"><div class="cta-band"><div><h2 id="download-title">نستعد عندما يستعد طريقك.</h2><p>تواصل معنا لتصلك أخبار الإطلاق. لا نحتاج إلى تفاصيل طرد هنا.</p></div><a class="button button-primary" href="/support.html">تواصل مع الفريق <span aria-hidden="true">←</span></a></div></section></main>
-<footer class="site-footer"><div class="shell"><div class="footer-grid"><div><a class="brand" href="/ar/"><span class="brand-mark" aria-hidden="true"><span>S</span></span> ShipTrip</a><p class="fineprint">سوق طرود لمسارات أوروبا ↔ الجزائر.</p></div><div><h3>استكشف</h3><a href="#how">كيف يعمل</a><a href="#safety">الأمان</a><a href="#faq">الأسئلة</a></div><div><h3>اقرأ</h3><a href="/terms.html">الشروط</a><a href="/privacy.html">الخصوصية</a><a href="/prohibited-items.html">الممنوعات</a></div><div><h3>مساعدة</h3><a href="/support.html">الدعم والتواصل</a></div></div><p class="footer-note">© <span data-year>2026</span> ShipTrip. صفحات المنتج والقانون مسودات بانتظار المراجعة القانونية الفرنسية والأوروبية والجزائرية.</p></div></footer><script src="/assets/site.js" defer></script></body></html>
+  <a class="skip-link" href="#main">تخطّي إلى المحتوى</a>
+
+  <header class="site-header">
+    <nav class="nav shell" aria-label="التنقّل الرئيسي">
+      <a class="brand" href="/ar/" aria-label="الصفحة الرئيسية لـ ShipTrip">
+        <span class="seal" aria-hidden="true">S</span> ShipTrip
+      </a>
+      <div class="nav-menu">
+        <a href="#journey">الرحلات</a>
+        <a href="#roles">أرسل أو احمل</a>
+        <a href="#mechanics">كيف يعمل</a>
+        <a href="#money">السعر</a>
+        <a href="#faq">الأسئلة</a>
+      </div>
+      <div class="nav-side">
+        <span class="language">
+          <span class="sr-only">اللغة</span>
+          <a href="/fr/" lang="fr" hreflang="fr">FR</a>
+          <a href="/ar/" hreflang="ar" aria-current="page">عربي</a>
+          <a href="/en/" lang="en" hreflang="en">EN</a>
+        </span>
+        <a class="button button-ghost" href="/support.html">تواصل</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+
+    <!-- الواجهة ---------------------------------------------------------- -->
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">أوروبا ↔ الجزائر · توصيل فقط</p>
+          <h1 id="hero-title">طردك <em>مسبقاً</em> على طريق أحدهم.</h1>
+          <p class="lede">
+            يجمع ShipTrip بين مرسل ومسافر موثّق على الرحلة نفسها بين أوروبا
+            والجزائر. اتّفقا على مكافأة، وابقَ الدفع محجوزاً حتى تأكيد التسليم —
+            أو احمل طرداً في رحلة كنت ستقوم بها على أي حال.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-sun" href="#sender">أريد إرسال طرد</a>
+            <a class="button button-ghost" href="#traveler">لديّ مساحة للحمل</a>
+          </div>
+          <ul class="hero-trust">
+            <li>هوية المسافرين موثّقة</li>
+            <li>الدفع محجوز حتى التسليم</li>
+            <li>العناوين الدقيقة خاصة حتى التمويل</li>
+          </ul>
+        </div>
+
+        <div class="postcard">
+          <div class="airmail">
+            <div class="postcard-inner">
+              <div class="postcard-head">
+                <div>
+                  <p class="postcard-title">باريس ← الجزائر ← جيجل</p>
+                  <p class="postcard-sub">رحلة واحدة، مرحلتان</p>
+                </div>
+              </div>
+              <div class="postage" aria-hidden="true">
+                <span class="postage-value ltr">EUR</span>
+                <span class="postage-label">بريد جوي</span>
+              </div>
+
+              <svg class="route-art" viewBox="0 0 520 262" role="img"
+                   aria-label="رحلة واحدة من مرحلتين: باريس إلى الجزائر جوّاً، ثم الجزائر إلى جيجل برّاً.">
+                <g class="mirror">
+                  <circle class="halo" cx="452" cy="168" r="24"/>
+
+                  <path class="leg-flight" d="M66 186 C 120 96 208 60 272 92"/>
+                  <path class="leg-drive" d="M272 92 C 330 120 356 176 452 168"/>
+                  <path class="leg-trace" pathLength="100"
+                        d="M66 186 C 120 96 208 60 272 92 C 330 120 356 176 452 168"/>
+
+                  <g transform="translate(165 93) rotate(-24)">
+                    <circle class="plane-ground" cx="0" cy="0" r="12"/>
+                    <path class="plane" d="M-11 -6 L11 0 L-11 6 L-5 0 Z"/>
+                  </g>
+
+                  <g transform="translate(20 168)">
+                    <rect class="parcel" x="0" y="0" width="21" height="16" rx="2.5"/>
+                    <path class="parcel-tape" d="M10.5 0 V16 M0 8 H21"/>
+                  </g>
+
+                  <circle class="node" cx="66" cy="186" r="8.5"/>
+                  <circle class="node-core" cx="66" cy="186" r="3.5"/>
+                  <circle class="node" cx="272" cy="92" r="8.5"/>
+                  <circle class="node-core" cx="272" cy="92" r="3.5"/>
+                  <circle class="node" cx="452" cy="168" r="9.5"/>
+                  <circle class="node-live" cx="452" cy="168" r="4.2"/>
+
+                  <text class="city" x="66" y="164" text-anchor="middle">باريس</text>
+                  <text class="role" x="66" y="212" text-anchor="middle">الانطلاق</text>
+                  <text class="city" x="272" y="70" text-anchor="middle">الجزائر</text>
+                  <text class="role" x="272" y="118" text-anchor="middle">محطة</text>
+                  <text class="city" x="452" y="146" text-anchor="middle">جيجل</text>
+                  <text class="role" x="452" y="194" text-anchor="middle">الوصول</text>
+                </g>
+              </svg>
+
+              <div class="postcard-legend">
+                <span class="chip chip-flight">مرحلة جوية · تتطلّب إثباتاً</span>
+                <span class="chip chip-drive">مرحلة برّية</span>
+              </div>
+              <p class="postcard-note">
+                السعة محجوزة لكل مرحلة على حدة، فيمكن للمسافر أن يحمل على الجزء
+                الذي يناسبه من الرحلة، لا على الرحلة كاملة فقط.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- الرحلة ----------------------------------------------------------- -->
+    <section class="section section-sunken" id="journey" aria-labelledby="journey-title">
+      <div class="shell">
+        <div class="section-head">
+          <p class="eyebrow">وحدة المنتج</p>
+          <h2 id="journey-title">الرحلة سلسلة من المراحل.</h2>
+          <p>
+            المسافر لا ينشر «من باريس إلى جيجل». بل ينشر المراحل التي يقطعها
+            فعلاً، بالترتيب، مع المساحة المتاحة في كل منها. وتتم المطابقة بعد ذلك
+            على مستوى المرحلة، ولهذا فإن طرداً يتوقّف عند الجزائر لا يحتاج مسافراً
+            يواصل شرقاً.
+          </p>
+        </div>
+        <div class="mechanics">
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16l7-3 5 5 3-1-4-6 6-4a2 2 0 0 0-2-3l-5 3-8-3-2 1 5 5-4 2-3-2-1 1z"/></svg>
+            </span>
+            <h3>المراحل الجوية</h3>
+            <p>
+              الرحلات بين مطارات الممرّ. لا تُعرض المرحلة الجوية للمطابقة إلا بعد
+              اعتماد إثبات النقل الخاص بها.
+            </p>
+          </article>
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2m8 0v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2"/><path d="M3 16h18l-1.5-5.5A2 2 0 0 0 17.6 9H6.4a2 2 0 0 0-1.9 1.5z"/><path d="M7 13h.01M17 13h.01"/></svg>
+            </span>
+            <h3>المراحل البرّية</h3>
+            <p>
+              الجزء البرّي من الرحلة نفسها — من الجزائر إلى ولاية مثل جيجل أو
+              سطيف. لا تتطلّب المراحل البرّية وثيقة مركبة عند الإطلاق.
+            </p>
+          </article>
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h9"/><circle cx="18" cy="17" r="2.4"/></svg>
+            </span>
+            <h3>السعة لكل مرحلة</h3>
+            <p>
+              تُحجز المساحة على المقطع الذي يقطعه الطرد فعلاً، فيمكن لطردين أن
+              يتشاركا رحلة واحدة دون أن يتنافسا على المساحة نفسها.
+            </p>
+          </article>
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6M8.5 11h5M11 8.5v5"/></svg>
+            </span>
+            <h3>التوافق أولاً</h3>
+            <p>
+              تُفحص المواعيد والسعة والوزن والمسافة والانحراف قبل عرض أي فرصة.
+              أما الإبراز المدفوع فيغيّر الترتيب فقط، ولا يمكنه أبداً أن يخلق
+              توافقاً غير موجود.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- الدوران ---------------------------------------------------------- -->
+    <section class="section" id="roles" aria-labelledby="roles-title">
+      <div class="shell">
+        <div class="section-head">
+          <p class="eyebrow">حساب واحد، سياقان</p>
+          <h2 id="roles-title">الإرسال والحمل وجهان لمنتج واحد.</h2>
+          <p>
+            لا تختار طرفاً عند التسجيل. الحساب نفسه يرسل طرداً هذا الشهر ويحمل
+            آخر في الشهر المقبل، ولكل سياق مسار قصير ومرتّب.
+          </p>
+        </div>
+
+        <div class="roles">
+          <article class="pass" id="sender" aria-labelledby="sender-title">
+            <div class="pass-head">
+              <span class="seal" aria-hidden="true">م</span>
+              <div>
+                <h3 id="sender-title">أرسل طرداً</h3>
+                <p>طلب ← مطابقة ← اتفاق ← دفع ← تسليم ← حماية</p>
+              </div>
+            </div>
+            <div class="pass-body">
+              <ol class="steps">
+                <li>
+                  <strong>صِف الطرد والممرّ</strong>
+                  <p>المحتوى والوزن ومدينتا الانطلاق والوصول. أما العناوين الدقيقة فتأتي لاحقاً، وداخل صفقة مموّلة فقط.</p>
+                </li>
+                <li>
+                  <strong>انشر الطلب بعربون نشر</strong>
+                  <p>عربون صغير يضع طلبك أمام المسافرين، ويُحتسب ضمن ما تدفعه ولا يُحصَّل مرّتين.</p>
+                </li>
+                <li>
+                  <strong>قارن المسافرين المتوافقين</strong>
+                  <p>لا تظهر إلا الرحلات التي تناسب فعلاً الطرد والتواريخ والمسار، مع مراحلها وحالة توثيقها.</p>
+                </li>
+                <li>
+                  <strong>اقترح مكافأة ثم تفاوض</strong>
+                  <p>المرسل هو من يقترح أولاً. ويمكن للطرفين طرح الأسئلة وتقديم عرض مقابل قبل أي اتفاق.</p>
+                </li>
+                <li>
+                  <strong>ادفع — وتُحجز الأموال</strong>
+                  <p>يُستوفى الدفع عند قبول الصفقة ويبقى محجوزاً حتى تأكيد التسليم. عندها فقط تُفتح العناوين الدقيقة.</p>
+                </li>
+                <li>
+                  <strong>سلّم الطرد برمز الاستلام</strong>
+                  <p>تعطي المسافر رمز الاستلام عند التسليم اليدوي، وهذا ما يثبت أن الطرد قد جُمع.</p>
+                </li>
+                <li>
+                  <strong>تأكيد التسليم ثم فترة الحماية</strong>
+                  <p>رمز المستلم هو ما يؤكّد التسليم. تبدأ بعده فترة حماية قبل صرف مكافأة المسافر، ويمكنك فتح منازعة خلالها.</p>
+                </li>
+              </ol>
+            </div>
+          </article>
+
+          <article class="pass pass-traveler" id="traveler" aria-labelledby="traveler-title">
+            <div class="pass-head">
+              <span class="seal" aria-hidden="true">س</span>
+              <div>
+                <h3 id="traveler-title">احمل أثناء سفرك</h3>
+                <p>توثيق ← رحلة ← عروض ← حمل ← تأكيد ← صرف</p>
+              </div>
+            </div>
+            <div class="pass-body">
+              <ol class="steps">
+                <li>
+                  <strong>وثّق هويتك</strong>
+                  <p>التوثيق يسبق أي نشر. ولا يمكن مطابقة رحلة قبل اعتماده.</p>
+                </li>
+                <li>
+                  <strong>ابنِ الرحلة من مراحل مرتّبة</strong>
+                  <p>أضف كل مرحلة تقطعها فعلاً، بالترتيب، مع المساحة المتاحة لديك فيها.</p>
+                </li>
+                <li>
+                  <strong>أثبت المراحل الجوية</strong>
+                  <p>تحتاج كل مرحلة جوية إلى إثبات نقل معتمد. أما المراحل البرّية فلا تتطلّب وثيقة مركبة عند الإطلاق.</p>
+                </li>
+                <li>
+                  <strong>راجع الطلبات المناسبة</strong>
+                  <p>يقترح عليك المرسلون مكافأة. تقبل أو ترفض أو تقدّم عرضاً مقابلاً — فالحمل ليس تلقائياً أبداً.</p>
+                </li>
+                <li>
+                  <strong>استلم برمز الاستلام</strong>
+                  <p>يمكنك فحص الطرد قبل قبوله، وعليك رفض أي شيء غير آمن أو مخالف للوصف.</p>
+                </li>
+                <li>
+                  <strong>سلّم مقابل رمز المستلم</strong>
+                  <p>يقرأ لك المستلم رمزه الخاص عند الباب. أنت لا تحمله مسبقاً ولا يمكنك الاطّلاع عليه.</p>
+                </li>
+                <li>
+                  <strong>الصرف بعد فترة الحماية</strong>
+                  <p>تصبح مكافأتك مستحقّة بعد انتهاء فترة الحماية دون منازعة مفتوحة. وبعض طرق الصرف تُسوّى يدوياً.</p>
+                </li>
+              </ol>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- الآليات ---------------------------------------------------------- -->
+    <section class="section section-sunken" id="mechanics" aria-labelledby="mechanics-title">
+      <div class="shell">
+        <div class="section-head">
+          <p class="eyebrow">ما يحمي الطرفين</p>
+          <h2 id="mechanics-title">رمزان، مبلغ محجوز، ومهلة واحدة.</h2>
+          <p>
+            كل ما يقدّمه ShipTrip ولا تقدّمه مجموعة محادثة يعود إلى أربعة أمور:
+            ما الذي يبقى خاصاً، ومتى يتحرّك المال، ومن يستطيع إثبات حدوث التسليم،
+            وكم من الوقت لديك للإبلاغ عن خطأ.
+          </p>
+        </div>
+
+        <div class="mechanics">
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-4.6 7-10a7 7 0 1 0-14 0c0 5.4 7 10 7 10z"/><circle cx="12" cy="11" r="2.4"/></svg>
+            </span>
+            <h3>خاص حتى التمويل</h3>
+            <p>
+              قبل تمويل الصفقة يرى الطرفان المدن والمناطق العامة فقط. ولا تُفتح
+              تفاصيل الاستلام والتسليم الدقيقة إلا لتلك الصفقة وحدها.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>
+            </span>
+            <h3>عربون للنشر</h3>
+            <p>
+              نشر الطلب يكلّف عربوناً صغيراً يبقي السوق قائماً على نيّات حقيقية،
+              ويُحتسب ضمن المبلغ الذي تدفعه — فهو ليس رسماً ثانياً.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M8 12l3 3 5-6"/></svg>
+            </span>
+            <h3>المرسل هو من يقترح</h3>
+            <p>
+              تبدأ العروض من المرسل ويجري التفاوض عليها بوضوح. ولا يلزم شيء قبل
+              أن يقبل الطرفان الشروط ويتم الدفع.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            </span>
+            <h3>رمزان، لحظتان</h3>
+            <p>
+              رمز الاستلام من المرسل يثبت الجمع، ورمز التسليم من المستلم يثبت
+              الوصول. وهما للتسليم اليدوي فقط ولا يُشاركان قبل موعدهما إطلاقاً.
+            </p>
+            <p class="code-tiles ltr" aria-hidden="true">
+              <span>A</span><span>7</span><span>K</span><span>2</span><span>Q</span><span>9</span>
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>
+            </span>
+            <h3>تأخير مقصود</h3>
+            <p>
+              لا يُفرج عن رمز التسليم لحظة جمع الطرد. تمرّ مهلة قصيرة قبل أن يراه
+              المرسل ويصل المستلم نسخته — ولا يستطيع المسافر الحصول عليه في أي
+              لحظة.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M12 9v4"/><path d="M12 16h.01"/></svg>
+            </span>
+            <h3>فترة الحماية</h3>
+            <p>
+              يبدأ تأكيد التسليم فترة حماية قبل صرف مكافأة المسافر. وهي موجودة كي
+              يبقى للمشكلة التي تُلاحَظ بعد انصراف الجميع طريق للمعالجة.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M7 20V9l5-5 5 5v11"/><path d="M10 20v-5h4v5"/></svg>
+            </span>
+            <h3>إذا ساء شيء ما</h3>
+            <p>
+              فتح منازعة يجمّد الصرف ريثما تُراجَع الأدلة. ويمكن للطرفين تقديم ما
+              لديهما، وتُسجَّل النتيجة على التوصيلة.
+            </p>
+          </article>
+
+          <article class="mechanic">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v10H3z"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>
+            </span>
+            <h3>ثم الصرف</h3>
+            <p>
+              بانتهاء فترة الحماية ودون منازعة مفتوحة تصبح مكافأة المسافر مستحقّة
+              للصرف. وبعض الطرق تُسوّى يدوياً ويُشار إليها بذلك.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- السعر ------------------------------------------------------------ -->
+    <section class="section" id="money" aria-labelledby="money-title">
+      <div class="shell money">
+        <div>
+          <p class="eyebrow">اقتصاد واضح</p>
+          <h2 id="money-title">مكافأة المسافر تبقى كاملة.</h2>
+          <p class="lede">
+            تُضاف عمولة ShipTrip فوق المكافأة المتفق عليها ولا تُقتطع منها. فالمسافر
+            الذي يقبل <span class="ltr">€30.00</span> يستحقّ <span class="ltr">€30.00</span>.
+          </p>
+          <p class="fineprint">
+            اليورو هو عملة السوق، وكل المبالغ يحسبها الخادم. وحين يُتاح Chargily
+            فإن المبلغ المعروض بالدينار الجزائري عند الدفع هو تحويل تضبطه المنصّة
+            انطلاقاً من المبلغ باليورو: تسوية خاصة بقناة الدفع، وليست سعر صرف
+            سوقياً ولا سعراً ثانياً. ولا يُوصف أي مزوّد دفع هنا بأنه نشط؛ يُعلَن عن
+            كل مزوّد عند اكتمال تفعيله.
+          </p>
+        </div>
+
+        <div class="ledger">
+          <p class="ledger-caption"><span>مثال على الحساب</span><span class="ltr">EUR</span></p>
+          <table>
+            <caption class="sr-only">مثال على تفصيل رسوم ShipTrip لمكافأة قدرها ٣٠٫٠٠ يورو</caption>
+            <tbody>
+              <tr>
+                <th scope="row">يستلم المسافر</th>
+                <td class="ltr">€30.00</td>
+              </tr>
+              <tr>
+                <th scope="row">رسوم ShipTrip</th>
+                <td class="ltr">+ €7.50</td>
+              </tr>
+              <tr class="total">
+                <th scope="row">أنت تدفع</th>
+                <td class="ltr">€37.50</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="ledger-note">
+            عربون النشر المدفوع سابقاً يُحتسب ضمن هذا المجموع ولا يُضاف إليه.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- الثقة ------------------------------------------------------------ -->
+    <section class="section section-sunken" id="safety" aria-labelledby="safety-title">
+      <div class="shell">
+        <div class="section-head">
+          <p class="eyebrow">الثقة بوضوح</p>
+          <h2 id="safety-title">ما الذي يُفحص، وما الذي لا يُفحص.</h2>
+          <p>
+            هذه الفحوص تدعم مستخدمي السوق. لكنها لا تحلّ محلّ حكمك الشخصي، وليست
+            وثيقة تأمين، ولا تضمن أن تمرّ التوصيلة على ما يرام.
+          </p>
+        </div>
+        <div class="trust">
+          <div class="trust-item">
+            <h3>توثيق الهوية</h3>
+            <p>يوثّق المسافر هويته قبل أن تصبح أي من رحلاته قابلة للمطابقة.</p>
+          </div>
+          <div class="trust-item">
+            <h3>إثبات الرحلة الجوية</h3>
+            <p>تتطلّب كل مرحلة جوية إثبات نقل معتمد، ودونه لا تُعرض المرحلة.</p>
+          </div>
+          <div class="trust-item">
+            <h3>خصوصية العناوين</h3>
+            <p>مواقع تقريبية قبل التمويل، وتفاصيل دقيقة داخل الصفقة الممولة وحدها.</p>
+          </div>
+          <div class="trust-item">
+            <h3>رموز التسليم</h3>
+            <p>رمزان منفصلان يُستخدمان في اللحظتين الفعليتين. لا تشارك أي رمز مسبقاً.</p>
+          </div>
+          <div class="trust-item">
+            <h3>فترة الحماية</h3>
+            <p>مهلة بين تأكيد التسليم والصرف، كي يبقى للمشكلة طريق للمعالجة.</p>
+          </div>
+          <div class="trust-item">
+            <h3>المنازعات والمراجعة</h3>
+            <p>المنازعة تجمّد الصرف. تُراجَع الأدلة وتُسجَّل النتيجة.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- الأسئلة ---------------------------------------------------------- -->
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="shell">
+        <div class="section-head">
+          <p class="eyebrow">قبل الرحلة الأولى</p>
+          <h2 id="faq-title">معلومات مهمّة.</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>ما الذي يمكنني إرساله؟</summary>
+            <p>
+              الأغراض القانونية فقط، موصوفة بدقّة ومتوافقة مع
+              <a class="textlink" href="/prohibited-items.html">سياسة الممنوعات</a>
+              ومع القواعد الجمركية للدول المعنية. ويبقى المرسل مسؤولاً عن التصريح
+              وعن محتوى الطرد.
+            </p>
+          </details>
+          <details>
+            <summary>من يحقّ له حمل طرد؟</summary>
+            <p>
+              على المسافر أن يوثّق هويته قبل نشر رحلة قابلة للمطابقة، وتحتاج كل
+              مرحلة جوية إضافةً إلى ذلك إلى إثبات نقل معتمد. أما المراحل البرّية
+              فلا تتطلّب وثيقة مركبة عند الإطلاق.
+            </p>
+          </details>
+          <details>
+            <summary>متى يُدفع للمسافر فعلياً؟</summary>
+            <p>
+              يبدأ تأكيد التسليم فترة حماية، وتصبح المكافأة مستحقّة للصرف بعد
+              انتهائها دون منازعة مفتوحة. والمنازعة القائمة تجمّدها حتى حسم
+              القضية، كما أن بعض طرق الصرف تُسوّى يدوياً.
+            </p>
+          </details>
+          <details>
+            <summary>ماذا يحدث عند الإلغاء؟</summary>
+            <p>
+              تعتمد النتيجة على المرحلة التي بلغتها الصفقة وعلى سياسة الإلغاء
+              المعروضة عند القبول. وأي مبلغ مستردّ يُعالَج على الدفعة الأصلية ويظهر
+              في سجلّ مدفوعاتك. أما بعد الاستلام فالمنازعة هي المسار المعتاد.
+            </p>
+          </details>
+          <details>
+            <summary>لماذا لا يرى المسافر رمز التسليم؟</summary>
+            <p>
+              لأن الرمز هو دليل المستلم على وصول الطرد. ولو استطاع حامله قراءته
+              لما أثبت شيئاً. فهو يُصدر للمستلم، ولا توجد شاشة ولا طلب ولا سجلّ
+              يكشفه للمسافر.
+            </p>
+          </details>
+          <details>
+            <summary>هل ShipTrip متاح الآن؟</summary>
+            <p>
+              يعرض هذا الموقع نطاق إطلاق أوروبا ↔ الجزائر. ويُعلَن عن التطبيقات
+              ومزوّدي الدفع عند تفعيل كل منها؛ ولا ينبغي قراءة أي شيء هنا على أنه
+              إعلان بأن مزوّداً ما نشط اليوم.
+            </p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- الختام ----------------------------------------------------------- -->
+    <section class="section shell" aria-labelledby="contact-title">
+      <div class="cta-band">
+        <div>
+          <p class="eyebrow">تواصل معنا</p>
+          <h2 id="contact-title">جاهزون حين يجهز طريقك.</h2>
+          <p>
+            سؤال عن الممرّ أو شراكة أو عن الإطلاق نفسه — اكتب إلى الفريق. لا
+            نحتاج أي تفاصيل عن طرد لتقول مرحباً.
+          </p>
+        </div>
+        <a class="button button-sun" href="/support.html">تواصل مع الفريق <span class="arrow" aria-hidden="true">←</span></a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="/ar/"><span class="seal" aria-hidden="true">S</span> ShipTrip</a>
+          <p class="fineprint">
+            سوق طرود مبني على المسارات بين أوروبا والجزائر. توصيل فقط.
+          </p>
+        </div>
+        <div>
+          <h3>استكشف</h3>
+          <a href="#journey">الرحلات</a>
+          <a href="#roles">أرسل أو احمل</a>
+          <a href="#mechanics">كيف يعمل</a>
+          <a href="#money">السعر</a>
+        </div>
+        <div>
+          <h3>اقرأ</h3>
+          <a href="/terms.html">شروط الخدمة</a>
+          <a href="/privacy.html">سياسة الخصوصية</a>
+          <a href="/prohibited-items.html">الأغراض الممنوعة</a>
+        </div>
+        <div>
+          <h3>مساعدة</h3>
+          <a href="/support.html">الدعم والتواصل</a>
+          <a href="/en/" lang="en" hreflang="en">English</a>
+          <a href="/fr/" lang="fr" hreflang="fr">Français</a>
+        </div>
+      </div>
+      <p class="footer-note">
+        © <span data-year>2026</span> ShipTrip. صفحات المنتج والصفحات القانونية
+        مسوّدات بانتظار المراجعة القانونية الفرنسية والأوروبية والجزائرية.
+        والصفحات القانونية منشورة بالإنجليزية في الوقت الحالي.
+      </p>
+    </div>
+  </footer>
+
+  <script src="/assets/site.js" defer></script>
+</body>
+</html>

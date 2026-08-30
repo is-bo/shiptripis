@@ -5,7 +5,7 @@
     "dockerfilePath": "backend/railway/Dockerfile"
   },
   "deploy": {
-    "healthcheckPath": "/healthz",
+    "healthcheckPath": "/readyz",
     "healthcheckTimeout": 600,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5

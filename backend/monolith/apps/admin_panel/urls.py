@@ -39,6 +39,7 @@ from .views import (
     AdminUserListView,
     DashboardView,
 )
+from .health import AdminDeepHealthView
 
 urlpatterns = [
     path("admin/dashboard", DashboardView.as_view(), name="admin-dashboard"),
@@ -70,6 +71,7 @@ urlpatterns = [
     path("admin/ratings", AdminRatingListView.as_view(), name="admin-rating-list"),
     path("admin/boosts", AdminBoostListView.as_view(), name="admin-boost-list"),
     path("admin/provider-health", AdminProviderHealthView.as_view(), name="admin-provider-health"),
+    path("admin/health/deep", AdminDeepHealthView.as_view(), name="admin-health-deep"),
     path("admin/settings", AdminSettingsView.as_view(), name="admin-settings"),
     path("admin/roles", AdminRoleMatrixView.as_view(), name="admin-role-matrix"),
     path("admin/accounts", AdminAccountListView.as_view(), name="admin-account-list"),

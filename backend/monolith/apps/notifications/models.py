@@ -3,6 +3,8 @@ from django.db import models
 
 import uuid
 
+from apps.core.languages import CommunicationLanguage
+
 
 class Notification(models.Model):
     """Persisted, per-recipient notification.
@@ -128,6 +130,16 @@ class OutboundMessage(models.Model):
         related_name="outbound_messages",
     )
     context = models.JSONField(default=dict, blank=True)
+    language = models.CharField(
+        max_length=2,
+        choices=CommunicationLanguage.choices,
+        default=CommunicationLanguage.ENGLISH,
+        db_index=True,
+        help_text=(
+            "Locale snapshot captured when the logical email obligation is "
+            "created; later profile changes do not alter queued mail."
+        ),
+    )
     #: `<resolver>:<id>` naming a secret to be resolved at render time, e.g.
     #: `handover_code:41`. Never the secret itself.
     secret_ref = models.CharField(max_length=64, blank=True, default="")

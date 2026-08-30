@@ -18,6 +18,11 @@ enum AppButtonVariant {
   /// One per screen. The thing the screen exists for.
   primary,
 
+  /// The sun button. Louder than [primary] and rationed far harder — the
+  /// front door of the app and the last step of a funnel, and nowhere else.
+  /// If two of these are visible at once, one of them is wrong.
+  hero,
+
   /// A real alternative to the primary action.
   secondary,
 
@@ -70,6 +75,15 @@ class AppButton extends StatelessWidget {
         onPressed: enabled ? onPressed : null,
         child: child,
       ),
+      AppButtonVariant.hero => FilledButton(
+        onPressed: enabled ? onPressed : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: c.accent,
+          // Ink on sun. White on this yellow fails contrast at every size.
+          foregroundColor: c.onAccent,
+        ),
+        child: child,
+      ),
       AppButtonVariant.secondary => OutlinedButton(
         onPressed: enabled ? onPressed : null,
         child: child,
@@ -94,7 +108,53 @@ class AppButton extends StatelessWidget {
       hint: semanticHint,
       // A spinner with no announcement is silence to a screen reader.
       liveRegion: isLoading,
-      child: expand ? SizedBox(width: double.infinity, child: button) : button,
+      child: _PressScale(
+        enabled: enabled,
+        child: expand
+            ? SizedBox(width: double.infinity, child: button)
+            : button,
+      ),
+    );
+  }
+}
+
+/// The original ShipTrip press feel: the button shrinks a shade under the
+/// thumb and springs back.
+///
+/// Two percent is enough to feel and small enough that it never reads as a
+/// layout shift. It listens rather than intercepts — [HitTestBehavior.deferToChild]
+/// with no tap handler of its own — so the real button underneath still owns
+/// the gesture, the ripple and the semantics.
+class _PressScale extends StatefulWidget {
+  const _PressScale({required this.child, required this.enabled});
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale> {
+  bool _down = false;
+
+  void _set(bool value) {
+    if (!widget.enabled || _down == value) return;
+    setState(() => _down = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: AnimatedScale(
+        scale: _down ? 0.98 : 1,
+        duration: AppMotion.respecting(context, AppMotion.fast),
+        curve: AppMotion.enter,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -246,12 +306,19 @@ class AppCard extends StatelessWidget {
     Widget body = Padding(padding: padding, child: child);
 
     if (accentColor != null) {
-      body = Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 3, color: accentColor),
-          Expanded(child: body),
-        ],
+      // Cards commonly live in a ListView, whose children have an
+      // unbounded vertical constraint. IntrinsicHeight gives the accent rail
+      // the card's natural height without asking a stretching Row to lay out
+      // at infinity (which otherwise surfaces as soon as a selectable card is
+      // tapped).
+      body = IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 3, color: accentColor),
+            Expanded(child: body),
+          ],
+        ),
       );
     }
 
@@ -349,7 +416,14 @@ class SectionHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Semantics(header: true, child: Text(title, style: text.titleLarge)),
+                Semantics(
+                  header: true,
+                  // Fraunces, not the sans title role. Section headings were
+                  // set in the display serif throughout the original app, and
+                  // it is most of what makes a list of sections read as
+                  // chapters rather than as form groups.
+                  child: Text(title, style: text.headlineSmall),
+                ),
                 if (subtitle != null) ...[
                   const SizedBox(height: AppSpace.xs),
                   Text(
@@ -440,8 +514,8 @@ class DetailRow extends StatelessWidget {
 class InfoNotice extends StatelessWidget {
   const InfoNotice({
     required this.message,
-    required this.tone,
-    required this.icon,
+    this.tone = StatusTone.neutral,
+    this.icon = Icons.info_outline_rounded,
     this.title,
     this.actionLabel,
     this.onAction,

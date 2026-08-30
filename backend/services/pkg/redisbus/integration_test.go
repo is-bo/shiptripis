@@ -29,6 +29,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -177,6 +179,126 @@ func TestSetEX_AppliesTTL(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("key never expired; SetEX is not applying its TTL")
+}
+
+// TestConsumeFixedWindow_IsAtomicAcrossClients exercises the exact primitive
+// used by KYC upload throttling. Two clients represent separate service
+// instances sharing Redis; concurrent requests must consume one global budget,
+// and exhausting one dimension must not partially increment another.
+func TestConsumeFixedWindow_IsAtomicAcrossClients(t *testing.T) {
+	first := itClient(t)
+	second := itClient(t)
+	ctx := context.Background()
+	userKey := itKey(t, first, "fixed-window-user")
+	ipKey := itKey(t, first, "fixed-window-ip")
+	t.Cleanup(func() { _ = second.Del(context.Background(), userKey, ipKey) })
+
+	const budget int64 = 7
+	var allowed atomic.Int64
+	errs := make(chan error, 64)
+	var wg sync.WaitGroup
+	for i := range 64 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			client := first
+			if n%2 == 1 {
+				client = second
+			}
+			decision, err := client.ConsumeFixedWindow(ctx,
+				FixedWindowBucket{Key: userKey, Limit: budget, Window: time.Second},
+				FixedWindowBucket{Key: ipKey, Limit: 50, Window: time.Second},
+			)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if decision.Allowed {
+				allowed.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("ConsumeFixedWindow: %v", err)
+	}
+	if got := allowed.Load(); got != budget {
+		t.Fatalf("allowed %d concurrent requests across clients, want %d", got, budget)
+	}
+	for _, key := range []string{userKey, ipKey} {
+		count, err := first.rdb.Get(ctx, key).Int64()
+		if err != nil {
+			t.Fatalf("GET %s: %v", key, err)
+		}
+		if count != budget {
+			t.Fatalf("%s count = %d, want %d; denied requests partially consumed a bucket", key, count, budget)
+		}
+	}
+
+	denied, err := second.ConsumeFixedWindow(ctx,
+		FixedWindowBucket{Key: userKey, Limit: budget, Window: time.Second},
+		FixedWindowBucket{Key: ipKey, Limit: 50, Window: time.Second},
+	)
+	if err != nil || denied.Allowed || denied.RetryAfter <= 0 || denied.RetryAfter > time.Second {
+		t.Fatalf("post-budget decision = %+v, err=%v", denied, err)
+	}
+}
+
+func TestConsumeFixedWindow_ExpiryAndRedisRecovery(t *testing.T) {
+	url := os.Getenv("REDIS_TEST_URL")
+	if url == "" {
+		t.Skip("REDIS_TEST_URL not set; skipping fixed-window integration test")
+	}
+	c, err := NewClient(context.Background(), Config{
+		URL:          url,
+		Logger:       itLogger(),
+		DialTimeout:  time.Second,
+		ReadTimeout:  100 * time.Millisecond,
+		WriteTimeout: 100 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	key := itKey(t, c, "fixed-window-recovery")
+	bucket := FixedWindowBucket{Key: key, Limit: 1, Window: 250 * time.Millisecond}
+
+	first, err := c.ConsumeFixedWindow(context.Background(), bucket)
+	if err != nil || !first.Allowed {
+		t.Fatalf("first decision = %+v, err=%v", first, err)
+	}
+	denied, err := c.ConsumeFixedWindow(context.Background(), bucket)
+	if err != nil || denied.Allowed || denied.RetryAfter <= 0 {
+		t.Fatalf("pre-expiry decision = %+v, err=%v", denied, err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	recoveredWindow, err := c.ConsumeFixedWindow(context.Background(), bucket)
+	if err != nil || !recoveredWindow.Allowed {
+		t.Fatalf("post-expiry decision = %+v, err=%v", recoveredWindow, err)
+	}
+
+	// Pause this throwaway Redis for longer than the client's read timeout.
+	// The limiter call must return an error (the HTTP layer fails closed), then
+	// the same client must recover automatically after Redis resumes.
+	if err := c.rdb.Do(context.Background(), "CLIENT", "PAUSE", 300, "ALL").Err(); err != nil {
+		t.Fatalf("CLIENT PAUSE: %v", err)
+	}
+	failureCtx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	_, failureErr := c.ConsumeFixedWindow(failureCtx, FixedWindowBucket{
+		Key: itKey(t, c, "fixed-window-paused"), Limit: 1, Window: time.Second,
+	})
+	cancel()
+	if failureErr == nil {
+		t.Fatal("fixed-window call succeeded while Redis was paused; fail-closed path was not exercised")
+	}
+	time.Sleep(350 * time.Millisecond)
+	afterRedisReturn, err := c.ConsumeFixedWindow(context.Background(), FixedWindowBucket{
+		Key: itKey(t, c, "fixed-window-returned"), Limit: 1, Window: time.Second,
+	})
+	if err != nil || !afterRedisReturn.Allowed {
+		t.Fatalf("same client did not recover after Redis returned: %+v err=%v", afterRedisReturn, err)
+	}
 }
 
 // TestXGroupCreate_IsIdempotent is the property main.go depends on: every pod

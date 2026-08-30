@@ -137,6 +137,8 @@ class HandoverPickupCodeRevealView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "handover_reveal"
 
     def get(self, request: Request, pk: int) -> Response:
         _party_deal(request.user.id, pk)
@@ -182,6 +184,8 @@ class HandoverDeliveryCodeRevealView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "handover_reveal"
 
     def get(self, request: Request, pk: int) -> Response:
         _party_deal(request.user.id, pk)

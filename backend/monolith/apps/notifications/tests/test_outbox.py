@@ -19,7 +19,7 @@ from datetime import timedelta
 from unittest import mock
 
 import redis
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.core.models import PublishedEvent
@@ -54,6 +54,7 @@ def patched_transport(fake: _FakeRedis):
     return mock.patch.object(outbox.redis_bus, "get_client", return_value=fake)
 
 
+@override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
 class RecipientDeliveryCodeMessageTests(TestCase):
     def setUp(self):
         self.scenario = fund_scenario(self.client, prefix="obx")
@@ -100,9 +101,10 @@ class RecipientDeliveryCodeMessageTests(TestCase):
 
     def test_dispatch_sends_secret_at_trusted_boundary_and_marks_once(self):
         fake = _FakeRedis()
-        with patched_transport(fake), mock.patch.object(
-            outbox, "_send_email_via_provider"
-        ) as send:
+        with (
+            patched_transport(fake),
+            mock.patch.object(outbox, "_send_email_via_provider") as send,
+        ):
             assert outbox.dispatch_message(message_id=self.message.pk) == "dispatched"
         send.assert_called_once()
         assert self.code in send.call_args.kwargs["body"]
@@ -113,20 +115,41 @@ class RecipientDeliveryCodeMessageTests(TestCase):
         assert fake.entries == []
 
         # A second dispatch is a no-op rather than a second email.
-        with patched_transport(fake), mock.patch.object(outbox, "_send_email_via_provider"):
+        with (
+            patched_transport(fake),
+            mock.patch.object(outbox, "_send_email_via_provider"),
+        ):
             assert (
                 outbox.dispatch_message(message_id=self.message.pk)
                 == "already_dispatched"
             )
         assert fake.entries == []
 
+    @override_settings(TRANSACTIONAL_EMAIL_ENABLED=False)
+    def test_disabled_email_never_reaches_the_direct_smtp_boundary(self):
+        fake = _FakeRedis()
+        with (
+            patched_transport(fake),
+            mock.patch.object(outbox, "_send_email_via_provider") as send,
+        ):
+            assert outbox.dispatch_message(message_id=self.message.pk) == "disabled"
+
+        send.assert_not_called()
+        assert fake.entries == []
+        self.message.refresh_from_db()
+        assert self.message.status == OutboundMessage.Status.PENDING
+        assert self.message.attempts == 0
+
     def test_dispatch_records_the_send_on_the_deal_timeline(self):
         with mock.patch.object(outbox, "_send_email_via_provider"):
             outbox.dispatch_message(message_id=self.message.pk)
-        assert DealEvent.objects.filter(
-            deal_id=self.scenario.deal.pk,
-            kind=DealEvent.Kind.RECIPIENT_NOTIFICATION_SENT,
-        ).count() == 1
+        assert (
+            DealEvent.objects.filter(
+                deal_id=self.scenario.deal.pk,
+                kind=DealEvent.Kind.RECIPIENT_NOTIFICATION_SENT,
+            ).count()
+            == 1
+        )
 
     def test_the_published_event_audit_stores_a_hash_and_not_the_code(self):
         with mock.patch.object(outbox, "_send_email_via_provider"):
@@ -137,6 +160,7 @@ class RecipientDeliveryCodeMessageTests(TestCase):
             assert self.code not in row.payload_hash
 
 
+@override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
 class TransportFailureTests(TestCase):
     def setUp(self):
         self.scenario = fund_scenario(self.client, prefix="obxfail")
@@ -182,7 +206,9 @@ class TransportFailureTests(TestCase):
         self.message.refresh_from_db()
         assert self.scenario.delivery_code not in self.message.last_error
 
-    def test_a_rotated_code_makes_the_stale_message_unrenderable_rather_than_wrong(self):
+    def test_a_rotated_code_makes_the_stale_message_unrenderable_rather_than_wrong(
+        self,
+    ):
         """Sending a code that no longer opens the handover is worse than silence."""
 
         from apps.handover.services import rotate_code
@@ -203,9 +229,7 @@ class TransportFailureTests(TestCase):
         )
 
         with mock.patch.object(outbox, "_send_email_via_provider"):
-            assert (
-                outbox.dispatch_message(message_id=self.message.pk) == "unrenderable"
-            )
+            assert outbox.dispatch_message(message_id=self.message.pk) == "unrenderable"
         self.message.refresh_from_db()
         assert self.message.status == OutboundMessage.Status.FAILED
 
@@ -219,6 +243,7 @@ class TransportFailureTests(TestCase):
         assert replacement.count() == 1
 
 
+@override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
 class DurabilityTests(TestCase):
     def test_inventory_kinds_have_safe_rendering_contracts(self):
         kinds = (
@@ -260,7 +285,10 @@ class DurabilityTests(TestCase):
             run_at=timezone.now() - timedelta(minutes=1)
         )
         fake = _FakeRedis()
-        with patched_transport(fake), mock.patch.object(outbox, "_send_email_via_provider"):
+        with (
+            patched_transport(fake),
+            mock.patch.object(outbox, "_send_email_via_provider"),
+        ):
             report = run_due_jobs(limit=50)
         assert report.failed == 0, report.results
         assert fake.entries
@@ -278,7 +306,10 @@ class DurabilityTests(TestCase):
         ScheduledJob.objects.filter(kind=ScheduledJob.Kind.OUTBOUND_MESSAGE).delete()
 
         fake = _FakeRedis()
-        with patched_transport(fake), mock.patch.object(outbox, "_send_email_via_provider"):
+        with (
+            patched_transport(fake),
+            mock.patch.object(outbox, "_send_email_via_provider"),
+        ):
             dispatched = outbox.dispatch_due_messages(limit=50)
         assert dispatched >= 1
         assert fake.entries

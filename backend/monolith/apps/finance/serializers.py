@@ -15,7 +15,10 @@ attempt. The guest sees less again — see `GuestPaymentSerializer`.
 
 from __future__ import annotations
 
+from django.conf import settings
 from rest_framework import serializers
+
+from apps.core.languages import CommunicationLanguage
 
 from .models import (
     PaymentAttempt,
@@ -250,6 +253,34 @@ class GuestLinkCreateSerializer(serializers.Serializer):
     label = serializers.CharField(
         required=False, allow_blank=True, max_length=80
     )
+    communication_language = serializers.ChoiceField(
+        choices=CommunicationLanguage.choices,
+        required=False,
+    )
+
+
+class GuestCheckoutCreateSerializer(CheckoutCreateSerializer):
+    """A guest identifies only the mailbox that should receive their receipt.
+
+    Email is collected by ShipTrip before redirecting to a hosted provider so
+    every enabled rail has the same durable receipt path. It grants no account
+    or Deal authority and is never included in a guest read response.
+    """
+
+    email = serializers.EmailField(
+        max_length=254,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        if settings.TRANSACTIONAL_EMAIL_ENABLED and not attrs.get("email"):
+            raise serializers.ValidationError(
+                {"email": "An email address is required for the payment receipt."}
+            )
+        return attrs
 
 
 class ManualPayoutCompleteSerializer(serializers.Serializer):

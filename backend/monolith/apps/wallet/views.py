@@ -77,14 +77,14 @@ class WalletHoldsView(APIView):
         holds = wallet.holds.all()
         if (s := request.query_params.get("status")):
             holds = holds.filter(status=s)
-        return Response(HoldSerializer(holds, many=True).data)
+        return Response(HoldSerializer(holds[:200], many=True).data)
 
 
 class WithdrawalListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        wds = Withdrawal.objects.filter(user=request.user)
+        wds = Withdrawal.objects.filter(user=request.user)[:200]
         return Response(WithdrawalSerializer(wds, many=True).data)
 
 

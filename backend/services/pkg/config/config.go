@@ -8,8 +8,8 @@
 //
 // Each loader returns a small typed struct that maps 1:1 onto a pkg's
 // Config (db.Config, redisbus.Config, etc.). Services compose only
-// the loaders they need — kyc doesn't need Redis, notif doesn't need
-// S3, and so on.
+// the loaders they need — KYC uses Redis for distributed upload abuse
+// protection, while notification still doesn't need S3, and so on.
 //
 // Loaders never read `.env` files themselves. docker-compose, systemd
 // env-files, or direnv handle that. Double-loading silently overrides
@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // errBuilder accumulates per-field errors during a load and joins them
@@ -126,8 +127,13 @@ func LoadPostgres(maxConnsKey string, maxConnsDefault int32) (Postgres, error) {
 			}
 			rawURL = u.String()
 		}
-	} else if _, err := url.Parse(rawURL); err != nil {
-		b.addf("DATABASE_URL is not parseable: %v", err)
+	} else if parsed, err := url.Parse(rawURL); err != nil {
+		// Do not echo parser errors: they can include the credential-bearing URL.
+		b.addf("DATABASE_URL is not parseable")
+	} else if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
+		b.addf("DATABASE_URL must use postgres or postgresql scheme")
+	} else if parsed.Hostname() == "" || strings.TrimPrefix(parsed.Path, "/") == "" {
+		b.addf("DATABASE_URL must include a host and database name")
 	}
 
 	maxConns := optInt(&b, maxConnsKey, int(maxConnsDefault))
@@ -150,10 +156,69 @@ type Redis struct {
 func LoadRedis() (Redis, error) {
 	var b errBuilder
 	u := mustString(&b, "REDIS_URL", "")
+	if u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil || (parsed.Scheme != "redis" && parsed.Scheme != "rediss") || parsed.Hostname() == "" {
+			b.addf("REDIS_URL must be a redis:// or rediss:// URL with a host")
+		}
+	}
 	if err := b.err(); err != nil {
 		return Redis{}, err
 	}
 	return Redis{URL: u}, nil
+}
+
+// KYCUploadRateLimit holds the distributed upload budgets consumed by the Go
+// KYC service. Defaults allow legitimate document retries while bounding the
+// number of multipart bodies and object writes one account or source address
+// can attempt in an hour.
+type KYCUploadRateLimit struct {
+	UserLimit      int64
+	UserWindow     time.Duration
+	IPLimit        int64
+	IPWindow       time.Duration
+	ClientIPSource string
+}
+
+func LoadKYCUploadRateLimit() (KYCUploadRateLimit, error) {
+	var b errBuilder
+	userLimit := optInt(&b, "KYC_UPLOAD_USER_LIMIT", 6)
+	userWindowSeconds := optInt(&b, "KYC_UPLOAD_USER_WINDOW_SECONDS", 3600)
+	ipLimit := optInt(&b, "KYC_UPLOAD_IP_LIMIT", 0)
+	ipWindowSeconds := optInt(&b, "KYC_UPLOAD_IP_WINDOW_SECONDS", 0)
+	clientIPSource := strings.ToLower(optString("KYC_UPLOAD_CLIENT_IP_SOURCE", ""))
+
+	if userLimit <= 0 {
+		b.addf("KYC_UPLOAD_USER_LIMIT must be > 0 (got %d)", userLimit)
+	}
+	if userWindowSeconds < 60 || userWindowSeconds > 86400 {
+		b.addf("KYC_UPLOAD_USER_WINDOW_SECONDS must be between 60 and 86400 (got %d)", userWindowSeconds)
+	}
+	if ipLimit < 0 {
+		b.addf("KYC_UPLOAD_IP_LIMIT must be >= 0 (got %d)", ipLimit)
+	}
+	if ipLimit == 0 {
+		if ipWindowSeconds != 0 {
+			b.addf("KYC_UPLOAD_IP_WINDOW_SECONDS must be 0 when KYC_UPLOAD_IP_LIMIT is 0")
+		}
+		if clientIPSource != "" {
+			b.addf("KYC_UPLOAD_CLIENT_IP_SOURCE must be empty when KYC_UPLOAD_IP_LIMIT is 0")
+		}
+	} else if ipWindowSeconds < 60 || ipWindowSeconds > 86400 {
+		b.addf("KYC_UPLOAD_IP_WINDOW_SECONDS must be between 60 and 86400 (got %d)", ipWindowSeconds)
+	} else if clientIPSource != "remote" && clientIPSource != "x-real-ip" && clientIPSource != "x-forwarded-for" {
+		b.addf("KYC_UPLOAD_CLIENT_IP_SOURCE must be remote, x-real-ip, or x-forwarded-for when the IP budget is enabled")
+	}
+	if err := b.err(); err != nil {
+		return KYCUploadRateLimit{}, err
+	}
+	return KYCUploadRateLimit{
+		UserLimit:      int64(userLimit),
+		UserWindow:     time.Duration(userWindowSeconds) * time.Second,
+		IPLimit:        int64(ipLimit),
+		IPWindow:       time.Duration(ipWindowSeconds) * time.Second,
+		ClientIPSource: clientIPSource,
+	}, nil
 }
 
 // ── JWT ──────────────────────────────────────────────────────────────────────

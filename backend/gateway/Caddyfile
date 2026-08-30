@@ -9,7 +9,17 @@
 }
 
 :{$PORT:80} {
-	respond /healthz "ok" 200
+	request_body {
+		max_size 12MB
+	}
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+	reverse_proxy /healthz {$DJANGO_UPSTREAM:django:8000}
+	reverse_proxy /readyz {$DJANGO_UPSTREAM:django:8000}
 
 	# More specific Go-service paths must be evaluated BEFORE the generic
 	# /api/* matcher, otherwise Django swallows them.
@@ -31,8 +41,10 @@
 
 	# Keep the public marketing bundle static and outside Django's authenticated
 	# routes. The compose deployment mounts ../web read-only at this path.
-	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms.html /privacy.html /prohibited-items.html /support.html /robots.txt /sitemap.xml
+	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms.html /privacy.html /prohibited-items.html /support.html /robots.txt /sitemap.xml /favicon.ico
 	handle @public {
+		header Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"
+		header Cache-Control "public, max-age=300"
 		root * /srv/shiptrip-web
 		encode gzip
 		file_server

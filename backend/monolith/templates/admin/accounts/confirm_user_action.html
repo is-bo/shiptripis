@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:accounts_user_changelist' %}">Users</a>
+    &rsaquo; {{ title }}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+
+  <p class="st-readonly-note">{{ consequence }}</p>
+
+  <div class="module">
+    <h2>{{ count }} account{{ count|pluralize }}</h2>
+    <ul class="st-confirm-list">
+      {% for account in accounts %}
+        <li><strong>{{ account.email }}</strong>{% if account.full_name %} — {{ account.full_name }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% for account in accounts %}
+      <input type="hidden" name="_selected_action" value="{{ account.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    <input type="hidden" name="st_confirm" value="{{ verb }}">
+    <div class="submit-row">
+      <input type="submit" class="default" value="Yes, {{ verb }} {{ count }} account{{ count|pluralize }}">
+      <a href="{% url 'admin:accounts_user_changelist' %}" class="button cancel-link">No, take me back</a>
+    </div>
+  </form>
+{% endblock %}

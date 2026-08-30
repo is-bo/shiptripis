@@ -1,0 +1,46 @@
+<table class="st-keyvalues">
+  <thead>
+    <tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">Read from</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+      <tr>
+        <th scope="row">{{ row.label }}</th>
+        <td>{% if row.tone %}<span class="st-chip st-{{ row.tone }}">{{ row.value }}</span>{% else %}{{ row.value }}{% endif %}</td>
+        <td><code>{{ row.source }}</code></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if packages %}
+  <table class="st-keyvalues">
+    <thead>
+      <tr>
+        <th scope="col">Boost package</th>
+        <th scope="col">Label</th>
+        <th scope="col">Duration</th>
+        <th scope="col">Price</th>
+        <th scope="col">Ranking weight</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for package in packages %}
+        <tr>
+          <th scope="row"><code>{{ package.code }}</code></th>
+          <td>{{ package.label }}</td>
+          <td>{{ package.duration }}</td>
+          <td>{{ package.price }}</td>
+          <td>{{ package.weight }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+
+<p class="st-keyvalues-note">
+  These are readings of the stored document below, rendered in operator units.
+  Nothing here is calculated and nothing is defaulted — an absent key reads
+  <em>not set</em>. Changing any of them means activating a new revision
+  through the audited operations API; this page cannot.
+</p>

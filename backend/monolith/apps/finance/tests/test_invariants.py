@@ -618,14 +618,12 @@ class PayoutGateTests(TestCase):
         assert response.status_code == 403, response.data
 
     def _grant_settle_payout(self):
-        from django.contrib.auth.models import Permission
+        from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 
-        self.scenario.admin.user_permissions.add(
-            Permission.objects.get(
-                codename="settle_payout", content_type__app_label="finance"
-            )
-        )
-        # Django caches permissions on the instance for the request's lifetime.
+        # /api/admin/* is owned by the Phase 6A permission matrix. Grant the
+        # canonical Finance role rather than the retired model-level Phase 4
+        # compatibility permission that happens to share this URL path.
+        assign_admin_roles(self.scenario.admin, (AdminRole.FINANCE,))
         return type(self.scenario.admin).objects.get(pk=self.scenario.admin.pk)
 
     def test_an_admin_cannot_settle_a_payout_that_is_not_eligible(self):

@@ -26,6 +26,10 @@ dependencies:
   # needs real numeral/date handling, not string interpolation.
   intl: any
 
+  # Grapheme-safe string handling. Names and Arabic text must never be
+  # sliced mid-character when we take initials or truncate.
+  characters: ^1.4.0
+
   # Media
   image_picker: ^1.1.2
   cached_network_image: ^3.4.1
@@ -36,6 +40,20 @@ dependencies:
   # a one-file change rather than a screen rewrite.
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
+
+  # Opening a hosted provider checkout. External application only: an
+  # in-app webview for a card form is both a worse trust signal and a
+  # PCI-scope problem we have no reason to take on.
+  url_launcher: ^6.3.1
+
+  # Entrance choreography. The staggered fade/rise on every ShipTrip screen is
+  # part of the product's identity, not decoration; `flutter_animate` is how
+  # the original expressed it and keeps the call sites declarative.
+  flutter_animate: ^4.5.2
+
+  # Flag glyphs for the DZ/FR corridor pills. Drawn as vectors, so they stay
+  # crisp and carry no per-country asset.
+  country_flags: ^4.1.2
 
   cupertino_icons: ^1.0.8
 

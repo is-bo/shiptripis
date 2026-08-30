@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status as http
@@ -42,6 +43,8 @@ from apps.core.permissions import (
     CanViewDisputes,
 )
 from apps.core.phase4_policy import InvalidPhase4Policy
+from apps.admin_panel.permissions import CanManageDisputes
+from apps.admin_panel.services import record_admin_action
 from apps.deals.cancellation import CancellationError, record_no_show
 from apps.deals.lifecycle import DealLifecycleError
 from apps.deals.models import Deal
@@ -318,18 +321,28 @@ class AdminDisputeListView(APIView):
 class AdminDisputeStatusView(APIView):
     """Move a live dispute between open, awaiting evidence and under review."""
 
-    permission_classes = (CanViewDisputes,)
+    permission_classes = (CanManageDisputes,)
 
     def post(self, request: Request, pk: int) -> Response:
         serializer = DisputeStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            dispute = set_dispute_status(
-                dispute_id=pk,
-                status=serializer.validated_data["status"],
-                admin_actor_id=request.user.id,
-                note=serializer.validated_data.get("note", ""),
-            )
+            with transaction.atomic():
+                before = Dispute.objects.only("status").get(pk=pk).status
+                dispute = set_dispute_status(
+                    dispute_id=pk,
+                    status=serializer.validated_data["status"],
+                    admin_actor_id=request.user.id,
+                    note=serializer.validated_data.get("note", ""),
+                )
+                record_admin_action(
+                    actor=request.user,
+                    action="dispute.status_changed",
+                    target=dispute,
+                    before={"status": before},
+                    after={"status": dispute.status},
+                    reason=serializer.validated_data.get("note", ""),
+                )
         except Dispute.DoesNotExist:
             return Response(
                 {"code": "dispute_not_found", "detail": "No such dispute."},

@@ -332,6 +332,23 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
         after={"status": submission.status, "rejection_reason": submission.rejection_reason},
         reason=clean_reason,
     )
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    enqueue_message(
+        kind=OutboundMessage.Kind.KYC_STATUS,
+        key=f"kyc_status:{submission.pk}:{decision}",
+        to_email=submission.user.email,
+        recipient_user_id=submission.user_id,
+        context={
+            "status": (
+                "approved"
+                if decision == KycSubmission.Status.APPROVED
+                else "action_required"
+            ),
+            "reason": submission.rejection_reason,
+        },
+    )
     return submission
 
 
@@ -375,5 +392,24 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
         before=before,
         after={"status": proof.status, "rejection_reason": proof.rejection_reason},
         reason=clean_reason,
+    )
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    traveler = proof.leg.journey.traveler
+    enqueue_message(
+        kind=OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
+        key=f"flight_proof_status:{proof.pk}:{decision}",
+        to_email=traveler.email,
+        recipient_user_id=traveler.pk,
+        context={
+            "status": (
+                "approved"
+                if decision == JourneyLegProof.Status.APPROVED
+                else "action_required"
+            ),
+            "reason": proof.rejection_reason,
+            "journey_reference": f"J-{proof.leg.journey_id}",
+        },
     )
     return proof

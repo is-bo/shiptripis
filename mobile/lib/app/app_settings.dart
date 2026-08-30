@@ -10,16 +10,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/session/session.dart';
-import '../core/session/token_store.dart';
 
 /// The languages ShipTrip ships. All three are launch languages, not
 /// afterthoughts: French and Arabic are the corridor's own languages and
 /// English is the fallback.
-const supportedLocales = <Locale>[
-  Locale('en'),
-  Locale('fr'),
-  Locale('ar'),
-];
+const supportedLocales = <Locale>[Locale('en'), Locale('fr'), Locale('ar')];
 
 /// `null` means "follow the device".
 final localeProvider = NotifierProvider<LocaleController, Locale?>(
@@ -54,8 +49,19 @@ final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
 );
 
 class ThemeModeController extends Notifier<ThemeMode> {
+  /// Light, not `system`.
+  ///
+  /// ShipTrip is a parchment app. The whole identity — the paper ground, the
+  /// grain, the stamps, the ink — is a light-mode design, and the original
+  /// build shipped no dark theme at all. Following the device meant that
+  /// every user with dark mode switched on opened a dark navy app that looks
+  /// nothing like the product, without ever choosing it.
+  ///
+  /// The dark theme still exists and is still complete; it is now something
+  /// a user opts into from Profile → Appearance rather than something the
+  /// operating system decides on their behalf.
   @override
-  ThemeMode build() => ThemeMode.system;
+  ThemeMode build() => ThemeMode.light;
 
   void set(ThemeMode mode) => state = mode;
 }

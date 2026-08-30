@@ -1,6 +1,10 @@
 from django.contrib.auth import authenticate, password_validation
 from rest_framework import serializers
 
+from apps.core.languages import (
+    CommunicationLanguage,
+    normalize_communication_language,
+)
 from apps.kyc.models import KycSubmission
 
 from .models import User
@@ -12,7 +16,24 @@ class SignUpSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     phone = serializers.CharField(min_length=6, max_length=32)
-    wilaya = serializers.CharField(min_length=2, max_length=2)
+    # Wilaya is retained as an optional legacy profile hint for Algeria-side
+    # users. It is not an account prerequisite: V1 serves EU↔Algeria and
+    # users choose their actual pickup/delivery locations on requests and
+    # journeys. A France/EU user therefore registers without inventing an
+    # Algerian region. When supplied, keep validating the legacy code list so
+    # old clients cannot persist malformed values.
+    wilaya = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        min_length=2,
+        max_length=2,
+        default="",
+    )
+    preferred_language = serializers.ChoiceField(
+        choices=CommunicationLanguage.choices,
+        required=False,
+        default=CommunicationLanguage.ENGLISH,
+    )
 
     def validate_email(self, value: str) -> str:
         normalized = value.lower().strip()
@@ -21,6 +42,8 @@ class SignUpSerializer(serializers.Serializer):
         return normalized
 
     def validate_wilaya(self, value: str) -> str:
+        if value == "":
+            return value
         if value not in WILAYA_CODES:
             raise serializers.ValidationError("Invalid wilaya code.")
         return value
@@ -35,7 +58,8 @@ class SignUpSerializer(serializers.Serializer):
             username=validated_data["email"],
             full_name=validated_data["full_name"],
             phone=validated_data["phone"],
-            wilaya=validated_data["wilaya"],
+            wilaya=validated_data.get("wilaya", ""),
+            preferred_language=validated_data["preferred_language"],
         )
         user.set_password(validated_data["password"])
         user.save()
@@ -70,6 +94,18 @@ class GoogleSignInSerializer(serializers.Serializer):
     # Optional fields used to populate a fresh User if Google didn't supply them.
     phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
     wilaya = serializers.CharField(required=False, allow_blank=True, max_length=2)
+    preferred_language = serializers.ChoiceField(
+        choices=CommunicationLanguage.choices,
+        required=False,
+        default=CommunicationLanguage.ENGLISH,
+    )
+
+    def validate_wilaya(self, value: str) -> str:
+        if value == "":
+            return value
+        if value not in WILAYA_CODES:
+            raise serializers.ValidationError("Invalid wilaya code.")
+        return value
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -103,6 +139,7 @@ class MeSerializer(serializers.ModelSerializer):
 
     kyc_status = serializers.SerializerMethodField()
     kyc_rejection_reason = serializers.SerializerMethodField()
+    preferred_language = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -113,6 +150,7 @@ class MeSerializer(serializers.ModelSerializer):
             "phone",
             "wilaya",
             "role",
+            "preferred_language",
             "is_phone_verified",
             "is_email_verified",
             "is_kyc_verified",
@@ -147,3 +185,23 @@ class MeSerializer(serializers.ModelSerializer):
         if sub is not None and sub.status == KycSubmission.Status.REJECTED:
             return sub.rejection_reason or ""
         return None
+
+    def get_preferred_language(self, obj: User) -> str:
+        return normalize_communication_language(obj.preferred_language)
+
+
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """The bounded writable profile contract used by Phase 6C.
+
+    Existing profile fields remain read-only. Only the durable communication
+    preference is added here, so a language update cannot become an accidental
+    generic account mutation surface.
+    """
+
+    preferred_language = serializers.ChoiceField(
+        choices=CommunicationLanguage.choices
+    )
+
+    class Meta:
+        model = User
+        fields = ("preferred_language",)

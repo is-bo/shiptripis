@@ -4,6 +4,7 @@ This machine has no Postgres/Docker, so tests run against in-memory SQLite.
 Overrides only the DB + secret + minimal env the base module requires so it
 imports without a real .env. Everything else inherits from base.
 """
+
 import os
 
 for _k, _v in {
@@ -32,3 +33,12 @@ DATABASES = {
 # The mock payment rail is a test fixture. Production refuses to boot with it.
 PAYMENTS_ALLOW_MOCK_PROVIDER = True
 PAYMENTS_PUBLIC_BASE_URL = "https://test.shiptrip.invalid"
+
+# Endpoint-scoped throttles deliberately use low real-world budgets. A full
+# suite reuses one in-process locmem cache/IP across hundreds of isolated test
+# transactions, so use a high deterministic rate here; dedicated throttle
+# tests override the relevant scope explicitly.
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
+    scope: "10000/min"
+    for scope in REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]  # noqa: F405
+}

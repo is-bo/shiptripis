@@ -10,6 +10,7 @@ import '../core/api/api_exception.dart';
 import '../core/api/error_codes.dart';
 import '../core/session/token_store.dart';
 import '../domain/account.dart';
+import '../domain/communication_language.dart';
 
 class AuthRepository {
   AuthRepository(this._api, this._tokens);
@@ -27,16 +28,23 @@ class AuthRepository {
     ),
   );
 
-  /// `wilaya` is a two-character Algerian region code and the server requires
-  /// it. That is a genuine problem for the sender side of this marketplace —
-  /// a sender in Paris has no wilaya — and is reported as a backend finding.
-  /// Until it is relaxed, the sign-up screen has to collect one.
+  /// [wilaya] is retained only for older clients that still send an Algerian
+  /// profile hint. New V1 signup does not collect it: delivery and Journey
+  /// locations carry the country and region where they are actually needed.
+  ///
+  /// [preferredLanguage] is the one moment the app language and the
+  /// communication language are legitimately the same decision: the account
+  /// does not exist yet, so there is no stored preference to overwrite and the
+  /// alternative is a first email in a language the person never chose. After
+  /// this call the two settings are independent — changing the interface
+  /// language never rewrites the account preference.
   Future<Account> signUp({
     required String fullName,
     required String email,
     required String password,
     required String phone,
-    required String wilaya,
+    String? wilaya,
+    required CommunicationLanguage preferredLanguage,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/sign-up',
@@ -45,15 +53,20 @@ class AuthRepository {
         'email': email.trim(),
         'password': password,
         'phone': phone.trim(),
-        'wilaya': wilaya,
+        if (wilaya != null && wilaya.trim().isNotEmpty) 'wilaya': wilaya.trim(),
+        'preferred_language': preferredLanguage.wire,
       },
     ),
   );
 
+  /// [preferredLanguage] is used only when Google creates a fresh account; the
+  /// server ignores it for an account that already exists, so a returning user
+  /// keeps whatever they chose.
   Future<Account> signInWithGoogle({
     required String idToken,
     String? phone,
     String? wilaya,
+    CommunicationLanguage? preferredLanguage,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/oauth/google',
@@ -61,11 +74,28 @@ class AuthRepository {
         'id_token': idToken,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (wilaya != null && wilaya.isNotEmpty) 'wilaya': wilaya,
+        if (preferredLanguage != null)
+          'preferred_language': preferredLanguage.wire,
       },
     ),
   );
 
-  Future<Account> me() async => Account.fromJson(await _api.getObject('/api/me'));
+  Future<Account> me() async =>
+      Account.fromJson(await _api.getObject('/api/me'));
+
+  /// The one writable field on the profile contract.
+  ///
+  /// `PATCH /api/me` accepts `preferred_language` and nothing else, and answers
+  /// with the whole profile — so the caller replaces its `Account` from the
+  /// response rather than patching a local copy and hoping the two agree.
+  Future<Account> updatePreferredLanguage(
+    CommunicationLanguage language,
+  ) async => Account.fromJson(
+    await _api.patchObject(
+      '/api/me',
+      body: {'preferred_language': language.wire},
+    ),
+  );
 
   /// Blacklists the refresh token server-side, then clears local storage.
   ///
@@ -87,8 +117,10 @@ class AuthRepository {
   /// The server answers 202 for every address, known or not, so the UI must
   /// show the same message either way. Revealing which emails have accounts
   /// is an enumeration vector.
-  Future<void> requestPasswordReset(String email) =>
-      _api.postVoid('/api/auth/password/reset/request', body: {'email': email.trim()});
+  Future<void> requestPasswordReset(String email) => _api.postVoid(
+    '/api/auth/password/reset/request',
+    body: {'email': email.trim()},
+  );
 
   Future<void> confirmPasswordReset({
     required String email,

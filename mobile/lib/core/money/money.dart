@@ -122,6 +122,24 @@ class Money implements Comparable<Money> {
     return Money.minor(sign * combined.toInt(), code, exp);
   }
 
+  /// The amount as a plain decimal string — no symbol, no grouping, no
+  /// locale — for pre-filling an input the user is about to type over.
+  ///
+  /// Uses the currency's own exponent rather than assuming two decimals, and
+  /// gets there with integer division so a dinar (exponent 0) renders as
+  /// `40500` and never as `405.00`. This is rendering, not arithmetic: no
+  /// amount is combined with another.
+  String get editableString {
+    final negative = minorUnits < 0;
+    final digits = minorUnits.abs().toString();
+    if (exponent == 0) return negative ? '-$digits' : digits;
+
+    final padded = digits.padLeft(exponent + 1, '0');
+    final whole = padded.substring(0, padded.length - exponent);
+    final fraction = padded.substring(padded.length - exponent);
+    return '${negative ? '-' : ''}$whole.$fraction';
+  }
+
   /// ISO 4217 minor-unit exponents for the currencies this product touches.
   /// DZD is a zero-decimal currency; treating it as 2 would inflate every
   /// Chargily amount by a hundred.

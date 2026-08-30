@@ -27,6 +27,10 @@ from dataclasses import dataclass
 from django.db import transaction
 
 from apps.core.financial_locks import lock_deal_lifecycle
+from apps.core.languages import (
+    DEFAULT_COMMUNICATION_LANGUAGE,
+    normalize_communication_language,
+)
 
 from . import lifecycle
 from .models import Deal, DealEvent, DealRecipient
@@ -72,6 +76,7 @@ def set_recipient(
     email: str,
     phone: str = "",
     delivery_note: str = "",
+    communication_language: str | None = None,
 ) -> RecipientResult:
     """Record or replace the recipient, then open pickup if that was the gate.
 
@@ -101,12 +106,16 @@ def set_recipient(
 
     existing = aggregate.recipient
     if existing is None:
+        selected_language = normalize_communication_language(
+            communication_language or getattr(deal.sender, "preferred_language", "")
+        )
         DealRecipient.objects.create(
             deal=deal,
             full_name=full_name.strip()[:120],
             email=email.strip()[:254],
             phone=phone.strip()[:32],
             delivery_note=delivery_note[:1_000],
+            communication_language=selected_language,
             created_by_id=actor_id,
             revision=1,
         )
@@ -123,6 +132,10 @@ def set_recipient(
         existing.email = email.strip()[:254]
         existing.phone = phone.strip()[:32]
         existing.delivery_note = delivery_note[:1_000]
+        if communication_language is not None:
+            existing.communication_language = normalize_communication_language(
+                communication_language
+            )
         existing.updated_by_id = actor_id
         existing.revision = int(existing.revision) + 1
         existing.save(
@@ -131,6 +144,7 @@ def set_recipient(
                 "email",
                 "phone",
                 "delivery_note",
+                "communication_language",
                 "updated_by",
                 "revision",
                 "updated_at",
@@ -178,6 +192,10 @@ def recipient_projection(
             "email": recipient.email,
             "phone": recipient.phone,
             "delivery_note": recipient.delivery_note,
+            "communication_language": normalize_communication_language(
+                recipient.communication_language
+                or DEFAULT_COMMUNICATION_LANGUAGE
+            ),
             "revision": recipient.revision,
             "updated_at": recipient.updated_at,
         }

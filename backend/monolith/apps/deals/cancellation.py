@@ -431,7 +431,7 @@ def _notify_cancelled(
     deal = aggregate.deal
     context = {
         "deal_reference": f"ST-{deal.pk}",
-        "reason": f"cancelled by the {quote.actor_role}",
+        "cancelled_by_role": quote.actor_role,
     }
     for user_id, email in (
         (deal.sender_id, getattr(deal.sender, "email", "")),

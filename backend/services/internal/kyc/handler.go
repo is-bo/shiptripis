@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -21,6 +24,11 @@ import (
 // passport scan from a modern phone is rarely over 4 MB; reject anything
 // claiming much more.
 const MaxImageBytes int64 = 8 << 20 // 8 MiB
+
+// MaxImagePixels prevents a small, maliciously crafted image header from
+// making a later reviewer/thumbnailer allocate an unreasonable decoded image.
+// 48 MP comfortably covers modern phone cameras used for identity documents.
+const MaxImagePixels int64 = 48_000_000
 
 // MaxMultipartMemory bounds how much of the multipart body sits in RAM
 // before spilling to a temp file. Each upload uses two or three image
@@ -63,6 +71,11 @@ var allowedContentTypes = map[string]string{
 	"image/png":  ".png",
 }
 
+var allowedImageFormats = map[string]string{
+	"image/jpeg": "jpeg",
+	"image/png":  "png",
+}
+
 // objectStore is the subset of *storage.Client the handler needs. Narrowed
 // to an interface so unit tests can inject a fake without a live MinIO/S3 —
 // *storage.Client satisfies it unchanged, so production wiring is identical.
@@ -75,11 +88,13 @@ type objectStore interface {
 // the bearer token into a user_id; the storage client owns the MinIO
 // uploads; the recorder is the gRPC client to Django.
 type Handler struct {
-	Validator *auth.Validator
-	Storage   objectStore
-	Bucket    string
-	Recorder  Recorder
-	Log       *slog.Logger
+	Validator      *auth.Validator
+	Limiter        UploadRateLimiter
+	ClientIPSource ClientIPSource
+	Storage        objectStore
+	Bucket         string
+	Recorder       Recorder
+	Log            *slog.Logger
 }
 
 // Mount installs the KYC routes on the given mux. Caddy strips
@@ -95,7 +110,9 @@ type submissionResponse struct {
 }
 
 type errorResponse struct {
-	Error string `json:"error"`
+	Error  string `json:"error"`
+	Code   string `json:"code,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -108,10 +125,59 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
 }
 
+func writeStructuredError(w http.ResponseWriter, status int, code, detail string) {
+	writeJSON(w, status, errorResponse{Error: detail, Code: code, Detail: detail})
+}
+
 func (h *Handler) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	claims, err := h.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.Limiter == nil {
+		// A missing limiter is a service wiring defect. KYC upload is
+		// storage-sensitive, so fail closed instead of silently restoring the
+		// pre-Phase-7A unlimited path.
+		h.Log.Error("kyc: upload rate limiter not configured", "user_id", claims.UserID)
+		writeStructuredError(
+			w,
+			http.StatusServiceUnavailable,
+			"kyc_upload_rate_limit_unavailable",
+			"KYC uploads are temporarily unavailable. Try again later.",
+		)
+		return
+	}
+	limitDecision, err := h.Limiter.Allow(
+		r.Context(),
+		claims.UserID,
+		requestClientIP(r, h.ClientIPSource),
+	)
+	if err != nil {
+		// Redis is transient abuse-control state, not KYC authority. Refuse
+		// storage work until the shared budget is available; do not leak the
+		// Redis address/error to the client.
+		h.Log.Error("kyc: upload rate limiter unavailable", "err", err, "user_id", claims.UserID)
+		writeStructuredError(
+			w,
+			http.StatusServiceUnavailable,
+			"kyc_upload_rate_limit_unavailable",
+			"KYC uploads are temporarily unavailable. Try again later.",
+		)
+		return
+	}
+	if !limitDecision.Allowed {
+		retrySeconds := int64((limitDecision.RetryAfter + time.Second - 1) / time.Second)
+		if retrySeconds < 1 {
+			retrySeconds = 1
+		}
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
+		writeStructuredError(
+			w,
+			http.StatusTooManyRequests,
+			"kyc_upload_rate_limited",
+			"Too many KYC upload attempts. Try again later.",
+		)
 		return
 	}
 
@@ -273,6 +339,9 @@ func (h *Handler) uploadImage(
 		return "", fmt.Errorf("open part: %w", err)
 	}
 	defer func() { _ = f.Close() }()
+	if err := validateImageContent(f, contentType); err != nil {
+		return "", err
+	}
 
 	key := imageKey(userID, idemKey, field, ext)
 	// storage.Put enforces its own overflow cap (see pkg/storage/s3.go).
@@ -280,6 +349,42 @@ func (h *Handler) uploadImage(
 		return "", fmt.Errorf("s3 put: %w", err)
 	}
 	return key, nil
+}
+
+func validateImageContent(f multipart.File, declaredContentType string) error {
+	var sniff [512]byte
+	n, err := f.Read(sniff[:])
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("read image signature: %w", err)
+	}
+	if http.DetectContentType(sniff[:n]) != declaredContentType {
+		return errBadContent
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reset image after signature: %w", err)
+	}
+	decoded, format, err := image.DecodeConfig(f)
+	if err != nil || format != allowedImageFormats[declaredContentType] {
+		return errBadContent
+	}
+	if decoded.Width <= 0 || decoded.Height <= 0 || int64(decoded.Width)*int64(decoded.Height) > MaxImagePixels {
+		return errBadContent
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reset image before full validation: %w", err)
+	}
+	fullyDecoded, fullFormat, err := image.Decode(f)
+	if err != nil || fullFormat != allowedImageFormats[declaredContentType] {
+		return errBadContent
+	}
+	fullBounds := fullyDecoded.Bounds()
+	if fullBounds.Dx() != decoded.Width || fullBounds.Dy() != decoded.Height {
+		return errBadContent
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reset image after validation: %w", err)
+	}
+	return nil
 }
 
 // cleanupOrphans best-effort deletes images after a failed RecordSubmission.
@@ -294,16 +399,17 @@ func (h *Handler) cleanupOrphans(userID int64, keys ...string) {
 		}
 		if err := h.Storage.Delete(ctx, h.Bucket, key); err != nil {
 			h.Log.Warn("kyc: orphan cleanup failed",
-				"user_id", userID, "key", key, "err", err)
+				"user_id", userID, "err", err)
 		}
 	}
 }
 
 var (
-	errMissing = errors.New("missing")
-	errTooMany = errors.New("too many parts")
-	errBadSize = errors.New("bad size")
-	errBadType = errors.New("bad content type")
+	errMissing    = errors.New("missing")
+	errTooMany    = errors.New("too many parts")
+	errBadSize    = errors.New("bad size")
+	errBadType    = errors.New("bad content type")
+	errBadContent = errors.New("invalid image content")
 )
 
 func writeUploadError(w http.ResponseWriter, field string, err error) {
@@ -316,6 +422,8 @@ func writeUploadError(w http.ResponseWriter, field string, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, field+": invalid size")
 	case errors.Is(err, errBadType):
 		writeError(w, http.StatusUnsupportedMediaType, field+": unsupported content type")
+	case errors.Is(err, errBadContent):
+		writeError(w, http.StatusUnsupportedMediaType, field+": invalid image content")
 	default:
 		writeError(w, http.StatusInternalServerError, field+": upload failed")
 	}

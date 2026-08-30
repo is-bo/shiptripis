@@ -116,6 +116,21 @@ class ApiException implements Exception {
       kind == ApiFailureKind.timeout ||
       kind == ApiFailureKind.server;
 
+  /// How long the server asked us to wait, when it said so.
+  ///
+  /// Only ever set on a throttle. Note that [isRetryable] stays false for a
+  /// 429 on purpose: the fix is for the *user* to wait, not for the client to
+  /// hammer the same endpoint on a timer.
+  Duration? get retryAfter {
+    final seconds = intExtra('retry_after_seconds');
+    return seconds == null ? null : Duration(seconds: seconds);
+  }
+
+  /// The server's correlation id for the request that failed, when it sent
+  /// one. Shown to the user only in the "contact support" affordance — it is
+  /// noise in a normal error message.
+  String? get requestId => extras['request_id'] as String?;
+
   int? intExtra(String key) => switch (extras[key]) {
     final int v => v,
     final num v => v.toInt(),
@@ -160,6 +175,10 @@ class ApiException implements Exception {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+      // Dio 5.11 added this for a response body that stalls mid-transform.
+      // It is a timeout from the user's point of view and must be handled, or
+      // a slow upload surfaces as an unexplained failure.
+      case DioExceptionType.transformTimeout:
         return ApiException(
           kind: ApiFailureKind.timeout,
           code: ApiErrorCode.unknown,
@@ -201,14 +220,17 @@ class ApiException implements Exception {
 
   /// Builds from a non-2xx [Response]. The client uses a permissive
   /// `validateStatus`, so most failures arrive here rather than as a throw.
-  factory ApiException.fromResponse(Response<dynamic> response, {Object? cause}) {
+  factory ApiException.fromResponse(
+    Response<dynamic> response, {
+    Object? cause,
+  }) {
     final status = response.statusCode ?? 0;
     final data = response.data;
 
     var codeString = <String>[];
     String? detail;
     final fields = <String, List<String>>{};
-    final extras = <String, dynamic>{};
+    final extras = <String, dynamic>{..._headerExtras(response)};
 
     if (data is Map) {
       for (final entry in data.entries) {
@@ -254,6 +276,9 @@ class ApiException implements Exception {
         code: ApiErrorCode.unknown,
         statusCode: status,
         serverDetail: data.length > 300 ? '${data.substring(0, 300)}…' : data,
+        // A gateway 502 has no JSON at all, and its request id is the only
+        // thread support can pull on. Keep it.
+        extras: Map.unmodifiable(extras),
         cause: cause,
       );
     }
@@ -269,6 +294,35 @@ class ApiException implements Exception {
       extras: Map.unmodifiable(extras),
       cause: cause,
     );
+  }
+
+  /// Metadata the transport carries rather than the body.
+  ///
+  /// Two headers matter to a user-facing client:
+  ///
+  /// * `Retry-After` on a 429. The backend's throttles are distributed and
+  ///   shared across instances, so a throttle is a real, reachable state
+  ///   rather than a theoretical one — and "try again later" with no idea of
+  ///   *when* is a dead end. Parsed as seconds; the HTTP-date form is
+  ///   deliberately not supported, because the server only ever sends the
+  ///   delta form and guessing at clock skew would be worse than saying
+  ///   nothing.
+  /// * `X-Request-ID` on anything. The server generates one per request and
+  ///   stamps it into its structured logs. Surfacing it is the difference
+  ///   between a support ticket that can be traced and one that cannot.
+  static Map<String, dynamic> _headerExtras(Response<dynamic> response) {
+    final headers = response.headers;
+    final extras = <String, dynamic>{};
+
+    final retryAfter = headers.value('retry-after');
+    final seconds = retryAfter == null ? null : int.tryParse(retryAfter.trim());
+    if (seconds != null && seconds > 0) extras['retry_after_seconds'] = seconds;
+
+    final requestId = headers.value('x-request-id');
+    if (requestId != null && requestId.trim().isNotEmpty) {
+      extras['request_id'] = requestId.trim();
+    }
+    return extras;
   }
 
   static ApiFailureKind _kindFor(
@@ -298,10 +352,7 @@ class ApiException implements Exception {
   static List<String> _asStringList(Object? value) {
     if (value is String) return [value];
     if (value is List) {
-      return value
-          .map(_stringify)
-          .whereType<String>()
-          .toList(growable: false);
+      return value.map(_stringify).whereType<String>().toList(growable: false);
     }
     return const [];
   }

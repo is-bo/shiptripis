@@ -1,8 +1,6 @@
 {
   "@@locale": "en",
-
   "appName": "ShipTrip",
-
   "actionContinue": "Continue",
   "actionCancel": "Cancel",
   "actionSave": "Save",
@@ -32,7 +30,6 @@
   "actionApply": "Apply",
   "actionReport": "Report a problem",
   "actionContactSupport": "Contact support",
-
   "navHome": "Home",
   "navDeliveries": "Deliveries",
   "navChat": "Chat",
@@ -41,9 +38,12 @@
   "navNotificationsWithCount": "Notifications, {count} unread",
   "@navNotificationsWithCount": {
     "description": "Screen-reader label for the header bell.",
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
-
   "roleSender": "Sending",
   "roleTraveler": "Travelling",
   "roleSwitchLabel": "Switch role",
@@ -52,7 +52,6 @@
   "roleTravelerDescription": "Carry parcels on a trip you're taking",
   "roleSwitchedToSender": "Switched to sending",
   "roleSwitchedToTraveler": "Switched to travelling",
-
   "authSignIn": "Sign in",
   "authSignUp": "Create account",
   "authSignOut": "Sign out",
@@ -66,21 +65,31 @@
   "authHaveAccount": "Already have an account?",
   "authVerifyEmailTitle": "Confirm your email",
   "authVerifyEmailBody": "We sent a link to {email}. Confirm it to keep your account secure.",
-  "@authVerifyEmailBody": { "placeholders": { "email": { "type": "String" } } },
+  "@authVerifyEmailBody": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
   "authSignOutConfirmTitle": "Sign out?",
   "authSignOutConfirmBody": "You'll need to sign in again to see your deliveries.",
-
   "validationRequired": "This is required",
   "validationEmailInvalid": "Enter a valid email address",
   "validationPasswordTooShort": "Use at least 8 characters",
   "validationNumberInvalid": "Enter a number",
   "validationMustBePositive": "Enter a number greater than zero",
   "validationTooLong": "Keep this under {max} characters",
-  "@validationTooLong": { "placeholders": { "max": { "type": "int" } } },
+  "@validationTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
   "validationSelectOne": "Choose one",
   "validationDateInPast": "Choose a date in the future",
   "validationDeadlineBeforeReady": "The deadline has to be after the parcel is ready",
-
   "stateLoading": "Loading…",
   "stateOfflineTitle": "You're offline",
   "stateOfflineBody": "Check your connection. We'll load this as soon as you're back.",
@@ -100,7 +109,6 @@
   "stateUnexpectedBody": "We couldn't complete that. Try again, and tell us if it keeps happening.",
   "stateAppOutdatedTitle": "This version is out of date",
   "stateAppOutdatedBody": "Update ShipTrip to continue. This part of the app no longer works on this version.",
-
   "staleTitle": "This has changed",
   "staleRefreshAction": "Refresh",
   "staleRequestNotOpen": "This request isn't open any more.",
@@ -112,14 +120,19 @@
   "staleCapacityExceededDetail": "Someone else booked space while you were deciding.",
   "staleRewardBelowMinimum": "The minimum reward has changed.",
   "staleRewardBelowMinimumDetail": "The minimum is now {amount}.",
-  "@staleRewardBelowMinimumDetail": { "placeholders": { "amount": { "type": "String" } } },
+  "@staleRewardBelowMinimumDetail": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "staleRouteChanged": "The route details changed. We've refreshed the price.",
   "staleKycInvalid": "Your identity check needs attention before you can do this.",
   "staleFlightProofInvalid": "Your flight proof needs attention before this journey can match.",
   "staleReservationExpired": "Your reserved space expired.",
   "staleDealClosed": "This delivery is closed.",
   "staleOfferExpired": "This offer is no longer available.",
-
   "moneyYouPay": "You pay",
   "moneyTravelerReceives": "Traveller receives",
   "moneyPlatformFee": "ShipTrip fee",
@@ -137,10 +150,15 @@
   "moneyDepositNotExtra": "This is credited towards your final payment. It isn't an extra fee.",
   "moneyAmountCharged": "You'll be charged",
   "moneyExchangeRate": "Rate: €1 = {rate} DA",
-  "@moneyExchangeRate": { "placeholders": { "rate": { "type": "String" } } },
+  "@moneyExchangeRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "moneyChargedInDinars": "Chargily charges in Algerian dinars. The delivery price stays in euros.",
   "moneyFree": "Free",
-
   "homeSenderGreeting": "Send something home",
   "homeTravelerGreeting": "Earn on a trip you're already taking",
   "homeCreateRequest": "Send a parcel",
@@ -153,7 +171,6 @@
   "homeEmptySenderBody": "Post what you want to send and travellers heading that way will see it.",
   "homeEmptyTravelerTitle": "No journeys yet",
   "homeEmptyTravelerBody": "Add the trip you're taking and we'll show you parcels along your route.",
-
   "deliveriesTitle": "Deliveries",
   "deliveriesFilterActive": "Active",
   "deliveriesFilterAwaitingYou": "Needs you",
@@ -167,7 +184,6 @@
   "deliveriesEmptyHistoryBody": "Completed and cancelled deliveries stay here.",
   "deliveriesEmptyAwaitingTitle": "You're all caught up",
   "deliveriesEmptyAwaitingBody": "Nothing is waiting on you.",
-
   "requestStatusAwaitingDeposit": "Deposit needed",
   "requestStatusOpen": "Finding a traveller",
   "requestStatusMatched": "Matched",
@@ -176,7 +192,6 @@
   "requestStatusCompleted": "Completed",
   "requestStatusCancelled": "Cancelled",
   "requestStatusExpired": "Expired",
-
   "dealStatusOfferAccepted": "Offer accepted",
   "dealStatusPaymentRequired": "Payment needed",
   "dealStatusPaymentProcessing": "Confirming payment",
@@ -194,7 +209,6 @@
   "dealStatusPartiallyRefunded": "Partly refunded",
   "dealStatusPaymentFailed": "Payment failed",
   "dealStatusExpired": "Expired",
-
   "requestCreateTitle": "Send a parcel",
   "requestStepRoute": "Route",
   "requestStepParcel": "Parcel",
@@ -235,7 +249,6 @@
   "requestProhibitedItemsLink": "See what can't be sent",
   "requestSizeExplainer": "Size matters as much as weight. We charge on whichever is greater.",
   "requestCreated": "Posted",
-
   "depositTitle": "Publish your request",
   "depositExplainer": "Pay a small deposit to publish this request to travellers.",
   "depositAmount": "Deposit",
@@ -246,7 +259,6 @@
   "depositPendingBody": "We're waiting for your payment provider to confirm. This usually takes a few seconds.",
   "depositPaidTitle": "Published",
   "depositPaidBody": "Travellers heading your way can see this now.",
-
   "journeyTitle": "Journey",
   "journeyCreateTitle": "Add a journey",
   "journeyOverallRoute": "Where are you going?",
@@ -255,7 +267,13 @@
   "journeyLegs": "Legs",
   "journeyAddLeg": "Add a leg",
   "journeyLegPosition": "Leg {position}",
-  "@journeyLegPosition": { "placeholders": { "position": { "type": "int" } } },
+  "@journeyLegPosition": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
   "journeyModeFlight": "Flight",
   "journeyModeDrive": "Drive",
   "journeyDeparts": "Departs",
@@ -269,7 +287,14 @@
   "journeySuggestLegTitle": "Add the road leg?",
   "journeySuggestLegBody": "Your flight lands in {arrival}, but you're going to {destination}. Add the drive so parcels can be matched all the way.",
   "@journeySuggestLegBody": {
-    "placeholders": { "arrival": { "type": "String" }, "destination": { "type": "String" } }
+    "placeholders": {
+      "arrival": {
+        "type": "String"
+      },
+      "destination": {
+        "type": "String"
+      }
+    }
   },
   "journeySuggestLegAccept": "Add drive leg",
   "journeySuggestLegDecline": "No, I stop there",
@@ -282,7 +307,56 @@
   "journeyStatusExpired": "Expired",
   "journeyEmptyLegsTitle": "Add your first leg",
   "journeyEmptyLegsBody": "A journey is made of legs. Paris to Algiers by plane, then Algiers to Jijel by road.",
-
+  "journeyRouteShape": "Your route",
+  "journeyModeLabel": "How you're travelling",
+  "journeyLegStartsAt": "Starts at",
+  "journeyLegEndsAt": "Ends at",
+  "journeyLegEndPlaceholder": "Choose where this leg ends",
+  "journeyChooseDateTime": "Choose date and time",
+  "journeyArriveOptionalHelp": "Optional. It lets us check the next leg leaves in time.",
+  "journeyRemoveLeg": "Remove this leg",
+  "journeyAddLegDestinationTitle": "Where does this leg end?",
+  "journeyMaxLegsReached": "A journey can hold at most 20 legs.",
+  "journeyCapacityInvalid": "Enter at least 0.01 kg, to two decimal places.",
+  "journeyLegDepartRequired": "Say when this leg departs.",
+  "journeyLegDepartNotAfterPrevious": "This leg has to depart after the leg before it.",
+  "journeyLegDepartBeforePreviousArrival": "This leg departs before the previous one lands.",
+  "journeyLegArriveBeforeDepart": "Arrival has to be after departure.",
+  "journeyNotesLabel": "Anything senders should know",
+  "journeyNotesHint": "No liquids, small parcels only, meeting near the terminal…",
+  "journeySaveDraft": "Save journey",
+  "journeyCreatedDraft": "Saved as a draft. Add flight proof, then publish it.",
+  "journeyDraftNextSteps": "Nothing is visible to senders yet. Publish it when your flight proof is approved.",
+  "journeyLegsNeedProofTitle": "Flights that need proof",
+  "journeyPublishBlockedProof": "Every flight leg needs approved proof before this can go live.",
+  "journeyPublished": "Your journey is live. Senders heading your way can see it.",
+  "journeyErrorNotPublishable": "This journey can't be published from where it is now.",
+  "journeyErrorNoLegs": "This journey has no legs, so there is nothing to publish.",
+  "journeyErrorLegPositions": "The legs are numbered wrongly. Cancel this journey and create it again.",
+  "journeyErrorEndpointsMismatch": "The first and last legs don't match the journey's start and destination.",
+  "journeyErrorLegEndpoints": "One leg starts or ends somewhere the route doesn't pass through.",
+  "journeyErrorLegTime": "One leg arrives before it departs.",
+  "journeyErrorLegsDisconnected": "The legs don't join up into one route.",
+  "journeyErrorLegTimeOrder": "The legs aren't in time order.",
+  "journeyErrorNotOwned": "This journey belongs to someone else.",
+  "journeyRebuildHint": "Cancel this journey and create it again with the corrected details.",
+  "journeyCancelConfirmTitle": "Cancel this journey?",
+  "journeyCancelConfirmBody": "Senders stop seeing it and any space they were holding is released. This can't be undone.",
+  "journeyCancelled": "Journey cancelled.",
+  "journeyReleasedAllocations": "{count, plural, =0{No reserved space was being held.} =1{1 reserved space was released.} other{{count} reserved spaces were released.}}",
+  "@journeyReleasedAllocations": {
+    "description": "How many pending capacity reservations the server released when a journey was cancelled.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "journeyErrorNotCancellable": "This journey can't be cancelled from where it is now.",
+  "journeyErrorHasFundedDeal": "A paid delivery is riding on this journey. Sort that delivery out first.",
+  "journeyMatchesInfoTitle": "Senders make the first move",
+  "journeyMatchesInfoBody": "You can't offer on these. If one of these senders picks you, their offer arrives in Deliveries.",
+  "journeyMatchesLoadFailed": "We couldn't load parcels for this journey.",
   "proofTitle": "Flight proof",
   "proofExplainer": "Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.",
   "proofDriveNotRequired": "Driving legs don't need any proof.",
@@ -292,9 +366,43 @@
   "proofStatusApproved": "Approved",
   "proofStatusRejected": "Not accepted",
   "proofRejectedReason": "Reason: {reason}",
-  "@proofRejectedReason": { "placeholders": { "reason": { "type": "String" } } },
+  "@proofRejectedReason": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "proofReplace": "Upload a new one",
-
+  "proofKindLabel": "What are you uploading?",
+  "proofKindTicket": "Ticket",
+  "proofKindBoardingPass": "Boarding pass",
+  "proofKindBookingConfirmation": "Booking",
+  "proofFormatRule": "JPEG, PNG or WebP, up to 10 MB. We check the file itself, so renaming one won't get it through.",
+  "proofFileTooLarge": "That image is over 10 MB. Pick a smaller one.",
+  "proofFileTypeNotAllowed": "Only JPEG, PNG and WebP images are accepted.",
+  "proofChooseImage": "Choose an image",
+  "proofTakePhoto": "Take a photo",
+  "proofSelectedFile": "Ready to upload",
+  "proofUploading": "Uploading your proof…",
+  "proofUploaded": "Proof received. We'll review it shortly.",
+  "proofExistingTitle": "What you've already sent",
+  "proofErrorUploadClosed": "This journey is past the point where proof can be added.",
+  "proofLegLabel": "Leg {position}: {from} to {to}",
+  "@proofLegLabel": {
+    "description": "Names the leg a proof upload belongs to.",
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
   "kycTitle": "Identity check",
   "kycWhyTitle": "Why we ask",
   "kycWhyBody": "Senders are handing a stranger something that matters to them. Verifying travellers is what makes that reasonable.",
@@ -315,7 +423,6 @@
   "kycFrontImage": "Front of document",
   "kycBackImage": "Back of document",
   "kycSelfie": "Selfie",
-
   "discoveryTravelersTitle": "Travellers for this parcel",
   "discoveryRequestsTitle": "Parcels along your route",
   "discoveryEmptyTravelersTitle": "No travellers yet",
@@ -323,7 +430,13 @@
   "discoveryEmptyRequestsTitle": "No parcels yet",
   "discoveryEmptyRequestsBody": "Nothing matches your journey right now. We'll notify you when something does.",
   "discoveryCoveredLegs": "Covers {count, plural, =1{1 leg} other{{count} legs}}",
-  "@discoveryCoveredLegs": { "placeholders": { "count": { "type": "int" } } },
+  "@discoveryCoveredLegs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "discoveryDetourSmall": "Barely a detour",
   "discoveryDetourModerate": "Small detour",
   "discoveryDetourLarge": "Noticeable detour",
@@ -332,10 +445,16 @@
   "discoveryBoostedExplainer": "The sender paid to be seen by more travellers. It doesn't change whether you're a match.",
   "discoveryRatingCount": "{rating} ({count})",
   "@discoveryRatingCount": {
-    "placeholders": { "rating": { "type": "String" }, "count": { "type": "int" } }
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "discoveryNoRatingsYet": "No ratings yet",
-
   "offerProposeTitle": "Make an offer",
   "offerProposeExplainer": "You choose what the traveller earns. They can accept, decline, or come back with a different amount.",
   "offerRewardLabel": "Traveller's reward",
@@ -349,9 +468,21 @@
   "offerAwaitingSender": "Waiting for the sender",
   "offerAwaitingYou": "Your move",
   "offerYouProposed": "You offered {amount}",
-  "@offerYouProposed": { "placeholders": { "amount": { "type": "String" } } },
+  "@offerYouProposed": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "offerTheyProposed": "They offered {amount}",
-  "@offerTheyProposed": { "placeholders": { "amount": { "type": "String" } } },
+  "@offerTheyProposed": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "offerHistoryTitle": "Offer history",
   "offerStatusPending": "Waiting",
   "offerStatusAccepted": "Accepted",
@@ -361,14 +492,25 @@
   "offerDeclineConfirmTitle": "Decline this offer?",
   "offerDeclineConfirmBody": "The other side will be told. You can still negotiate afterwards.",
   "offerAcceptConfirmTitle": "Accept {amount}?",
-  "@offerAcceptConfirmTitle": { "placeholders": { "amount": { "type": "String" } } },
+  "@offerAcceptConfirmTitle": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "offerAcceptTravelerBody": "Space on your journey is reserved as soon as you accept. The sender then has to pay.",
   "offerAcceptSenderBody": "Once you accept, you'll be asked to pay so the delivery can start.",
   "offerBelowMinimum": "Offer at least {amount}",
-  "@offerBelowMinimum": { "placeholders": { "amount": { "type": "String" } } },
+  "@offerBelowMinimum": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "offerEmptyTitle": "No offers yet",
   "offerEmptyBody": "When someone makes an offer, it shows up here.",
-
   "paymentTitle": "Payment",
   "paymentChooseProvider": "How would you like to pay?",
   "paymentProviderStripe": "Card",
@@ -381,7 +523,13 @@
   "paymentNoProvidersTitle": "No payment method available",
   "paymentNoProvidersBody": "Payment is temporarily unavailable. Nothing has been charged and your delivery is unaffected.",
   "paymentPayAction": "Pay {amount}",
-  "@paymentPayAction": { "placeholders": { "amount": { "type": "String" } } },
+  "@paymentPayAction": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "paymentOpeningProvider": "Opening secure checkout…",
   "paymentConfirmingTitle": "Confirming your payment",
   "paymentConfirmingBody": "Your bank has told us, and we're confirming it with ShipTrip. Don't pay again — this usually takes a few seconds.",
@@ -401,7 +549,6 @@
   "paymentStatusRefunded": "Refunded",
   "paymentReturnedTitle": "Welcome back",
   "paymentRedirectNotProof": "We confirm every payment with the provider before marking it paid.",
-
   "guestPayTitle": "Have someone else pay",
   "guestPayExplainer": "Share a link and anyone can pay this amount for you. They don't need a ShipTrip account.",
   "guestPayCreateLink": "Create payment link",
@@ -411,20 +558,29 @@
   "guestPayRevoke": "Cancel this link",
   "guestPayRevoked": "Link cancelled",
   "guestPayExpiresAt": "Expires {when}",
-  "@guestPayExpiresAt": { "placeholders": { "when": { "type": "String" } } },
+  "@guestPayExpiresAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "guestPayWarning": "Anyone with this link can pay this amount. They get nothing else — no access to your delivery, your chat, or your details.",
+  "guestPayPayerEmail": "Your email for the receipt",
+  "guestPayPayerEmailHelp": "We use it for your payment receipt, failure updates and any refund communication. It does not create a ShipTrip account.",
   "guestPayAmountDue": "Amount due",
   "guestPayForDelivery": "Payment for a ShipTrip delivery",
   "guestPayThanksTitle": "Thank you",
   "guestPayThanksBody": "The payment is confirmed. Nothing else is needed from you.",
   "guestPayInvalidTitle": "This link isn't valid",
   "guestPayInvalidBody": "It may have expired, been cancelled, or already been paid.",
-
   "recipientTitle": "Who's receiving this?",
   "recipientExplainer": "We email the delivery code to the recipient. The traveller can only complete the delivery if the recipient gives them that code.",
   "recipientName": "Recipient's name",
   "recipientEmail": "Recipient's email",
   "recipientEmailHelp": "The delivery code is sent here. Make sure it's right.",
+  "recipientLanguage": "Recipient's language",
+  "recipientLanguageHelp": "This is the language we'll use for the recipient's delivery email.",
   "recipientPhone": "Phone (optional)",
   "recipientNote": "Note for the recipient (optional)",
   "recipientSave": "Save recipient",
@@ -432,7 +588,6 @@
   "recipientRequiredTitle": "Recipient needed",
   "recipientRequiredBody": "Add the recipient before pickup so we can send them the delivery code.",
   "recipientRecordedForTraveler": "The sender has provided the recipient's details.",
-
   "pickupSenderTitle": "Pickup code",
   "pickupSenderExplainer": "Give this code to the traveller only when you're physically handing over the parcel. It's how they confirm they have it.",
   "pickupSenderReveal": "Show pickup code",
@@ -446,7 +601,6 @@
   "pickupAwaitingTitle": "Waiting for pickup",
   "pickupAwaitingSenderBody": "The traveller will ask for your pickup code when you meet.",
   "pickupAwaitingTravelerBody": "Meet the sender and ask for their pickup code.",
-
   "deliveryTravelerTitle": "Confirm delivery",
   "deliveryTravelerExplainer": "Ask the recipient for the code that was emailed to them.",
   "deliveryCodeLabel": "Delivery code",
@@ -456,41 +610,80 @@
   "deliveryConfirmedSenderBody": "Your parcel arrived. Your payment stays protected for a little longer.",
   "deliverySenderTitle": "Delivery code",
   "deliveryCodeLockedTitle": "Available in {countdown}",
-  "@deliveryCodeLockedTitle": { "placeholders": { "countdown": { "type": "String" } } },
+  "@deliveryCodeLockedTitle": {
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
   "deliveryCodeLockedBody": "For safety, the delivery code stays locked for 30 minutes after pickup. The recipient hasn't been emailed yet either.",
   "deliveryCodeLockedWhy": "Why the wait?",
   "deliveryCodeLockedWhyBody": "The pause means a code can't be handed over at the same moment as the parcel. It's what stops a delivery being marked complete before it happens.",
   "deliveryCodeReadyTitle": "Delivery code ready",
   "deliveryCodeSentToRecipient": "We've emailed the code to {recipient}.",
-  "@deliveryCodeSentToRecipient": { "placeholders": { "recipient": { "type": "String" } } },
+  "@deliveryCodeSentToRecipient": {
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
   "deliveryCodeReveal": "Show delivery code",
   "deliveryCodeSenderWarning": "The recipient gives this to the traveller at the door. Only share it with the recipient.",
   "deliveryCodeTravelerNever": "Only the recipient has this code. Ask them for it when you arrive.",
-
   "codeAttemptsRemaining": "{count, plural, =1{1 attempt left} other{{count} attempts left}}",
-  "@codeAttemptsRemaining": { "placeholders": { "count": { "type": "int" } } },
+  "@codeAttemptsRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "codeIncorrect": "That code isn't right",
   "codeLockedTitle": "Too many wrong attempts",
   "codeLockedBody": "Try again {when}. If you're stuck, ask for a new code.",
-  "@codeLockedBody": { "placeholders": { "when": { "type": "String" } } },
+  "@codeLockedBody": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "codeRotate": "Get a new code",
   "codeRotated": "New code issued. The old one no longer works.",
   "codeRotateConfirmTitle": "Issue a new code?",
   "codeRotateConfirmBody": "The code you already shared will stop working immediately.",
   "codeNotAvailableYet": "This code isn't available yet",
   "codeCopyForReading": "Read the code out loud rather than sending it.",
-
   "protectionTitle": "Payment protected",
   "protectionSenderBody": "Your payment is held until {when}. If something's wrong with the delivery, open a dispute before then.",
-  "@protectionSenderBody": { "placeholders": { "when": { "type": "String" } } },
+  "@protectionSenderBody": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "protectionTravelerBody": "Delivered. Your payout is released after {when}, once the protection window closes.",
-  "@protectionTravelerBody": { "placeholders": { "when": { "type": "String" } } },
+  "@protectionTravelerBody": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "protectionEndsIn": "Ends in {countdown}",
-  "@protectionEndsIn": { "placeholders": { "countdown": { "type": "String" } } },
+  "@protectionEndsIn": {
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
   "protectionEnded": "Protection window closed",
   "protectionExplainerTitle": "What this means",
   "protectionExplainerBody": "Funds are held pending delivery confirmation and a 48-hour window. This isn't a bank escrow account — it's ShipTrip holding the payment until both sides are settled.",
-
   "payoutTitle": "Payout",
   "payoutStatusNotEligible": "Not yet",
   "payoutStatusEligible": "Ready",
@@ -504,7 +697,6 @@
   "payoutPendingTitle": "Payout pending",
   "payoutEmptyTitle": "No payouts yet",
   "payoutEmptyBody": "Complete a delivery and your earnings appear here.",
-
   "disputeOpenTitle": "Open a dispute",
   "disputeOpenExplainer": "Tell us what went wrong. Opening a dispute puts the traveller's payout on hold while we look into it.",
   "disputeCategory": "What happened?",
@@ -522,11 +714,23 @@
   "disputeAddVideo": "Add video",
   "disputeAddNote": "Add a note",
   "disputeUploading": "Uploading… {percent}%",
-  "@disputeUploading": { "placeholders": { "percent": { "type": "int" } } },
+  "@disputeUploading": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "disputeUploadFailed": "Upload failed",
   "disputeUploadRetry": "Retry upload",
   "disputeFileTooLarge": "That file is too large. The limit is {limit}.",
-  "@disputeFileTooLarge": { "placeholders": { "limit": { "type": "String" } } },
+  "@disputeFileTooLarge": {
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
   "disputeFileTypeNotAllowed": "That file type isn't supported. Use a JPEG, PNG, WebP, MP4 or MOV.",
   "disputeEvidenceLimitReached": "You've added the maximum number of items.",
   "disputeResolutionTitle": "Outcome",
@@ -537,7 +741,6 @@
   "disputeWindowClosedBody": "Disputes can be opened for 48 hours after delivery. Contact support if you still need help.",
   "disputeEmptyTitle": "No disputes",
   "disputeEmptyBody": "Nothing is under dispute.",
-
   "cancelTitle": "Cancel this delivery",
   "cancelConfirmAction": "Cancel delivery",
   "cancelKeepAction": "Keep it",
@@ -548,12 +751,17 @@
   "cancelOutcomeTitle": "What happens",
   "cancelCancelledTitle": "Cancelled",
   "cancelRefundOnWay": "Your refund is on the way.",
-
   "ratingTitle": "How did it go?",
   "ratingSenderPrompt": "Rate the traveller",
   "ratingTravelerPrompt": "Rate the sender",
   "ratingScoreLabel": "{score} out of 5",
-  "@ratingScoreLabel": { "placeholders": { "score": { "type": "int" } } },
+  "@ratingScoreLabel": {
+    "placeholders": {
+      "score": {
+        "type": "int"
+      }
+    }
+  },
   "ratingTagsLabel": "What stood out?",
   "ratingCommentLabel": "Anything else? (optional)",
   "ratingSubmit": "Submit rating",
@@ -563,24 +771,46 @@
   "ratingWindowClosed": "The rating window has closed.",
   "ratingEmptyTitle": "No ratings yet",
   "ratingEmptyBody": "Ratings appear after a delivery is completed.",
-
   "boostTitle": "Boost this request",
   "boostExplainer": "A boost puts your request higher in the list for travellers who already match it.",
   "boostDoesNotGuarantee": "It doesn't change who you match with, and it doesn't guarantee a delivery.",
   "boostChoosePackage": "Choose a boost",
   "boostDuration": "{hours, plural, =1{1 hour} other{{hours} hours}}",
-  "@boostDuration": { "placeholders": { "hours": { "type": "int" } } },
+  "@boostDuration": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "boostDurationDays": "{days, plural, =1{1 day} other{{days} days}}",
-  "@boostDurationDays": { "placeholders": { "days": { "type": "int" } } },
+  "@boostDurationDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "boostActive": "Boost active",
   "boostActiveUntil": "Active until {when}",
-  "@boostActiveUntil": { "placeholders": { "when": { "type": "String" } } },
+  "@boostActiveUntil": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "boostPendingPayment": "Waiting for payment",
   "boostExpired": "Boost ended",
   "boostPurchase": "Boost for {amount}",
-  "@boostPurchase": { "placeholders": { "amount": { "type": "String" } } },
+  "@boostPurchase": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "boostNotEligible": "This request can't be boosted right now.",
-
   "chatTitle": "Chat",
   "chatEmptyTitle": "No conversations",
   "chatEmptyBody": "Chat opens once a delivery is paid for.",
@@ -596,14 +826,18 @@
   "chatUnavailableTitle": "Chat isn't available yet",
   "chatUnavailableBody": "Chat opens for this delivery once payment is confirmed.",
   "chatNeverShareCodes": "Never send a pickup or delivery code in chat.",
-
   "notificationsTitle": "Notifications",
   "notificationsMarkAllRead": "Mark all as read",
   "notificationsEmptyTitle": "Nothing new",
   "notificationsEmptyBody": "Offers, payments and delivery updates show up here.",
   "notificationsUnreadCount": "{count, plural, =0{No unread} =1{1 unread} other{{count} unread}}",
-  "@notificationsUnreadCount": { "placeholders": { "count": { "type": "int" } } },
-
+  "@notificationsUnreadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "profileTitle": "Profile",
   "profileAccount": "Account",
   "profileRoles": "What you do",
@@ -613,6 +847,11 @@
   "profileNotificationSettings": "Notifications",
   "profileLanguage": "Language",
   "profileLanguageSystem": "Device language",
+  "profileAppLanguage": "App language",
+  "profileAppLanguageHelp": "What you read inside ShipTrip. Stored on this phone.",
+  "profileEmailLanguage": "Email language",
+  "profileEmailLanguageHelp": "What we write to you in — payments, verification, deliveries, disputes and account security. Saved to your account.",
+  "profileEmailLanguageSaved": "Email language updated",
   "profileSupport": "Help and support",
   "profileTerms": "Terms of service",
   "profilePrivacy": "Privacy policy",
@@ -623,10 +862,21 @@
   "profileEmailVerified": "Email verified",
   "profileEmailUnverified": "Email not verified",
   "profileMemberSince": "With ShipTrip since {date}",
-  "@profileMemberSince": { "placeholders": { "date": { "type": "String" } } },
+  "@profileMemberSince": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "profileVersion": "Version {version}",
-  "@profileVersion": { "placeholders": { "version": { "type": "String" } } },
-
+  "@profileVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
   "locationSearchTitle": "Choose a location",
   "locationSearchHint": "Search for a city or address",
   "locationUseMap": "Choose on map",
@@ -641,14 +891,37 @@
   "locationSearchEmptyTitle": "No results",
   "locationSearchEmptyBody": "Try a different spelling, or pick the point on the map.",
   "mapAttribution": "Map data {attribution}",
-  "@mapAttribution": { "placeholders": { "attribution": { "type": "String" } } },
-
+  "@mapAttribution": {
+    "placeholders": {
+      "attribution": {
+        "type": "String"
+      }
+    }
+  },
+  "locationYourPlaces": "Your places",
+  "locationAirports": "Airports",
+  "locationExactRequiredNotice": "This needs one of your own addresses. Airports are city-level only, so they can't be used here.",
+  "locationExactRequiredRow": "City-level only",
+  "locationEmptyTitle": "No saved places yet",
+  "locationEmptyBody": "Drop a pin on the map to save your first address.",
+  "locationDropPinHelp": "Move the map until the crosshair sits where you mean, then confirm.",
+  "locationNamePlaceTitle": "Name this place",
+  "locationNamePlaceBody": "Only you see the label. Other people see the city until a delivery is paid for.",
+  "locationLabelField": "Label",
+  "locationLabelHint": "Home, Mum's place, the office",
+  "locationCityField": "City",
+  "locationCountryField": "Country code",
+  "locationCountryHint": "FR, DZ, ES",
+  "locationCountryInvalid": "Use the two-letter country code.",
+  "locationSavePlace": "Save this place",
+  "locationPlaceSaved": "Place saved.",
+  "mapZoomIn": "Zoom in",
+  "mapZoomOut": "Zoom out",
   "timelineTitle": "Progress",
   "timelineWaitingOnYou": "Waiting on you",
   "timelineWaitingOnThem": "Waiting on them",
   "timelineDone": "Done",
   "timelineUpcoming": "Next",
-
   "a11yStatusPrefix": "Status",
   "a11yMoneyAmount": "Amount",
   "a11yRequiredField": "Required",
@@ -659,5 +932,742 @@
   "a11ySelected": "Selected",
   "a11yNotSelected": "Not selected",
   "a11yExpandSection": "Expand",
-  "a11yCollapseSection": "Collapse"
+  "a11yCollapseSection": "Collapse",
+  "disputeCategoryNotDelivered": "Never arrived",
+  "disputeCategoryDamaged": "Arrived damaged",
+  "disputeCategoryWrongItem": "Wrong item",
+  "disputeCategoryLate": "Arrived too late",
+  "disputeCategoryNoShow": "The other person didn't show up",
+  "disputeCategoryPayment": "Something is wrong with the money",
+  "disputeCategoryOther": "Something else",
+  "unitWeightKg": "{value} kg",
+  "@unitWeightKg": {
+    "description": "A weight with its unit.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "unitDimensions": "{length} × {width} × {height} cm",
+  "@unitDimensions": {
+    "description": "Parcel dimensions.",
+    "placeholders": {
+      "length": {
+        "type": "String"
+      },
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "unitCapacityKg": "{value} kg free",
+  "@unitCapacityKg": {
+    "description": "Remaining declared capacity on a leg.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "unitDurationHm": "{hours}h {minutes}m",
+  "@unitDurationHm": {
+    "description": "A duration in hours and minutes.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "unitDurationM": "{minutes}m",
+  "@unitDurationM": {
+    "description": "A duration under an hour.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "distanceUnder": "Under {max} km",
+  "@distanceUnder": {
+    "description": "Upper-bounded distance band.",
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "distanceBetween": "{min}–{max} km",
+  "@distanceBetween": {
+    "description": "A bounded distance band.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "distanceOver": "Over {min} km",
+  "@distanceOver": {
+    "description": "Lower-bounded distance band.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "unitDistanceKm": "{value} km",
+  "@unitDistanceKm": {
+    "description": "An exact distance, which the server only releases to the owner of a journey.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "weightChargeableVolumetric": "Priced on size, not weight",
+  "weightChargeableActual": "Priced on weight",
+  "homeVerifyIdentityTitle": "Verify your identity",
+  "homeVerifyIdentityBody": "Travellers must be verified before a journey can go live.",
+  "homeAttentionOfferAwaiting": "An offer is waiting for your answer",
+  "homeAttentionFunding": "Pay to confirm this delivery",
+  "homeAttentionRecipient": "Add who receives the parcel",
+  "homeAttentionRevealPickup": "Show the pickup code to your traveller",
+  "homeAttentionSubmitPickup": "Enter the pickup code",
+  "homeAttentionRevealDelivery": "The delivery code is ready",
+  "homeAttentionSubmitDelivery": "Enter the delivery code",
+  "homeAttentionRating": "Rate this delivery",
+  "homeOpenAction": "Open",
+  "deliveriesTabAll": "All",
+  "deliveryCardSending": "Sending",
+  "deliveryCardCarrying": "Carrying",
+  "deliveryCardWith": "with {name}",
+  "@deliveryCardWith": {
+    "description": "Names the counterparty on a delivery card.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyLegCount": "{count, plural, =1{1 leg} other{{count} legs}}",
+  "@journeyLegCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "journeyProofNeeded": "{count, plural, =1{1 flight needs proof} other{{count} flights need proof}}",
+  "@journeyProofNeeded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "requestOffersCount": "{count, plural, =0{No offers yet} =1{1 offer} other{{count} offers}}",
+  "@requestOffersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onboardingSendTitle": "Send something home",
+  "onboardingSendBody": "Post what you want delivered. Travellers already heading that way can carry it, and you agree the price between you.",
+  "onboardingCarryTitle": "Earn on a trip you're already taking",
+  "onboardingCarryBody": "Add your journey, and we'll show you parcels that fit your route and your spare kilos.",
+  "onboardingSafeTitle": "The money waits until it arrives",
+  "onboardingSafeBody": "We hold the payment from the moment you book until 48 hours after delivery is confirmed.",
+  "onboardingGetStarted": "Create an account",
+  "onboardingHaveAccount": "I already have an account",
+  "onboardingPageOf": "Page {current} of {total}",
+  "@onboardingPageOf": {
+    "description": "Screen-reader position in the onboarding carousel.",
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "authInvalidCredentials": "Email or password is incorrect",
+  "authShowPassword": "Show password",
+  "authHidePassword": "Hide password",
+  "authPhone": "Phone number",
+  "authWilaya": "Wilaya",
+  "authWilayaHelp": "Your home wilaya in Algeria. Choose the one you're connected to if you live in Europe.",
+  "authWilayaSheetTitle": "Choose a wilaya",
+  "authResetCodeSent": "If that address has an account, we've sent it a six-digit code.",
+  "authResetCodeLabel": "Six-digit code",
+  "authNewPassword": "New password",
+  "authResetDone": "Password changed. You can sign in now.",
+  "authSendCode": "Send code",
+  "authResendCode": "Send a new code",
+  "authVerifyDone": "Email verified",
+  "authTermsNotice": "By creating an account you accept the Terms and the Privacy Policy.",
+  "authVerifyNoCode": "Nothing arrived? Check your spam folder. If it still isn't there, contact support and we'll sort it out.",
+  "kycDocIdCard": "National ID card",
+  "kycDocPassport": "Passport",
+  "kycDocDrivingLicense": "Driving licence",
+  "kycAddPhoto": "Add photo",
+  "kycReplacePhoto": "Replace",
+  "kycFileTooLarge": "That image is too large. Each photo must be under 8 MB.",
+  "kycFileTypeNotAllowed": "Only JPEG and PNG photos are accepted.",
+  "kycUploading": "Sending your documents…",
+  "kycSubmitAction": "Submit for review",
+  "kycSubmitted": "Documents received. We'll review them shortly.",
+  "kycBackNotNeeded": "A passport only needs its photo page.",
+  "kycSelfieHelp": "A clear photo of your face, taken now — it's checked against your document.",
+  "kycUnavailable": "Verification is temporarily unavailable. Please try again shortly.",
+  "payoutEligibleIn": "Released in",
+  "notificationOffer": "Offer update",
+  "notificationMatch": "New match",
+  "notificationPayment": "Payment update",
+  "notificationChat": "New message",
+  "notificationRequest": "Request update",
+  "notificationDelivery": "Delivery update",
+  "notificationOther": "Update",
+  "chatBlockedPayAction": "Go to payment",
+  "chatLoadEarlier": "Load earlier messages",
+  "chatToday": "Today",
+  "chatYesterday": "Yesterday",
+  "paymentProviderNewCheckoutsDisabled": "Not taking new payments right now",
+  "paymentProviderPickAnother": "Try a different payment method.",
+  "paymentContinueTitle": "A checkout is already open",
+  "paymentContinueBody": "Finish the payment you started instead of opening a second one.",
+  "paymentContinueAction": "Continue your payment",
+  "paymentCouldNotOpen": "We couldn't open the checkout page. Check that you have a browser installed.",
+  "paymentStillConfirmingTitle": "Still confirming",
+  "paymentStillConfirmingBody": "This is taking longer than usual. Nothing is lost, and you have not been charged twice.",
+  "paymentCheckAgain": "Check again",
+  "paymentNothingOutstandingTitle": "Nothing left to pay",
+  "paymentNothingOutstandingBody": "This has already been settled.",
+  "paymentOrderClosedTitle": "This can't be paid now",
+  "paymentOrderClosedBody": "This payment was closed or refunded, so no new checkout can be opened.",
+  "requestReadyUntil": "Ready until",
+  "requestReadyWindow": "Ready window",
+  "requestReadyWindowHelp": "The stretch of time a traveller could collect it. Give a window, not a minute.",
+  "requestDeadlineHelp": "The latest it can arrive. This has to be after your ready window closes.",
+  "requestWeightHelp": "Between 0.01 and 100 kg.",
+  "requestDimensionsHelp": "Optional. Enter all three, or leave all three empty.",
+  "requestDimensionsPartial": "Enter all three measurements, or clear them all.",
+  "requestCategoryDocuments": "Documents",
+  "requestCategorySmallBox": "Small box",
+  "requestCategoryElectronics": "Electronics",
+  "requestCategoryClothing": "Clothing",
+  "requestCategoryOther": "Something else",
+  "requestProposedReward": "What you propose to pay",
+  "requestProposedRewardHelp": "A starting point, not a price. Travellers can accept it or come back with a different amount.",
+  "requestRewardIsIntent": "This is what you proposed. The price is settled when a traveller accepts an offer.",
+  "requestReviewTitle": "Check this over",
+  "requestAckAllRequired": "Confirm all five before you post.",
+  "requestPostAction": "Post this request",
+  "requestDetailTitle": "Your request",
+  "requestParcelSection": "The parcel",
+  "requestTimingSection": "Timing",
+  "requestRouteSection": "Route",
+  "requestMatchesSection": "Travellers you've approached",
+  "requestNoMatchesYet": "You haven't proposed to anyone yet.",
+  "requestAwaitingDepositNotice": "Travellers can't see this yet. Pay the deposit to publish it.",
+  "requestFindTravelers": "Find travellers",
+  "requestPayDepositAction": "Pay deposit",
+  "requestCancelAction": "Cancel request",
+  "requestCancelConfirmTitle": "Cancel this request?",
+  "requestCancelConfirmBody": "It stops being visible to travellers. Any deposit you paid comes back to you.",
+  "requestCancelled": "Request cancelled",
+  "requestCancelNotCancellableBody": "A traveller is already matched with this request, so it can't be cancelled here.",
+  "requestCancelViaDealBody": "This request has become a delivery. Cancel it from the delivery instead.",
+  "requestPhotoCount": "{count, plural, =0{No photos} =1{1 photo} other{{count} photos}}",
+  "@requestPhotoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "requestNotFragile": "Standard handling",
+  "requestFragileYes": "Handle with care",
+  "requestTargetedNotice": "You addressed this request to one traveller. Nobody else can see it.",
+  "depositNotRequiredTitle": "No deposit needed",
+  "depositNotRequiredBody": "This request publishes without one. There is nothing to pay here.",
+  "depositClampedMin": "This is the smallest deposit we take.",
+  "depositClampedMax": "This is the largest deposit we take, whatever the parcel is worth.",
+  "discoveryMatchedDistance": "Distance carried",
+  "discoveryDetourLabel": "Detour for the traveller",
+  "discoveryFirstDeparture": "Leaves",
+  "discoveryProposeBlocked": "We can't work out which part of this journey fits your parcel. Refresh and try again.",
+  "discoveryVolumetricExplainer": "This parcel is bulkier than it is heavy, so its size sets the price.",
+  "discoveryBreakdownNote": "This is how the suggested amount adds up. Offer something different and the total moves with it.",
+  "discoveryProposalSent": "Offer sent",
+  "discoveryLegRangeMoved": "This traveller's route changed while you were looking. We've refreshed it.",
+  "discoveryIncompatibleCount": "{count, plural, =1{This traveller no longer fits your parcel, for 1 reason.} other{This traveller no longer fits your parcel, for {count} reasons.}}",
+  "@discoveryIncompatibleCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "boostRankingLabel": "Visibility",
+  "boostRankingModest": "Higher in the list",
+  "boostRankingStrong": "Much higher in the list",
+  "boostRankingTop": "Top of the list",
+  "boostDurationLabel": "Runs for",
+  "boostPriceLabel": "Price",
+  "boostCompatibilityNote": "Only travellers who already match your parcel ever see it. A boost doesn't change who those travellers are.",
+  "boostActivatesOnPayment": "The boost starts once your payment is confirmed, not when you leave the checkout page.",
+  "boostBuyAction": "Buy this boost",
+  "boostPayAction": "Pay for this boost",
+  "boostPurchasesSection": "Your boosts",
+  "boostNoPackagesTitle": "No boosts available",
+  "boostNoPackagesBody": "There are no boost packages on offer at the moment.",
+  "boostDisabledTitle": "Boosts are switched off",
+  "boostDisabledBody": "Nobody can buy a boost right now. Your request is unaffected.",
+  "boostLimitReachedTitle": "Boost limit reached",
+  "boostLimitReachedBody": "{count, plural, =1{You can have 1 boost running on a request at a time.} other{You can have {count} boosts running on a request at a time.}}",
+  "@boostLimitReachedBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "boostRequestExpiredBody": "This request has expired, so it can no longer be boosted.",
+  "boostPackageUnknownBody": "That boost is no longer offered. Choose another one.",
+  "boostStatusCancelled": "Cancelled",
+  "boostStatusUnusable": "Refunded — the request stopped being boostable",
+  "boostStatusRefunded": "Refunded",
+  "validationReadyWindowOrder": "The ready window has to end after it starts",
+  "validationWeightRange": "Enter a weight between {min} and {max} kg",
+  "@validationWeightRange": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "dealStepAgreed": "Terms agreed",
+  "dealStepPaid": "Payment held",
+  "dealStepRecipient": "Recipient added",
+  "dealStepPickedUp": "Parcel collected",
+  "dealStepDelivered": "Delivered",
+  "dealStepProtection": "Protected payment",
+  "dealStepCompleted": "Completed",
+  "dealOpenChat": "Message",
+  "dealParcelSection": "The parcel",
+  "dealMoneySection": "The money",
+  "dealActionPay": "Pay now",
+  "dealActionRecipient": "Add recipient",
+  "dealActionPickup": "Pickup",
+  "dealActionDelivery": "Delivery",
+  "dealActionDispute": "Open a dispute",
+  "dealActionCancel": "Cancel this delivery",
+  "dealActionRate": "Leave a rating",
+  "dealFundingDeadline": "Pay before {time} or the space is released",
+  "@dealFundingDeadline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "dealLocationsHiddenUntilFunded": "Exact addresses appear once the delivery is paid for.",
+  "ratingBlindNote": "Neither of you sees the other's rating until you've both left one, or the window closes.",
+  "ratingSubmittedTitle": "Rating saved",
+  "pickupTitle": "Pickup",
+  "@pickupTitle": {
+    "description": "Top bar of the pickup handover screen. Neutral: the same screen serves both parties."
+  },
+  "pickupNextTitle": "What happens next",
+  "@pickupNextTitle": {
+    "description": "Section header shown once pickup is confirmed."
+  },
+  "pickupConfirmedSenderNext": "The delivery code unlocks 30 minutes from now. We email it to your recipient, and only they can pass it to the traveller.",
+  "@pickupConfirmedSenderNext": {
+    "description": "Sender copy after pickup is confirmed."
+  },
+  "pickupConfirmedTravelerNext": "Carry the parcel to the recipient. They read you the delivery code at the door — you are never shown it yourself.",
+  "@pickupConfirmedTravelerNext": {
+    "description": "Traveller copy after pickup is confirmed. States the invariant plainly."
+  },
+  "pickupGoToDeliveryAction": "Go to delivery",
+  "@pickupGoToDeliveryAction": {
+    "description": "Action that moves from the pickup screen to the delivery screen."
+  },
+  "pickupNotFundedBody": "This delivery isn't funded yet, so there's no pickup code to show.",
+  "@pickupNotFundedBody": {
+    "description": "Shown when the server refuses a pickup code with deal_not_funded."
+  },
+  "pickupNotReadyBody": "This delivery isn't ready for pickup yet.",
+  "@pickupNotReadyBody": {
+    "description": "Shown when the server refuses a pickup submission with deal_not_pickup_ready."
+  },
+  "pickupAlreadyConfirmedBody": "Pickup is already confirmed on this delivery.",
+  "@pickupAlreadyConfirmedBody": {
+    "description": "Shown when the server refuses with pickup_already_confirmed."
+  },
+  "recipientRequiredTravelerBody": "The sender hasn't added the recipient yet. Ask them to do that, then try the code again.",
+  "@recipientRequiredTravelerBody": {
+    "description": "Traveller-facing form of recipient_not_set. Never blames the traveller."
+  },
+  "codeRequiresNewCodeBody": "This code can't be used again. A new one has to be issued before you can confirm.",
+  "@codeRequiresNewCodeBody": {
+    "description": "Shown when handover_code_invalid carries requires_new_code."
+  },
+  "codeRateLimitedBody": "{count, plural, =1{Too many tries. Wait a second and try again.} other{Too many tries. Wait {count} seconds and try again.}}",
+  "@codeRateLimitedBody": {
+    "description": "Shown when handover_rate_limited carries retry_after_seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deliveryTitle": "Delivery",
+  "@deliveryTitle": {
+    "description": "Top bar of the delivery handover screen. Neutral: the same screen serves both parties."
+  },
+  "deliverySenderExplainer": "The recipient receives this code by email. They read it to the traveller at the door, and that is what confirms the delivery.",
+  "@deliverySenderExplainer": {
+    "description": "Sender explainer on the delivery screen."
+  },
+  "deliveryCodeSentToRecipientUnknown": "We've emailed the code to your recipient.",
+  "@deliveryCodeSentToRecipientUnknown": {
+    "description": "Fallback for deliveryCodeSentToRecipient when no recipient contact is on the record."
+  },
+  "deliveryCodeBufferOpenBody": "The delivery code is still locked. It unlocks 30 minutes after pickup.",
+  "@deliveryCodeBufferOpenBody": {
+    "description": "Shown when the server refuses with delivery_code_buffer_open."
+  },
+  "deliveryNotInCarriageBody": "This delivery isn't in transit, so a new code can't be issued.",
+  "@deliveryNotInCarriageBody": {
+    "description": "Shown when a delivery-code rotation is refused with deal_not_in_carriage."
+  },
+  "deliveryConfirmedTravelerNext": "The protection window has started. Your payout is released once it closes — nothing is paid out before then.",
+  "@deliveryConfirmedTravelerNext": {
+    "description": "Traveller copy immediately after a delivery is confirmed."
+  },
+  "deliveryAwaitingTitle": "Not yet",
+  "@deliveryAwaitingTitle": {
+    "description": "Title of the delivery screen before the code exists."
+  },
+  "deliveryAwaitingSenderBody": "The delivery code appears here once the parcel has been picked up.",
+  "@deliveryAwaitingSenderBody": {
+    "description": "Sender copy before the delivery code exists."
+  },
+  "deliveryAwaitingTravelerBody": "Confirm the pickup first. The delivery code can only be used after that.",
+  "@deliveryAwaitingTravelerBody": {
+    "description": "Traveller copy before the delivery code can be submitted."
+  },
+  "protectionEndsInLabel": "Ends in",
+  "@protectionEndsInLabel": {
+    "description": "Label placed before a live protection-window countdown."
+  },
+  "payoutAmountLabel": "Amount",
+  "@payoutAmountLabel": {
+    "description": "Label for the payout amount on a deal."
+  },
+  "payoutEligibleLabel": "Expected",
+  "@payoutEligibleLabel": {
+    "description": "Label for the date a payout becomes eligible."
+  },
+  "disputeViewAction": "View the dispute",
+  "@disputeViewAction": {
+    "description": "Action that opens the dispute attached to this delivery."
+  },
+  "disputeOpenAction": "Open a dispute",
+  "@disputeOpenAction": {
+    "description": "Action that starts the dispute form."
+  },
+  "disputeOpened": "Dispute opened",
+  "@disputeOpened": {
+    "description": "Confirmation after a dispute is created."
+  },
+  "disputeExistingOpenedBody": "You already have a dispute open on this delivery. We've taken you to it.",
+  "@disputeExistingOpenedBody": {
+    "description": "Shown when the idempotent open endpoint returned an existing dispute."
+  },
+  "disputeFreezesPayoutTitle": "The traveller's payout goes on hold",
+  "@disputeFreezesPayoutTitle": {
+    "description": "Notice title on the dispute form."
+  },
+  "disputeFreezesPayoutBody": "Nothing is paid out while we look into this. Both sides can add evidence.",
+  "@disputeFreezesPayoutBody": {
+    "description": "Notice body on the dispute form."
+  },
+  "disputeNotAvailableTitle": "You can't open a dispute yet",
+  "@disputeNotAvailableTitle": {
+    "description": "Shown when the server refuses with dispute_not_available."
+  },
+  "disputeNotAvailableBody": "A dispute can be opened once the parcel has been picked up. Before that, cancel the delivery instead.",
+  "@disputeNotAvailableBody": {
+    "description": "Body for dispute_not_available."
+  },
+  "disputeAlreadyResolvedTitle": "This has already been decided",
+  "@disputeAlreadyResolvedTitle": {
+    "description": "Shown when the server refuses with dispute_already_resolved."
+  },
+  "disputeAlreadyResolvedBody": "There's already a resolved dispute on this delivery.",
+  "@disputeAlreadyResolvedBody": {
+    "description": "Body for dispute_already_resolved."
+  },
+  "disputeDetailTitle": "Dispute",
+  "@disputeDetailTitle": {
+    "description": "Top bar of the dispute detail screen."
+  },
+  "disputeReferenceLabel": "Reference",
+  "@disputeReferenceLabel": {
+    "description": "Label for the dispute's public reference."
+  },
+  "disputeCategoryTitle": "Category",
+  "@disputeCategoryTitle": {
+    "description": "Row label for the reported category on the dispute detail screen."
+  },
+  "disputeReasonLabel": "What was reported",
+  "@disputeReasonLabel": {
+    "description": "Row label for the free-text reason on the dispute detail screen."
+  },
+  "disputeOpenedByLabel": "Opened by",
+  "@disputeOpenedByLabel": {
+    "description": "Row label for which party opened the dispute."
+  },
+  "disputeOpenedBySender": "The sender",
+  "@disputeOpenedBySender": {
+    "description": "Value for opened_by_role = sender."
+  },
+  "disputeOpenedByTraveler": "The traveller",
+  "@disputeOpenedByTraveler": {
+    "description": "Value for opened_by_role = traveler."
+  },
+  "disputeOpenedAtLabel": "Opened",
+  "@disputeOpenedAtLabel": {
+    "description": "Row label for when the dispute was opened."
+  },
+  "disputeResolvedAtLabel": "Decided",
+  "@disputeResolvedAtLabel": {
+    "description": "Row label for when the dispute was resolved."
+  },
+  "disputeProtectionEndsLabel": "Protection window ends",
+  "@disputeProtectionEndsLabel": {
+    "description": "Row label for the dispute's protection deadline."
+  },
+  "disputePayoutFrozenTitle": "Payout on hold",
+  "@disputePayoutFrozenTitle": {
+    "description": "Notice title while payout_frozen is true."
+  },
+  "disputePayoutSettledBody": "The payout had already gone out before this dispute was opened.",
+  "@disputePayoutSettledBody": {
+    "description": "Shown when payout_already_settled is true."
+  },
+  "disputeAmountsTitle": "How this was settled",
+  "@disputeAmountsTitle": {
+    "description": "Title of the settlement breakdown."
+  },
+  "disputeAmountsExplainer": "These amounts are ShipTrip's decision. Nothing here is worked out on your phone.",
+  "@disputeAmountsExplainer": {
+    "description": "Explainer under the settlement breakdown."
+  },
+  "disputeCollectedTotal": "Collected from the sender",
+  "@disputeCollectedTotal": {
+    "description": "Breakdown line for the total the sender originally paid."
+  },
+  "disputeResolutionNoteLabel": "Note from ShipTrip",
+  "@disputeResolutionNoteLabel": {
+    "description": "Row label for the resolution note."
+  },
+  "disputeTimelineTitle": "What's happened",
+  "@disputeTimelineTitle": {
+    "description": "Section header for the dispute event log."
+  },
+  "disputeEventOpened": "Dispute opened",
+  "@disputeEventOpened": {
+    "description": "Timeline entry for the 'opened' event."
+  },
+  "disputeEventStatusChanged": "Status changed to {status}",
+  "@disputeEventStatusChanged": {
+    "description": "Timeline entry for the 'status_changed' event.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "disputeEventEvidenceAdded": "Evidence added",
+  "@disputeEventEvidenceAdded": {
+    "description": "Timeline entry for the 'evidence_added' event."
+  },
+  "disputeEventResolved": "Decision made",
+  "@disputeEventResolved": {
+    "description": "Timeline entry for the 'resolved' event."
+  },
+  "disputeEventClosed": "Dispute closed",
+  "@disputeEventClosed": {
+    "description": "Timeline entry for the 'closed' event."
+  },
+  "disputeEventPayoutFrozen": "Payout put on hold",
+  "@disputeEventPayoutFrozen": {
+    "description": "Timeline entry for the 'payout_frozen' event."
+  },
+  "disputeEventNote": "Note added",
+  "@disputeEventNote": {
+    "description": "Timeline entry for the 'note' event."
+  },
+  "disputeEventOther": "Update",
+  "@disputeEventOther": {
+    "description": "Timeline entry for an event kind this release does not recognise."
+  },
+  "disputeEvidenceNone": "Nothing added yet",
+  "@disputeEvidenceNone": {
+    "description": "Empty state for the evidence list."
+  },
+  "disputeEvidenceView": "View",
+  "@disputeEvidenceView": {
+    "description": "Action that opens a piece of file evidence."
+  },
+  "disputeEvidenceOpenFailed": "We couldn't open that. Try again.",
+  "@disputeEvidenceOpenFailed": {
+    "description": "Shown when a signed evidence URL could not be opened."
+  },
+  "disputeEvidenceKindText": "Note",
+  "@disputeEvidenceKindText": {
+    "description": "Label for text evidence."
+  },
+  "disputeEvidenceKindPhoto": "Photo",
+  "@disputeEvidenceKindPhoto": {
+    "description": "Label for photo evidence."
+  },
+  "disputeEvidenceKindVideo": "Video",
+  "@disputeEvidenceKindVideo": {
+    "description": "Label for video evidence."
+  },
+  "disputeEvidenceCount": "{count} of {max} added",
+  "@disputeEvidenceCount": {
+    "description": "How many evidence items have been used out of the allowance.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "disputeEvidenceNoteHint": "What you want us to know",
+  "@disputeEvidenceNoteHint": {
+    "description": "Hint for the evidence note field."
+  },
+  "disputeEvidenceAdded": "Evidence added",
+  "@disputeEvidenceAdded": {
+    "description": "Confirmation after evidence is uploaded."
+  },
+  "disputeEvidenceClosedBody": "This dispute is closed, so nothing more can be added.",
+  "@disputeEvidenceClosedBody": {
+    "description": "Shown when the server refuses with dispute_not_active."
+  },
+  "disputeEvidenceTypeMismatchBody": "That file doesn't match the type you chose.",
+  "@disputeEvidenceTypeMismatchBody": {
+    "description": "Shown for dispute_evidence_type_mismatch."
+  },
+  "disputeEvidenceContentMismatchBody": "That file isn't what it claims to be. Try a different one.",
+  "@disputeEvidenceContentMismatchBody": {
+    "description": "Shown for dispute_evidence_content_mismatch."
+  },
+  "disputeEvidenceLinkNote": "Evidence links expire after a few minutes, so we fetch a fresh one each time you open something.",
+  "@disputeEvidenceLinkNote": {
+    "description": "Explains why viewing evidence takes a moment."
+  },
+  "disputeEvidenceTextRequiredBody": "Write something before adding a note.",
+  "@disputeEvidenceTextRequiredBody": {
+    "description": "Shown for dispute_evidence_text_required."
+  },
+  "disputeEvidenceFileRequiredBody": "Choose a file first.",
+  "@disputeEvidenceFileRequiredBody": {
+    "description": "Shown for dispute_evidence_file_required."
+  },
+  "unitFileSizeMb": "{value} MB",
+  "@unitFileSizeMb": {
+    "description": "A file size in megabytes.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "paymentPollingHint": "This can take a moment. You can leave this screen — we'll keep checking.",
+  "paymentOpenProvider": "Continue payment",
+  "guestPayPoweredBy": "Paid securely through ShipTrip",
+  "onboardingEyebrow": "Welcome",
+  "onboardingHeadline": "Send anything,\nthe travellers\ndo the rest.",
+  "onboardingBody": "A peer-to-peer corridor between Algeria and France. Travellers carry, senders save, and the money is held until it arrives.",
+  "onboardingStamp": "EST. 2026 · ALG ↔ FR",
+  "onboardingTrust": "ID verified · Payment held · Priced in euros",
+  "onboardingRouteFrom": "ALGIERS",
+  "onboardingRouteTo": "PARIS",
+  "onboardingRouteMeta": "DIRECT · 2H 25M",
+  "benefitsSkip": "Skip",
+  "benefitsIndex": "{current} / {total}",
+  "@benefitsIndex": {
+    "description": "Position marker in the onboarding chapter carousel.",
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "benefitsChapterOneEyebrow": "Chapter I · The post",
+  "benefitsChapterOneTitle": "Send anywhere,\nfor a fraction.",
+  "benefitsChapterOneAccent": "Envoyez vers la France, l’Algérie, et plus loin.",
+  "benefitsChapterOneBody": "Travellers carry your parcel as part of their luggage. You pay a sliver of express shipping.",
+  "benefitsChapterOneStamp": "Par avion",
+  "benefitsChapterTwoEyebrow": "Chapter II · The suitcase",
+  "benefitsChapterTwoTitle": "Earn while\nyou travel.",
+  "benefitsChapterTwoAccent": "Voyagez. Gagnez.",
+  "benefitsChapterTwoBody": "Going to Algiers, Paris or Oran already? Fill the unused kilos in your luggage.",
+  "benefitsChapterTwoStamp": "Boarding",
+  "benefitsChapterThreeEyebrow": "Chapter III · The seal",
+  "benefitsChapterThreeTitle": "Built for\ntrust.",
+  "benefitsChapterThreeAccent": "Conçu pour la confiance.",
+  "benefitsChapterThreeBody": "Verified identities, payment held until delivery, a code at every handover. Nothing moves on trust alone.",
+  "benefitsChapterThreeStamp": "Verified",
+  "benefitsHandoverCaption": "HANDOVER · 6 CHARACTERS",
+  "benefitsKilosFree": "KG\nFREE",
+  "authWelcomeBackStamp": "Welcome back",
+  "authSignInHeadline": "Good to see\nyou again.",
+  "authSignInSubhead": "Sign in to pick up where your deliveries left off.",
+  "authJoinStamp": "Join the corridor",
+  "authSignUpHeadline": "Create your\npassport.",
+  "authSignUpSubhead": "Two minutes — then you can send or travel.",
+  "authForgotStamp": "Locked out",
+  "authForgotHeadline": "Let's get you\nback in.",
+  "authVerifyStamp": "One more stamp",
+  "stateRateLimitedWait": "Wait about {seconds} seconds before trying again.",
+  "@stateRateLimitedWait": {
+    "description": "Throttle message when the server sent a Retry-After delay.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "authForgotSubhead": "Tell us the address on your account and we'll send a six-digit code to it.",
+  "authVerifySubhead": "Enter the six-digit code we emailed you. It's the last step.",
+  "onboardingGetStartedShort": "Get started"
 }

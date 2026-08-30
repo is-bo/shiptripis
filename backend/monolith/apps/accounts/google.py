@@ -38,5 +38,7 @@ def verify_id_token(token: str) -> dict:
     iss = payload.get("iss")
     if iss not in {"https://accounts.google.com", "accounts.google.com"}:
         raise GoogleAuthError("token issuer not accepted")
+    if payload.get("email_verified") is not True:
+        raise GoogleAuthError("Google account email is not verified")
 
     return payload

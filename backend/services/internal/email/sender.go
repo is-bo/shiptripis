@@ -38,8 +38,14 @@ type EmailPayload struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
-	// Kind is "verify" | "reset" — used only for log/metric labels. Go does
-	// not branch sending behaviour on it (all kinds are the same SMTP send).
+	// HTML is the alternative rendering of the same document Django built for
+	// Body. It is optional: a payload without it is sent as plain text, which
+	// is what every message on this stream was before HTML existed. Go still
+	// does not template — it decides multipart-or-not and nothing else.
+	HTML string `json:"html,omitempty"`
+	// Kind identifies the Django notification template and is used only for
+	// log/metric labels. Go does not branch sending behaviour on it (all kinds
+	// are the same SMTP send).
 	Kind string `json:"kind,omitempty"`
 }
 
@@ -66,6 +72,9 @@ func decodePayload(values map[string]any) (EmailPayload, error) {
 	// there if the JSON omitted it, so the dedup key is always populated.
 	if p.EventID == "" {
 		p.EventID = stringField(values, "event_id")
+	}
+	if p.EventID == "" {
+		return EmailPayload{}, errors.New("missing event_id")
 	}
 	return p, nil
 }

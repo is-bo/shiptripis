@@ -36,9 +36,7 @@ def _enable_mock():
     settings_version = get_active_business_settings()
     policy = deepcopy(settings_version.policy)
     policy["payments"]["providers"]["mock_enabled"] = True
-    BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(
-        policy=policy
-    )
+    BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(policy=policy)
 
 
 class FinanceApiTestCase(TestCase):
@@ -93,9 +91,7 @@ class OrderAuthorizationTests(FinanceApiTestCase):
         other = build_scenario(prefix="api-other")
         other.accept()
 
-        response = self.client_for(self.scenario.sender).get(
-            reverse("finance-orders")
-        )
+        response = self.client_for(self.scenario.sender).get(reverse("finance-orders"))
 
         assert response.status_code == 200
         references = {row["public_reference"] for row in response.data}
@@ -245,6 +241,12 @@ class ProviderAvailabilityTests(FinanceApiTestCase):
 
     @override_settings(STRIPE_SECRET_KEY="", STRIPE_WEBHOOK_SECRET="")
     def test_an_unconfigured_provider_is_reported_unavailable(self):
+        settings_version = get_active_business_settings()
+        policy = deepcopy(settings_version.policy)
+        policy["payments"]["providers"]["stripe_enabled"] = True
+        BusinessSettingsVersion.objects.filter(pk=settings_version.pk).update(
+            policy=policy
+        )
         response = self.client_for(self.scenario.sender).get(
             reverse("finance-providers")
         )
@@ -257,7 +259,11 @@ class ProviderAvailabilityTests(FinanceApiTestCase):
 
     @override_settings(STRIPE_SECRET_KEY="", STRIPE_WEBHOOK_SECRET="")
     def test_an_unconfigured_provider_never_falls_back_to_mock(self):
-        policy = phase3_policy()
+        settings_version = get_active_business_settings()
+        policy_dict = deepcopy(settings_version.policy)
+        policy_dict["payments"]["providers"]["stripe_enabled"] = True
+        settings_version.policy = policy_dict
+        policy = Phase3Policy.from_settings(settings_version)
 
         with self.assertRaises(ProviderNotConfigured):
             resolve_gateway_for_checkout(policy, "stripe")
@@ -376,9 +382,7 @@ class PayoutVisibilityTests(FinanceApiTestCase):
         assert row["amount_eur_cents"] == int(self.payout.amount_eur_cents)
 
     def test_the_sender_does_not_see_the_travelers_payout(self):
-        response = self.client_for(self.scenario.sender).get(
-            reverse("finance-payouts")
-        )
+        response = self.client_for(self.scenario.sender).get(reverse("finance-payouts"))
 
         assert response.status_code == 200
         assert response.data == []
@@ -393,7 +397,11 @@ class PayoutVisibilityTests(FinanceApiTestCase):
             assert forbidden not in body, forbidden
 
     def test_only_staff_may_reach_the_manual_settlement_route(self):
-        for user in (self.scenario.sender, self.scenario.traveler, self.scenario.outsider):
+        for user in (
+            self.scenario.sender,
+            self.scenario.traveler,
+            self.scenario.outsider,
+        ):
             response = self.client_for(user).post(
                 reverse("finance-admin-payout-complete", args=[self.payout.pk]),
                 {
@@ -427,9 +435,7 @@ class PostingDepositApiTests(TestCase):
 
     def test_the_sender_sees_a_server_calculated_quote(self):
         response = self.client_for(self.scenario.sender).get(
-            reverse(
-                "finance-posting-deposit", args=[self.scenario.delivery_request.pk]
-            )
+            reverse("finance-posting-deposit", args=[self.scenario.delivery_request.pk])
         )
 
         assert response.status_code == 200, response.data
@@ -439,9 +445,7 @@ class PostingDepositApiTests(TestCase):
 
     def test_a_stranger_cannot_see_another_senders_deposit(self):
         response = self.client_for(self.scenario.outsider).get(
-            reverse(
-                "finance-posting-deposit", args=[self.scenario.delivery_request.pk]
-            )
+            reverse("finance-posting-deposit", args=[self.scenario.delivery_request.pk])
         )
 
         assert response.status_code == 403

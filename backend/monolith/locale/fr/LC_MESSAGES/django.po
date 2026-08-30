@@ -1,0 +1,509 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: ShipTrip Phase 6C\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Amount"
+msgstr "Montant"
+
+msgid "Your sender"
+msgstr "Votre expéditeur"
+
+msgid "Hello,"
+msgstr "Bonjour,"
+
+msgid "Hello %(recipient_name)s,"
+msgstr "Bonjour %(recipient_name)s,"
+
+msgid "Your ShipTrip delivery code"
+msgstr "Votre code de livraison ShipTrip"
+
+msgid "Keep this code private until the parcel is in your hands."
+msgstr "Gardez ce code privé jusqu'à ce que le colis soit entre vos mains."
+
+msgid "Delivery"
+msgstr "Livraison"
+
+msgid "Your parcel is on its way"
+msgstr "Votre colis est en route"
+
+msgid "Never share this code by phone, message or email with anyone before you have the parcel. ShipTrip will never ask you for it."
+msgstr "Ne communiquez jamais ce code par téléphone, message ou e-mail avant d'avoir le colis. ShipTrip ne vous le demandera jamais."
+
+msgid "eligible"
+msgstr "éligible"
+
+msgid "scheduled"
+msgstr "programmé"
+
+msgid "processing"
+msgstr "en cours"
+
+msgid "paid"
+msgstr "payé"
+
+msgid "needs attention"
+msgstr "nécessite votre attention"
+
+msgid "updated"
+msgstr "mis à jour"
+
+msgid "Delivery reference"
+msgstr "Référence de livraison"
+
+msgid "Give this code to the traveler only once the parcel is physically in your hands. Entering it confirms delivery and starts the payment protection window."
+msgstr "Donnez ce code au voyageur uniquement lorsque le colis est physiquement entre vos mains. Sa saisie confirme la livraison et déclenche la période de protection du paiement."
+
+msgid "Your delivery code"
+msgstr "Votre code de livraison"
+
+msgid "Confirm your ShipTrip email"
+msgstr "Confirmez votre adresse e-mail ShipTrip"
+
+msgid "Use this code to confirm your email address."
+msgstr "Utilisez ce code pour confirmer votre adresse e-mail."
+
+msgid "Account"
+msgstr "Compte"
+
+msgid "Welcome to ShipTrip"
+msgstr "Bienvenue sur ShipTrip"
+
+msgid "It expires in 15 minutes. ShipTrip will never ask you to share this code outside the verification screen."
+msgstr "Il expire dans 15 minutes. ShipTrip ne vous demandera jamais de communiquer ce code en dehors de l'écran de vérification."
+
+msgid "Reset your ShipTrip password"
+msgstr "Réinitialisez votre mot de passe ShipTrip"
+
+msgid "Use this private code to reset your password."
+msgstr "Utilisez ce code privé pour réinitialiser votre mot de passe."
+
+msgid "Account security"
+msgstr "Sécurité du compte"
+
+msgid "Reset your password"
+msgstr "Réinitialisez votre mot de passe"
+
+msgid "It expires in 15 minutes. If you did not request this, ignore this email and keep your code private."
+msgstr "Il expire dans 15 minutes. Si vous n'avez pas fait cette demande, ignorez cet e-mail et gardez ce code privé."
+
+msgid "ShipTrip identity verification update"
+msgstr "Mise à jour de votre vérification d'identité ShipTrip"
+
+msgid "Verification"
+msgstr "Vérification"
+
+msgid "ShipTrip flight proof update"
+msgstr "Mise à jour de votre justificatif de vol ShipTrip"
+
+msgid "Payment needed for your ShipTrip delivery"
+msgstr "Un paiement est requis pour votre livraison ShipTrip"
+
+msgid "Open ShipTrip to review the payment needed."
+msgstr "Ouvrez ShipTrip pour consulter le paiement requis."
+
+msgid "Payment"
+msgstr "Paiement"
+
+msgid "A payment is needed to continue"
+msgstr "Un paiement est nécessaire pour continuer"
+
+msgid "Your ShipTrip payment is processing"
+msgstr "Votre paiement ShipTrip est en cours"
+
+msgid "The provider is still confirming your payment."
+msgstr "Le prestataire confirme encore votre paiement."
+
+msgid "Your payment is being confirmed"
+msgstr "Votre paiement est en cours de confirmation"
+
+msgid "Your ShipTrip payment needs attention"
+msgstr "Votre paiement ShipTrip nécessite votre attention"
+
+msgid "The payment failed; open ShipTrip to try again."
+msgstr "Le paiement a échoué ; ouvrez ShipTrip pour réessayer."
+
+msgid "That payment did not go through"
+msgstr "Ce paiement n'a pas abouti"
+
+msgid "ShipTrip payment confirmed"
+msgstr "Paiement ShipTrip confirmé"
+
+msgid "Your payment is confirmed."
+msgstr "Votre paiement est confirmé."
+
+msgid "Your payment is confirmed"
+msgstr "Votre paiement est confirmé"
+
+msgid "This payment does not create a ShipTrip account or give access to the delivery. Keep the reference private and contact ShipTrip support if you need help."
+msgstr "Ce paiement ne crée pas de compte ShipTrip et ne donne pas accès à la livraison. Gardez la référence privée et contactez l'assistance ShipTrip si nécessaire."
+
+msgid "ShipTrip refund update"
+msgstr "Mise à jour de votre remboursement ShipTrip"
+
+msgid "More information is needed for your ShipTrip case"
+msgstr "Des informations supplémentaires sont requises pour votre dossier ShipTrip"
+
+msgid "Open ShipTrip to review the evidence request."
+msgstr "Ouvrez ShipTrip pour consulter la demande de justificatifs."
+
+msgid "Dispute"
+msgstr "Litige"
+
+msgid "We need a little more information"
+msgstr "Nous avons besoin de quelques informations supplémentaires"
+
+msgid "Open the app to upload evidence. Never include a handover code."
+msgstr "Ouvrez l'application pour ajouter des justificatifs. N'incluez jamais de code de remise."
+
+msgid "ShipTrip security notice"
+msgstr "Alerte de sécurité ShipTrip"
+
+msgid "Your ShipTrip password was changed."
+msgstr "Votre mot de passe ShipTrip a été modifié."
+
+msgid "Your password was changed"
+msgstr "Votre mot de passe a été modifié"
+
+msgid "If you did not make this change, reset your password immediately and contact ShipTrip support."
+msgstr "Si vous n'avez pas effectué cette modification, réinitialisez immédiatement votre mot de passe et contactez l'assistance ShipTrip."
+
+msgid "Pickup confirmed"
+msgstr "Collecte confirmée"
+
+msgid "The traveler has collected your parcel."
+msgstr "Le voyageur a récupéré votre colis."
+
+msgid "The traveler has collected your parcel"
+msgstr "Le voyageur a récupéré votre colis"
+
+msgid "Your delivery code is now available"
+msgstr "Votre code de livraison est maintenant disponible"
+
+msgid "Open ShipTrip to view the delivery code."
+msgstr "Ouvrez ShipTrip pour afficher le code de livraison."
+
+msgid "The code is not in this email. Open the app to see it."
+msgstr "Le code ne figure pas dans cet e-mail. Ouvrez l'application pour le consulter."
+
+msgid "Delivery confirmed"
+msgstr "Livraison confirmée"
+
+msgid "The delivery code was accepted successfully."
+msgstr "Le code de livraison a été accepté."
+
+msgid "The delivery is confirmed"
+msgstr "La livraison est confirmée"
+
+msgid "Payment protection has ended"
+msgstr "La protection du paiement est terminée"
+
+msgid "The protection window closed with no open dispute."
+msgstr "La période de protection s'est terminée sans litige ouvert."
+
+msgid "Payment protection"
+msgstr "Protection du paiement"
+
+msgid "Payment protection ends soon"
+msgstr "La protection du paiement se termine bientôt"
+
+msgid "Open a dispute before the protection deadline if needed."
+msgstr "Si nécessaire, ouvrez un litige avant la fin de la période de protection."
+
+msgid "A dispute has been opened"
+msgstr "Un litige a été ouvert"
+
+msgid "The traveler's payout is frozen while the dispute is reviewed."
+msgstr "Le versement au voyageur est suspendu pendant l'examen du litige."
+
+msgid "Your dispute has been resolved"
+msgstr "Votre litige a été résolu"
+
+msgid "Open ShipTrip to review the dispute outcome."
+msgstr "Ouvrez ShipTrip pour consulter l'issue du litige."
+
+msgid "Payout update"
+msgstr "Mise à jour du versement"
+
+msgid "Your ShipTrip payout status was updated."
+msgstr "Le statut de votre versement ShipTrip a été mis à jour."
+
+msgid "Payout"
+msgstr "Versement"
+
+msgid "Your payout was updated"
+msgstr "Votre versement a été mis à jour"
+
+msgid "Delivery cancelled"
+msgstr "Livraison annulée"
+
+msgid "This ShipTrip delivery has been cancelled."
+msgstr "Cette livraison ShipTrip a été annulée."
+
+msgid "This delivery has been cancelled"
+msgstr "Cette livraison a été annulée"
+
+msgid "Leave a review"
+msgstr "Laissez un avis"
+
+msgid "You can now review the other party."
+msgstr "Vous pouvez maintenant évaluer l'autre partie."
+
+msgid "After the delivery"
+msgstr "Après la livraison"
+
+msgid "You can now leave a review"
+msgstr "Vous pouvez maintenant laisser un avis"
+
+msgid "%(sender_name)s has sent you a parcel through ShipTrip and it is on its way."
+msgstr "%(sender_name)s vous a envoyé un colis via ShipTrip et celui-ci est en route."
+
+msgid "Enter this code on the verification screen to confirm your email address."
+msgstr "Saisissez ce code sur l'écran de vérification pour confirmer votre adresse e-mail."
+
+msgid "Your verification code"
+msgstr "Votre code de vérification"
+
+msgid "Enter this code on the password reset screen."
+msgstr "Saisissez ce code sur l'écran de réinitialisation du mot de passe."
+
+msgid "Your password reset code"
+msgstr "Votre code de réinitialisation du mot de passe"
+
+msgid "Your identity verification is approved."
+msgstr "Votre vérification d'identité est approuvée."
+
+msgid "Your identity verification needs attention."
+msgstr "Votre vérification d'identité nécessite votre attention."
+
+msgid "Your identity verification is approved"
+msgstr "Votre vérification d'identité est approuvée"
+
+msgid "Your identity verification needs attention"
+msgstr "Votre vérification d'identité nécessite votre attention"
+
+msgid "Open the ShipTrip app to see the next step."
+msgstr "Ouvrez l'application ShipTrip pour voir l'étape suivante."
+
+msgid "Your flight proof is approved."
+msgstr "Votre justificatif de vol est approuvé."
+
+msgid "Your flight proof needs attention."
+msgstr "Votre justificatif de vol nécessite votre attention."
+
+msgid "Your flight proof is approved"
+msgstr "Votre justificatif de vol est approuvé"
+
+msgid "Your flight proof needs attention"
+msgstr "Votre justificatif de vol nécessite votre attention"
+
+msgid "A payment is required before this delivery can continue."
+msgstr "Un paiement est requis avant que cette livraison puisse continuer."
+
+msgid "Open ShipTrip to review the amount and available provider."
+msgstr "Ouvrez ShipTrip pour consulter le montant et les prestataires disponibles."
+
+msgid "Your payment has been received by the provider and is being confirmed."
+msgstr "Votre paiement a été reçu par le prestataire et est en cours de confirmation."
+
+msgid "The payment provider could not complete this attempt."
+msgstr "Le prestataire de paiement n'a pas pu finaliser cette tentative."
+
+msgid "Open ShipTrip to retry or choose another available provider."
+msgstr "Ouvrez ShipTrip pour réessayer ou choisir un autre prestataire disponible."
+
+msgid "Your payment is confirmed and the delivery can continue."
+msgstr "Votre paiement est confirmé et la livraison peut continuer."
+
+msgid "Your ShipTrip payment receipt"
+msgstr "Votre reçu de paiement ShipTrip"
+
+msgid "Your guest payment was confirmed."
+msgstr "Votre paiement invité a été confirmé."
+
+msgid "Your guest payment is confirmed"
+msgstr "Votre paiement invité est confirmé"
+
+msgid "Your refund is complete."
+msgstr "Votre remboursement est terminé."
+
+msgid "Your refund is being processed."
+msgstr "Votre remboursement est en cours de traitement."
+
+msgid "Your refund is complete"
+msgstr "Votre remboursement est terminé"
+
+msgid "Your refund is being processed"
+msgstr "Votre remboursement est en cours de traitement"
+
+msgid "The time it takes to appear depends on the payment provider."
+msgstr "Le délai d'affichage dépend du prestataire de paiement."
+
+msgid "The ShipTrip trust team requested additional evidence."
+msgstr "L'équipe de confiance ShipTrip a demandé des justificatifs supplémentaires."
+
+msgid "The password for your ShipTrip account was changed."
+msgstr "Le mot de passe de votre compte ShipTrip a été modifié."
+
+msgid "The traveler has confirmed pickup of your parcel."
+msgstr "Le voyageur a confirmé la collecte de votre colis."
+
+msgid "The safety window has passed. You can now view the delivery code in the ShipTrip app, and the recipient has been emailed their copy."
+msgstr "La période de sécurité est terminée. Vous pouvez maintenant afficher le code de livraison dans l'application ShipTrip, et une copie a été envoyée au destinataire par e-mail."
+
+msgid "The delivery code was entered successfully and the delivery is confirmed."
+msgstr "Le code de livraison a été saisi correctement et la livraison est confirmée."
+
+msgid "The protection window for this delivery has closed with no open dispute. The traveler's payout is now eligible."
+msgstr "La période de protection de cette livraison s'est terminée sans litige ouvert. Le versement au voyageur est maintenant éligible."
+
+msgid "If something is wrong with this delivery, open a dispute before the protection window closes."
+msgstr "Si cette livraison présente un problème, ouvrez un litige avant la fin de la période de protection."
+
+msgid "A dispute has been opened on this delivery. The traveler's payout is frozen while it is reviewed."
+msgstr "Un litige a été ouvert pour cette livraison. Le versement au voyageur est suspendu pendant son examen."
+
+msgid "This delivery has been cancelled."
+msgstr "Cette livraison a été annulée."
+
+msgid "Any refund due is processed automatically and appears in your payment history."
+msgstr "Tout remboursement dû est traité automatiquement et apparaît dans votre historique de paiements."
+
+msgid "You can now review the other party for this delivery."
+msgstr "Vous pouvez maintenant évaluer l'autre partie pour cette livraison."
+
+msgid "Reviews stay hidden until both sides have submitted or the review window closes."
+msgstr "Les avis restent masqués jusqu'à ce que les deux parties les aient envoyés ou que la période d'évaluation se termine."
+
+msgid "You can now publish a journey after its other checks pass."
+msgstr "Vous pouvez maintenant publier un trajet une fois les autres vérifications validées."
+
+msgid "Please review the reason and submit updated documents."
+msgstr "Consultez le motif et envoyez des documents mis à jour."
+
+msgid "The verified flight leg can be used for matching."
+msgstr "Le segment de vol vérifié peut être utilisé pour la mise en relation."
+
+msgid "Please review the reason and submit updated proof."
+msgstr "Consultez le motif et envoyez un justificatif mis à jour."
+
+msgid "Journey reference"
+msgstr "Référence du trajet"
+
+msgid "Payment reference"
+msgstr "Référence du paiement"
+
+msgid "Your ShipTrip guest payment needs attention"
+msgstr "Votre paiement invité ShipTrip nécessite votre attention"
+
+msgid "Your ShipTrip guest payment"
+msgstr "Votre paiement invité ShipTrip"
+
+msgid "Your guest payment did not complete."
+msgstr "Votre paiement invité n'a pas abouti."
+
+msgid "A guest payment update is available."
+msgstr "Une mise à jour de votre paiement invité est disponible."
+
+msgid "Your guest payment did not go through"
+msgstr "Votre paiement invité n'a pas abouti"
+
+msgid "Your guest payment"
+msgstr "Votre paiement invité"
+
+msgid "ShipTrip received this payment for the reference below."
+msgstr "ShipTrip a reçu ce paiement pour la référence ci-dessous."
+
+msgid "ShipTrip has completed the refund shown below."
+msgstr "ShipTrip a effectué le remboursement indiqué ci-dessous."
+
+msgid "ShipTrip has started the refund shown below."
+msgstr "ShipTrip a lancé le remboursement indiqué ci-dessous."
+
+msgid "Dispute reference"
+msgstr "Référence du litige"
+
+msgid "Your delivery code becomes available in %(minutes)s minutes, and the recipient is emailed at the same time."
+msgstr "Votre code de livraison sera disponible dans %(minutes)s minutes, et le destinataire le recevra simultanément par e-mail."
+
+msgid "Payment protection runs until"
+msgstr "La protection du paiement est active jusqu'au"
+
+msgid "Protection ends at"
+msgstr "Fin de la protection"
+
+msgid "A ShipTrip administrator has resolved this dispute. Open ShipTrip to see the outcome."
+msgstr "Un administrateur ShipTrip a résolu ce litige. Ouvrez ShipTrip pour consulter l'issue."
+
+msgid "Your ShipTrip payout was updated. Open ShipTrip to see its current status."
+msgstr "Votre versement ShipTrip a été mis à jour. Ouvrez ShipTrip pour consulter son statut actuel."
+
+msgid "Reason"
+msgstr "Motif"
+
+msgid "Reason: %(reason)s"
+msgstr "Motif : %(reason)s"
+
+msgid "The provider could not complete this guest payment."
+msgstr "Le prestataire n'a pas pu finaliser ce paiement invité."
+
+msgid "the end of the window"
+msgstr "la fin de la période"
+
+msgid "A ShipTrip administrator has resolved this dispute as: %(resolution)s."
+msgstr "Un administrateur ShipTrip a résolu ce litige comme suit : %(resolution)s."
+
+msgid "A security or account change was made"
+msgstr "Une modification de sécurité ou de compte a été effectuée"
+
+msgid "There was a security or account change."
+msgstr "Une modification de sécurité ou de compte a été effectuée."
+
+msgid "Your ShipTrip payout status is now %(status)s."
+msgstr "Le statut de votre versement ShipTrip est maintenant : %(status)s."
+
+msgid "cancelled"
+msgstr "annulée"
+
+msgid "ShipTrip will never ask you for a pickup or delivery code, and will never ask you to share one before the parcel is in your hands."
+msgstr "ShipTrip ne vous demandera jamais un code de collecte ou de livraison, ni de le communiquer avant que le colis soit entre vos mains."
+
+msgid "You are receiving this because of a delivery or account action on ShipTrip. This is a transactional message, not marketing."
+msgstr "Vous recevez ce message à la suite d'une action liée à une livraison ou à votre compte ShipTrip. Il s'agit d'un message transactionnel, pas d'une communication marketing."
+
+msgid "Questions? Reply to this email."
+msgstr "Une question ? Répondez à cet e-mail."
+
+msgid "You are receiving this because of a delivery or account action on %(shiptrip)s. This is a transactional message, not marketing."
+msgstr "Vous recevez ce message à la suite d'une action liée à une livraison ou à votre compte %(shiptrip)s. Il s'agit d'un message transactionnel, pas d'une communication marketing."
+
+msgid "Questions? Reply to this email or write to %(support_link)s."
+msgstr "Une question ? Répondez à cet e-mail ou écrivez à %(support_link)s."
+
+msgid "Questions? Reply to this email or write to %(support_email)s."
+msgstr "Une question ? Répondez à cet e-mail ou écrivez à %(support_email)s."
+
+msgid "EU ↔ Algeria"
+msgstr "UE ↔ Algérie"
+
+msgid "Full sender refund"
+msgstr "Remboursement intégral de l'expéditeur"
+
+msgid "Full traveler payout"
+msgstr "Versement intégral au voyageur"
+
+msgid "Partial split"
+msgstr "Répartition partielle"
+
+msgid "cancelled by the sender"
+msgstr "annulée par l'expéditeur"
+
+msgid "cancelled by the traveler"
+msgstr "annulée par le voyageur"
+
+msgid "cancelled by an administrator"
+msgstr "annulée par un administrateur"

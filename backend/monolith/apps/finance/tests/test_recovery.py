@@ -293,7 +293,11 @@ class RefundRecoveryTests(RecoveryTestCase):
             kind=ScheduledJob.Kind.REFUND_RECONCILE,
             payload__refund_id=refund.pk,
         ).update(status=ScheduledJob.Status.PENDING, run_at=timezone.now())
-        report = jobs.run_due_jobs(limit=10)
+        with patch.dict(
+            jobs.HANDLERS,
+            {ScheduledJob.Kind.OUTBOUND_MESSAGE: lambda _payload: "dispatched"},
+        ):
+            report = jobs.run_due_jobs(limit=10)
 
         assert report.failed == 0, report.results
         refund.refresh_from_db()
@@ -346,7 +350,11 @@ class RefundRecoveryTests(RecoveryTestCase):
             payload__refund_id=refund.pk,
         ).update(status=ScheduledJob.Status.PENDING, run_at=timezone.now())
 
-        report = jobs.run_due_jobs(limit=10)
+        with patch.dict(
+            jobs.HANDLERS,
+            {ScheduledJob.Kind.OUTBOUND_MESSAGE: lambda _payload: "dispatched"},
+        ):
+            report = jobs.run_due_jobs(limit=10)
 
         assert report.failed == 0, report.results
         refund.refresh_from_db()
@@ -373,7 +381,11 @@ class RefundRecoveryTests(RecoveryTestCase):
                 run_at=timezone.now(),
                 max_attempts=1,
             )
-            report = jobs.run_due_jobs(limit=10)
+            with patch.dict(
+                jobs.HANDLERS,
+                {ScheduledJob.Kind.OUTBOUND_MESSAGE: lambda _payload: "dispatched"},
+            ):
+                report = jobs.run_due_jobs(limit=10)
 
         assert report.failed == 1
         refund.refresh_from_db()

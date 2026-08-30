@@ -39,12 +39,17 @@ from datetime import datetime, timedelta
 
 import redis
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, connection, transaction
+from django.utils import translation
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.core import redis_bus
+from apps.core.languages import normalize_communication_language
 from apps.core.models import PublishedEvent
+
+from .email_layout import EmailDocument, to_html, to_text
 
 from .models import OutboundMessage, OutboundSecret
 
@@ -79,6 +84,7 @@ def enqueue_message(
     deal_id: int | None = None,
     recipient_user_id: int | None = None,
     secret_ref: str = "",
+    language: str | None = None,
     run_at: datetime | None = None,
     max_attempts: int = 10,
 ) -> OutboundMessage:
@@ -90,6 +96,15 @@ def enqueue_message(
     """
 
     run_at = run_at or timezone.now()
+    if language is None and recipient_user_id is not None:
+        from apps.accounts.models import User
+
+        language = (
+            User.objects.filter(pk=recipient_user_id)
+            .values_list("preferred_language", flat=True)
+            .first()
+        )
+    resolved_language = normalize_communication_language(language)
     try:
         with transaction.atomic():
             message = OutboundMessage.objects.create(
@@ -97,6 +112,7 @@ def enqueue_message(
                 key=key,
                 to_email=to_email,
                 context=context or {},
+                language=resolved_language,
                 deal_id=deal_id,
                 recipient_user_id=recipient_user_id,
                 secret_ref=secret_ref,
@@ -130,6 +146,7 @@ def enqueue_secret_message(
     secret_expires_at: datetime,
     context: dict | None = None,
     recipient_user_id: int | None = None,
+    language: str | None = None,
     max_attempts: int = 10,
 ) -> OutboundMessage:
     """Arm a durable OTP email without storing the plaintext code.
@@ -175,6 +192,7 @@ def enqueue_secret_message(
             to_email=to_email,
             context=context,
             recipient_user_id=recipient_user_id,
+            language=language,
             secret_ref=f"outbound_secret:{vault.pk}",
             max_attempts=max_attempts,
         )
@@ -183,13 +201,34 @@ def enqueue_secret_message(
 def cancel_message(*, key: str, reason: str = "") -> int:
     """Withdraw an obligation that is no longer true. Never cancels a sent one."""
 
-    return OutboundMessage.objects.filter(
-        key=key, status=OutboundMessage.Status.PENDING
-    ).update(
-        status=OutboundMessage.Status.CANCELLED,
-        last_error=reason[:500],
-        updated_at=timezone.now(),
-    )
+    from apps.finance.models import ScheduledJob
+
+    now = timezone.now()
+    with transaction.atomic():
+        message_ids = list(
+            OutboundMessage.objects.select_for_update()
+            .filter(key=key, status=OutboundMessage.Status.PENDING)
+            .values_list("pk", flat=True)
+        )
+        if not message_ids:
+            return 0
+        updated = OutboundMessage.objects.filter(pk__in=message_ids).update(
+            status=OutboundMessage.Status.CANCELLED,
+            last_error=reason[:500],
+            updated_at=now,
+        )
+        ScheduledJob.objects.filter(
+            kind=ScheduledJob.Kind.OUTBOUND_MESSAGE,
+            payload__message_id__in=message_ids,
+            status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.FAILED),
+        ).update(
+            status=ScheduledJob.Status.CANCELLED,
+            last_error=reason[:500],
+            last_result="message_cancelled",
+            completed_at=now,
+            updated_at=now,
+        )
+        return updated
 
 
 # --- secret resolution --------------------------------------------------------
@@ -210,7 +249,9 @@ def resolve_secret(message: OutboundMessage) -> str:
         try:
             secret_id = uuid.UUID(raw_id)
         except (TypeError, ValueError) as exc:
-            raise SecretUnavailable("The outbound secret reference is invalid.") from exc
+            raise SecretUnavailable(
+                "The outbound secret reference is invalid."
+            ) from exc
         vault = OutboundSecret.objects.filter(pk=secret_id).first()
         if vault is None or vault.consumed_at is not None or not vault.sealed_value:
             raise SecretUnavailable("The outbound email secret is unavailable.")
@@ -227,7 +268,9 @@ def resolve_secret(message: OutboundMessage) -> str:
                 sealed_value=vault.sealed_value,
             )
         except OutboundSecretError as exc:
-            raise SecretUnavailable("The outbound email secret could not be opened.") from exc
+            raise SecretUnavailable(
+                "The outbound email secret could not be opened."
+            ) from exc
 
     if resolver != "handover_code" or not raw_id.isdigit():
         raise SecretUnavailable(f"Unsupported secret reference {resolver!r}.")
@@ -260,291 +303,631 @@ def resolve_secret(message: OutboundMessage) -> str:
 # --- rendering ----------------------------------------------------------------
 
 
-def _recipient_delivery_code(context: dict, secret: str) -> tuple[str, str]:
+def _facts(context: dict, *extra: tuple[str, str]) -> tuple[tuple[str, str], ...]:
+    """Reference rows. Deliberately a small allow-list of context keys.
+
+    Domain events carry provider references and other operational metadata.
+    A transactional email should contain the minimum a recipient needs to
+    identify what it is about, and never echo an arbitrary payload.
+    """
+
+    rows = [(label, str(value)) for label, value in extra if value]
     reference = context.get("deal_reference", "")
-    sender_name = context.get("sender_name", "your sender")
-    body = (
-        f"Hello {context.get('recipient_name', '')},\n\n"
-        f"{sender_name} has sent you a parcel through ShipTrip and it is on "
-        "its way.\n\n"
-        f"Your delivery code is: {secret}\n\n"
-        "Give this code to the traveler only once the parcel is physically in "
-        "your hands. Entering it is what confirms the delivery and starts the "
-        "payment protection window.\n\n"
-        "Never share this code by phone, message or email with anyone before "
-        "you have the parcel. ShipTrip will never ask you for it.\n\n"
-        f"Delivery reference: {reference}\n"
+    if reference:
+        rows.append((_("Delivery reference"), str(reference)))
+    return tuple(rows)
+
+
+def _amount_fact(context: dict) -> tuple[str, str]:
+    raw = context.get("amount_eur_cents")
+    if raw in (None, ""):
+        return ("", "")
+    try:
+        cents = int(raw)
+    except (TypeError, ValueError):
+        return ("", "")
+    # LRI/PDI keep the symbol and decimal digits in order in Arabic plain text.
+    return (_("Amount"), f"\u2066€{cents // 100}.{cents % 100:02d}\u2069")
+
+
+def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
+    reference = context.get("deal_reference", "")
+    sender_name = context.get("sender_name", "") or _("Your sender")
+    recipient_name = context.get("recipient_name", "")
+    greeting = (
+        _("Hello %(recipient_name)s,") % {"recipient_name": recipient_name}
+        if recipient_name
+        else _("Hello,")
     )
-    return ("Your ShipTrip delivery code", body)
+    return EmailDocument(
+        subject=_("Your ShipTrip delivery code"),
+        preheader=_("Keep this code private until the parcel is in your hands."),
+        eyebrow=_("Delivery"),
+        heading=_("Your parcel is on its way"),
+        paragraphs=(
+            greeting,
+            _(
+                "%(sender_name)s has sent you a parcel through ShipTrip and it is "
+                "on its way."
+            )
+            % {"sender_name": sender_name},
+            _(
+                "Give this code to the traveler only once the parcel is physically "
+                "in your hands. Entering it confirms delivery and starts the "
+                "payment protection window."
+            ),
+        ),
+        highlight=(_("Your delivery code"), secret),
+        callout=(
+            _(
+                "Never share this code by phone, message or email with anyone "
+                "before you have the parcel. ShipTrip will never ask you for it."
+            )
+        ),
+        facts=_facts({"deal_reference": reference}),
+    )
 
 
-def _plain(subject: str, lines: list[str]) -> tuple[str, str]:
-    return subject, "\n".join(lines) + "\n"
-
-
-def render(message: OutboundMessage) -> tuple[str, str]:
-    """Build `(subject, body)`. The only place a code becomes text."""
+def build_document(message: OutboundMessage) -> EmailDocument:
+    """Build the document for one obligation. The only place a code becomes text."""
 
     context = dict(message.context or {})
     kind = message.kind
+    reference = context.get("deal_reference", "")
+
     if kind == OutboundMessage.Kind.EMAIL_VERIFICATION:
-        code = resolve_secret(message)
-        return _plain(
-            "Confirm your ShipTrip email",
-            [
-                "Welcome to ShipTrip.",
-                "",
-                f"Your email verification code is: {code}",
-                "",
-                "It expires in 15 minutes. ShipTrip will never ask you to "
-                "share this code outside the verification screen.",
-            ],
+        return EmailDocument(
+            subject=_("Confirm your ShipTrip email"),
+            preheader=_("Use this code to confirm your email address."),
+            eyebrow=_("Account"),
+            heading=_("Welcome to ShipTrip"),
+            paragraphs=(
+                _(
+                    "Enter this code on the verification screen to confirm your "
+                    "email address."
+                ),
+            ),
+            highlight=(_("Your verification code"), resolve_secret(message)),
+            callout=(
+                _(
+                    "It expires in 15 minutes. ShipTrip will never ask you to share "
+                    "this code outside the verification screen."
+                )
+            ),
         )
     if kind == OutboundMessage.Kind.PASSWORD_RESET:
-        code = resolve_secret(message)
-        return _plain(
-            "Reset your ShipTrip password",
-            [
-                f"Your password reset code is: {code}",
-                "",
-                "It expires in 15 minutes. If you did not request this, "
-                "ignore this email and keep your code private.",
-            ],
+        return EmailDocument(
+            subject=_("Reset your ShipTrip password"),
+            preheader=_("Use this private code to reset your password."),
+            eyebrow=_("Account security"),
+            heading=_("Reset your password"),
+            paragraphs=(_("Enter this code on the password reset screen."),),
+            highlight=(_("Your password reset code"), resolve_secret(message)),
+            callout=(
+                _(
+                    "It expires in 15 minutes. If you did not request this, ignore "
+                    "this email and keep your code private."
+                )
+            ),
         )
     if kind == OutboundMessage.Kind.ADMIN_INVITATION:
         base = str(context.get("frontend_base_url", "")).rstrip("/")
-        invite_url = (
-            f"{base}/admin/invitations/accept?token={resolve_secret(message)}"
-            if base
-            else "the secure invitation link"
-        )
-        return _plain(
-            "You have been invited to ShipTrip Operations",
-            [
+        token = resolve_secret(message)
+        invite_url = f"{base}/admin/invitations/accept?token={token}" if base else ""
+        return EmailDocument(
+            subject="You have been invited to ShipTrip Operations",
+            eyebrow="Operations",
+            heading="You have been invited to ShipTrip Operations",
+            paragraphs=(
                 "A ShipTrip administrator invited you to join the operations team.",
-                "",
-                f"Role: {context.get('role_label', 'operations')}",
-                f"Accept your invitation: {invite_url}",
-                "",
-                "This link expires in 24 hours and can be used once.",
-                "If you were not expecting this, contact ShipTrip support.",
-            ],
+            ),
+            action=(
+                ("Accept your invitation", invite_url)
+                if invite_url
+                else ("Use the secure invitation link you were given.", "")
+            ),
+            callout=(
+                "This link expires in 24 hours and can be used once. If you were "
+                "not expecting this, contact ShipTrip support."
+            ),
+            facts=(("Role", str(context.get("role_label", "operations"))),),
         )
     if kind == OutboundMessage.Kind.RECIPIENT_DELIVERY_CODE:
         return _recipient_delivery_code(context, resolve_secret(message))
 
-    reference = context.get("deal_reference", "")
-    tail = [f"Delivery reference: {reference}"]
-    # The inventory below is intentionally rendered from a small allow-list of
-    # context fields.  Domain events may carry provider references or other
-    # operational metadata, but transactional mail should contain only the
-    # minimum user-facing status and never echo arbitrary payload keys.
+    # The inventory below renders from a small allow-list of context fields.
     if kind == OutboundMessage.Kind.KYC_STATUS:
-        return _plain(
-            "ShipTrip identity verification update",
-            [
-                "Your identity verification status is now "
-                f"{context.get('status', 'updated') }.",
-                str(context.get("reason", "")) if context.get("reason") else "",
-                "Open the ShipTrip app to see the next step.",
-            ],
+        approved = context.get("status") == "approved"
+        return EmailDocument(
+            subject=_("ShipTrip identity verification update"),
+            preheader=(
+                _("Your identity verification is approved.")
+                if approved
+                else _("Your identity verification needs attention.")
+            ),
+            eyebrow=_("Verification"),
+            heading=(
+                _("Your identity verification is approved")
+                if approved
+                else _("Your identity verification needs attention")
+            ),
+            paragraphs=(
+                (
+                    _("You can now publish a journey after its other checks pass.")
+                    if approved
+                    else _("Please review the reason and submit updated documents.")
+                ),
+                (
+                    _("Reason: %(reason)s") % {"reason": context["reason"]}
+                    if context.get("reason")
+                    else ""
+                ),
+                _("Open the ShipTrip app to see the next step."),
+            ),
         )
     if kind == OutboundMessage.Kind.FLIGHT_PROOF_STATUS:
-        return _plain(
-            "ShipTrip flight proof update",
-            [
-                "Your flight proof status is now "
-                f"{context.get('status', 'updated') }.",
-                str(context.get("reason", "")) if context.get("reason") else "",
-                "Open the ShipTrip app to see the next step.",
-            ],
+        approved = context.get("status") == "approved"
+        return EmailDocument(
+            subject=_("ShipTrip flight proof update"),
+            preheader=(
+                _("Your flight proof is approved.")
+                if approved
+                else _("Your flight proof needs attention.")
+            ),
+            eyebrow=_("Verification"),
+            heading=(
+                _("Your flight proof is approved")
+                if approved
+                else _("Your flight proof needs attention")
+            ),
+            paragraphs=(
+                (
+                    _("The verified flight leg can be used for matching.")
+                    if approved
+                    else _("Please review the reason and submit updated proof.")
+                ),
+                (
+                    _("Reason: %(reason)s") % {"reason": context["reason"]}
+                    if context.get("reason")
+                    else ""
+                ),
+                _("Open the ShipTrip app to see the next step."),
+            ),
+            facts=(
+                (_("Journey reference"), str(context.get("journey_reference", ""))),
+            ),
         )
     if kind == OutboundMessage.Kind.PAYMENT_REQUIRED:
-        return _plain(
-            "Payment needed for your ShipTrip delivery",
-            [
-                "A payment is required before this delivery can continue.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-                "Open ShipTrip to review the amount and available provider.",
-            ],
+        return EmailDocument(
+            subject=_("Payment needed for your ShipTrip delivery"),
+            preheader=_("Open ShipTrip to review the payment needed."),
+            eyebrow=_("Payment"),
+            heading=_("A payment is needed to continue"),
+            paragraphs=(
+                _("A payment is required before this delivery can continue."),
+                _("Open ShipTrip to review the amount and available provider."),
+            ),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+                _amount_fact(context),
+            ),
         )
     if kind == OutboundMessage.Kind.PAYMENT_PROCESSING:
-        return _plain(
-            "Your ShipTrip payment is processing",
-            [
-                "Your payment has been received by the provider and is being confirmed.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-            ],
+        return EmailDocument(
+            subject=_("Your ShipTrip payment is processing"),
+            preheader=_("The provider is still confirming your payment."),
+            eyebrow=_("Payment"),
+            heading=_("Your payment is being confirmed"),
+            paragraphs=(
+                _(
+                    "Your payment has been received by the provider and is being "
+                    "confirmed."
+                ),
+            ),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+            ),
         )
     if kind == OutboundMessage.Kind.PAYMENT_FAILED:
-        return _plain(
-            "Your ShipTrip payment needs attention",
-            [
-                "The payment provider could not complete this attempt.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-                "Open ShipTrip to retry or choose another available provider.",
-            ],
+        return EmailDocument(
+            subject=_("Your ShipTrip payment needs attention"),
+            preheader=_("The payment failed; open ShipTrip to try again."),
+            eyebrow=_("Payment"),
+            heading=_("That payment did not go through"),
+            paragraphs=(
+                _("The payment provider could not complete this attempt."),
+                _("Open ShipTrip to retry or choose another available provider."),
+            ),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+                _amount_fact(context),
+            ),
         )
     if kind == OutboundMessage.Kind.PAYMENT_SUCCEEDED:
-        return _plain(
-            "ShipTrip payment confirmed",
-            [
-                "Your payment is confirmed and the delivery can continue.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-            ],
+        return EmailDocument(
+            subject=_("ShipTrip payment confirmed"),
+            preheader=_("Your payment is confirmed."),
+            eyebrow=_("Payment"),
+            heading=_("Your payment is confirmed"),
+            paragraphs=(_("Your payment is confirmed and the delivery can continue."),),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+                _amount_fact(context),
+            ),
         )
     if kind == OutboundMessage.Kind.GUEST_PAYMENT:
-        return _plain(
-            "Your ShipTrip guest payment",
-            [
-                "Your guest payment link or status is ready.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-                "Keep this reference private and use ShipTrip support if you need help.",
-            ],
+        succeeded = context.get("status") == "succeeded"
+        failed = context.get("status") == "failed"
+        return EmailDocument(
+            subject=(
+                _("Your ShipTrip payment receipt")
+                if succeeded
+                else _("Your ShipTrip guest payment needs attention")
+                if failed
+                else _("Your ShipTrip guest payment")
+            ),
+            preheader=(
+                _("Your guest payment was confirmed.")
+                if succeeded
+                else _("Your guest payment did not complete.")
+                if failed
+                else _("A guest payment update is available.")
+            ),
+            eyebrow=_("Payment"),
+            heading=(
+                _("Your guest payment is confirmed")
+                if succeeded
+                else _("Your guest payment did not go through")
+                if failed
+                else _("Your guest payment")
+            ),
+            paragraphs=(
+                (
+                    _("ShipTrip received this payment for the reference below.")
+                    if succeeded
+                    else _("The provider could not complete this guest payment.")
+                    if failed
+                    else _("A guest payment update is available.")
+                ),
+            ),
+            callout=(
+                _(
+                    "This payment does not create a ShipTrip account or give access "
+                    "to the delivery. Keep the reference private and contact "
+                    "ShipTrip support if you need help."
+                )
+            ),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+                _amount_fact(context),
+            ),
         )
     if kind == OutboundMessage.Kind.REFUND_STATUS:
-        return _plain(
-            "ShipTrip refund update",
-            [
-                "Your refund status is now "
-                f"{context.get('status', 'updated')}.",
-                f"Payment reference: {context.get('payment_reference', reference)}",
-                "Refund timing depends on the payment provider.",
-            ],
+        succeeded = context.get("status") == "succeeded"
+        return EmailDocument(
+            subject=_("ShipTrip refund update"),
+            preheader=(
+                _("Your refund is complete.")
+                if succeeded
+                else _("Your refund is being processed.")
+            ),
+            eyebrow=_("Payment"),
+            heading=(
+                _("Your refund is complete")
+                if succeeded
+                else _("Your refund is being processed")
+            ),
+            paragraphs=(
+                (
+                    _("ShipTrip has completed the refund shown below.")
+                    if succeeded
+                    else _("ShipTrip has started the refund shown below.")
+                ),
+                _("The time it takes to appear depends on the payment provider."),
+            ),
+            facts=_facts(
+                context,
+                (_("Payment reference"), context.get("payment_reference", reference)),
+                _amount_fact(context),
+            ),
         )
     if kind == OutboundMessage.Kind.EVIDENCE_REQUEST:
-        return _plain(
-            "More information is needed for your ShipTrip case",
-            [
-                "The ShipTrip trust team requested additional evidence.",
-                f"Dispute reference: {context.get('dispute_reference', '')}",
-                "Open the app to upload evidence. Never include a handover code.",
-            ],
+        return EmailDocument(
+            subject=_("More information is needed for your ShipTrip case"),
+            preheader=_("Open ShipTrip to review the evidence request."),
+            eyebrow=_("Dispute"),
+            heading=_("We need a little more information"),
+            paragraphs=(_("The ShipTrip trust team requested additional evidence."),),
+            callout=_(
+                "Open the app to upload evidence. Never include a handover code."
+            ),
+            facts=_facts(
+                context,
+                (_("Dispute reference"), context.get("dispute_reference", "")),
+            ),
         )
     if kind == OutboundMessage.Kind.SECURITY_EVENT:
-        return _plain(
-            "ShipTrip security notice",
-            [
-                str(context.get("summary", "There was a security or account change.")),
-                "If you did not make this change, reset your password and contact support.",
-            ],
+        password_reset = context.get("event") == "password_reset_completed"
+        return EmailDocument(
+            subject=_("ShipTrip security notice"),
+            preheader=(
+                _("Your ShipTrip password was changed.")
+                if password_reset
+                else _("A security or account change was made")
+            ),
+            eyebrow=_("Account security"),
+            heading=(
+                _("Your password was changed")
+                if password_reset
+                else _("A security or account change was made")
+            ),
+            paragraphs=(
+                _("The password for your ShipTrip account was changed.")
+                if password_reset
+                else str(
+                    context.get(
+                        "summary",
+                        _("There was a security or account change."),
+                    )
+                ),
+            ),
+            callout=(
+                _(
+                    "If you did not make this change, reset your password "
+                    "immediately and contact ShipTrip support."
+                )
+            ),
         )
     if kind == OutboundMessage.Kind.PICKUP_CONFIRMED:
-        return _plain(
-            "Pickup confirmed",
-            [
-                "The traveler has confirmed pickup of your parcel.",
-                "",
-                "Your delivery code becomes available in "
-                f"{context.get('buffer_minutes', 30)} minutes, and the "
-                "recipient is emailed at the same time.",
-                "",
-                *tail,
-            ],
+        buffer_minutes = context.get("buffer_minutes", 30)
+        return EmailDocument(
+            subject=_("Pickup confirmed"),
+            preheader=_("The traveler has collected your parcel."),
+            eyebrow=_("Delivery"),
+            heading=_("The traveler has collected your parcel"),
+            paragraphs=(
+                _("The traveler has confirmed pickup of your parcel."),
+                _(
+                    "Your delivery code becomes available in %(minutes)s minutes, "
+                    "and the recipient is emailed at the same time."
+                )
+                % {"minutes": buffer_minutes},
+            ),
+            facts=_facts(context),
         )
     if kind == OutboundMessage.Kind.DELIVERY_CODE_RELEASED:
-        return _plain(
-            "Your delivery code is now available",
-            [
-                "The safety window has passed. You can now view the delivery "
-                "code in the ShipTrip app, and the recipient has been emailed "
-                "their copy.",
-                "",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("Your delivery code is now available"),
+            preheader=_("Open ShipTrip to view the delivery code."),
+            eyebrow=_("Delivery"),
+            heading=_("Your delivery code is now available"),
+            paragraphs=(
+                _(
+                    "The safety window has passed. You can now view the delivery "
+                    "code in the ShipTrip app, and the recipient has been emailed "
+                    "their copy."
+                ),
+            ),
+            callout=_("The code is not in this email. Open the app to see it."),
+            facts=_facts(context),
         )
     if kind == OutboundMessage.Kind.DELIVERY_CONFIRMED:
-        return _plain(
-            "Delivery confirmed",
-            [
-                "The delivery code was entered successfully and the delivery "
-                "is confirmed.",
-                "",
-                "Payment protection runs until "
-                f"{context.get('protection_ends_at', 'the end of the window')}.",
-                "",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("Delivery confirmed"),
+            preheader=_("The delivery code was accepted successfully."),
+            eyebrow=_("Delivery"),
+            heading=_("The delivery is confirmed"),
+            paragraphs=(
+                _(
+                    "The delivery code was entered successfully and the delivery "
+                    "is confirmed."
+                ),
+            ),
+            facts=_facts(
+                context,
+                (
+                    _("Payment protection runs until"),
+                    context.get("protection_ends_at", _("the end of the window")),
+                ),
+            ),
         )
     if kind == OutboundMessage.Kind.PROTECTION_ENDED:
-        return _plain(
-            "Payment protection has ended",
-            [
-                "The protection window for this delivery has closed with no "
-                "open dispute. The traveler's payout is now eligible.",
-                "",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("Payment protection has ended"),
+            preheader=_("The protection window closed with no open dispute."),
+            eyebrow=_("Payment protection"),
+            heading=_("Payment protection has ended"),
+            paragraphs=(
+                _(
+                    "The protection window for this delivery has closed with no "
+                    "open dispute. The traveler's payout is now eligible."
+                ),
+            ),
+            facts=_facts(context),
         )
     if kind == OutboundMessage.Kind.PROTECTION_ENDING:
-        return _plain(
-            "Payment protection ends soon",
-            [
-                "If something is wrong with this delivery, open a dispute "
-                "before the protection window closes.",
-                "",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("Payment protection ends soon"),
+            preheader=_("Open a dispute before the protection deadline if needed."),
+            eyebrow=_("Payment protection"),
+            heading=_("Payment protection ends soon"),
+            paragraphs=(
+                _(
+                    "If something is wrong with this delivery, open a dispute "
+                    "before the protection window closes."
+                ),
+            ),
+            facts=_facts(
+                context,
+                (_("Protection ends at"), context.get("protection_ends_at", "")),
+            ),
         )
     if kind == OutboundMessage.Kind.DISPUTE_OPENED:
-        return _plain(
-            "A dispute has been opened",
-            [
-                "A dispute has been opened on this delivery. The traveler's "
-                "payout is frozen while it is reviewed.",
-                "",
-                f"Dispute reference: {context.get('dispute_reference', '')}",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("A dispute has been opened"),
+            preheader=_(
+                "The traveler's payout is frozen while the dispute is reviewed."
+            ),
+            eyebrow=_("Dispute"),
+            heading=_("A dispute has been opened"),
+            paragraphs=(
+                _(
+                    "A dispute has been opened on this delivery. The traveler's "
+                    "payout is frozen while it is reviewed."
+                ),
+            ),
+            facts=_facts(
+                context,
+                (_("Dispute reference"), context.get("dispute_reference", "")),
+            ),
         )
     if kind == OutboundMessage.Kind.DISPUTE_RESOLVED:
-        return _plain(
-            "Your dispute has been resolved",
-            [
-                "A ShipTrip administrator has resolved this dispute as: "
-                f"{context.get('resolution_label', '')}.",
-                "",
-                f"Dispute reference: {context.get('dispute_reference', '')}",
-                *tail,
-            ],
+        resolution_labels = {
+            "full_sender_refund": _("Full sender refund"),
+            "full_traveler_payout": _("Full traveler payout"),
+            "partial_split": _("Partial split"),
+        }
+        resolution_label = resolution_labels.get(
+            str(context.get("resolution", "")),
+            context.get("resolution_label", ""),
+        )
+        return EmailDocument(
+            subject=_("Your dispute has been resolved"),
+            preheader=_("Open ShipTrip to review the dispute outcome."),
+            eyebrow=_("Dispute"),
+            heading=_("Your dispute has been resolved"),
+            # The outbox is durable, so a row queued before a deploy is
+            # rendered after it. A value interpolated mid-sentence has to
+            # survive its own absence, or the recipient reads "resolved this
+            # dispute as: ." — the two sentences below both stand alone.
+            paragraphs=(
+                (
+                    _(
+                        "A ShipTrip administrator has resolved this dispute as: "
+                        "%(resolution)s."
+                    )
+                    % {"resolution": resolution_label}
+                    if resolution_label
+                    else _(
+                        "A ShipTrip administrator has resolved this dispute. Open "
+                        "ShipTrip to see the outcome."
+                    )
+                ),
+            ),
+            facts=_facts(
+                context,
+                (_("Dispute reference"), context.get("dispute_reference", "")),
+            ),
         )
     if kind == OutboundMessage.Kind.PAYOUT_STATUS:
-        return _plain(
-            "Payout update",
-            [
-                "Your ShipTrip payout status is now "
-                f"{context.get('payout_status', '')}.",
-                "",
-                *tail,
-            ],
+        payout_labels = {
+            "eligible": _("eligible"),
+            "scheduled": _("scheduled"),
+            "processing": _("processing"),
+            "paid": _("paid"),
+            "failed": _("needs attention"),
+        }
+        payout_status = payout_labels.get(
+            str(context.get("payout_status", "")), _("updated")
+        )
+        return EmailDocument(
+            subject=_("Payout update"),
+            preheader=_("Your ShipTrip payout status was updated."),
+            eyebrow=_("Payout"),
+            heading=_("Your payout was updated"),
+            paragraphs=(
+                (
+                    _("Your ShipTrip payout status is now %(status)s.")
+                    % {"status": payout_status}
+                    if context.get("payout_status")
+                    else _(
+                        "Your ShipTrip payout was updated. Open ShipTrip to see "
+                        "its current status."
+                    )
+                ),
+            ),
+            facts=_facts(context),
         )
     if kind == OutboundMessage.Kind.DEAL_CANCELLED:
-        return _plain(
-            "Delivery cancelled",
-            [
-                "This delivery has been cancelled.",
-                "",
-                f"Reason: {context.get('reason', 'cancelled')}",
-                "",
-                "Any refund due is processed automatically and appears in "
-                "your payment history.",
-                "",
-                *tail,
-            ],
+        cancellation_labels = {
+            "sender": _("cancelled by the sender"),
+            "traveler": _("cancelled by the traveler"),
+            "admin": _("cancelled by an administrator"),
+        }
+        cancellation_reason = cancellation_labels.get(
+            str(context.get("cancelled_by_role", "")),
+            context.get("reason", _("cancelled")),
+        )
+        return EmailDocument(
+            subject=_("Delivery cancelled"),
+            preheader=_("This ShipTrip delivery has been cancelled."),
+            eyebrow=_("Delivery"),
+            heading=_("This delivery has been cancelled"),
+            paragraphs=(
+                _("This delivery has been cancelled."),
+                _(
+                    "Any refund due is processed automatically and appears in "
+                    "your payment history."
+                ),
+            ),
+            facts=_facts(
+                context,
+                (_("Reason"), cancellation_reason),
+            ),
         )
     if kind == OutboundMessage.Kind.RATING_AVAILABLE:
-        return _plain(
-            "Leave a review",
-            [
-                "You can now review the other party for this delivery.",
-                "",
-                "Reviews stay hidden until both sides have submitted or the "
-                "review window closes.",
-                "",
-                *tail,
-            ],
+        return EmailDocument(
+            subject=_("Leave a review"),
+            preheader=_("You can now review the other party."),
+            eyebrow=_("After the delivery"),
+            heading=_("You can now leave a review"),
+            paragraphs=(
+                _("You can now review the other party for this delivery."),
+                _(
+                    "Reviews stay hidden until both sides have submitted or the "
+                    "review window closes."
+                ),
+            ),
+            facts=_facts(context),
         )
     raise SecretUnavailable(f"No template for outbound message kind {kind!r}.")
+
+
+def render(message: OutboundMessage) -> tuple[str, str]:
+    """Build `(subject, plain-text body)`. The only place a code becomes text."""
+
+    language = normalize_communication_language(message.language)
+    with translation.override(language):
+        document = build_document(message)
+        return document.subject, to_text(document, language=language)
+
+
+def render_parts(message: OutboundMessage) -> tuple[str, str, str]:
+    """Build `(subject, text, html)` for a multipart send.
+
+    Both bodies come from one document, so the plain-text part and the HTML
+    part cannot drift apart and say different things about the same delivery.
+    """
+
+    language = normalize_communication_language(message.language)
+    with translation.override(language):
+        document = build_document(message)
+        support = str(getattr(settings, "EMAIL_SUPPORT_ADDR", "") or "")
+        return (
+            document.subject,
+            to_text(document, support_email=support, language=language),
+            to_html(
+                document,
+                support_email=support,
+                site_url=str(getattr(settings, "FRONTEND_BASE_URL", "") or ""),
+                language=language,
+            ),
+        )
 
 
 # --- dispatch -----------------------------------------------------------------
@@ -555,6 +938,7 @@ def _xadd_email(
     to: str,
     subject: str,
     body: str,
+    html: str,
     kind: str,
     event_id: str,
 ) -> str:
@@ -571,6 +955,7 @@ def _xadd_email(
         "to": to,
         "subject": subject,
         "body": body,
+        "html": html,
         "kind": kind,
     }
     serialized = json.dumps(payload, separators=(",", ":"))
@@ -592,7 +977,9 @@ def _xadd_email(
     return event_id
 
 
-def _send_email_via_provider(*, to: str, subject: str, body: str) -> None:
+def _send_email_via_provider(
+    *, to: str, subject: str, body: str, html: str = ""
+) -> None:
     """Send a secret-bearing message at the final SMTP boundary.
 
     The Go stream worker is used for ordinary transactional messages. A
@@ -607,22 +994,30 @@ def _send_email_via_provider(*, to: str, subject: str, body: str) -> None:
         # logs. Local development must use MailHog/SMTP for this message.
         raise RuntimeError("Secret-bearing email requires a non-console SMTP backend.")
     reply_to = [settings.EMAIL_SUPPORT_ADDR] if settings.EMAIL_SUPPORT_ADDR else None
-    message = EmailMessage(
+    message = EmailMultiAlternatives(
         subject=subject,
         body=body,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[to],
         reply_to=reply_to,
     )
+    if html:
+        # The HTML part is built from the same document as the text part and in
+        # the same trusted process. It is an alternative rendering, never an
+        # extra place a secret could take a different route.
+        message.attach_alternative(html, "text/html")
     if message.send(fail_silently=False) != 1:
         raise RuntimeError("Email provider did not accept the message.")
 
 
 def _transport_confirmed(event_id: str) -> bool:
-    return bool(event_id) and PublishedEvent.objects.filter(
-        event_id=event_id,
-        delivered_at__isnull=False,
-    ).exists()
+    return (
+        bool(event_id)
+        and PublishedEvent.objects.filter(
+            event_id=event_id,
+            delivered_at__isnull=False,
+        ).exists()
+    )
 
 
 def _mark_dispatched(message: OutboundMessage, *, event_id: str = "") -> None:
@@ -668,6 +1063,13 @@ def dispatch_message(*, message_id: int) -> str:
             return "already_dispatched"
         if message.status == OutboundMessage.Status.CANCELLED:
             return "cancelled"
+        # EMAIL_ENABLED is the operator's kill switch for every external
+        # delivery path. Secret-bearing messages bypass Redis and send from
+        # Django directly, so checking only the Go consumer would let them
+        # leave while delivery is documented as disabled. Keep the obligation
+        # untouched so an approved activation can carry it later.
+        if not bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False)):
+            return "disabled"
         if _transport_confirmed(message.transport_event_id):
             _mark_dispatched(message, event_id=message.transport_event_id)
             return "dispatched"
@@ -678,7 +1080,9 @@ def dispatch_message(*, message_id: int) -> str:
             and message.next_attempt_at > now
         ):
             return "awaiting_receipt"
-        if message.transport_event_id and int(message.attempts) >= int(message.max_attempts):
+        if message.transport_event_id and int(message.attempts) >= int(
+            message.max_attempts
+        ):
             message.status = OutboundMessage.Status.FAILED
             message.last_error = "SMTP delivery receipt was not confirmed."
             message.next_attempt_at = None
@@ -692,7 +1096,7 @@ def dispatch_message(*, message_id: int) -> str:
         max_attempts = int(message.max_attempts)
 
     try:
-        subject, body = render(message)
+        subject, body, html = render_parts(message)
     except SecretUnavailable as exc:
         # The message can never become valid again, so stop retrying it and
         # leave the reason on the row for an operator.
@@ -715,6 +1119,7 @@ def dispatch_message(*, message_id: int) -> str:
                 to=message.to_email,
                 subject=subject,
                 body=body,
+                html=html,
             )
         except Exception as exc:  # noqa: BLE001 - provider errors are retryable
             failed_permanently = attempts >= max_attempts
@@ -753,6 +1158,7 @@ def dispatch_message(*, message_id: int) -> str:
             to=message.to_email,
             subject=subject,
             body=body,
+            html=html,
             kind=message.kind,
             event_id=event_id,
         )

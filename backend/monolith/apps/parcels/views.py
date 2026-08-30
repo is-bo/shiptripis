@@ -26,6 +26,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
@@ -46,6 +47,7 @@ from apps.finance.services import (
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest
 from .serializers import (
     DeliveryV1CreateSerializer,
+    ParcelMediaSerializer,
     ParcelRequestSerializer,
 )
 from .services import (
@@ -358,6 +360,8 @@ class DeliveryQuoteView(APIView):
 class ParcelMediaUploadView(APIView):
     permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "media_upload"
 
     def post(self, request: Request, pk: int) -> Response:
         parcel = get_object_or_404(ParcelRequest, pk=pk)
@@ -407,12 +411,5 @@ class ParcelMediaUploadView(APIView):
             bytes=len(body),
         )
         return Response(
-            {
-                "id": media.id,
-                "bucket": media.bucket,
-                "object_key": media.object_key,
-                "content_type": media.content_type,
-                "bytes": media.bytes,
-            },
-            status=status.HTTP_201_CREATED,
+            ParcelMediaSerializer(media).data, status=status.HTTP_201_CREATED
         )

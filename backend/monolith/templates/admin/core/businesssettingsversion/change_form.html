@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block content %}
+<p class="st-readonly-note">
+  <strong>Historical revision.</strong> The values below are the ones that were
+  snapshotted onto every Deal, offer and payment order created while this
+  revision was active. They are never rewritten by a later activation.
+</p>
+{{ block.super }}
+{% endblock %}

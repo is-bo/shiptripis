@@ -11,6 +11,7 @@
 ///    gets the light or dark terracotta automatically.
 library;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,7 +25,10 @@ ThemeData buildAppTheme({
   final isDark = brightness == Brightness.dark;
   final c = isDark ? AppColorScheme.dark : AppColorScheme.light;
   final ext = isDark ? AppTheme.darkExtension : AppTheme.lightExtension;
-  final text = AppTypography.textTheme(locale: locale, onSurface: c.textPrimary);
+  final text = AppTypography.textTheme(
+    locale: locale,
+    onSurface: c.textPrimary,
+  );
 
   final scheme = ColorScheme(
     brightness: brightness,
@@ -56,7 +60,9 @@ ThemeData buildAppTheme({
     outlineVariant: c.hairline,
     inverseSurface: c.surfaceInverse,
     onInverseSurface: c.textOnInverse,
-    inversePrimary: isDark ? AppColorScheme.light.brand : AppColorScheme.dark.brand,
+    inversePrimary: isDark
+        ? AppColorScheme.light.brand
+        : AppColorScheme.dark.brand,
     scrim: c.scrim,
     shadow: Colors.black,
   );
@@ -96,18 +102,20 @@ ThemeData buildAppTheme({
             ),
     ),
 
-    dividerTheme: DividerThemeData(
-      color: c.hairline,
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: DividerThemeData(color: c.hairline, thickness: 1, space: 1),
 
     cardTheme: CardThemeData(
       color: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.rLg),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.rLg,
+        // Paper has an edge. Without the hairline a parchment card on a
+        // parchment ground has nothing to separate it but a shadow, and the
+        // whole screen goes soft.
+        side: BorderSide(color: c.hairline),
+      ),
     ),
 
     // Transient feedback. Floating so it clears the navigation bar; the shell
@@ -151,7 +159,10 @@ ThemeData buildAppTheme({
     // visible for keyboard users.
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.surfaceSunken,
+      // Paper, not a sunken well. The original ShipTrip field sat *on* the
+      // parchment as a lighter card with a hairline; an inset grey trough is
+      // the single change that made the forms read as a generic Material app.
+      fillColor: c.surfaceRaised,
       hintStyle: text.bodyMedium?.copyWith(color: c.textTertiary),
       labelStyle: text.bodyMedium?.copyWith(color: c.textSecondary),
       floatingLabelStyle: text.labelMedium?.copyWith(color: c.brand),
@@ -169,9 +180,12 @@ ThemeData buildAppTheme({
         borderRadius: AppRadius.rMd,
         borderSide: BorderSide(color: c.hairline),
       ),
+      // Focus is ink rather than emerald: on parchment, a dark rule reads as
+      // "this line is live" the way a filled-in form does, and it keeps
+      // emerald reserved for meaning rather than for state.
       focusedBorder: OutlineInputBorder(
         borderRadius: AppRadius.rMd,
-        borderSide: BorderSide(color: c.brand, width: 2),
+        borderSide: BorderSide(color: c.textPrimary, width: 1.6),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: AppRadius.rMd,
@@ -187,39 +201,44 @@ ThemeData buildAppTheme({
       ),
     ),
 
+    // Ink, and a full pill. Both are original ShipTrip: the primary action is
+    // a dark lozenge on parchment, which is why the sun accent can mean
+    // "this one, above all" on the two screens that use it. An emerald
+    // rounded-rectangle primary is a different product.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: c.brand,
-        foregroundColor: c.onBrand,
+        backgroundColor: c.surfaceInverse,
+        foregroundColor: c.textOnInverse,
         disabledBackgroundColor: c.neutralSoft,
         disabledForegroundColor: c.textTertiary,
-        minimumSize: const Size(0, AppSpace.minTapTarget + 4),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpace.xxl),
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rMd),
+        minimumSize: const Size(0, AppSpace.minTapTarget + 6),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.x3l),
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rPill),
         textStyle: text.labelLarge,
         elevation: 0,
       ),
     ),
 
+    // The ghost button: same pill, hairline instead of a fill.
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: c.textPrimary,
         disabledForegroundColor: c.textTertiary,
-        side: BorderSide(color: c.hairlineStrong),
-        minimumSize: const Size(0, AppSpace.minTapTarget + 4),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpace.xxl),
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rMd),
+        side: BorderSide(color: c.hairlineStrong, width: 1.4),
+        minimumSize: const Size(0, AppSpace.minTapTarget + 6),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.x3l),
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rPill),
         textStyle: text.labelLarge,
       ),
     ),
 
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: c.brandStrong,
+        foregroundColor: c.textPrimary,
         disabledForegroundColor: c.textTertiary,
         minimumSize: const Size(0, AppSpace.minTapTarget),
         padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rSm),
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rPill),
         textStyle: text.labelLarge,
       ),
     ),
@@ -228,7 +247,7 @@ ThemeData buildAppTheme({
       style: IconButton.styleFrom(
         foregroundColor: c.textSecondary,
         minimumSize: const Size.square(AppSpace.minTapTarget),
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rSm),
+        shape: const CircleBorder(),
       ),
     ),
 

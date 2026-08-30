@@ -1,4 +1,4 @@
-name: Android release APK
+name: Build Android
 
 on:
   workflow_dispatch:
@@ -7,19 +7,44 @@ on:
         description: HTTPS base URL of the deployed ShipTrip gateway
         required: true
         type: string
+      build_type:
+        description: Signed release is the pre-launch artifact; debug is install-only fallback
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - debug
+      release_id:
+        description: Optional label (for example v1.0.0-rc.1); defaults from the pubspec version/build
+        required: false
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: build-android-${{ github.ref }}-${{ inputs.build_type }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - uses: subosito/flutter-action@v2
         with:
@@ -27,21 +52,166 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - name: Install dependencies
+        run: flutter pub get
 
-      - name: Build release APK
-        run: >-
-          flutter build apk --release
-          --dart-define=API_BASE_URL=${{ inputs.api_base_url }}
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
 
-      - name: Record checksum
-        run: sha256sum build/app/outputs/flutter-apk/app-release.apk > build/app/outputs/flutter-apk/app-release.apk.sha256
+      - name: Analyze
+        run: flutter analyze --fatal-infos
 
-      - uses: actions/upload-artifact@v4
+      - name: Test
+        run: flutter test
+
+      - name: Validate public build configuration and derive artifact names
+        id: metadata
+        env:
+          INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
+          INPUT_BUILD_TYPE: ${{ inputs.build_type }}
+          INPUT_RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          python - <<'PY'
+          import os
+          import ipaddress
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          api_base_url = os.environ["INPUT_API_BASE_URL"].strip()
+          build_type = os.environ["INPUT_BUILD_TYPE"]
+          parsed = urlsplit(api_base_url)
+          try:
+              parsed.port
+          except ValueError as exc:
+              raise SystemExit("api_base_url has an invalid port") from exc
+          hostname = parsed.hostname or ""
+          try:
+              ipaddress.ip_address(hostname)
+              valid_host = True
+          except ValueError:
+              labels = hostname.rstrip(".").split(".")
+              valid_host = bool(hostname) and all(
+                  1 <= len(label) <= 63
+                  and label[0].isalnum()
+                  and label[-1].isalnum()
+                  and all(character.isalnum() or character == "-" for character in label)
+                  for label in labels
+              )
+          if (
+              parsed.scheme != "https"
+              or not valid_host
+              or parsed.username is not None
+              or parsed.password is not None
+              or parsed.path not in ("", "/")
+              or parsed.query
+              or parsed.fragment
+          ):
+              raise SystemExit(
+                  "api_base_url must be a credential-free HTTPS origin"
+              )
+
+          pubspec = Path("pubspec.yaml").read_text(encoding="utf-8")
+          version_match = re.search(r"(?m)^version:\s*([^+\s]+)(?:\+([^\s]+))?\s*$", pubspec)
+          if version_match is None:
+              raise SystemExit("mobile/pubspec.yaml has no parseable version")
+          version = version_match.group(1)
+          build_number = version_match.group(2)
+
+          release_id = os.environ.get("INPUT_RELEASE_ID", "").strip()
+          if not release_id:
+              release_id = f"v{version}"
+              if build_number:
+                  release_id += f"-build.{build_number}"
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", release_id):
+              raise SystemExit(
+                  "release_id must be 1-64 characters using only letters, digits, dot, underscore, or hyphen"
+              )
+
+          short_sha = os.environ["GITHUB_SHA"][:7]
+          stem = f"shiptrip-{release_id}-{short_sha}-{build_type}"
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"api_base_url={api_base_url.rstrip('/')}\n")
+              handle.write(f"artifact_name={stem}\n")
+              handle.write(f"file_stem={stem}\n")
+          PY
+
+      - name: Decode temporary release keystore
+        id: signing
+        if: inputs.build_type == 'release'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Missing required GitHub Secret: ANDROID_KEYSTORE_BASE64"
+            exit 1
+          fi
+          keystore_path="$RUNNER_TEMP/shiptrip-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          chmod 600 "$keystore_path"
+          echo "keystore_path=$keystore_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release APK and AAB
+        if: inputs.build_type == 'release'
+        env:
+          API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
+          ANDROID_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required GitHub Secret: $name"
+              exit 1
+            fi
+          done
+          flutter build apk --release "--dart-define=API_BASE_URL=$API_BASE_URL"
+          flutter build appbundle --release "--dart-define=API_BASE_URL=$API_BASE_URL"
+
+      - name: Build debug fallback APK
+        if: inputs.build_type == 'debug'
+        env:
+          API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
+        run: flutter build apk --debug "--dart-define=API_BASE_URL=$API_BASE_URL"
+
+      - name: Verify signatures and stage artifacts
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+          FILE_STEM: ${{ steps.metadata.outputs.file_stem }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/android-artifacts
+          if [ "$BUILD_TYPE" = "release" ]; then
+            apk_source=build/app/outputs/flutter-apk/app-release.apk
+            aab_source=build/app/outputs/bundle/release/app-release.aab
+            apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+            test -n "$apksigner"
+            "$apksigner" verify "$apk_source"
+            verify_output="$(jarsigner -verify -verbose -certs "$aab_source" 2>&1)"
+            if ! grep -q '^jar verified\.$' <<<"$verify_output"; then
+              echo "::error::Android App Bundle signature verification failed"
+              exit 1
+            fi
+            cp "$apk_source" "build/android-artifacts/$FILE_STEM.apk"
+            cp "$aab_source" "build/android-artifacts/$FILE_STEM.aab"
+          else
+            apk_source=build/app/outputs/flutter-apk/app-debug.apk
+            cp "$apk_source" "build/android-artifacts/$FILE_STEM.apk"
+          fi
+          cd build/android-artifacts
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Remove temporary signing material
+        if: always() && inputs.build_type == 'release'
+        run: rm -f "$RUNNER_TEMP/shiptrip-release.jks"
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: shiptrip-android-release
-          path: |
-            mobile/build/app/outputs/flutter-apk/app-release.apk
-            mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: mobile/build/android-artifacts/
           if-no-files-found: error
           retention-days: 30

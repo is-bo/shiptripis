@@ -13,13 +13,14 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError as DjangoValidationError
 from django.db import connection, transaction
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers, status as http
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
@@ -42,7 +43,7 @@ from apps.notifications.models import OutboundMessage
 from apps.parcels.models import DeliveryRequest
 from apps.ratings.models import Rating
 from apps.routing.providers import route_provider_status
-from apps.trips.models import Journey, JourneyLegProof
+from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import (
@@ -385,7 +386,14 @@ class AdminJourneyListView(APIView):
     permission_classes = (CanViewJourneys,)
 
     def get(self, request):
-        queryset = _status_filter(Journey.objects.select_related("traveler", "start_location", "destination_location").prefetch_related("legs__origin", "legs__destination", "legs__proofs").order_by("-created_at"), request)
+        legs = JourneyLeg.objects.select_related("origin", "destination").annotate(
+            proof_count=Count("proofs"),
+            pending_proof_count=Count(
+                "proofs",
+                filter=Q(proofs__status=JourneyLegProof.Status.PENDING),
+            ),
+        )
+        queryset = _status_filter(Journey.objects.select_related("traveler", "start_location", "destination_location").prefetch_related(Prefetch("legs", queryset=legs)).order_by("-created_at"), request)
         queryset = _search(queryset, request, ("traveler__email", "traveler__full_name"))
         return _paginate(request, queryset, AdminJourneySerializer)
 
@@ -687,6 +695,8 @@ class AdminAccountRoleView(APIView):
 
 class AdminInvitationListCreateView(APIView):
     permission_classes = (CanManageAdmins,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "admin_invitation"
 
     def get(self, request):
         return _paginate(request, AdminInvitation.objects.select_related("invited_by", "accepted_by").order_by("-created_at"), AdminInvitationSerializer)
@@ -707,6 +717,8 @@ class AdminInvitationListCreateView(APIView):
 
 class AdminInvitationAcceptView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "admin_invitation"
 
     def post(self, request):
         serializer = AdminInvitationAcceptSerializer(data=request.data)

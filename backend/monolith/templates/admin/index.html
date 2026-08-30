@@ -1,0 +1,9 @@
+{% extends "admin/index.html" %}
+{% load shiptrip_admin %}
+
+{# The app directory is still the body of the page. What is added above it is
+   the answer to the question an operator actually opens the admin with. #}
+{% block content %}
+  {% needs_attention %}
+  {{ block.super }}
+{% endblock %}

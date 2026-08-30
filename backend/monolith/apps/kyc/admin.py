@@ -9,6 +9,9 @@ writes an audit record. The Django admin remains a read-only inspection view.
 from __future__ import annotations
 
 from django.contrib import admin
+
+from apps.core.admin_display import status
+
 from .models import KycSubmission
 
 
@@ -18,11 +21,13 @@ class KycSubmissionAdmin(admin.ModelAdmin):
         "id",
         "user",
         "document_type",
-        "status",
+        "status_chip",
         "reviewed_at",
         "created_at",
     )
+    status_chip = status("status", "Status")
     list_filter = ("status", "document_type")
+    list_select_related = ("user",)
     search_fields = ("user__email", "user__phone")
     readonly_fields = (
         "user",

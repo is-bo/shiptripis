@@ -215,6 +215,111 @@ def _publish(channel: str, payload: dict, *, targets: list[int]) -> None:
     redis_bus.publish_after_commit(channel, payload, targets=targets)
 
 
+def _enqueue_payment_failed_email(
+    *, attempt: PaymentAttempt, order: PaymentOrder
+) -> None:
+    """Arm mail only for a real terminal failure, never expiry/cancellation."""
+
+    if attempt.status != PaymentAttempt.Status.FAILED:
+        return
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    context = {
+        "payment_reference": str(order.public_reference),
+        "amount_eur_cents": int(attempt.amount_eur_cents),
+        "currency": "EUR",
+        "status": "failed",
+    }
+    enqueue_message(
+        kind=OutboundMessage.Kind.PAYMENT_FAILED,
+        key=f"payment_failed:attempt:{attempt.pk}:owner",
+        to_email=order.owner.email,
+        recipient_user_id=order.owner_id,
+        deal_id=order.deal_id,
+        context=context,
+    )
+    if attempt.guest_link_id and attempt.guest_email:
+        enqueue_message(
+            kind=OutboundMessage.Kind.GUEST_PAYMENT,
+            key=f"guest_payment:attempt:{attempt.pk}:failed",
+            to_email=attempt.guest_email,
+            language=attempt.guest_link.communication_language,
+            context=context,
+        )
+
+
+def _cancel_payment_failed_emails(*, attempt: PaymentAttempt) -> None:
+    """Withdraw retry notices when a provider later proves the payment succeeded."""
+
+    from apps.notifications.outbox import cancel_message
+
+    cancel_message(
+        key=f"payment_failed:attempt:{attempt.pk}:owner",
+        reason="superseded by authoritative payment success",
+    )
+    cancel_message(
+        key=f"guest_payment:attempt:{attempt.pk}:failed",
+        reason="superseded by authoritative payment success",
+    )
+
+
+def _enqueue_guest_payment_receipt(
+    *, attempt: PaymentAttempt, order: PaymentOrder
+) -> None:
+    """Give a guest payer a minimal receipt without making them a Deal party."""
+
+    if not attempt.guest_link_id or not attempt.guest_email:
+        return
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    enqueue_message(
+        kind=OutboundMessage.Kind.GUEST_PAYMENT,
+        key=f"guest_payment:attempt:{attempt.pk}:succeeded",
+        to_email=attempt.guest_email,
+        language=attempt.guest_link.communication_language,
+        context={
+            "payment_reference": str(order.public_reference),
+            "amount_eur_cents": int(attempt.amount_eur_cents),
+            "currency": "EUR",
+            "status": "succeeded",
+        },
+    )
+
+
+def _enqueue_refund_status_email(*, refund: PaymentRefund, status: str) -> None:
+    """Notify the account owner and, when applicable, the actual guest payer."""
+
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    order = refund.order
+    attempt = refund.attempt
+    context = {
+        "payment_reference": str(order.public_reference),
+        "amount_eur_cents": int(refund.amount_eur_cents),
+        "currency": "EUR",
+        "status": status,
+    }
+    enqueue_message(
+        kind=OutboundMessage.Kind.REFUND_STATUS,
+        key=f"refund_status:refund:{refund.pk}:{status}:owner",
+        to_email=order.owner.email,
+        recipient_user_id=order.owner_id,
+        deal_id=order.deal_id,
+        context=context,
+    )
+    if attempt.guest_link_id and attempt.guest_email:
+        enqueue_message(
+            kind=OutboundMessage.Kind.REFUND_STATUS,
+            key=f"refund_status:refund:{refund.pk}:{status}:guest",
+            to_email=attempt.guest_email,
+            language=attempt.guest_link.communication_language,
+            context=context,
+        )
+
+
 def hash_guest_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -769,10 +874,24 @@ def start_checkout(
             same_amount = (
                 int(open_attempt.amount_eur_cents) == amounts["amount_eur_cents"]
             )
+            same_payer = (
+                open_attempt.payer_id == actor_id
+                and open_attempt.guest_link_id
+                == (guest_link.pk if guest_link is not None else None)
+            )
             still_valid = (
                 open_attempt.expires_at is None or open_attempt.expires_at > now
             )
-            if same_rail and same_amount and still_valid and open_attempt.checkout_url:
+            if (
+                same_rail
+                and same_amount
+                and same_payer
+                and still_valid
+                and open_attempt.checkout_url
+            ):
+                if guest_link is not None and open_attempt.guest_email != guest_email:
+                    open_attempt.guest_email = guest_email[:254]
+                    open_attempt.save(update_fields=["guest_email", "updated_at"])
                 return CheckoutSession(attempt=open_attempt, created=False)
             # Switching rail, amount or a stale session: close the old attempt
             # so the one-open-attempt-per-order invariant holds and two live
@@ -850,6 +969,7 @@ def start_checkout(
                     "updated_at",
                 ]
             )
+            _enqueue_payment_failed_email(attempt=failed, order=order)
         logger.warning(
             "finance.checkout_failed order=%s provider=%s code=%s",
             order_id,
@@ -1012,6 +1132,7 @@ def _normalized_provider_event(event) -> dict:
         "reference": event.reference,
         "amount_minor": event.amount_minor,
         "currency": event.currency,
+        "guest_email": event.guest_email,
         "failure_code": event.failure_code,
     }
 
@@ -1102,6 +1223,7 @@ def _provider_event_from_record(record: PaymentProviderEvent) -> ProviderEvent:
         reference=str(data.get("reference") or ""),
         amount_minor=data.get("amount_minor"),
         currency=str(data.get("currency") or ""),
+        guest_email=str(data.get("guest_email") or ""),
         failure_code=str(data.get("failure_code") or ""),
         payload=dict(record.payload or {}),
     )
@@ -1161,6 +1283,7 @@ def process_provider_event(*, event_id: int) -> str:
         provider_payment_id=durable_event.provider_payment_id,
         provider_amount_minor=durable_event.amount_minor,
         provider_currency=durable_event.currency,
+        guest_email=durable_event.guest_email,
         failure_code=durable_event.failure_code,
     )
     _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.APPLIED, note)
@@ -1291,6 +1414,10 @@ def reconcile_attempt(
     order = locked.order
     attempt = PaymentAttempt.objects.select_for_update().get(pk=attempt_id)
 
+    if attempt.guest_link_id and guest_email and attempt.guest_email != guest_email:
+        attempt.guest_email = guest_email[:254]
+        attempt.save(update_fields=["guest_email", "updated_at"])
+
     if outcome == "processing":
         # A delayed payment method has been authorised but has not settled. The
         # attempt stays open and no money moves; the provider will follow with a
@@ -1322,6 +1449,7 @@ def reconcile_attempt(
         attempt.failure_code = (failure_code or outcome)[:64]
         attempt.save(update_fields=["status", "failure_code", "updated_at"])
         _recompute_order_money(order)
+        _enqueue_payment_failed_email(attempt=attempt, order=order)
         # An attempt that ended without money travels on `payment.failed`.
         # Announcing a failure on `payment.captured` would let a client render
         # success for a payment that never happened.
@@ -1348,6 +1476,7 @@ def reconcile_attempt(
         attempt.save(
             update_fields=["status", "failure_code", "failure_message", "updated_at"]
         )
+        _enqueue_payment_failed_email(attempt=attempt, order=order)
         logger.error(
             "finance.amount_unverifiable attempt=%s provider=%s",
             attempt.pk,
@@ -1370,6 +1499,7 @@ def reconcile_attempt(
                     "updated_at",
                 ]
             )
+            _enqueue_payment_failed_email(attempt=attempt, order=order)
             logger.error(
                 "finance.amount_mismatch attempt=%s provider=%s",
                 attempt.pk,
@@ -1380,6 +1510,7 @@ def reconcile_attempt(
         attempt.status = PaymentAttempt.Status.FAILED
         attempt.failure_code = "currency_mismatch"
         attempt.save(update_fields=["status", "failure_code", "updated_at"])
+        _enqueue_payment_failed_email(attempt=attempt, order=order)
         logger.error(
             "finance.currency_mismatch attempt=%s provider=%s",
             attempt.pk,
@@ -1411,6 +1542,7 @@ def reconcile_attempt(
             "updated_at",
         ]
     )
+    _cancel_payment_failed_emails(attempt=attempt)
 
     ledger.record_customer_payment(
         attempt_id=attempt.pk,
@@ -1467,6 +1599,7 @@ def reconcile_attempt(
         },
         targets=[order.owner_id],
     )
+    _enqueue_guest_payment_receipt(attempt=attempt, order=order)
     return "applied"
 
 
@@ -1560,6 +1693,8 @@ def request_refund(
             max_attempts=32,
         )
         _recompute_order_money(order)
+
+        _enqueue_refund_status_email(refund=refund, status="pending")
 
     # The callback runs only after the outermost transaction commits. If this
     # request originated inside payment reconciliation or request cancellation,
@@ -1882,6 +2017,7 @@ def mark_refund_succeeded(
         },
         targets=[order.owner_id],
     )
+    _enqueue_refund_status_email(refund=refund, status="succeeded")
     return refund
 
 
@@ -1976,14 +2112,36 @@ def refund_order_in_full(
 def cancel_order(*, order_id: int, reason: str) -> PaymentOrder:
     """Close an obligation so no further money is collected against it.
 
-    Cancelling does not refund by itself — refunds are their own decision with
-    their own evidence — but it does close the collection window, which is what
-    makes a late provider success land as an unapplied payment rather than
-    funding a Deal that no longer exists.
+    Cancelling does not invent a refund decision. If captured money already
+    won a race with this transition, cancellation is a no-op until every
+    applied cent has a durable refund obligation. Domain cancellation flows
+    that are allowed after payment create that obligation first. Otherwise it
+    closes the collection window, which makes a later provider success land as
+    an unapplied payment rather than funding a Deal that no longer exists.
     """
 
     order = lock_payment_order_aggregate(order_id).order
     if order.cancelled_at is not None:
+        return order
+    refund_obligated = int(
+        PaymentRefund.objects.filter(
+            order=order,
+            status__in=(
+                PaymentRefund.Status.PENDING,
+                PaymentRefund.Status.PROCESSING,
+                PaymentRefund.Status.SUCCEEDED,
+            ),
+            attempt__is_unapplied=False,
+        ).aggregate(total=Sum("amount_eur_cents"))["total"]
+        or 0
+    )
+    if int(order.paid_eur_cents) > refund_obligated:
+        logger.info(
+            "finance.order_cancellation_lost_to_payment order=%s paid=%s refund_obligated=%s",
+            order.pk,
+            order.paid_eur_cents,
+            refund_obligated,
+        )
         return order
     order.cancelled_at = timezone.now()
     # Persist the cancellation before recomputing: `_recompute_order_money`
@@ -2149,6 +2307,7 @@ def create_guest_link(
     order_id: int,
     actor_id: int,
     label: str = "",
+    communication_language: str | None = None,
     policy: Phase3Policy | None = None,
 ) -> IssuedGuestLink:
     """Issue a single-purpose capability to pay one order.
@@ -2178,11 +2337,17 @@ def create_guest_link(
         ).update(revoked_at=timezone.now())
 
         token = secrets.token_urlsafe(GUEST_TOKEN_BYTES)
+        from apps.core.languages import normalize_communication_language
+
         link = GuestPaymentLink.objects.create(
             order=order,
             token_hash=hash_guest_token(token),
             created_by_id=actor_id,
             label=label[:80],
+            communication_language=normalize_communication_language(
+                communication_language
+                or getattr(order.owner, "preferred_language", "")
+            ),
             expires_at=timezone.now()
             + timedelta(seconds=policy.guest_link_ttl_seconds),
         )

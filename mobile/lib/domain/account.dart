@@ -3,6 +3,7 @@ library;
 
 import 'package:characters/characters.dart';
 
+import 'communication_language.dart';
 import 'json.dart';
 
 /// What the account is permitted to do, per the server.
@@ -65,6 +66,7 @@ class Account {
     required this.phone,
     required this.wilaya,
     required this.role,
+    required this.preferredLanguage,
     required this.isEmailVerified,
     required this.isPhoneVerified,
     required this.isKycVerified,
@@ -80,6 +82,11 @@ class Account {
     phone: readString(json['phone']) ?? '',
     wilaya: readString(json['wilaya']) ?? '',
     role: AccountRole.parse(json['role']),
+    // The server already normalises this, including for accounts created
+    // before the preference existed. Parsing defensively anyway costs
+    // nothing and keeps the selector out of an impossible state if an older
+    // deployment omits the key entirely.
+    preferredLanguage: CommunicationLanguage.parse(json['preferred_language']),
     isEmailVerified: readBool(json['is_email_verified']),
     isPhoneVerified: readBool(json['is_phone_verified']),
     isKycVerified: readBool(json['is_kyc_verified']),
@@ -94,6 +101,11 @@ class Account {
   final String phone;
   final String wilaya;
   final AccountRole role;
+
+  /// The language ShipTrip writes to this account in. Distinct from the app's
+  /// interface language, which is a device setting and never leaves the phone.
+  final CommunicationLanguage preferredLanguage;
+
   final bool isEmailVerified;
   final bool isPhoneVerified;
 

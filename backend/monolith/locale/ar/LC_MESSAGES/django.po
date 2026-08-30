@@ -1,0 +1,509 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: ShipTrip Phase 6C\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+msgid "Amount"
+msgstr "المبلغ"
+
+msgid "Your sender"
+msgstr "المرسِل"
+
+msgid "Hello,"
+msgstr "مرحبًا،"
+
+msgid "Hello %(recipient_name)s,"
+msgstr "مرحبًا %(recipient_name)s،"
+
+msgid "Your ShipTrip delivery code"
+msgstr "رمز تسليم ShipTrip الخاص بك"
+
+msgid "Keep this code private until the parcel is in your hands."
+msgstr "احتفظ بهذا الرمز سريًا حتى يصبح الطرد بين يديك."
+
+msgid "Delivery"
+msgstr "التسليم"
+
+msgid "Your parcel is on its way"
+msgstr "طردك في الطريق"
+
+msgid "Never share this code by phone, message or email with anyone before you have the parcel. ShipTrip will never ask you for it."
+msgstr "لا تشارك هذا الرمز عبر الهاتف أو الرسائل أو البريد الإلكتروني قبل استلام الطرد. لن تطلبه منك ShipTrip أبدًا."
+
+msgid "eligible"
+msgstr "مؤهل"
+
+msgid "scheduled"
+msgstr "مجدول"
+
+msgid "processing"
+msgstr "قيد المعالجة"
+
+msgid "paid"
+msgstr "مدفوع"
+
+msgid "needs attention"
+msgstr "يتطلب الانتباه"
+
+msgid "updated"
+msgstr "محدّث"
+
+msgid "Delivery reference"
+msgstr "مرجع التسليم"
+
+msgid "Give this code to the traveler only once the parcel is physically in your hands. Entering it confirms delivery and starts the payment protection window."
+msgstr "أعطِ هذا الرمز للمسافر فقط بعد أن يصبح الطرد بين يديك فعليًا. إدخال الرمز يؤكد التسليم ويبدأ فترة حماية الدفع."
+
+msgid "Your delivery code"
+msgstr "رمز التسليم الخاص بك"
+
+msgid "Confirm your ShipTrip email"
+msgstr "أكّد بريدك الإلكتروني في ShipTrip"
+
+msgid "Use this code to confirm your email address."
+msgstr "استخدم هذا الرمز لتأكيد عنوان بريدك الإلكتروني."
+
+msgid "Account"
+msgstr "الحساب"
+
+msgid "Welcome to ShipTrip"
+msgstr "مرحبًا بك في ShipTrip"
+
+msgid "It expires in 15 minutes. ShipTrip will never ask you to share this code outside the verification screen."
+msgstr "تنتهي صلاحيته خلال 15 دقيقة. لن تطلب منك ShipTrip مشاركة هذا الرمز خارج شاشة التحقق."
+
+msgid "Reset your ShipTrip password"
+msgstr "أعد تعيين كلمة مرور ShipTrip"
+
+msgid "Use this private code to reset your password."
+msgstr "استخدم هذا الرمز السري لإعادة تعيين كلمة المرور."
+
+msgid "Account security"
+msgstr "أمان الحساب"
+
+msgid "Reset your password"
+msgstr "إعادة تعيين كلمة المرور"
+
+msgid "It expires in 15 minutes. If you did not request this, ignore this email and keep your code private."
+msgstr "تنتهي صلاحيته خلال 15 دقيقة. إذا لم تطلب ذلك، فتجاهل هذه الرسالة واحتفظ بالرمز سريًا."
+
+msgid "ShipTrip identity verification update"
+msgstr "تحديث التحقق من الهوية في ShipTrip"
+
+msgid "Verification"
+msgstr "التحقق"
+
+msgid "ShipTrip flight proof update"
+msgstr "تحديث إثبات الرحلة في ShipTrip"
+
+msgid "Payment needed for your ShipTrip delivery"
+msgstr "يلزم دفع مبلغ لمتابعة تسليم ShipTrip"
+
+msgid "Open ShipTrip to review the payment needed."
+msgstr "افتح ShipTrip لمراجعة الدفعة المطلوبة."
+
+msgid "Payment"
+msgstr "الدفع"
+
+msgid "A payment is needed to continue"
+msgstr "يلزم الدفع للمتابعة"
+
+msgid "Your ShipTrip payment is processing"
+msgstr "دفعة ShipTrip قيد المعالجة"
+
+msgid "The provider is still confirming your payment."
+msgstr "لا يزال مزود الدفع يؤكد دفعتك."
+
+msgid "Your payment is being confirmed"
+msgstr "يجري تأكيد دفعتك"
+
+msgid "Your ShipTrip payment needs attention"
+msgstr "دفعة ShipTrip تتطلب انتباهك"
+
+msgid "The payment failed; open ShipTrip to try again."
+msgstr "فشلت الدفعة؛ افتح ShipTrip للمحاولة مرة أخرى."
+
+msgid "That payment did not go through"
+msgstr "لم تكتمل هذه الدفعة"
+
+msgid "ShipTrip payment confirmed"
+msgstr "تم تأكيد دفعة ShipTrip"
+
+msgid "Your payment is confirmed."
+msgstr "تم تأكيد دفعتك."
+
+msgid "Your payment is confirmed"
+msgstr "تم تأكيد دفعتك"
+
+msgid "This payment does not create a ShipTrip account or give access to the delivery. Keep the reference private and contact ShipTrip support if you need help."
+msgstr "لا تنشئ هذه الدفعة حسابًا في ShipTrip ولا تمنح حق الوصول إلى التسليم. احتفظ بالمرجع سريًا واتصل بدعم ShipTrip إذا احتجت إلى المساعدة."
+
+msgid "ShipTrip refund update"
+msgstr "تحديث استرداد ShipTrip"
+
+msgid "More information is needed for your ShipTrip case"
+msgstr "نحتاج إلى معلومات إضافية بشأن حالتك في ShipTrip"
+
+msgid "Open ShipTrip to review the evidence request."
+msgstr "افتح ShipTrip لمراجعة طلب الأدلة."
+
+msgid "Dispute"
+msgstr "النزاع"
+
+msgid "We need a little more information"
+msgstr "نحتاج إلى بعض المعلومات الإضافية"
+
+msgid "Open the app to upload evidence. Never include a handover code."
+msgstr "افتح التطبيق لرفع الأدلة. لا تُرفق أبدًا رمز تسليم أو استلام."
+
+msgid "ShipTrip security notice"
+msgstr "إشعار أمان من ShipTrip"
+
+msgid "Your ShipTrip password was changed."
+msgstr "تم تغيير كلمة مرور ShipTrip الخاصة بك."
+
+msgid "Your password was changed"
+msgstr "تم تغيير كلمة المرور"
+
+msgid "If you did not make this change, reset your password immediately and contact ShipTrip support."
+msgstr "إذا لم تُجرِ هذا التغيير، فأعد تعيين كلمة المرور فورًا واتصل بدعم ShipTrip."
+
+msgid "Pickup confirmed"
+msgstr "تم تأكيد الاستلام"
+
+msgid "The traveler has collected your parcel."
+msgstr "استلم المسافر طردك."
+
+msgid "The traveler has collected your parcel"
+msgstr "استلم المسافر طردك"
+
+msgid "Your delivery code is now available"
+msgstr "رمز التسليم متاح الآن"
+
+msgid "Open ShipTrip to view the delivery code."
+msgstr "افتح ShipTrip لعرض رمز التسليم."
+
+msgid "The code is not in this email. Open the app to see it."
+msgstr "الرمز غير موجود في هذه الرسالة. افتح التطبيق لعرضه."
+
+msgid "Delivery confirmed"
+msgstr "تم تأكيد التسليم"
+
+msgid "The delivery code was accepted successfully."
+msgstr "تم قبول رمز التسليم بنجاح."
+
+msgid "The delivery is confirmed"
+msgstr "تم تأكيد التسليم"
+
+msgid "Payment protection has ended"
+msgstr "انتهت حماية الدفع"
+
+msgid "The protection window closed with no open dispute."
+msgstr "انتهت فترة الحماية دون نزاع مفتوح."
+
+msgid "Payment protection"
+msgstr "حماية الدفع"
+
+msgid "Payment protection ends soon"
+msgstr "ستنتهي حماية الدفع قريبًا"
+
+msgid "Open a dispute before the protection deadline if needed."
+msgstr "افتح نزاعًا قبل موعد انتهاء الحماية إذا لزم الأمر."
+
+msgid "A dispute has been opened"
+msgstr "تم فتح نزاع"
+
+msgid "The traveler's payout is frozen while the dispute is reviewed."
+msgstr "تم تعليق مستحقات المسافر أثناء مراجعة النزاع."
+
+msgid "Your dispute has been resolved"
+msgstr "تم حل نزاعك"
+
+msgid "Open ShipTrip to review the dispute outcome."
+msgstr "افتح ShipTrip لمراجعة نتيجة النزاع."
+
+msgid "Payout update"
+msgstr "تحديث المستحقات"
+
+msgid "Your ShipTrip payout status was updated."
+msgstr "تم تحديث حالة مستحقاتك في ShipTrip."
+
+msgid "Payout"
+msgstr "المستحقات"
+
+msgid "Your payout was updated"
+msgstr "تم تحديث مستحقاتك"
+
+msgid "Delivery cancelled"
+msgstr "تم إلغاء التسليم"
+
+msgid "This ShipTrip delivery has been cancelled."
+msgstr "تم إلغاء عملية التسليم هذه في ShipTrip."
+
+msgid "This delivery has been cancelled"
+msgstr "تم إلغاء عملية التسليم"
+
+msgid "Leave a review"
+msgstr "أضف تقييمًا"
+
+msgid "You can now review the other party."
+msgstr "يمكنك الآن تقييم الطرف الآخر."
+
+msgid "After the delivery"
+msgstr "بعد التسليم"
+
+msgid "You can now leave a review"
+msgstr "يمكنك الآن إضافة تقييم"
+
+msgid "%(sender_name)s has sent you a parcel through ShipTrip and it is on its way."
+msgstr "أرسل إليك %(sender_name)s طردًا عبر ShipTrip وهو في الطريق."
+
+msgid "Enter this code on the verification screen to confirm your email address."
+msgstr "أدخل هذا الرمز في شاشة التحقق لتأكيد عنوان بريدك الإلكتروني."
+
+msgid "Your verification code"
+msgstr "رمز التحقق الخاص بك"
+
+msgid "Enter this code on the password reset screen."
+msgstr "أدخل هذا الرمز في شاشة إعادة تعيين كلمة المرور."
+
+msgid "Your password reset code"
+msgstr "رمز إعادة تعيين كلمة المرور"
+
+msgid "Your identity verification is approved."
+msgstr "تمت الموافقة على التحقق من هويتك."
+
+msgid "Your identity verification needs attention."
+msgstr "يتطلب التحقق من هويتك اتخاذ إجراء."
+
+msgid "Your identity verification is approved"
+msgstr "تمت الموافقة على التحقق من هويتك"
+
+msgid "Your identity verification needs attention"
+msgstr "يتطلب التحقق من هويتك اتخاذ إجراء"
+
+msgid "Open the ShipTrip app to see the next step."
+msgstr "افتح تطبيق ShipTrip لمعرفة الخطوة التالية."
+
+msgid "Your flight proof is approved."
+msgstr "تمت الموافقة على إثبات رحلتك."
+
+msgid "Your flight proof needs attention."
+msgstr "يتطلب إثبات رحلتك اتخاذ إجراء."
+
+msgid "Your flight proof is approved"
+msgstr "تمت الموافقة على إثبات رحلتك"
+
+msgid "Your flight proof needs attention"
+msgstr "يتطلب إثبات رحلتك اتخاذ إجراء"
+
+msgid "A payment is required before this delivery can continue."
+msgstr "يلزم الدفع قبل متابعة عملية التسليم هذه."
+
+msgid "Open ShipTrip to review the amount and available provider."
+msgstr "افتح ShipTrip لمراجعة المبلغ ومزودي الدفع المتاحين."
+
+msgid "Your payment has been received by the provider and is being confirmed."
+msgstr "استلم مزود الدفع دفعتك ويجري تأكيدها."
+
+msgid "The payment provider could not complete this attempt."
+msgstr "تعذر على مزود الدفع إكمال هذه المحاولة."
+
+msgid "Open ShipTrip to retry or choose another available provider."
+msgstr "افتح ShipTrip لإعادة المحاولة أو اختيار مزود آخر متاح."
+
+msgid "Your payment is confirmed and the delivery can continue."
+msgstr "تم تأكيد دفعتك ويمكن متابعة التسليم."
+
+msgid "Your ShipTrip payment receipt"
+msgstr "إيصال دفعة ShipTrip"
+
+msgid "Your guest payment was confirmed."
+msgstr "تم تأكيد دفعة الضيف."
+
+msgid "Your guest payment is confirmed"
+msgstr "تم تأكيد دفعة الضيف"
+
+msgid "Your refund is complete."
+msgstr "اكتمل استرداد المبلغ."
+
+msgid "Your refund is being processed."
+msgstr "يجري استرداد المبلغ."
+
+msgid "Your refund is complete"
+msgstr "اكتمل استرداد المبلغ"
+
+msgid "Your refund is being processed"
+msgstr "يجري استرداد المبلغ"
+
+msgid "The time it takes to appear depends on the payment provider."
+msgstr "تعتمد مدة ظهور المبلغ على مزود الدفع."
+
+msgid "The ShipTrip trust team requested additional evidence."
+msgstr "طلب فريق الثقة في ShipTrip أدلة إضافية."
+
+msgid "The password for your ShipTrip account was changed."
+msgstr "تم تغيير كلمة مرور حساب ShipTrip الخاص بك."
+
+msgid "The traveler has confirmed pickup of your parcel."
+msgstr "أكد المسافر استلام طردك."
+
+msgid "The safety window has passed. You can now view the delivery code in the ShipTrip app, and the recipient has been emailed their copy."
+msgstr "انتهت فترة الأمان. يمكنك الآن عرض رمز التسليم في تطبيق ShipTrip، وقد أُرسلت نسخة منه إلى المستلم عبر البريد الإلكتروني."
+
+msgid "The delivery code was entered successfully and the delivery is confirmed."
+msgstr "تم إدخال رمز التسليم بنجاح وتأكيد التسليم."
+
+msgid "The protection window for this delivery has closed with no open dispute. The traveler's payout is now eligible."
+msgstr "انتهت فترة الحماية لهذا التسليم دون نزاع مفتوح. أصبحت مستحقات المسافر مؤهلة الآن."
+
+msgid "If something is wrong with this delivery, open a dispute before the protection window closes."
+msgstr "إذا كانت هناك مشكلة في هذا التسليم، فافتح نزاعًا قبل انتهاء فترة الحماية."
+
+msgid "A dispute has been opened on this delivery. The traveler's payout is frozen while it is reviewed."
+msgstr "تم فتح نزاع بشأن هذا التسليم. تم تعليق مستحقات المسافر أثناء مراجعته."
+
+msgid "This delivery has been cancelled."
+msgstr "تم إلغاء عملية التسليم هذه."
+
+msgid "Any refund due is processed automatically and appears in your payment history."
+msgstr "تُعالج أي مبالغ مستحقة للاسترداد تلقائيًا وتظهر في سجل المدفوعات."
+
+msgid "You can now review the other party for this delivery."
+msgstr "يمكنك الآن تقييم الطرف الآخر في عملية التسليم هذه."
+
+msgid "Reviews stay hidden until both sides have submitted or the review window closes."
+msgstr "تبقى التقييمات مخفية حتى يرسلها الطرفان أو تنتهي فترة التقييم."
+
+msgid "You can now publish a journey after its other checks pass."
+msgstr "يمكنك الآن نشر رحلة بعد اجتياز عمليات التحقق الأخرى."
+
+msgid "Please review the reason and submit updated documents."
+msgstr "راجع السبب وأرسل مستندات محدّثة."
+
+msgid "The verified flight leg can be used for matching."
+msgstr "يمكن استخدام مقطع الرحلة الجوية المتحقق منه في المطابقة."
+
+msgid "Please review the reason and submit updated proof."
+msgstr "راجع السبب وأرسل إثباتًا محدّثًا."
+
+msgid "Journey reference"
+msgstr "مرجع الرحلة"
+
+msgid "Payment reference"
+msgstr "مرجع الدفع"
+
+msgid "Your ShipTrip guest payment needs attention"
+msgstr "دفعة الضيف في ShipTrip تتطلب انتباهك"
+
+msgid "Your ShipTrip guest payment"
+msgstr "دفعة الضيف في ShipTrip"
+
+msgid "Your guest payment did not complete."
+msgstr "لم تكتمل دفعة الضيف."
+
+msgid "A guest payment update is available."
+msgstr "يتوفر تحديث بشأن دفعة الضيف."
+
+msgid "Your guest payment did not go through"
+msgstr "لم تكتمل دفعة الضيف"
+
+msgid "Your guest payment"
+msgstr "دفعة الضيف"
+
+msgid "ShipTrip received this payment for the reference below."
+msgstr "استلمت ShipTrip هذه الدفعة للمرجع الموضح أدناه."
+
+msgid "ShipTrip has completed the refund shown below."
+msgstr "أكملت ShipTrip استرداد المبلغ الموضح أدناه."
+
+msgid "ShipTrip has started the refund shown below."
+msgstr "بدأت ShipTrip استرداد المبلغ الموضح أدناه."
+
+msgid "Dispute reference"
+msgstr "مرجع النزاع"
+
+msgid "Your delivery code becomes available in %(minutes)s minutes, and the recipient is emailed at the same time."
+msgstr "سيصبح رمز التسليم متاحًا خلال %(minutes)s دقيقة، وسيُرسل إلى المستلم عبر البريد الإلكتروني في الوقت نفسه."
+
+msgid "Payment protection runs until"
+msgstr "تستمر حماية الدفع حتى"
+
+msgid "Protection ends at"
+msgstr "تنتهي الحماية في"
+
+msgid "A ShipTrip administrator has resolved this dispute. Open ShipTrip to see the outcome."
+msgstr "حلّ أحد مسؤولي ShipTrip هذا النزاع. افتح ShipTrip للاطلاع على النتيجة."
+
+msgid "Your ShipTrip payout was updated. Open ShipTrip to see its current status."
+msgstr "تم تحديث مستحقاتك في ShipTrip. افتح ShipTrip للاطلاع على حالتها الحالية."
+
+msgid "Reason"
+msgstr "السبب"
+
+msgid "Reason: %(reason)s"
+msgstr "السبب: %(reason)s"
+
+msgid "The provider could not complete this guest payment."
+msgstr "تعذر على مزود الدفع إكمال دفعة الضيف هذه."
+
+msgid "the end of the window"
+msgstr "نهاية الفترة"
+
+msgid "A ShipTrip administrator has resolved this dispute as: %(resolution)s."
+msgstr "حلّ أحد مسؤولي ShipTrip هذا النزاع بالنتيجة التالية: %(resolution)s."
+
+msgid "A security or account change was made"
+msgstr "تم إجراء تغيير أمني أو تعديل في الحساب"
+
+msgid "There was a security or account change."
+msgstr "حدث تغيير أمني أو تعديل في الحساب."
+
+msgid "Your ShipTrip payout status is now %(status)s."
+msgstr "حالة مستحقاتك في ShipTrip الآن: %(status)s."
+
+msgid "cancelled"
+msgstr "ملغاة"
+
+msgid "ShipTrip will never ask you for a pickup or delivery code, and will never ask you to share one before the parcel is in your hands."
+msgstr "لن تطلب منك ShipTrip أبدًا رمز الاستلام أو التسليم، ولن تطلب منك مشاركته قبل أن يصبح الطرد بين يديك."
+
+msgid "You are receiving this because of a delivery or account action on ShipTrip. This is a transactional message, not marketing."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتسليم أو بحسابك على ShipTrip. هذه رسالة معاملات وليست رسالة تسويقية."
+
+msgid "Questions? Reply to this email."
+msgstr "لديك سؤال؟ رد على هذه الرسالة."
+
+msgid "You are receiving this because of a delivery or account action on %(shiptrip)s. This is a transactional message, not marketing."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتسليم أو بحسابك على %(shiptrip)s. هذه رسالة معاملات وليست رسالة تسويقية."
+
+msgid "Questions? Reply to this email or write to %(support_link)s."
+msgstr "لديك سؤال؟ رد على هذه الرسالة أو راسل %(support_link)s."
+
+msgid "Questions? Reply to this email or write to %(support_email)s."
+msgstr "لديك سؤال؟ رد على هذه الرسالة أو راسل %(support_email)s."
+
+msgid "EU ↔ Algeria"
+msgstr "الاتحاد الأوروبي ↔ الجزائر"
+
+msgid "Full sender refund"
+msgstr "رد كامل للمرسل"
+
+msgid "Full traveler payout"
+msgstr "دفع كامل للمسافر"
+
+msgid "Partial split"
+msgstr "تقسيم جزئي"
+
+msgid "cancelled by the sender"
+msgstr "ألغيت من قبل المرسل"
+
+msgid "cancelled by the traveler"
+msgstr "ألغيت من قبل المسافر"
+
+msgid "cancelled by an administrator"
+msgstr "ألغيت من قبل مسؤول"

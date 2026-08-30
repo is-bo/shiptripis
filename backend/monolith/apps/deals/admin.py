@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from apps.core.admin_display import status
+
 from .models import (
     Deal,
     DealEvent,
@@ -53,13 +55,15 @@ class DealAdmin(admin.ModelAdmin):
         "journey",
         "sender",
         "traveler",
-        "status",
+        "status_chip",
         "pickup_confirmed_at",
         "delivery_confirmed_at",
         "protection_ends_at",
         "created_at",
     )
+    status_chip = status("status", "Status")
     list_filter = ("status", "is_legacy", "no_show_party")
+    list_select_related = ("delivery_request", "journey", "sender", "traveler")
     search_fields = ("id", "delivery_request__id", "accepted_offer__id")
     date_hierarchy = "created_at"
     readonly_fields = [field.name for field in Deal._meta.fields]

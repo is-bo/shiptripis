@@ -1,10 +1,13 @@
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import OAuthIdentity, PasswordResetCode, User
+from apps.notifications import outbox
+from apps.notifications.models import OutboundMessage
 
 
 SIGN_UP_PAYLOAD = {
@@ -28,6 +31,32 @@ class SignUpTests(APITestCase):
         user = User.objects.get(email=SIGN_UP_PAYLOAD["email"])
         self.assertTrue(user.check_password(SIGN_UP_PAYLOAD["password"]))
         self.assertEqual(user.wilaya, "16")
+        # A newly registered account can use both sides of the marketplace;
+        # role context is switched in-app and is not inferred from location.
+        self.assertEqual(user.role, User.Role.BOTH)
+
+    def test_eu_side_user_can_register_without_an_algerian_wilaya(self):
+        payload = {
+            **SIGN_UP_PAYLOAD,
+            "email": "sender.paris@example.com",
+        }
+        payload.pop("wilaya")
+
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["user"]["wilaya"], "")
+        user = User.objects.get(email=payload["email"])
+        self.assertEqual(user.wilaya, "")
+        self.assertEqual(user.role, User.Role.BOTH)
+
+    def test_blank_wilaya_is_accepted_for_legacy_clients(self):
+        payload = {**SIGN_UP_PAYLOAD, "email": "blank-wilaya@example.com", "wilaya": ""}
+
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(User.objects.get(email=payload["email"]).wilaya, "")
 
     def test_duplicate_email_rejected(self):
         self.client.post(self.url, SIGN_UP_PAYLOAD, format="json")
@@ -40,6 +69,31 @@ class SignUpTests(APITestCase):
         resp = self.client.post(self.url, payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("wilaya", resp.data)
+
+    def test_supported_communication_languages_are_persisted(self):
+        for index, language in enumerate(("en", "fr", "ar")):
+            with self.subTest(language=language):
+                payload = {
+                    **SIGN_UP_PAYLOAD,
+                    "email": f"language-{index}@example.com",
+                    "preferred_language": language,
+                }
+                resp = self.client.post(self.url, payload, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+                self.assertEqual(resp.data["user"]["preferred_language"], language)
+                self.assertEqual(
+                    User.objects.get(email=payload["email"]).preferred_language,
+                    language,
+                )
+
+    def test_invalid_communication_language_is_rejected(self):
+        resp = self.client.post(
+            self.url,
+            {**SIGN_UP_PAYLOAD, "preferred_language": "de"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("preferred_language", resp.data)
 
 
 class SignInTests(APITestCase):
@@ -133,6 +187,73 @@ class PasswordResetTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
         user.refresh_from_db()
         self.assertTrue(user.check_password(new_password))
+        notification = OutboundMessage.objects.get(
+            kind=OutboundMessage.Kind.SECURITY_EVENT,
+            recipient_user=user,
+        )
+        self.assertEqual(notification.language, "en")
+        self.assertEqual(notification.context, {"event": "password_reset_completed"})
+        self.assertEqual(notification.secret_ref, "")
+        self.assertNotIn(new_password, str(notification.context))
+        self.assertNotIn(plaintext, str(notification.context))
+
+    def test_confirm_retry_does_not_duplicate_security_notification(self):
+        user = User.objects.get(email=SIGN_UP_PAYLOAD["email"])
+        _, plaintext = PasswordResetCode.issue(user)
+        payload = {
+            "email": user.email,
+            "code": plaintext,
+            "new_password": "BrandNewPass99!",
+        }
+
+        self.assertEqual(
+            self.client.post(self.confirm_url, payload, format="json").status_code,
+            status.HTTP_204_NO_CONTENT,
+        )
+        self.assertEqual(
+            self.client.post(self.confirm_url, payload, format="json").status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            OutboundMessage.objects.filter(
+                kind=OutboundMessage.Kind.SECURITY_EVENT,
+                recipient_user=user,
+            ).count(),
+            1,
+        )
+
+    @override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
+    def test_notification_delivery_failure_does_not_undo_password_reset(self):
+        user = User.objects.get(email=SIGN_UP_PAYLOAD["email"])
+        _, plaintext = PasswordResetCode.issue(user)
+        new_password = "BrandNewPass99!"
+        response = self.client.post(
+            self.confirm_url,
+            {
+                "email": user.email,
+                "code": plaintext,
+                "new_password": new_password,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        notification = OutboundMessage.objects.get(
+            kind=OutboundMessage.Kind.SECURITY_EVENT,
+            recipient_user=user,
+        )
+
+        with patch.object(
+            outbox,
+            "_xadd_email",
+            side_effect=OSError("transport unavailable"),
+        ):
+            with self.assertRaises(OSError):
+                outbox.dispatch_message(message_id=notification.pk)
+
+        user.refresh_from_db()
+        notification.refresh_from_db()
+        self.assertTrue(user.check_password(new_password))
+        self.assertEqual(notification.status, OutboundMessage.Status.PENDING)
 
     def test_confirm_with_invalid_code_rejected(self):
         user = User.objects.get(email=SIGN_UP_PAYLOAD["email"])
@@ -191,6 +312,41 @@ class GoogleOAuthTests(APITestCase):
         self.assertEqual(identity.provider, OAuthIdentity.Provider.GOOGLE)
 
     @patch("apps.accounts.views.verify_id_token")
+    def test_eu_side_oauth_registration_does_not_require_wilaya(self, mock_verify):
+        mock_verify.return_value = {
+            "sub": "google-eu-sub",
+            "email": "oauth.paris@example.com",
+            "email_verified": True,
+            "name": "Paris User",
+        }
+
+        resp = self.client.post(self.url, {"id_token": "fake"}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user = User.objects.get(email="oauth.paris@example.com")
+        self.assertEqual(user.wilaya, "")
+        self.assertEqual(user.role, User.Role.BOTH)
+
+    @patch("apps.accounts.views.verify_id_token")
+    def test_invalid_oauth_wilaya_is_rejected_when_supplied(self, mock_verify):
+        mock_verify.return_value = {
+            "sub": "google-invalid-wilaya-sub",
+            "email": "oauth.invalid@example.com",
+            "email_verified": True,
+            "name": "Invalid Wilaya",
+        }
+
+        resp = self.client.post(
+            self.url,
+            {"id_token": "fake", "wilaya": "99"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("wilaya", resp.data)
+        self.assertFalse(User.objects.filter(email="oauth.invalid@example.com").exists())
+
+    @patch("apps.accounts.views.verify_id_token")
     def test_returning_user_reuses_existing_identity(self, mock_verify):
         mock_verify.return_value = {
             "sub": "google-sub-12345",
@@ -225,6 +381,23 @@ class GoogleOAuthTests(APITestCase):
         resp = self.client.post(self.url, {"id_token": "fake"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @patch("apps.accounts.views.verify_id_token")
+    def test_unverified_google_email_cannot_link_or_sign_in(self, mock_verify):
+        self.client.post(reverse("auth-sign-up"), SIGN_UP_PAYLOAD, format="json")
+        mock_verify.return_value = {
+            "sub": "unverified-google-sub",
+            "email": SIGN_UP_PAYLOAD["email"],
+            "email_verified": False,
+            "name": "Amina Test",
+        }
+
+        resp = self.client.post(self.url, {"id_token": "fake"}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(
+            OAuthIdentity.objects.filter(subject="unverified-google-sub").exists()
+        )
+
 
 class MeTests(APITestCase):
     url = reverse("me")
@@ -243,3 +416,28 @@ class MeTests(APITestCase):
         self.assertEqual(resp.data["email"], SIGN_UP_PAYLOAD["email"])
         self.assertEqual(resp.data["full_name"], SIGN_UP_PAYLOAD["full_name"])
         self.assertEqual(resp.data["wilaya"], "16")
+        self.assertEqual(resp.data["preferred_language"], "en")
+
+    def test_authenticated_user_can_update_only_preferred_language(self):
+        resp = self.client.post(reverse("auth-sign-up"), SIGN_UP_PAYLOAD, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+
+        update = self.client.patch(
+            self.url,
+            {"preferred_language": "ar", "email": "changed@example.com"},
+            format="json",
+        )
+
+        self.assertEqual(update.status_code, status.HTTP_200_OK)
+        self.assertEqual(update.data["preferred_language"], "ar")
+        self.assertEqual(update.data["email"], SIGN_UP_PAYLOAD["email"])
+
+    def test_invalid_preferred_language_update_is_rejected(self):
+        resp = self.client.post(reverse("auth-sign-up"), SIGN_UP_PAYLOAD, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+
+        update = self.client.patch(
+            self.url, {"preferred_language": "de"}, format="json"
+        )
+
+        self.assertEqual(update.status_code, status.HTTP_400_BAD_REQUEST)

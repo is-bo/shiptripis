@@ -1,0 +1,34 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{#
+  ShipTrip operations shell.
+
+  This overrides branding and adds one stylesheet. It deliberately does not
+  restructure Django's admin: the value of this surface is that it behaves
+  exactly like every other Django admin an operator has used, and a bespoke
+  layout would trade that away for decoration. The stylesheet re-points
+  Django's own CSS variables at the ShipTrip palette and adds the few
+  components an operations queue actually needs — status chips, aligned money,
+  and unmistakable irreversible actions.
+#}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('ShipTrip Admin') }}{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+  <link rel="stylesheet" href="{% static 'shiptrip/admin.css' %}">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}">
+    <span class="st-brand-seal" aria-hidden="true">S</span>
+    <span class="st-brand-name">{{ site_header|default:_('ShipTrip Operations') }}</span>
+  </a>
+</div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

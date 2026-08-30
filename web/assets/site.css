@@ -1,188 +1,1257 @@
+/* ShipTrip public site.
+ *
+ * The palette, the type and the paper are not a web interpretation of the
+ * product: they are the same values the Flutter client resolves at runtime,
+ * ported out of `mobile/lib/design/tokens.dart` and
+ * `mobile/lib/design/typography.dart`. Someone who installs the app after
+ * reading this page should recognise it as the same object.
+ *
+ * Constraints this file works inside:
+ *   - the production CSP is `default-src 'self'`, so there is no hosted font,
+ *     no data: URI and no inline style anywhere;
+ *   - there is no build step and no framework — one stylesheet, one 6-line
+ *     script, four subset faces;
+ *   - every decorative mark is drawn with borders, gradients and inline SVG,
+ *     because the original identity had no raster assets and inventing them
+ *     here would be inventing a second identity.
+ */
+
+/* ---------------------------------------------------------------------------
+   1. Tokens — ported verbatim from AppColorScheme.light
+   --------------------------------------------------------------------------- */
+
 :root {
-  --ink: #17352f;
-  --muted: #5f6f68;
-  --paper: #f8f5ef;
-  --paper-strong: #fffdf8;
-  --emerald: #0f6b57;
-  --emerald-dark: #084638;
-  --terracotta: #c95e42;
-  --amber: #b57a23;
-  --line: #d8ddd5;
-  --lapis: #315f83;
-  --radius: 18px;
-  --shadow: 0 18px 45px rgba(23, 53, 47, .10);
+  /* Paper. The single biggest carrier of the identity: parchment, not the
+     near-white every marketplace ships. */
+  --canvas: #f4efe6;
+  --surface: #faf6ee;
+  --surface-raised: #fffcf5;
+  --surface-sunken: #eae3d2;
+  --surface-inverse: #0e1f2c;
+
+  --hairline: rgba(14, 31, 44, .12);
+  --hairline-strong: rgba(14, 31, 44, .26);
+
+  /* Ink. The warm navy the original printed in — a colder near-black shifts
+     the temperature of every section at once. */
+  --text-primary: #0e1f2c;
+  --text-secondary: #2a3b49;
+  --text-tertiary: #616c79;
+  --text-on-inverse: #faf6ee;
+
+  --brand: #0e5a4f;
+  --brand-strong: #0a4a40;
+  --brand-soft: #e6f2ef;
+  --on-brand: #ffffff;
+
+  /* Terracotta is split the way the app splits it: `attention-vivid` fills
+     shapes and never carries text, `attention` prints rules, borders and
+     markers. One step is added here that the app does not need: `attention`
+     is 3.6:1 on parchment, which is right for a shape and short of AA for a
+     word, so terracotta *words* take the next step down the same ramp. That
+     step is clay1 — an existing value on the app's scale, not a new colour. */
+  --attention: #c75e26;
+  --attention-print: #9b4318;
+  --attention-deep: #6e2c0e;
+  --attention-soft: #fcebe0;
+  --on-attention-soft: #6e2c0e;
+  --attention-vivid: #e8763a;
+
+  --waiting: #9a6d08;
+  --waiting-soft: #fdf5e2;
+  --on-waiting-soft: #6b4a05;
+
+  --danger: #b23a2e;
+  --danger-soft: #fcedeb;
+
+  --info: #2a62a6;
+  --info-soft: #eaf2fb;
+  --on-info-soft: #102a4c;
+
+  /* The sun. One marquee action per view; never a status. */
+  --accent: #fbbc04;
+  --accent-strong: #d89e00;
+  --accent-soft: #fff0c2;
+  --on-accent: #0e1f2c;
+
+  /* Stamp and seal metal. Decorative only. */
+  --seal: #c9a961;
+  --seal-soft: #e0cb9b;
+
+  --grain: rgba(14, 31, 44, .085);
+  --focus: #2a62a6;
+
+  --mode-flight: #2a62a6;
+  --mode-drive: #1c7a6b;
+
+  /* Structure */
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shell: 1140px;
+  --stamp-shadow: 4px 4px 0 rgba(14, 31, 44, .10);
+  --stamp-shadow-tight: 3px 3px 0 rgba(14, 31, 44, .09);
+
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-ui: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --font-arabic: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
+
   color-scheme: light;
-  font-family: "DM Sans", "Noto Sans", system-ui, -apple-system, sans-serif;
-  font-synthesis: none;
+  font-family: var(--font-ui);
+  font-synthesis-weight: none;
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+/* ---------------------------------------------------------------------------
+   2. Faces — subset from the app's bundled variable fonts by
+      `tools/web/build_fonts.py`. Self-hosted because the CSP forbids anything
+      else and because a font swap on a stairwell connection is a real cost.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/assets/fonts/fraunces.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2190-2199, U+2212;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  src: url("/assets/fonts/dmsans.woff2") format("woff2-variations");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2190-2199, U+2212;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/assets/fonts/jetbrainsmono.woff2") format("woff2-variations");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020, U+002D, U+0030-0039, U+0041-005A, U+00B7, U+2013;
+}
+
+/* Arabic is fetched only by a page that actually sets Arabic glyphs — the FR
+   and EN routes never pay for it. */
+@font-face {
+  font-family: "Noto Sans Arabic";
+  src: url("/assets/fonts/notosansarabic.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+/* ---------------------------------------------------------------------------
+   3. Base
+   --------------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-block-start: 6rem;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  color: var(--ink);
-  background: var(--paper);
-  line-height: 1.6;
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.62;
+  font-optical-sizing: auto;
+  overflow-x: hidden;
 }
+
+/* Paper grain. Two offset speckles rather than an image, because an image is
+   an extra request and a data: URI is blocked by the CSP. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(var(--grain) .6px, transparent .7px),
+    radial-gradient(var(--grain) .5px, transparent .6px);
+  background-size: 7px 7px, 11px 11px;
+  background-position: 0 0, 4px 6px;
+}
+
+body > * { position: relative; z-index: 1; }
+
+h1, h2, h3, h4 { margin: 0; line-height: 1.1; text-wrap: balance; }
+
+h1, h2, .display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+h1 { font-size: clamp(2.6rem, 6.4vw, 4.6rem); }
+h2 { font-size: clamp(2rem, 4.2vw, 3rem); }
+h3 { font-size: 1.12rem; font-weight: 700; letter-spacing: -.01em; }
+
+p { margin: 0; }
+ul { margin: 0; }
+
 a { color: inherit; }
-a:focus-visible, button:focus-visible, summary:focus-visible {
-  outline: 3px solid var(--terracotta);
-  outline-offset: 4px;
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+details:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
   border-radius: 4px;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skip-link {
   position: absolute;
   inset-inline-start: 1rem;
-  top: -5rem;
-  padding: .65rem 1rem;
-  background: var(--emerald-dark);
-  color: #fff;
-  z-index: 20;
+  top: -6rem;
+  z-index: 40;
+  padding: .7rem 1.1rem;
+  border-radius: 999px;
+  background: var(--surface-inverse);
+  color: var(--text-on-inverse);
+  font-weight: 700;
+  text-decoration: none;
 }
 .skip-link:focus { top: 1rem; }
-.shell { width: min(1160px, calc(100% - 2.5rem)); margin-inline: auto; }
+
+.shell {
+  width: min(var(--shell), 100% - 2.5rem);
+  margin-inline: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   4. Identity kit — the marks the app draws with CustomPainter, drawn here
+      with borders and gradients. Every one of them is decoration: none of
+      them carries information that is not also written in words.
+   --------------------------------------------------------------------------- */
+
+/* Eyebrow — 11px caps at 1.6 tracking, above every display headline, exactly
+   as the original set it. Printed in terracotta, which is why it uses
+   `--attention` and never `--attention-vivid`. */
+.eyebrow {
+  display: flex;
+  /* The rule belongs beside the first line. `center` looked identical while
+     every eyebrow fit on one line and slid to the gap between lines the moment
+     a longer French or Arabic string wrapped. */
+  align-items: flex-start;
+  line-height: 1.5;
+  gap: .55rem;
+  margin-block-end: .9rem;
+  color: var(--attention-print);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.eyebrow::before {
+  content: "";
+  width: 1.6rem;
+  height: 2px;
+  margin-block-start: calc(.75em - 1px);
+  background: currentColor;
+  flex: none;
+}
+
+/* Passport stamp: a dashed pill set a few hundredths of a radian off true. */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .8rem;
+  border: 1.5px dashed var(--attention);
+  border-radius: 999px;
+  color: var(--attention-print);
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  rotate: -2.4deg;
+  background: color-mix(in srgb, var(--attention-soft) 55%, transparent);
+}
+.stamp-seal { border-color: var(--seal); color: var(--attention-deep); rotate: 1.8deg; }
+
+/* Wax seal. Vivid terracotta is a fill here and nothing else. */
+.seal {
+  display: grid;
+  place-items: center;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: 50%;
+  background: var(--attention-vivid);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--seal);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  flex: none;
+}
+
+/* Hairline rule with a perforation, the way a ticket separates its stub. */
+.perforation {
+  position: relative;
+  block-size: 1px;
+  margin-block: 1.35rem;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--hairline-strong) 0 6px,
+    transparent 6px 12px
+  );
+}
+.perforation::before,
+.perforation::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 50%;
+  background: var(--canvas);
+  translate: 0 -50%;
+}
+.perforation::before { inset-inline-start: -1.9rem; }
+.perforation::after { inset-inline-end: -1.9rem; }
+
+/* Paper. A card has an edge, a slight lift and no blur — the original's depth
+   came from stacked paper and hard shadows, never from a soft glow. */
+.paper {
+  padding: 1.6rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--stamp-shadow-tight);
+}
+
+.paper-raised { background: var(--surface-raised); }
+
+/* Airmail border: the alternating terracotta/ink chevron edge of a par-avion
+   envelope, as four repeating gradients. */
+.airmail {
+  padding: 8px;
+  border-radius: calc(var(--radius) + 6px);
+  background:
+    repeating-linear-gradient(45deg,
+      var(--attention-vivid) 0 9px,
+      var(--surface-inverse) 9px 18px,
+      var(--surface) 18px 27px);
+  box-shadow: var(--stamp-shadow);
+}
+.airmail > * { border-radius: var(--radius); }
+
+/* Postage stamp: scalloped edge cut out of the ground colour. */
+.postage {
+  position: relative;
+  display: grid;
+  gap: .15rem;
+  place-items: center;
+  padding: .8rem .7rem .6rem;
+  background: var(--surface-raised);
+  color: var(--attention-deep);
+  text-align: center;
+  rotate: 3.5deg;
+  --scallop: radial-gradient(circle 3.6px, transparent 96%, var(--surface) 100%);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+.postage::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  background:
+    radial-gradient(circle 4px at 0 50%, transparent 95%, var(--surface) 100%) repeat-y left / 8px 12px,
+    radial-gradient(circle 4px at 100% 50%, transparent 95%, var(--surface) 100%) repeat-y right / 8px 12px,
+    radial-gradient(circle 4px at 50% 0, transparent 95%, var(--surface) 100%) repeat-x top / 12px 8px,
+    radial-gradient(circle 4px at 50% 100%, transparent 95%, var(--surface) 100%) repeat-x bottom / 12px 8px;
+  pointer-events: none;
+}
+.postage-value { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; line-height: 1; }
+.postage-label { font-size: .55rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+
+/* Buttons. The primary action is an ink pill; the sun is reserved for the one
+   marquee action on the page, which is the same rule the app follows. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 48px;
+  padding: .75rem 1.35rem;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: .97rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: translate .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+.button-sun {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--stamp-shadow-tight);
+}
+.button-sun:hover { background: var(--accent-strong); translate: 0 -2px; }
+.button-ink {
+  background: var(--surface-inverse);
+  color: var(--text-on-inverse);
+}
+.button-ink:hover { background: #1b2e3c; translate: 0 -2px; }
+.button-ghost {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--hairline-strong);
+}
+.button-ghost:hover { background: var(--surface-raised); translate: 0 -2px; }
+
+.textlink {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--attention-print);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: .28em;
+}
+.textlink:hover { color: var(--attention-deep); }
+.textlink .arrow { transition: translate .16s ease; }
+.textlink:hover .arrow { translate: .2rem 0; }
+[dir="rtl"] .textlink:hover .arrow { translate: -.2rem 0; }
+
+/* Status chips. Colour is the third signal — every chip also carries a word
+   and a shape, exactly as the app requires. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .28rem .65rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.chip::before {
+  content: "";
+  inline-size: .5rem;
+  block-size: .5rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.chip-flight { background: var(--info-soft); color: var(--on-info-soft); }
+.chip-drive { background: var(--brand-soft); color: var(--brand-strong); }
+.chip-wait { background: var(--waiting-soft); color: var(--on-waiting-soft); }
+.chip-attention { background: var(--attention-soft); color: var(--on-attention-soft); }
+
+/* Handover code tile — split-flap characters with a hard stamped shadow. */
+.code-tiles { display: flex; gap: .3rem; }
+.code-tiles span {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2.5rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  box-shadow: 2px 2px 0 rgba(14, 31, 44, .12);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   5. Header
+   --------------------------------------------------------------------------- */
+
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-  backdrop-filter: blur(14px);
+  z-index: 20;
+  border-block-end: 1px solid var(--hairline);
+  background: var(--canvas);
 }
-.nav { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.brand { display: inline-flex; align-items: center; gap: .65rem; text-decoration: none; font-weight: 800; letter-spacing: -.03em; }
-.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; color: var(--paper); background: var(--emerald); border-radius: 50% 50% 50% 8px; transform: rotate(-12deg); }
-.brand-mark span { transform: rotate(12deg); font-family: Georgia, serif; font-size: 1.25rem; }
-.nav-links { display: flex; align-items: center; gap: 1.2rem; font-size: .9rem; }
-.nav-links a { text-decoration: none; color: var(--muted); }
-.nav-links a:hover { color: var(--ink); }
-.language { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--line); border-radius: 999px; }
-.language a { padding: .25rem .5rem; font-size: .75rem; border-radius: 999px; }
-.language a[aria-current="page"] { color: var(--paper); background: var(--ink); }
-.button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .7rem 1.1rem; border: 1px solid transparent; border-radius: 999px; font-weight: 700; text-decoration: none; transition: transform .18s ease, background .18s ease; }
-.button:hover { transform: translateY(-2px); }
-.button-primary { color: #fff; background: var(--emerald); }
-.button-primary:hover { background: var(--emerald-dark); }
-.button-quiet { color: var(--ink); border-color: var(--line); background: var(--paper-strong); }
-.hero { padding: clamp(4rem, 9vw, 8rem) 0 5rem; }
-.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .85fr); gap: clamp(2rem, 7vw, 6rem); align-items: center; }
-h1, h2, h3 { margin: 0; letter-spacing: -.045em; line-height: 1.08; }
-h1, h2 { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif; font-weight: 700; }
-h1 { max-width: 11ch; font-size: clamp(3.2rem, 8vw, 6.4rem); }
-h2 { max-width: 16ch; font-size: clamp(2.2rem, 5vw, 4rem); }
-h3 { font-size: 1.2rem; }
-.hero-copy { max-width: 58ch; font-size: 1.12rem; color: var(--muted); }
-.hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
-.route-board { position: relative; min-height: 390px; padding: 2rem; overflow: hidden; border: 1px solid var(--line); border-radius: 28px; background: var(--paper-strong); box-shadow: var(--shadow); }
-.route-board::before { content: ""; position: absolute; inset: 12% 8%; border: 1px dashed color-mix(in srgb, var(--emerald) 35%, transparent); border-radius: 50%; transform: rotate(-13deg); }
-.route-board::after { content: ""; position: absolute; width: 180px; height: 180px; inset-inline-end: -70px; bottom: -70px; background: color-mix(in srgb, var(--terracotta) 15%, transparent); border-radius: 50%; }
-.route-stamp { position: absolute; inset-inline-end: 1.5rem; top: 1.25rem; color: var(--terracotta); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.route-line { position: absolute; inset-inline: 16%; top: 51%; height: 2px; background: var(--emerald); transform: rotate(-14deg); transform-origin: center; }
-.route-line::after { content: ""; position: absolute; inset-inline-end: 0; top: -4px; width: 10px; height: 10px; border-inline-end: 2px solid var(--emerald); border-top: 2px solid var(--emerald); transform: rotate(45deg); }
-.route-stop { position: absolute; display: grid; gap: .2rem; justify-items: center; text-align: center; }
-.route-stop::before { content: ""; width: 18px; height: 18px; border: 4px solid var(--paper-strong); border-radius: 50%; background: var(--emerald); box-shadow: 0 0 0 2px var(--emerald); }
-.route-stop small { color: var(--muted); font-size: .72rem; }
-.route-stop strong { font-size: 1.05rem; }
-.route-stop.one { inset-inline-start: 12%; top: 36%; }
-.route-stop.two { inset-inline-start: 47%; top: 53%; }
-.route-stop.three { inset-inline-end: 9%; top: 68%; }
-.route-mode { position: absolute; display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .6rem; color: var(--lapis); background: #edf3f5; border-radius: 999px; font-size: .72rem; font-weight: 700; }
-.route-mode.flight { inset-inline-start: 27%; top: 39%; }
-.route-mode.drive { inset-inline-end: 24%; top: 62%; color: var(--terracotta); background: #fbede7; }
-.board-note { position: absolute; inset-inline-start: 1.5rem; bottom: 1.25rem; max-width: 20ch; color: var(--muted); font-size: .82rem; }
-.section { padding: 6rem 0; }
-.section-tight { padding: 4rem 0; }
-.section-head { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 2.25rem; }
-.section-head p { max-width: 43ch; margin: 0; color: var(--muted); }
-.eyebrow { margin-bottom: .8rem; color: var(--terracotta); font-size: .72rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
-.route-explainer { display: grid; grid-template-columns: .85fr 1.15fr; gap: 2rem; align-items: stretch; }
-.steps { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
-.step { display: grid; grid-template-columns: 44px 1fr; gap: 1rem; padding: 1.25rem; background: var(--paper-strong); }
-.step-number { display: grid; place-items: center; width: 34px; height: 34px; color: var(--paper); background: var(--emerald); border-radius: 50%; font-weight: 800; }
-.step p { margin: .35rem 0 0; color: var(--muted); font-size: .94rem; }
-.role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-.role { padding: 2rem; border-radius: var(--radius); background: var(--emerald-dark); color: #eff8f0; }
-.role:nth-child(2) { background: #f4e6d8; color: var(--ink); }
-.role h3 { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif; font-size: 2rem; }
-.role p { max-width: 38ch; color: color-mix(in srgb, currentColor 72%, transparent); }
-.role a { color: inherit; font-weight: 700; }
-.trust-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.trust-item { padding-top: 1rem; border-top: 2px solid var(--emerald); }
-.trust-item:nth-child(2) { border-color: var(--lapis); }
-.trust-item:nth-child(3) { border-color: var(--terracotta); }
-.trust-item:nth-child(4) { border-color: var(--amber); }
-.trust-item p { margin: .5rem 0 0; color: var(--muted); font-size: .9rem; }
-.fee { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
-.fee-table { width: 100%; border-collapse: collapse; background: var(--paper-strong); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
-.fee-table th, .fee-table td { padding: 1rem 1.2rem; text-align: start; border-bottom: 1px solid var(--line); }
-.fee-table th { color: var(--muted); font-size: .82rem; font-weight: 600; }
-.fee-table tr:last-child td { border-bottom: 0; font-weight: 800; color: var(--emerald-dark); }
-.fee-table td:last-child { text-align: end; font-variant-numeric: tabular-nums; }
-.fineprint { color: var(--muted); font-size: .86rem; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.faq { max-width: 820px; }
-details { padding: 1.1rem 0; border-top: 1px solid var(--line); }
-details:last-child { border-bottom: 1px solid var(--line); }
-summary { cursor: pointer; font-weight: 700; }
-details p { max-width: 65ch; margin: .7rem 0 0; color: var(--muted); }
-.cta-band { padding: 3rem; border-radius: 24px; background: var(--emerald); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 2rem; }
-.cta-band h2 { max-width: 12ch; }
-.cta-band p { max-width: 43ch; color: #d8eee2; }
-.cta-band .button-primary { color: var(--emerald-dark); background: #fff; }
-.site-footer { padding: 3rem 0 2rem; border-top: 1px solid var(--line); }
-.footer-grid { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 2rem; }
-.footer-grid h3 { margin-bottom: .8rem; font-size: .86rem; text-transform: uppercase; letter-spacing: .08em; }
-.footer-grid a { display: block; margin: .35rem 0; color: var(--muted); font-size: .9rem; text-decoration: none; }
-.footer-grid a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: .2em; }
-.footer-note { margin: 2rem 0 0; color: var(--muted); font-size: .8rem; }
-.legal-main { padding: 5rem 0 6rem; }
-.legal-main article { max-width: 780px; }
-.legal-main h1 { max-width: none; font-size: clamp(2.7rem, 6vw, 5rem); }
-.legal-main h2 { margin-top: 2.6rem; max-width: none; font-size: 1.7rem; }
-.legal-main p, .legal-main li { color: var(--muted); }
-.legal-main ul { padding-inline-start: 1.3rem; }
-.notice { padding: 1rem 1.2rem; border: 1px solid #e8c3b7; border-radius: 12px; background: #fbede7; }
-.support-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.support-card { padding: 1.4rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper-strong); }
-.support-card a { color: var(--emerald-dark); font-weight: 700; }
-[dir="rtl"] { font-family: "Noto Sans Arabic", "Noto Sans", system-ui, sans-serif; }
-[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3 { letter-spacing: 0; }
-[dir="rtl"] .route-line { transform: rotate(14deg); }
-[dir="rtl"] .route-line::after { transform: rotate(-45deg); }
-[dir="rtl"] .route-stop.one { inset-inline-start: auto; inset-inline-end: 12%; }
-[dir="rtl"] .route-stop.three { inset-inline-end: auto; inset-inline-start: 9%; }
-[dir="rtl"] .route-mode.flight { inset-inline-start: auto; inset-inline-end: 27%; }
-[dir="rtl"] .route-mode.drive { inset-inline-end: auto; inset-inline-start: 24%; }
-@media (max-width: 840px) {
-  .nav-links a:not(.button) { display: none; }
-  .hero-grid, .route-explainer, .fee { grid-template-columns: 1fr; }
-  .hero { padding-top: 4rem; }
-  h1 { max-width: 12ch; }
-  .route-board { min-height: 340px; }
-  .trust-grid { grid-template-columns: repeat(2, 1fr); row-gap: 2rem; }
-  .cta-band { align-items: start; flex-direction: column; }
-  .footer-grid { grid-template-columns: 1.5fr 1fr 1fr; }
-  .footer-grid > :first-child { grid-column: 1 / -1; }
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-height: 74px;
+  padding-block: .6rem;
 }
-@media (max-width: 560px) {
-  .shell { width: min(100% - 1.5rem, 1160px); }
-  .nav { min-height: 68px; }
-  .language a { padding-inline: .35rem; }
-  .hero { padding-bottom: 3rem; }
-  .section { padding: 4rem 0; }
-  .section-head { display: block; }
-  .section-head p { margin-top: 1rem; }
-  .role-grid, .support-grid { grid-template-columns: 1fr; }
-  .trust-grid { grid-template-columns: 1fr; }
-  .route-board { min-height: 300px; padding: 1rem; }
-  .route-stop strong { font-size: .9rem; }
-  .route-stop small { font-size: .64rem; }
-  .route-stop.one { inset-inline-start: 7%; }
-  .route-stop.three { inset-inline-end: 4%; }
-  .cta-band { padding: 2rem 1.4rem; }
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  font-family: var(--font-display);
+  font-size: 1.22rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  text-decoration: none;
+  flex: none;
+}
+.brand .seal { inline-size: 2.1rem; block-size: 2.1rem; font-size: .95rem; }
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  margin-inline: auto;
+  font-size: .94rem;
+}
+.nav-menu a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+}
+.nav-menu a:hover { color: var(--text-primary); border-block-end-color: var(--accent); }
+.nav-menu a[aria-current="page"] {
+  color: var(--text-primary);
+  font-weight: 700;
+  border-block-end-color: var(--accent);
+}
+
+.nav-side { display: flex; align-items: center; gap: .8rem; flex: none; }
+
+.language {
+  display: inline-flex;
+  gap: .15rem;
+  padding: .2rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.language a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: .65rem;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: .78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.language a:hover { color: var(--text-primary); }
+/* Landing pages mark the language `page`; the English-only policy pages mark
+   it `true`, because FR and AR there open the localized home rather than a
+   translation of the document. Both are the language you are reading. */
+.language a[aria-current] {
+  background: var(--surface-inverse);
+  color: var(--text-on-inverse);
+}
+
+/* ---------------------------------------------------------------------------
+   6. Hero
+   --------------------------------------------------------------------------- */
+
+.hero { padding-block: clamp(2.6rem, 6vw, 4.6rem) clamp(2.6rem, 5vw, 4rem); }
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+.hero h1 { max-width: 13ch; }
+.hero h1 em {
+  font-style: italic;
+  color: var(--attention);
+  /* Fraunces' italic exit strokes overhang their advance width. At display
+     size that closes the word space after a descender — "already on" set
+     solid — so the accent carries its own trailing air. */
+  padding-inline-end: .06em;
+}
+
+.lede {
+  max-width: 46ch;
+  margin-block-start: 1.2rem;
+  color: var(--text-secondary);
+  font-size: clamp(1.02rem, 1.6vw, 1.14rem);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-block-start: 1.8rem;
+}
+
+.hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem 1.3rem;
+  margin-block-start: 1.6rem;
+  padding: 0;
+  color: var(--text-tertiary);
+  font-size: .85rem;
+}
+.hero-trust li { list-style: none; display: flex; align-items: center; gap: .45rem; }
+.hero-trust li::before {
+  content: "";
+  inline-size: .55rem;
+  block-size: .55rem;
+  border: 1.5px solid var(--seal);
+  border-radius: 50%;
+  flex: none;
+}
+
+/* The corridor postcard. */
+.postcard { position: relative; }
+.postcard-inner {
+  position: relative;
+  padding: 1.4rem 1.4rem 1.1rem;
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.postcard-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: .4rem;
+}
+.postcard-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.postcard-sub { color: var(--text-tertiary); font-size: .78rem; }
+.postcard .postage { position: absolute; inset-block-start: 1.1rem; inset-inline-end: 1.1rem; }
+
+.route-art { display: block; width: 100%; height: auto; }
+.route-art .paper-line { fill: none; stroke: var(--hairline-strong); stroke-width: 1; }
+.route-art .leg-flight {
+  fill: none;
+  stroke: var(--mode-flight);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 7 6;
+}
+.route-art .leg-drive {
+  fill: none;
+  stroke: var(--mode-drive);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+/* The tracer normalises its own length with `pathLength="100"` on the element,
+   so the loop closes cleanly whatever the geometry measures. */
+.route-art .leg-trace {
+  fill: none;
+  stroke: var(--attention-vivid);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 9 91;
+  animation: trace 3.2s linear infinite;
+}
+.route-art .node { fill: var(--surface-raised); stroke: var(--surface-inverse); stroke-width: 2.5; }
+.route-art .node-core { fill: var(--surface-inverse); }
+.route-art .node-live { fill: var(--attention-vivid); }
+.route-art .city {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--text-primary);
+}
+.route-art .role {
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  fill: var(--text-tertiary);
+}
+.route-art .parcel { fill: var(--accent); stroke: var(--surface-inverse); stroke-width: 1.6; }
+.route-art .parcel-tape { stroke: var(--surface-inverse); stroke-width: 1.4; fill: none; }
+.route-art .plane { fill: var(--surface-inverse); }
+.route-art .plane-ground { fill: var(--surface-raised); }
+.route-art .halo { fill: var(--attention-vivid); opacity: .15; }
+
+@keyframes trace {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+.postcard-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-block-start: .5rem;
+}
+.postcard-note {
+  margin-block-start: .8rem;
+  color: var(--text-tertiary);
+  font-size: .82rem;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Sections
+   --------------------------------------------------------------------------- */
+
+.section { padding-block: clamp(3.2rem, 6vw, 5.5rem); }
+.section-sunken { background: var(--surface-sunken); border-block: 1px solid var(--hairline); }
+
+.section-head { max-width: 62ch; margin-block-end: 2.4rem; }
+.section-head p {
+  margin-block-start: 1rem;
+  color: var(--text-secondary);
+  font-size: 1.03rem;
+}
+
+/* Two roles as two boarding passes. */
+.roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Head, then body. Each pass adopts these two rows so the perforated seam
+     is at the same height on both tickets even when one head wraps — which
+     French does and English does not. */
+  grid-template-rows: auto 1fr;
+  gap: 1.5rem;
+}
+.pass {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--stamp-shadow);
+  overflow: hidden;
+}
+/* The seam between the head and the steps is a ticket perforation: a dashed
+   rule with a notch punched out of each edge. `.pass` clips its overflow, so a
+   circle in the ground colour straddling the edge cuts the notch. */
+.pass-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  padding: 1.3rem 1.5rem 1.4rem;
+  background: var(--surface-raised);
+}
+.pass-head::after {
+  content: "";
+  position: absolute;
+  inset-inline: 1.6rem;
+  inset-block-end: 0;
+  border-block-end: 1.5px dashed var(--hairline-strong);
+}
+.pass-head::before,
+.pass-body::before {
+  content: "";
+  position: absolute;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 50%;
+  background: var(--canvas);
+  z-index: 1;
+}
+.pass-head::before { inset-inline-start: -9px; inset-block-end: -9px; }
+.pass-body::before { inset-inline-end: -9px; inset-block-start: -9px; }
+.pass-head h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; }
+.pass-head p { color: var(--text-tertiary); font-size: .84rem; }
+.pass-body { position: relative; padding: 1.4rem 1.5rem 1.5rem; }
+
+.pass-traveler .pass-head { background: var(--brand-soft); }
+.pass-traveler .seal { background: var(--brand); color: var(--on-brand); }
+
+/* Numbered route of steps — one motif, earned everywhere. */
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li {
+  position: relative;
+  padding-inline-start: 2.6rem;
+  padding-block-end: 1.25rem;
+}
+.steps li:last-child { padding-block-end: 0; }
+.steps li::before {
+  content: counter(step);
+  counter-increment: step;
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: .05rem;
+  display: grid;
+  place-items: center;
+  inline-size: 1.65rem;
+  block-size: 1.65rem;
+  border: 1.5px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  font-size: .78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.steps li::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: .8rem;
+  inset-block-start: 1.85rem;
+  block-size: calc(100% - 1.9rem);
+  border-inline-start: 1.5px dashed var(--hairline-strong);
+}
+.steps li:last-child::after { display: none; }
+.steps { counter-reset: step; }
+.steps strong { display: block; font-size: .98rem; }
+.steps p { color: var(--text-secondary); font-size: .9rem; }
+
+/* Mechanic cards — the product explanation. */
+.mechanics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  gap: 1.1rem;
+}
+.mechanic {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  padding: 1.4rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.mechanic h3 { font-size: 1.04rem; }
+.mechanic p { color: var(--text-secondary); font-size: .91rem; }
+.mechanic .mark {
+  inline-size: 2.2rem;
+  block-size: 2.2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+.mechanic .mark svg { inline-size: 1.15rem; block-size: 1.15rem; }
+
+/* Money. A ticket stub: addition toward what the sender pays, never a
+   subtraction from what the traveler earns. */
+.money {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 26rem);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+.ledger {
+  padding: 1.6rem 1.7rem 1.4rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--stamp-shadow);
+}
+.ledger-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-tertiary);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.ledger table { width: 100%; border-collapse: collapse; margin-block-start: .9rem; }
+.ledger th, .ledger td { padding-block: .6rem; text-align: start; font-weight: 400; }
+.ledger td:last-child, .ledger th:last-child {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+.ledger tbody tr + tr th, .ledger tbody tr + tr td { border-block-start: 1px dotted var(--hairline-strong); }
+.ledger .total th, .ledger .total td {
+  padding-block-start: .9rem;
+  border-block-start: 2px solid var(--surface-inverse);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.ledger .total td { color: var(--text-primary); }
+.ledger-note { margin-block-start: 1rem; color: var(--text-tertiary); font-size: .82rem; }
+
+.fineprint { color: var(--text-tertiary); font-size: .86rem; }
+.lede + .fineprint, .section-head + .fineprint { margin-block-start: 1.1rem; }
+.money .fineprint { max-width: 54ch; }
+
+/* Trust. */
+.trust {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1.1rem 1.6rem;
+}
+/* Six items. Four columns leaves a hole two cells wide under the second row,
+   so above the breakpoint the grid is pinned to three and reads 3 + 3. */
+@media (min-width: 62rem) {
+  .trust { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.trust-item { padding-block-start: 1rem; border-block-start: 2px solid var(--seal); }
+.trust-item h3 { margin-block-end: .35rem; }
+.trust-item p { color: var(--text-secondary); font-size: .9rem; }
+.trust-item:nth-child(2) { border-block-start-color: var(--mode-flight); }
+.trust-item:nth-child(3) { border-block-start-color: var(--attention-vivid); }
+.trust-item:nth-child(4) { border-block-start-color: var(--brand); }
+.trust-item:nth-child(5) { border-block-start-color: var(--waiting); }
+.trust-item:nth-child(6) { border-block-start-color: var(--text-secondary); }
+
+/* FAQ. The list is a reading column, so on a wide screen it sits beside its
+   heading rather than under it — the same two-column figure the price section
+   uses, and the page's last full-width band is not half empty. */
+.faq { max-width: 46rem; }
+@media (min-width: 62rem) {
+  #faq > .shell {
+    display: grid;
+    grid-template-columns: minmax(0, 19rem) minmax(0, 1fr);
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: start;
+  }
+  #faq .section-head { margin-block-end: 0; }
+  #faq .faq { max-width: none; }
+}
+.faq details {
+  border-block-end: 1px solid var(--hairline);
+  padding-block: .45rem;
+}
+.faq details:first-of-type { border-block-start: 1px solid var(--hairline); }
+.faq summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 48px;
+  padding-block: .55rem;
+  font-weight: 700;
+  list-style: none;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "";
+  inline-size: .6rem;
+  block-size: .6rem;
+  flex: none;
+  border-inline-end: 2px solid var(--attention);
+  border-block-end: 2px solid var(--attention);
+  rotate: 45deg;
+  transition: rotate .18s ease;
+}
+.faq details[open] summary::after { rotate: -135deg; }
+.faq details p { margin-block: .2rem .9rem; max-width: 62ch; color: var(--text-secondary); }
+
+/* Closing band. */
+.cta-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.6rem;
+  padding: clamp(1.8rem, 4vw, 2.8rem);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inverse);
+  color: var(--text-on-inverse);
+  box-shadow: var(--stamp-shadow);
+}
+.cta-band h2 { max-width: 16ch; }
+.cta-band p { max-width: 44ch; margin-block-start: .7rem; color: #c2cdd5; }
+.cta-band .eyebrow { color: var(--accent); }
+
+/* Footer. */
+.site-footer {
+  border-block-start: 1px solid var(--hairline);
+  padding-block: 3rem 2.2rem;
+  background: var(--surface-sunken);
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
+  gap: 2rem;
+}
+.footer-grid h3 {
+  margin-block-end: .7rem;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.footer-grid a:not(.brand) {
+  display: block;
+  padding-block: .35rem;
+  color: var(--text-secondary);
+  font-size: .92rem;
+  text-decoration: none;
+}
+.footer-grid a:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: .22em; }
+.footer-grid .brand { margin-block-end: .8rem; }
+.footer-grid .fineprint { max-width: 34ch; }
+.footer-note {
+  margin-block-start: 2.2rem;
+  padding-block-start: 1.2rem;
+  border-block-start: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: .8rem;
+}
+
+/* ---------------------------------------------------------------------------
+   8. Policy, support and other document pages
+   --------------------------------------------------------------------------- */
+
+.doc-header { padding-block: clamp(2.4rem, 5vw, 3.6rem) 0; }
+.doc-header .stamp { margin-block-end: 1rem; }
+.doc-header h1 { max-width: 20ch; font-size: clamp(2.2rem, 5vw, 3.4rem); }
+.doc-header .lede { margin-block-start: 1rem; }
+
+.doc {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: clamp(1.6rem, 4vw, 3.2rem);
+  padding-block: 2.4rem 4.5rem;
+  align-items: start;
+}
+
+.doc-aside { position: sticky; top: 6rem; }
+.doc-aside h2 {
+  font-family: var(--font-ui);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-block-end: .7rem;
+}
+.doc-aside a {
+  display: block;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding-block: .35rem;
+  color: var(--text-secondary);
+  font-size: .9rem;
+  text-decoration: none;
+  border-inline-start: 2px solid var(--hairline);
+  padding-inline-start: .8rem;
+}
+.doc-aside a:hover { color: var(--text-primary); border-inline-start-color: var(--accent); }
+
+.doc-body { max-width: 68ch; }
+.doc-body h2 {
+  margin-block: 2.6rem .8rem;
+  font-size: clamp(1.4rem, 2.6vw, 1.8rem);
+  scroll-margin-block-start: 6rem;
+}
+.doc-body h2:first-child { margin-block-start: 0; }
+.doc-body h3 { margin-block: 1.6rem .5rem; }
+.doc-body p, .doc-body li { color: var(--text-secondary); }
+.doc-body p + p { margin-block-start: .9rem; }
+.doc-body ul { margin-block: .8rem; padding-inline-start: 1.2rem; }
+.doc-body li { margin-block: .45rem; }
+.doc-body ul.plain { list-style: none; padding-inline-start: 0; }
+.doc-body ul.plain li {
+  padding-inline-start: 1.7rem;
+  position: relative;
+}
+.doc-body ul.plain li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: .62em;
+  inline-size: .55rem;
+  block-size: .55rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--attention);
+}
+
+/* Draft notice. This page is not approved text and must never look like it. */
+.notice {
+  display: flex;
+  gap: .9rem;
+  padding: 1.1rem 1.3rem;
+  border: 1.5px dashed var(--attention);
+  border-radius: var(--radius);
+  background: var(--attention-soft);
+  color: var(--on-attention-soft);
+}
+.notice p { color: inherit; font-size: .92rem; }
+.notice strong { display: block; }
+.doc-body .notice { margin-block: 0 2rem; }
+.doc-body h2 + .notice, .doc-body .notice:last-child { margin-block: 1.2rem 0; }
+.notice .seal { inline-size: 2.1rem; block-size: 2.1rem; font-size: .9rem; }
+
+.support-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-block: 1.4rem;
+}
+.support-card {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  padding: 1.3rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--stamp-shadow-tight);
+}
+.support-card h3 { font-size: 1rem; }
+.support-card p { color: var(--text-secondary); font-size: .89rem; }
+.support-card a { margin-block-start: auto; padding-block-start: .5rem; }
+
+/* ---------------------------------------------------------------------------
+   9. Arabic
+   --------------------------------------------------------------------------- */
+
+[lang="ar"] {
+  --font-ui: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
+  /* Fraunces has no Arabic coverage. The app answers this by setting Arabic
+     display text in Noto's heaviest weight rather than falling back to an
+     unrelated serif, and so does this page. */
+  --font-display: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
+}
+[lang="ar"] h1, [lang="ar"] h2, [lang="ar"] .display { font-weight: 800; letter-spacing: 0; }
+/* Arabic has no italic. Left alone the browser synthesises an oblique, which
+   is a distortion of the letterforms rather than an emphasis — colour and
+   weight carry the accent instead. */
+[lang="ar"] .hero h1 em { font-style: normal; font-weight: 800; }
+[lang="ar"] .eyebrow, [lang="ar"] .stamp, [lang="ar"] .chip { letter-spacing: 0; }
+[lang="ar"] .postage-label, [lang="ar"] .ledger-caption,
+[lang="ar"] .footer-grid h3, [lang="ar"] .doc-aside h2 { letter-spacing: 0; }
+[lang="ar"] .route-art .role { letter-spacing: 0; }
+[lang="ar"] body { line-height: 1.85; }
+
+/* A Latin run inside Arabic — an amount, a provider name — keeps its own
+   direction so `€30.00` never reorders. */
+.ltr { direction: ltr; unicode-bidi: isolate; }
+
+/* The corridor runs the way the page reads. Geometry mirrors; the words that
+   sit inside the geometry flip back so they stay legible. */
+[dir="rtl"] .route-art .mirror { transform: scaleX(-1); transform-origin: center; }
+[dir="rtl"] .route-art text { transform: scaleX(-1); transform-box: fill-box; transform-origin: center; }
+[dir="rtl"] .steps li::before { transform: none; }
+/* The arrow is drawn from two logical borders, so in RTL the corner it forms
+   starts at the bottom-left rather than the bottom-right and needs the
+   opposite rotation. Closed points down, open points up, in both directions. */
+[dir="rtl"] .faq summary::after { rotate: -45deg; }
+[dir="rtl"] .faq details[open] summary::after { rotate: 135deg; }
+[dir="rtl"] .stamp { rotate: 2.4deg; }
+[dir="rtl"] .postage { rotate: -3.5deg; }
+
+/* ---------------------------------------------------------------------------
+   10. Responsive
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 1000px) {
+  .hero-grid, .money { grid-template-columns: minmax(0, 1fr); }
+  .hero h1 { max-width: 16ch; }
+  .money { gap: 2rem; }
+  .doc { grid-template-columns: minmax(0, 1fr); }
+  /* The rail stops being a rail and becomes a block of contents above the
+     document. It stays a vertical list: reflowed into a wrapping row, each
+     entry carried its own underline and the six of them read as damage
+     rather than as a table of contents. */
+  .doc-aside {
+    position: static;
+    margin-block-end: 2rem;
+    padding-block-end: 1.4rem;
+    border-block-end: 1px solid var(--hairline);
+  }
+}
+
+@media (max-width: 880px) {
+  .roles { grid-template-columns: minmax(0, 1fr); }
   .footer-grid { grid-template-columns: 1fr 1fr; }
+  .footer-grid > :first-child { grid-column: 1 / -1; }
+  /* Full navigation survives on a phone. The section anchors drop to their own
+     row rather than disappearing, because the language switcher lives in this
+     bar and an FR/AR audience must be able to reach it. */
+  .nav { flex-wrap: wrap; row-gap: 0; }
+  .nav-menu {
+    order: 3;
+    inline-size: 100%;
+    margin-inline: 0;
+    gap: 1.2rem;
+    padding-block: .1rem .55rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-menu::-webkit-scrollbar { display: none; }
+  .nav-side { margin-inline-start: auto; }
 }
+
+@media (max-width: 560px) {
+  .shell { width: min(var(--shell), 100% - 1.75rem); }
+  /* A sticky header that grows to three stacked rows eats a third of a small
+     phone. Everything still fits on two: identity plus controls, then the
+     section anchors on a single scrolling line. */
+  .nav { min-height: 0; gap: .4rem; padding-block: .45rem; }
+  .brand { font-size: 1rem; gap: .45rem; }
+  .brand .seal { inline-size: 1.8rem; block-size: 1.8rem; font-size: .82rem; }
+  .nav-side { gap: .4rem; margin-inline-start: auto; }
+  .language { padding: .15rem; }
+  .language a { min-height: 36px; padding-inline: .45rem; font-size: .74rem; }
+  .nav-side .button { min-height: 40px; padding-inline: .8rem; font-size: .86rem; }
+  .nav-menu { gap: 1rem; font-size: .88rem; padding-block: 0 .35rem; }
+  .nav-menu a { min-height: 38px; }
+  .button { padding-inline: 1rem; font-size: .92rem; }
+  .hero-actions .button { flex: 1 1 100%; }
+  .perforation::before, .perforation::after { display: none; }
+  .postcard-inner { padding: 1.1rem 1.1rem .9rem; }
+  .postcard .postage { inset-block-start: .8rem; inset-inline-end: .8rem; scale: .88; }
+  .pass-head, .pass-body { padding-inline: 1.15rem; }
+  .ledger { padding: 1.2rem 1.2rem 1rem; }
+  .footer-grid { grid-template-columns: 1fr; gap: 1.4rem; }
+  .cta-band { flex-direction: column; align-items: flex-start; }
+  .airmail { padding: 6px; }
+}
+
+/* Below ~360px the brand, the language switcher and the contact button no
+   longer share a row, and the sticky header grows to three — a quarter of an
+   iPhone SE, permanently. Everything is kept; it is set tighter. */
+@media (max-width: 360px) {
+  .brand { font-size: .92rem; gap: .35rem; }
+  .brand .seal { inline-size: 1.6rem; block-size: 1.6rem; font-size: .76rem; }
+  .nav-side { gap: .3rem; }
+  .language a { padding-inline: .32rem; font-size: .72rem; }
+  .nav-side .button { padding-inline: .6rem; font-size: .82rem; }
+}
+
+/* ---------------------------------------------------------------------------
+   11. Motion and print
+   --------------------------------------------------------------------------- */
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  /* The tracer's static frame is the completed route, not a blank one. */
+  .route-art .leg-trace { stroke-dashoffset: 0; stroke-dasharray: none; opacity: .22; }
+}
+
+@media print {
+  .site-header, .cta-band, .skip-link { display: none; }
+  body { background: #fff; }
+  body::before { display: none; }
 }

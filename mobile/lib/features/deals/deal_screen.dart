@@ -1,0 +1,648 @@
+/// The delivery.
+///
+/// This is the hub: one screen that answers "where is my parcel, what happens
+/// next, and is it me who has to do something". Every other deal screen —
+/// payment, recipient, pickup, delivery, dispute, cancel, rate — is reached
+/// from here and returns to here.
+///
+/// ## One call
+///
+/// `GET /api/deals/<id>` returns the whole aggregate: terms, allocations,
+/// recipient, handover, protection, dispute, cancellation availability and
+/// ratings. This screen makes that one call and nothing else. Fanning out into
+/// eight requests for a screen the user opens on a train would be a worse
+/// product for no gain.
+///
+/// ## The timeline is built from timestamps, not from a status
+///
+/// Each step is `done` because the server returned an instant for it, and
+/// `waitingOnYou` because the server returned a permission for it
+/// (`can_submit_*`, `can_reveal_*`, `can_rate`, a status that needs funding).
+/// Nothing here infers a stage from a status string, which is what keeps the
+/// screen honest when a deal is in a state this build has never seen.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../app/app_state.dart';
+import '../../app/router.dart';
+import '../../core/format/locale_formats.dart';
+import '../../core/session/session.dart';
+import '../../design/components/codes.dart';
+import '../../design/components/feedback.dart';
+import '../../design/components/money.dart';
+import '../../design/components/navigation.dart';
+import '../../design/components/primitives.dart';
+import '../../design/components/status.dart';
+import '../../design/components/timeline.dart';
+import '../../design/layout/app_scaffold.dart';
+import '../../design/tokens.dart';
+import '../../domain/deal.dart';
+import '../../l10n/app_localizations.dart';
+import '../common/status_copy.dart';
+
+class DealScreen extends ConsumerWidget {
+  const DealScreen({required this.dealId, super.key});
+
+  final int dealId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final account = ref.watch(accountProvider);
+    final deal = ref.watch(dealDetailProvider(dealId));
+
+    return AppScaffold(
+      topBar: AppTopBar(
+        title: l.deliveriesTitle,
+        showBack: true,
+        actions: [
+          if (deal.value?.matchId != null)
+            AppIconButton(
+              icon: Icons.forum_outlined,
+              label: l.dealOpenChat,
+              onPressed: () => context.openChatThread(deal.value!.matchId!),
+            ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(dealDetailProvider(dealId)),
+        child: AsyncView<Deal>(
+          value: deal,
+          onRetry: () => ref.invalidate(dealDetailProvider(dealId)),
+          loading: () => ListView(
+            padding: AppScrollPadding.page(context),
+            children: const [SkeletonDetail()],
+          ),
+          data: (data) {
+            if (account == null) return const SkeletonDetail();
+            final isSender = data.isSender(account.id);
+
+            return ListView(
+              padding: AppScrollPadding.page(context),
+              children: [
+                _StatusHeader(deal: data, isSender: isSender),
+                const SizedBox(height: AppSpace.xl),
+
+                _Urgent(deal: data, isSender: isSender),
+
+                SectionHeader(title: l.timelineTitle),
+                LifecycleTimeline(
+                  steps: _buildSteps(context, data, isSender: isSender),
+                ),
+                const SizedBox(height: AppSpace.xl),
+
+                _MoneySection(deal: data, isSender: isSender),
+                const SizedBox(height: AppSpace.xl),
+
+                _RecipientSection(deal: data, isSender: isSender),
+
+                _ProtectionSection(deal: data, isSender: isSender),
+
+                _DisputeSection(deal: data),
+
+                _RatingSection(deal: data, isSender: isSender),
+
+                const SizedBox(height: AppSpace.xl),
+                _SecondaryActions(deal: data, isSender: isSender),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// The lifecycle, assembled from server instants and server permissions.
+  List<LifecycleStep> _buildSteps(
+    BuildContext context,
+    Deal deal, {
+    required bool isSender,
+  }) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final handover = deal.handover;
+
+    String? at(DateTime? when) =>
+        when == null ? null : LocaleFormats.dayMonth(locale, when);
+
+    LifecycleState stateFor({
+      required bool done,
+      required bool mine,
+      required bool reached,
+    }) {
+      if (done) return LifecycleState.done;
+      if (!reached) return LifecycleState.upcoming;
+      return mine ? LifecycleState.waitingOnYou : LifecycleState.waitingOnThem;
+    }
+
+    final isFunded = deal.isFunded;
+    final recipientRecorded = deal.recipient?.recorded ?? false;
+    final pickedUp = deal.pickupConfirmedAt != null;
+    final delivered = deal.deliveryConfirmedAt != null;
+    final completed = deal.status == DealStatus.completed;
+
+    return [
+      LifecycleStep(
+        label: l.dealStepAgreed,
+        state: LifecycleState.done,
+        timeLabel: at(deal.createdAt),
+      ),
+
+      LifecycleStep(
+        label: l.dealStepPaid,
+        state: deal.status == DealStatus.paymentFailed
+            ? LifecycleState.failed
+            : stateFor(done: isFunded, mine: isSender, reached: true),
+        timeLabel: at(deal.fundedAt),
+        detail: isFunded ? null : (isSender ? l.dealActionPay : null),
+        actionLabel: !isFunded && isSender ? l.dealActionPay : null,
+        onAction: !isFunded && isSender
+            ? () => context.openDealPayment(deal.id)
+            : null,
+      ),
+
+      LifecycleStep(
+        label: l.dealStepRecipient,
+        state: stateFor(
+          done: recipientRecorded,
+          mine: isSender,
+          reached: isFunded,
+        ),
+        timeLabel: at(deal.recipient?.updatedAt),
+        actionLabel: isFunded && !recipientRecorded && isSender
+            ? l.dealActionRecipient
+            : null,
+        onAction: isFunded && !recipientRecorded && isSender
+            ? () => context.openRecipient(deal.id)
+            : null,
+      ),
+
+      LifecycleStep(
+        label: l.dealStepPickedUp,
+        state: stateFor(
+          done: pickedUp,
+          // Whoever the server says can act on the code right now.
+          mine:
+              (handover?.canSubmitPickupCode ?? false) ||
+              (handover?.canRevealPickupCode ?? false),
+          reached: isFunded,
+        ),
+        timeLabel: at(deal.pickupConfirmedAt),
+        actionLabel:
+            !pickedUp &&
+                ((handover?.canSubmitPickupCode ?? false) ||
+                    (handover?.canRevealPickupCode ?? false))
+            ? l.dealActionPickup
+            : null,
+        onAction:
+            !pickedUp &&
+                ((handover?.canSubmitPickupCode ?? false) ||
+                    (handover?.canRevealPickupCode ?? false))
+            ? () => context.openPickup(deal.id)
+            : null,
+      ),
+
+      LifecycleStep(
+        label: l.dealStepDelivered,
+        state: stateFor(
+          done: delivered,
+          mine:
+              (handover?.canSubmitDeliveryCode ?? false) ||
+              (handover?.canRevealDeliveryCode ?? false),
+          reached: pickedUp,
+        ),
+        timeLabel: at(deal.deliveryConfirmedAt),
+        // The buffer is a real, explainable wait rather than a silence.
+        detail: !delivered && (handover?.inDeliveryCodeBuffer ?? false)
+            ? l.deliveryCodeLockedBody
+            : null,
+        actionLabel: !delivered && pickedUp ? l.dealActionDelivery : null,
+        onAction: !delivered && pickedUp
+            ? () => context.openDelivery(deal.id)
+            : null,
+      ),
+
+      LifecycleStep(
+        label: l.dealStepProtection,
+        state: completed
+            ? LifecycleState.done
+            : stateFor(done: false, mine: false, reached: delivered),
+        timeLabel: at(deal.protectionEndsAt),
+      ),
+
+      LifecycleStep(
+        label: l.dealStepCompleted,
+        state: completed ? LifecycleState.done : LifecycleState.upcoming,
+        timeLabel: at(deal.completedAt),
+      ),
+    ];
+  }
+}
+
+class _StatusHeader extends StatelessWidget {
+  const _StatusHeader({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final copy = dealStatusCopy(context, deal.status, viewerIsSender: isSender);
+    final amount = isSender
+        ? deal.terms?.senderTotal
+        : deal.terms?.travelerReward;
+
+    return AppCard(
+      accent: copy.tone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StatusPill(label: copy.label, tone: copy.tone, icon: copy.icon),
+          if (amount != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            MoneyHero(
+              amount: amount,
+              label: isSender ? l.moneyYouPay : l.moneyYourReward,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The one thing that is time-critical right now, if there is one.
+class _Urgent extends StatelessWidget {
+  const _Urgent({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+
+    // An unfunded deal holds space on somebody's journey, and that hold
+    // expires. Saying so is the difference between a lapsed reservation and a
+    // user who thought they had time.
+    final deadline = deal.fundingDeadline;
+    if (deadline != null && isSender) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: InfoNotice(
+          message: l.dealFundingDeadline(
+            LocaleFormats.dateTime(locale, deadline),
+          ),
+          tone: StatusTone.action,
+          icon: Icons.timer_outlined,
+          actionLabel: l.dealActionPay,
+          onAction: () => context.openDealPayment(deal.id),
+        ),
+      );
+    }
+
+    if (deal.hasActiveDispute) {
+      final dispute = deal.dispute!;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: InfoNotice(
+          title: disputeStatusCopy(context, dispute.status).label,
+          message: l.payoutFrozenBody,
+          tone: StatusTone.bad,
+          icon: Icons.gavel_rounded,
+          actionLabel: l.actionOpen,
+          onAction: () => context.openDispute(dispute.id),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class _MoneySection extends StatelessWidget {
+  const _MoneySection({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final terms = deal.terms;
+    if (terms == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: l.dealMoneySection),
+        MoneyBreakdown(
+          // The traveller is shown what they receive and nothing about the
+          // sender's fee; the sender is shown the full build-up.
+          explainer: isSender ? l.moneyRewardNotReduced : null,
+          lines: [
+            if (terms.travelerReward != null)
+              MoneyLine(
+                label: isSender ? l.moneyTravelerReceives : l.moneyYourReward,
+                amount: terms.travelerReward!,
+              ),
+            if (isSender && terms.platformFee != null)
+              MoneyLine(label: l.moneyPlatformFee, amount: terms.platformFee!),
+            if (isSender && terms.senderTotal != null)
+              MoneyLine.total(label: l.moneyYouPay, amount: terms.senderTotal!),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RecipientSection extends StatelessWidget {
+  const _RecipientSection({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final recipient = deal.recipient;
+    if (!deal.isFunded) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            title: l.recipientTitle,
+            actionLabel: isSender && deal.pickupConfirmedAt == null
+                ? l.actionEdit
+                : null,
+            onAction: isSender && deal.pickupConfirmedAt == null
+                ? () => context.openRecipient(deal.id)
+                : null,
+          ),
+          if (recipient == null || !recipient.recorded)
+            InfoNotice(
+              message: isSender
+                  ? l.recipientRequiredBody
+                  : l.pickupAwaitingSenderBody,
+              tone: isSender ? StatusTone.action : StatusTone.waiting,
+              icon: Icons.person_add_alt_rounded,
+              actionLabel: isSender ? l.dealActionRecipient : null,
+              onAction: isSender ? () => context.openRecipient(deal.id) : null,
+            )
+          else if (isSender)
+            // The sender's own record, in full. This is the only place the
+            // recipient's email is ever rendered, and it is never logged.
+            AppInsetGroup(
+              child: Column(
+                children: [
+                  DetailRow(
+                    label: l.recipientName,
+                    value: Text(recipient.fullName ?? ''),
+                  ),
+                  if (recipient.email != null)
+                    DetailRow(
+                      label: l.recipientEmail,
+                      value: Text(recipient.email!),
+                    ),
+                  if (recipient.phone != null && recipient.phone!.isNotEmpty)
+                    DetailRow(
+                      label: l.recipientPhone,
+                      value: Text(recipient.phone!),
+                    ),
+                ],
+              ),
+            )
+          else
+            // The traveller learns that a recipient exists, and after pickup
+            // their name — never their email or phone. That asymmetry is the
+            // server's, and this branch mirrors it rather than working round it.
+            InfoNotice(
+              message: recipient.fullName == null
+                  ? l.recipientRecordedForTraveler
+                  : recipient.fullName!,
+              icon: Icons.person_outline_rounded,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProtectionSection extends StatelessWidget {
+  const _ProtectionSection({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final protection = deal.protection;
+    final endsAt = protection?.protectionEndsAt ?? deal.protectionEndsAt;
+    if (endsAt == null) return const SizedBox.shrink();
+
+    final payout = protection?.payout;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: l.protectionTitle),
+          AppInsetGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSender
+                      ? l.protectionSenderBody(
+                          LocaleFormats.dateTime(
+                            Localizations.localeOf(context),
+                            endsAt,
+                          ),
+                        )
+                      : l.protectionTravelerBody(
+                          LocaleFormats.dateTime(
+                            Localizations.localeOf(context),
+                            endsAt,
+                          ),
+                        ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.lg),
+                if (endsAt.isAfter(DateTime.now()))
+                  CodeCountdown(target: endsAt, label: l.protectionEndsInLabel)
+                else
+                  Text(
+                    l.protectionEnded,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                if (payout != null && !isSender) ...[
+                  const SizedBox(height: AppSpace.lg),
+                  Builder(
+                    builder: (context) {
+                      final copy = payoutStatusCopy(context, payout.status);
+                      return StatusPill(
+                        label: copy.label,
+                        tone: copy.tone,
+                        icon: copy.icon,
+                        compact: true,
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisputeSection extends StatelessWidget {
+  const _DisputeSection({required this.deal});
+
+  final Deal deal;
+
+  @override
+  Widget build(BuildContext context) {
+    final dispute = deal.dispute;
+    // An active dispute is already surfaced at the top; this is the closed
+    // record, kept visible because a resolution moved money.
+    if (dispute == null || dispute.isActive) return const SizedBox.shrink();
+
+    final l = L.of(context);
+    final copy = disputeStatusCopy(context, dispute.status);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: l.disputeResolutionTitle),
+          AppCard(
+            onTap: () => context.openDispute(dispute.id),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    disputeCategoryLabel(context, dispute.category),
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                StatusPill(
+                  label: copy.label,
+                  tone: copy.tone,
+                  icon: copy.icon,
+                  compact: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RatingSection extends StatelessWidget {
+  const _RatingSection({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final ratings = deal.ratings;
+    if (ratings == null || !ratings.windowOpen) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: l.ratingTitle),
+          if (ratings.canRate && !ratings.submitted)
+            InfoNotice(
+              message: isSender ? l.ratingSenderPrompt : l.ratingTravelerPrompt,
+              tone: StatusTone.action,
+              icon: Icons.star_outline_rounded,
+              actionLabel: l.dealActionRate,
+              onAction: () => context.openRate(deal.id),
+            )
+          else if (ratings.awaitingCounterparty)
+            InfoNotice(
+              message: l.ratingWaitingForOther,
+              icon: Icons.hourglass_top_rounded,
+            )
+          else if (ratings.counterpartyIsWaiting)
+            InfoNotice(
+              message: l.ratingHiddenUntilBoth,
+              tone: StatusTone.action,
+              icon: Icons.visibility_off_outlined,
+              actionLabel: l.dealActionRate,
+              onAction: () => context.openRate(deal.id),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Destructive and rare actions, kept at the bottom where they cannot be hit
+/// by accident.
+class _SecondaryActions extends StatelessWidget {
+  const _SecondaryActions({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final cancellation = deal.cancellation;
+
+    // Disputes open at pickup and close with the protection window. The server
+    // owns that window; this only asks whether we are inside it.
+    final canDispute =
+        deal.pickupConfirmedAt != null &&
+        !deal.hasActiveDispute &&
+        (deal.protectionEndsAt == null ||
+            deal.protectionEndsAt!.isAfter(DateTime.now()));
+
+    return Column(
+      children: [
+        if (canDispute)
+          AppButton(
+            label: l.dealActionDispute,
+            variant: AppButtonVariant.tertiary,
+            icon: Icons.gavel_rounded,
+            onPressed: () => context.openDisputeForm(deal.id),
+          ),
+        if (cancellation?.allowed ?? false) ...[
+          const SizedBox(height: AppSpace.sm),
+          AppButton(
+            label: l.dealActionCancel,
+            variant: AppButtonVariant.destructive,
+            onPressed: () => context.openCancel(deal.id),
+          ),
+        ] else if (cancellation?.isAfterPickup ?? false) ...[
+          const SizedBox(height: AppSpace.sm),
+          InfoNotice(message: l.cancelAfterPickupBody),
+        ],
+      ],
+    );
+  }
+}

@@ -21,6 +21,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from django.db.models import Count, OuterRef, Q, Subquery
@@ -57,6 +58,12 @@ class ChatMessagesView(ListAPIView, APIView):
     serializer_class = ChatMessageSerializer
     permission_classes = (IsAuthenticated,)
     pagination_class = _Pagination
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            self.throttle_scope = "chat_message"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         match = get_object_or_404(
@@ -210,6 +217,6 @@ class ChatThreadsView(APIView):
         )
 
         data = ChatThreadSerializer(
-            eligible, many=True, context={"viewer_id": uid}
+            eligible[:100], many=True, context={"viewer_id": uid}
         ).data
         return Response({"results": data})

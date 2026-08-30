@@ -13,6 +13,11 @@
 /// genuinely need attention rather than used as decoration.
 library;
 
+// The ramps below are complete scales on purpose: a new semantic token should
+// be picked from an existing step rather than by inventing a colour next to
+// one. Some steps therefore have no consumer yet, which is the point.
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 
 // ---------------------------------------------------------------------------
@@ -30,13 +35,21 @@ class _Ramp {
   static const sand3 = Color(0xFFE6DFD1);
   static const sand4 = Color(0xFFD5CCB9);
 
-  // Sea ink — the text/structure ramp.
-  static const ink0 = Color(0xFF0B1A24);
-  static const ink1 = Color(0xFF152A38);
-  static const ink2 = Color(0xFF2B4353);
-  static const ink3 = Color(0xFF546A79);
-  static const ink4 = Color(0xFF8496A2);
-  static const ink5 = Color(0xFFB9C5CD);
+  // Ink — the text and structure ramp, anchored on the original ShipTrip
+  // values rather than re-derived. `ink0`, `ink2` and `ink4` are literally the
+  // original `ink`, `inkSoft` and `inkMute`; the steps between them exist so a
+  // new token can be picked off the scale instead of invented next to it.
+  //
+  // The original ink is a warmer, softer navy than a neutral near-black, and
+  // because it is the most-used colour in the app, getting it wrong shifts the
+  // temperature of every screen at once. It was wrong here, and this is the
+  // fix.
+  static const ink0 = Color(0xFF0E1F2C);
+  static const ink1 = Color(0xFF1B2E3C);
+  static const ink2 = Color(0xFF2A3B49);
+  static const ink3 = Color(0xFF616C79);
+  static const ink4 = Color(0xFF6B7785);
+  static const ink5 = Color(0xFFA9B3BD);
 
   // Emerald — brand + primary action + "confirmed".
   static const emerald0 = Color(0xFF042F28);
@@ -47,7 +60,11 @@ class _Ramp {
   static const emerald5 = Color(0xFFBFE0D9);
   static const emerald6 = Color(0xFFE6F2EF);
 
-  // Terracotta — attention / action-required. Never decorative.
+  // Terracotta. The original used two of these deliberately and so do we:
+  // `clay3` is the bright Saharan orange that fills wax seals, stamps and the
+  // halo behind the flying parcel, and `clay2` is the deeper one it printed
+  // *words* in. That split is not fussiness — `clay3` on parchment is 2.6:1,
+  // which is fine for a shape and unreadable as a sentence.
   static const clay0 = Color(0xFF6E2C0E);
   static const clay1 = Color(0xFF9B4318);
   static const clay2 = Color(0xFFC75E26);
@@ -78,6 +95,30 @@ class _Ramp {
   static const lapis3 = Color(0xFF5A8FCC);
   static const lapis4 = Color(0xFFB6D0EB);
   static const lapis5 = Color(0xFFEAF2FB);
+
+  // Sun — the signature ShipTrip accent. Reserved for the one marquee action
+  // on a screen and for the selected navigation destination. It is the colour
+  // people remember the app by, so it is never used as a status or a fill.
+  static const sun0 = Color(0xFFA87A00);
+  static const sun1 = Color(0xFFD89E00);
+  static const sun2 = Color(0xFFFBBC04);
+  static const sun3 = Color(0xFFFFD766);
+  static const sun4 = Color(0xFFFFF0C2);
+
+  // Gold — the seal/stamp metal. Borders on postage marks, wax-seal rims,
+  // the certification flourish. Decorative by design.
+  static const gold0 = Color(0xFF6B5320);
+  static const gold1 = Color(0xFFA88842);
+  static const gold2 = Color(0xFFC9A961);
+  static const gold3 = Color(0xFFE0CB9B);
+
+  // Parchment — the original ShipTrip ground. Warmer and more pigmented than
+  // a neutral off-white; it is what makes a card read as paper rather than as
+  // a browser panel, and it is the single biggest carrier of the identity.
+  static const parchment = Color(0xFFF4EFE6);
+  static const parchmentSoft = Color(0xFFFAF6EE);
+  static const parchmentLift = Color(0xFFFFFCF5);
+  static const parchmentDeep = Color(0xFFEAE3D2);
 
   static const white = Color(0xFFFFFFFF);
   static const black = Color(0xFF000000);
@@ -126,6 +167,14 @@ class AppColorScheme {
     required this.onInfoSoft,
     required this.neutralSoft,
     required this.onNeutralSoft,
+    required this.attentionVivid,
+    required this.accent,
+    required this.accentStrong,
+    required this.accentSoft,
+    required this.onAccent,
+    required this.seal,
+    required this.sealSoft,
+    required this.grain,
     required this.focus,
     required this.scrim,
     required this.skeleton,
@@ -194,6 +243,30 @@ class AppColorScheme {
   final Color neutralSoft;
   final Color onNeutralSoft;
 
+  /// The bright Saharan terracotta, for *shapes only* — a wax seal, the halo
+  /// trailing the parcel, an airmail stripe. Never text, never an icon that
+  /// carries meaning on its own: it does not clear a text contrast floor on
+  /// parchment and it is not supposed to.
+  final Color attentionVivid;
+
+  /// The ShipTrip sun. One marquee action per screen, and the selected
+  /// navigation destination. Never a status colour — [waiting] is amber and
+  /// they must stay tellable apart.
+  final Color accent;
+  final Color accentStrong;
+  final Color accentSoft;
+
+  /// Text and icons drawn on [accent]. Ink, not white: sun is far too light
+  /// to carry white type at any size.
+  final Color onAccent;
+
+  /// Stamp and seal metal. Decorative only.
+  final Color seal;
+  final Color sealSoft;
+
+  /// The paper-grain speckle drawn over the canvas. Alpha is baked in.
+  final Color grain;
+
   final Color focus;
   final Color scrim;
   final Color skeleton;
@@ -204,17 +277,22 @@ class AppColorScheme {
 
   static const light = AppColorScheme(
     brightness: Brightness.light,
-    canvas: _Ramp.sand1,
-    surface: _Ramp.white,
-    surfaceRaised: _Ramp.white,
-    surfaceSunken: _Ramp.sand2,
+    canvas: _Ramp.parchment,
+    surface: _Ramp.parchmentSoft,
+    surfaceRaised: _Ramp.parchmentLift,
+    surfaceSunken: _Ramp.parchmentDeep,
     surfaceInverse: _Ramp.ink0,
-    hairline: Color(0x14152A38),
-    hairlineStrong: Color(0x33152A38),
+    hairline: Color(0x1A0E1F2C),
+    hairlineStrong: Color(0x380E1F2C),
     textPrimary: _Ramp.ink0,
     textSecondary: _Ramp.ink2,
+    // `ink3`, not the original's `ink4` mute. The original tertiary grey is
+    // 4.0:1 on parchment, which fails AA for small text — and tertiary is
+    // exactly where the eyebrows and captions live. `ink3` is the nearest
+    // step in the same warm-grey family that clears 4.5:1. It is the one
+    // colour here deliberately not identical to the original.
     textTertiary: _Ramp.ink3,
-    textOnInverse: _Ramp.sand0,
+    textOnInverse: _Ramp.parchmentSoft,
     brand: _Ramp.emerald2,
     brandStrong: _Ramp.emerald1,
     brandSoft: _Ramp.emerald6,
@@ -234,12 +312,20 @@ class AppColorScheme {
     info: _Ramp.lapis2,
     infoSoft: _Ramp.lapis5,
     onInfoSoft: _Ramp.lapis0,
-    neutralSoft: _Ramp.sand2,
+    neutralSoft: _Ramp.parchmentDeep,
     onNeutralSoft: _Ramp.ink2,
+    attentionVivid: _Ramp.clay3,
+    accent: _Ramp.sun2,
+    accentStrong: _Ramp.sun1,
+    accentSoft: _Ramp.sun4,
+    onAccent: _Ramp.ink0,
+    seal: _Ramp.gold2,
+    sealSoft: _Ramp.gold3,
+    grain: Color(0x0A0E1F2C),
     focus: _Ramp.lapis2,
     scrim: Color(0x800B1A24),
-    skeleton: _Ramp.sand2,
-    skeletonSheen: _Ramp.sand0,
+    skeleton: _Ramp.parchmentDeep,
+    skeletonSheen: _Ramp.parchmentSoft,
     modeFlight: _Ramp.lapis2,
     modeDrive: _Ramp.emerald3,
   );
@@ -255,7 +341,9 @@ class AppColorScheme {
     hairlineStrong: Color(0x3DFFFFFF),
     textPrimary: Color(0xFFF2EEE6),
     textSecondary: Color(0xFFC2CDD5),
-    textTertiary: _Ramp.ink4,
+    // Named rather than taken off the ink ramp: the ramp is anchored for a
+    // light ground, and its mute step is far too dark to read on this one.
+    textTertiary: Color(0xFF93A0AB),
     textOnInverse: _Ramp.ink0,
     brand: _Ramp.emerald4,
     brandStrong: Color(0xFF6FBFB1),
@@ -278,6 +366,18 @@ class AppColorScheme {
     onInfoSoft: _Ramp.lapis4,
     neutralSoft: Color(0xFF1B2C38),
     onNeutralSoft: Color(0xFFC2CDD5),
+    attentionVivid: _Ramp.clay3,
+    // Sun survives the dark theme unchanged: it is the brand mark, and
+    // desaturating it here would make the two themes feel like two apps.
+    accent: _Ramp.sun2,
+    accentStrong: _Ramp.sun3,
+    accentSoft: Color(0xFF3A2C05),
+    onAccent: _Ramp.ink0,
+    seal: _Ramp.gold2,
+    sealSoft: _Ramp.gold1,
+    // Lighter than the light-mode speckle, because grain on a dark ground
+    // has to add light rather than subtract it to read as texture at all.
+    grain: Color(0x0DF2EEE6),
     focus: _Ramp.lapis3,
     scrim: Color(0xB3000000),
     skeleton: Color(0xFF1A2A36),
@@ -322,6 +422,14 @@ class AppColorScheme {
       onInfoSoft: c(onInfoSoft, other.onInfoSoft),
       neutralSoft: c(neutralSoft, other.neutralSoft),
       onNeutralSoft: c(onNeutralSoft, other.onNeutralSoft),
+      attentionVivid: c(attentionVivid, other.attentionVivid),
+      accent: c(accent, other.accent),
+      accentStrong: c(accentStrong, other.accentStrong),
+      accentSoft: c(accentSoft, other.accentSoft),
+      onAccent: c(onAccent, other.onAccent),
+      seal: c(seal, other.seal),
+      sealSoft: c(sealSoft, other.sealSoft),
+      grain: c(grain, other.grain),
       focus: c(focus, other.focus),
       scrim: c(scrim, other.scrim),
       skeleton: c(skeleton, other.skeleton),
@@ -384,6 +492,7 @@ class AppElevation {
     required this.raised,
     required this.overlay,
     required this.navBar,
+    required this.stamped,
   });
 
   final List<BoxShadow> card;
@@ -391,19 +500,39 @@ class AppElevation {
   final List<BoxShadow> overlay;
   final List<BoxShadow> navBar;
 
+  /// A hard, un-blurred offset — the look of ink pressed into paper rather
+  /// than of a surface floating above it. Used by stamps, seals and code
+  /// tiles, and by nothing that is meant to read as elevated.
+  final List<BoxShadow> stamped;
+
   static const light = AppElevation(
     card: [
       BoxShadow(color: Color(0x0D0B1A24), blurRadius: 16, offset: Offset(0, 4)),
     ],
     raised: [
-      BoxShadow(color: Color(0x140B1A24), blurRadius: 28, offset: Offset(0, 10)),
+      BoxShadow(
+        color: Color(0x140B1A24),
+        blurRadius: 28,
+        offset: Offset(0, 10),
+      ),
       BoxShadow(color: Color(0x0A0B1A24), blurRadius: 6, offset: Offset(0, 2)),
     ],
     overlay: [
-      BoxShadow(color: Color(0x260B1A24), blurRadius: 48, offset: Offset(0, 20)),
+      BoxShadow(
+        color: Color(0x260B1A24),
+        blurRadius: 48,
+        offset: Offset(0, 20),
+      ),
     ],
     navBar: [
-      BoxShadow(color: Color(0x0F0B1A24), blurRadius: 20, offset: Offset(0, -6)),
+      BoxShadow(
+        color: Color(0x0F0B1A24),
+        blurRadius: 20,
+        offset: Offset(0, -6),
+      ),
+    ],
+    stamped: [
+      BoxShadow(color: Color(0x1AB23A2E), blurRadius: 0, offset: Offset(2, 2)),
     ],
   );
 
@@ -415,10 +544,21 @@ class AppElevation {
       BoxShadow(color: Color(0x59000000), blurRadius: 24, offset: Offset(0, 8)),
     ],
     overlay: [
-      BoxShadow(color: Color(0x80000000), blurRadius: 44, offset: Offset(0, 18)),
+      BoxShadow(
+        color: Color(0x80000000),
+        blurRadius: 44,
+        offset: Offset(0, 18),
+      ),
     ],
     navBar: [
-      BoxShadow(color: Color(0x4D000000), blurRadius: 18, offset: Offset(0, -6)),
+      BoxShadow(
+        color: Color(0x4D000000),
+        blurRadius: 18,
+        offset: Offset(0, -6),
+      ),
+    ],
+    stamped: [
+      BoxShadow(color: Color(0x33000000), blurRadius: 0, offset: Offset(2, 2)),
     ],
   );
 }
@@ -430,6 +570,11 @@ abstract final class AppMotion {
   static const fast = Duration(milliseconds: 160);
   static const normal = Duration(milliseconds: 260);
   static const slow = Duration(milliseconds: 420);
+
+  /// Long-form identity motion — the looping route tracer, a wax seal
+  /// landing, a code reveal. Longer than anything functional on purpose:
+  /// these are the moments the app is allowed to be enjoyed rather than used.
+  static const expressive = Duration(milliseconds: 620);
 
   /// Expressive ease-out. Everything that enters uses this.
   static const enter = Cubic(0.16, 1, 0.3, 1);

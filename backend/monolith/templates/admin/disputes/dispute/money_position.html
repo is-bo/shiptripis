@@ -1,0 +1,44 @@
+{% if frozen or settled %}
+  <p class="st-readonly-note">
+    {% if settled %}
+      The traveler payout for this deal was <strong>already settled</strong>.
+      Money has left the platform, so any resolution that returns it has to be
+      reconciled by hand.
+    {% else %}
+      Payout is <strong>frozen</strong> while this dispute is open.
+    {% endif %}
+  </p>
+{% endif %}
+
+{% if rows %}
+  <table class="st-keyvalues">
+    <thead>
+      <tr>
+        <th scope="col">Position</th>
+        <th scope="col">State</th>
+        <th scope="col">Amount</th>
+        <th scope="col">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <th scope="row">{{ row.label }}</th>
+          <td><span class="st-chip st-{{ row.tone }}">{{ row.state }}</span></td>
+          <td><span class="st-money">{{ row.amount }}</span></td>
+          <td>{{ row.detail }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No payment order, refund or payout is recorded against this deal.</p>
+{% endif %}
+
+<p class="st-keyvalues-note">
+  Every value is read from the stored row as it stands. Nothing is summed or
+  netted here. A dispute is resolved through
+  <code>POST /api/admin/disputes/&lt;id&gt;/resolve</code>, which writes the three
+  amounts under the deal lock and has to reconcile with what was collected;
+  this page cannot resolve anything.
+</p>

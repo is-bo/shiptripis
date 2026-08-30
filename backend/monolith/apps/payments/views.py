@@ -174,7 +174,7 @@ class PaymentIntentListView(APIView):
         ).exclude(offer__match__parcel__kind=ParcelRequest.Kind.PRODUCT)
         if (s := request.query_params.get("status")):
             qs = qs.filter(status=s)
-        return Response(PaymentIntentSerializer(qs, many=True).data)
+        return Response(PaymentIntentSerializer(qs[:100], many=True).data)
 
 
 class PaymentIntentCreateView(APIView):

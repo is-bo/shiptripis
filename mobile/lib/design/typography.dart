@@ -21,8 +21,6 @@
 /// fake bold on top of it and keeps fallback faces in step.
 library;
 
-import 'dart:ui' show FontFeature, FontVariation;
-
 import 'package:flutter/material.dart';
 
 abstract final class AppFonts {
@@ -71,7 +69,10 @@ abstract final class AppTypography {
   /// mixing DM Sans metrics with a fallback Arabic face produces inconsistent
   /// line heights down a list, which is exactly the "translated, not
   /// localized" tell this rebuild is meant to remove.
-  static TextTheme textTheme({required Locale locale, required Color onSurface}) {
+  static TextTheme textTheme({
+    required Locale locale,
+    required Color onSurface,
+  }) {
     final isArabic = locale.languageCode == 'ar';
     final ui = isArabic ? AppFonts.arabic : AppFonts.sans;
     final uiStack = isArabic ? AppFonts.arabicStack : AppFonts.latinStack;
@@ -169,8 +170,11 @@ abstract final class AppTypography {
 
   /// A countdown or duration. Tabular so the digits do not jitter as the
   /// clock ticks — a countdown that reflows every second is unreadable.
-  static TextStyle timer(BuildContext context, {Color? color, double size = 15}) =>
-      money(context, color: color, size: size, weight: 600);
+  static TextStyle timer(
+    BuildContext context, {
+    Color? color,
+    double size = 15,
+  }) => money(context, color: color, size: size, weight: 600);
 
   /// Handover codes and provider references. Always LTR: a delivery code is a
   /// machine token, and mirroring it in Arabic would change what the user
@@ -188,6 +192,57 @@ abstract final class AppTypography {
     fontVariations: _wght(weight),
     fontFeatures: _tabular,
     letterSpacing: size * 0.14,
+  );
+
+  /// The eyebrow — a small, wide-tracked, upper-case label sitting above a
+  /// display headline. It is one of the two or three things that make a
+  /// ShipTrip screen recognisable from across a room, so it is a real type
+  /// role rather than a `copyWith` that each screen re-invents.
+  ///
+  /// Arabic takes no tracking and is not upper-cased: Arabic script has no
+  /// case, and letter-spacing breaks the joins between characters.
+  static TextStyle eyebrow(BuildContext context, {Color? color}) {
+    final isArabic = Directionality.of(context) == TextDirection.rtl;
+    return TextStyle(
+      fontFamily: isArabic ? AppFonts.arabic : AppFonts.sans,
+      fontFamilyFallback: isArabic ? AppFonts.arabicStack : AppFonts.latinStack,
+      fontSize: isArabic ? 12 : 11,
+      height: 1.3,
+      color: color ?? Theme.of(context).textTheme.bodySmall?.color,
+      fontWeight: _materialWeight(600),
+      fontVariations: _wght(600),
+      letterSpacing: isArabic ? 0 : 1.6,
+    );
+  }
+
+  /// The text inside a passport stamp. Same idea as [eyebrow], one notch
+  /// heavier and wider, because it is being read through a dashed border.
+  static TextStyle stamp(BuildContext context, {required Color color}) {
+    final isArabic = Directionality.of(context) == TextDirection.rtl;
+    return eyebrow(context, color: color).copyWith(
+      fontWeight: _materialWeight(700),
+      fontVariations: _wght(700),
+      letterSpacing: isArabic ? 0 : 1.8,
+    );
+  }
+
+  /// Small monospaced data — an IATA code, a duration, a reference under a
+  /// route. Distinct from [code], which is the large handover-code face.
+  static TextStyle monoLabel(
+    BuildContext context, {
+    Color? color,
+    double size = 11,
+    double weight = 600,
+    double tracking = 1.2,
+  }) => TextStyle(
+    fontFamily: AppFonts.mono,
+    fontSize: size,
+    height: 1.3,
+    color: color ?? Theme.of(context).textTheme.bodySmall?.color,
+    fontWeight: _materialWeight(weight),
+    fontVariations: _wght(weight),
+    fontFeatures: _tabular,
+    letterSpacing: tracking,
   );
 
   /// Variable `wght` is continuous; [FontWeight] is not. Round to the nearest

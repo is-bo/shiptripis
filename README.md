@@ -49,12 +49,15 @@ versioned next to each Docker build:
 - `backend/services/railway.json`
 
 Secrets and resource references are configured in Railway, never committed.
-Only the gateway receives a public domain. The anonymous mock-payment webhook
-is disabled when hosted. Payments still use the project’s mock provider, so the
-deployed application is suitable for beta/demo usage, not real-money operation.
+Only the combined gateway receives a public domain. Mock and legacy payment
+paths are refused in production; Stripe and Chargily remain disabled until a
+separately approved provider-activation procedure is completed. The initial
+deployment is private pre-launch infrastructure, not an invitation to users.
 
 ## Android artifact
 
-After deployment, run the `Android release APK` GitHub workflow and supply the
-gateway HTTPS URL. It injects `API_BASE_URL`, builds an APK, and uploads the APK
-plus its SHA-256 checksum as a workflow artifact.
+After deployment, run the manual **Build Android** GitHub workflow and supply
+the gateway HTTPS origin. Its default path builds a GitHub-Secrets-signed APK
+and AAB; a clearly labeled debug APK is available only as a development
+fallback. See `docs/ANDROID_BUILD_RUNBOOK.md` for signing, download,
+installation, and optional RC GitHub Release steps.

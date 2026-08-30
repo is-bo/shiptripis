@@ -1,0 +1,28 @@
+{% if rows %}
+<section class="st-attention" aria-labelledby="st-attention-title">
+  <div class="st-attention-head">
+    <h2 id="st-attention-title">Needs attention</h2>
+    {% if raised %}
+      <p class="st-attention-summary st-attention-raised">{{ raised }} queue{{ raised|pluralize }} with work waiting</p>
+    {% else %}
+      <p class="st-attention-summary">Every queue is empty right now.</p>
+    {% endif %}
+  </div>
+  <ul class="st-attention-list">
+    {% for row in rows %}
+      <li class="st-attention-row st-attention-{{ row.tone }}">
+        <a href="{{ row.url }}">
+          <span class="st-attention-count">{{ row.count }}</span>
+          <span class="st-attention-label">{{ row.label }}</span>
+          <span class="st-attention-hint">{{ row.hint }}</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  <p class="st-readonly-note">
+    Each number is a count of rows in that state, linked to the changelist
+    filtered to exactly those rows. Nothing here is calculated: the changelist
+    behind the link is the authority for what it counted.
+  </p>
+</section>
+{% endif %}

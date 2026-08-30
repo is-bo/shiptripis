@@ -338,6 +338,9 @@ CanViewBoosts = _permission_class("CanViewBoosts", "view_boosts")
 CanViewProviderHealth = _permission_class(
     "CanViewProviderHealth", "view_provider_health"
 )
+CanViewOperationalIncidents = _permission_class(
+    "CanViewOperationalIncidents", "view_operational_incidents"
+)
 CanViewSettings = _permission_class("CanViewSettings", "view_settings")
 CanManageSettings = _permission_class("CanManageSettings", "manage_settings")
 CanManageAdmins = _permission_class("CanManageAdmins", "manage_admins")

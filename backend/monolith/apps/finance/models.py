@@ -51,6 +51,8 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 
+from apps.core.languages import CommunicationLanguage
+
 
 class PaymentProvider(models.TextChoices):
     """Rails a PaymentAttempt can run on.
@@ -677,6 +679,12 @@ class GuestPaymentLink(models.Model):
         blank=True,
         default="",
         help_text="Owner's own note, e.g. 'Dad'. Never shown to the guest.",
+    )
+    communication_language = models.CharField(
+        max_length=2,
+        choices=CommunicationLanguage.choices,
+        default=CommunicationLanguage.ENGLISH,
+        help_text="Language snapshotted when the owner creates the guest payment link.",
     )
     expires_at = models.DateTimeField(db_index=True)
     revoked_at = models.DateTimeField(null=True, blank=True)

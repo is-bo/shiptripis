@@ -1,7 +1,9 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -14,6 +16,7 @@ from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, Use
 from .serializers import (
     GoogleSignInSerializer,
     MeSerializer,
+    MeUpdateSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     SignInSerializer,
@@ -43,6 +46,8 @@ def _send_verify_email(user: User) -> None:
 
 class SignUpView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "registration"
 
     def post(self, request: Request) -> Response:
         s = SignUpSerializer(data=request.data)
@@ -57,6 +62,8 @@ class SignUpView(APIView):
 
 class SignInView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "login"
 
     def post(self, request: Request) -> Response:
         s = SignInSerializer(data=request.data, context={"request": request})
@@ -87,6 +94,8 @@ class SignOutView(APIView):
 
 class GoogleSignInView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "google_signin"
 
     def post(self, request: Request) -> Response:
         s = GoogleSignInSerializer(data=request.data)
@@ -97,6 +106,15 @@ class GoogleSignInView(APIView):
         except GoogleAuthError as exc:
             return Response(
                 {"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Keep the policy at the view boundary as well as in the verifier. The
+        # duplicate check protects against a future alternate verifier and
+        # ensures an unverified claim can never link to an existing account.
+        if payload.get("email_verified") is not True:
+            return Response(
+                {"detail": "Google account email is not verified."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
         sub = payload["sub"]
@@ -123,6 +141,7 @@ class GoogleSignInView(APIView):
                     full_name=name,
                     phone=s.validated_data.get("phone", ""),
                     wilaya=s.validated_data.get("wilaya", ""),
+                    preferred_language=s.validated_data["preferred_language"],
                     is_email_verified=bool(payload.get("email_verified")),
                 )
                 user.set_unusable_password()
@@ -141,6 +160,8 @@ class PasswordResetRequestView(APIView):
     """Always returns 202, even if email is unknown — prevents account enumeration."""
 
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "password_reset"
 
     def post(self, request: Request) -> Response:
         s = PasswordResetRequestSerializer(data=request.data)
@@ -162,6 +183,8 @@ class PasswordResetRequestView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "password_reset"
 
     def post(self, request: Request) -> Response:
         s = PasswordResetConfirmSerializer(data=request.data)
@@ -170,24 +193,34 @@ class PasswordResetConfirmView(APIView):
         code = s.validated_data["code"]
         new_password = s.validated_data["new_password"]
 
-        user = User.objects.filter(email__iexact=email).first()
-        if user is None:
-            return Response(
-                {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
-            )
+        with transaction.atomic():
+            user = User.objects.select_for_update().filter(email__iexact=email).first()
+            if user is None:
+                return Response(
+                    {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
+                )
 
-        active = (
-            user.password_reset_codes.filter(used_at__isnull=True)
-            .order_by("-created_at")
-            .first()
-        )
-        if active is None or not active.verify(code):
-            return Response(
-                {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
+            active = (
+                user.password_reset_codes.filter(used_at__isnull=True)
+                .order_by("-created_at")
+                .first()
             )
+            if active is None or not active.verify(code):
+                return Response(
+                    {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
+                )
 
-        user.set_password(new_password)
-        user.save(update_fields=("password",))
+            user.set_password(new_password)
+            user.save(update_fields=("password",))
+            from apps.notifications.outbox import enqueue_message
+
+            enqueue_message(
+                kind=OutboundMessage.Kind.SECURITY_EVENT,
+                key=f"security_event:password_reset:{active.pk}",
+                to_email=user.email,
+                recipient_user_id=user.pk,
+                context={"event": "password_reset_completed"},
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -200,6 +233,8 @@ class VerifyEmailView(APIView):
     """
 
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "email_verify"
 
     def post(self, request: Request) -> Response:
         s = VerifyEmailSerializer(data=request.data)
@@ -234,4 +269,14 @@ class MeView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
+        return Response(MeSerializer(request.user).data)
+
+    def patch(self, request: Request) -> Response:
+        serializer = MeUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(MeSerializer(request.user).data)

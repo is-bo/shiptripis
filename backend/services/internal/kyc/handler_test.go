@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/color"
+	stdjpeg "image/jpeg"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -111,6 +114,30 @@ type stubRecorder struct {
 	gotIn  RecordSubmissionInput
 }
 
+type stubLimiter struct {
+	mu         sync.Mutex
+	remaining  int
+	retryAfter time.Duration
+	err        error
+	calls      int
+}
+
+func (s *stubLimiter) Allow(_ context.Context, _ int64, _ string) (UploadRateLimitDecision, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if s.err != nil {
+		return UploadRateLimitDecision{}, s.err
+	}
+	if s.remaining <= 0 {
+		return UploadRateLimitDecision{Allowed: false, RetryAfter: s.retryAfter}, nil
+	}
+	s.remaining--
+	return UploadRateLimitDecision{Allowed: true}, nil
+}
+
+func allowLimiter() *stubLimiter { return &stubLimiter{remaining: 1_000} }
+
 func (s *stubRecorder) RecordSubmission(_ context.Context, in RecordSubmissionInput) (RecordSubmissionOutput, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,6 +149,7 @@ func (s *stubRecorder) RecordSubmission(_ context.Context, in RecordSubmissionIn
 func newHandler(store objectStore, rec Recorder) *Handler {
 	return &Handler{
 		Validator: nil, // set per-test where auth matters
+		Limiter:   allowLimiter(),
 		Storage:   store,
 		Bucket:    "kyc-docs",
 		Recorder:  rec,
@@ -173,9 +201,44 @@ func multipartReq(t *testing.T, token, docType, idemKey string, parts []imagePar
 	return req
 }
 
-// jpeg builds a non-empty fake JPEG part for the given field.
+// jpeg builds a small, decodable JPEG part for the given field. The handler
+// validates both the signature and decoded image configuration, so test data
+// must be a real image rather than bytes with a JPEG Content-Type label.
 func jpeg(field string, n int) imagePart {
-	return imagePart{field: field, filename: field + ".jpg", contentType: "image/jpeg", data: bytes.Repeat([]byte{0xFF}, n)}
+	width := n
+	if width < 1 {
+		width = 1
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, 1))
+	for x := 0; x < width; x++ {
+		img.Set(x, 0, color.RGBA{R: byte(x), G: 80, B: 120, A: 255})
+	}
+	var buf bytes.Buffer
+	if err := stdjpeg.Encode(&buf, img, &stdjpeg.Options{Quality: 75}); err != nil {
+		panic(err)
+	}
+	data := buf.Bytes()
+	if n == 0 {
+		data = nil
+	}
+	return imagePart{field: field, filename: field + ".jpg", contentType: "image/jpeg", data: data}
+}
+
+// truncatedJPEG keeps enough of a real JPEG for DecodeConfig to accept its
+// header while removing pixel data that a full decode must reject.
+func truncatedJPEG(field string) imagePart {
+	part := jpeg(field, 100)
+	for cut := len(part.data) - 1; cut > 0; cut-- {
+		candidate := part.data[:cut]
+		if _, _, err := image.DecodeConfig(bytes.NewReader(candidate)); err != nil {
+			continue
+		}
+		if _, _, err := image.Decode(bytes.NewReader(candidate)); err != nil {
+			part.data = candidate
+			return part
+		}
+	}
+	panic("could not construct a header-valid truncated JPEG")
 }
 
 func idCardParts() []imagePart {
@@ -266,6 +329,8 @@ func TestSubmit_PassportNeedsNoBack(t *testing.T) {
 func TestSubmit_Unauthorized(t *testing.T) {
 	h := newHandler(&fakeStore{}, &stubRecorder{})
 	h.Validator = testValidator(t)
+	limiter := &stubLimiter{remaining: 1}
+	h.Limiter = limiter
 
 	// No Authorization header.
 	req := multipartReq(t, "", string(DocumentIDCard), validIdemKey, idCardParts())
@@ -274,6 +339,80 @@ func TestSubmit_Unauthorized(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)
+	}
+	if limiter.calls != 0 {
+		t.Fatalf("limiter called %d times before authentication, want 0", limiter.calls)
+	}
+}
+
+func TestSubmit_RepeatedUploadsEventually429WithRetryAfter(t *testing.T) {
+	store := &fakeStore{}
+	rec := &stubRecorder{out: RecordSubmissionOutput{SubmissionID: 7, Created: true, Status: StatusPending}}
+	h := newHandler(store, rec)
+	h.Validator = testValidator(t)
+	h.Limiter = &stubLimiter{remaining: 2, retryAfter: 90*time.Second + time.Millisecond}
+
+	for attempt, want := range []int{http.StatusCreated, http.StatusCreated, http.StatusTooManyRequests} {
+		req := multipartReq(t, accessToken(t, 42), string(DocumentIDCard), validIdemKey, idCardParts())
+		rr := httptest.NewRecorder()
+		h.handleSubmit(rr, req)
+		if rr.Code != want {
+			t.Fatalf("attempt %d status = %d, want %d; body=%s", attempt+1, rr.Code, want, rr.Body.String())
+		}
+		if want == http.StatusTooManyRequests {
+			if got := rr.Header().Get("Retry-After"); got != "91" {
+				t.Fatalf("Retry-After = %q, want 91", got)
+			}
+			body := rr.Body.String()
+			if !strings.Contains(body, `"code":"kyc_upload_rate_limited"`) {
+				t.Fatalf("429 body lacks safe code: %s", body)
+			}
+			for _, secret := range []string{"redis", "127.0.0.1", validIdemKey} {
+				if strings.Contains(strings.ToLower(body), strings.ToLower(secret)) {
+					t.Fatalf("429 body leaked %q: %s", secret, body)
+				}
+			}
+		}
+	}
+}
+
+func TestSubmit_RateLimiterFailureFailsClosedWithoutInternalDetails(t *testing.T) {
+	store := &fakeStore{}
+	rec := &stubRecorder{}
+	h := newHandler(store, rec)
+	h.Validator = testValidator(t)
+	h.Limiter = &stubLimiter{err: errors.New("dial redis://secret@cache.internal:6379: connection refused")}
+
+	req := multipartReq(t, accessToken(t, 42), string(DocumentIDCard), validIdemKey, idCardParts())
+	rr := httptest.NewRecorder()
+	h.handleSubmit(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"code":"kyc_upload_rate_limit_unavailable"`) {
+		t.Fatalf("503 body lacks safe code: %s", body)
+	}
+	for _, secret := range []string{"redis", "secret", "cache.internal", validIdemKey} {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(secret)) {
+			t.Fatalf("503 body leaked %q: %s", secret, body)
+		}
+	}
+	if len(store.putKeys()) != 0 || rec.called {
+		t.Fatal("fail-closed limiter failure reached storage or recorder")
+	}
+}
+
+func TestSubmit_MissingRateLimiterFailsClosed(t *testing.T) {
+	h := newHandler(&fakeStore{}, &stubRecorder{})
+	h.Validator = testValidator(t)
+	h.Limiter = nil
+	req := multipartReq(t, accessToken(t, 42), string(DocumentIDCard), validIdemKey, idCardParts())
+	rr := httptest.NewRecorder()
+	h.handleSubmit(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -295,6 +434,13 @@ func TestSubmit_RejectsBadInputs(t *testing.T) {
 		{"bad content type", string(DocumentIDCard), validIdemKey, []imagePart{
 			{field: fieldFront, filename: "f.gif", contentType: "image/gif", data: []byte{1, 2, 3}},
 			jpeg(fieldBack, 100), jpeg(fieldSelfie, 100),
+		}, http.StatusUnsupportedMediaType},
+		{"declared jpeg with invalid content", string(DocumentIDCard), validIdemKey, []imagePart{
+			{field: fieldFront, filename: "f.jpg", contentType: "image/jpeg", data: []byte("not an image")},
+			jpeg(fieldBack, 100), jpeg(fieldSelfie, 100),
+		}, http.StatusUnsupportedMediaType},
+		{"header-valid truncated jpeg", string(DocumentIDCard), validIdemKey, []imagePart{
+			truncatedJPEG(fieldFront), jpeg(fieldBack, 100), jpeg(fieldSelfie, 100),
 		}, http.StatusUnsupportedMediaType},
 		{"empty front file", string(DocumentIDCard), validIdemKey, []imagePart{
 			jpeg(fieldFront, 0), jpeg(fieldBack, 100), jpeg(fieldSelfie, 100),

@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
+from apps.core.languages import CommunicationLanguage
+
 
 class Deal(models.Model):
     class Status(models.TextChoices):
@@ -475,6 +477,16 @@ class DealRecipient(models.Model):
     email = models.EmailField()
     phone = models.CharField(max_length=32, blank=True, default="")
     delivery_note = models.TextField(blank=True, default="", max_length=1000)
+    communication_language = models.CharField(
+        max_length=2,
+        choices=CommunicationLanguage.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Language explicitly selected for recipient communication. Blank "
+            "legacy rows resolve to English."
+        ),
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
