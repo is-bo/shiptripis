@@ -43,8 +43,8 @@ import (
 )
 
 const (
-	serviceName = "email"
-	dbMaxConnsKey = "EMAIL_DB_MAX_CONNS"
+	serviceName             = "email"
+	dbMaxConnsKey           = "EMAIL_DB_MAX_CONNS"
 	dbMaxConnsDefault int32 = 5
 
 	httpAddrKey      = "EMAIL_HTTP_ADDR"
