@@ -200,8 +200,28 @@ jobs:
       S3_ENDPOINT_URL: http://localhost:9000
       S3_ACCESS_KEY: ci-access
       S3_SECRET_KEY: ci-secret
+      # The full suite shares one Redis cache and client IP. Dedicated throttle
+      # tests override the scope they exercise; all unrelated tests need a
+      # deterministic high ceiling so execution order cannot turn assertions
+      # into 429 responses.
       DRF_ANON_THROTTLE_RATE: 10000/min
       DRF_USER_THROTTLE_RATE: 10000/min
+      DRF_MATCHING_DISCOVERY_THROTTLE_RATE: 10000/min
+      DRF_JOURNEY_ROUTES_THROTTLE_RATE: 10000/min
+      DRF_GUEST_PAYMENT_THROTTLE_RATE: 10000/min
+      DRF_PAYMENT_CHECKOUT_THROTTLE_RATE: 10000/min
+      DRF_PAYMENT_WEBHOOK_THROTTLE_RATE: 10000/min
+      DRF_HANDOVER_SUBMIT_THROTTLE_RATE: 10000/min
+      DRF_HANDOVER_REVEAL_THROTTLE_RATE: 10000/min
+      DRF_DISPUTE_EVIDENCE_THROTTLE_RATE: 10000/min
+      DRF_REGISTRATION_THROTTLE_RATE: 10000/min
+      DRF_LOGIN_THROTTLE_RATE: 10000/min
+      DRF_PASSWORD_RESET_THROTTLE_RATE: 10000/min
+      DRF_EMAIL_VERIFY_THROTTLE_RATE: 10000/min
+      DRF_GOOGLE_SIGNIN_THROTTLE_RATE: 10000/min
+      DRF_MEDIA_UPLOAD_THROTTLE_RATE: 10000/min
+      DRF_CHAT_MESSAGE_THROTTLE_RATE: 10000/min
+      DRF_ADMIN_INVITATION_THROTTLE_RATE: 10000/min
     steps:
       - uses: actions/checkout@v4
 
