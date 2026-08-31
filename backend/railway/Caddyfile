@@ -36,6 +36,9 @@
 
 	@kyc path /kyc/* /api/kyc/*
 	handle @kyc {
+		# The Go service registers /kyc/submit. Normalize the public /api/kyc
+		# alias before proxying so both documented forms reach the handler.
+		uri strip_prefix /api
 		reverse_proxy 127.0.0.1:8083
 	}
 
