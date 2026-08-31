@@ -319,6 +319,28 @@ class CombinedLauncherKycLimiterTests(SimpleTestCase):
         assert env["S3_ACCESS_KEY"] == "kyc-only-access-key"
         assert env["KYC_HTTP_ADDR"] == "127.0.0.1:8083"
 
+    def test_combined_launcher_allows_explicit_single_replica_local_mode(self):
+        with mock.patch.dict(
+            os.environ,
+            {"KYC_RATE_LIMIT_LOCAL_MODE": "true"},
+            clear=True,
+        ):
+            env = self._kyc_env()
+
+        assert env["REDIS_URL"] == "redis://127.0.0.1:6379/0"
+
+    def test_combined_launcher_rejects_local_mode_with_external_url(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "KYC_RATE_LIMIT_LOCAL_MODE": "true",
+                "KYC_RATE_LIMIT_REDIS_URL": "rediss://cache.invalid:6380/0",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "LOCAL_MODE"):
+                self._kyc_env()
+
 
 class LegacyProviderFirewallTests(SimpleTestCase):
     @override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=False)

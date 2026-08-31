@@ -94,7 +94,22 @@ def request_stop(_signum: int, _frame: object) -> None:
 
 def kyc_env() -> dict[str, str]:
     shared_redis_url = os.environ.get("KYC_RATE_LIMIT_REDIS_URL", "").strip()
-    if not shared_redis_url:
+    local_mode = os.environ.get("KYC_RATE_LIMIT_LOCAL_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if local_mode:
+        # Private pre-launch fallback only: Railway must keep this service at
+        # one replica because the limiter state is held by this container's
+        # loopback Redis. Shared Redis remains the normal/public requirement.
+        if shared_redis_url:
+            raise RuntimeError(
+                "KYC_RATE_LIMIT_LOCAL_MODE requires KYC_RATE_LIMIT_REDIS_URL to be empty"
+            )
+        shared_redis_url = "redis://127.0.0.1:6379/0"
+    elif not shared_redis_url:
         raise RuntimeError(
             "KYC_RATE_LIMIT_REDIS_URL must point at Redis shared by every KYC replica"
         )
@@ -112,7 +127,7 @@ def kyc_env() -> dict[str, str]:
         loopback = ipaddress.ip_address(hostname).is_loopback
     except ValueError:
         loopback = hostname == "localhost"
-    if loopback:
+    if loopback and not local_mode:
         raise RuntimeError(
             "KYC_RATE_LIMIT_REDIS_URL must not use per-container loopback Redis"
         )
