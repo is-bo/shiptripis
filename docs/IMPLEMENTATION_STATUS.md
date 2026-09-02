@@ -2481,12 +2481,95 @@ an embedded PostgreSQL on import. It is a local-only artefact — the file is
 gitignored and never reaches CI — but it will confuse the next person who runs
 the suite without the variable set.
 
+#### Phase 8E release record
+
+- **Release commit** `0a61cba063e899092391613e05fde64ea959e00a`, pushed to
+  `is-bo/shiptripis` `main` (`cef2a9c..0a61cba`). The `upstream`
+  `islamouahab/ShipTrip` remote is push-disabled and was not written to.
+- **Local gates on that exact tree:** PostgreSQL 16 **1102 passed / 34 expected
+  skips**, SQLite **1102 passed / 80 expected skips**, Flutter `dart format`
+  clean, `flutter analyze --fatal-infos` clean, `flutter test` **281 passed**
+  (269 baseline plus 12 Phase 8E tests). Ruff, `manage.py check`,
+  `makemigrations --check --dry-run`, `git diff --check`,
+  `tools/check_static_web.py`, Go build/vet/unit tests all clean. Caddy
+  validation needs Docker, which the workstation lacks; it runs in CI.
+- **CI** run `33681208736` on `0a61cba`: **success**, all six jobs — Go unit,
+  Go integration (real Redis), Django, Production config + static web, Flutter,
+  and Schema drift. The drift job passing is the independent confirmation that
+  the regenerated `schema.sql` matches a clean `migrate`.
+- **Railway** deployment `32e74fb3-6085-455b-a7b2-f732357574ea`: **SUCCESS**,
+  production environment, one replica (unchanged — the local KYC limiter
+  requires exactly one). `RELEASE_ID` moved from `v1.0.0-rc.1+cef2a9c` to
+  `v1.0.0-rc.2+0a61cba`; no other variable was read or written.
+- **Migrations applied:** `locations.0004_country_place_airportlocalitymapping_and_more`,
+  `locations.0005_location_canonical_place`,
+  `locations.0006_geographycatalogueimport`,
+  `parcels.0008_remove_deliveryrequest_parcels_delivery_schema_ver_and_more`,
+  `trips.0007_remove_journey_journey_distinct_endpoints_and_more`.
+- **Geography import on Railway:** started 21:00:11 UTC, committed 21:03:04 UTC
+  (173 s), reporting content digest
+  `b4aad209f4ae7ecb264fc9ae4b5d9b4b61b7ff9d918ca470729db93d1abb7692` and
+  4 countries / 56,134 places / 3,833 alternate names / 165 mappings. Readiness
+  was green throughout; the catalogue was briefly empty between readiness and
+  the import's commit, exactly as designed.
+- **Deployed catalogue verified through the public API:** DZ 69 wilayas and
+  1,541 communes, FR 34,875 communes and 119 parents, ES 8,132 municipalities
+  and 71 parents, DE 10,749 municipalities and 417 parents, 161 selectable
+  airports (DZ 31, FR 49, ES 42, DE 39). Because an airport is only selectable
+  with an active primary served mapping, that count is the 161/161 coverage
+  gate. Wilaya identities 59–69 are all present (Aflou through El Abiodh Sidi
+  Cheikh). CDG and ORY resolve to Paris, MAD to Madrid, FRA to Frankfurt am
+  Main and ALG to Alger Centre. `parent_admin_level` is served on the
+  deployment: Jijel/`wilaya`, Paris/`department`, Madrid/`province`,
+  Frankfurt/`district`.
+- **Deployed smoke:** `/`, `/en/`, `/fr/`, `/ar/` and the four legal/support
+  pages 200; `/healthz` and `/readyz` 200 with database, migrations and
+  `rate_limit_cache` all `ok`; `POST /api/auth/sign-in` 400 (validation),
+  `/api/me` and `/api/parcels/open` 401; geography search 200; `/admin/` 302 to
+  a 200 ShipTrip-branded login. Unauthenticated `POST /api/kyc/submit` answers
+  **401**, not 404, through the gateway, and `/kyc/submit` behaves identically.
+- **Payment webhooks on the deployment:** `/api/payments/webhooks/stripe` and
+  `/api/payments/webhooks/chargily` both reject an unsigned probe with 400
+  `invalid_webhook_signature`, which is only reachable when the signing secret
+  is configured; `/api/payments/webhooks/mock` answers 503
+  `provider_not_configured`, so the test rail cannot move money in production.
+  No signed event was sent and no charge was created.
+- **Android artifact:** workflow run `33682489873` on the same `0a61cba`,
+  artifact `shiptrip-v1.0.0-rc.2-0a61cba-debug-arm64`. **Debug**, not signed
+  release: the repository has no Actions secrets at all, so
+  `ANDROID_KEYSTORE_BASE64` and its passwords are absent and the workflow
+  correctly refuses to substitute a debug key into a release build. The APK is
+  `shiptrip-v1.0.0-rc.2-0a61cba-debug-arm64.apk`, **96,481,615 bytes
+  (92.01 MiB)**, SHA-256
+  `0bbbc3287c385924ff3017351f21a67aa37cfdba52f61b1bdd902e84b7f828c2`,
+  embedding `https://shiptrip-production.up.railway.app` and no provider
+  secret of any kind.
+
+  On size: the earlier figures are not comparable to this one. ~160 MB was a
+  universal debug build, 58.65 MB a universal *release*, and the 21.17 MB
+  projection an ARM64 *release*. This is an ARM64 *debug* build, and the ABI
+  targeting did work — `lib/arm64-v8a/` holds 51.7 MiB of native code while
+  `armeabi-v7a` and `x86_64` carry only a 0.1 MiB JNI shim each. The bulk is
+  debug-only: a JIT `libflutter.so` at 38.8 MB, a
+  `libVkLayer_khronos_validation.so` at 15.2 MB that ships only in debug, and
+  the Dart kernel blob that a release build replaces with stripped AOT code.
+  Nothing here indicates unexpected growth; a signed release ARM64 build
+  remains the ~21 MB artifact, and it is blocked only on the signing secrets.
+
 Known remaining items:
 
 - **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
   files, deliberately not taken in a release phase (see above).
 - Hardware QA on a physical device is still pending and is written up as
   `docs/PHASE8E_DEVICE_QA.md`.
+- **Owner-read, not determined here:** whether each payment rail's credentials
+  are test or live, and whether business settings have each rail enabled. Both
+  need an authenticated admin session; the console now states all three facts
+  on one line. Provider end-to-end testing stays gated on that reading.
+- **No signed Android release** until `ANDROID_KEYSTORE_BASE64`,
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`
+  exist as repository Actions secrets. The debug artifact is for controlled
+  private installation only, not distribution.
 
 ## External dependencies/blockers
 
