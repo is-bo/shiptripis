@@ -2556,12 +2556,105 @@ the suite without the variable set.
   Nothing here indicates unexpected growth; a signed release ARM64 build
   remains the ~21 MB artifact, and it is blocked only on the signing secrets.
 
+#### Phase 8E-A private profile artifact
+
+A bridge step, not a phase: produce an artifact fit for judging real-phone
+performance, and change nothing else.
+
+- **Why the debug APK was the wrong instrument.** A debug build runs Dart under
+  the JIT engine, ships the Vulkan validation layer, and carries the whole Dart
+  kernel; it is slower than the product by a margin wide enough that any lag
+  judged from it is unattributable. Profile is the mode Flutter provides for
+  this question: release AOT code and the optimised engine, with only the
+  tracing hooks a profiler needs left in.
+- **Follow-up commit** `6a46c16914abe580a8361bcbba50ad678d13b6b9` — the Build
+  Android workflow and `docs/ANDROID_BUILD_RUNBOOK.md`, nothing else.
+  `git diff 0a61cba..6a46c16 -- mobile/` is empty: every line of Flutter
+  application code and the entire Android Gradle configuration are identical to
+  the deployed release. Backend runtime code is untouched, so the deployment was
+  **not** redeployed and still serves `v1.0.0-rc.2+0a61cba`.
+- **Three build types, kept separate.** `release` (signed, distributable),
+  `profile` (private device QA), `debug` (install-only fallback). Profile uses
+  the Flutter Gradle plugin's own `profile` build type, created with
+  `initWith(debug)`, so it carries the runner's auto-generated Android debug
+  signing config. Nothing in the release path moved: the Gradle guard still
+  throws on any `*Release` task unless all four signing values are present, so a
+  debug key cannot reach a release artifact. Production signing policy was not
+  weakened, relaxed or bypassed.
+- **CI** run `33689383484` on `6a46c16`: **success**, all six jobs.
+- **Android** run `33689392364` on `6a46c16`, artifact
+  `shiptrip-v1.0.0-rc.2-6a46c16-profile-arm64`.
+- **The artifact.** `shiptrip-v1.0.0-rc.2-6a46c16-profile-arm64.apk`,
+  **33,792,256 bytes (32.23 MiB)**, SHA-256
+  `909ceac55c4494e0ddfedbff25a58afa3e026e91cd0ada58167f0ad992ccddcd`
+  (recomputed locally, matching the runner's `SHA256SUMS.txt`).
+- **Proved to be profile, not debug or release.** AOT `lib/arm64-v8a/libapp.so`
+  present; `libvmservice_snapshot.so` present, which only a profile build ships;
+  `kernel_blob.bin`, `isolate_snapshot_data`, `vm_snapshot_data` and
+  `libVkLayer_khronos_validation.so` all absent. The workflow asserts three of
+  these on the runner before upload, so a mislabelled artifact fails the build
+  rather than reaching a phone.
+- **ARM64 targeting held.** `lib/arm64-v8a/` carries 25.52 MiB of real code
+  (`libflutter.so` 11.99 MiB, `libapp.so` 11.88 MiB,
+  `libvmservice_snapshot.so` 1.56 MiB); `armeabi-v7a` and `x86_64` carry only a
+  0.05 / 0.10 MiB `libdartjni.so` JNI shim each, the same pattern as the debug
+  artifact.
+- **Configuration.** `https://shiptrip-production.up.railway.app` appears twice
+  inside the Dart AOT snapshot; the `10.0.2.2` development default does not
+  appear. A ten-pattern secret scan over the whole APK (Stripe secret,
+  restricted, publishable and webhook keys, Chargily keys, AWS keys, PEM private
+  key blocks, bearer tokens, Postgres DSNs, SMTP password markers) found nothing.
+- **Installable.** `apksigner verify` passed on the runner. The APK carries an
+  APK Signature Scheme v2 block whose certificate is the standard
+  `CN=Android Debug, O=Android` key AGP generated on that runner, fingerprint
+  `591bdcb7b5189416b63534492cd524220853c14169967b7858fa3f9e81c6da45`. Manifest:
+  `com.shiptrip.shiptrip`, versionName 1.0.0, versionCode 1, minSdk 24,
+  targetSdk 36, `extractNativeLibs=false`, `debuggable=true` (inherited from the
+  debug build type, which is how a profiler attaches; it does not change Dart's
+  execution mode).
+- **The Phase 8E debug APK must be uninstalled first.** Its certificate is
+  `bb9314f908cf8a0ece3dfc017377946553c631bbe79fe8f5c5d0cfd154f88e83` — a
+  different runner, a different auto-generated debug key, the same
+  `applicationId`. Android refuses to update an installed app with a different
+  signer, so an in-place install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+- **Measured size comparison** (all figures from the artifacts themselves):
+
+  | Build | APK | `lib/` | `assets/` | `classes*.dex` |
+  | --- | --- | --- | --- | --- |
+  | Debug ARM64 (`0a61cba`) | 92.01 MiB | 51.81 MiB | 104.00 MiB | 10.74 MiB |
+  | **Profile ARM64 (`6a46c16`)** | **32.23 MiB** | 25.67 MiB | 4.24 MiB | 10.74 MiB |
+  | Release universal (`32731448680`) | 55.93 MiB | 54.07 MiB | 2.66 MiB | 0.85 MiB |
+
+  Profile is 65% smaller than the debug artifact. Almost all of that is the Dart
+  kernel: debug ships `kernel_blob.bin` at 86.86 MiB uncompressed plus an 11.11
+  MiB `isolate_snapshot_data`, which AOT compilation replaces outright, and it
+  ships a 37.03 MiB JIT `libflutter.so` against profile's 11.99 MiB optimised
+  one plus the 14.53 MiB Vulkan validation layer that only debug carries.
+- **Profile is still not release size, and the gap is explainable.** A release
+  ARM64 build would be roughly 21 MiB. Profile's extra ~11 MiB is three known
+  things: `classes*.dex` is 10.74 MiB because R8 minification runs only on
+  release (0.85 MiB there), the AOT `libapp.so` is 11.88 MiB against release's
+  7.00 MiB because profile keeps symbol names and timeline instrumentation, and
+  `libvmservice_snapshot.so` adds 1.56 MiB that release omits. Nothing here is
+  unexpected growth.
+- **How to read the numbers it produces.** Profile's tracing instrumentation is
+  real work, so frame timings from it are marginally pessimistic. Treat them as
+  an upper bound on release frame cost, not as the release figure. The
+  `debuggable=true` manifest flag also makes ART run the Kotlin/Java side with
+  debug-friendly settings, which matters far less than the Dart side but is not
+  nothing.
+- **No payment call of any kind was made** during this step, and no provider
+  secret was read, printed or logged. Provider mode remains an owner reading
+  from the admin console.
+
 Known remaining items:
 
 - **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
   files, deliberately not taken in a release phase (see above).
 - Hardware QA on a physical device is still pending and is written up as
-  `docs/PHASE8E_DEVICE_QA.md`.
+  `docs/PHASE8E_DEVICE_QA.md`. Judge it on the **profile** artifact
+  (`shiptrip-v1.0.0-rc.2-6a46c16-profile-arm64`), not the debug one; the
+  debug build's timings are not attributable to the product.
 - **Owner-read, not determined here:** whether each payment rail's credentials
   are test or live, and whether business settings have each rail enabled. Both
   need an authenticated admin session; the console now states all three facts
