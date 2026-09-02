@@ -8,12 +8,13 @@ on:
         required: true
         type: string
       build_type:
-        description: Signed release is the pre-launch artifact; debug is install-only fallback
+        description: Signed release is the pre-launch artifact; profile is the private device-performance build; debug is the install-only fallback
         required: true
         default: release
         type: choice
         options:
           - release
+          - profile
           - debug
       apk_architecture:
         description: ARM64 is the smaller private phone-test APK; universal also includes 32-bit ARM and x64
@@ -186,6 +187,27 @@ jobs:
           flutter build apk --release "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
           flutter build appbundle --release "--dart-define=API_BASE_URL=$API_BASE_URL"
 
+      # PRIVATE PROFILE ARM64 — a device-performance artifact, never a
+      # distributable one. Profile is Flutter's measurement mode: Dart is
+      # AOT-compiled exactly as in release, the JIT engine and the Vulkan
+      # validation layer are gone, and only the tracing hooks a profiler needs
+      # remain. The Flutter Gradle plugin creates the `profile` build type with
+      # `initWith(debug)`, so it carries the runner's local Android debug
+      # signing config and installs without any release key. The release build
+      # type is untouched and still refuses to build without all four signing
+      # secrets.
+      - name: Build private profile APK
+        if: inputs.build_type == 'profile'
+        env:
+          API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
+          APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
+        run: |
+          apk_target=()
+          if [ "$APK_ARCHITECTURE" = "arm64" ]; then
+            apk_target+=(--target-platform android-arm64)
+          fi
+          flutter build apk --profile "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
+
       - name: Build debug fallback APK
         if: inputs.build_type == 'debug'
         env:
@@ -218,6 +240,31 @@ jobs:
             fi
             cp "$apk_source" "build/android-artifacts/$FILE_STEM.apk"
             cp "$aab_source" "build/android-artifacts/$FILE_STEM.aab"
+          elif [ "$BUILD_TYPE" = "profile" ]; then
+            apk_source=build/app/outputs/flutter-apk/app-profile.apk
+            # Prove the artifact is profile before it leaves the runner: AOT
+            # code present, and the two debug-only payloads absent. A debug APK
+            # fails all three checks.
+            entries="$(unzip -Z1 "$apk_source")"
+            if ! grep -Eq '^lib/[^/]+/libapp\.so$' <<<"$entries"; then
+              echo "::error::No AOT libapp.so — this is not a profile build"
+              exit 1
+            fi
+            if grep -q 'kernel_blob.bin' <<<"$entries"; then
+              echo "::error::Dart kernel blob present — this is a debug build"
+              exit 1
+            fi
+            if grep -q 'libVkLayer' <<<"$entries"; then
+              echo "::error::Vulkan validation layer present — this is a debug build"
+              exit 1
+            fi
+            # Installability requires a signature. Profile carries the local
+            # debug signing config; it is not, and cannot become, the release
+            # key.
+            apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+            test -n "$apksigner"
+            "$apksigner" verify "$apk_source"
+            cp "$apk_source" "build/android-artifacts/$FILE_STEM.apk"
           else
             apk_source=build/app/outputs/flutter-apk/app-debug.apk
             cp "$apk_source" "build/android-artifacts/$FILE_STEM.apk"

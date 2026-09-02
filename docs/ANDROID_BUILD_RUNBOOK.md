@@ -45,6 +45,42 @@ builds and uploads a clearly labeled debug APK only. It does not silently
 substitute the debug key for a release build. Debug artifacts are for controlled
 development installation, not release distribution.
 
+## Three build types, three purposes
+
+The workflow's `build_type` input keeps three artifacts conceptually separate.
+They are not interchangeable.
+
+| `build_type` | Purpose | Signed with | Distributable |
+| --- | --- | --- | --- |
+| `release` | The pre-launch and store artifact | The release keystore, from Actions secrets | Yes, once launch approval exists |
+| `profile` | Private device-performance QA | The runner's local Android debug key | No |
+| `debug` | Install-only fallback when nothing else builds | The runner's local Android debug key | No |
+
+`release` is the only signed path, and it stays that way: the Gradle build
+refuses any `*Release` task unless all four signing values are present, so a
+debug key can never be substituted into a release artifact.
+
+## Build a private profile APK for device performance
+
+Debug builds are the wrong instrument for judging whether the app feels fast on
+a real phone. A debug APK runs Dart under the JIT engine, ships the Vulkan
+validation layer, and disables the compiler optimisations a shipped build uses;
+it is slower than the product by a wide and misleading margin. Profile is
+Flutter's measurement mode: the same AOT-compiled Dart as release, the same
+optimised engine, with only the tracing hooks a profiler needs left in.
+
+1. Select **Actions → Build Android → Run workflow**.
+2. Set **build_type** to `profile` and **apk_architecture** to `arm64`.
+3. Enter the deployed gateway origin in **api_base_url**.
+4. Run the workflow.
+
+Before uploading, the workflow proves the artifact really is profile: AOT
+`libapp.so` present, and the debug-only Dart kernel blob and Vulkan validation
+layer absent. Timings taken from a profile build are still marginally slower
+than release, because the tracing instrumentation is real; treat it as an upper
+bound on frame cost, not as the release number. A profile APK is for private
+QA only and must never be distributed.
+
 ## Download and install the APK
 
 1. Open the repository on GitHub.
