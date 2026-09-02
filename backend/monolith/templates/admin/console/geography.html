@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Geography catalogue</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Canonical locations</p>
+      <h1>Geography catalogue</h1>
+      <p>The place names ShipTrip actually matches on, used across delivery requests and ordered journey legs. Exact delivery addresses stay private and are never listed here.</p>
+    </div>
+  </header>
+  <div class="st-stat-grid">
+    <div><strong>{{ countries|length }}</strong><span>Countries</span></div>
+    <div><strong>{{ places }}</strong><span>Places</span></div>
+    <div><strong>{{ active_places }}</strong><span>Selectable today</span></div>
+    <div><strong>{{ airports }}</strong><span>Active airports</span></div>
+    <div><strong>{{ primary_mappings }}</strong><span>Airport-to-locality links</span></div>
+  </div>
+  <section class="st-card">
+    <h2>Applied catalogue</h2>
+    {% if catalogue_import %}
+      <dl class="st-facts">
+        <div><dt>Reviewed manifest</dt><dd><span class="st-ref">{{ catalogue_import.content_sha256|slice:":16" }}</span></dd></div>
+        <div><dt>Applied</dt><dd>{{ catalogue_import.applied_at }}</dd></div>
+        <div><dt>By release</dt><dd>{{ catalogue_import.applied_by_release|default:"Not recorded" }}</dd></div>
+      </dl>
+      <p>Counts above are what this database holds now. The digest is the reviewed manifest it was built from, so a superseded or partial import is visible rather than inferred from row counts.</p>
+    {% else %}
+      <p><strong>No catalogue import is recorded.</strong> Canonical place selection is unavailable, so senders and travellers cannot create a request or a journey. The release applies its bundled catalogue on first boot; if this persists, check the deployment log for <span class="st-ref">geography catalogue import FAILED</span>.</p>
+    {% endif %}
+  </section>
+  <section class="st-table-card">
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Country</th><th scope="col" class="is-numeric">Places</th><th scope="col" class="is-numeric">Selectable</th></tr></thead>
+        <tbody>
+          {% for country in countries %}
+          <tr>
+            <td><strong>{{ country.name }}</strong><small>{{ country.code }}</small></td>
+            <td class="is-numeric">{{ country.place_count }}</td>
+            <td class="is-numeric">{{ country.active_place_count }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3">The geography catalogue has not been imported.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

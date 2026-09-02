@@ -13,6 +13,7 @@
 library;
 
 import 'json.dart';
+import 'canonical_place.dart';
 import 'location.dart';
 import 'transport_mode.dart';
 
@@ -84,6 +85,8 @@ class JourneyLeg {
     required this.mode,
     required this.origin,
     required this.destination,
+    this.originPlace,
+    this.destinationPlace,
     required this.departAt,
     required this.capacityKg,
     required this.flightNumber,
@@ -111,6 +114,8 @@ class JourneyLeg {
       mode: TransportMode.parse(json['mode']),
       origin: AppLocation.maybe(json['origin']),
       destination: AppLocation.maybe(json['destination']),
+      originPlace: _place(json['origin_place']),
+      destinationPlace: _place(json['destination_place']),
       departAt: readDate(json['depart_at']),
       arriveAt: readDate(json['arrive_at']),
       capacityKg: readDouble(json['capacity_kg']),
@@ -131,6 +136,8 @@ class JourneyLeg {
   final TransportMode mode;
   final AppLocation? origin;
   final AppLocation? destination;
+  final CanonicalPlace? originPlace;
+  final CanonicalPlace? destinationPlace;
   final DateTime? departAt;
   final DateTime? arriveAt;
 
@@ -178,6 +185,8 @@ class Journey {
     required this.legs,
     this.startLocation,
     this.destinationLocation,
+    this.startPlace,
+    this.destinationPlace,
     this.publishedAt,
     this.createdAt,
     this.updatedAt,
@@ -189,6 +198,8 @@ class Journey {
     travelerName: readText(json['traveler_name']),
     startLocation: AppLocation.maybe(json['start_location']),
     destinationLocation: AppLocation.maybe(json['destination_location']),
+    startPlace: _place(json['start_place']),
+    destinationPlace: _place(json['destination_place']),
     status: readEnum(
       json['status'],
       JourneyStatus.values,
@@ -207,6 +218,8 @@ class Journey {
   final String travelerName;
   final AppLocation? startLocation;
   final AppLocation? destinationLocation;
+  final CanonicalPlace? startPlace;
+  final CanonicalPlace? destinationPlace;
   final JourneyStatus status;
   final DateTime? publishedAt;
   final String notes;
@@ -239,4 +252,9 @@ class Journey {
     if (values.isEmpty) return null;
     return values.reduce((a, b) => a < b ? a : b);
   }
+}
+
+CanonicalPlace? _place(Object? raw) {
+  final value = readObject(raw);
+  return value == null ? null : CanonicalPlace.fromJson(value);
 }

@@ -1,12 +1,15 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
-from apps.locations.models import Location
+from apps.locations.models import Country, Location, Place
 from apps.locations.permissions import IsLocationCreatorOrReadOnly
+from apps.routing.geometry import GeoPoint
+from apps.routing.providers import GeocodeResult, RouteProviderUnavailable
 
 
 PRIVATE_FIELDS = {
@@ -63,13 +66,16 @@ class LocationApiPrivacyTests(APITestCase):
     def setUp(self):
         self.owner = _make_user("owner@example.com")
         self.other = _make_user("other@example.com")
-        response = _client(self.owner).post(
-            reverse("locations-list-create"),
-            _payload(),
-            format="json",
+        payload = _payload()
+        payload["country_code"] = "FR"
+        self.location = Location.objects.create(
+            owner=self.owner,
+            created_by=self.owner,
+            public_label="Paris, FR",
+            coarse_latitude="48.900000",
+            coarse_longitude="2.400000",
+            **payload,
         )
-        assert response.status_code == 201, response.data
-        self.location = Location.objects.get(pk=response.data["id"])
 
     def test_owner_detail_contains_private_fields(self):
         response = _client(self.owner).get(
@@ -134,11 +140,56 @@ class LocationCreateValidationTests(APITestCase):
     def setUp(self):
         self.user = _make_user("creator@example.com")
         self.client = _client(self.user)
+        self.paris = self._canonical_paris()
+        provider_patcher = patch(
+            "apps.locations.serializers.get_route_provider",
+            return_value=self._reverse_provider(),
+        )
+        provider_patcher.start()
+        self.addCleanup(provider_patcher.stop)
+
+    def _canonical_paris(self) -> Place:
+        country = Country.objects.create(
+            code="FR",
+            name="France",
+            source="phase8c-test",
+            source_id="country-fr",
+            source_version="phase8c",
+        )
+        return Place.objects.create(
+            country=country,
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8c-test",
+            source_id="locality-paris",
+            source_version="phase8c",
+            name="Paris",
+            latitude="48.856600",
+            longitude="2.352200",
+        )
+
+    def _preferred_payload(self, **overrides) -> dict:
+        return _payload(canonical_place=self.paris.pk, **overrides)
+
+    @staticmethod
+    def _reverse_provider(*, country="fr", locality="Paris"):
+        result = GeocodeResult(
+            point=GeoPoint(48.8761, 2.3599),
+            normalized_label="12 rue Exemple, 75010 Paris, France",
+            provider_place_id="verified-paris-point",
+            precision="rooftop",
+            metadata={
+                "address": {"country_code": country, "city": locality},
+            },
+        )
+        return SimpleNamespace(
+            name="existing_map_provider",
+            reverse_geocode=lambda point: result,
+        )
 
     def test_create_assigns_identity_server_side_and_normalizes_country(self):
         response = self.client.post(
             reverse("locations-list-create"),
-            _payload(),
+            self._preferred_payload(),
             format="json",
         )
 
@@ -148,10 +199,81 @@ class LocationCreateValidationTests(APITestCase):
         assert location.owner == self.user
         assert location.country_code == "FR"
 
+    def test_new_preferred_point_requires_canonical_place(self):
+        response = self.client.post(
+            reverse("locations-list-create"),
+            _payload(),
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert "canonical_place" in response.data
+        assert Location.objects.count() == 0
+
+    def test_canonical_preferred_point_uses_server_verified_provider_context(self):
+        payload = self._preferred_payload(
+            provider="spoofed-client",
+            provider_place_id="spoofed-id",
+            provider_metadata={"country_code": "DE", "city": "Berlin"},
+        )
+
+        with patch(
+            "apps.locations.serializers.get_route_provider",
+            return_value=self._reverse_provider(),
+        ):
+            response = self.client.post(
+                reverse("locations-list-create"), payload, format="json"
+            )
+
+        assert response.status_code == 201, response.data
+        location = Location.objects.get(pk=response.data["id"])
+        assert location.canonical_place == self.paris
+        assert location.provider == "existing_map_provider"
+        assert location.provider_place_id == "verified-paris-point"
+        assert location.provider_metadata["address"]["city"] == "Paris"
+
+    def test_canonical_preferred_point_rejects_wrong_provider_locality(self):
+        with patch(
+            "apps.locations.serializers.get_route_provider",
+            return_value=self._reverse_provider(country="de", locality="Berlin"),
+        ):
+            response = self.client.post(
+                reverse("locations-list-create"),
+                self._preferred_payload(),
+                format="json",
+            )
+
+        assert response.status_code == 400
+        assert "canonical_place" in response.data
+        assert Location.objects.count() == 0
+
+    def test_canonical_preferred_point_fails_transparently_when_provider_unavailable(
+        self,
+    ):
+        provider = SimpleNamespace(
+            name="unavailable",
+            reverse_geocode=lambda point: (_ for _ in ()).throw(
+                RouteProviderUnavailable("not configured")
+            ),
+        )
+
+        with patch(
+            "apps.locations.serializers.get_route_provider",
+            return_value=provider,
+        ):
+            response = self.client.post(
+                reverse("locations-list-create"),
+                self._preferred_payload(),
+                format="json",
+            )
+
+        assert response.status_code == 400
+        assert "continue without one" in str(response.data["canonical_place"][0])
+
     def test_rejects_client_supplied_owner_or_creator(self):
         response = self.client.post(
             reverse("locations-list-create"),
-            _payload(owner_id=999, created_by_id=999),
+            self._preferred_payload(owner_id=999, created_by_id=999),
             format="json",
         )
 
@@ -162,7 +284,7 @@ class LocationCreateValidationTests(APITestCase):
     def test_rejects_out_of_range_exact_coordinates(self):
         response = self.client.post(
             reverse("locations-list-create"),
-            _payload(latitude="90.000001"),
+            self._preferred_payload(latitude="90.000001"),
             format="json",
         )
 
@@ -172,7 +294,7 @@ class LocationCreateValidationTests(APITestCase):
     def test_rejects_client_supplied_public_or_coarse_values(self):
         response = self.client.post(
             reverse("locations-list-create"),
-            _payload(
+            self._preferred_payload(
                 public_label="12 rue Exemple",
                 coarse_latitude="48.876100",
                 coarse_longitude="2.359900",
@@ -188,7 +310,7 @@ class LocationCreateValidationTests(APITestCase):
     def test_rejects_non_object_provider_metadata(self):
         response = self.client.post(
             reverse("locations-list-create"),
-            _payload(provider_metadata=["not", "an", "object"]),
+            self._preferred_payload(provider_metadata=["not", "an", "object"]),
             format="json",
         )
 
@@ -198,12 +320,12 @@ class LocationCreateValidationTests(APITestCase):
     def test_rejects_duplicate_nonblank_provider_place(self):
         first = self.client.post(
             reverse("locations-list-create"),
-            _payload(),
+            self._preferred_payload(),
             format="json",
         )
         second = self.client.post(
             reverse("locations-list-create"),
-            _payload(private_label="Different private label"),
+            self._preferred_payload(private_label="Different private label"),
             format="json",
         )
 
@@ -215,19 +337,22 @@ class LocationCreateValidationTests(APITestCase):
     def test_different_owners_may_save_the_same_provider_place(self):
         first = self.client.post(
             reverse("locations-list-create"),
-            _payload(),
+            self._preferred_payload(),
             format="json",
         )
         other = _make_user("same-place-owner@example.com")
         second = _client(other).post(
             reverse("locations-list-create"),
-            _payload(),
+            self._preferred_payload(),
             format="json",
         )
 
         assert first.status_code == 201, first.data
         assert second.status_code == 201, second.data
-        assert Location.objects.filter(provider_place_id="place-paris-12").count() == 2
+        assert (
+            Location.objects.filter(provider_place_id="verified-paris-point").count()
+            == 2
+        )
 
     def test_database_rejects_unpaired_coarse_coordinates(self):
         data = _payload(provider_place_id="db-pair-check")

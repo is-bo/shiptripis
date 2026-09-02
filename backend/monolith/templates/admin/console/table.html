@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; {{ title }}</div>
+{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">{{ eyebrow|default:"Operations" }}</p>
+      <h1>{{ title }}</h1>
+      <p>{{ description }}</p>
+    </div>
+    {% if actions %}<div class="st-page-actions">{% for action in actions %}<a class="button" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div>{% endif %}
+  </header>
+
+  <form method="get" class="st-filters" role="search">
+    <div class="st-filter">
+      <label for="st-search">Search</label>
+      <input id="st-search" type="search" name="q" value="{{ query }}" placeholder="{{ search_placeholder }}">
+    </div>
+    {% if filter_choices %}
+      <div class="st-filter">
+        <label for="st-status">State</label>
+        <select id="st-status" name="status">
+          <option value="">All states</option>
+          {% for value, label in filter_choices %}<option value="{{ value }}"{% if current_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <button type="submit">Apply</button>
+    {% if query or current_status %}<a class="st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
+  </form>
+
+  <section class="st-table-card" aria-label="{{ title }} results">
+    {% if rows %}
+      <div class="st-table-scroll">
+        <table class="st-data-table">
+          <thead>
+            <tr>
+              {% for column in columns %}<th scope="col"{% if column.numeric %} class="is-numeric"{% endif %}>{{ column.label|default:column }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in rows %}
+            <tr>
+              {% for cell in row.cells %}
+                <td{% if cell.kind == "money" or cell.kind == "money-lead" or cell.kind == "money-pair" %} class="is-numeric"{% endif %}>
+                  {% if cell.kind == "status" %}
+                    <span class="st-chip st-{{ cell.tone }}">{{ cell.primary }}</span>
+                  {% elif cell.kind == "route" %}
+                    {% include "admin/console/_route.html" with nodes=cell.nodes variant="line" %}
+                  {% elif cell.kind == "money-pair" %}
+                    <span class="st-money-pair"><strong>{{ cell.primary }}</strong>{% if cell.secondary %}<small>{{ cell.secondary }}</small>{% endif %}</span>
+                  {% else %}
+                    <span{% if cell.kind == "money" or cell.kind == "money-lead" %} class="st-money{% if cell.kind == 'money-lead' %} st-money-lead{% endif %}"{% elif cell.kind == "strong" %} class="st-cell-strong"{% elif cell.kind == "ref" %} class="st-ref"{% endif %}>
+                      {% if cell.href %}<a href="{{ cell.href }}">{{ cell.primary }}</a>{% else %}{{ cell.primary }}{% endif %}
+                    </span>
+                    {% if cell.secondary %}<small{% if cell.kind == "ref" %} class="st-ref"{% endif %}>{{ cell.secondary }}</small>{% endif %}
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="st-pagination" aria-label="Pagination">
+          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &middot; {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}</span>
+          <div>
+            {% if page_obj.has_previous %}<a href="?{% if query_without_page %}{{ query_without_page }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?{% if query_without_page %}{{ query_without_page }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+          </div>
+        </nav>
+      {% endif %}
+    {% else %}
+      <div class="st-empty"><span aria-hidden="true">&#10003;</span><h2>{{ empty_title }}</h2><p>{{ empty_text }}</p></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

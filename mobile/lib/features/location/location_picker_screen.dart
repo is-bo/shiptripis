@@ -1,26 +1,13 @@
-/// Choosing a place.
+/// Choosing an optional exact point inside an already selected canonical place.
 ///
-/// One screen, two ways in, because the two are not alternatives — they answer
-/// different questions. "Which of my addresses?" is a list; "where exactly is
-/// this?" is a map. Splitting them across two routes would make the common
-/// case (pick the address I already saved) cost a navigation, and the rare
-/// case (add a new one) cost a dead end.
+/// Saved points are limited to this catalogue place; the map can create a new
+/// preferred point only after provider context has been checked by the server.
 ///
 /// ## What the server sends back
 ///
-/// `GET /api/locations` returns a **mixed** array: the caller's own rows carry
-/// exact coordinates, the shared airports carry only the coarse public shape.
-/// [AppLocation.isExact] is the only honest test for which is which, and it is
-/// what the "Your places" / "Airports" split is built on — not `kind`, which
-/// an own-row could also set to `airport`.
-///
-/// ## Why a coarse row is disabled rather than hidden
-///
-/// A delivery request needs a sender-owned exact location; the server refuses
-/// anything else. Hiding the airports when [requireExact] is set would leave
-/// a traveller who *does* use them wondering where they went, and a sender
-/// with no saved address staring at an empty list with no explanation. The row
-/// stays, greyed, with the reason attached.
+/// `GET /api/locations` remains a mixed privacy-aware collection, but this
+/// screen filters it to owner-visible exact rows whose `canonical_place` is the
+/// selected place. Coarse shared rows are not preferred meeting points.
 ///
 /// ## What must never be sent
 ///
@@ -41,11 +28,13 @@ import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
 import '../../design/components/navigation.dart';
+import '../../design/components/place.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
+import '../../domain/canonical_place.dart';
 import '../../domain/location.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -74,18 +63,16 @@ enum _Mode { saved, map }
 
 class LocationPickerScreen extends ConsumerStatefulWidget {
   const LocationPickerScreen({
+    required this.canonicalPlace,
     this.title,
-    this.requireExact = false,
     super.key,
   });
+
+  final CanonicalPlace canonicalPlace;
 
   /// What the caller is asking for — "Pickup address", "Where does this leg
   /// end?". Falls back to a generic title rather than being invented here.
   final String? title;
-
-  /// True where the server needs a sender-owned exact location and will refuse
-  /// a coarse one.
-  final bool requireExact;
 
   @override
   ConsumerState<LocationPickerScreen> createState() =>
@@ -95,12 +82,23 @@ class LocationPickerScreen extends ConsumerStatefulWidget {
 class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
   final _mapController = MapController();
 
-  _Mode _mode = _Mode.saved;
+  _Mode _mode = _Mode.map;
 
   /// Mirrors the camera rather than reading it back off the controller, so the
   /// zoom buttons work before the map has ever emitted a position.
   LatLng _centre = _defaultCentre;
   double _zoom = _defaultZoom;
+
+  @override
+  void initState() {
+    super.initState();
+    final latitude = widget.canonicalPlace.latitude;
+    final longitude = widget.canonicalPlace.longitude;
+    if (latitude != null && longitude != null) {
+      _centre = LatLng(latitude, longitude);
+      _zoom = widget.canonicalPlace.isAirport ? 12 : 11;
+    }
+  }
 
   @override
   void dispose() {
@@ -113,7 +111,10 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
   Future<void> _confirmPoint() async {
     final created = await showAppSheet<AppLocation>(
       context,
-      builder: (sheetContext) => _SavePlaceSheet(point: _centre),
+      builder: (sheetContext) => _SavePlaceSheet(
+        point: _centre,
+        canonicalPlace: widget.canonicalPlace,
+      ),
     );
     if (created == null || !mounted) return;
     _choose(created);
@@ -129,10 +130,15 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final onMap = _mode == _Mode.map;
+    final place = widget.canonicalPlace;
+    final hasCentre = place.latitude != null && place.longitude != null;
 
     return AppScaffold(
+      // Not "Choose a place": the place is already chosen. This screen only
+      // narrows a point inside it, and a title that says otherwise is exactly
+      // the old feeling that the map defines the city.
       topBar: AppTopBar(
-        title: widget.title ?? l.locationSearchTitle,
+        title: widget.title ?? l.locationPreferredMeetingPoint,
         showBack: true,
       ),
       body: Column(
@@ -141,6 +147,35 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
             padding: const EdgeInsets.fromLTRB(
               AppSpace.gutter,
               AppSpace.lg,
+              AppSpace.gutter,
+              AppSpace.md,
+            ),
+            // The selected locality, restated and kept on screen. Without it
+            // the map is an unbounded world and the user cannot tell that
+            // their choice is constrained — or to what.
+            child: PlaceContextStrip(
+              place: place,
+              caption: l.locationPointInside,
+            ),
+          ),
+          if (!hasCentre)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.gutter,
+                0,
+                AppSpace.gutter,
+                AppSpace.md,
+              ),
+              child: InfoNotice(
+                message: l.locationNoCentre(place.name),
+                tone: StatusTone.waiting,
+                icon: Icons.explore_off_outlined,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.gutter,
+              0,
               AppSpace.gutter,
               AppSpace.lg,
             ),
@@ -170,13 +205,15 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
               sizing: StackFit.expand,
               children: [
                 _SavedPlacesPane(
-                  requireExact: widget.requireExact,
+                  canonicalPlaceId: widget.canonicalPlace.id,
                   hasFooter: onMap,
                   onPick: _choose,
                   onUseMap: () => setState(() => _mode = _Mode.map),
                 ),
                 _MapPane(
                   controller: _mapController,
+                  initialCentre: _centre,
+                  initialZoom: _zoom,
                   onCameraChanged: (centre, zoom) {
                     _centre = centre;
                     _zoom = zoom;
@@ -199,7 +236,7 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  l.locationDropPinHelp,
+                  l.locationDropPinHelpIn(place.name),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.colors.textSecondary,
                   ),
@@ -209,6 +246,14 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
                   label: l.locationConfirmPoint,
                   icon: Icons.place_outlined,
                   onPressed: _confirmPoint,
+                ),
+                // An exact point is optional, so leaving without one has to be
+                // an offered move rather than something the user works out
+                // from the back arrow.
+                AppButton(
+                  label: l.locationDecideLater,
+                  variant: AppButtonVariant.tertiary,
+                  onPressed: () => context.pop(),
                 ),
               ],
             )
@@ -223,13 +268,13 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
 
 class _SavedPlacesPane extends ConsumerWidget {
   const _SavedPlacesPane({
-    required this.requireExact,
+    required this.canonicalPlaceId,
     required this.hasFooter,
     required this.onPick,
     required this.onUseMap,
   });
 
-  final bool requireExact;
+  final int canonicalPlaceId;
 
   /// The sibling pane owns the footer, so this one has to pad for it too —
   /// both panes share one scaffold.
@@ -254,10 +299,14 @@ class _SavedPlacesPane extends ConsumerWidget {
         children: const [SkeletonCardList(count: 3)],
       ),
       data: (all) {
-        final mine = all.where((p) => p.isExact).toList(growable: false);
-        final shared = all.where((p) => !p.isExact).toList(growable: false);
+        final mine = all
+            .where(
+              (place) =>
+                  place.isExact && place.canonicalPlaceId == canonicalPlaceId,
+            )
+            .toList(growable: false);
 
-        if (all.isEmpty) {
+        if (mine.isEmpty) {
           return ListView(
             padding: padding,
             children: [
@@ -277,14 +326,6 @@ class _SavedPlacesPane extends ConsumerWidget {
           child: ListView(
             padding: padding,
             children: [
-              if (requireExact) ...[
-                InfoNotice(
-                  message: l.locationExactRequiredNotice,
-                  icon: Icons.lock_outline_rounded,
-                ),
-                const SizedBox(height: AppSpace.xl),
-              ],
-
               if (mine.isNotEmpty) ...[
                 SectionHeader(title: l.locationYourPlaces),
                 for (final place in mine) ...[
@@ -292,22 +333,6 @@ class _SavedPlacesPane extends ConsumerWidget {
                   const SizedBox(height: AppSpace.md),
                 ],
                 const SizedBox(height: AppSpace.lg),
-              ],
-
-              if (shared.isNotEmpty) ...[
-                SectionHeader(title: l.locationAirports),
-                for (final place in shared) ...[
-                  _PlaceRow(
-                    place: place,
-                    // Kept visible and explained: a hidden option is a
-                    // question the user cannot answer.
-                    blockedReason: requireExact
-                        ? l.locationExactRequiredRow
-                        : null,
-                    onTap: () => onPick(place),
-                  ),
-                  const SizedBox(height: AppSpace.md),
-                ],
               ],
             ],
           ),
@@ -318,94 +343,63 @@ class _SavedPlacesPane extends ConsumerWidget {
 }
 
 class _PlaceRow extends StatelessWidget {
-  const _PlaceRow({
-    required this.place,
-    required this.onTap,
-    this.blockedReason,
-  });
+  const _PlaceRow({required this.place, required this.onTap});
 
   final AppLocation place;
   final VoidCallback onTap;
 
-  /// Non-null disables the row and says why.
-  final String? blockedReason;
-
   @override
   Widget build(BuildContext context) {
-    final l = L.of(context);
     final c = context.colors;
     final text = Theme.of(context).textTheme;
-    final blocked = blockedReason != null;
 
     final secondary = place.isExact
         ? place.coarseLabel
         : (place.airportIata ?? place.coarseLabel);
 
-    return Opacity(
-      opacity: blocked ? 0.55 : 1,
-      child: AppCard(
-        onTap: blocked ? null : onTap,
-        semanticLabel: blocked
-            ? '${place.displayLabel}, $blockedReason'
-            : place.displayLabel,
-        child: Row(
-          children: [
-            Icon(
-              place.isExact
-                  ? Icons.home_outlined
-                  : Icons.flight_takeoff_rounded,
-              size: 20,
-              color: blocked ? c.textTertiary : c.brand,
-            ),
-            const SizedBox(width: AppSpace.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    return AppCard(
+      onTap: onTap,
+      semanticLabel: place.displayLabel,
+      child: Row(
+        children: [
+          Icon(
+            place.isExact ? Icons.home_outlined : Icons.flight_takeoff_rounded,
+            size: 20,
+            color: c.brand,
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  place.displayLabel,
+                  style: text.titleSmall,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (secondary.isNotEmpty &&
+                    secondary != place.displayLabel) ...[
+                  const SizedBox(height: AppSpace.xxs),
                   Text(
-                    place.displayLabel,
-                    style: text.titleSmall,
-                    maxLines: 2,
+                    secondary,
+                    style: text.bodySmall?.copyWith(color: c.textSecondary),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (secondary.isNotEmpty &&
-                      secondary != place.displayLabel) ...[
-                    const SizedBox(height: AppSpace.xxs),
-                    Text(
-                      secondary,
-                      style: text.bodySmall?.copyWith(color: c.textSecondary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (blocked) ...[
-                    const SizedBox(height: AppSpace.sm),
-                    Text(
-                      blockedReason!,
-                      style: text.bodySmall?.copyWith(color: c.danger),
-                    ),
-                  ] else if (!place.isExact) ...[
-                    const SizedBox(height: AppSpace.sm),
-                    Text(
-                      l.locationCityOnly,
-                      style: text.bodySmall?.copyWith(color: c.textTertiary),
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
-            if (!blocked) ...[
-              const SizedBox(width: AppSpace.sm),
-              Icon(
-                context.isRtl
-                    ? Icons.chevron_left_rounded
-                    : Icons.chevron_right_rounded,
-                size: 20,
-                color: c.textTertiary,
-              ),
-            ],
-          ],
-        ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Icon(
+            context.isRtl
+                ? Icons.chevron_left_rounded
+                : Icons.chevron_right_rounded,
+            size: 20,
+            color: c.textTertiary,
+          ),
+        ],
       ),
     );
   }
@@ -416,9 +410,16 @@ class _PlaceRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _MapPane extends StatelessWidget {
-  const _MapPane({required this.controller, required this.onCameraChanged});
+  const _MapPane({
+    required this.controller,
+    required this.initialCentre,
+    required this.initialZoom,
+    required this.onCameraChanged,
+  });
 
   final MapController controller;
+  final LatLng initialCentre;
+  final double initialZoom;
   final void Function(LatLng centre, double zoom) onCameraChanged;
 
   @override
@@ -432,8 +433,8 @@ class _MapPane extends StatelessWidget {
           child: FlutterMap(
             mapController: controller,
             options: MapOptions(
-              initialCenter: _defaultCentre,
-              initialZoom: _defaultZoom,
+              initialCenter: initialCentre,
+              initialZoom: initialZoom,
               minZoom: _minZoom,
               maxZoom: _maxZoom,
               backgroundColor: c.surfaceSunken,
@@ -581,14 +582,14 @@ class _MapControls extends StatelessWidget {
 
 /// Names the point the user chose and creates the Location.
 ///
-/// The label the user types is sent as both `private_label` and
-/// `normalized_label`: V1 has no geocoder, so there is no canonical form to
-/// derive, and inventing one client-side would be a claim the app cannot back.
-/// Normalisation stays a server concern for when geocoding lands.
+/// The label is a private note only. The server reverse-geocodes the selected
+/// coordinate through the existing provider abstraction and rejects a point
+/// whose country/locality context cannot be confirmed against [canonicalPlace].
 class _SavePlaceSheet extends ConsumerStatefulWidget {
-  const _SavePlaceSheet({required this.point});
+  const _SavePlaceSheet({required this.point, required this.canonicalPlace});
 
   final LatLng point;
+  final CanonicalPlace canonicalPlace;
 
   @override
   ConsumerState<_SavePlaceSheet> createState() => _SavePlaceSheetState();
@@ -597,8 +598,6 @@ class _SavePlaceSheet extends ConsumerStatefulWidget {
 class _SavePlaceSheetState extends ConsumerState<_SavePlaceSheet> {
   final _formKey = GlobalKey<FormState>();
   final _label = TextEditingController();
-  final _city = TextEditingController();
-  final _country = TextEditingController();
 
   bool _busy = false;
   FieldErrorMap _fieldErrors = const FieldErrorMap.empty();
@@ -606,8 +605,7 @@ class _SavePlaceSheetState extends ConsumerState<_SavePlaceSheet> {
   static const _claimedFields = {
     'private_label',
     'normalized_label',
-    'city',
-    'country_code',
+    'canonical_place',
     'latitude',
     'longitude',
   };
@@ -615,8 +613,6 @@ class _SavePlaceSheetState extends ConsumerState<_SavePlaceSheet> {
   @override
   void dispose() {
     _label.dispose();
-    _city.dispose();
-    _country.dispose();
     super.dispose();
   }
 
@@ -636,11 +632,15 @@ class _SavePlaceSheetState extends ConsumerState<_SavePlaceSheet> {
             kind: LocationKind.mapPoint,
             normalizedLabel: label,
             privateLabel: label,
-            city: _city.text.trim(),
-            countryCode: _country.text.trim(),
+            city:
+                widget.canonicalPlace.matchingLocalityName ??
+                widget.canonicalPlace.name,
+            region: widget.canonicalPlace.parentName,
+            countryCode: widget.canonicalPlace.countryCode,
             latitude: widget.point.latitude,
             longitude: widget.point.longitude,
             precision: LocationPrecision.approximate,
+            canonicalPlaceId: widget.canonicalPlace.id,
           );
       if (!mounted) return;
       ref.invalidate(_savedPlacesProvider);
@@ -694,32 +694,11 @@ class _SavePlaceSheetState extends ConsumerState<_SavePlaceSheet> {
               validator: validators.required,
               errorText: _fieldErrors['private_label'],
             ),
-            AppTextField(
-              label: l.locationCityField,
-              controller: _city,
-              isRequired: true,
-              enabled: !_busy,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
-              validator: validators.required,
-              errorText: _fieldErrors['city'],
-            ),
-            AppTextField(
-              label: l.locationCountryField,
-              controller: _country,
-              hint: l.locationCountryHint,
-              isRequired: true,
-              enabled: !_busy,
-              maxLength: 2,
-              textCapitalization: TextCapitalization.characters,
-              textInputAction: TextInputAction.done,
-              validator: (value) {
-                final v = value?.trim() ?? '';
-                if (v.isEmpty) return l.validationRequired;
-                return v.length == 2 ? null : l.locationCountryInvalid;
-              },
-              errorText: _fieldErrors['country_code'],
-              onSubmitted: (_) => _save(),
+            InfoNotice(
+              message: l.locationPreferredValidation(
+                widget.canonicalPlace.name,
+              ),
+              icon: Icons.verified_outlined,
             ),
           ],
         ),

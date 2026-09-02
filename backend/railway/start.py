@@ -151,6 +151,56 @@ def kyc_env() -> dict[str, str]:
     return env
 
 
+def apply_geography_catalogue(base_env: dict[str, str]) -> None:
+    """Apply the reviewed catalogue that shipped with this image, once.
+
+    The 56k-row geography catalogue is deliberately not a migration, and the
+    active V1 write contract refuses a request or a journey that does not
+    reference a canonical Place — so a deployment without the catalogue is a
+    deployment nobody can create anything on. Shipping the manifest inside the
+    image and applying it here makes one release identifier carry both the code
+    and the exact reviewed data it needs.
+
+    Two properties matter more than speed:
+
+    * **It is not destructive on every boot.** `--skip-if-current` compares the
+      shipped manifest's content digest against what the database records and
+      returns after one indexed read when they match, which is every boot after
+      the first.
+    * **It never blocks readiness.** It runs after the gateway is listening, so
+      a slow first import cannot fail a health check and roll the deployment
+      back. The import is one transaction, so until it commits the catalogue
+      reads as its previous state rather than as a half-built one.
+
+    A failure here is loud and non-fatal: the service keeps serving, and the
+    operations console reports a catalogue that is not at the shipped digest.
+    """
+
+    print("applying bundled geography catalogue (skip-if-current)", flush=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "manage.py",
+            "import_geography",
+            "--skip-if-current",
+        ],
+        cwd=ROOT,
+        env=base_env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print(f"geography catalogue: {result.stdout.strip()}", flush=True)
+        return
+    print(
+        "geography catalogue import FAILED; the service is still serving but "
+        "canonical place selection will be unavailable until this is resolved",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(result.stderr.strip()[-4000:], file=sys.stderr, flush=True)
+
+
 def run() -> int:
     # Resolve the external KYC limiter dependency before migrations or child
     # processes start. The loopback Redis below remains intentionally local for
@@ -288,6 +338,9 @@ def run() -> int:
     )
     wait_for_port(gateway, int(os.environ.get("PORT", "8080")))
     print("ShipTrip is ready", flush=True)
+
+    # Deliberately after readiness. See `apply_geography_catalogue`.
+    apply_geography_catalogue(base_env)
 
     while not STOP_REQUESTED:
         for child in CHILDREN:

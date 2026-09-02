@@ -1,0 +1,142 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Business settings</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Commercial policy</p>
+      <h1>Business settings</h1>
+      <p>Everything here applies to <strong>future</strong> offers only. Saving creates a new numbered version; every Deal already agreed keeps the version it was priced on.</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-info">Version {{ active.version }} active</span>
+      <span class="st-chip st-ok">EUR is canonical</span>
+    </div>
+  </header>
+
+  {% if not may_manage %}
+    <div class="st-readonly-note">Your role can read these settings but cannot create or activate a new version.</div>
+  {% endif %}
+
+  {# --- Commission: the number the owner changes most, explained in euro --- #}
+  <section class="st-card">
+    <p class="st-eyebrow">Pricing</p>
+    <div class="st-card-head">
+      <div><h2>ShipTrip commission</h2></div>
+      <span class="st-chip st-info">Currently {{ commission.percent }}</span>
+    </div>
+    <p>The commission is added on top of whatever the Traveler is paid. It is not taken out of their reward.</p>
+    <div class="st-worked">
+      <div><span>Traveler earns</span><strong>{{ commission.example.traveler_reward }}</strong></div>
+      <div class="st-worked-op" aria-hidden="true">+</div>
+      <div><span>ShipTrip earns</span><strong>{{ commission.example.platform_fee }}</strong></div>
+      <div class="st-worked-op" aria-hidden="true">=</div>
+      <div class="is-result"><span>Sender pays</span><strong>{{ commission.example.sender_total }}</strong></div>
+    </div>
+    <p class="st-muted">Worked out by the same pricing engine the marketplace uses, so it cannot drift from what a Sender is actually charged.</p>
+  </section>
+
+  {# --- Posting deposit: a percentage held between a floor and a ceiling --- #}
+  <section class="st-card">
+    <p class="st-eyebrow">Pricing</p>
+    <h2>Posting deposit</h2>
+    <p>What a Sender pays up front to post a request. It is a percentage of the recommended total, but never less than the minimum or more than the maximum.</p>
+    <div class="st-band">
+      <div><span>Never below</span><strong>{{ deposit.minimum }}</strong></div>
+      <div class="is-lead"><span>Of the recommended total</span><strong>{{ deposit.percent }}</strong></div>
+      <div><span>Never above</span><strong>{{ deposit.maximum }}</strong></div>
+    </div>
+  </section>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Change pricing</p>
+    <h2>Commission, deposit and floors</h2>
+    <p>Saving publishes a new immutable settings version and records who changed it and why.</p>
+    <form method="post" class="st-form">{% csrf_token %}
+      <input type="hidden" name="action" value="pricing">
+      {{ pricing_form.as_p }}
+      {% if may_manage %}<div class="st-split-actions"><button type="submit">Save as a new pricing version</button></div>{% endif %}
+    </form>
+  </section>
+
+  <div class="st-grid st-grid-2">
+    {# --- Chargily FX: readable units, and a visible read-back ------------- #}
+    <section class="st-card st-decision-card">
+      <p class="st-eyebrow">High-impact setting</p>
+      <div class="st-card-head">
+        <div><h2>Chargily exchange rate</h2></div>
+        <span class="st-chip st-wait">{{ fx.reads }}</span>
+      </div>
+      <p>Chargily charges in Algerian dinars. This rate converts the canonical euro obligation into the dinar amount a payer is shown. <strong>EUR stays the business currency</strong>: nothing about the Deal changes when this rate changes.</p>
+      <p class="st-muted">A new rate applies only to Chargily attempts started after it is saved. Attempts already made keep the rate they were snapshotted with.</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="fx">
+        {{ fx_form.as_p }}
+        {% if may_manage %}<div class="st-split-actions"><button class="st-button-danger" type="submit">Save a new exchange rate</button></div>{% endif %}
+      </form>
+    </section>
+
+    {# --- Providers ------------------------------------------------------- #}
+    <section class="st-card">
+      <p class="st-eyebrow">Payments and communication</p>
+      <h2>Provider availability</h2>
+      <p>These switches say whether ShipTrip <em>offers</em> a rail. Credentials and webhook secrets live in deployment configuration and are never editable or visible here.</p>
+      <ul class="st-reading-list">
+        {% for provider in providers %}
+        <li>
+          <div><strong>{{ provider.name }}</strong><small>{{ provider.detail }}</small></div>
+          <span class="st-chip st-{{ provider.tone }}">{{ provider.label }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="providers">
+        {{ provider_form.as_p }}
+        {% if may_manage %}<div class="st-split-actions"><button type="submit">Save provider availability</button></div>{% endif %}
+      </form>
+    </section>
+  </div>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">Protection &amp; handover</p>
+      <h2>Lifecycle guardrails</h2>
+      <table class="st-keyvalues">
+        <thead><tr><th scope="col">Policy</th><th scope="col">Value</th></tr></thead>
+        <tbody>{% for row in protection_rows %}<tr><th scope="row">{{ row.label }}</th><td>{{ row.value }}</td></tr>{% endfor %}</tbody>
+      </table>
+      <p class="st-keyvalues-note">Copied into each funded Deal when it is agreed. Changing a guardrail never rewrites an active Deal.</p>
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Boosts</p>
+      <h2>Marketplace boost packages</h2>
+      <table class="st-keyvalues">
+        <thead><tr><th scope="col">Package</th><th scope="col">Price</th><th scope="col">Duration</th></tr></thead>
+        <tbody>
+          {% for package in boost_packages %}<tr><th scope="row">{{ package.label }}<br><code>{{ package.code }}</code></th><td>{{ package.price }}</td><td>{{ package.duration }}</td></tr>
+          {% empty %}<tr><td colspan="3">No packages are configured.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+      <p class="st-keyvalues-note">A boost raises visibility only. It can never override matching compatibility.</p>
+    </section>
+  </div>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Reference</p>
+    <h2>Every guardrail in operator units</h2>
+    <p>The full active policy, with the stored key behind each value for when a value has to be traced through the code.</p>
+    <div class="st-table-scroll">
+      <table class="st-keyvalues">
+        <thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col" class="st-source">Stored source</th></tr></thead>
+        <tbody>
+          {% for row in rows %}<tr><th scope="row">{{ row.label }}</th><td>{% if row.tone %}<span class="st-chip st-{{ row.tone }}">{{ row.value }}</span>{% else %}{{ row.value }}{% endif %}</td><td class="st-source"><code>{{ row.source }}</code></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

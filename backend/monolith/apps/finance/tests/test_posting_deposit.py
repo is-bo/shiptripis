@@ -34,6 +34,7 @@ from apps.finance.services import (
     quote_posting_deposit,
 )
 from apps.finance import ledger
+from apps.locations.models import Country, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 
 from .factories import (
@@ -173,10 +174,43 @@ class DepositPublicationTests(DepositTestCase):
     def test_a_new_request_is_created_unpublished_in_deposit_mode(self):
         pickup = self.scenario.delivery_request.pickup_location
         dropoff = self.scenario.delivery_request.delivery_location
+        country = Country.objects.create(
+            code="DZ",
+            name="Algeria",
+            source="posting-deposit-test",
+            source_id=f"{self.prefix}-country",
+            source_version="phase8c",
+        )
+        pickup_place = Place.objects.create(
+            country=country,
+            place_type=Place.PlaceType.LOCALITY,
+            source="posting-deposit-test",
+            source_id=f"{self.prefix}-pickup",
+            source_version="phase8c",
+            name="Pickup locality",
+            latitude=pickup.latitude,
+            longitude=pickup.longitude,
+        )
+        dropoff_place = Place.objects.create(
+            country=country,
+            place_type=Place.PlaceType.LOCALITY,
+            source="posting-deposit-test",
+            source_id=f"{self.prefix}-dropoff",
+            source_version="phase8c",
+            name="Dropoff locality",
+            latitude=dropoff.latitude,
+            longitude=dropoff.longitude,
+        )
+        pickup.canonical_place = pickup_place
+        pickup.save(update_fields=["canonical_place", "updated_at"])
+        dropoff.canonical_place = dropoff_place
+        dropoff.save(update_fields=["canonical_place", "updated_at"])
         at = timezone.now()
         response = self.client_for(self.scenario.sender).post(
             reverse("parcels-delivery-v1-create"),
             {
+                "pickup_place_id": pickup_place.pk,
+                "delivery_place_id": dropoff_place.pk,
                 "pickup_location_id": pickup.pk,
                 "delivery_location_id": dropoff.pk,
                 "ready_window_start": (at + timedelta(hours=1)).isoformat(),

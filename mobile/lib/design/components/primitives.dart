@@ -226,6 +226,12 @@ class AppIconButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
+      enabled: onPressed != null,
+      // The action has to be re-declared here. `ExcludeSemantics` is what stops
+      // the tooltip repeating the label, and it also drops the button's own tap
+      // action on the way up — leaving a node a screen reader announces
+      // perfectly and cannot activate.
+      onTap: onPressed,
       child: ExcludeSemantics(
         child: IconButton(
           onPressed: onPressed,

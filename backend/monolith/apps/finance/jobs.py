@@ -76,7 +76,7 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
 
     with transaction.atomic():
         request_row = (
-            ParcelRequest.objects.select_for_update().filter(pk=request_id).first()
+            ParcelRequest.objects.select_for_update(no_key=True).filter(pk=request_id).first()
         )
         if request_row is None:
             return "request_missing"
@@ -99,7 +99,7 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             request_row.save(update_fields=["status", "updated_at"])
 
         order = (
-            PaymentOrder.objects.select_for_update()
+            PaymentOrder.objects.select_for_update(no_key=True)
             .filter(
                 delivery_request_id=request_id,
                 purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
@@ -457,9 +457,9 @@ def claim_due_jobs(*, limit: int, at: datetime | None = None) -> list[ScheduledJ
             status=ScheduledJob.Status.PENDING, run_at__lte=at
         ).order_by("run_at", "id")
         if connection.features.has_select_for_update_skip_locked:
-            queryset = queryset.select_for_update(skip_locked=True)
+            queryset = queryset.select_for_update(no_key=True, skip_locked=True)
         else:
-            queryset = queryset.select_for_update()
+            queryset = queryset.select_for_update(no_key=True)
         rows = list(queryset[:limit])
         if rows:
             ScheduledJob.objects.filter(pk__in=[row.pk for row in rows]).update(

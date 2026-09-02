@@ -316,7 +316,9 @@ class _ProviderTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      label: label,
       hint: selected ? l.a11ySelected : l.a11yNotSelected,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: AppCard(
           onTap: onTap,

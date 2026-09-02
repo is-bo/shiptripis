@@ -22,6 +22,7 @@ import secrets
 from django.conf import settings
 
 from .base import (
+    MODE_TEST,
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
@@ -61,6 +62,11 @@ class MockGateway:
 
     def __init__(self, *, webhook_secret: str = MOCK_WEBHOOK_SECRET):
         self.webhook_secret = webhook_secret
+
+    def credential_mode(self) -> str:
+        """Always test. Production refuses to boot with this rail enabled."""
+
+        return MODE_TEST
 
     def is_configured(self) -> bool:
         return bool(getattr(settings, "PAYMENTS_ALLOW_MOCK_PROVIDER", False))

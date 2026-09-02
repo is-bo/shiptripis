@@ -1533,6 +1533,12 @@ abstract class L {
   /// **'e.g. AH1006'**
   String get journeyFlightNumberHint;
 
+  /// No description provided for @journeyFlightAirportsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Flight legs must start and end at airports.'**
+  String get journeyFlightAirportsRequired;
+
   /// No description provided for @journeyPublish.
   ///
   /// In en, this message translates to:
@@ -3663,6 +3669,24 @@ abstract class L {
   /// **'Account'**
   String get profileAccount;
 
+  /// No description provided for @profilePassportStamp.
+  ///
+  /// In en, this message translates to:
+  /// **'SHIPTRIP · MEMBER'**
+  String get profilePassportStamp;
+
+  /// No description provided for @profileCompletedDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get profileCompletedDeliveries;
+
+  /// No description provided for @profileRecentRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent rating'**
+  String get profileRecentRating;
+
   /// No description provided for @profileRoles.
   ///
   /// In en, this message translates to:
@@ -3804,14 +3828,80 @@ abstract class L {
   /// No description provided for @locationSearchTitle.
   ///
   /// In en, this message translates to:
-  /// **'Choose a location'**
+  /// **'Choose a place'**
   String get locationSearchTitle;
 
   /// No description provided for @locationSearchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search for a city or address'**
+  /// **'Search localities and airports'**
   String get locationSearchHint;
+
+  /// No description provided for @locationSelectCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a country first'**
+  String get locationSelectCountry;
+
+  /// No description provided for @locationSearchStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a locality, municipality, commune, or airport'**
+  String get locationSearchStart;
+
+  /// No description provided for @placeTierWilaya.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} Wilaya'**
+  String placeTierWilaya(String name);
+
+  /// No description provided for @placeTierDepartment.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} department'**
+  String placeTierDepartment(String name);
+
+  /// No description provided for @placeTierRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} region'**
+  String placeTierRegion(String name);
+
+  /// No description provided for @placeTierProvince.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} province'**
+  String placeTierProvince(String name);
+
+  /// No description provided for @placeTierAutonomousCommunity.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} autonomous community'**
+  String placeTierAutonomousCommunity(String name);
+
+  /// No description provided for @placeTierState.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} state'**
+  String placeTierState(String name);
+
+  /// No description provided for @placeTierDistrict.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} district'**
+  String placeTierDistrict(String name);
+
+  /// No description provided for @locationTypeAirport.
+  ///
+  /// In en, this message translates to:
+  /// **'Airport'**
+  String get locationTypeAirport;
+
+  /// No description provided for @locationTypeLocality.
+  ///
+  /// In en, this message translates to:
+  /// **'Locality'**
+  String get locationTypeLocality;
 
   /// No description provided for @locationUseMap.
   ///
@@ -3825,29 +3915,11 @@ abstract class L {
   /// **'Use this point'**
   String get locationConfirmPoint;
 
-  /// No description provided for @locationRecent.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent'**
-  String get locationRecent;
-
   /// No description provided for @locationSaved.
   ///
   /// In en, this message translates to:
   /// **'Saved places'**
   String get locationSaved;
-
-  /// No description provided for @locationCityOnly.
-  ///
-  /// In en, this message translates to:
-  /// **'City only'**
-  String get locationCityOnly;
-
-  /// No description provided for @locationExactAddress.
-  ///
-  /// In en, this message translates to:
-  /// **'Exact address'**
-  String get locationExactAddress;
 
   /// No description provided for @locationPrivacyBeforeFunding.
   ///
@@ -3879,6 +3951,168 @@ abstract class L {
   /// **'Try a different spelling, or pick the point on the map.'**
   String get locationSearchEmptyBody;
 
+  /// No description provided for @countryNameAlgeria.
+  ///
+  /// In en, this message translates to:
+  /// **'Algeria'**
+  String get countryNameAlgeria;
+
+  /// No description provided for @countryNameFrance.
+  ///
+  /// In en, this message translates to:
+  /// **'France'**
+  String get countryNameFrance;
+
+  /// No description provided for @countryNameSpain.
+  ///
+  /// In en, this message translates to:
+  /// **'Spain'**
+  String get countryNameSpain;
+
+  /// No description provided for @countryNameGermany.
+  ///
+  /// In en, this message translates to:
+  /// **'Germany'**
+  String get countryNameGermany;
+
+  /// No description provided for @locationCountryQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Which country?'**
+  String get locationCountryQuestion;
+
+  /// No description provided for @locationChangeCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get locationChangeCountry;
+
+  /// No description provided for @locationCountryStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get locationCountryStep;
+
+  /// No description provided for @locationCountriesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No countries are available right now.'**
+  String get locationCountriesUnavailable;
+
+  /// No description provided for @locationSelectCountryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a country above, then search for the town, commune or airport.'**
+  String get locationSelectCountryBody;
+
+  /// No description provided for @locationSearchReadyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready when you are'**
+  String get locationSearchReadyTitle;
+
+  /// No description provided for @locationSearchHintAirports.
+  ///
+  /// In en, this message translates to:
+  /// **'Search airports'**
+  String get locationSearchHintAirports;
+
+  /// No description provided for @locationSearchStartAirports.
+  ///
+  /// In en, this message translates to:
+  /// **'Type an airport name or its three-letter code.'**
+  String get locationSearchStartAirports;
+
+  /// No description provided for @locationAirportsOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'This leg flies, so only airports are offered.'**
+  String get locationAirportsOnly;
+
+  /// No description provided for @locationCurrentSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently selected'**
+  String get locationCurrentSelection;
+
+  /// No description provided for @locationSearchNoMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here matches “{query}”. Check the spelling, or try the nearest larger town.'**
+  String locationSearchNoMatch(String query);
+
+  /// No description provided for @locationSearchNoMatchAirports.
+  ///
+  /// In en, this message translates to:
+  /// **'No airport here matches “{query}”. Try the city name, or the three-letter code.'**
+  String locationSearchNoMatchAirports(String query);
+
+  /// No description provided for @locationPreferredExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Travellers are matched on {place}. A preferred point only says where you would rather meet inside it.'**
+  String locationPreferredExplainer(String place);
+
+  /// No description provided for @locationPreferredFlexibleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No exact point needed'**
+  String get locationPreferredFlexibleHint;
+
+  /// No description provided for @locationAddPreferredPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a preferred point'**
+  String get locationAddPreferredPoint;
+
+  /// No description provided for @locationChangePreferredPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Change point'**
+  String get locationChangePreferredPoint;
+
+  /// No description provided for @locationRemovePreferredPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove preferred point'**
+  String get locationRemovePreferredPoint;
+
+  /// No description provided for @locationPreferredRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferred point removed.'**
+  String get locationPreferredRemoved;
+
+  /// No description provided for @locationPreferredClearedByPlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferred point removed — it belonged to the place you just changed.'**
+  String get locationPreferredClearedByPlace;
+
+  /// No description provided for @locationDecideLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Decide later'**
+  String get locationDecideLater;
+
+  /// No description provided for @locationPointInside.
+  ///
+  /// In en, this message translates to:
+  /// **'Point inside'**
+  String get locationPointInside;
+
+  /// No description provided for @locationDropPinHelpIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Move the map until the crosshair sits where you mean inside {place}, then confirm.'**
+  String locationDropPinHelpIn(String place);
+
+  /// No description provided for @locationNoCentre.
+  ///
+  /// In en, this message translates to:
+  /// **'We have no centre on file for {place}, so the map starts wide. Move it to the right area before you confirm.'**
+  String locationNoCentre(String place);
+
   /// No description provided for @mapAttribution.
   ///
   /// In en, this message translates to:
@@ -3890,24 +4124,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Your places'**
   String get locationYourPlaces;
-
-  /// No description provided for @locationAirports.
-  ///
-  /// In en, this message translates to:
-  /// **'Airports'**
-  String get locationAirports;
-
-  /// No description provided for @locationExactRequiredNotice.
-  ///
-  /// In en, this message translates to:
-  /// **'This needs one of your own addresses. Airports are city-level only, so they can\'t be used here.'**
-  String get locationExactRequiredNotice;
-
-  /// No description provided for @locationExactRequiredRow.
-  ///
-  /// In en, this message translates to:
-  /// **'City-level only'**
-  String get locationExactRequiredRow;
 
   /// No description provided for @locationEmptyTitle.
   ///
@@ -3951,30 +4167,6 @@ abstract class L {
   /// **'Home, Mum\'s place, the office'**
   String get locationLabelHint;
 
-  /// No description provided for @locationCityField.
-  ///
-  /// In en, this message translates to:
-  /// **'City'**
-  String get locationCityField;
-
-  /// No description provided for @locationCountryField.
-  ///
-  /// In en, this message translates to:
-  /// **'Country code'**
-  String get locationCountryField;
-
-  /// No description provided for @locationCountryHint.
-  ///
-  /// In en, this message translates to:
-  /// **'FR, DZ, ES'**
-  String get locationCountryHint;
-
-  /// No description provided for @locationCountryInvalid.
-  ///
-  /// In en, this message translates to:
-  /// **'Use the two-letter country code.'**
-  String get locationCountryInvalid;
-
   /// No description provided for @locationSavePlace.
   ///
   /// In en, this message translates to:
@@ -3986,6 +4178,36 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Place saved.'**
   String get locationPlaceSaved;
+
+  /// No description provided for @locationPreferredMeetingPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferred meeting point'**
+  String get locationPreferredMeetingPoint;
+
+  /// No description provided for @locationPreferredOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get locationPreferredOptional;
+
+  /// No description provided for @locationChoosePreferredPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose on map'**
+  String get locationChoosePreferredPoint;
+
+  /// No description provided for @locationFlexibleWithin.
+  ///
+  /// In en, this message translates to:
+  /// **'Flexible within {place}'**
+  String locationFlexibleWithin(String place);
+
+  /// No description provided for @locationPreferredValidation.
+  ///
+  /// In en, this message translates to:
+  /// **'The map provider will verify that this point belongs to {place}.'**
+  String locationPreferredValidation(String place);
 
   /// No description provided for @mapZoomIn.
   ///

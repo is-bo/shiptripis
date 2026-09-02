@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_settings.dart';
+import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
@@ -23,9 +24,11 @@ import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
+import '../../design/identity.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/account.dart';
+import '../../domain/rating.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
@@ -37,6 +40,8 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
+    final completedDeals = ref.watch(completedDealsCountProvider);
+    final ratings = ref.watch(receivedRatingsProvider);
 
     if (account == null) {
       return const AppScaffold(
@@ -57,7 +62,11 @@ class ProfileScreen extends ConsumerWidget {
         child: ListView(
           padding: AppScrollPadding.page(context),
           children: [
-            _AccountCard(account: account),
+            _PassportCard(
+              account: account,
+              completedDeals: completedDeals,
+              ratings: ratings,
+            ),
             const SizedBox(height: AppSpace.xl),
 
             _VerificationCard(account: account),
@@ -160,10 +169,23 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _AccountCard extends StatelessWidget {
-  const _AccountCard({required this.account});
+/// The useful account-passport concept from the original pre-Phase-5 client,
+/// mapped onto current V1 authority.
+///
+/// The historical card's hard-coded member number, DZD wallet and demo trip
+/// counts are deliberately gone. In their place are only facts supplied by
+/// current endpoints: identity, capabilities, verification, received ratings,
+/// completed Deals, join date and the stored communication language.
+class _PassportCard extends StatelessWidget {
+  const _PassportCard({
+    required this.account,
+    required this.completedDeals,
+    required this.ratings,
+  });
 
   final Account account;
+  final AsyncValue<int> completedDeals;
+  final AsyncValue<List<Rating>> ratings;
 
   @override
   Widget build(BuildContext context) {
@@ -172,75 +194,174 @@ class _AccountCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context);
     final joined = account.dateJoined;
+    final displayName = account.fullName.trim().isEmpty
+        ? account.email
+        : account.fullName;
+    final completed = completedDeals.value;
+    final revealedRatings = ratings.value ?? const <Rating>[];
+    final average = revealedRatings.isEmpty
+        ? null
+        : revealedRatings.fold<int>(0, (sum, rating) => sum + rating.score) /
+              revealedRatings.length;
 
-    return AppCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AppAvatar(
-            initials: initialsFor(account.fullName),
-            name: account.fullName,
-            size: 52,
-            isVerified: account.isKycVerified,
-          ),
-          const SizedBox(width: AppSpace.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  account.fullName,
-                  style: text.titleMedium,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  account.email,
-                  style: text.bodySmall?.copyWith(color: c.textSecondary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpace.md),
-                Wrap(
-                  spacing: AppSpace.sm,
-                  runSpacing: AppSpace.sm,
+    return Semantics(
+      container: true,
+      label: '${l.profileAccount}, $displayName',
+      child: ClipRRect(
+        borderRadius: AppRadius.rLg,
+        child: ColoredBox(
+          color: c.surfaceInverse,
+          child: Stack(
+            children: [
+              const Positioned.fill(child: PaperGrain(density: 0.7)),
+              Padding(
+                padding: const EdgeInsets.all(AppSpace.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StatusPill(
-                      label: account.isEmailVerified
-                          ? l.profileEmailVerified
-                          : l.profileEmailUnverified,
-                      tone: account.isEmailVerified
-                          ? StatusTone.good
-                          : StatusTone.waiting,
-                      icon: account.isEmailVerified
-                          ? Icons.mark_email_read_rounded
-                          : Icons.mark_email_unread_rounded,
-                      compact: true,
+                    StampChip(
+                      label: l.profilePassportStamp,
+                      color: c.accent,
+                      angle: -0.025,
                     ),
-                    StatusPill(
-                      label: _roleLabel(context, account.role),
-                      tone: StatusTone.neutral,
-                      icon: Icons.badge_outlined,
-                      compact: true,
+                    const SizedBox(height: AppSpace.xl),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppAvatar(
+                          initials: initialsFor(displayName),
+                          name: displayName,
+                          size: 64,
+                          isVerified: account.isKycVerified,
+                        ),
+                        const SizedBox(width: AppSpace.lg),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: text.titleLarge?.copyWith(
+                                  color: c.textOnInverse,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              Text(
+                                account.email,
+                                style: text.bodySmall?.copyWith(
+                                  color: c.textOnInverse.withValues(
+                                    alpha: 0.72,
+                                  ),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: AppSpace.md),
+                              Wrap(
+                                spacing: AppSpace.sm,
+                                runSpacing: AppSpace.sm,
+                                children: [
+                                  _PassportMarker(
+                                    label: account.isKycVerified
+                                        ? l.kycStatusApproved
+                                        : _kycLabel(context, account.kycStatus),
+                                    icon: account.isKycVerified
+                                        ? Icons.verified_rounded
+                                        : Icons.badge_outlined,
+                                    highlighted: account.isKycVerified,
+                                  ),
+                                  _PassportMarker(
+                                    label: account.isEmailVerified
+                                        ? l.profileEmailVerified
+                                        : l.profileEmailUnverified,
+                                    icon: account.isEmailVerified
+                                        ? Icons.mark_email_read_rounded
+                                        : Icons.mark_email_unread_rounded,
+                                    highlighted: account.isEmailVerified,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: AppSpace.xl),
+                    Divider(
+                      height: 1,
+                      color: c.textOnInverse.withValues(alpha: 0.16),
+                    ),
+                    const SizedBox(height: AppSpace.lg),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width =
+                            (constraints.maxWidth - AppSpace.lg * 2) / 3;
+                        return Wrap(
+                          spacing: AppSpace.lg,
+                          runSpacing: AppSpace.lg,
+                          children: [
+                            _PassportFact(
+                              width: width,
+                              label: l.profileRoles,
+                              value: _roleLabel(context, account.role),
+                            ),
+                            _PassportFact(
+                              width: width,
+                              label: l.profileCompletedDeliveries,
+                              value: completed?.toString() ?? '—',
+                            ),
+                            _PassportFact(
+                              width: width,
+                              label: l.profileRecentRating,
+                              value: !ratings.hasValue
+                                  ? '—'
+                                  : average == null
+                                  ? l.discoveryNoRatingsYet
+                                  : '${average.toStringAsFixed(1)} ★',
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpace.lg),
+                    Text(
+                      '${l.profileEmailLanguage}: '
+                      '${account.preferredLanguage.nativeLabel}',
+                      style: text.bodySmall?.copyWith(
+                        color: c.textOnInverse.withValues(alpha: 0.78),
+                      ),
+                    ),
+                    if (joined != null) ...[
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        l.profileMemberSince(
+                          LocaleFormats.fullDate(locale, joined),
+                        ),
+                        style: text.bodySmall?.copyWith(
+                          color: c.textOnInverse.withValues(alpha: 0.62),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (joined != null) ...[
-                  const SizedBox(height: AppSpace.md),
-                  Text(
-                    l.profileMemberSince(
-                      LocaleFormats.fullDate(locale, joined),
-                    ),
-                    style: text.bodySmall?.copyWith(color: c.textTertiary),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  String _kycLabel(BuildContext context, KycStatus status) {
+    final l = L.of(context);
+    return switch (status) {
+      KycStatus.verified => l.kycStatusApproved,
+      KycStatus.pending => l.kycStatusPending,
+      KycStatus.rejected => l.kycStatusRejected,
+      KycStatus.unverified || KycStatus.unknown => l.kycStatusNotStarted,
+    };
   }
 
   String _roleLabel(BuildContext context, AccountRole role) {
@@ -253,6 +374,84 @@ class _AccountCard extends StatelessWidget {
       AccountRole.both => '${l.roleSender} · ${l.roleTraveler}',
       AccountRole.admin || AccountRole.unknown => l.profileAccount,
     };
+  }
+}
+
+class _PassportMarker extends StatelessWidget {
+  const _PassportMarker({
+    required this.label,
+    required this.icon,
+    required this.highlighted,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: highlighted
+              ? c.accent
+              : c.textOnInverse.withValues(alpha: 0.65),
+        ),
+        const SizedBox(width: AppSpace.xs),
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: c.textOnInverse),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PassportFact extends StatelessWidget {
+  const _PassportFact({
+    required this.width,
+    required this.label,
+    required this.value,
+  });
+
+  final double width;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: text.labelSmall?.copyWith(
+              color: c.textOnInverse.withValues(alpha: 0.58),
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            value,
+            style: text.titleSmall?.copyWith(color: c.textOnInverse),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -359,6 +558,7 @@ class _Row extends StatelessWidget {
       button: enabled,
       enabled: enabled,
       label: value == null ? label : '$label, $value',
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,

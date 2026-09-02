@@ -12,6 +12,7 @@
 /// Django.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -28,6 +29,7 @@ class RecordedRequest {
     required this.method,
     required this.path,
     required this.body,
+    this.query = const <String, dynamic>{},
   });
 
   final String method;
@@ -35,6 +37,7 @@ class RecordedRequest {
 
   /// The decoded JSON body, or `{}` for a request that carried none.
   final Map<String, dynamic> body;
+  final Map<String, dynamic> query;
 
   @override
   String toString() => '$method $path $body';
@@ -48,7 +51,7 @@ class FakeResponse {
   final Object body;
 }
 
-typedef FakeHandler = FakeResponse Function(RecordedRequest request);
+typedef FakeHandler = FutureOr<FakeResponse> Function(RecordedRequest request);
 
 class FakeBackend {
   final List<RecordedRequest> requests = <RecordedRequest>[];
@@ -79,7 +82,7 @@ class FakeBackend {
     return matches.isEmpty ? null : matches.last;
   }
 
-  FakeResponse _dispatch(RecordedRequest request) {
+  Future<FakeResponse> _dispatch(RecordedRequest request) async {
     requests.add(request);
     final handler = _routes[_key(request.method, request.path)];
     if (handler == null) {
@@ -107,9 +110,10 @@ class _FakeAdapter implements HttpClientAdapter {
       method: options.method.toUpperCase(),
       path: options.uri.path,
       body: raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{},
+      query: Map<String, dynamic>.from(options.queryParameters),
     );
 
-    final response = backend._dispatch(request);
+    final response = await backend._dispatch(request);
     return ResponseBody.fromString(
       jsonEncode(response.body),
       response.statusCode,

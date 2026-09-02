@@ -203,6 +203,10 @@ class _Stars extends StatelessWidget {
     return Semantics(
       slider: true,
       value: score == 0 ? null : l.ratingScoreLabel(score),
+      // A slider is operated with increase/decrease, not a tap. Without these
+      // the control announces a score a screen reader can never change.
+      onIncrease: score < 5 ? () => onChanged(score + 1) : null,
+      onDecrease: score > 1 ? () => onChanged(score - 1) : null,
       child: ExcludeSemantics(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -251,6 +255,7 @@ class _TagChip extends StatelessWidget {
       selected: selected,
       hint: selected ? l.a11ySelected : l.a11yNotSelected,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: Material(
           color: selected ? c.brandSoft : c.surfaceSunken,

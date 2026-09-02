@@ -7,6 +7,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
+from .geography import normalize_search_name
+
 
 latitude_validators = (
     MinValueValidator(Decimal("-90")),
@@ -113,6 +115,16 @@ class Location(models.Model):
         "trips.Airport",
         on_delete=models.PROTECT,
         related_name="locations",
+        null=True,
+        blank=True,
+    )
+    # Optional authoritative catalogue context.  Legacy address-book rows may
+    # remain unscoped; every new V1 preferred point is scoped to the selected
+    # canonical Place and can therefore never create a competing city identity.
+    canonical_place = models.ForeignKey(
+        "Place",
+        on_delete=models.PROTECT,
+        related_name="preferred_locations",
         null=True,
         blank=True,
     )
@@ -252,3 +264,478 @@ class Location(models.Model):
 
     def __str__(self) -> str:
         return self.public_label
+
+
+class Country(models.Model):
+    """An authoritative ISO country used by the geography catalogue.
+
+    ``Location`` remains the user-owned exact address/pin model.  Country and
+    Place are stable catalogue identities consumed by the future locality UX.
+    """
+
+    code = models.CharField(
+        max_length=2,
+        primary_key=True,
+        validators=[country_code_validator],
+    )
+    name = models.CharField(max_length=120)
+    normalized_name = models.CharField(max_length=120, editable=False)
+    source = models.CharField(max_length=96)
+    source_id = models.CharField(max_length=128)
+    source_version = models.CharField(max_length=96)
+    active = models.BooleanField(default=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "locations_country"
+        ordering = ("name", "code")
+        indexes = [
+            models.Index(fields=("active", "name"), name="geo_country_active_name_idx"),
+            models.Index(
+                fields=("source", "source_id"),
+                name="geo_country_source_id_idx",
+            ),
+            models.Index(
+                fields=("normalized_name",),
+                name="geo_country_norm_name_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("source", "source_id"),
+                name="geo_country_source_identity_uniq",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.upper()
+        self.normalized_name = normalize_search_name(self.name)
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        super().clean()
+        self.code = self.code.upper()
+        if not isinstance(self.metadata, dict):
+            raise ValidationError({"metadata": "Metadata must be a JSON object."})
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.code})"
+
+
+class Place(models.Model):
+    """A stable selectable geography record, including airports.
+
+    The natural key is ``(source, source_id)``.  Names and coordinates can be
+    refreshed without changing the internal primary key, while old records are
+    retained and marked inactive when a source retires them.
+    """
+
+    class PlaceType(models.TextChoices):
+        ADMIN_REGION = "admin_region", "Administrative region"
+        LOCALITY = "locality", "Locality / commune"
+        AIRPORT = "airport", "Airport"
+
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.PROTECT,
+        related_name="places",
+    )
+    place_type = models.CharField(max_length=24, choices=PlaceType.choices)
+    source = models.CharField(max_length=96)
+    source_id = models.CharField(max_length=160)
+    source_version = models.CharField(max_length=96)
+    name = models.CharField(max_length=255)
+    normalized_name = models.CharField(max_length=255, editable=False)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="children",
+        null=True,
+        blank=True,
+    )
+    admin_level = models.CharField(max_length=48, blank=True, default="")
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        validators=latitude_validators,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        validators=longitude_validators,
+        null=True,
+        blank=True,
+    )
+    iata_code = models.CharField(max_length=3, blank=True, default="")
+    icao_code = models.CharField(max_length=4, blank=True, default="")
+    airport_type = models.CharField(max_length=40, blank=True, default="")
+    passenger_use = models.BooleanField(default=False)
+    legacy_airport = models.OneToOneField(
+        "trips.Airport",
+        on_delete=models.PROTECT,
+        related_name="catalogue_place",
+        null=True,
+        blank=True,
+    )
+    active = models.BooleanField(default=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "locations_place"
+        ordering = ("name", "id")
+        indexes = [
+            models.Index(
+                fields=("country", "active", "place_type"),
+                name="geo_place_ctry_act_type_idx",
+            ),
+            models.Index(
+                fields=("source", "source_id"), name="geo_place_source_id_idx"
+            ),
+            models.Index(
+                fields=("place_type", "active"),
+                name="geo_place_type_active_idx",
+            ),
+            models.Index(
+                fields=("parent", "active"), name="geo_place_parent_active_idx"
+            ),
+            models.Index(
+                fields=("active", "normalized_name"),
+                name="geo_place_active_norm_name_idx",
+            ),
+            models.Index(
+                fields=("country", "normalized_name"),
+                name="geo_place_ctry_norm_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("source", "source_id"),
+                name="geo_place_source_identity_uniq",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(latitude__isnull=True, longitude__isnull=True)
+                    | models.Q(latitude__isnull=False, longitude__isnull=False)
+                ),
+                name="geo_place_coords_pair",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(latitude__isnull=True)
+                    | models.Q(latitude__gte=-90, latitude__lte=90)
+                ),
+                name="geo_place_latitude_range",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(longitude__isnull=True)
+                    | models.Q(longitude__gte=-180, longitude__lte=180)
+                ),
+                name="geo_place_longitude_range",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(iata_code="") | models.Q(place_type="airport"),
+                name="geo_place_iata_airport_only",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(icao_code="") | models.Q(place_type="airport"),
+                name="geo_place_icao_airport_only",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(passenger_use=False)
+                | models.Q(place_type="airport"),
+                name="geo_place_passenger_airport_only",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(place_type="airport")
+                | models.Q(latitude__isnull=False, longitude__isnull=False),
+                name="geo_place_airport_coords_required",
+            ),
+            models.UniqueConstraint(
+                fields=("iata_code",),
+                condition=models.Q(iata_code__gt=""),
+                name="geo_place_iata_uniq",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.normalized_name = normalize_search_name(self.name)
+        if self.iata_code:
+            self.iata_code = self.iata_code.upper()
+        if self.icao_code:
+            self.icao_code = self.icao_code.upper()
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.parent_id == self.pk:
+            errors["parent"] = "A place cannot be its own parent."
+        if self.parent is not None and self.parent.country_id != self.country_id:
+            errors["parent"] = "Parent must belong to the same country."
+        if self.place_type != self.PlaceType.AIRPORT and (
+            self.iata_code
+            or self.icao_code
+            or self.airport_type
+            or self.legacy_airport_id
+            or self.passenger_use
+        ):
+            errors["place_type"] = "Airport fields are valid only for airport places."
+        if not isinstance(self.metadata, dict):
+            errors["metadata"] = "Metadata must be a JSON object."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def display_label(self) -> str:
+        if self.parent_id and self.parent is not None:
+            return f"{self.name} · {self.parent.name}"
+        return self.name
+
+    def resolve_matching_locality(self):
+        """Return the canonical locality identity used by V1 compatibility.
+
+        Airports must have exactly one active primary ``served`` mapping;
+        returning ``None`` is a deliberate fail-closed result for an unmapped
+        airport rather than an inferred city from a display label.
+        """
+
+        if self.place_type == self.PlaceType.LOCALITY:
+            # A reviewed catalogue refresh can retire a locality after a
+            # request/journey was created.  Do not keep matching against a
+            # retired identity; V1 compatibility must fail closed.
+            return self if self.active else None
+        if self.place_type != self.PlaceType.AIRPORT:
+            return None
+        cached_locality = getattr(self, "_matching_locality_cache", None)
+        if cached_locality is not None:
+            return cached_locality or None
+        prefetched = getattr(self, "_active_matching_mappings", None)
+        if prefetched is None:
+            prefetched = getattr(self, "_prefetched_objects_cache", {}).get(
+                "airport_mappings"
+            )
+        if prefetched is not None:
+            mapping = next(
+                (
+                    item
+                    for item in prefetched
+                    if item.active
+                    and item.is_primary
+                    and item.relationship_type
+                    == AirportLocalityMapping.RelationshipType.SERVED
+                    and item.locality.active
+                ),
+                None,
+            )
+            locality = mapping.locality if mapping else None
+            self._matching_locality_cache = locality or False
+            return locality
+        mapping = (
+            self.airport_mappings.filter(
+                active=True,
+                is_primary=True,
+                relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+                locality__active=True,
+            )
+            .select_related("locality")
+            .first()
+        )
+        locality = mapping.locality if mapping else None
+        self._matching_locality_cache = locality or False
+        return locality
+
+    def __str__(self) -> str:
+        return self.display_label
+
+
+class PlaceAlternateName(models.Model):
+    """A source-backed alternate/localized name; no invented translations."""
+
+    place = models.ForeignKey(
+        Place,
+        on_delete=models.CASCADE,
+        related_name="alternate_name_records",
+    )
+    name = models.CharField(max_length=255)
+    normalized_name = models.CharField(max_length=255, editable=False)
+    language = models.CharField(max_length=16, blank=True, default="und")
+    source = models.CharField(max_length=96)
+    source_id = models.CharField(max_length=160)
+    source_version = models.CharField(max_length=96)
+    active = models.BooleanField(default=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "locations_place_alternate_name"
+        indexes = [
+            models.Index(
+                fields=("normalized_name", "active"),
+                name="geo_alt_name_norm_active_idx",
+            ),
+            models.Index(
+                fields=("source", "source_id"), name="geo_alt_name_source_id_idx"
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("source", "source_id"),
+                name="geo_alt_name_source_identity_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=("place", "language", "normalized_name"),
+                name="geo_alt_name_place_lang_norm_uniq",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.normalized_name = normalize_search_name(self.name)
+        self.language = (self.language or "und").casefold()
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        super().clean()
+        if not isinstance(self.metadata, dict):
+            raise ValidationError({"metadata": "Metadata must be a JSON object."})
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.language})"
+
+
+class AirportLocalityMapping(models.Model):
+    """Explicit airport-to-useful-locality context mapping.
+
+    ``Place.parent`` identifies the physical administrative context.  This
+    model records the separate locality an airport commercially serves.
+    """
+
+    class RelationshipType(models.TextChoices):
+        SERVED = "served", "Commercially served locality"
+        PHYSICAL = "physical", "Physical locality"
+
+    airport = models.ForeignKey(
+        Place,
+        on_delete=models.CASCADE,
+        related_name="airport_mappings",
+    )
+    locality = models.ForeignKey(
+        Place,
+        on_delete=models.PROTECT,
+        related_name="airport_contexts",
+    )
+    relationship_type = models.CharField(
+        max_length=16,
+        choices=RelationshipType.choices,
+        default=RelationshipType.SERVED,
+    )
+    is_primary = models.BooleanField(default=False)
+    source = models.CharField(max_length=96)
+    source_id = models.CharField(max_length=160)
+    source_version = models.CharField(max_length=96)
+    active = models.BooleanField(default=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "locations_airport_locality_mapping"
+        indexes = [
+            models.Index(
+                fields=("airport", "active"), name="geo_map_airport_active_idx"
+            ),
+            models.Index(
+                fields=("locality", "active"), name="geo_map_locality_active_idx"
+            ),
+            models.Index(
+                fields=("source", "source_id"),
+                name="geo_map_source_id_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("source", "source_id"),
+                name="geo_map_source_identity_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=("airport", "relationship_type", "locality"),
+                name="geo_map_airport_type_locality_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=("airport", "relationship_type"),
+                condition=models.Q(active=True, is_primary=True),
+                name="geo_map_one_primary_uniq",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if (
+            self.airport is not None
+            and self.airport.place_type != Place.PlaceType.AIRPORT
+        ):
+            errors["airport"] = "Mapping source must be an airport place."
+        if (
+            self.locality is not None
+            and self.locality.place_type != Place.PlaceType.LOCALITY
+        ):
+            errors["locality"] = "Mapping target must be a locality place."
+        if (
+            self.airport is not None
+            and self.locality is not None
+            and self.airport.country_id != self.locality.country_id
+        ):
+            errors["locality"] = "Airport and locality must share a country."
+        if not isinstance(self.metadata, dict):
+            errors["metadata"] = "Metadata must be a JSON object."
+        if self.active and (
+            (self.airport is not None and not self.airport.active)
+            or (self.locality is not None and not self.locality.active)
+        ):
+            errors["active"] = "An active mapping must reference active places."
+        if not self.active and self.is_primary:
+            errors["is_primary"] = "An inactive mapping cannot be primary."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"{self.airport.name} → {self.locality.name}"
+
+
+class GeographyCatalogueImport(models.Model):
+    """A record that one exact catalogue manifest has been applied here.
+
+    The catalogue is 56k rows of reviewed source data, too large to live in a
+    migration and too important to leave to somebody remembering to run a
+    command. The release ships one manifest artefact and the deployment applies
+    it once; this table is how "once" is decided.
+
+    The key is ``content_sha256`` — the digest of the manifest's *uncompressed*
+    bytes, so it identifies the reviewed data itself rather than how it was
+    packed. A boot whose shipped manifest already matches the stored digest
+    skips the import in one indexed read; that is what keeps the import from
+    being destructive, or even expensive, on every boot.
+    """
+
+    content_sha256 = models.CharField(max_length=64, unique=True)
+    #: What the manifest actually put in the database, for the operator who has
+    #: to answer "did the catalogue land?" without counting rows by hand.
+    counts = models.JSONField(default=dict, blank=True)
+    #: The release that applied it. Free text on purpose: it is provenance for
+    #: a human, never something the importer branches on.
+    applied_by_release = models.CharField(max_length=128, blank=True, default="")
+    applied_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "locations_geography_catalogue_import"
+        ordering = ("-applied_at",)
+        verbose_name = "geography catalogue import"
+        verbose_name_plural = "geography catalogue imports"
+
+    def __str__(self) -> str:
+        return f"{self.content_sha256[:12]} @ {self.applied_at:%Y-%m-%d %H:%M}"

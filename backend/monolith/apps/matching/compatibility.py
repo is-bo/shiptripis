@@ -9,7 +9,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.deals.models import Deal, DealLegAllocation
-from apps.locations.models import Location
+from apps.locations.models import AirportLocalityMapping, Location, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.geometry import (
     GeoPoint,
@@ -139,6 +139,47 @@ def _public_location_summary(location: Location) -> dict:
     return {field: values[field] for field in PUBLIC_LOCATION_SUMMARY_FIELDS}
 
 
+def _matching_locality_id(place: Place | None) -> int | None:
+    """Resolve a selectable place to the immutable locality used for matching."""
+
+    if place is None:
+        return None
+    if place.place_type == Place.PlaceType.LOCALITY:
+        return place.pk if place.active else None
+    cached = getattr(place, "_matching_locality_id_cache", None)
+    if cached is not None:
+        return cached or None
+    prefetched = getattr(place, "_active_matching_mappings", None)
+    if prefetched is not None:
+        locality_id = prefetched[0].locality_id if prefetched else None
+        place._matching_locality_id_cache = locality_id or 0
+        return locality_id
+    mapping = place.airport_mappings.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).first()
+    locality_id = mapping.locality_id if mapping else None
+    place._matching_locality_id_cache = locality_id or 0
+    return locality_id
+
+
+def _public_place_summary(place: Place | None) -> dict | None:
+    if place is None:
+        return None
+    locality_id = _matching_locality_id(place)
+    return {
+        "id": place.pk,
+        "name": place.name,
+        "display_label": place.display_label,
+        "place_type": place.place_type,
+        "country_code": place.country_id,
+        "iata_code": place.iata_code or None,
+        "matching_locality_id": locality_id,
+    }
+
+
 def _public_leg_summary(leg: JourneyLeg) -> dict:
     """Render one covered leg with only counterparty-visible fields.
 
@@ -151,8 +192,12 @@ def _public_leg_summary(leg: JourneyLeg) -> dict:
         "journey_leg_id": leg.pk,
         "position": leg.position,
         "mode": leg.mode,
-        "origin": _public_location_summary(leg.origin),
-        "destination": _public_location_summary(leg.destination),
+        "origin": _public_location_summary(leg.origin) if leg.origin else None,
+        "destination": _public_location_summary(leg.destination)
+        if leg.destination
+        else None,
+        "origin_place": _public_place_summary(leg.origin_place),
+        "destination_place": _public_place_summary(leg.destination_place),
         "depart_at": leg.depart_at.isoformat() if leg.depart_at else None,
         "arrive_at": leg.arrive_at.isoformat() if leg.arrive_at else None,
     }
@@ -161,6 +206,17 @@ def _public_leg_summary(leg: JourneyLeg) -> dict:
 
 def _point(location: Location) -> GeoPoint:
     return GeoPoint(float(location.latitude), float(location.longitude))
+
+
+def _leg_point(leg: JourneyLeg, *, origin: bool) -> GeoPoint:
+    """Get a route endpoint from canonical Place or legacy Location."""
+
+    value = (leg.origin_place if origin else leg.destination_place) or (
+        leg.origin if origin else leg.destination
+    )
+    if value is None or value.latitude is None or value.longitude is None:
+        raise ValueError("Journey endpoint has no trusted coordinates")
+    return GeoPoint(float(value.latitude), float(value.longitude))
 
 
 def _same_route_node(first: Location, second: Location) -> bool:
@@ -180,7 +236,7 @@ def _journey_legs(journey: Journey) -> list[JourneyLeg]:
         return list(prefetched)
     return list(
         JourneyLeg.objects.filter(journey=journey)
-        .select_related("origin", "destination")
+        .select_related("origin", "destination", "origin_place", "destination_place")
         .order_by("position", "pk")
     )
 
@@ -262,6 +318,26 @@ def _candidate_anchors(
     return anchors
 
 
+def _canonical_candidate_anchors(
+    place: Place, legs: list[JourneyLeg]
+) -> list[RouteAnchor]:
+    """Return node anchors for canonical locality identity only.
+
+    Preferred pins are intentionally absent from this function: they are an
+    operational handoff detail and never alter V1 compatibility.
+    """
+
+    locality_id = _matching_locality_id(place)
+    if locality_id is None:
+        return []
+    nodes = [legs[0].origin_place, *[leg.destination_place for leg in legs]]
+    return [
+        RouteAnchor(float(index), 0, None, "canonical_locality", None)
+        for index, node in enumerate(nodes)
+        if _matching_locality_id(node) == locality_id
+    ]
+
+
 def _time_at_position(
     position: float,
     legs: list[JourneyLeg],
@@ -323,8 +399,8 @@ def _route_distance(
     legs: list[JourneyLeg],
     pickup_anchor: RouteAnchor,
     delivery_anchor: RouteAnchor,
-    pickup_location: Location,
-    delivery_location: Location,
+    pickup_location: Location | None,
+    delivery_location: Location | None,
     provider: RouteProvider,
 ) -> tuple[int, str, tuple[dict, ...], list[str]]:
     """Measure only the route on which the parcel is actually carried.
@@ -352,24 +428,28 @@ def _route_distance(
     )
     for index in range(start_index, end_index + 1):
         leg = legs[index]
-        start_fraction = (
-            pickup_anchor.position - index if index == start_index else 0.0
-        )
-        end_fraction = (
-            delivery_anchor.position - index if index == end_index else 1.0
-        )
+        start_fraction = pickup_anchor.position - index if index == start_index else 0.0
+        end_fraction = delivery_anchor.position - index if index == end_index else 1.0
         end_fraction = min(1.0, end_fraction)
         covered_fraction = max(0.0, end_fraction - start_fraction)
 
         partial_start = index == start_index and pickup_anchor.leg is leg
         partial_end = index == end_index and delivery_anchor.leg is leg
-        carried_start = _point(pickup_location) if partial_start else _point(leg.origin)
+        carried_start = (
+            _point(pickup_location)
+            if partial_start and pickup_location
+            else _leg_point(leg, origin=True)
+        )
         carried_end = (
-            _point(delivery_location) if partial_end else _point(leg.destination)
+            _point(delivery_location)
+            if partial_end and delivery_location
+            else _leg_point(leg, origin=False)
         )
 
         if leg.mode == JourneyLeg.Mode.FLIGHT:
-            distance = haversine_meters(_point(leg.origin), _point(leg.destination))
+            distance = haversine_meters(
+                _leg_point(leg, origin=True), _leg_point(leg, origin=False)
+            )
             method = "great_circle_trusted_coordinates"
             covered_distance = round(distance * covered_fraction)
         elif not partial_start and not partial_end and leg.distance_meters is not None:
@@ -434,8 +514,11 @@ def evaluate_compatibility(
         if not passed:
             rejection_codes.append(code)
 
+    canonical_request = delivery_request.schema_version >= 3
+    canonical_journey = journey.schema_version >= 2
+    canonical_flow = canonical_request and canonical_journey
     request_active = (
-        delivery_request.schema_version == 2
+        delivery_request.schema_version in (2, 3)
         and delivery_request.status == ParcelRequest.Status.OPEN
     )
     check("request_active", request_active)
@@ -457,10 +540,23 @@ def evaluate_compatibility(
         range(len(legs))
     )
     if sequence_valid:
-        sequence_valid = all(
-            first.destination_id == second.origin_id
-            for first, second in zip(legs, legs[1:], strict=False)
-        )
+        if canonical_journey:
+            sequence_valid = all(
+                _matching_locality_id(first.destination_place) is not None
+                and _matching_locality_id(first.destination_place)
+                == _matching_locality_id(second.origin_place)
+                for first, second in zip(legs, legs[1:], strict=False)
+            )
+            sequence_valid = sequence_valid and all(
+                _matching_locality_id(leg.origin_place) is not None
+                and _matching_locality_id(leg.destination_place) is not None
+                for leg in legs
+            )
+        else:
+            sequence_valid = all(
+                first.destination_id == second.origin_id
+                for first, second in zip(legs, legs[1:], strict=False)
+            )
     check("journey_leg_sequence", sequence_valid)
 
     safety_fields = (
@@ -484,6 +580,15 @@ def evaluate_compatibility(
         delivery_request.target_traveler_id in (None, journey.traveler_id),
     )
     check("request_has_no_active_deal", not _has_active_deal(delivery_request))
+    if canonical_request:
+        check(
+            "canonical_geography_complete",
+            canonical_journey
+            and _matching_locality_id(delivery_request.pickup_place) is not None
+            and _matching_locality_id(delivery_request.delivery_place) is not None,
+        )
+    elif canonical_journey:
+        check("canonical_geography_complete", False)
 
     empty = CompatibilityResult(
         compatible=False,
@@ -513,7 +618,9 @@ def evaluate_compatibility(
     # annotations and covered-leg identity remain stable without extra queries.
     journey._matching_legs = legs
 
-    def pair_sort_key(pair: tuple[RouteAnchor, RouteAnchor]) -> tuple[int, float, float]:
+    def pair_sort_key(
+        pair: tuple[RouteAnchor, RouteAnchor],
+    ) -> tuple[int, float, float]:
         return (
             pair[0].detour_meters + pair[1].detour_meters,
             pair[1].position - pair[0].position,
@@ -521,16 +628,34 @@ def evaluate_compatibility(
         )
 
     if _anchor_pair is None:
-        pickup_anchors = _candidate_anchors(
-            delivery_request.pickup_location,
-            legs,
-            provider=provider,
-        )
-        delivery_anchors = _candidate_anchors(
-            delivery_request.delivery_location,
-            legs,
-            provider=provider,
-        )
+        if canonical_flow:
+            pickup_anchors = _canonical_candidate_anchors(
+                delivery_request.pickup_place, legs
+            )
+            delivery_anchors = _canonical_candidate_anchors(
+                delivery_request.delivery_place, legs
+            )
+        else:
+            if (
+                delivery_request.pickup_location is None
+                or delivery_request.delivery_location is None
+            ):
+                check("canonical_geography_complete", False)
+                return replace(
+                    empty,
+                    checks=tuple(checks),
+                    rejection_codes=tuple(dict.fromkeys(rejection_codes)),
+                )
+            pickup_anchors = _candidate_anchors(
+                delivery_request.pickup_location,
+                legs,
+                provider=provider,
+            )
+            delivery_anchors = _candidate_anchors(
+                delivery_request.delivery_location,
+                legs,
+                provider=provider,
+            )
         ordered_pairs = [
             (pickup, delivery)
             for pickup in pickup_anchors
@@ -583,9 +708,7 @@ def evaluate_compatibility(
         ("delivery", delivery_anchor),
     ):
         if anchor.method == "spatial_fallback":
-            limitations.append(
-                f"{kind}_anchor_uses_straight_line_spatial_fallback"
-            )
+            limitations.append(f"{kind}_anchor_uses_straight_line_spatial_fallback")
     check(
         "pickup_before_delivery",
         True,
@@ -593,8 +716,8 @@ def evaluate_compatibility(
         delivery_position=delivery_anchor.position,
     )
 
-    pickup_detour = pickup_anchor.detour_meters
-    delivery_detour = delivery_anchor.detour_meters
+    pickup_detour = 0 if canonical_flow else pickup_anchor.detour_meters
+    delivery_detour = 0 if canonical_flow else delivery_anchor.detour_meters
     added_distance = pickup_detour + delivery_detour
     added_duration: int | None = None
     pickup_added_duration: int | None = None
@@ -603,7 +726,17 @@ def evaluate_compatibility(
     detour_anchors = [
         anchor for anchor in (pickup_anchor, delivery_anchor) if anchor.leg
     ]
-    if detour_anchors:
+    if canonical_flow:
+        check("pickup_detour_within_limit", True, actual_meters=0)
+        check("delivery_detour_within_limit", True, actual_meters=0)
+        check("total_added_distance_within_limit", True, actual_meters=0)
+        check(
+            "total_added_duration_within_limit", True, actual_seconds=0, available=True
+        )
+        added_duration = 0
+        pickup_added_duration = 0
+        delivery_added_duration = 0
+    elif detour_anchors:
         by_leg: dict[int, list[tuple[str, GeoPoint, RouteAnchor]]] = {}
         for kind, location, anchor in (
             ("pickup", delivery_request.pickup_location, pickup_anchor),
@@ -627,7 +760,7 @@ def evaluate_compatibility(
                 assert leg is not None
                 ordered = sorted(entries, key=lambda item: item[2].position)
                 baseline = provider.directions(
-                    [_point(leg.origin), _point(leg.destination)],
+                    [_leg_point(leg, origin=True), _leg_point(leg, origin=False)],
                     profile="drive",
                 )
                 with_detour = provider.directions(
@@ -666,8 +799,7 @@ def evaluate_compatibility(
                         )
                         individual_distance = max(
                             0,
-                            individual_route.distance_meters
-                            - baseline.distance_meters,
+                            individual_route.distance_meters - baseline.distance_meters,
                         )
                     individual[kind] = individual_distance
                     prefix = provider.directions(
@@ -691,9 +823,7 @@ def evaluate_compatibility(
                                 [_point(leg.origin), anchor.projected_point],
                                 profile="drive",
                             )
-                            baseline_prefix_duration = (
-                                baseline_prefix.duration_seconds
-                            )
+                            baseline_prefix_duration = baseline_prefix.duration_seconds
                         if baseline_prefix_duration is not None:
                             anchor_prefix_delay[kind] = max(
                                 0,
@@ -759,9 +889,7 @@ def evaluate_compatibility(
         else ceil(delivery_anchor.position) - 1
     )
     covered_legs = tuple(legs[start_index : end_index + 1])
-    journey_flight_legs = [
-        leg for leg in legs if leg.mode == JourneyLeg.Mode.FLIGHT
-    ]
+    journey_flight_legs = [leg for leg in legs if leg.mode == JourneyLeg.Mode.FLIGHT]
     covered_flight_legs = [
         leg for leg in covered_legs if leg.mode == JourneyLeg.Mode.FLIGHT
     ]
@@ -771,13 +899,28 @@ def evaluate_compatibility(
         flight_proofs_ok,
         flight_leg_ids=[leg.pk for leg in journey_flight_legs],
     )
-    trusted_flight_coordinates = all(
-        leg.origin.kind == Location.Kind.AIRPORT
-        and leg.origin.coordinates_trusted
-        and leg.destination.kind == Location.Kind.AIRPORT
-        and leg.destination.coordinates_trusted
-        for leg in covered_flight_legs
-    )
+    if canonical_flow:
+        trusted_flight_coordinates = all(
+            leg.origin_place is not None
+            and leg.origin_place.place_type == Place.PlaceType.AIRPORT
+            and leg.origin_place.latitude is not None
+            and leg.origin_place.longitude is not None
+            and leg.destination_place is not None
+            and leg.destination_place.place_type == Place.PlaceType.AIRPORT
+            and leg.destination_place.latitude is not None
+            and leg.destination_place.longitude is not None
+            for leg in covered_flight_legs
+        )
+    else:
+        trusted_flight_coordinates = all(
+            leg.origin is not None
+            and leg.origin.kind == Location.Kind.AIRPORT
+            and leg.origin.coordinates_trusted
+            and leg.destination is not None
+            and leg.destination.kind == Location.Kind.AIRPORT
+            and leg.destination.coordinates_trusted
+            for leg in covered_flight_legs
+        )
     check(
         "flight_coordinates_trusted",
         trusted_flight_coordinates,

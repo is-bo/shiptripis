@@ -63,6 +63,9 @@ STATUS_TONES: dict[str, str] = {
     "awaiting_payment": TONE_WAIT,
     "eligible": TONE_WAIT,
     "submitted": TONE_WAIT,
+    "pending_verification": TONE_ATTENTION,
+    "awaiting_evidence": TONE_ATTENTION,
+    "not_eligible": TONE_WAIT,
     "open": TONE_WAIT,
     # someone has to act
     "requires_action": TONE_ATTENTION,
@@ -89,6 +92,52 @@ STATUS_TONES: dict[str, str] = {
     "none": TONE_MUTE,
     "": TONE_MUTE,
 }
+
+
+#: Words the console spells the way an operator does rather than the way the
+#: code stores them, when a stored action or model code is turned into English.
+ACTION_WORDS = {
+    "kyc": "KYC",
+    "fx": "FX",
+    "eur": "EUR",
+    "dzd": "DZD",
+    "id": "ID",
+    "url": "URL",
+    "sms": "SMS",
+    "smtp": "SMTP",
+}
+
+
+def humanize_action(value) -> str:
+    """`kyc.evidence_viewed` reads as `KYC evidence viewed`.
+
+    An audit row answers who did what to which record. `kyc.evidence_viewed`
+    answers it only to someone who already knows the code, which is nobody the
+    audit log is for.
+    """
+
+    words = str(value or "").replace(".", " ").replace("_", " ").split()
+    if not words:
+        return "—"
+    rendered = [ACTION_WORDS.get(word.lower(), word.lower()) for word in words]
+    first = rendered[0]
+    if first not in ACTION_WORDS.values():
+        first = first[:1].upper() + first[1:]
+    return " ".join([first, *rendered[1:]])
+
+
+def humanize_object(value) -> str:
+    """`kyc.kycsubmission` reads as `KYC submission`."""
+
+    text = str(value or "").strip()
+    if not text:
+        return "System"
+    tail = text.split(".")[-1]
+    for prefix in ("kyc", "admin", "payment", "journey", "dispute", "business", "outbound"):
+        if tail.startswith(prefix) and tail != prefix:
+            tail = f"{prefix} {tail[len(prefix):]}"
+            break
+    return humanize_action(tail)
 
 
 def format_eur(cents: int | None) -> str:

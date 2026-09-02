@@ -1,0 +1,179 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:disputes' %}">Disputes</a> &rsaquo; {{ dispute.get_category_display }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Protected case &middot; Deal {{ dispute.deal_id }}</p>
+      <h1>{{ dispute.get_category_display }}</h1>
+      <p>Opened {{ dispute.opened_at|timesince }} ago by the {{ dispute.get_opened_by_role_display|lower }}, {{ dispute.opened_by.email }}.</p>
+      <span class="st-page-ref">{{ dispute.public_reference }}</span>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ dispute.status|status_tone }}">{{ dispute.get_status_display }}</span>
+    </div>
+  </header>
+
+  <div class="st-alert {% if dispute.payout_frozen %}st-alert-bad{% else %}st-alert-info{% endif %}">
+    <strong>{% if dispute.payout_frozen %}Payout frozen{% elif dispute.payout_already_settled %}Payout already settled{% else %}Payout state recorded{% endif %}</strong>
+    <span>{% if dispute.payout_frozen %}No money can reach the Traveler while this case is open.{% elif dispute.payout_already_settled %}The money left before this dispute was opened; settlement safeguards still apply.{% else %}The settlement service re-checks the current payout state before any decision.{% endif %}</span>
+  </div>
+
+  <div class="st-grid st-grid-main">
+    <div>
+      <section class="st-card">
+        <p class="st-eyebrow">Canonical EUR</p>
+        <h2>Money at stake</h2>
+        <div class="st-money-strip">
+          <div class="is-total"><span>Sender total</span><strong>{{ terms.sender_total_minor|eur }}</strong></div>
+          <div><span>Traveler reward</span><strong>{{ terms.traveler_reward_minor|eur }}</strong></div>
+          <div><span>ShipTrip fee</span><strong>{{ terms.platform_fee_minor|eur }}</strong></div>
+        </div>
+        <dl class="st-facts">
+          <div><dt>Net collected, after committed refunds</dt><dd><span class="st-money">{{ money.collected_eur_cents|eur }}</span></dd></div>
+          <div><dt>Deposit credited</dt><dd><span class="st-money">{{ money.credited_eur_cents|eur }}</span></dd></div>
+          <div><dt>Already paid to Traveler</dt><dd><span class="st-money">{{ money.paid_out_eur_cents|eur }}</span></dd></div>
+        </dl>
+      </section>
+
+      <section class="st-card">
+        <p class="st-eyebrow">The claim</p>
+        <h2>What the {{ dispute.get_opened_by_role_display|lower }} says</h2>
+        {% if may_view_evidence %}
+          <p class="st-case-reason">{{ dispute.reason_text }}</p>
+        {% else %}
+          <p class="st-privacy-note">Private participant statements are restricted to evidence-authorized staff.</p>
+        {% endif %}
+        <dl class="st-facts">
+          <div><dt>Sender</dt><dd>{{ dispute.deal.sender.email }}</dd></div>
+          <div><dt>Traveler</dt><dd>{{ dispute.deal.traveler.email }}</dd></div>
+          <div><dt>Deal state</dt><dd>{{ dispute.deal.get_status_display }}</dd></div>
+          <div><dt>Pickup confirmed</dt><dd>{{ dispute.deal.pickup_confirmed_at|date:"d M Y, H:i"|default:"Not confirmed" }}</dd></div>
+          <div><dt>Delivery confirmed</dt><dd>{{ dispute.deal.delivery_confirmed_at|date:"d M Y, H:i"|default:"Not confirmed" }}</dd></div>
+          <div><dt>Protection deadline</dt><dd>{{ dispute.protection_ends_at|date:"d M Y, H:i"|default:"Not recorded" }}</dd></div>
+        </dl>
+        <div class="st-split-actions"><a class="button st-button-quiet" href="{% url 'admin_console:deal-detail' dispute.deal_id %}">Open the full Deal</a></div>
+      </section>
+
+      <section class="st-card">
+        <div class="st-card-head">
+          <div><p class="st-eyebrow">Evidence</p><h2>{{ dispute.evidence.all|length }} submitted item{{ dispute.evidence.all|length|pluralize }}</h2></div>
+          {% if may_view_evidence %}<span class="st-chip st-info">Every open is audited</span>{% endif %}
+        </div>
+        {% if may_view_evidence %}
+          {% for evidence in dispute.evidence.all %}
+          <article class="st-evidence-row">
+            <div>
+              <strong>{{ evidence.get_kind_display }}</strong>
+              <small>{{ evidence.submitted_by.email }} &middot; {{ evidence.created_at|date:"d M Y, H:i" }}</small>
+              {% if evidence.text %}<p>{{ evidence.text }}</p>{% endif %}
+            </div>
+            {% if evidence.storage_key %}<a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:dispute-evidence' dispute.pk evidence.pk %}">Open file</a>{% endif %}
+          </article>
+          {% empty %}
+          <p class="st-muted">Neither side has submitted evidence yet.</p>
+          {% endfor %}
+        {% else %}
+          <p class="st-privacy-note">Your role cannot view private evidence or statements.</p>
+        {% endif %}
+      </section>
+
+      <section class="st-card">
+        <p class="st-eyebrow">History</p>
+        <h2>Case and admin activity</h2>
+        <ol class="st-timeline">
+          {% for event in dispute.events.all %}
+          <li><strong>{{ event.get_kind_display }}</strong><span>{{ event.created_at|date:"d M Y, H:i" }} &middot; {{ event.actor.email|default:"System" }}</span></li>
+          {% endfor %}
+          {% for audit in audits %}
+          <li><strong>{{ audit.action|admin_action }}</strong><span>{{ audit.created_at|date:"d M Y, H:i" }} &middot; {{ audit.actor.email|default:"System" }}</span></li>
+          {% empty %}
+          <li class="is-empty">No administrative action has been taken on this case yet.</li>
+          {% endfor %}
+        </ol>
+      </section>
+    </div>
+
+    <aside>
+      {% if may_manage and dispute.status != 'resolved' and dispute.status != 'closed' %}
+      <section class="st-card">
+        <p class="st-eyebrow">Workflow</p>
+        <h2>Move the review along</h2>
+        <p>Changing the review state does not move any money.</p>
+        <form method="post" class="st-form">{% csrf_token %}
+          <input type="hidden" name="action" value="status">
+          {{ status_form.as_p }}
+          <div class="st-split-actions"><button type="submit">Update state</button></div>
+        </form>
+      </section>
+      {% endif %}
+
+      {% if may_resolve and dispute.status != 'resolved' and dispute.status != 'closed' %}
+      <section class="st-card st-decision-card">
+        <p class="st-eyebrow">Irreversible financial decision</p>
+        <h2>Resolve this dispute</h2>
+        <p>The server calculates and validates the split. You will see the exact consequence in euro before anything is committed.</p>
+        <form method="post" class="st-form">{% csrf_token %}
+          <input type="hidden" name="action" value="preview-resolution">
+          {{ resolution_form.as_p }}
+          <div class="st-split-actions"><button type="submit">Preview consequence</button></div>
+        </form>
+        {% if resolution_preview %}
+        <div class="st-consequence">
+          <h3>What confirming would do</h3>
+          <p class="st-muted">Server-validated consequence, calculated by the settlement engine rather than by this page.</p>
+          <dl>
+            <div><dt>Collected</dt><dd>{{ resolution_preview.money.collected_eur_cents|eur }}</dd></div>
+            <div><dt>Return to Sender</dt><dd>{{ resolution_preview.sender_refund_eur_cents|eur }}</dd></div>
+            <div><dt>Pay Traveler</dt><dd>{{ resolution_preview.traveler_payout_eur_cents|eur }}</dd></div>
+            <div><dt>ShipTrip keeps</dt><dd>{{ resolution_preview.platform_fee_eur_cents|eur }}</dd></div>
+          </dl>
+          <form method="post" class="st-form">{% csrf_token %}
+            <input type="hidden" name="action" value="confirm-resolution">
+            <input type="hidden" name="resolution" value="{{ resolution_form.cleaned_data.resolution }}">
+            <input type="hidden" name="sender_refund_eur" value="{{ resolution_form.cleaned_data.sender_refund_eur|default_if_none:'' }}">
+            <input type="hidden" name="traveler_payout_eur" value="{{ resolution_form.cleaned_data.traveler_payout_eur|default_if_none:'' }}">
+            <input type="hidden" name="note" value="{{ resolution_form.cleaned_data.note }}">
+            <div class="st-check"><input id="confirm-resolution" type="checkbox" name="confirm_resolution" value="yes" required><label for="confirm-resolution">I understand this creates irreversible financial obligations.</label></div>
+            <div class="st-split-actions"><button class="st-button-danger" type="submit">Confirm resolution</button></div>
+          </form>
+        </div>
+        {% endif %}
+      </section>
+      {% elif dispute.status == 'resolved' or dispute.status == 'closed' %}
+      <section class="st-card">
+        <p class="st-eyebrow">Resolution</p>
+        <h2>{{ dispute.get_resolution_display|default:"Closed" }}</h2>
+        <div class="st-money-strip st-money-stack">
+          <div><span>Returned to Sender</span><strong>{{ dispute.sender_refund_eur_cents|eur }}</strong></div>
+          <div><span>Paid to Traveler</span><strong>{{ dispute.traveler_payout_eur_cents|eur }}</strong></div>
+          <div><span>ShipTrip kept</span><strong>{{ dispute.platform_fee_eur_cents|eur }}</strong></div>
+        </div>
+        {% if dispute.resolution_note %}<p>{{ dispute.resolution_note }}</p>{% endif %}
+      </section>
+      {% endif %}
+
+      <section class="st-card">
+        <p class="st-eyebrow">Payments and refunds</p>
+        <h2>What has moved so far</h2>
+        <ul class="st-reading-list">
+          {% for order in dispute.deal.payment_orders.all %}
+          <li>
+            <div>
+              <strong>{{ order.get_purpose_display }} &middot; {{ order.amount_eur_cents|eur }}</strong>
+              <small>{% for attempt in order.attempts.all %}{{ attempt.get_provider_display }}: {{ attempt.get_status_display|lower }} &middot; {{ attempt.amount_eur_cents|eur }}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% for refund in order.refunds.all %}<br>Refund {{ refund.amount_eur_cents|eur }} &middot; {{ refund.get_status_display|lower }}{% endfor %}</small>
+            </div>
+            <span class="st-chip st-{{ order.status|status_tone }}">{{ order.get_status_display }}</span>
+          </li>
+          {% empty %}
+          <li><div><strong>No payment orders recorded.</strong></div></li>
+          {% endfor %}
+        </ul>
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}

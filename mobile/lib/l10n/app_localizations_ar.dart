@@ -768,6 +768,10 @@ class LAr extends L {
   String get journeyFlightNumberHint => 'مثال: AH1006';
 
   @override
+  String get journeyFlightAirportsRequired =>
+      'يجب أن تبدأ مراحل الطيران وتنتهي في مطارات.';
+
+  @override
   String get journeyPublish => 'نشر الرحلة';
 
   @override
@@ -2025,6 +2029,15 @@ class LAr extends L {
   String get profileAccount => 'الحساب';
 
   @override
+  String get profilePassportStamp => 'SHIPTRIP · عضو';
+
+  @override
+  String get profileCompletedDeliveries => 'مكتملة';
+
+  @override
+  String get profileRecentRating => 'التقييم الأخير';
+
+  @override
   String get profileRoles => 'ما تقوم به';
 
   @override
@@ -2100,10 +2113,57 @@ class LAr extends L {
   }
 
   @override
-  String get locationSearchTitle => 'اختر موقعًا';
+  String get locationSearchTitle => 'اختر مكانًا';
 
   @override
-  String get locationSearchHint => 'ابحث عن مدينة أو عنوان';
+  String get locationSearchHint => 'ابحث عن بلدية أو مطار';
+
+  @override
+  String get locationSelectCountry => 'اختر بلدًا أولًا';
+
+  @override
+  String get locationSearchStart => 'اكتب اسم بلدية أو مدينة أو مطار';
+
+  @override
+  String placeTierWilaya(String name) {
+    return 'ولاية $name';
+  }
+
+  @override
+  String placeTierDepartment(String name) {
+    return 'مقاطعة $name';
+  }
+
+  @override
+  String placeTierRegion(String name) {
+    return 'منطقة $name';
+  }
+
+  @override
+  String placeTierProvince(String name) {
+    return 'إقليم $name';
+  }
+
+  @override
+  String placeTierAutonomousCommunity(String name) {
+    return 'منطقة $name ذاتية الحكم';
+  }
+
+  @override
+  String placeTierState(String name) {
+    return 'ولاية $name';
+  }
+
+  @override
+  String placeTierDistrict(String name) {
+    return 'دائرة $name';
+  }
+
+  @override
+  String get locationTypeAirport => 'مطار';
+
+  @override
+  String get locationTypeLocality => 'بلدية';
 
   @override
   String get locationUseMap => 'اختر من الخريطة';
@@ -2112,16 +2172,7 @@ class LAr extends L {
   String get locationConfirmPoint => 'استخدم هذه النقطة';
 
   @override
-  String get locationRecent => 'الأخيرة';
-
-  @override
   String get locationSaved => 'الأماكن المحفوظة';
-
-  @override
-  String get locationCityOnly => 'المدينة فقط';
-
-  @override
-  String get locationExactAddress => 'العنوان الدقيق';
 
   @override
   String get locationPrivacyBeforeFunding =>
@@ -2142,22 +2193,108 @@ class LAr extends L {
       'جرّب إملاءً مختلفًا، أو حدد النقطة على الخريطة.';
 
   @override
+  String get countryNameAlgeria => 'الجزائر';
+
+  @override
+  String get countryNameFrance => 'فرنسا';
+
+  @override
+  String get countryNameSpain => 'إسبانيا';
+
+  @override
+  String get countryNameGermany => 'ألمانيا';
+
+  @override
+  String get locationCountryQuestion => 'أي بلد؟';
+
+  @override
+  String get locationChangeCountry => 'تغيير';
+
+  @override
+  String get locationCountryStep => 'البلد';
+
+  @override
+  String get locationCountriesUnavailable =>
+      'لا تتوفر أي بلدان في الوقت الحالي.';
+
+  @override
+  String get locationSelectCountryBody =>
+      'اختر بلدًا في الأعلى، ثم ابحث عن المدينة أو البلدية أو المطار.';
+
+  @override
+  String get locationSearchReadyTitle => 'جاهز متى شئت';
+
+  @override
+  String get locationSearchHintAirports => 'ابحث عن مطار';
+
+  @override
+  String get locationSearchStartAirports =>
+      'اكتب اسم المطار أو رمزه المكوّن من ثلاثة أحرف.';
+
+  @override
+  String get locationAirportsOnly =>
+      'هذه المرحلة بالطائرة، لذا تُعرض المطارات فقط.';
+
+  @override
+  String get locationCurrentSelection => 'المحدَّد حاليًا';
+
+  @override
+  String locationSearchNoMatch(String query) {
+    return 'لا شيء هنا يطابق «$query». تحقّق من الإملاء، أو جرّب أقرب مدينة كبيرة.';
+  }
+
+  @override
+  String locationSearchNoMatchAirports(String query) {
+    return 'لا يوجد مطار هنا يطابق «$query». جرّب اسم المدينة، أو الرمز المكوّن من ثلاثة أحرف.';
+  }
+
+  @override
+  String locationPreferredExplainer(String place) {
+    return 'تتم مطابقة المسافرين على $place. أما النقطة المفضلة فتحدد فقط المكان الذي تفضّل اللقاء فيه داخلها.';
+  }
+
+  @override
+  String get locationPreferredFlexibleHint => 'لا حاجة إلى نقطة دقيقة';
+
+  @override
+  String get locationAddPreferredPoint => 'أضف نقطة مفضلة';
+
+  @override
+  String get locationChangePreferredPoint => 'غيّر النقطة';
+
+  @override
+  String get locationRemovePreferredPoint => 'أزل النقطة المفضلة';
+
+  @override
+  String get locationPreferredRemoved => 'أُزيلت النقطة المفضلة.';
+
+  @override
+  String get locationPreferredClearedByPlace =>
+      'أُزيلت النقطة المفضلة — كانت تابعة للمكان الذي غيّرته للتو.';
+
+  @override
+  String get locationDecideLater => 'قرّر لاحقًا';
+
+  @override
+  String get locationPointInside => 'نقطة داخل';
+
+  @override
+  String locationDropPinHelpIn(String place) {
+    return 'حرّك الخريطة حتى تستقر علامة التصويب في المكان المقصود داخل $place، ثم أكّد.';
+  }
+
+  @override
+  String locationNoCentre(String place) {
+    return 'لا يوجد لدينا مركز مسجَّل لـ $place، لذا تبدأ الخريطة بعرض واسع. حرّكها إلى المنطقة الصحيحة قبل التأكيد.';
+  }
+
+  @override
   String mapAttribution(String attribution) {
     return 'بيانات الخريطة $attribution';
   }
 
   @override
   String get locationYourPlaces => 'أماكنك';
-
-  @override
-  String get locationAirports => 'المطارات';
-
-  @override
-  String get locationExactRequiredNotice =>
-      'يتطلب هذا أحد عناوينك الخاصة. المطارات على مستوى المدينة فقط، لذا لا يمكن استخدامها هنا.';
-
-  @override
-  String get locationExactRequiredRow => 'على مستوى المدينة فقط';
 
   @override
   String get locationEmptyTitle => 'لا توجد أماكن محفوظة بعد';
@@ -2183,22 +2320,29 @@ class LAr extends L {
   String get locationLabelHint => 'المنزل، بيت الوالدة، المكتب';
 
   @override
-  String get locationCityField => 'المدينة';
-
-  @override
-  String get locationCountryField => 'رمز الدولة';
-
-  @override
-  String get locationCountryHint => 'FR, DZ, ES';
-
-  @override
-  String get locationCountryInvalid => 'استخدم رمز الدولة المكوّن من حرفين.';
-
-  @override
   String get locationSavePlace => 'احفظ هذا المكان';
 
   @override
   String get locationPlaceSaved => 'تم حفظ المكان.';
+
+  @override
+  String get locationPreferredMeetingPoint => 'نقطة اللقاء المفضلة';
+
+  @override
+  String get locationPreferredOptional => 'اختياري';
+
+  @override
+  String get locationChoosePreferredPoint => 'اختر على الخريطة';
+
+  @override
+  String locationFlexibleWithin(String place) {
+    return 'مرن داخل $place';
+  }
+
+  @override
+  String locationPreferredValidation(String place) {
+    return 'سيتحقق مزود الخرائط من أن هذه النقطة تقع ضمن $place.';
+  }
 
   @override
   String get mapZoomIn => 'تكبير';

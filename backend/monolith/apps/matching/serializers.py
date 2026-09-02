@@ -164,6 +164,16 @@ class _MatchParcelMini(serializers.Serializer):
         delivery = getattr(obj, "deliveryrequest", None)
         if delivery is not None and delivery.pickup_location_id:
             return PublicLocationSerializer(delivery.pickup_location).data
+        if delivery is not None and delivery.pickup_place_id:
+            place = delivery.pickup_place
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+            }
         return AirportSerializer(obj.origin).data if obj.origin_id else {}
 
     def get_destination(self, obj) -> dict:
@@ -173,6 +183,16 @@ class _MatchParcelMini(serializers.Serializer):
         delivery = getattr(obj, "deliveryrequest", None)
         if delivery is not None and delivery.delivery_location_id:
             return PublicLocationSerializer(delivery.delivery_location).data
+        if delivery is not None and delivery.delivery_place_id:
+            place = delivery.delivery_place
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+            }
         return AirportSerializer(obj.destination).data if obj.destination_id else {}
 
     def get_actual_weight_kg(self, obj) -> str | None:

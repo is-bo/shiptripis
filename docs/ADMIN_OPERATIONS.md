@@ -1,0 +1,144 @@
+# ShipTrip operations console
+
+Phase 8D adds a task-focused Django admin surface at `/admin/`. It is for the
+owner and the fixed Phase 6A staff roles; the backend capability checks and
+audited domain services remain authoritative.
+
+## Navigation and roles
+
+The header is filtered to the signed-in staff member's capabilities:
+
+- **Overview** answers “what needs attention?” with live queue counts.
+- **Users** covers identity, verification state, restrictions and safe account
+  context.
+- **Verification** contains KYC and flight-proof queues and private evidence
+review.
+- **Marketplace** contains Delivery requests, ordered Journeys and Deals.
+- **Disputes** keeps the case, evidence, participants, protection and money in
+  one review flow.
+- **Finance** contains Payments, Refunds, Payouts and Ledger/reconciliation.
+- **Staff** is for fixed-role invitations and access changes.
+- **Settings** groups pricing, deposit, FX and provider availability in human
+  units.
+- **System** shows safe health, worker, outbox and readiness signals.
+
+Ops, Support, Finance, Trust / Verification and Super Admin see only the
+destinations granted by `apps.admin_panel.permissions`. Raw Django model pages
+are deliberately hidden from the main mental model; Super Admin can reach
+them through the owner-only **Technical records** escape hatch when required.
+
+## Verification workflow
+
+Open **Verification → KYC review** or **Flight proofs**, filter to **Pending**,
+and open a row. The detail page puts the applicant/Traveler, document or
+flight metadata, canonical route, history and evidence together. **View
+evidence** creates a short-lived authorized object-store URL and writes an
+audit event; storage keys are never displayed. Trust-capable staff choose
+**Approve** or **Reject**. A rejection requires a reason and every decision is
+audited through the existing review service.
+
+Image evidence is also previewed directly in the review screen through the
+same authorized endpoint. PDFs and original-size images open in a separate
+tab. Storage failures show a safe error and request reference; they never
+weaken the private bucket policy. General Support pages do not expose KYC
+documents or private dispute statements. Historical rejected flight proofs do
+not override a valid approval, but every flight leg must have an approval.
+
+## Disputes and finance
+
+The **Disputes** queue shows age, Deal, parties, evidence count, status and
+money at stake. The detail view includes the timeline, statements/evidence,
+pickup/delivery and protection state, payment context and audit history.
+Resolution is two-step: choose a resolution and **Preview consequence**; the
+server settlement planner returns the exact Sender refund, Traveler payout and
+ShipTrip fee; then explicitly confirm. The final write re-locks and re-plans
+through the existing settlement service.
+
+**Payments** separates provider charge/currency from the canonical EUR
+obligation. **Refunds** show reason, requested/returned amounts, provider and
+automatic/manual state. **Payouts** show reward, eligibility, hold reason and
+method; manual settlement records external evidence rather than pretending to
+send money. **Ledger** presents append-only transactions before technical
+entries. No page changes V1 money rules or exposes a handover/delivery code.
+
+## Staff and settings
+
+On **Staff**, enter a work email, choose one fixed role and an expiry. The
+one-time invitation is sent through the durable email queue; its token is never
+shown in the browser. Owners can see pending invitations, revoke/replace them,
+change an existing role and disable sign-in. Self-disable and Super Admin
+guardrails are enforced by the service layer.
+
+On **Settings**, pricing accepts percentages and EUR amounts rather than basis
+points/cents. The page explains commission, deposit bounds, floors, boosts and
+the calculated €30.00 example. The Chargily field is `1 EUR = ___ DZD`; the
+server stores micros and snapshots the rate only on new attempts. Policy rows
+also read out the 30-minute delivery-code buffer and 48-hour payout protection
+window. Every change creates an immutable, audited settings version. Provider
+and email cards report Disabled, Configuration incomplete, Configured but
+disabled or Enabled/Ready from authoritative configuration only; credentials,
+webhook secrets and SMTP passwords never render.
+
+## System and audit expectations
+
+**System & operations** reports database and Redis probes, routing readiness,
+KYC limiter mode, durable background jobs, email outbox, finance worker signals
+and release metadata. Failed work is surfaced with a safe status; stored errors
+remain in logs/records for investigation. **Audit log** reads as WHO / WHAT /
+WHICH OBJECT / WHEN and includes KYC, proof, dispute, finance, staff and
+settings actions without logging secrets or full sensitive evidence.
+
+Each payment rail's line states three separate facts, because conflating them
+is how a rail gets transacted against by mistake: whether the deployment has
+**credentials**, whether business settings have it **enabled**, and whether
+those credentials are **test** or **LIVE**. The third is derived from the
+credential's documented shape — Stripe's key prefix, and for Chargily the key
+prefix cross-checked against the API base — so it never requires anyone to read
+or copy a secret to answer it. A configured rail reading *Credential
+environment could not be identified* means the key is not a shape this code
+recognises, or Chargily's key and API base disagree; treat that as a stop
+condition rather than as test.
+
+**Geography catalogue** reports the reviewed manifest digest this database was
+built from, when it was applied, and by which release, above the per-country
+counts. Counts alone cannot tell a complete catalogue from a superseded or
+partial one; the digest can. *No catalogue import is recorded* means canonical
+place selection is unavailable and neither senders nor travellers can create
+anything — check the deployment log for `geography catalogue import FAILED`.
+
+Failed-job and failed-email counts link to filtered record queues with safe
+references. Queue counts are not live worker heartbeats: the current platform
+does not expose reliable per-worker liveness telemetry. No “worker online”
+claim is inferred from a pending or empty queue.
+
+The console is desktop-first. Navigation is one row of sections with a second
+band for the current section's destinations; the overview additionally lists
+every destination the signed-in role can open. Tables scroll horizontally
+inside their own card and cards/forms stack at narrower laptop and tablet
+widths. Status is always a word plus a mark, never colour alone, and the
+palette meets WCAG AA in both the light and dark themes. Empty queues explain that
+they are clear; action failures preserve a request reference and never claim a
+state change when the audited service refused the operation.
+
+## Review and verification
+
+Use Python 3.12 with the pinned requirements, matching the application image.
+The local Python 3.14 runtime is incompatible with Django 5.1.4's template
+context copying; it is not a valid substitute for admin regression testing.
+
+`tools/preview/dump_console_pages.py` renders every console screen from the
+throwaway preview database into `build/adminshots/console-*.html`, with the
+stylesheet cache-busted so a review always sees the current pass. Private
+evidence is never exported: any authorized object-store image is replaced with
+a visibly synthetic placeholder.
+
+`tools/preview/dump_console.py` creates review HTML from an isolated in-memory
+database and explicitly synthetic evidence. It refuses an existing file-backed
+database. See the preview README for the command. No live provider activation
+or email delivery is involved.
+
+The Phase 8D SQLite task/regression slice is green. PostgreSQL admin, staff,
+settings and verification checks pass, but wider finance/dispute integration
+remains blocked by the existing nullable-join lock in matching offer creation;
+see the Phase 8D handoff in `IMPLEMENTATION_STATUS.md`. This is not a release
+approval and Phase 8E has not started.

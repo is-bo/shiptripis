@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import runpy
@@ -278,6 +279,71 @@ class ProductionEntrypointTests(SimpleTestCase):
             result = boot_production(PROD_ENTRYPOINT_BOOT, **{variable: value})
             assert result.returncode != 0
             assert variable in result.stderr
+
+
+class CombinedLauncherGeographyTests(SimpleTestCase):
+    """The catalogue import in the boot sequence, and where it must sit.
+
+    The active V1 write contract refuses a request or a journey without a
+    canonical Place, so the release ships the reviewed catalogue and applies it
+    on first boot. Two properties keep that from being a liability, and both are
+    positional rather than behavioural — which is exactly the kind of thing a
+    later edit moves without noticing.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.launcher = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+
+    def test_the_import_is_guarded_so_a_restart_is_not_a_reimport(self):
+        assert '"import_geography"' in self.launcher
+        assert '"--skip-if-current"' in self.launcher
+        # No `--deactivate-missing` on the boot path: a boot must never be able
+        # to retire catalogue rows that a running deployment is matching on.
+        assert "--deactivate-missing" not in self.launcher
+
+    def test_the_import_runs_after_readiness_not_before_it(self):
+        ready = self.launcher.index('print("ShipTrip is ready"')
+        applied = self.launcher.index("apply_geography_catalogue(base_env)")
+        gateway = self.launcher.index('wait_for_port(gateway')
+
+        # A first import takes minutes. Ahead of the gateway it would fail the
+        # platform health check and roll the deployment back.
+        assert gateway < ready < applied
+
+    def test_the_catalogue_actually_reaches_the_image(self):
+        from apps.locations.management.commands.import_geography import (
+            BUNDLED_MANIFEST,
+        )
+
+        assert BUNDLED_MANIFEST.exists()
+        # A `.dockerignore` pattern that excluded the artefact would fail only
+        # in production, as an empty catalogue — the one failure mode the local
+        # suite cannot otherwise see.
+        relative = BUNDLED_MANIFEST.relative_to(REPO).as_posix()
+        for ignore in (REPO / ".dockerignore", MONOLITH / ".dockerignore"):
+            for line in ignore.read_text(encoding="utf-8").splitlines():
+                pattern = line.strip()
+                if not pattern or pattern.startswith("#") or pattern.startswith("!"):
+                    continue
+                assert not fnmatch.fnmatch(relative, pattern.rstrip("/") + "*"), (
+                    f"{ignore.name} pattern {pattern!r} would drop the catalogue"
+                )
+                assert not fnmatch.fnmatch(
+                    BUNDLED_MANIFEST.name, pattern
+                ), f"{ignore.name} pattern {pattern!r} would drop the catalogue"
+
+    def test_a_failed_import_does_not_take_the_service_down(self):
+        body = self.launcher[
+            self.launcher.index("def apply_geography_catalogue") : self.launcher.index(
+                "def run() -> int:"
+            )
+        ]
+        # Serving without a catalogue is degraded; refusing to serve is worse.
+        assert "check=True" not in body
+        assert "FAILED" in body
+        assert "raise" not in body
 
 
 class CombinedLauncherKycLimiterTests(SimpleTestCase):

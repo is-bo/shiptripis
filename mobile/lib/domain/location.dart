@@ -58,6 +58,7 @@ class AppLocation {
     this.normalizedLabel,
     this.latitude,
     this.longitude,
+    this.canonicalPlaceId,
   });
 
   factory AppLocation.fromJson(Map<String, dynamic> json) => AppLocation(
@@ -84,6 +85,7 @@ class AppLocation {
     normalizedLabel: readString(json['normalized_label']),
     latitude: readDouble(json['latitude']),
     longitude: readDouble(json['longitude']),
+    canonicalPlaceId: readInt(json['canonical_place']),
   );
 
   /// Builds a location from the legacy airport shape that still appears under
@@ -144,6 +146,7 @@ class AppLocation {
   final String? normalizedLabel;
   final double? latitude;
   final double? longitude;
+  final int? canonicalPlaceId;
 
   /// True only when the server released exact coordinates to this viewer.
   bool get isExact => latitude != null && longitude != null;

@@ -169,7 +169,7 @@ def purchase_boost(
 
         if request.sender_id != actor_id:
             raise NotAuthorized("Only the sender may boost their own request.")
-        if request.schema_version != 2:
+        if request.schema_version not in (2, 3):
             raise BoostError(
                 "Only V1 delivery requests can be boosted.",
                 code="boost_request_not_eligible",

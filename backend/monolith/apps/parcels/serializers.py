@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.locations.models import Location
+from apps.locations.models import Location, Place
 from apps.locations.serializers import (
     PrivateLocationSerializer,
     PublicLocationSerializer,
@@ -84,15 +84,37 @@ class DeliveryCreateSerializer(_ParcelBase):
 
 
 class DeliveryV1CreateSerializer(serializers.Serializer):
-    """Strict V1 write contract; legacy airport and DZD inputs are not accepted."""
+    """Canonical geography write contract for every new V1 request.
+
+    ``*_location_id`` is optional preferred-point detail scoped to the
+    required catalogue Place. Existing schema-2 rows remain readable, but this
+    active write contract never creates another location-only record.
+    """
+
+    pickup_place_id = serializers.PrimaryKeyRelatedField(
+        source="pickup_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
+    delivery_place_id = serializers.PrimaryKeyRelatedField(
+        source="delivery_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
 
     pickup_location_id = serializers.PrimaryKeyRelatedField(
         source="pickup_location",
         queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
     )
     delivery_location_id = serializers.PrimaryKeyRelatedField(
         source="delivery_location",
         queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
     )
     ready_window_start = serializers.DateTimeField()
     ready_window_end = serializers.DateTimeField()
@@ -165,27 +187,56 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
                 }
             )
         request = self.context["request"]
-        pickup = attrs["pickup_location"]
-        delivery = attrs["delivery_location"]
+        pickup_place = attrs.get("pickup_place")
+        delivery_place = attrs.get("delivery_place")
+        pickup = attrs.get("pickup_location")
+        delivery = attrs.get("delivery_location")
+        for field, place in (
+            ("pickup_place_id", pickup_place),
+            ("delivery_place_id", delivery_place),
+        ):
+            if place.place_type not in {
+                Place.PlaceType.LOCALITY,
+                Place.PlaceType.AIRPORT,
+            }:
+                raise serializers.ValidationError(
+                    {field: "Choose a locality or airport."}
+                )
+            if place.resolve_matching_locality() is None:
+                raise serializers.ValidationError(
+                    {field: "This place is temporarily unavailable for matching."}
+                )
+        if pickup_place.pk == delivery_place.pk:
+            raise serializers.ValidationError(
+                {"delivery_place_id": "Pickup and delivery places must differ."}
+            )
 
         # A parcel owner receives exact nested location data. Requiring ownership
         # here prevents a sender from using a guessed Location ID to disclose
         # another user's private address through the parcel response.
         location_errors = {}
-        if pickup.owner_id != request.user.id:
+        if pickup is not None and pickup.owner_id != request.user.id:
             location_errors["pickup_location_id"] = (
                 "Pickup location must belong to the authenticated sender."
             )
-        if delivery.owner_id != request.user.id:
+        if delivery is not None and delivery.owner_id != request.user.id:
             location_errors["delivery_location_id"] = (
                 "Delivery location must belong to the authenticated sender."
             )
         if location_errors:
             raise serializers.ValidationError(location_errors)
-        if pickup.pk == delivery.pk:
+        if pickup is not None and delivery is not None and pickup.pk == delivery.pk:
             raise serializers.ValidationError(
                 {"delivery_location_id": "Pickup and delivery locations must differ."}
             )
+        for field, location, place in (
+            ("pickup_location_id", pickup, pickup_place),
+            ("delivery_location_id", delivery, delivery_place),
+        ):
+            if location is not None and location.canonical_place_id != place.pk:
+                raise serializers.ValidationError(
+                    {field: "Preferred point must belong to the selected place."}
+                )
 
         ready_start = attrs["ready_window_start"]
         ready_end = attrs["ready_window_end"]
@@ -262,6 +313,8 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
     schema_version = serializers.SerializerMethodField()
     pickup_location = serializers.SerializerMethodField()
     delivery_location = serializers.SerializerMethodField()
+    pickup_place = serializers.SerializerMethodField()
+    delivery_place = serializers.SerializerMethodField()
     ready_window_start = serializers.SerializerMethodField()
     ready_window_end = serializers.SerializerMethodField()
     actual_weight_kg = serializers.SerializerMethodField()
@@ -301,6 +354,8 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "schema_version",
             "pickup_location",
             "delivery_location",
+            "pickup_place",
+            "delivery_place",
             "ready_window_start",
             "ready_window_end",
             "actual_weight_kg",
@@ -379,6 +434,31 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
 
     def get_delivery_location(self, obj: ParcelRequest) -> dict | None:
         return self._location(obj, "delivery_location")
+
+    @staticmethod
+    def _place_summary(place: Place | None) -> dict | None:
+        if place is None:
+            return None
+        locality = place.resolve_matching_locality()
+        return {
+            "id": place.pk,
+            "name": place.name,
+            "display_label": place.display_label,
+            "place_type": place.place_type,
+            "iata_code": place.iata_code or None,
+            "country_code": place.country_id,
+            "parent_name": place.parent.name
+            if place.parent_id and place.parent
+            else None,
+            "matching_locality_id": locality.pk if locality else None,
+            "matching_locality_name": locality.name if locality else None,
+        }
+
+    def get_pickup_place(self, obj: ParcelRequest) -> dict | None:
+        return self._place_summary(getattr(self._delivery(obj), "pickup_place", None))
+
+    def get_delivery_place(self, obj: ParcelRequest) -> dict | None:
+        return self._place_summary(getattr(self._delivery(obj), "delivery_place", None))
 
     def get_ready_window_start(self, obj: ParcelRequest):
         d = self._delivery(obj)

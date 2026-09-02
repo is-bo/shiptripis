@@ -50,7 +50,10 @@ class AppearanceScreen extends ConsumerWidget {
             Semantics(
               button: true,
               selected: option.mode == mode,
+              label: option.label,
               hint: option.mode == mode ? l.a11ySelected : l.a11yNotSelected,
+              onTap: () =>
+                  ref.read(themeModeProvider.notifier).set(option.mode),
               child: ExcludeSemantics(
                 child: InkWell(
                   onTap: () =>

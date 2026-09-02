@@ -42,12 +42,13 @@ import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
 import '../../design/components/navigation.dart';
+import '../../design/components/place.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
-import '../../domain/location.dart';
+import '../../domain/canonical_place.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
@@ -63,7 +64,7 @@ const _maxLegs = 20;
 class _LegDraft {
   _LegDraft({required this.destination, this.mode = TransportModeDraft.flight});
 
-  AppLocation destination;
+  CanonicalPlace destination;
   TransportModeDraft mode;
   DateTime? departAt;
   DateTime? arriveAt;
@@ -87,6 +88,7 @@ typedef _LegIssues = ({
   String? depart,
   String? arrive,
   String? capacity,
+  String? endpoints,
   String? flightNumber,
 });
 
@@ -102,8 +104,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   final _notes = TextEditingController();
   final _legs = <_LegDraft>[];
 
-  AppLocation? _start;
-  AppLocation? _destination;
+  CanonicalPlace? _start;
+  CanonicalPlace? _destination;
 
   bool _busy = false;
 
@@ -114,8 +116,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   FieldErrorMap _fieldErrors = const FieldErrorMap.empty();
 
   static const _claimedFields = {
-    'start_location',
-    'destination_location',
+    'start_place_id',
+    'destination_place_id',
     'legs',
     'notes',
   };
@@ -133,31 +135,48 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   // Chain
   // -------------------------------------------------------------------------
 
-  AppLocation? _originOf(int index) =>
+  CanonicalPlace? _originOf(int index) =>
       index == 0 ? _start : _legs[index - 1].destination;
 
   /// Where the legs currently end, which is not necessarily the destination.
-  AppLocation? get _chainEnd => _legs.isEmpty ? _start : _legs.last.destination;
+  CanonicalPlace? get _chainEnd =>
+      _legs.isEmpty ? _start : _legs.last.destination;
 
   bool get _hasGap {
     final end = _chainEnd;
     final destination = _destination;
     if (end == null || destination == null) return false;
-    return end.id != destination.id;
+    final endMatchingId = _matchingId(end);
+    final destinationMatchingId = _matchingId(destination);
+    // Matching locality is backend-owned.  A malformed/stale catalogue row
+    // must not be treated as a self-matching Place by the client.
+    if (endMatchingId == null || destinationMatchingId == null) return true;
+    return endMatchingId != destinationMatchingId;
   }
+
+  int? _matchingId(CanonicalPlace place) => place.matchingLocalityId;
 
   /// Proposes the single obvious leg the moment both ends are known.
   void _proposeFirstLegIfPossible() {
     if (_legs.isNotEmpty) return;
     final destination = _destination;
     if (_start == null || destination == null) return;
-    _legs.add(_LegDraft(destination: destination));
+    _legs.add(
+      _LegDraft(
+        destination: destination,
+        mode: _start!.isAirport && destination.isAirport
+            ? TransportModeDraft.flight
+            : TransportModeDraft.drive,
+      ),
+    );
   }
 
   Future<void> _pickStart() async {
-    final picked = await context.pickLocation(
+    final picked = await context.pickCanonicalPlace(
       title: L.of(context).journeyFrom,
-      requireExact: false,
+      airportOnly:
+          _legs.isNotEmpty && _legs.first.mode == TransportModeDraft.flight,
+      current: _start,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -167,9 +186,11 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   }
 
   Future<void> _pickDestination() async {
-    final picked = await context.pickLocation(
+    final picked = await context.pickCanonicalPlace(
       title: L.of(context).journeyTo,
-      requireExact: false,
+      airportOnly:
+          _legs.isNotEmpty && _legs.last.mode == TransportModeDraft.flight,
+      current: _destination,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -179,9 +200,10 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   }
 
   Future<void> _pickLegDestination(int index) async {
-    final picked = await context.pickLocation(
+    final picked = await context.pickCanonicalPlace(
       title: L.of(context).journeyAddLegDestinationTitle,
-      requireExact: false,
+      airportOnly: _legs[index].mode == TransportModeDraft.flight,
+      current: _legs[index].destination,
     );
     if (picked == null || !mounted) return;
     setState(() => _legs[index].destination = picked);
@@ -189,9 +211,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
 
   Future<void> _addLeg() async {
     if (_legs.length >= _maxLegs) return;
-    final picked = await context.pickLocation(
+    final picked = await context.pickCanonicalPlace(
       title: L.of(context).journeyAddLegDestinationTitle,
-      requireExact: false,
     );
     if (picked == null || !mounted) return;
     setState(
@@ -274,11 +295,18 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
             leg.flightNumber.text.trim().isEmpty
         ? l.validationRequired
         : null;
+    final origin = _originOf(index);
+    final endpoints =
+        leg.mode == TransportModeDraft.flight &&
+            (origin?.isAirport != true || !leg.destination.isAirport)
+        ? l.journeyFlightAirportsRequired
+        : null;
 
     return (
       depart: depart,
       arrive: arrive,
       capacity: capacity,
+      endpoints: endpoints,
       flightNumber: flightNumber,
     );
   }
@@ -292,6 +320,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
       if (issues.depart != null ||
           issues.arrive != null ||
           issues.capacity != null ||
+          issues.endpoints != null ||
           issues.flightNumber != null) {
         return false;
       }
@@ -322,8 +351,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
           JourneyLegDraft(
             position: i,
             mode: _legs[i].mode,
-            originId: _originOf(i)!.id,
-            destinationId: _legs[i].destination.id,
+            originPlaceId: _originOf(i)!.id,
+            destinationPlaceId: _legs[i].destination.id,
             departAt: _legs[i].departAt!,
             arriveAt: _legs[i].arriveAt,
             capacityKg: parseDecimalInput(_legs[i].capacity.text)!,
@@ -336,8 +365,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
       final journey = await ref
           .read(journeyRepositoryProvider)
           .create(
-            startLocationId: _start!.id,
-            destinationLocationId: _destination!.id,
+            startPlaceId: _start!.id,
+            destinationPlaceId: _destination!.id,
             legs: drafts,
             notes: _notes.text.trim(),
           );
@@ -393,11 +422,12 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               icon: Icons.trip_origin_rounded,
               isRequired: true,
               enabled: !_busy,
-              value: _start?.displayLabel,
-              secondary: _start?.coarseLabel,
+              value: _start == null ? null : placeLabel(_start!),
+              secondary: _start == null ? null : placeContext(context, _start!),
               errorText: _showErrors && _start == null
                   ? l.validationRequired
-                  : _fieldErrors['start_location'],
+                  : _fieldErrors['start_place_id'] ??
+                        _fieldErrors['start_location'],
               onTap: _pickStart,
             ),
             AppSelectField(
@@ -406,11 +436,14 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               icon: Icons.place_outlined,
               isRequired: true,
               enabled: !_busy,
-              value: _destination?.displayLabel,
-              secondary: _destination?.coarseLabel,
+              value: _destination == null ? null : placeLabel(_destination!),
+              secondary: _destination == null
+                  ? null
+                  : placeContext(context, _destination!),
               errorText: _showErrors && _destination == null
                   ? l.validationRequired
-                  : _fieldErrors['destination_location'],
+                  : _fieldErrors['destination_place_id'] ??
+                        _fieldErrors['destination_location'],
               onTap: _pickDestination,
             ),
 
@@ -451,8 +484,8 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               if (_hasGap) ...[
                 const SizedBox(height: AppSpace.sm),
                 _GapSuggestion(
-                  arrival: _chainEnd!.coarseLabel,
-                  destination: _destination!.coarseLabel,
+                  arrival: placeLabel(_chainEnd!),
+                  destination: placeLabel(_destination!),
                   canAccept: _legs.length < _maxLegs,
                   onAccept: _acceptSuggestedLeg,
                   onDecline: _declineSuggestedLeg,
@@ -545,7 +578,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
 class _ChainPreview extends StatelessWidget {
   const _ChainPreview({required this.start, required this.legs});
 
-  final AppLocation start;
+  final CanonicalPlace start;
   final List<_LegDraft> legs;
 
   @override
@@ -565,10 +598,14 @@ class _ChainPreview extends StatelessWidget {
           RouteLine(
             compactSegments: true,
             stops: [
-              RouteStop(label: start.coarseLabel),
+              RouteStop(
+                label: placeLabel(start),
+                detail: placeContext(context, start),
+              ),
               for (final leg in legs)
                 RouteStop(
-                  label: leg.destination.coarseLabel,
+                  label: placeLabel(leg.destination),
+                  detail: placeContext(context, leg.destination),
                   timeLabel: leg.arriveAt == null
                       ? null
                       : '${l.journeyArrives} '
@@ -626,7 +663,7 @@ class _LegEditor extends StatelessWidget {
   });
 
   final int position;
-  final AppLocation? origin;
+  final CanonicalPlace? origin;
   final _LegDraft leg;
 
   /// Null until the user has tried to submit.
@@ -675,7 +712,7 @@ class _LegEditor extends StatelessWidget {
             label: l.journeyLegStartsAt,
             icon: Icons.trip_origin_rounded,
             value: Text(
-              origin?.coarseLabel ?? '—',
+              origin == null ? '—' : placeLabel(origin!),
               style: text.bodyMedium,
               textAlign: TextAlign.end,
             ),
@@ -688,8 +725,9 @@ class _LegEditor extends StatelessWidget {
             icon: Icons.place_outlined,
             isRequired: true,
             enabled: enabled,
-            value: leg.destination.displayLabel,
-            secondary: leg.destination.coarseLabel,
+            value: placeLabel(leg.destination),
+            secondary: placeContext(context, leg.destination),
+            errorText: issues?.endpoints,
             onTap: onPickDestination,
           ),
 

@@ -12,6 +12,7 @@ library;
 import '../core/money/money.dart';
 import 'json.dart';
 import 'location.dart';
+import 'canonical_place.dart';
 
 enum RequestStatus {
   awaitingDeposit,
@@ -71,6 +72,8 @@ class DeliveryRequest {
     this.targetTravelerId,
     this.pickupLocation,
     this.deliveryLocation,
+    this.pickupPlace,
+    this.deliveryPlace,
     this.readyWindowStart,
     this.readyWindowEnd,
     this.deadlineAt,
@@ -97,6 +100,8 @@ class DeliveryRequest {
         schemaVersion: readInt(json['schema_version']) ?? 0,
         pickupLocation: AppLocation.maybe(json['pickup_location']),
         deliveryLocation: AppLocation.maybe(json['delivery_location']),
+        pickupPlace: _place(json['pickup_place']),
+        deliveryPlace: _place(json['delivery_place']),
         readyWindowStart: readDate(json['ready_window_start']),
         readyWindowEnd: readDate(json['ready_window_end']),
         deadlineAt: readDate(json['deadline_at']),
@@ -139,6 +144,8 @@ class DeliveryRequest {
   /// Coarse for everyone else. Ask [AppLocation.isExact] rather than assuming.
   final AppLocation? pickupLocation;
   final AppLocation? deliveryLocation;
+  final CanonicalPlace? pickupPlace;
+  final CanonicalPlace? deliveryPlace;
 
   final DateTime? readyWindowStart;
   final DateTime? readyWindowEnd;
@@ -165,6 +172,8 @@ class DeliveryRequest {
   final DateTime? updatedAt;
 
   bool get isV1 => schemaVersion >= 2;
+  bool get isCanonical =>
+      schemaVersion >= 3 && pickupPlace != null && deliveryPlace != null;
   bool get isTargeted => targetTravelerId != null;
   bool get hasDimensions =>
       lengthCm != null && widthCm != null && heightCm != null;
@@ -173,6 +182,11 @@ class DeliveryRequest {
     final deadline = deadlineAt;
     return deadline != null && deadline.isBefore(DateTime.now());
   }
+}
+
+CanonicalPlace? _place(Object? raw) {
+  final value = readObject(raw);
+  return value == null ? null : CanonicalPlace.fromJson(value);
 }
 
 /// The five declarations a sender must make before a request can be published.

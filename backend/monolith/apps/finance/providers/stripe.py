@@ -31,6 +31,10 @@ import requests
 from django.conf import settings
 
 from .base import (
+    MODE_LIVE,
+    MODE_NOT_CONFIGURED,
+    MODE_TEST,
+    MODE_UNKNOWN,
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
@@ -176,6 +180,25 @@ class StripeGateway:
 
     def is_configured(self) -> bool:
         return bool(self.secret_key and self.webhook_secret)
+
+    def credential_mode(self) -> str:
+        """Whether the configured key points at Stripe test or live money.
+
+        Read from the key's documented prefix only. Nothing here logs, returns
+        or compares the key itself, so an operator (and this deployment's own
+        health endpoint) can confirm which rail is armed without a secret ever
+        leaving the settings object.
+        """
+
+        key = self.secret_key
+        if not key:
+            return MODE_NOT_CONFIGURED
+        # Restricted keys carry the same test/live segment as secret keys.
+        if key.startswith(("sk_test_", "rk_test_")):
+            return MODE_TEST
+        if key.startswith(("sk_live_", "rk_live_")):
+            return MODE_LIVE
+        return MODE_UNKNOWN
 
     def _require_configured(self) -> None:
         if not self.secret_key:

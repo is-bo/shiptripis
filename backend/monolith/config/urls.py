@@ -9,6 +9,13 @@ admin.site.index_title = "Operations dashboard"
 
 
 urlpatterns = [
+    # Human-facing operations routes intentionally precede Django's technical
+    # model routes. The latter remain available under /admin/ for the explicit
+    # owner-only Technical records area.
+    path(
+        "admin/",
+        include(("apps.admin_panel.console_urls", "admin_console"), namespace="admin_console"),
+    ),
     path("admin/", admin.site.urls),
     path("healthz", healthz),
     path("readyz", readyz),

@@ -139,10 +139,23 @@ class AppScaffold extends StatelessWidget {
       );
     }
 
-    // Horizontal-only safe area. Vertical insets are handled deliberately:
-    // the top by the app bar, the bottom by the footer and the shell's
-    // navigation bar. Consuming them here as well would double-pad.
-    content = SafeArea(top: false, bottom: false, child: content);
+    // Consume vertical system insets at the shell boundary. AppBar already
+    // owns the status-bar inset for ordinary screens; routes without an
+    // app bar (welcome, auth, onboarding and splash) do not have anything
+    // else to protect their first row, so they opt in here. A route that
+    // deliberately paints behind its app bar also receives the top inset in
+    // its body, as promised by [extendBodyBehindTopBar].
+    //
+    // A footer owns its own bottom SafeArea. Screens without one consume the
+    // bottom inset here so static content and non-scrolling surfaces cannot
+    // end up below an Android gesture pill or an iPhone home indicator. The
+    // SafeArea removes the consumed padding from the descendant MediaQuery,
+    // which keeps [AppScrollPadding] from counting the same inset twice.
+    content = SafeArea(
+      top: topBar == null || extendBodyBehindTopBar,
+      bottom: footer == null,
+      child: content,
+    );
 
     if (floating != null) {
       content = Stack(

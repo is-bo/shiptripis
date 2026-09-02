@@ -34,6 +34,10 @@ import requests
 from django.conf import settings
 
 from .base import (
+    MODE_LIVE,
+    MODE_NOT_CONFIGURED,
+    MODE_TEST,
+    MODE_UNKNOWN,
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
@@ -152,6 +156,38 @@ class ChargilyGateway:
 
     def is_configured(self) -> bool:
         return bool(self.secret_key and self.api_base)
+
+    def credential_mode(self) -> str:
+        """Whether this deployment is pointed at Chargily test or live money.
+
+        Chargily decides the environment twice — once in the key prefix
+        (`test_sk_` / `live_sk_`) and once in the API base (`/test/api/v2`).
+        Both must agree; a deployment that mixes a live key with the test base
+        (or the reverse) is a misconfiguration, and saying `unknown` is the
+        only honest answer to it. The key itself is never returned or logged.
+        """
+
+        key = self.secret_key
+        if not key:
+            return MODE_NOT_CONFIGURED
+        base = self.api_base.rstrip("/")
+        by_key = (
+            MODE_TEST
+            if key.startswith("test_sk_")
+            else MODE_LIVE
+            if key.startswith("live_sk_")
+            else MODE_UNKNOWN
+        )
+        by_base = (
+            MODE_TEST
+            if base == TEST_API_BASE.rstrip("/")
+            else MODE_LIVE
+            if base == LIVE_API_BASE.rstrip("/")
+            else MODE_UNKNOWN
+        )
+        if by_key == MODE_UNKNOWN or by_base == MODE_UNKNOWN:
+            return MODE_UNKNOWN
+        return by_key if by_key == by_base else MODE_UNKNOWN
 
     def _require_configured(self) -> None:
         if not self.secret_key:

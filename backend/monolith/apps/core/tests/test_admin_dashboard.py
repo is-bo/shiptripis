@@ -54,7 +54,7 @@ class QueuePanelTests(TestCase):
         response = self.client.get("/admin/")
         body = response.content.decode()
         assert response.status_code == 200
-        assert "Needs attention" in body
+        assert "What needs attention" in body
         assert "Every queue is empty right now." in body
         # A queue at zero stays on the page: an operator has to be able to see
         # that it was checked.
@@ -73,7 +73,7 @@ class QueuePanelTests(TestCase):
         )
         body = self.client.get("/admin/").content.decode()
         assert "1 queue with work waiting" in body
-        assert "/admin/kyc/kycsubmission/?status__exact=pending" in body
+        assert "/admin/verification/kyc/?status=pending" in body
 
     def test_every_queue_link_lands_on_a_changelist_filtered_to_its_own_rows(self):
         """The link is the panel's only claim; an unfiltered one is a lie.
@@ -110,8 +110,8 @@ class QueuePanelTests(TestCase):
         )
         body = self.client.get("/admin/").content.decode()
         assert "2 queues with work waiting" in body
-        assert "/admin/finance/scheduledjob/?status__exact=failed" in body
-        assert "/admin/notifications/outboundmessage/?status__exact=failed" in body
+        assert "/admin/system/jobs/?status=failed" in body
+        assert "/admin/system/email/?status=failed" in body
 
     def test_the_panel_is_not_shown_to_staff_who_are_not_superusers(self):
         """It counts across finance, KYC and disputes in one view.

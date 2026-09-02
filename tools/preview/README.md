@@ -72,6 +72,49 @@ guarantee is held by the tests in `apps/notifications/tests/`.
 
 ## Screenshots
 
+For a visual pass over the whole console, seed the preview database as above,
+add the states the base seed cannot reach, and then dump every screen from
+`backend/monolith/`:
+
+```bash
+python manage.py shell --settings=config.settings.local_preview -c "exec(open('../../tools/preview/enrich_admin_preview.py', encoding='utf-8').read())"
+```
+
+`enrich_admin_preview.py` adds a canonical multi-leg Journey (FLIGHT + DRIVE
+with real airport identities), a pending and a revoked staff invitation, audit
+entries, and the review superuser the dump signs in as with `force_login`. It
+refuses any database that is not the throwaway preview one and contacts no
+provider.
+
+```bash
+python manage.py runserver 127.0.0.1:8199 --noreload --insecure --settings=config.settings.local_preview
+python manage.py shell --settings=config.settings.local_preview -c "exec(open('../../tools/preview/dump_console_pages.py', encoding='utf-8').read())"
+python -m http.server 4174 --directory build/adminshots
+```
+
+`dump_console_pages.py` writes `build/adminshots/console-*.html` for all 34
+screens, covering pending and decided KYC, flight proofs, a multi-leg journey,
+a Deal, an open and a resolved dispute, Stripe and Chargily payments, a refund,
+a payout, staff with a pending invitation, provider warnings and an empty
+queue. It refuses any database that is not the throwaway preview one, issues
+GETs only, replaces every authorized evidence image with a visibly synthetic
+placeholder, and cache-busts the console stylesheet so a browser cannot show
+the previous pass.
+
+For a smaller in-memory slice, use the isolated renderer from
+`backend/monolith/` with Python 3.12 and the pinned requirements:
+
+```text
+python manage.py shell --settings=config.settings.test_local -c "exec(open('../../tools/preview/dump_console.py', encoding='utf-8').read())"
+```
+
+It migrates only its in-memory database, uses the test-only payment rail, and
+exports `build/adminshots/phase8d-*.html`. Evidence placeholders are visibly
+synthetic. It refuses file-backed databases and does not modify an existing
+preview database. Serve the generated files on port 4174 and static assets on
+8199 as above. Exported evidence placeholders are for layout review only;
+private retrieval authorization is exercised by the console HTTP tests.
+
 `tools/web/shot.sh <url> <out.png> [width] [height]` renders with headless Edge,
 which on Windows will not lay out below ~492 CSS px. Phone widths have to be
 reviewed in a browser that emulates the viewport properly.

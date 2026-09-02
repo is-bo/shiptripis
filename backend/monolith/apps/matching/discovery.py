@@ -23,6 +23,7 @@ from django.conf import settings
 from apps.core.business_settings import get_active_business_settings
 from apps.deals.models import Deal, DealLegAllocation
 from apps.kyc.models import KycSubmission
+from apps.locations.models import AirportLocalityMapping, Place
 from apps.locations.serializers import PublicLocationSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import RouteProvider, get_route_provider
@@ -32,6 +33,7 @@ from .compatibility import (
     ACTIVE_DEAL_STATUSES,
     CompatibilityResult,
     evaluate_compatibility,
+    _matching_locality_id,
 )
 from .policy import Phase2Policy
 from .pricing import PricingQuote, calculate_pricing_quote
@@ -48,15 +50,35 @@ class CandidateEvaluation:
     ranking: dict | None
 
     def _request_block(self) -> dict:
+        def place_summary(place):
+            if place is None:
+                return None
+            locality_id = _matching_locality_id(place)
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+                "matching_locality_id": locality_id,
+            }
+
         return {
             "id": self.delivery_request.pk,
             "sender_id": self.delivery_request.sender_id,
-            "pickup": PublicLocationSerializer(
-                self.delivery_request.pickup_location
-            ).data,
-            "delivery": PublicLocationSerializer(
-                self.delivery_request.delivery_location
-            ).data,
+            "pickup": (
+                PublicLocationSerializer(self.delivery_request.pickup_location).data
+                if self.delivery_request.pickup_location
+                else place_summary(self.delivery_request.pickup_place)
+            ),
+            "delivery": (
+                PublicLocationSerializer(self.delivery_request.delivery_location).data
+                if self.delivery_request.delivery_location
+                else place_summary(self.delivery_request.delivery_place)
+            ),
+            "pickup_place": place_summary(self.delivery_request.pickup_place),
+            "delivery_place": place_summary(self.delivery_request.delivery_place),
             "actual_weight_kg": str(self.delivery_request.actual_weight_kg),
             "ready_window_start": self.delivery_request.ready_window_start,
             "ready_window_end": self.delivery_request.ready_window_end,
@@ -68,42 +90,58 @@ class CandidateEvaluation:
 
     def _journey_block(self, compatibility: dict) -> dict:
         legs = list(getattr(self.journey, "_matching_legs", ()))
+        covered_leg_ids = compatibility.get("covered_leg_ids") or []
+        start_leg_id = compatibility.get("start_leg_id")
+        end_leg_id = compatibility.get("end_leg_id")
+        if start_leg_id is None and covered_leg_ids:
+            start_leg_id = covered_leg_ids[0]
+        if end_leg_id is None and covered_leg_ids:
+            end_leg_id = covered_leg_ids[-1]
+
+        def place_summary(place):
+            if place is None:
+                return None
+            locality_id = _matching_locality_id(place)
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+                "matching_locality_id": locality_id,
+            }
+
         return {
             "id": self.journey.pk,
             "traveler_id": self.journey.traveler_id,
-            "start_location": PublicLocationSerializer(
-                self.journey.start_location
-            ).data,
-            "destination_location": PublicLocationSerializer(
-                self.journey.destination_location
-            ).data,
+            "start_location": (
+                PublicLocationSerializer(self.journey.start_location).data
+                if self.journey.start_location
+                else place_summary(self.journey.start_place)
+            ),
+            "destination_location": (
+                PublicLocationSerializer(self.journey.destination_location).data
+                if self.journey.destination_location
+                else place_summary(self.journey.destination_place)
+            ),
+            "start_place": place_summary(self.journey.start_place),
+            "destination_place": place_summary(self.journey.destination_place),
             "first_departure": legs[0].depart_at if legs else None,
             # Proposing needs both endpoint leg IDs and rendering needs the leg
             # modes/labels. Both are served here so a candidate row never costs
             # the client an extra GET /journeys/{id}.
-            "start_leg_id": compatibility["start_leg_id"],
-            "end_leg_id": compatibility["end_leg_id"],
-            "covered_legs": compatibility["covered_legs"],
+            "start_leg_id": start_leg_id,
+            "end_leg_id": end_leg_id,
+            "covered_legs": compatibility.get("covered_legs", []),
         }
 
     def as_dict(self) -> dict:
         """Internal/admin representation. Never serialize this to a party."""
 
-        legs = list(getattr(self.journey, "_matching_legs", ()))
-        first_departure = legs[0].depart_at if legs else None
         return {
             "delivery_request": self._request_block(),
-            "journey": {
-                "id": self.journey.pk,
-                "traveler_id": self.journey.traveler_id,
-                "start_location": PublicLocationSerializer(
-                    self.journey.start_location
-                ).data,
-                "destination_location": PublicLocationSerializer(
-                    self.journey.destination_location
-                ).data,
-                "first_departure": first_departure,
-            },
+            "journey": self._journey_block(self.compatibility.as_dict()),
             "compatibility": self.compatibility.as_dict(),
             "pricing": self.pricing.as_dict() if self.pricing else None,
             "ranking": self.ranking,
@@ -148,8 +186,28 @@ def _matching_leg_queryset(*, at):
         .values("total")[:1]
     )
     decimal_field = DecimalField(max_digits=10, decimal_places=3)
+    active_mapping = AirportLocalityMapping.objects.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality")
     return (
-        JourneyLeg.objects.select_related("origin", "destination")
+        JourneyLeg.objects.select_related(
+            "origin", "destination", "origin_place", "destination_place"
+        )
+        .prefetch_related(
+            Prefetch(
+                "origin_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+            Prefetch(
+                "destination_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+        )
         .annotate(
             has_approved_proof_value=Exists(approved_proof),
             reserved_capacity_value=Coalesce(
@@ -172,6 +230,8 @@ def _matching_journey_queryset(*, at):
             "traveler",
             "start_location",
             "destination_location",
+            "start_place",
+            "destination_place",
         )
         .annotate(has_current_kyc_value=Exists(approved_kyc))
         .prefetch_related(
@@ -181,6 +241,37 @@ def _matching_journey_queryset(*, at):
                 to_attr="_matching_legs",
             )
         )
+    )
+
+
+def _canonical_node_mapping_q(*, relation: str, locality_id: int) -> Q:
+    """Match an airport node only through its active primary served mapping."""
+
+    mapping = f"{relation}__airport_mappings"
+    return Q(
+        **{
+            f"{mapping}__locality_id": locality_id,
+            f"{mapping}__active": True,
+            f"{mapping}__is_primary": True,
+            f"{mapping}__relationship_type": AirportLocalityMapping.RelationshipType.SERVED,
+            f"{mapping}__locality__active": True,
+        }
+    )
+
+
+def _canonical_place_in_localities_q(
+    *, field: str, locality_ids: set[int]
+) -> Q:
+    """Match a canonical place directly or through an active served airport map."""
+
+    return Q(**{f"{field}_id__in": locality_ids}) | Q(
+        **{
+            f"{field}__airport_mappings__locality_id__in": locality_ids,
+            f"{field}__airport_mappings__active": True,
+            f"{field}__airport_mappings__is_primary": True,
+            f"{field}__airport_mappings__relationship_type": AirportLocalityMapping.RelationshipType.SERVED,
+            f"{field}__airport_mappings__locality__active": True,
+        }
     )
 
 
@@ -248,32 +339,75 @@ def compatible_journeys_for_request(
         Q(arrive_at__isnull=True)
         | Q(arrive_at__gte=delivery_request.ready_window_start)
     )
-    pickup_location = delivery_request.pickup_location
-    delivery_location = delivery_request.delivery_location
-    pickup_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
-        Q(origin_id=pickup_location.pk)
-        | Q(destination_id=pickup_location.pk)
-        | Q(
-            origin__airport_id=pickup_location.airport_id,
-            origin__airport_id__isnull=False,
+    canonical = delivery_request.schema_version >= 3
+    if canonical:
+        pickup_locality = delivery_request.pickup_place
+        delivery_locality = delivery_request.delivery_place
+        if pickup_locality.place_type == Place.PlaceType.AIRPORT:
+            mapping = pickup_locality.airport_mappings.filter(
+                active=True,
+                is_primary=True,
+                relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+                locality__active=True,
+            ).first()
+            pickup_locality = mapping.locality if mapping else None
+        if delivery_locality.place_type == Place.PlaceType.AIRPORT:
+            mapping = delivery_locality.airport_mappings.filter(
+                active=True,
+                is_primary=True,
+                relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+                locality__active=True,
+            ).first()
+            delivery_locality = mapping.locality if mapping else None
+        if pickup_locality is None or delivery_locality is None:
+            return []
+        pickup_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
+            _canonical_node_mapping_q(
+                relation="origin_place", locality_id=pickup_locality.pk
+            )
+            | _canonical_node_mapping_q(
+                relation="destination_place", locality_id=pickup_locality.pk
+            )
+            | Q(origin_place_id=pickup_locality.pk)
+            | Q(destination_place_id=pickup_locality.pk)
         )
-        | Q(
-            destination__airport_id=pickup_location.airport_id,
-            destination__airport_id__isnull=False,
+        delivery_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
+            _canonical_node_mapping_q(
+                relation="origin_place", locality_id=delivery_locality.pk
+            )
+            | _canonical_node_mapping_q(
+                relation="destination_place", locality_id=delivery_locality.pk
+            )
+            | Q(origin_place_id=delivery_locality.pk)
+            | Q(destination_place_id=delivery_locality.pk)
         )
-    )
-    delivery_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
-        Q(origin_id=delivery_location.pk)
-        | Q(destination_id=delivery_location.pk)
-        | Q(
-            origin__airport_id=delivery_location.airport_id,
-            origin__airport_id__isnull=False,
+    else:
+        pickup_location = delivery_request.pickup_location
+        delivery_location = delivery_request.delivery_location
+        pickup_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
+            Q(origin_id=pickup_location.pk)
+            | Q(destination_id=pickup_location.pk)
+            | Q(
+                origin__airport_id=pickup_location.airport_id,
+                origin__airport_id__isnull=False,
+            )
+            | Q(
+                destination__airport_id=pickup_location.airport_id,
+                destination__airport_id__isnull=False,
+            )
         )
-        | Q(
-            destination__airport_id=delivery_location.airport_id,
-            destination__airport_id__isnull=False,
+        delivery_node = JourneyLeg.objects.filter(journey_id=OuterRef("pk")).filter(
+            Q(origin_id=delivery_location.pk)
+            | Q(destination_id=delivery_location.pk)
+            | Q(
+                origin__airport_id=delivery_location.airport_id,
+                origin__airport_id__isnull=False,
+            )
+            | Q(
+                destination__airport_id=delivery_location.airport_id,
+                destination__airport_id__isnull=False,
+            )
         )
-    )
     queryset = (
         _matching_journey_queryset(at=at)
         .filter(
@@ -339,13 +473,24 @@ def compatible_requests_for_journey(
     # Use its arrival as the route coverage end; an open-ended leg conservatively
     # falls back to departure and is then decided by hard compatibility.
     coverage_end = legs[-1].arrive_at or legs[-1].depart_at
-    route_nodes = [legs[0].origin, *[leg.destination for leg in legs]]
-    node_ids = {location.pk for location in route_nodes}
-    airport_ids = {
-        location.airport_id
-        for location in route_nodes
-        if location.airport_id is not None
-    }
+    canonical_journey = journey.schema_version >= 2
+    if canonical_journey:
+        route_nodes = [legs[0].origin_place, *[leg.destination_place for leg in legs]]
+        route_localities = {
+            locality_id
+            for locality_id in (_matching_locality_id(place) for place in route_nodes)
+            if locality_id is not None
+        }
+        node_ids = set()
+        airport_ids = set()
+    else:
+        route_nodes = [legs[0].origin, *[leg.destination for leg in legs]]
+        node_ids = {location.pk for location in route_nodes}
+        airport_ids = {
+            location.airport_id
+            for location in route_nodes
+            if location.airport_id is not None
+        }
     active_deal = Deal.objects.filter(
         delivery_request_id=OuterRef("pk"),
         status__in=ACTIVE_DEAL_STATUSES,
@@ -357,7 +502,7 @@ def compatible_requests_for_journey(
             "delivery_location",
         )
         .filter(
-            schema_version=2,
+            schema_version=3 if canonical_journey else 2,
             status=ParcelRequest.Status.OPEN,
             sender__is_active=True,
             sender__is_banned=False,
@@ -378,8 +523,14 @@ def compatible_requests_for_journey(
         .annotate(
             has_exact_pickup_node=Case(
                 When(
-                    Q(pickup_location_id__in=node_ids)
-                    | Q(pickup_location__airport_id__in=airport_ids),
+                    _canonical_place_in_localities_q(
+                        field="pickup_place", locality_ids=route_localities
+                    )
+                    if canonical_journey
+                    else (
+                        Q(pickup_location_id__in=node_ids)
+                        | Q(pickup_location__airport_id__in=airport_ids)
+                    ),
                     then=Value(1),
                 ),
                 default=Value(0),
@@ -387,8 +538,14 @@ def compatible_requests_for_journey(
             ),
             has_exact_delivery_node=Case(
                 When(
-                    Q(delivery_location_id__in=node_ids)
-                    | Q(delivery_location__airport_id__in=airport_ids),
+                    _canonical_place_in_localities_q(
+                        field="delivery_place", locality_ids=route_localities
+                    )
+                    if canonical_journey
+                    else (
+                        Q(delivery_location_id__in=node_ids)
+                        | Q(delivery_location__airport_id__in=airport_ids)
+                    ),
                     then=Value(1),
                 ),
                 default=Value(0),
@@ -432,6 +589,8 @@ def explain_candidate(*, delivery_request_id: int, journey_id: int, at=None):
             "sender",
             "pickup_location",
             "delivery_location",
+            "pickup_place",
+            "delivery_place",
         )
         .annotate(
             has_active_deal_value=Exists(

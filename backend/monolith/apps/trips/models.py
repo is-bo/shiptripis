@@ -195,15 +195,37 @@ class Journey(models.Model):
         on_delete=models.PROTECT,
         related_name="journeys",
     )
+    # Version 1 rows retain the historical Location-only shape.  New V1
+    # journeys use schema_version=2 and stable catalogue places; Location is
+    # optional operational meeting detail only.
+    schema_version = models.PositiveSmallIntegerField(default=1)
+    start_place = models.ForeignKey(
+        "locations.Place",
+        on_delete=models.PROTECT,
+        related_name="journeys_starting_at",
+        null=True,
+        blank=True,
+    )
+    destination_place = models.ForeignKey(
+        "locations.Place",
+        on_delete=models.PROTECT,
+        related_name="journeys_ending_at",
+        null=True,
+        blank=True,
+    )
     start_location = models.ForeignKey(
         "locations.Location",
         on_delete=models.PROTECT,
         related_name="journeys_starting_here",
+        null=True,
+        blank=True,
     )
     destination_location = models.ForeignKey(
         "locations.Location",
         on_delete=models.PROTECT,
         related_name="journeys_ending_here",
+        null=True,
+        blank=True,
     )
     legacy_trip = models.OneToOneField(
         Trip,
@@ -239,18 +261,49 @@ class Journey(models.Model):
                 fields=["start_location", "destination_location", "status"],
                 name="journey_endpoints_idx",
             ),
+            models.Index(
+                fields=["start_place", "destination_place", "status"],
+                name="journey_place_endpoints_idx",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
-                condition=~models.Q(start_location=models.F("destination_location")),
+                condition=(
+                    (
+                        models.Q(start_location__isnull=True)
+                        | models.Q(destination_location__isnull=True)
+                        | ~models.Q(start_location=models.F("destination_location"))
+                    )
+                    & (
+                        models.Q(start_place__isnull=True)
+                        | models.Q(destination_place__isnull=True)
+                        | ~models.Q(start_place=models.F("destination_place"))
+                    )
+                ),
                 name="journey_distinct_endpoints",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        schema_version=1,
+                        start_place__isnull=True,
+                        destination_place__isnull=True,
+                    )
+                    | models.Q(
+                        schema_version=2,
+                        start_place__isnull=False,
+                        destination_place__isnull=False,
+                    )
+                ),
+                name="journey_canonical_endpoints",
             ),
         ]
 
     def __str__(self) -> str:
         return (
-            f"Journey #{self.pk} {self.start_location_id}"
-            f"→{self.destination_location_id}"
+            f"Journey #{self.pk} "
+            f"{self.start_place_id or self.start_location_id}"
+            f"→{self.destination_place_id or self.destination_location_id}"
         )
 
 
@@ -271,17 +324,35 @@ class JourneyLeg(models.Model):
         on_delete=models.CASCADE,
         related_name="legs",
     )
+    origin_place = models.ForeignKey(
+        "locations.Place",
+        on_delete=models.PROTECT,
+        related_name="journey_legs_originating",
+        null=True,
+        blank=True,
+    )
+    destination_place = models.ForeignKey(
+        "locations.Place",
+        on_delete=models.PROTECT,
+        related_name="journey_legs_ending",
+        null=True,
+        blank=True,
+    )
     position = models.PositiveSmallIntegerField()
     mode = models.CharField(max_length=8, choices=Mode.choices)
     origin = models.ForeignKey(
         "locations.Location",
         on_delete=models.PROTECT,
         related_name="journey_legs_from",
+        null=True,
+        blank=True,
     )
     destination = models.ForeignKey(
         "locations.Location",
         on_delete=models.PROTECT,
         related_name="journey_legs_to",
+        null=True,
+        blank=True,
     )
     depart_at = models.DateTimeField()
     arrive_at = models.DateTimeField(null=True, blank=True)
@@ -330,8 +401,28 @@ class JourneyLeg(models.Model):
                 name="journey_leg_unique_position",
             ),
             models.CheckConstraint(
-                condition=~models.Q(origin=models.F("destination")),
+                condition=(
+                    (
+                        models.Q(origin__isnull=True)
+                        | models.Q(destination__isnull=True)
+                        | ~models.Q(origin=models.F("destination"))
+                    )
+                    & (
+                        models.Q(origin_place__isnull=True)
+                        | models.Q(destination_place__isnull=True)
+                        | ~models.Q(origin_place=models.F("destination_place"))
+                    )
+                ),
                 name="journey_leg_distinct_endpoints",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(origin_place__isnull=True, destination_place__isnull=True)
+                    | models.Q(
+                        origin_place__isnull=False, destination_place__isnull=False
+                    )
+                ),
+                name="journey_leg_canonical_endpoints",
             ),
             models.CheckConstraint(
                 condition=models.Q(capacity_kg__gt=0),

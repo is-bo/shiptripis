@@ -139,9 +139,11 @@ class PaperGrain extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: IgnorePointer(
-      child: CustomPaint(
-        painter: _GrainPainter(color: context.colors.grain, density: density),
-        size: Size.infinite,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _GrainPainter(color: context.colors.grain, density: density),
+          size: Size.infinite,
+        ),
       ),
     ),
   );
@@ -964,19 +966,35 @@ class _RouteTraceState extends State<RouteTrace>
         child: SizedBox(
           height: widget.height,
           width: double.infinity,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) => CustomPaint(
-              painter: _RoutePainter(
-                t: _controller.value,
-                ink: c.textPrimary,
-                halo: c.attentionVivid,
-                accent: c.brand,
-                // Mirrored in Arabic so the plane still flies in the
-                // direction the page reads.
-                mirrored: Directionality.of(context) == TextDirection.rtl,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // The path and city marks are static. Keeping them in their own
+              // layer avoids rebuilding and repainting every dash on each
+              // frame of the plane's three-second loop.
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: _RouteBackdropPainter(
+                    ink: c.textPrimary,
+                    accent: c.brand,
+                    mirrored: Directionality.of(context) == TextDirection.rtl,
+                  ),
+                ),
               ),
-            ),
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) => CustomPaint(
+                    painter: _RoutePlanePainter(
+                      t: _controller.value,
+                      ink: c.textPrimary,
+                      halo: c.attentionVivid,
+                      mirrored: Directionality.of(context) == TextDirection.rtl,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -984,18 +1002,29 @@ class _RouteTraceState extends State<RouteTrace>
   }
 }
 
-class _RoutePainter extends CustomPainter {
-  const _RoutePainter({
-    required this.t,
+Path _routePath(Size size) {
+  final start = Offset(20, size.height * 0.78);
+  final end = Offset(size.width - 20, size.height * 0.32);
+  return Path()
+    ..moveTo(start.dx, start.dy)
+    ..cubicTo(
+      size.width * 0.30,
+      size.height * 0.05,
+      size.width * 0.70,
+      size.height * 0.85,
+      end.dx,
+      end.dy,
+    );
+}
+
+class _RouteBackdropPainter extends CustomPainter {
+  const _RouteBackdropPainter({
     required this.ink,
-    required this.halo,
     required this.accent,
     required this.mirrored,
   });
 
-  final double t;
   final Color ink;
-  final Color halo;
   final Color accent;
   final bool mirrored;
 
@@ -1009,16 +1038,7 @@ class _RoutePainter extends CustomPainter {
 
     final start = Offset(20, size.height * 0.78);
     final end = Offset(size.width - 20, size.height * 0.32);
-    final path = Path()
-      ..moveTo(start.dx, start.dy)
-      ..cubicTo(
-        size.width * 0.30,
-        size.height * 0.05,
-        size.width * 0.70,
-        size.height * 0.85,
-        end.dx,
-        end.dy,
-      );
+    final path = _routePath(size);
 
     final dashPaint = Paint()
       ..color = ink.withValues(alpha: 0.25)
@@ -1031,28 +1051,6 @@ class _RoutePainter extends CustomPainter {
         canvas.drawPath(metric.extractPath(distance, next), dashPaint);
         distance = next + 4;
       }
-    }
-
-    for (final metric in path.computeMetrics()) {
-      final tangent = metric.getTangentForOffset(metric.length * t);
-      if (tangent == null) continue;
-      final p = tangent.position;
-      canvas
-        ..drawCircle(p, 14, Paint()..color = halo.withValues(alpha: 0.18))
-        ..drawCircle(p, 8, Paint()..color = halo.withValues(alpha: 0.35))
-        ..save()
-        ..translate(p.dx, p.dy)
-        ..rotate(tangent.angle)
-        ..drawPath(
-          Path()
-            ..moveTo(8, 0)
-            ..lineTo(-6, -4)
-            ..lineTo(-3, 0)
-            ..lineTo(-6, 4)
-            ..close(),
-          Paint()..color = ink,
-        )
-        ..restore();
     }
 
     final dot = Paint()..color = ink;
@@ -1077,6 +1075,58 @@ class _RoutePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RoutePainter old) =>
-      old.t != t || old.ink != ink || old.mirrored != mirrored;
+  bool shouldRepaint(covariant _RouteBackdropPainter old) =>
+      old.ink != ink || old.accent != accent || old.mirrored != mirrored;
+}
+
+class _RoutePlanePainter extends CustomPainter {
+  const _RoutePlanePainter({
+    required this.t,
+    required this.ink,
+    required this.halo,
+    required this.mirrored,
+  });
+
+  final double t;
+  final Color ink;
+  final Color halo;
+  final bool mirrored;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    if (mirrored) {
+      canvas.translate(size.width, 0);
+      canvas.scale(-1, 1);
+    }
+
+    for (final metric in _routePath(size).computeMetrics()) {
+      final tangent = metric.getTangentForOffset(metric.length * t);
+      if (tangent == null) continue;
+      final point = tangent.position;
+      canvas
+        ..drawCircle(point, 14, Paint()..color = halo.withValues(alpha: 0.18))
+        ..drawCircle(point, 8, Paint()..color = halo.withValues(alpha: 0.35))
+        ..save()
+        ..translate(point.dx, point.dy)
+        ..rotate(tangent.angle)
+        ..drawPath(
+          Path()
+            ..moveTo(8, 0)
+            ..lineTo(-6, -4)
+            ..lineTo(-3, 0)
+            ..lineTo(-6, 4)
+            ..close(),
+          Paint()..color = ink,
+        )
+        ..restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoutePlanePainter old) =>
+      old.t != t ||
+      old.ink != ink ||
+      old.halo != halo ||
+      old.mirrored != mirrored;
 }

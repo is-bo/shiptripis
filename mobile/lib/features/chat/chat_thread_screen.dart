@@ -38,20 +38,41 @@ import '../../design/tokens.dart';
 import '../../domain/chat.dart';
 import '../../l10n/app_localizations.dart';
 
-final _messagesProvider = FutureProvider.autoDispose
-    .family<ChatMessagePage, int>((ref, matchId) async {
+class _ChatThreadData {
+  const _ChatThreadData({required this.eligibility, required this.page});
+
+  final ChatEligibility eligibility;
+  final ChatMessagePage page;
+}
+
+final _threadDataProvider = FutureProvider.autoDispose
+    .family<_ChatThreadData, int>((ref, matchId) async {
       final repo = ref.watch(chatRepositoryProvider);
+      final eligibility = await repo.eligibility(matchId: matchId);
+
+      if (!eligibility.canReadHistory) {
+        return _ChatThreadData(
+          eligibility: eligibility,
+          page: const ChatMessagePage(
+            count: 0,
+            messages: <ChatMessage>[],
+            hasMore: false,
+          ),
+        );
+      }
+
       // Reading also marks the other party's messages read, server-side, so
       // the unread badge has to be re-read afterwards.
       final page = await repo.messages(matchId: matchId);
       ref.invalidate(chatThreadsProvider);
-      return page;
+      return _ChatThreadData(eligibility: eligibility, page: page);
     });
 
 class ChatThreadScreen extends ConsumerStatefulWidget {
-  const ChatThreadScreen({required this.matchId, super.key});
+  const ChatThreadScreen({required this.matchId, this.dealId, super.key});
 
   final int matchId;
+  final int? dealId;
 
   @override
   ConsumerState<ChatThreadScreen> createState() => _ChatThreadScreenState();
@@ -77,8 +98,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     super.dispose();
   }
 
-  ChatThread? get _thread {
-    final threads = ref.read(chatThreadsProvider).value ?? const <ChatThread>[];
+  ChatThread? _threadFrom(List<ChatThread> threads) {
     for (final thread in threads) {
       if (thread.matchId == widget.matchId) return thread;
     }
@@ -110,7 +130,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         _block = ChatBlockReason.ok;
       });
       ref
-        ..invalidate(_messagesProvider(widget.matchId))
+        ..invalidate(_threadDataProvider(widget.matchId))
         ..invalidate(chatThreadsProvider);
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -140,11 +160,13 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
-    final page = ref.watch(_messagesProvider(widget.matchId));
-    final thread = _thread;
-
-    final canSend = thread?.canSend ?? true;
+    final threads = ref.watch(chatThreadsProvider);
+    final thread = _threadFrom(threads.value ?? const <ChatThread>[]);
+    final state = ref.watch(_threadDataProvider(widget.matchId));
+    final eligibility = state.value?.eligibility;
+    final canSend = eligibility?.eligible ?? false;
     final blocked = !canSend || _block != ChatBlockReason.ok;
+    final dealId = widget.dealId ?? thread?.dealId;
 
     return AppScaffold(
       topBar: AppTopBar(
@@ -163,15 +185,23 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       body: Column(
         children: [
           Expanded(
-            child: AsyncView<ChatMessagePage>(
-              value: page,
-              onRetry: () => ref.invalidate(_messagesProvider(widget.matchId)),
+            child: AsyncView<_ChatThreadData>(
+              value: state,
+              onRetry: () =>
+                  ref.invalidate(_threadDataProvider(widget.matchId)),
               loading: () => const Padding(
                 padding: EdgeInsets.all(AppSpace.gutter),
                 child: SkeletonLines(count: 6, spacing: AppSpace.xl),
               ),
               data: (data) {
-                if (data.messages.isEmpty && _pending.isEmpty) {
+                if (!data.eligibility.canReadHistory) {
+                  return _ChatUnavailableState(
+                    reason: data.eligibility.reason,
+                    dealId: dealId,
+                  );
+                }
+
+                if (data.page.messages.isEmpty && _pending.isEmpty) {
                   return AppEmptyState(
                     title: l.chatThreadEmptyTitle,
                     body: l.chatThreadEmptyBody,
@@ -184,7 +214,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                 // upward without a scroll jump.
                 final items = <Object>[
                   ..._pending.reversed,
-                  ...data.messages.reversed,
+                  ...data.page.messages.reversed,
                 ];
 
                 return ListView.builder(
@@ -214,18 +244,50 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
               },
             ),
           ),
-          if (blocked)
+          if (state.hasValue &&
+              state.requireValue.eligibility.canReadHistory &&
+              blocked)
             _BlockedNotice(
               reason: _block == ChatBlockReason.ok
-                  ? ChatBlockReason.matchClosed
+                  ? state.requireValue.eligibility.reason
                   : _block,
-              dealId: thread?.dealId,
+              dealId: dealId,
             ),
         ],
       ),
       footer: blocked
           ? null
           : _Composer(controller: _composer, sending: _sending, onSend: _send),
+    );
+  }
+}
+
+/// A normal gate state, distinct from a transport failure. In particular,
+/// `payment_pending` is not rendered as a raw 402/403 or as an empty white
+/// screen: it names what is waiting and, when the originating Deal is known,
+/// gives the sender the payment action.
+class _ChatUnavailableState extends StatelessWidget {
+  const _ChatUnavailableState({required this.reason, this.dealId});
+
+  final ChatBlockReason reason;
+  final int? dealId;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final paymentPending = reason == ChatBlockReason.paymentPending;
+    return AppEmptyState(
+      title: paymentPending ? l.chatUnavailableTitle : l.chatClosedTitle,
+      body: paymentPending ? l.chatUnavailableBody : l.chatClosedBody,
+      icon: paymentPending
+          ? Icons.credit_card_rounded
+          : Icons.lock_outline_rounded,
+      actionLabel: paymentPending && dealId != null
+          ? l.chatBlockedPayAction
+          : null,
+      onAction: paymentPending && dealId != null
+          ? () => context.openDealPayment(dealId!)
+          : null,
     );
   }
 }

@@ -122,6 +122,8 @@ def _request_for_owner(*, pk: int, user):
             "sender",
             "pickup_location",
             "delivery_location",
+            "pickup_place",
+            "delivery_place",
         ),
         pk=pk,
     )

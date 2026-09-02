@@ -599,7 +599,7 @@ def _release_deposit_credit_share(
         # it again would let the same cents be refunded twice.
         return amount
 
-    order = PaymentOrder.objects.select_for_update().get(pk=money.balance_order_id)
+    order = PaymentOrder.objects.select_for_update(no_key=True).get(pk=money.balance_order_id)
     order.credited_eur_cents = max(0, int(order.credited_eur_cents) - amount)
     fields = ["credited_eur_cents", "updated_at"]
     if order.credited_eur_cents == 0:
@@ -620,7 +620,7 @@ def _apply_payout_share(
     which the `fin_payout_amount_positive` constraint would refuse anyway.
     """
 
-    payout = Payout.objects.select_for_update().filter(deal_id=plan.money.deal_id).first()
+    payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=plan.money.deal_id).first()
     if payout is None:
         return "no_payout"
     if payout.status == Payout.Status.PAID:

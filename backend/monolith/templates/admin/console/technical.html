@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Technical records</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Owner-only escape hatch</p>
+      <h1>Technical records</h1>
+      <p>Raw Django model screens. Use them only when no audited operations view can answer the question.</p>
+    </div>
+  </header>
+  <div class="st-warning-panel">
+    <strong>These screens bypass the guided actions</strong>
+    <p>Editing a record here can skip the checks the operations console runs, and can affect production invariants. Prefer the role-aware console wherever it can answer the question.</p>
+  </div>
+  <section class="st-table-card">
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Area</th><th scope="col">Models</th></tr></thead>
+        <tbody>
+          {% for app in apps %}
+          <tr>
+            <td><strong>{{ app.name }}</strong></td>
+            <td><div class="st-technical-links">{% for model in app.models %}<a href="{{ model.admin_url }}">{{ model.name }}</a>{% empty %}No registered models{% endfor %}</div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

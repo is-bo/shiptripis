@@ -291,43 +291,6 @@ class AcceptedDeal:
     created: bool
 
 
-def _covered_legs(
-    journey: Journey,
-    start_leg_id: int,
-    end_leg_id: int,
-    *,
-    for_update: bool = False,
-) -> list[JourneyLeg]:
-    manager = (
-        JourneyLeg.objects.select_for_update() if for_update else JourneyLeg.objects
-    )
-    endpoints = {
-        leg.id: leg
-        for leg in manager.filter(journey=journey, id__in=[start_leg_id, end_leg_id])
-    }
-    if len(endpoints) != 2 and start_leg_id != end_leg_id:
-        raise InvalidLegRange("Both endpoint legs must belong to the selected journey.")
-    start = endpoints.get(start_leg_id)
-    end = endpoints.get(end_leg_id)
-    if start is None or end is None or start.position > end.position:
-        raise InvalidLegRange("The covered leg range is not ordered.")
-
-    queryset = JourneyLeg.objects
-    if for_update:
-        queryset = queryset.select_for_update()
-    legs = list(
-        queryset.filter(
-            journey=journey,
-            position__gte=start.position,
-            position__lte=end.position,
-        ).order_by("position", "id")
-    )
-    expected = end.position - start.position + 1
-    if len(legs) != expected:
-        raise InvalidLegRange("The covered leg range is not contiguous.")
-    return legs
-
-
 def _v1_offer_values(
     traveler_reward_eur_cents: int,
     *,
@@ -453,6 +416,33 @@ def _preflight_evaluation(
     return provider.replay()
 
 
+def _lock_journey_legs(journey: Journey) -> list[JourneyLeg]:
+    """Lock every leg of ``journey`` for update and return them in route order.
+
+    ``of=("self",)`` is load-bearing, not cosmetic. Compatibility needs each
+    leg's ``origin``/``destination`` row, and both columns became nullable with
+    canonical geography, so ``select_related`` compiles to a LEFT OUTER JOIN. A
+    bare ``FOR UPDATE`` would then ask PostgreSQL to lock the nullable side of
+    that join, which it rejects outright with "FOR UPDATE cannot be applied to
+    the nullable side of an outer join". SQLite never sees this: it has no
+    ``has_select_for_update``, so the clause is dropped before it is compiled.
+
+    Naming the leg table keeps the lock exactly where the transaction writes —
+    the per-segment capacity rows — and leaves the read-only Location rows
+    unlocked, which is what every caller already intended.
+
+    Callers must already hold the Journey row lock; legs are always taken after
+    their journey and never before it.
+    """
+
+    return list(
+        JourneyLeg.objects.select_for_update(no_key=True, of=("self",))
+        .select_related("origin", "destination")
+        .filter(journey=journey)
+        .order_by("position", "pk")
+    )
+
+
 def _lock_acceptance_eligibility(
     *,
     delivery_request: DeliveryRequest,
@@ -469,7 +459,7 @@ def _lock_acceptance_eligibility(
     """
 
     current_kyc = (
-        KycSubmission.objects.select_for_update()
+        KycSubmission.objects.select_for_update(no_key=True)
         .filter(user_id=journey.traveler_id, status=KycSubmission.Status.APPROVED)
         .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=at))
         .order_by("pk")
@@ -488,7 +478,7 @@ def _lock_acceptance_eligibility(
         .values_list("witness_id", flat=True)
     )
     approved_proof_leg_ids = set(
-        JourneyLegProof.objects.select_for_update()
+        JourneyLegProof.objects.select_for_update(no_key=True)
         .filter(pk__in=proof_witness_ids, status=JourneyLegProof.Status.APPROVED)
         .order_by("pk")
         .values_list("leg_id", flat=True)
@@ -498,7 +488,7 @@ def _lock_acceptance_eligibility(
 
     locked_users = {
         user.pk: user
-        for user in User.objects.select_for_update()
+        for user in User.objects.select_for_update(no_key=True)
         .filter(pk__in={delivery_request.sender_id, journey.traveler_id})
         .order_by("pk")
     }
@@ -570,13 +560,13 @@ def _create_sender_offer_locked(
 ) -> Offer:
     request_row = (
         DeliveryRequest.objects.select_for_update(
-            of=("self", "parcelrequest_ptr")
+            no_key=True, of=("self", "parcelrequest_ptr")
         )
         .select_related("sender", "pickup_location", "delivery_location")
         .get(pk=delivery_request_id)
     )
     journey_row = (
-        Journey.objects.select_for_update()
+        Journey.objects.select_for_update(no_key=True)
         .select_related("traveler")
         .get(pk=journey_id)
     )
@@ -600,12 +590,7 @@ def _create_sender_offer_locked(
             "This private delivery request targets a different traveler."
         )
 
-    locked_legs = list(
-        JourneyLeg.objects.select_for_update()
-        .select_related("origin", "destination")
-        .filter(journey=journey_row)
-        .order_by("position", "pk")
-    )
+    locked_legs = _lock_journey_legs(journey_row)
     journey_row._matching_legs = locked_legs
     policy, evaluation = _validate_evaluation(
         delivery_request=request_row,
@@ -737,10 +722,10 @@ def _counter_offer_locked(
             "ProductRequest/Kaba offer mutations are retired."
         )
     DeliveryRequest.objects.select_for_update(
-        of=("self", "parcelrequest_ptr")
+        no_key=True, of=("self", "parcelrequest_ptr")
     ).get(pk=snapshot["match__parcel_id"])
-    match = Match.objects.select_for_update().get(pk=snapshot["match_id"])
-    current = Offer.objects.select_for_update().get(pk=pending_offer_id)
+    match = Match.objects.select_for_update(no_key=True).get(pk=snapshot["match_id"])
+    current = Offer.objects.select_for_update(no_key=True).get(pk=pending_offer_id)
     if actor.id not in (match.sender_id, match.traveler_id):
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
@@ -766,16 +751,11 @@ def _counter_offer_locked(
             "The V1 match has no covered journey-leg range."
         )
     journey = (
-        Journey.objects.select_for_update()
+        Journey.objects.select_for_update(no_key=True)
         .select_related("traveler")
         .get(pk=match.journey_id)
     )
-    journey._matching_legs = list(
-        JourneyLeg.objects.select_for_update()
-        .select_related("origin", "destination")
-        .filter(journey=journey)
-        .order_by("position", "pk")
-    )
+    journey._matching_legs = _lock_journey_legs(journey)
     policy, evaluation = _validate_evaluation(
         delivery_request=request_row,
         journey=journey,
@@ -900,13 +880,13 @@ def _accept_offer_locked(
         )
     request_row = (
         DeliveryRequest.objects.select_for_update(
-            of=("self", "parcelrequest_ptr")
+            no_key=True, of=("self", "parcelrequest_ptr")
         )
         .select_related("sender", "pickup_location", "delivery_location")
         .get(pk=snapshot["match__parcel_id"])
     )
     request_matches = list(
-        Match.objects.select_for_update()
+        Match.objects.select_for_update(no_key=True)
         .filter(parcel_id=request_row.pk)
         .order_by("pk")
     )
@@ -915,7 +895,7 @@ def _accept_offer_locked(
     if match is None:
         raise OfferNotPending("The offer no longer belongs to this request.")
     request_offers = list(
-        Offer.objects.select_for_update()
+        Offer.objects.select_for_update(no_key=True)
         .filter(match_id__in=[row.pk for row in request_matches])
         .order_by("pk")
     )
@@ -952,19 +932,14 @@ def _accept_offer_locked(
             "The delivery request is already matched or closed."
         )
     journey = (
-        Journey.objects.select_for_update(of=("self",))
+        Journey.objects.select_for_update(no_key=True, of=("self",))
         .select_related("traveler")
         .get(pk=match.journey_id)
     )
     if journey.status != Journey.Status.ACTIVE:
         raise JourneyNotActive("The journey is no longer active.")
 
-    locked_legs = list(
-        JourneyLeg.objects.select_for_update(of=("self",))
-        .select_related("origin", "destination")
-        .filter(journey=journey)
-        .order_by("position", "pk")
-    )
+    locked_legs = _lock_journey_legs(journey)
     journey._matching_legs = locked_legs
     eligibility_at = timezone.now()
     _lock_acceptance_eligibility(

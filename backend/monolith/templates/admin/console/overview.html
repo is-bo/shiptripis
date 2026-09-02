@@ -1,0 +1,111 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+<main class="st-console st-overview">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">ShipTrip operations</p>
+      <h1>What needs attention</h1>
+      <p>Live work queues for your role. Every count opens the records behind it.</p>
+    </div>
+    <div class="st-page-aside">
+      <div class="st-head-signal{% if raised %} has-alerts{% endif %}">
+        <strong>{{ raised }}</strong><span>queue{{ raised|pluralize }} with work waiting</span>
+      </div>
+    </div>
+  </header>
+
+  {% comment %}The action panel is the operator's anchor. It stays on the page when it is empty, because a panel that disappears reads as a broken page rather than as a clear queue.{% endcomment %}
+  <section class="st-attention" aria-labelledby="attention-title">
+    <div class="st-attention-head">
+      <h2 id="attention-title">Action queues</h2>
+      <p class="st-attention-summary">{% if raised %}{{ raised }} queue{{ raised|pluralize }} with work waiting{% else %}Every queue is empty right now.{% endif %}</p>
+    </div>
+    {% if raised_items %}
+    <ul class="st-attention-list">
+      {% for item in raised_items %}
+      <li class="st-attention-row st-attention-{{ item.tone }}">
+        <a href="{{ item.url }}">
+          <span class="st-attention-count">{{ item.count }}</span>
+          <span class="st-attention-label">{{ item.title }}</span>
+          <span class="st-attention-hint">{{ item.hint }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="st-empty">
+      <span aria-hidden="true">&#10003;</span>
+      <h2>Every queue is empty right now.</h2>
+      <p>{% if attention %}Nothing in your role is waiting on a decision. The cleared queues below were all checked.{% else %}Your role has no operational work waiting.{% endif %}</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if clear_items %}
+  <section class="st-queues" aria-labelledby="clear-title">
+    <div class="st-queues-head">
+      <h2 id="clear-title">Checked and clear</h2>
+      <p class="st-attention-summary">{{ clear_items|length }} queue{{ clear_items|length|pluralize }} with nothing waiting. Open one to confirm.</p>
+    </div>
+    <ul class="st-clear-list">
+      {% for item in clear_items %}<li><a href="{{ item.url }}">{{ item.title }}</a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% operations_destinations as sections %}
+  {% if sections %}
+  <section class="st-card">
+    <p class="st-eyebrow">Where everything is</p>
+    <h2>All destinations your role can open</h2>
+    <div class="st-directory">
+      {% for section in sections %}
+      <div>
+        <h3>{{ section.label }}</h3>
+        <ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}</a></li>{% endfor %}</ul>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="st-grid st-grid-2">
+    {% if providers %}
+    <section class="st-card">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Readiness</p><h2>Payment and email rails</h2></div>
+        <a href="{% url 'admin_console:system' %}">System &amp; operations</a>
+      </div>
+      <ul class="st-reading-list">
+        {% for provider in providers %}
+        <li>
+          <div><strong>{{ provider.name }}</strong><small>{{ provider.detail }}</small></div>
+          <span class="st-chip st-{{ provider.tone }}">{{ provider.label }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% if recent_audit %}
+    <section class="st-card">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Accountability</p><h2>Recent admin activity</h2></div>
+        <a href="{% url 'admin_console:audit' %}">Full audit log</a>
+      </div>
+      <ol class="st-timeline">
+        {% for item in recent_audit %}
+        <li>
+          <strong>{{ item.action|admin_action }}</strong>
+          <span>{{ item.actor.email|default:"System" }} &middot; {{ item.created_at|date:"d M, H:i" }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

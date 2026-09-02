@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:users' %}">Users</a> &rsaquo; {{ title }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Person</p>
+      <h1>{{ title }}</h1>
+      <p>{{ person.email }} &middot; joined {{ person.date_joined|date:"d M Y" }}</p>
+    </div>
+    <div class="st-page-aside">
+      {% if kyc_current %}
+        <span class="st-chip st-ok">Identity approved</span>
+      {% else %}
+        <span class="st-chip st-attn">No current identity approval</span>
+      {% endif %}
+      <span class="st-chip {% if person.is_banned or not person.is_active %}st-bad{% else %}st-ok{% endif %}">{% if person.is_banned %}Banned{% elif person.is_active %}Account active{% else %}Sign-in disabled{% endif %}</span>
+    </div>
+  </header>
+
+  {% if person.is_banned or not person.is_active %}
+  <div class="st-alert st-alert-bad">
+    <strong>{% if person.is_banned %}This account is banned{% else %}This account cannot sign in{% endif %}</strong>
+    <span>Existing Deals and financial obligations are unaffected by the restriction and remain visible below.</span>
+  </div>
+  {% endif %}
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">Identity</p>
+      <h2>Who this is</h2>
+      <div class="st-identity">
+        <span class="st-avatar" aria-hidden="true">{{ person.full_name|default:person.email|slice:":1"|upper }}</span>
+        <div class="st-identity-body">
+          <strong>{{ person.full_name|default:"Name not provided" }}</strong>
+          <span>{{ person.email }}</span>
+        </div>
+      </div>
+      <dl class="st-facts">
+        <div><dt>Marketplace role</dt><dd>{{ person.get_role_display }}</dd></div>
+        <div><dt>Email verified</dt><dd><span class="st-chip {% if person.is_email_verified %}st-ok{% else %}st-mute{% endif %}">{{ person.is_email_verified|yesno:"Verified,Not verified" }}</span></dd></div>
+        <div><dt>Phone verified</dt><dd><span class="st-chip {% if person.is_phone_verified %}st-ok{% else %}st-mute{% endif %}">{{ person.is_phone_verified|yesno:"Verified,Not verified" }}</span></dd></div>
+        <div><dt>Joined</dt><dd>{{ person.date_joined|date:"d M Y, H:i" }}</dd></div>
+        {% if may_view_sensitive %}
+          <div><dt>Phone</dt><dd>{{ person.phone|default:"Not provided" }}</dd></div>
+          <div><dt>Wilaya</dt><dd>{{ person.wilaya|default:"Not provided" }}</dd></div>
+        {% endif %}
+      </dl>
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Trust</p>
+      <h2>Identity verification history</h2>
+      <div class="st-band">
+        <div class="is-lead">
+          <span>Can publish journeys</span>
+          <strong class="{% if kyc_current %}st-tone-ok{% else %}st-tone-attn{% endif %}">{{ kyc_current|yesno:"Yes,No" }}</strong>
+        </div>
+        <div>
+          <span>Average rating</span>
+          <strong>{{ stats.rating|floatformat:1|default:"—" }}</strong>
+        </div>
+      </div>
+      {% if kyc_submissions %}
+        <ol class="st-timeline">
+          {% for item in kyc_submissions %}
+          <li>
+            <strong>{% if perms.admin_panel.view_kyc %}<a href="{% url 'admin_console:kyc-detail' item.pk %}">{{ item.get_document_type_display }}</a>{% else %}Identity submission{% endif %}</strong>
+            <span><span class="st-chip st-{{ item.status|status_tone }}">{{ item.get_status_display }}</span> &middot; {{ item.created_at|date:"d M Y" }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="st-muted">This person has never submitted identity evidence.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Activity</p>
+    <h2>Related ShipTrip records</h2>
+    <div class="st-stat-grid">
+      {% if perms.admin_panel.view_requests %}<a href="{% url 'admin_console:requests' %}?user_id={{ person.pk }}"><strong>{{ stats.requests }}</strong><span>Delivery requests sent</span></a>{% else %}<div><strong>{{ stats.requests }}</strong><span>Delivery requests sent</span></div>{% endif %}
+      {% if perms.admin_panel.view_journeys %}<a href="{% url 'admin_console:journeys' %}?user_id={{ person.pk }}"><strong>{{ stats.journeys }}</strong><span>Journeys published</span></a>{% else %}<div><strong>{{ stats.journeys }}</strong><span>Journeys published</span></div>{% endif %}
+      <a href="{% url 'admin_console:deals' %}?user_id={{ person.pk }}"><strong>{{ stats.deals }}</strong><span>Deals, either side</span></a>
+      <a href="{% url 'admin_console:disputes' %}?user_id={{ person.pk }}"><strong>{{ stats.disputes }}</strong><span>Disputes involved in</span></a>
+    </div>
+  </section>
+</main>
+{% endblock %}

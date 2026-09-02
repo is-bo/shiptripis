@@ -84,6 +84,13 @@ final dealsProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
   return repo.list();
 });
 
+final completedDealsCountProvider = FutureProvider.autoDispose<int>((
+  ref,
+) async {
+  final repo = ref.watch(dealRepositoryProvider);
+  return repo.count(status: DealStatus.completed);
+});
+
 final dealDetailProvider = FutureProvider.autoDispose.family<Deal, int>((
   ref,
   id,
@@ -372,6 +379,7 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
 void refreshVolatileState(WidgetRef ref) {
   ref
     ..invalidate(dealsProvider)
+    ..invalidate(completedDealsCountProvider)
     ..invalidate(dealDetailProvider)
     ..invalidate(matchesProvider)
     ..invalidate(matchDetailProvider)

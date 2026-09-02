@@ -1,0 +1,5 @@
+# The reviewed geography catalogue ships as a gzip stream. Git only converts
+# line endings in files its heuristic calls text, so this is already safe --
+# but a byte-mangled release artefact would fail only in production, as an
+# empty catalogue, so the rule is stated rather than relied upon.
+backend/monolith/apps/locations/data/*.json.gz binary

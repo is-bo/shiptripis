@@ -62,7 +62,10 @@ class DealScreen extends ConsumerWidget {
             AppIconButton(
               icon: Icons.forum_outlined,
               label: l.dealOpenChat,
-              onPressed: () => context.openChatThread(deal.value!.matchId!),
+              onPressed: () => context.openChatThread(
+                deal.value!.matchId!,
+                dealId: deal.value!.id,
+              ),
             ),
         ],
       ),

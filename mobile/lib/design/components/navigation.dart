@@ -120,6 +120,7 @@ class _NavItem extends StatelessWidget {
           ? '${destination.label}, ${destination.badgeCount}'
           : destination.label,
       value: '$position / $total',
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,

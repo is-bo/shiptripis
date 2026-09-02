@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; {% if kind == 'refund' %}<a href="{% url 'admin_console:refunds' %}">Refunds</a>{% else %}<a href="{% url 'admin_console:payouts' %}">Payouts</a>{% endif %} &rsaquo; {{ title }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">{% if kind == 'refund' %}Money going back to a Sender{% else %}Money going to a Traveler{% endif %}</p>
+      <h1>{{ record.amount_eur_cents|eur }}</h1>
+      <p>{% if kind == 'refund' %}Refund against order {{ record.order.public_reference }}{% else %}Reward for Deal {{ record.deal_id }}, owed to {{ record.traveler.email }}{% endif %}</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ record.status|status_tone }}">{{ record.get_status_display }}</span>
+    </div>
+  </header>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Financial fact</p>
+    <h2>{% if kind == 'refund' %}Why this refund exists{% else %}Whether this payout can move{% endif %}</h2>
+    <dl class="st-facts">
+      {% if kind == 'refund' %}
+        <div><dt>Reason</dt><dd>{{ record.get_reason_display }}</dd></div>
+        <div><dt>Provider</dt><dd>{{ record.get_provider_display }}</dd></div>
+        <div><dt>Settlement</dt><dd>{% if record.requires_manual_action %}<span class="st-chip st-attn">A person has to send this</span>{% else %}<span class="st-chip st-ok">Automatic</span>{% endif %}</dd></div>
+        <div><dt>Provider reference</dt><dd>{{ record.provider_refund_id|default:"Not assigned" }}</dd></div>
+        {% if record.failure_message %}<div class="st-fact-wide"><dt>What went wrong</dt><dd>{{ record.failure_message }}</dd></div>{% endif %}
+      {% else %}
+        <div><dt>Traveler</dt><dd>{{ record.traveler.email }}</dd></div>
+        <div><dt>Method</dt><dd>{{ record.get_method_display }}</dd></div>
+        <div><dt>Eligible from</dt><dd>{{ record.eligible_at|date:"d M Y, H:i"|default:"Not yet" }}</dd></div>
+        <div><dt>Protection</dt><dd>{% if record.status == 'frozen' %}<span class="st-chip st-attn">Frozen by a dispute</span>{% elif record.status == 'not_eligible' %}<span class="st-chip st-wait">48-hour window still open</span>{% else %}<span class="st-chip st-ok">Window has passed</span>{% endif %}</dd></div>
+        {% if record.reference %}<div><dt>Settlement reference</dt><dd>{{ record.reference }}</dd></div>{% endif %}
+      {% endif %}
+    </dl>
+  </section>
+
+  {% if may_act %}
+  <section class="st-card st-decision-card">
+    <p class="st-eyebrow">Irreversible action</p>
+    <h2>Record external payment evidence</h2>
+    <p><strong>This does not send money.</strong> Use it only after the transfer has already completed outside ShipTrip, to record what was sent and its reference.</p>
+    <form method="post" class="st-form">{% csrf_token %}
+      {{ form.as_p }}
+      <div class="st-split-actions">
+        <a class="button st-button-quiet" href="{% if kind == 'refund' %}{% url 'admin_console:refunds' %}{% else %}{% url 'admin_console:payouts' %}{% endif %}">Cancel</a>
+        <span class="st-spacer"></span>
+        <button class="st-button-danger" type="submit">{% if kind == 'refund' %}Mark refund settled{% else %}Mark payout paid{% endif %}</button>
+      </div>
+    </form>
+  </section>
+  {% else %}
+  <div class="st-readonly-note"><span>No manual action is available in this state, or your role cannot take it.</span></div>
+  {% endif %}
+</main>
+{% endblock %}

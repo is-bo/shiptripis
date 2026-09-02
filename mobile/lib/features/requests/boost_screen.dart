@@ -298,7 +298,9 @@ class _PackageCard extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      label: package.label,
       hint: selected ? l.a11ySelected : l.a11yNotSelected,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: AppCard(
           onTap: onTap,

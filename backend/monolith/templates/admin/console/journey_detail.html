@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:journeys' %}">Journeys</a> &rsaquo; Journey {{ journey.pk }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Marketplace journey</p>
+      <h1>Journey {{ journey.pk }}</h1>
+      <p>{{ journey.legs.all|length }} ordered leg{{ journey.legs.all|length|pluralize }} carried by {{ journey.traveler.full_name|default:journey.traveler.email }}.</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ proof_summary.1 }}">Flight proof: {{ proof_summary.0 }}</span>
+      <span class="st-chip st-{{ journey.status|status_tone }}">{{ journey.get_status_display }}</span>
+    </div>
+  </header>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Ordered route</p>
+    <h2>Where this journey goes</h2>
+    {% include "admin/console/_route.html" with nodes=route_nodes %}
+  </section>
+
+  <div class="st-grid st-grid-main">
+    <section class="st-card">
+      <p class="st-eyebrow">Legs</p>
+      <h2>Each segment and its proof</h2>
+      <ol class="st-leg-list">
+        {% for leg in journey.legs.all %}
+        <li>
+          <div class="st-leg-index">{{ forloop.counter }}</div>
+          <div class="st-leg-body">
+            {% include "admin/console/_route.html" with nodes=leg.console_route_nodes variant="line" %}
+            <div class="st-leg-meta">
+              <span><b>{{ leg.get_mode_display }}</b>{% if leg.flight_number %} &middot; {{ leg.flight_number }}{% endif %}</span>
+              <span>{{ leg.depart_at|date:"d M Y, H:i" }}{% if leg.arrive_at %} &rarr; {{ leg.arrive_at|date:"H:i" }}{% endif %}</span>
+              <span><b>{{ leg.capacity_kg|floatformat:"-2" }} kg</b> segment capacity</span>
+            </div>
+            <div>
+              {% for proof in leg.proofs.all %}
+                {% if perms.admin_panel.view_flight_proofs %}<a href="{% url 'admin_console:proof-detail' proof.pk %}"><span class="st-chip st-{{ proof.status|status_tone }}">Proof {{ proof.get_status_display|lower }}</span></a>{% else %}<span class="st-chip st-{{ proof.status|status_tone }}">Proof {{ proof.get_status_display|lower }}</span>{% endif %}
+              {% empty %}
+                {% if leg.mode == 'FLIGHT' %}<span class="st-chip st-bad">Proof missing</span>{% else %}<span class="st-chip st-mute">Proof not required</span>{% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </li>
+        {% empty %}
+        <li><div class="st-leg-index">&ndash;</div><div class="st-leg-body"><p class="st-muted">No ordered legs exist for this journey.</p></div></li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <aside>
+      <section class="st-card">
+        <p class="st-eyebrow">Traveler</p>
+        <h2>Who is carrying</h2>
+        <div class="st-identity">
+          <span class="st-avatar" aria-hidden="true">{{ journey.traveler.full_name|default:journey.traveler.email|slice:":1"|upper }}</span>
+          <div class="st-identity-body">
+            <strong>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' journey.traveler_id %}">{{ journey.traveler.full_name|default:"Name not provided" }}</a>{% else %}{{ journey.traveler.full_name|default:"Name not provided" }}{% endif %}</strong>
+            <span>{{ journey.traveler.email }}</span>
+          </div>
+        </div>
+        <p>{{ journey.notes|default:"The Traveler left no note on this journey." }}</p>
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}

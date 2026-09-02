@@ -183,7 +183,7 @@ def accept_admin_invitation(
         if invitation is None:
             raise ValidationError("Invitation is invalid, expired, used, or revoked.")
 
-        existing = User.objects.select_for_update().filter(email__iexact=invitation.email).first()
+        existing = User.objects.select_for_update(no_key=True).filter(email__iexact=invitation.email).first()
         if existing is None:
             if not password:
                 raise ValidationError("Password is required for a new administrator account.")
@@ -247,7 +247,7 @@ def change_admin_role(*, actor, user_id: int, role: str):
         raise PermissionDenied("Only a Super Admin may assign the Super Admin role.")
 
     User = get_user_model()
-    user = User.objects.select_for_update().get(pk=user_id)
+    user = User.objects.select_for_update(no_key=True).get(pk=user_id)
     if user.pk == actor.pk and user.is_superuser and normalized_role != AdminRole.SUPER_ADMIN:
         raise ValidationError("A Super Admin cannot demote their own active account.")
     before = {
@@ -279,6 +279,40 @@ def change_admin_role(*, actor, user_id: int, role: str):
     return user
 
 
+@transaction.atomic
+def set_admin_access(*, actor, user_id: int, enabled: bool):
+    """Enable or disable an existing staff account without changing its role.
+
+    Access state and role are deliberately separate: an owner may need to stop
+    a staff member signing in immediately while retaining the role assignment
+    as audit context. Re-enabling restores the same fixed role; no permission
+    list is accepted here.
+    """
+
+    if not has_admin_permission(actor, "manage_admins"):
+        raise PermissionDenied("Administrative staff management permission is required.")
+    User = get_user_model()
+    user = User.objects.select_for_update(no_key=True).get(pk=user_id)
+    if not user.is_staff:
+        raise ValidationError("Only an existing staff account can be changed here.")
+    if user.pk == actor.pk and not enabled:
+        raise ValidationError("You cannot disable your own active administrator account.")
+    if user.is_superuser and not actor.is_superuser:
+        raise PermissionDenied("Only a Super Admin may change a Super Admin account.")
+    before = {"is_active": user.is_active, "roles": user_admin_roles(user)}
+    if user.is_active != bool(enabled):
+        user.is_active = bool(enabled)
+        user.save(update_fields=("is_active",))
+        record_admin_action(
+            actor=actor,
+            action="admin.access_enabled" if enabled else "admin.access_disabled",
+            target=user,
+            before=before,
+            after={"is_active": user.is_active, "roles": user_admin_roles(user)},
+        )
+    return user
+
+
 class AdminReviewError(RuntimeError):
     code = "admin_review_not_permitted"
 
@@ -298,7 +332,7 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
     if decision == KycSubmission.Status.REJECTED and not clean_reason:
         raise AdminReviewError("A rejection reason is required.")
 
-    submission = KycSubmission.objects.select_for_update().get(pk=submission_id)
+    submission = KycSubmission.objects.select_for_update(no_key=True).get(pk=submission_id)
     if submission.status == decision:
         return submission
     if submission.status != KycSubmission.Status.PENDING:
@@ -366,7 +400,7 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
     if decision == JourneyLegProof.Status.REJECTED and not clean_reason:
         raise AdminReviewError("A rejection reason is required.")
 
-    proof = JourneyLegProof.objects.select_for_update().get(pk=proof_id)
+    proof = JourneyLegProof.objects.select_for_update(no_key=True).get(pk=proof_id)
     if proof.status == decision:
         return proof
     if proof.status != JourneyLegProof.Status.PENDING:

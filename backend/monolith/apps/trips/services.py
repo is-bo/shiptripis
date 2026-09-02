@@ -10,6 +10,8 @@ from django.utils import timezone
 
 from apps.kyc.models import KycSubmission
 
+from apps.locations.models import AirportLocalityMapping, Place
+
 from .models import Journey, JourneyLeg, JourneyLegProof
 
 
@@ -92,7 +94,32 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
             "Journey leg positions must be contiguous and start at zero.",
         )
 
-    if (
+    canonical = journey.schema_version >= 2
+
+    def matching_place_id(place: Place | None) -> int | None:
+        if place is None:
+            return None
+        if place.place_type == Place.PlaceType.LOCALITY:
+            return place.pk
+        mapping = place.airport_mappings.filter(
+            active=True,
+            is_primary=True,
+            relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+            locality__active=True,
+        ).first()
+        return mapping.locality_id if mapping else None
+
+    if canonical:
+        if matching_place_id(legs[0].origin_place) != matching_place_id(
+            journey.start_place
+        ) or matching_place_id(legs[-1].destination_place) != matching_place_id(
+            journey.destination_place
+        ):
+            raise JourneyDomainError(
+                "journey_endpoints_mismatch",
+                "Journey endpoints must match the first and last leg.",
+            )
+    elif (
         legs[0].origin_id != journey.start_location_id
         or legs[-1].destination_id != journey.destination_location_id
     ):
@@ -102,7 +129,17 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
         )
 
     for index, leg in enumerate(legs):
-        if leg.origin_id == leg.destination_id:
+        if canonical:
+            origin_node = matching_place_id(leg.origin_place)
+            destination_node = matching_place_id(leg.destination_place)
+        else:
+            origin_node = leg.origin_id
+            destination_node = leg.destination_id
+        if (
+            origin_node is None
+            or destination_node is None
+            or origin_node == destination_node
+        ):
             raise JourneyDomainError(
                 "journey_leg_endpoints_invalid",
                 f"Leg {leg.position} origin and destination must differ.",
@@ -116,7 +153,17 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
             continue
 
         previous = legs[index - 1]
-        if previous.destination_id != leg.origin_id:
+        if canonical:
+            previous_node = matching_place_id(previous.destination_place)
+            current_node = matching_place_id(leg.origin_place)
+        else:
+            previous_node = previous.destination_id
+            current_node = leg.origin_id
+        if (
+            previous_node is None
+            or current_node is None
+            or previous_node != current_node
+        ):
             raise JourneyDomainError(
                 "journey_legs_disconnected",
                 "Each leg must begin where the previous leg ends.",
@@ -142,7 +189,7 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
     caller-provided object.
     """
 
-    locked = Journey.objects.select_for_update().get(pk=journey.pk)
+    locked = Journey.objects.select_for_update(no_key=True).get(pk=journey.pk)
     if locked.traveler_id != actor.pk:
         raise JourneyDomainError(
             "journey_not_owned",
@@ -159,7 +206,7 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
         )
     legs = list(
         JourneyLeg.objects.filter(journey=locked)
-        .select_for_update()
+        .select_for_update(no_key=True)
         .order_by("position", "pk")
     )
     _validate_leg_sequence(locked, legs)
@@ -189,7 +236,7 @@ def cancel_journey(*, journey: Journey, actor) -> JourneyCancellationResult:
 
     changed = False
     with transaction.atomic():
-        locked = Journey.objects.select_for_update().get(pk=journey.pk)
+        locked = Journey.objects.select_for_update(no_key=True).get(pk=journey.pk)
         if locked.traveler_id != actor.id:
             raise JourneyDomainError(
                 "journey_not_owned",
@@ -201,7 +248,7 @@ def cancel_journey(*, journey: Journey, actor) -> JourneyCancellationResult:
                 f"A journey in status '{locked.status}' cannot be cancelled.",
             )
         funded_deal = (
-            Deal.objects.select_for_update()
+            Deal.objects.select_for_update(no_key=True)
             .filter(
                 journey_id=locked.pk,
                 status__in=(
@@ -251,7 +298,7 @@ def cancel_journey(*, journey: Journey, actor) -> JourneyCancellationResult:
 
     with transaction.atomic():
         pending_matches = list(
-            Match.objects.select_for_update()
+            Match.objects.select_for_update(no_key=True)
             .filter(journey_id=locked.pk, status=Match.Status.PENDING)
             .order_by("pk")
         )

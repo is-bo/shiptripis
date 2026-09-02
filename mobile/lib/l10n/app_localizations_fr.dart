@@ -779,6 +779,10 @@ class LFr extends L {
   String get journeyFlightNumberHint => 'ex. AH1006';
 
   @override
+  String get journeyFlightAirportsRequired =>
+      'Les trajets en avion doivent commencer et se terminer dans des aéroports.';
+
+  @override
   String get journeyPublish => 'Publier le trajet';
 
   @override
@@ -2035,6 +2039,15 @@ class LFr extends L {
   String get profileAccount => 'Compte';
 
   @override
+  String get profilePassportStamp => 'SHIPTRIP · MEMBRE';
+
+  @override
+  String get profileCompletedDeliveries => 'Terminées';
+
+  @override
+  String get profileRecentRating => 'Note récente';
+
+  @override
   String get profileRoles => 'Votre activité';
 
   @override
@@ -2113,7 +2126,55 @@ class LFr extends L {
   String get locationSearchTitle => 'Choisir un lieu';
 
   @override
-  String get locationSearchHint => 'Recherchez une ville ou une adresse';
+  String get locationSearchHint => 'Rechercher une localité ou un aéroport';
+
+  @override
+  String get locationSelectCountry => 'Choisissez d’abord un pays';
+
+  @override
+  String get locationSearchStart =>
+      'Saisissez une localité, commune ou un aéroport';
+
+  @override
+  String placeTierWilaya(String name) {
+    return '$name (wilaya)';
+  }
+
+  @override
+  String placeTierDepartment(String name) {
+    return '$name (département)';
+  }
+
+  @override
+  String placeTierRegion(String name) {
+    return '$name (région)';
+  }
+
+  @override
+  String placeTierProvince(String name) {
+    return '$name (province)';
+  }
+
+  @override
+  String placeTierAutonomousCommunity(String name) {
+    return '$name (communauté autonome)';
+  }
+
+  @override
+  String placeTierState(String name) {
+    return '$name (Land)';
+  }
+
+  @override
+  String placeTierDistrict(String name) {
+    return '$name (district)';
+  }
+
+  @override
+  String get locationTypeAirport => 'Aéroport';
+
+  @override
+  String get locationTypeLocality => 'Localité';
 
   @override
   String get locationUseMap => 'Choisir sur la carte';
@@ -2122,16 +2183,7 @@ class LFr extends L {
   String get locationConfirmPoint => 'Utiliser ce point';
 
   @override
-  String get locationRecent => 'Récents';
-
-  @override
   String get locationSaved => 'Lieux enregistrés';
-
-  @override
-  String get locationCityOnly => 'Ville uniquement';
-
-  @override
-  String get locationExactAddress => 'Adresse exacte';
 
   @override
   String get locationPrivacyBeforeFunding =>
@@ -2153,22 +2205,108 @@ class LFr extends L {
       'Essayez une autre orthographe, ou choisissez le point sur la carte.';
 
   @override
+  String get countryNameAlgeria => 'Algérie';
+
+  @override
+  String get countryNameFrance => 'France';
+
+  @override
+  String get countryNameSpain => 'Espagne';
+
+  @override
+  String get countryNameGermany => 'Allemagne';
+
+  @override
+  String get locationCountryQuestion => 'Quel pays ?';
+
+  @override
+  String get locationChangeCountry => 'Changer';
+
+  @override
+  String get locationCountryStep => 'Pays';
+
+  @override
+  String get locationCountriesUnavailable =>
+      'Aucun pays n’est disponible pour le moment.';
+
+  @override
+  String get locationSelectCountryBody =>
+      'Choisissez un pays ci-dessus, puis cherchez la ville, la commune ou l’aéroport.';
+
+  @override
+  String get locationSearchReadyTitle => 'Prêt quand vous l’êtes';
+
+  @override
+  String get locationSearchHintAirports => 'Rechercher un aéroport';
+
+  @override
+  String get locationSearchStartAirports =>
+      'Saisissez le nom d’un aéroport ou son code à trois lettres.';
+
+  @override
+  String get locationAirportsOnly =>
+      'Ce segment se fait en avion : seuls les aéroports sont proposés.';
+
+  @override
+  String get locationCurrentSelection => 'Sélection actuelle';
+
+  @override
+  String locationSearchNoMatch(String query) {
+    return 'Rien ici ne correspond à « $query ». Vérifiez l’orthographe, ou essayez la ville importante la plus proche.';
+  }
+
+  @override
+  String locationSearchNoMatchAirports(String query) {
+    return 'Aucun aéroport ici ne correspond à « $query ». Essayez le nom de la ville, ou le code à trois lettres.';
+  }
+
+  @override
+  String locationPreferredExplainer(String place) {
+    return 'Les voyageurs sont mis en relation sur $place. Un point préféré indique seulement où vous préféreriez vous retrouver à l’intérieur.';
+  }
+
+  @override
+  String get locationPreferredFlexibleHint => 'Aucun point exact nécessaire';
+
+  @override
+  String get locationAddPreferredPoint => 'Ajouter un point préféré';
+
+  @override
+  String get locationChangePreferredPoint => 'Changer de point';
+
+  @override
+  String get locationRemovePreferredPoint => 'Retirer le point préféré';
+
+  @override
+  String get locationPreferredRemoved => 'Point préféré retiré.';
+
+  @override
+  String get locationPreferredClearedByPlace =>
+      'Point préféré retiré — il appartenait au lieu que vous venez de changer.';
+
+  @override
+  String get locationDecideLater => 'Décider plus tard';
+
+  @override
+  String get locationPointInside => 'Point à l’intérieur de';
+
+  @override
+  String locationDropPinHelpIn(String place) {
+    return 'Déplacez la carte jusqu’à ce que le repère central soit au bon endroit dans $place, puis confirmez.';
+  }
+
+  @override
+  String locationNoCentre(String place) {
+    return 'Nous n’avons pas de centre enregistré pour $place : la carte démarre donc en vue large. Déplacez-la vers la bonne zone avant de confirmer.';
+  }
+
+  @override
   String mapAttribution(String attribution) {
     return 'Données cartographiques $attribution';
   }
 
   @override
   String get locationYourPlaces => 'Vos lieux';
-
-  @override
-  String get locationAirports => 'Aéroports';
-
-  @override
-  String get locationExactRequiredNotice =>
-      'Ceci nécessite l’une de vos propres adresses. Les aéroports ne sont connus qu’au niveau de la ville, ils ne peuvent donc pas être utilisés ici.';
-
-  @override
-  String get locationExactRequiredRow => 'Niveau ville uniquement';
 
   @override
   String get locationEmptyTitle => 'Aucun lieu enregistré pour le moment';
@@ -2195,22 +2333,29 @@ class LFr extends L {
   String get locationLabelHint => 'Maison, chez maman, le bureau';
 
   @override
-  String get locationCityField => 'Ville';
-
-  @override
-  String get locationCountryField => 'Code pays';
-
-  @override
-  String get locationCountryHint => 'FR, DZ, ES';
-
-  @override
-  String get locationCountryInvalid => 'Utilisez le code pays à deux lettres.';
-
-  @override
   String get locationSavePlace => 'Enregistrer ce lieu';
 
   @override
   String get locationPlaceSaved => 'Lieu enregistré.';
+
+  @override
+  String get locationPreferredMeetingPoint => 'Point de rencontre préféré';
+
+  @override
+  String get locationPreferredOptional => 'Facultatif';
+
+  @override
+  String get locationChoosePreferredPoint => 'Choisir sur la carte';
+
+  @override
+  String locationFlexibleWithin(String place) {
+    return 'Flexible dans $place';
+  }
+
+  @override
+  String locationPreferredValidation(String place) {
+    return 'Le fournisseur cartographique vérifiera que ce point appartient à $place.';
+  }
 
   @override
   String get mapZoomIn => 'Zoomer';

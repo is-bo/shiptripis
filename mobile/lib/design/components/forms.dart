@@ -334,6 +334,10 @@ class AppSelectField extends StatelessWidget {
           enabled: enabled,
           label: label,
           value: hasValue ? value : placeholder,
+          // Re-declared: `ExcludeSemantics` below drops the InkWell's tap
+          // action along with the duplicated inner text, and a labelled button
+          // that cannot be activated is worse than an unlabelled one.
+          onTap: enabled ? onTap : null,
           child: ExcludeSemantics(
             child: Material(
               color: enabled ? c.surface : c.surfaceSunken,
@@ -495,6 +499,7 @@ class AppSegmentedChoice<T> extends StatelessWidget {
                     enabled: enabled,
                     selected: option.value == selected,
                     label: option.label,
+                    onTap: enabled ? () => onSelect(option.value) : null,
                     child: ExcludeSemantics(
                       child: Material(
                         color: option.value == selected
@@ -614,6 +619,7 @@ class AppCheckTile extends StatelessWidget {
     return Semantics(
       checked: value,
       label: title,
+      onTap: () => onChanged(!value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => onChanged(!value),
@@ -779,62 +785,76 @@ class AppStepIndicator extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return Semantics(
+      container: true,
       label: '${currentIndex + 1} / ${steps.length}',
       value: steps[currentIndex.clamp(0, steps.length - 1)],
-      child: ExcludeSemantics(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showLabels = constraints.maxWidth / steps.length >= 78;
-            return Row(
-              children: [
-                for (var i = 0; i < steps.length; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: i < currentIndex
-                          ? () => onStepTapped?.call(i)
-                          : null,
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: EdgeInsetsDirectional.only(
-                          end: i == steps.length - 1 ? 0 : AppSpace.sm,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: i <= currentIndex
-                                    ? c.brand
-                                    : c.hairlineStrong,
-                                borderRadius: AppRadius.rPill,
-                              ),
-                            ),
-                            if (showLabels) ...[
-                              const SizedBox(height: AppSpace.sm),
-                              Text(
-                                steps[i],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: text.labelSmall?.copyWith(
-                                  color: i == currentIndex
-                                      ? c.textPrimary
-                                      : c.textTertiary,
-                                  fontWeight: i == currentIndex
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showLabels = constraints.maxWidth / steps.length >= 78;
+          return Row(
+            children: [
+              for (var i = 0; i < steps.length; i++)
+                Expanded(
+                  // Only a completed step can be returned to, so only a
+                  // completed step gets an identity of its own. Wrapping the
+                  // whole row in `ExcludeSemantics` announced the progress
+                  // correctly and threw the back-navigation away with it.
+                  child: Semantics(
+                    button: i < currentIndex && onStepTapped != null,
+                    label: i < currentIndex && onStepTapped != null
+                        ? steps[i]
+                        : null,
+                    onTap: i < currentIndex && onStepTapped != null
+                        ? () => onStepTapped!.call(i)
+                        : null,
+                    child: ExcludeSemantics(
+                      child: GestureDetector(
+                        onTap: i < currentIndex
+                            ? () => onStepTapped?.call(i)
+                            : null,
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: EdgeInsetsDirectional.only(
+                            end: i == steps.length - 1 ? 0 : AppSpace.sm,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: i <= currentIndex
+                                      ? c.brand
+                                      : c.hairlineStrong,
+                                  borderRadius: AppRadius.rPill,
                                 ),
                               ),
+                              if (showLabels) ...[
+                                const SizedBox(height: AppSpace.sm),
+                                Text(
+                                  steps[i],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: text.labelSmall?.copyWith(
+                                    color: i == currentIndex
+                                        ? c.textPrimary
+                                        : c.textTertiary,
+                                    fontWeight: i == currentIndex
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

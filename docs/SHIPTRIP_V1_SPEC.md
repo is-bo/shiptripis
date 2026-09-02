@@ -153,26 +153,45 @@ If an admin manually pays a traveler in DZD or another currency, record:
 
 Airport-only origin/destination is no longer the core model.
 
-A location may represent:
+The active V1 geography flow is:
 
-- city
-- exact address
-- selected map point
-- airport
-- public meeting point
+1. country
+2. canonical catalogue place
+3. optional preferred exact meeting point
 
-Store enough information for backend matching:
+Users do not create matching cities. A canonical `Place` is a stable ShipTrip
+catalogue locality/municipality/commune or airport. Its immutable identity, not
+its mutable display label, is authoritative.
+
+Every selected place has one backend-owned **matching locality**:
+
+- a locality/municipality/commune resolves to itself;
+- an airport resolves through one explicit active primary served-locality
+  mapping;
+- an airport without a reliable mapping is unavailable for matching.
+
+Matching locality is derived from the selected canonical place. It is not
+inferred from free text, map labels, coordinates or preferred-point distance.
+
+The existing user-owned `Location` model is retained only for an optional
+preferred exact point inside the selected canonical context. It may store:
 
 - normalized label/address
-- city
-- region
-- country code
 - latitude/longitude
 - geocoding provider/source
 - provider place ID where available
 - precision level
 - public/coarse label
 - private/exact label
+
+The backend validates a new preferred point against the selected country and
+locality using the existing provider abstraction. Insufficient provider context
+fails transparently; it never assigns a different canonical city. The map is
+therefore used only after place selection to answer where within that place a
+participant prefers to meet, and it is optional during request/journey creation.
+Active preferred-point, request and Journey write APIs require canonical Place
+references; pre-8C location-only records may remain readable but cannot be
+newly created.
 
 ### Privacy
 
@@ -185,7 +204,8 @@ Do not reveal exact:
 - private map pin
 - recipient address
 
-The backend may use exact coordinates internally before funding.
+The backend may use exact coordinates internally for authorized operational
+purposes before funding, but they never decide basic V1 locality compatibility.
 
 Exact pickup/dropoff unlocks to the relevant parties only after the deal is funded.
 
@@ -234,8 +254,9 @@ Ordered by position:
 - journey
 - position
 - mode: FLIGHT | DRIVE
-- origin location
-- destination location
+- canonical origin place
+- canonical destination place
+- optional preferred origin/destination points scoped to those places
 - depart_at
 - arrive_at
 - capacity_kg
@@ -285,10 +306,11 @@ A sender request should contain:
 - optional targeted traveler/journey
 
 ### Locations
-- private pickup location
-- private delivery location
-- coarse/public pickup label
-- coarse/public delivery label
+- canonical pickup place
+- canonical delivery place
+- optional private preferred pickup point scoped to the pickup place
+- optional private preferred delivery point scoped to the delivery place
+- safe canonical place/airport summaries before funding
 
 ### Timing
 - ready time/window
@@ -422,24 +444,36 @@ Require:
 - feasible route
 - feasible time/deadline
 - sufficient capacity on every covered leg
-- road detour within configured threshold
+- operational road feasibility within configured threshold (never a substitute
+  for canonical-locality identity)
 - item allowed
 - safety rules pass
+- request and ordered journey subroute endpoints resolve to the same canonical
+  matching-locality IDs
 
 Boost can never override these.
 
-### Road matching
+### Canonical locality matching
 
-Automatically suggest compatible requests within a configurable detour radius/time.
+For V1, basic origin/destination compatibility is exact equality of canonical
+matching-locality identity. A journey's ordered leg nodes preserve subroute
+matching, so a request may join at one matching locality and leave at a later
+matching locality without collapsing the leg order.
 
-Use route-corridor distance and estimated additional travel where available.
+Preferred pins do not alter this result. Two different localities do not become
+compatible because their coordinates are close. Radius matching, neighboring
+municipalities, automatic nearby-city compatibility and geographic detour
+scoring are not active V1 features.
+
+Airport/locality interoperability occurs only when the catalogue explicitly
+defines the airport as serving that locality. It does not make every airport
+equivalent to every locality in its administrative region.
 
 ### Ranking
 
 Use explainable factors:
 
 - route fit
-- detour
 - time fit
 - traveler rating
 - reliability/completion

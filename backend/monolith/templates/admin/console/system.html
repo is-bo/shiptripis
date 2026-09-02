@@ -1,0 +1,99 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; System &amp; operations</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Operational health</p>
+      <h1>System &amp; operations</h1>
+      <p>Safe status signals only. Credentials, payloads and stored errors are never rendered on this page.</p>
+    </div>
+    <div class="st-page-aside">
+      <div class="st-head-signal"><strong>{{ release_signal.label }}</strong><span>release</span></div>
+    </div>
+  </header>
+
+  <div class="st-health-grid">
+    <section class="st-health-card{% if database.tone == 'attn' %} is-attn{% elif database.tone == 'bad' %} is-bad{% endif %}">
+      <span>Database</span>
+      <strong class="st-tone-{{ database.tone }}">{{ database.label }}</strong>
+      <small>{{ database.detail }}</small>
+    </section>
+    <section class="st-health-card{% if redis.tone == 'attn' %} is-attn{% elif redis.tone == 'bad' %} is-bad{% endif %}">
+      <span>Redis</span>
+      <strong class="st-tone-{{ redis.tone }}">{{ redis.label }}</strong>
+      <small>{{ redis.detail }}</small>
+    </section>
+    <section class="st-health-card{% if routing_signal.tone == 'attn' %} is-attn{% elif routing_signal.tone == 'bad' %} is-bad{% endif %}">
+      <span>Routing provider</span>
+      <strong class="st-tone-{{ routing_signal.tone }}">{{ routing_signal.label }}</strong>
+      <small>{{ routing_signal.detail }}</small>
+    </section>
+    <section class="st-health-card{% if limiter_signal.tone == 'attn' %} is-attn{% elif limiter_signal.tone == 'bad' %} is-bad{% endif %}">
+      <span>KYC rate limiter</span>
+      <strong class="st-tone-{{ limiter_signal.tone }}">{{ limiter_signal.label }}</strong>
+      <small>{{ limiter_signal.detail }} <em>({{ kyc_limiter }})</em></small>
+    </section>
+  </div>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card" id="jobs">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Durable work</p><h2>Background jobs</h2></div>
+        <a href="{% url 'admin_console:jobs' %}?status=failed">Open failed jobs</a>
+      </div>
+      <div class="st-stat-grid st-stat-grid-small">
+        <div><strong>{{ jobs.pending }}</strong><span>Pending</span></div>
+        <div><strong>{{ jobs.running }}</strong><span>Running</span></div>
+        <div><strong>{{ jobs.retrying }}</strong><span>Retrying</span></div>
+        <div><strong class="{% if jobs.failed %}st-tone-bad{% endif %}">{{ jobs.failed }}</strong><span>Failed</span></div>
+      </div>
+      <p class="st-muted">Oldest pending job: {{ jobs.oldest_age }}. A failed job keeps its stored error for investigation; the error itself is not shown here.</p>
+    </section>
+
+    <section class="st-card" id="email">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Outbound email</p><h2>Transactional delivery</h2></div>
+        <a href="{% url 'admin_console:email' %}?status=failed">Open failed email</a>
+      </div>
+      <div class="st-stat-grid st-stat-grid-small">
+        <div><strong>{{ email.pending }}</strong><span>Pending</span></div>
+        <div><strong class="{% if email.failed %}st-tone-bad{% endif %}">{{ email.failed }}</strong><span>Failed</span></div>
+        <div><strong>{{ email.dispatched }}</strong><span>Dispatched</span></div>
+      </div>
+      <p class="st-muted">The obligation to send is durable. A failed row means delivery has not succeeded, not that the message was lost.</p>
+    </section>
+
+    <section class="st-card" id="providers">
+      <p class="st-eyebrow">Provider state</p>
+      <h2>Business rails</h2>
+      <ul class="st-reading-list">
+        {% for provider in providers %}
+        <li>
+          <div><strong>{{ provider.name }}</strong><small>{{ provider.detail }}</small></div>
+          <span class="st-chip st-{{ provider.tone }}">{{ provider.label }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Finance queues</p>
+      <h2>What finance workers still owe</h2>
+      <dl class="st-facts">
+        <div><dt>Provider events retryable</dt><dd>{{ finance.provider_retryable }}</dd></div>
+        <div><dt>Provider events failed</dt><dd>{{ finance.provider_failed }}</dd></div>
+        <div><dt>Refunds needing a person</dt><dd>{{ finance.manual_refunds }}</dd></div>
+        <div><dt>Payouts eligible to send</dt><dd>{{ finance.eligible_payouts }}</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="st-readonly-note">
+    <span>A queue count is not a worker heartbeat. This platform does not record reliable per-worker liveness, so nothing on this page claims a worker is running. Pending work alone cannot prove it.</span>
+  </div>
+</main>
+{% endblock %}

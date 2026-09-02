@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.finance.models import PaymentProviderEvent, ScheduledJob
+from apps.finance.providers import ChargilyGateway, StripeGateway
 from apps.notifications.models import OutboundMessage
 
 from .permissions import CanViewOperationalIncidents
@@ -76,9 +77,15 @@ class AdminDeepHealthView(APIView):
                 status=OutboundMessage.Status.FAILED
             ).count(),
         }
+        # Credential *shape*, never a credential. `credential_mode` says which
+        # rail a key points at ("test" / "live" / "unknown"), so a pre-launch
+        # operator can confirm that nothing is armed against real money without
+        # anyone reading, echoing or logging a secret to find out.
         checks["providers"] = {
             "stripe_credentials_present": bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_WEBHOOK_SECRET),
+            "stripe_mode": StripeGateway().credential_mode(),
             "chargily_credentials_present": bool(settings.CHARGILY_SECRET_KEY),
+            "chargily_mode": ChargilyGateway().credential_mode(),
             "email_enabled": bool(settings.TRANSACTIONAL_EMAIL_ENABLED),
         }
         checks["storage"] = {

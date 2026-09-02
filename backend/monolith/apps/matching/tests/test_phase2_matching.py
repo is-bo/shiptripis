@@ -18,7 +18,7 @@ from apps.accounts.models import User
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal, DealLegAllocation
 from apps.kyc.models import KycSubmission
-from apps.locations.models import Location
+from apps.locations.models import Country, Location, Place
 from apps.matching import compatibility as compatibility_module
 from apps.matching.compatibility import evaluate_compatibility
 from apps.matching.discovery import compatible_requests_for_journey
@@ -1685,14 +1685,49 @@ class Phase2CompatibilityTests(TestCase):
         cache.clear()
         origin = _location("Enrichment origin", "36.752500", "3.041970")
         destination = _location("Enrichment destination", "36.365000", "6.614700")
+        country = Country.objects.create(
+            code="DZ",
+            name="Algeria",
+            source="route-enrichment-test",
+            source_id="country-dz",
+            source_version="phase8c",
+        )
+        origin_place = Place.objects.create(
+            country=country,
+            place_type=Place.PlaceType.LOCALITY,
+            source="route-enrichment-test",
+            source_id="origin",
+            source_version="phase8c",
+            name="Enrichment origin",
+            latitude=origin.latitude,
+            longitude=origin.longitude,
+        )
+        destination_place = Place.objects.create(
+            country=country,
+            place_type=Place.PlaceType.LOCALITY,
+            source="route-enrichment-test",
+            source_id="destination",
+            source_version="phase8c",
+            name="Enrichment destination",
+            latitude=destination.latitude,
+            longitude=destination.longitude,
+        )
+        origin.canonical_place = origin_place
+        origin.save(update_fields=["canonical_place", "updated_at"])
+        destination.canonical_place = destination_place
+        destination.save(update_fields=["canonical_place", "updated_at"])
         serializer = JourneyCreateSerializer(
             data={
+                "start_place_id": origin_place.pk,
+                "destination_place_id": destination_place.pk,
                 "start_location": origin.pk,
                 "destination_location": destination.pk,
                 "legs": [
                     {
                         "position": 0,
                         "mode": JourneyLeg.Mode.DRIVE,
+                        "origin_place_id": origin_place.pk,
+                        "destination_place_id": destination_place.pk,
                         "origin": origin.pk,
                         "destination": destination.pk,
                         "depart_at": self.at + timedelta(days=1),

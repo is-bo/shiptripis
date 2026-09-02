@@ -282,6 +282,7 @@
   "journeyCapacityHelp": "Set this per leg. You can carry different amounts on different parts of the trip.",
   "journeyFlightNumber": "Flight number",
   "journeyFlightNumberHint": "e.g. AH1006",
+  "journeyFlightAirportsRequired": "Flight legs must start and end at airports.",
   "journeyPublish": "Publish journey",
   "journeyCancel": "Cancel journey",
   "journeySuggestLegTitle": "Add the road leg?",
@@ -840,6 +841,9 @@
   },
   "profileTitle": "Profile",
   "profileAccount": "Account",
+  "profilePassportStamp": "SHIPTRIP · MEMBER",
+  "profileCompletedDeliveries": "Completed",
+  "profileRecentRating": "Recent rating",
   "profileRoles": "What you do",
   "profileVerification": "Verification",
   "profileRatings": "Ratings",
@@ -877,19 +881,90 @@
       }
     }
   },
-  "locationSearchTitle": "Choose a location",
-  "locationSearchHint": "Search for a city or address",
+  "locationSearchTitle": "Choose a place",
+  "locationSearchHint": "Search localities and airports",
+  "locationSelectCountry": "Choose a country first",
+  "locationSearchStart": "Type a locality, municipality, commune, or airport",
+  "placeTierWilaya": "{name} Wilaya",
+  "@placeTierWilaya": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierDepartment": "{name} department",
+  "@placeTierDepartment": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierRegion": "{name} region",
+  "@placeTierRegion": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierProvince": "{name} province",
+  "@placeTierProvince": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierAutonomousCommunity": "{name} autonomous community",
+  "@placeTierAutonomousCommunity": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierState": "{name} state",
+  "@placeTierState": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "placeTierDistrict": "{name} district",
+  "@placeTierDistrict": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "locationTypeAirport": "Airport",
+  "locationTypeLocality": "Locality",
   "locationUseMap": "Choose on map",
   "locationConfirmPoint": "Use this point",
-  "locationRecent": "Recent",
   "locationSaved": "Saved places",
-  "locationCityOnly": "City only",
-  "locationExactAddress": "Exact address",
   "locationPrivacyBeforeFunding": "Only the city is shared until the delivery is paid for.",
   "locationPrivacyAfterFunding": "Full address shared with the traveller.",
   "locationHiddenUntilFunded": "Exact address available after payment",
   "locationSearchEmptyTitle": "No results",
   "locationSearchEmptyBody": "Try a different spelling, or pick the point on the map.",
+  "countryNameAlgeria": "Algeria",
+  "countryNameFrance": "France",
+  "countryNameSpain": "Spain",
+  "countryNameGermany": "Germany",
+  "locationCountryQuestion": "Which country?",
+  "locationChangeCountry": "Change",
+  "locationCountryStep": "Country",
+  "locationCountriesUnavailable": "No countries are available right now.",
+  "locationSelectCountryBody": "Pick a country above, then search for the town, commune or airport.",
+  "locationSearchReadyTitle": "Ready when you are",
+  "locationSearchHintAirports": "Search airports",
+  "locationSearchStartAirports": "Type an airport name or its three-letter code.",
+  "locationAirportsOnly": "This leg flies, so only airports are offered.",
+  "locationCurrentSelection": "Currently selected",
+  "locationSearchNoMatch": "Nothing here matches “{query}”. Check the spelling, or try the nearest larger town.",
+  "@locationSearchNoMatch": {
+    "placeholders": {"query": {"type": "String"}}
+  },
+  "locationSearchNoMatchAirports": "No airport here matches “{query}”. Try the city name, or the three-letter code.",
+  "@locationSearchNoMatchAirports": {
+    "placeholders": {"query": {"type": "String"}}
+  },
+  "locationPreferredExplainer": "Travellers are matched on {place}. A preferred point only says where you would rather meet inside it.",
+  "@locationPreferredExplainer": {
+    "placeholders": {"place": {"type": "String"}}
+  },
+  "locationPreferredFlexibleHint": "No exact point needed",
+  "locationAddPreferredPoint": "Add a preferred point",
+  "locationChangePreferredPoint": "Change point",
+  "locationRemovePreferredPoint": "Remove preferred point",
+  "locationPreferredRemoved": "Preferred point removed.",
+  "locationPreferredClearedByPlace": "Preferred point removed — it belonged to the place you just changed.",
+  "locationDecideLater": "Decide later",
+  "locationPointInside": "Point inside",
+  "locationDropPinHelpIn": "Move the map until the crosshair sits where you mean inside {place}, then confirm.",
+  "@locationDropPinHelpIn": {
+    "placeholders": {"place": {"type": "String"}}
+  },
+  "locationNoCentre": "We have no centre on file for {place}, so the map starts wide. Move it to the right area before you confirm.",
+  "@locationNoCentre": {
+    "placeholders": {"place": {"type": "String"}}
+  },
   "mapAttribution": "Map data {attribution}",
   "@mapAttribution": {
     "placeholders": {
@@ -899,9 +974,6 @@
     }
   },
   "locationYourPlaces": "Your places",
-  "locationAirports": "Airports",
-  "locationExactRequiredNotice": "This needs one of your own addresses. Airports are city-level only, so they can't be used here.",
-  "locationExactRequiredRow": "City-level only",
   "locationEmptyTitle": "No saved places yet",
   "locationEmptyBody": "Drop a pin on the map to save your first address.",
   "locationDropPinHelp": "Move the map until the crosshair sits where you mean, then confirm.",
@@ -909,12 +981,19 @@
   "locationNamePlaceBody": "Only you see the label. Other people see the city until a delivery is paid for.",
   "locationLabelField": "Label",
   "locationLabelHint": "Home, Mum's place, the office",
-  "locationCityField": "City",
-  "locationCountryField": "Country code",
-  "locationCountryHint": "FR, DZ, ES",
-  "locationCountryInvalid": "Use the two-letter country code.",
   "locationSavePlace": "Save this place",
   "locationPlaceSaved": "Place saved.",
+  "locationPreferredMeetingPoint": "Preferred meeting point",
+  "locationPreferredOptional": "Optional",
+  "locationChoosePreferredPoint": "Choose on map",
+  "locationFlexibleWithin": "Flexible within {place}",
+  "@locationFlexibleWithin": {
+    "placeholders": {"place": {"type": "String"}}
+  },
+  "locationPreferredValidation": "The map provider will verify that this point belongs to {place}.",
+  "@locationPreferredValidation": {
+    "placeholders": {"place": {"type": "String"}}
+  },
   "mapZoomIn": "Zoom in",
   "mapZoomOut": "Zoom out",
   "timelineTitle": "Progress",

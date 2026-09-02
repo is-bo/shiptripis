@@ -6,11 +6,11 @@
 ///   delivery closes; only sending stops. The server publishes `can_send` per
 ///   thread and the composer is gated on that, never inferred from a status.
 ///
-/// * **An unfunded V1 deal cannot chat.** The server answers `402` with
-///   `{"reason": "payment_pending"}` — note the field is `reason`, not the
-///   `code` used elsewhere, and there is no human string in the body at all.
-///   [ChatBlockReason] carries that vocabulary so the UI can explain the block
-///   and offer the payment screen instead of showing a dead composer.
+/// * **An unfunded V1 deal cannot chat.** The eligibility pre-flight returns
+///   `eligible: false` with `reason: payment_pending`; a rejected send carries
+///   the same reason in its structured response. [ChatBlockReason] carries
+///   that vocabulary so the UI can explain the block and offer the payment
+///   screen instead of showing a dead composer.
 library;
 
 import 'json.dart';
@@ -37,6 +37,34 @@ enum ChatBlockReason {
 
   /// The one block a sender can act on themselves.
   bool get isFixableByFunding => this == paymentPending;
+}
+
+/// The server's pre-flight answer for one conversation.
+///
+/// This is intentionally fetched before history. An unfunded match has no
+/// readable thread yet, and asking the history endpoint first turns the
+/// expected `payment_pending` state into a generic permission error.
+class ChatEligibility {
+  const ChatEligibility({
+    required this.eligible,
+    required this.reason,
+    required this.matchId,
+  });
+
+  factory ChatEligibility.fromJson(Map<String, dynamic> json) =>
+      ChatEligibility(
+        eligible: readBool(json['eligible']),
+        reason: ChatBlockReason.parse(json['reason']),
+        matchId: readInt(json['match_id']) ?? 0,
+      );
+
+  final bool eligible;
+  final ChatBlockReason reason;
+  final int matchId;
+
+  /// Closed conversations remain readable even though they are not writable.
+  /// All other blocked states have no history surface before funding.
+  bool get canReadHistory => eligible || reason == ChatBlockReason.matchClosed;
 }
 
 class ChatThread {

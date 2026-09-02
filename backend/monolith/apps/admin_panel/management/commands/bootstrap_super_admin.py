@@ -58,7 +58,7 @@ class Command(BaseCommand):
 
         User = get_user_model()
         with transaction.atomic():
-            user = User.objects.select_for_update().filter(email__iexact=email).first()
+            user = User.objects.select_for_update(no_key=True).filter(email__iexact=email).first()
             created = user is None
             before = {}
             if user is None:

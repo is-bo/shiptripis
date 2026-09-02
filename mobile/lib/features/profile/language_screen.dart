@@ -220,6 +220,7 @@ class _Option extends StatelessWidget {
       selected: selected,
       label: label,
       hint: selected ? l.a11ySelected : l.a11yNotSelected,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,

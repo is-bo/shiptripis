@@ -23,6 +23,10 @@ from django.conf import settings
 from ..models import PaymentProvider
 from ..policy import Phase3Policy
 from .base import (
+    MODE_LIVE,
+    MODE_NOT_CONFIGURED,
+    MODE_TEST,
+    MODE_UNKNOWN,
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
@@ -42,6 +46,10 @@ from .mock import MockGateway
 from .stripe import StripeGateway
 
 __all__ = [
+    "MODE_LIVE",
+    "MODE_NOT_CONFIGURED",
+    "MODE_TEST",
+    "MODE_UNKNOWN",
     "AttemptSnapshot",
     "CheckoutRequest",
     "CheckoutResult",
@@ -87,6 +95,11 @@ class ProviderAvailability:
     payment_currency: str
     supports_guest_payment: bool
     unavailable_reason: str = ""
+    #: `test`, `live`, `unknown` or `not_configured`, from the credential's
+    #: documented shape. Configuration and enablement are separate facts and
+    #: this is a third: a rail can be configured for live money and disabled,
+    #: and an operator has to be able to see all three at once.
+    credential_mode: str = MODE_NOT_CONFIGURED
 
     def as_dict(self) -> dict:
         return {
@@ -95,6 +108,21 @@ class ProviderAvailability:
             "payment_currency": self.payment_currency,
             "supports_guest_payment": self.supports_guest_payment,
             "unavailable_reason": self.unavailable_reason,
+        }
+
+    def as_operator_dict(self) -> dict:
+        """The admin/health view: enablement, configuration and mode apart.
+
+        Never served to a payer. `as_dict` stays the payer-facing contract, so
+        adding an operational fact here cannot leak one into a checkout.
+        """
+
+        return {
+            **self.as_dict(),
+            "enabled": self.enabled,
+            "configured": self.configured,
+            "accepts_new_checkouts": self.accepts_new_checkouts,
+            "credential_mode": self.credential_mode,
         }
 
 
@@ -149,12 +177,14 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
     configured = False
     payment_currency = ""
     supports_guest = False
+    credential_mode = MODE_NOT_CONFIGURED
     reason = ""
     try:
         gateway = _build(provider)
         configured = gateway.is_configured()
         payment_currency = gateway.payment_currency
         supports_guest = gateway.supports_guest_payment
+        credential_mode = gateway.credential_mode()
     except ProviderNotConfigured as exc:
         reason = exc.code
     accepts_new = _accepts_new_checkouts(policy, provider)
@@ -173,6 +203,7 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
         payment_currency=payment_currency,
         supports_guest_payment=supports_guest,
         unavailable_reason=reason,
+        credential_mode=credential_mode,
     )
 
 

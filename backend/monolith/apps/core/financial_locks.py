@@ -33,7 +33,39 @@ nothing else in the codebase locks two `PaymentOrder` rows at once.
 
 Provider-event and ScheduledJob claims are deliberately short transactions.
 They commit before acquiring any business or finance rows, so they are never a
-reverse edge into this graph.
+reverse edge into this graph *through the locks they ask for*. They are still a
+reverse edge through the locks PostgreSQL takes on their behalf; see below.
+
+**Lock strength: every row here is taken `FOR NO KEY UPDATE`.**
+
+Django emits every foreign key as `DEFERRABLE INITIALLY DEFERRED`, so an
+`INSERT` does not check its parents when it runs -- it checks them at `COMMIT`,
+by executing one ``SELECT 1 FROM <parent> WHERE id = $1 FOR KEY SHARE`` per
+foreign key. Those referential-integrity locks fire in constraint-creation
+order, which is model field order, and no application code chooses it. For
+``finance_provider_event`` that order is `PaymentAttempt` then `PaymentOrder` --
+the exact inverse of the order above. A writer that acquires the canonical order
+explicitly and a writer that acquires the inverse order implicitly at commit is
+a lock cycle, and it is not fixable by reordering application statements,
+because one of the two orders is the database's.
+
+It is fixable by lock *strength*. `FOR KEY SHARE` conflicts with exactly one
+row-lock mode, `FOR UPDATE`. `FOR NO KEY UPDATE` -- the mode a plain `UPDATE`
+statement takes anyway -- still conflicts with `FOR SHARE`, `FOR NO KEY UPDATE`
+and `FOR UPDATE`, so two writers still exclude each other exactly as before, but
+it does *not* conflict with `FOR KEY SHARE`. Taking these rows `FOR NO KEY
+UPDATE` therefore removes every implicit reverse edge at once while changing
+nothing about what two writers are allowed to do concurrently.
+
+Concretely: acquire rows in this module through `select_for_update(no_key=True)`
+-- never a bare `select_for_update()`. The stronger mode buys only the right to
+delete a locked row or change its primary key, and no writer in this graph does
+either; every row here is append-only or updated in place. The same rule applies
+to every service that locks one of these rows directly (`apps.finance`,
+`apps.disputes`, `apps.trips`, `apps.parcels`, `apps.matching`, the
+`apps.admin_panel` review services, and the `BusinessSettingsVersion` rows that
+`PaymentOrder`/`PaymentAttempt` reference). It is asserted structurally by
+`apps.finance.tests.test_phase8df_lock_order`, which walks those modules' ASTs.
 
 **Phase 4 placement.** Everything Phase 4 adds sits between `Deal` and
 `PaymentOrder`, except `BoostPurchase`, which sits with the request graph it
@@ -138,7 +170,7 @@ def _lock_boost_purchases(request_id: int) -> tuple[object, ...]:
     from apps.boosts.models import BoostPurchase
 
     return tuple(
-        BoostPurchase.objects.select_for_update()
+        BoostPurchase.objects.select_for_update(no_key=True)
         .filter(delivery_request_id=request_id)
         .order_by("pk")
     )
@@ -149,7 +181,9 @@ def lock_request_graph(request_id: int, *, include_negotiation: bool) -> LockedR
     from apps.parcels.models import DeliveryRequest
 
     request = (
-        DeliveryRequest.objects.select_for_update(of=("self", "parcelrequest_ptr"))
+        DeliveryRequest.objects.select_for_update(
+            no_key=True, of=("self", "parcelrequest_ptr")
+        )
         .select_related("parcelrequest_ptr")
         .get(pk=request_id)
     )
@@ -162,12 +196,12 @@ def lock_request_graph(request_id: int, *, include_negotiation: bool) -> LockedR
         )
 
     matches = tuple(
-        Match.objects.select_for_update()
+        Match.objects.select_for_update(no_key=True)
         .filter(parcel_id=request_id)
         .order_by("pk")
     )
     offers = tuple(
-        Offer.objects.select_for_update()
+        Offer.objects.select_for_update(no_key=True)
         .filter(match_id__in=[row.pk for row in matches])
         .order_by("pk")
     )
@@ -187,15 +221,17 @@ def lock_deal_aggregate(deal_id: int) -> LockedDealAggregate:
     request_graph = lock_request_graph(
         snapshot["delivery_request_id"], include_negotiation=True
     )
-    journey = Journey.objects.select_for_update().get(pk=snapshot["journey_id"])
+    journey = Journey.objects.select_for_update(no_key=True).get(
+        pk=snapshot["journey_id"]
+    )
     journey_legs = tuple(
-        JourneyLeg.objects.select_for_update()
+        JourneyLeg.objects.select_for_update(no_key=True)
         .filter(journey_id=journey.pk)
         .order_by("position", "pk")
     )
-    deal = Deal.objects.select_for_update().get(pk=deal_id)
+    deal = Deal.objects.select_for_update(no_key=True).get(pk=deal_id)
     allocations = tuple(
-        DealLegAllocation.objects.select_for_update()
+        DealLegAllocation.objects.select_for_update(no_key=True)
         .filter(deal_id=deal_id)
         .order_by("journey_leg_id", "pk")
     )
@@ -225,18 +261,24 @@ def lock_deal_lifecycle(deal_id: int) -> LockedLifecycleAggregate:
 
     deal_aggregate = lock_deal_aggregate(deal_id)
     recipient = (
-        DealRecipient.objects.select_for_update().filter(deal_id=deal_id).first()
+        DealRecipient.objects.select_for_update(no_key=True)
+        .filter(deal_id=deal_id)
+        .first()
     )
     handover_codes = tuple(
-        DealHandoverCode.objects.select_for_update()
+        DealHandoverCode.objects.select_for_update(no_key=True)
         .filter(deal_id=deal_id)
         .order_by("pk")
     )
     disputes = tuple(
-        Dispute.objects.select_for_update().filter(deal_id=deal_id).order_by("pk")
+        Dispute.objects.select_for_update(no_key=True)
+        .filter(deal_id=deal_id)
+        .order_by("pk")
     )
     ratings = tuple(
-        Rating.objects.select_for_update().filter(deal_id=deal_id).order_by("pk")
+        Rating.objects.select_for_update(no_key=True)
+        .filter(deal_id=deal_id)
+        .order_by("pk")
     )
     return LockedLifecycleAggregate(
         deal_aggregate=deal_aggregate,
@@ -263,7 +305,7 @@ def lock_payment_order_aggregate(order_id: int) -> LockedPaymentAggregate:
         request_graph = lock_request_graph(
             snapshot["delivery_request_id"], include_negotiation=False
         )
-    order = PaymentOrder.objects.select_for_update().get(pk=order_id)
+    order = PaymentOrder.objects.select_for_update(no_key=True).get(pk=order_id)
     return LockedPaymentAggregate(
         order=order,
         request_graph=request_graph,

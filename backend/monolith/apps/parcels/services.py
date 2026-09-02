@@ -97,7 +97,7 @@ def cancel_delivery_request(
     parcel.save(update_fields=["status", "updated_at"])
 
     deposit_orders = tuple(
-        PaymentOrder.objects.select_for_update()
+        PaymentOrder.objects.select_for_update(no_key=True)
         .filter(
             delivery_request_id=parcel.pk,
             purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,

@@ -143,6 +143,13 @@ class _RoleSwitcher extends ConsumerWidget {
                 child: Semantics(
                   button: true,
                   selected: option == role,
+                  label: option == RoleContext.sender
+                      ? l.roleSender
+                      : l.roleTraveler,
+                  onTap: option == role
+                      ? null
+                      : () =>
+                            ref.read(roleContextProvider.notifier).set(option),
                   child: ExcludeSemantics(
                     child: Material(
                       color: option == role

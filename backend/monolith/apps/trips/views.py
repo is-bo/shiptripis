@@ -48,6 +48,7 @@ from apps.core.storage import (
 )
 from apps.deals.models import DealLegAllocation
 from apps.kyc.models import KycSubmission
+from apps.locations.models import AirportLocalityMapping
 
 from .models import (
     Airport,
@@ -181,32 +182,106 @@ class TripMediaUploadView(APIView):
 
 
 def _journey_queryset():
+    active_mapping = AirportLocalityMapping.objects.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality", "locality__parent")
     proof_queryset = JourneyLegProof.objects.select_related("leg__journey").order_by(
         "-created_at"
     )
     leg_queryset = (
-        JourneyLeg.objects.select_related("journey", "origin", "destination")
-        .prefetch_related(Prefetch("proofs", queryset=proof_queryset))
+        JourneyLeg.objects.select_related(
+            "journey", "origin", "destination", "origin_place", "destination_place"
+        )
+        .prefetch_related(
+            Prefetch("proofs", queryset=proof_queryset),
+            Prefetch(
+                "origin_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+            Prefetch(
+                "destination_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+        )
         .order_by("position")
     )
     return Journey.objects.select_related(
-        "traveler", "start_location", "destination_location", "legacy_trip"
-    ).prefetch_related(Prefetch("legs", queryset=leg_queryset))
+        "traveler",
+        "start_location",
+        "destination_location",
+        "start_place",
+        "destination_place",
+        "legacy_trip",
+    ).prefetch_related(
+        Prefetch("legs", queryset=leg_queryset),
+        Prefetch(
+            "start_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+        Prefetch(
+            "destination_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+    )
 
 
 def _public_journey_queryset():
+    active_mapping = AirportLocalityMapping.objects.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality", "locality__parent")
     approved_proof = JourneyLegProof.objects.filter(
         leg_id=OuterRef("pk"),
         status=JourneyLegProof.Status.APPROVED,
     )
     leg_queryset = (
-        JourneyLeg.objects.select_related("journey", "origin", "destination")
+        JourneyLeg.objects.select_related(
+            "journey", "origin", "destination", "origin_place", "destination_place"
+        )
         .annotate(has_approved_proof_value=Exists(approved_proof))
+        .prefetch_related(
+            Prefetch(
+                "origin_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+            Prefetch(
+                "destination_place__airport_mappings",
+                queryset=active_mapping,
+                to_attr="_active_matching_mappings",
+            ),
+        )
         .order_by("position")
     )
     return Journey.objects.select_related(
-        "traveler", "start_location", "destination_location", "legacy_trip"
-    ).prefetch_related(Prefetch("legs", queryset=leg_queryset))
+        "traveler",
+        "start_location",
+        "destination_location",
+        "start_place",
+        "destination_place",
+        "legacy_trip",
+    ).prefetch_related(
+        Prefetch("legs", queryset=leg_queryset),
+        Prefetch(
+            "start_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+        Prefetch(
+            "destination_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+    )
 
 
 class JourneyListCreateView(APIView):
@@ -307,6 +382,10 @@ class JourneySearchView(APIView):
             queryset = queryset.filter(start_location_id=start_id)
         if destination_id := values.get("destination_location_id"):
             queryset = queryset.filter(destination_location_id=destination_id)
+        if start_place_id := values.get("start_place_id"):
+            queryset = queryset.filter(start_place_id=start_place_id)
+        if destination_place_id := values.get("destination_place_id"):
+            queryset = queryset.filter(destination_place_id=destination_place_id)
         if mode := values.get("mode"):
             queryset = queryset.alias(
                 has_requested_mode=Exists(leg_scope.filter(mode=mode))

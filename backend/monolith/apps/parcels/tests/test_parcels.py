@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
-from apps.locations.models import Location
+from apps.locations.models import Country, Location, Place
 from apps.parcels.models import (
     DeliveryRequest,
     ParcelMedia,
@@ -231,6 +231,52 @@ class DeliveryV1CreateTests(APITestCase):
             suffix="Delivery",
             country_code="DZ",
         )
+        france = Country.objects.create(
+            code="FR",
+            name="France",
+            source="phase8c-test",
+            source_id="country-fr",
+            source_version="phase8c",
+        )
+        algeria = Country.objects.create(
+            code="DZ",
+            name="Algeria",
+            source="phase8c-test",
+            source_id="country-dz",
+            source_version="phase8c",
+        )
+        self.pickup_place = Place.objects.create(
+            country=france,
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8c-test",
+            source_id="locality-paris",
+            source_version="phase8c",
+            name="Paris",
+        )
+        self.delivery_place = Place.objects.create(
+            country=algeria,
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8c-test",
+            source_id="locality-algiers",
+            source_version="phase8c",
+            name="Algiers",
+        )
+        self.pickup.canonical_place = self.pickup_place
+        self.pickup.save(update_fields=["canonical_place", "updated_at"])
+        self.delivery.canonical_place = self.delivery_place
+        self.delivery.save(update_fields=["canonical_place", "updated_at"])
+
+    def _canonical_payload(self, *, include_locations=False, **overrides):
+        payload = _delivery_v1_payload(self.pickup, self.delivery)
+        if not include_locations:
+            payload.pop("pickup_location_id")
+            payload.pop("delivery_location_id")
+        payload.update(
+            pickup_place_id=self.pickup_place.pk,
+            delivery_place_id=self.delivery_place.pk,
+        )
+        payload.update(overrides)
+        return payload
 
     def test_requires_authentication(self):
         response = APIClient().post(
@@ -240,44 +286,72 @@ class DeliveryV1CreateTests(APITestCase):
         )
         assert response.status_code == 401
 
-    @patch("apps.parcels.views.redis_bus.publish_after_commit")
-    def test_creates_location_based_eur_request_without_legacy_values(self, publish):
+    def test_location_only_creation_is_rejected(self):
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
             _delivery_v1_payload(self.pickup, self.delivery),
             format="json",
         )
 
+        assert response.status_code == 400
+        assert "pickup_place_id" in response.data
+        assert "delivery_place_id" in response.data
+        assert DeliveryRequest.objects.count() == 0
+
+    @patch("apps.parcels.views.redis_bus.publish_after_commit")
+    def test_new_creation_persists_canonical_places_without_forcing_exact_points(
+        self, publish
+    ):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            self._canonical_payload(),
+            format="json",
+        )
+
         assert response.status_code == 201, response.data
         parcel = DeliveryRequest.objects.get()
-        assert parcel.schema_version == 2
-        assert parcel.origin_id is None
-        assert parcel.destination_id is None
-        assert parcel.weight_kg is None
-        assert parcel.base_amount_dzd is None
-        assert parcel.actual_weight_kg == 2.5
-        assert parcel.traveler_reward_eur_cents == 3_000
-        assert response.data["origin"] is None
-        assert response.data["destination"] is None
-        assert response.data["base_amount_dzd"] is None
-        assert response.data["sender_proposed_reward_eur_cents"] == 3_000
-        assert "traveler_reward_eur_cents" not in response.data
+        assert parcel.schema_version == 3
+        assert parcel.pickup_place == self.pickup_place
+        assert parcel.delivery_place == self.delivery_place
+        assert parcel.pickup_location is None
+        assert parcel.delivery_location is None
+        assert response.data["pickup_place"]["id"] == self.pickup_place.pk
+        assert response.data["pickup_location"] is None
+        publish.assert_called_once()
+
+    @patch("apps.parcels.views.redis_bus.publish_after_commit")
+    def test_canonical_creation_accepts_scoped_preferred_points(self, publish):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            self._canonical_payload(include_locations=True),
+            format="json",
+        )
+
+        assert response.status_code == 201, response.data
+        parcel = DeliveryRequest.objects.get()
+        assert parcel.schema_version == 3
+        assert parcel.pickup_location == self.pickup
+        assert parcel.delivery_location == self.delivery
         assert response.data["pickup_location"]["private_label"].startswith(
             "Apartment 4"
         )
-        assert "latitude" in response.data["pickup_location"]
         publish.assert_called_once()
-        assert publish.call_args.args[1]["currency"] == "EUR"
-        assert "base_amount_dzd" not in publish.call_args.args[1]
+
+    def test_canonical_creation_requires_both_places(self):
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            self._canonical_payload(delivery_place_id=None),
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert "delivery_place_id" in response.data
+        assert DeliveryRequest.objects.count() == 0
 
     def test_rejects_unconfirmed_safety_declaration(self):
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
-            _delivery_v1_payload(
-                self.pickup,
-                self.delivery,
-                no_prohibited_goods=False,
-            ),
+            self._canonical_payload(no_prohibited_goods=False),
             format="json",
         )
         assert response.status_code == 400
@@ -287,11 +361,7 @@ class DeliveryV1CreateTests(APITestCase):
     def test_rejects_legacy_dzd_input(self):
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
-            _delivery_v1_payload(
-                self.pickup,
-                self.delivery,
-                base_amount_dzd=99_999,
-            ),
+            self._canonical_payload(base_amount_dzd=99_999),
             format="json",
         )
         assert response.status_code == 400
@@ -307,7 +377,7 @@ class DeliveryV1CreateTests(APITestCase):
         )
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
-            _delivery_v1_payload(private_location, self.delivery),
+            self._canonical_payload(pickup_location_id=private_location.pk),
             format="json",
         )
         assert response.status_code == 400
@@ -317,11 +387,7 @@ class DeliveryV1CreateTests(APITestCase):
     def test_rejects_incomplete_dimensions_and_invalid_window(self):
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
-            _delivery_v1_payload(
-                self.pickup,
-                self.delivery,
-                width_cm=None,
-            ),
+            self._canonical_payload(width_cm=None),
             format="json",
         )
         assert response.status_code == 400
@@ -330,9 +396,7 @@ class DeliveryV1CreateTests(APITestCase):
         now = timezone.now()
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
-            _delivery_v1_payload(
-                self.pickup,
-                self.delivery,
+            self._canonical_payload(
                 ready_window_start=(now + timedelta(days=2)).isoformat(),
                 ready_window_end=(now + timedelta(days=1)).isoformat(),
             ),

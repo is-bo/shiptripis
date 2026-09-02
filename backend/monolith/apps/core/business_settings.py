@@ -27,7 +27,7 @@ def activate_business_settings(
 ) -> BusinessSettingsVersion:
     """Activate one immutable revision while serializing concurrent changes."""
 
-    candidate = BusinessSettingsVersion.objects.select_for_update().get(
+    candidate = BusinessSettingsVersion.objects.select_for_update(no_key=True).get(
         pk=settings_version.pk
     )
     if candidate.status == BusinessSettingsVersion.Status.RETIRED:
@@ -43,7 +43,7 @@ def activate_business_settings(
     assert_pricing_bands_preserve_location_privacy(candidate.policy)
 
     now = timezone.now()
-    BusinessSettingsVersion.objects.select_for_update().filter(
+    BusinessSettingsVersion.objects.select_for_update(no_key=True).filter(
         status=BusinessSettingsVersion.Status.ACTIVE
     ).exclude(pk=candidate.pk).update(
         status=BusinessSettingsVersion.Status.RETIRED

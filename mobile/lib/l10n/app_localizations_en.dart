@@ -774,6 +774,10 @@ class LEn extends L {
   String get journeyFlightNumberHint => 'e.g. AH1006';
 
   @override
+  String get journeyFlightAirportsRequired =>
+      'Flight legs must start and end at airports.';
+
+  @override
   String get journeyPublish => 'Publish journey';
 
   @override
@@ -2021,6 +2025,15 @@ class LEn extends L {
   String get profileAccount => 'Account';
 
   @override
+  String get profilePassportStamp => 'SHIPTRIP · MEMBER';
+
+  @override
+  String get profileCompletedDeliveries => 'Completed';
+
+  @override
+  String get profileRecentRating => 'Recent rating';
+
+  @override
   String get profileRoles => 'What you do';
 
   @override
@@ -2096,10 +2109,58 @@ class LEn extends L {
   }
 
   @override
-  String get locationSearchTitle => 'Choose a location';
+  String get locationSearchTitle => 'Choose a place';
 
   @override
-  String get locationSearchHint => 'Search for a city or address';
+  String get locationSearchHint => 'Search localities and airports';
+
+  @override
+  String get locationSelectCountry => 'Choose a country first';
+
+  @override
+  String get locationSearchStart =>
+      'Type a locality, municipality, commune, or airport';
+
+  @override
+  String placeTierWilaya(String name) {
+    return '$name Wilaya';
+  }
+
+  @override
+  String placeTierDepartment(String name) {
+    return '$name department';
+  }
+
+  @override
+  String placeTierRegion(String name) {
+    return '$name region';
+  }
+
+  @override
+  String placeTierProvince(String name) {
+    return '$name province';
+  }
+
+  @override
+  String placeTierAutonomousCommunity(String name) {
+    return '$name autonomous community';
+  }
+
+  @override
+  String placeTierState(String name) {
+    return '$name state';
+  }
+
+  @override
+  String placeTierDistrict(String name) {
+    return '$name district';
+  }
+
+  @override
+  String get locationTypeAirport => 'Airport';
+
+  @override
+  String get locationTypeLocality => 'Locality';
 
   @override
   String get locationUseMap => 'Choose on map';
@@ -2108,16 +2169,7 @@ class LEn extends L {
   String get locationConfirmPoint => 'Use this point';
 
   @override
-  String get locationRecent => 'Recent';
-
-  @override
   String get locationSaved => 'Saved places';
-
-  @override
-  String get locationCityOnly => 'City only';
-
-  @override
-  String get locationExactAddress => 'Exact address';
 
   @override
   String get locationPrivacyBeforeFunding =>
@@ -2139,22 +2191,108 @@ class LEn extends L {
       'Try a different spelling, or pick the point on the map.';
 
   @override
+  String get countryNameAlgeria => 'Algeria';
+
+  @override
+  String get countryNameFrance => 'France';
+
+  @override
+  String get countryNameSpain => 'Spain';
+
+  @override
+  String get countryNameGermany => 'Germany';
+
+  @override
+  String get locationCountryQuestion => 'Which country?';
+
+  @override
+  String get locationChangeCountry => 'Change';
+
+  @override
+  String get locationCountryStep => 'Country';
+
+  @override
+  String get locationCountriesUnavailable =>
+      'No countries are available right now.';
+
+  @override
+  String get locationSelectCountryBody =>
+      'Pick a country above, then search for the town, commune or airport.';
+
+  @override
+  String get locationSearchReadyTitle => 'Ready when you are';
+
+  @override
+  String get locationSearchHintAirports => 'Search airports';
+
+  @override
+  String get locationSearchStartAirports =>
+      'Type an airport name or its three-letter code.';
+
+  @override
+  String get locationAirportsOnly =>
+      'This leg flies, so only airports are offered.';
+
+  @override
+  String get locationCurrentSelection => 'Currently selected';
+
+  @override
+  String locationSearchNoMatch(String query) {
+    return 'Nothing here matches “$query”. Check the spelling, or try the nearest larger town.';
+  }
+
+  @override
+  String locationSearchNoMatchAirports(String query) {
+    return 'No airport here matches “$query”. Try the city name, or the three-letter code.';
+  }
+
+  @override
+  String locationPreferredExplainer(String place) {
+    return 'Travellers are matched on $place. A preferred point only says where you would rather meet inside it.';
+  }
+
+  @override
+  String get locationPreferredFlexibleHint => 'No exact point needed';
+
+  @override
+  String get locationAddPreferredPoint => 'Add a preferred point';
+
+  @override
+  String get locationChangePreferredPoint => 'Change point';
+
+  @override
+  String get locationRemovePreferredPoint => 'Remove preferred point';
+
+  @override
+  String get locationPreferredRemoved => 'Preferred point removed.';
+
+  @override
+  String get locationPreferredClearedByPlace =>
+      'Preferred point removed — it belonged to the place you just changed.';
+
+  @override
+  String get locationDecideLater => 'Decide later';
+
+  @override
+  String get locationPointInside => 'Point inside';
+
+  @override
+  String locationDropPinHelpIn(String place) {
+    return 'Move the map until the crosshair sits where you mean inside $place, then confirm.';
+  }
+
+  @override
+  String locationNoCentre(String place) {
+    return 'We have no centre on file for $place, so the map starts wide. Move it to the right area before you confirm.';
+  }
+
+  @override
   String mapAttribution(String attribution) {
     return 'Map data $attribution';
   }
 
   @override
   String get locationYourPlaces => 'Your places';
-
-  @override
-  String get locationAirports => 'Airports';
-
-  @override
-  String get locationExactRequiredNotice =>
-      'This needs one of your own addresses. Airports are city-level only, so they can\'t be used here.';
-
-  @override
-  String get locationExactRequiredRow => 'City-level only';
 
   @override
   String get locationEmptyTitle => 'No saved places yet';
@@ -2181,22 +2319,29 @@ class LEn extends L {
   String get locationLabelHint => 'Home, Mum\'s place, the office';
 
   @override
-  String get locationCityField => 'City';
-
-  @override
-  String get locationCountryField => 'Country code';
-
-  @override
-  String get locationCountryHint => 'FR, DZ, ES';
-
-  @override
-  String get locationCountryInvalid => 'Use the two-letter country code.';
-
-  @override
   String get locationSavePlace => 'Save this place';
 
   @override
   String get locationPlaceSaved => 'Place saved.';
+
+  @override
+  String get locationPreferredMeetingPoint => 'Preferred meeting point';
+
+  @override
+  String get locationPreferredOptional => 'Optional';
+
+  @override
+  String get locationChoosePreferredPoint => 'Choose on map';
+
+  @override
+  String locationFlexibleWithin(String place) {
+    return 'Flexible within $place';
+  }
+
+  @override
+  String locationPreferredValidation(String place) {
+    return 'The map provider will verify that this point belongs to $place.';
+  }
 
   @override
   String get mapZoomIn => 'Zoom in';

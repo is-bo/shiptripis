@@ -325,7 +325,7 @@ def hash_guest_token(token: str) -> str:
 
 
 def _order_for_update(order_id: int) -> PaymentOrder:
-    return PaymentOrder.objects.select_for_update().get(pk=order_id)
+    return PaymentOrder.objects.select_for_update(no_key=True).get(pk=order_id)
 
 
 def _recompute_order_money(order: PaymentOrder, *, at: datetime | None = None) -> None:
@@ -448,23 +448,40 @@ def quote_posting_deposit(
     policy = policy or phase3_policy()
     pricing_policy = Phase2Policy.from_settings(policy.settings_version)
 
-    pickup = delivery_request.pickup_location
-    dropoff = delivery_request.delivery_location
+    if delivery_request.schema_version >= 3:
+        pickup = delivery_request.pickup_place
+        dropoff = delivery_request.delivery_place
+        estimate_method = "posting_deposit_estimate:canonical_place_great_circle"
+    else:
+        pickup = delivery_request.pickup_location
+        dropoff = delivery_request.delivery_location
+        estimate_method = "posting_deposit_estimate:great_circle"
     if pickup is None or dropoff is None:
-        raise RequestNotDepositable(
-            "A V1 delivery request needs both locations before a deposit is priced."
+        raise RequestNotDepositable("A V1 delivery request needs both route endpoints.")
+    if (
+        pickup.latitude is not None
+        and pickup.longitude is not None
+        and dropoff.latitude is not None
+        and dropoff.longitude is not None
+    ):
+        straight_line_meters = int(
+            haversine_meters(
+                GeoPoint(float(pickup.latitude), float(pickup.longitude)),
+                GeoPoint(float(dropoff.latitude), float(dropoff.longitude)),
+            )
         )
-    straight_line_meters = int(
-        haversine_meters(
-            GeoPoint(float(pickup.latitude), float(pickup.longitude)),
-            GeoPoint(float(dropoff.latitude), float(dropoff.longitude)),
-        )
-    )
+    else:
+        # Many authoritative municipal catalogues do not publish centroids.
+        # Exact preferred pins are optional operational data, so they must not
+        # become a hidden prerequisite or pricing identity. The global pricing
+        # floor is the fail-safe posting estimate until a journey is matched.
+        straight_line_meters = 0
+        estimate_method = "posting_deposit_estimate:canonical_place_floor"
     arrival_estimate = delivery_request.ready_window_end or timezone.now()
     quote = calculate_pricing_quote(
         delivery_request=delivery_request,
         matched_distance_meters=max(0, straight_line_meters),
-        matched_distance_method="posting_deposit_estimate:great_circle",
+        matched_distance_method=estimate_method,
         added_distance_meters=0,
         estimated_arrival_at=arrival_estimate,
         policy=pricing_policy,
@@ -495,7 +512,7 @@ def quote_posting_deposit(
         estimated_sender_total_eur_cents=sender_total,
         clamped=clamped,
         inputs={
-            "estimate_method": "posting_deposit_estimate:great_circle",
+            "estimate_method": estimate_method,
             "estimate_distance_meters": max(0, straight_line_meters),
             "recommended_reward_eur_cents": quote.recommended_reward_eur_cents,
             "recommended_sender_total_eur_cents": sender_total,
@@ -523,13 +540,13 @@ def ensure_posting_deposit_order(
         raise DepositNotRequired(
             "The platform is in after-acceptance payment timing mode."
         )
-    if delivery_request.schema_version != 2:
+    if delivery_request.schema_version not in (2, 3):
         raise RequestNotDepositable(
             "Only V1 delivery requests carry a posting deposit."
         )
 
     existing = (
-        PaymentOrder.objects.select_for_update()
+        PaymentOrder.objects.select_for_update(no_key=True)
         .filter(
             delivery_request_id=delivery_request.pk,
             purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
@@ -563,7 +580,7 @@ def _publish_request_after_deposit(order: PaymentOrder, *, at: datetime) -> None
     """
 
     request_row = (
-        ParcelRequest.objects.select_for_update()
+        ParcelRequest.objects.select_for_update(no_key=True)
         .filter(pk=order.delivery_request_id)
         .first()
     )
@@ -664,7 +681,7 @@ def apply_posting_deposit_credit(*, order: PaymentOrder, deal: Deal) -> int:
         credit_source__isnull=False
     ).values("credit_source_id")
     deposit = (
-        PaymentOrder.objects.select_for_update()
+        PaymentOrder.objects.select_for_update(no_key=True)
         .filter(
             owner_id=order.owner_id,
             delivery_request_id=order.delivery_request_id,
@@ -865,7 +882,7 @@ def start_checkout(
         amounts = _resolve_amounts(order=order, gateway=gateway, policy=policy)
 
         open_attempt = (
-            PaymentAttempt.objects.select_for_update()
+            PaymentAttempt.objects.select_for_update(no_key=True)
             .filter(order=order, status__in=PaymentAttempt.OPEN_STATUSES)
             .first()
         )
@@ -957,7 +974,7 @@ def start_checkout(
         result = gateway.create_checkout(checkout_request)
     except ProviderError as exc:
         with transaction.atomic():
-            failed = PaymentAttempt.objects.select_for_update().get(pk=attempt.pk)
+            failed = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt.pk)
             failed.status = PaymentAttempt.Status.FAILED
             failed.failure_code = exc.code
             failed.failure_message = str(exc)[:255]
@@ -979,7 +996,7 @@ def start_checkout(
         raise
 
     with transaction.atomic():
-        stored = PaymentAttempt.objects.select_for_update().get(pk=attempt.pk)
+        stored = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt.pk)
         if stored.status == PaymentAttempt.Status.CREATED:
             stored.provider_session_id = result.provider_session_id
             stored.checkout_url = result.checkout_url
@@ -1044,7 +1061,7 @@ def recover_checkout_attempt(*, attempt_id: int) -> str:
         )
     )
     with transaction.atomic():
-        row = PaymentAttempt.objects.select_for_update().get(pk=attempt_id)
+        row = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
         if not row.provider_session_id:
             row.provider_session_id = result.provider_session_id
             row.checkout_url = result.checkout_url
@@ -1233,7 +1250,7 @@ def process_provider_event(*, event_id: int) -> str:
     """Apply one durable event at least once; every economic effect is idempotent."""
 
     with transaction.atomic():
-        record = PaymentProviderEvent.objects.select_for_update().get(pk=event_id)
+        record = PaymentProviderEvent.objects.select_for_update(no_key=True).get(pk=event_id)
         if record.processing_result in (
             PaymentProviderEvent.ProcessingResult.APPLIED,
             PaymentProviderEvent.ProcessingResult.IGNORED,
@@ -1412,7 +1429,7 @@ def reconcile_attempt(
     )
     locked = lock_payment_order_aggregate(order_id)
     order = locked.order
-    attempt = PaymentAttempt.objects.select_for_update().get(pk=attempt_id)
+    attempt = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
 
     if attempt.guest_link_id and guest_email and attempt.guest_email != guest_email:
         attempt.guest_email = guest_email[:254]
@@ -1646,12 +1663,27 @@ def request_refund(
     with transaction.atomic():
         order = _order_for_update(order_id)
         attempt = (
-            PaymentAttempt.objects.select_for_update().get(pk=attempt_id)
+            PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
         )
         if attempt.order_id != order.pk:
             raise RefundNotPermitted("The attempt does not belong to this order.")
         if attempt.status != PaymentAttempt.Status.SUCCEEDED:
             raise RefundNotPermitted("Only a succeeded attempt can be refunded.")
+
+        # Re-read the key now that the order row is held. The pre-transaction
+        # lookup above answers the sequential retry; this one answers the
+        # simultaneous one. Without it two operators clicking Refund at the same
+        # instant both miss the unlocked read, and the loser is refused with
+        # `RefundExceedsCapture` — correct about the money, but a confusing
+        # answer to a request that is idempotent by contract.
+        duplicate = PaymentRefund.objects.filter(idempotency_key=key).first()
+        if duplicate is not None:
+            if duplicate.status in (
+                PaymentRefund.Status.PENDING,
+                PaymentRefund.Status.PROCESSING,
+            ):
+                _schedule_refund_reconciliation(duplicate.pk, run_at=timezone.now())
+            return duplicate
 
         already = int(
             PaymentRefund.objects.filter(
@@ -1736,7 +1768,7 @@ def _settle_refund_with_provider(*, refund_id: int) -> str:
     """
 
     with transaction.atomic():
-        row = PaymentRefund.objects.select_for_update().get(pk=refund_id)
+        row = PaymentRefund.objects.select_for_update(no_key=True).get(pk=refund_id)
         if row.status == PaymentRefund.Status.SUCCEEDED:
             return "already_succeeded"
         if row.status == PaymentRefund.Status.FAILED:
@@ -1782,7 +1814,7 @@ def _settle_refund_with_provider(*, refund_id: int) -> str:
     except ProviderError as exc:
         with transaction.atomic():
             order = _order_for_update(refund.order_id)
-            row = PaymentRefund.objects.select_for_update().get(pk=refund.pk)
+            row = PaymentRefund.objects.select_for_update(no_key=True).get(pk=refund.pk)
             if row.status == PaymentRefund.Status.SUCCEEDED:
                 return "already_succeeded"
             row.failure_code = exc.code[:64]
@@ -1874,7 +1906,7 @@ def _mark_refund_retryable(refund_id: int, exc: Exception) -> None:
     )
     with transaction.atomic():
         order = _order_for_update(refund.order_id)
-        row = PaymentRefund.objects.select_for_update().get(pk=refund_id)
+        row = PaymentRefund.objects.select_for_update(no_key=True).get(pk=refund_id)
         if row.status == PaymentRefund.Status.SUCCEEDED:
             return
         row.status = PaymentRefund.Status.PENDING
@@ -1953,7 +1985,7 @@ def mark_refund_succeeded(
         pk=refund_id
     )
     order = _order_for_update(order_id)
-    refund = PaymentRefund.objects.select_for_update().get(pk=refund_id)
+    refund = PaymentRefund.objects.select_for_update(no_key=True).get(pk=refund_id)
     if refund.status == PaymentRefund.Status.SUCCEEDED:
         return refund
     refund.status = PaymentRefund.Status.SUCCEEDED
@@ -2544,7 +2576,7 @@ def complete_manual_payout(
     already-settled row.
     """
 
-    payout = Payout.objects.select_for_update().get(pk=payout_id)
+    payout = Payout.objects.select_for_update(no_key=True).get(pk=payout_id)
     if payout.status == Payout.Status.PAID:
         return payout
     if payout.status not in (

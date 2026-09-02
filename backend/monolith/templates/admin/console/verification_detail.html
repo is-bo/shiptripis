@@ -1,0 +1,163 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; {% if kind == 'kyc' %}<a href="{% url 'admin_console:kyc-queue' %}">KYC review</a>{% else %}<a href="{% url 'admin_console:proof-queue' %}">Flight proofs</a>{% endif %} &rsaquo; {{ title }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">{{ subject }}</p>
+      <h1>{{ title }}</h1>
+      <p>{% if kind == 'kyc' %}Decide whether this person's identity evidence is good enough to let them carry.{% else %}Decide whether this evidence proves the Traveler is actually booked on this flight.{% endif %}</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ record.status|status_tone }}">{{ record.get_status_display }}</span>
+    </div>
+  </header>
+
+  {% if record.status == 'pending' %}
+  <div class="st-alert st-alert-info">
+    <strong>Waiting {{ waiting_for }}</strong>
+    <span>{% if kind == 'kyc' %}This Traveler cannot publish a journey until the submission is decided.{% else %}This flight leg cannot be matched until the proof is approved.{% endif %}</span>
+  </div>
+  {% endif %}
+
+  <div class="st-grid st-grid-main">
+    <div>
+      <section class="st-card">
+        <p class="st-eyebrow">Private evidence</p>
+        <div class="st-card-head">
+          <div><h2>What was submitted</h2></div>
+          {% if may_view_evidence %}<span class="st-chip st-info">Every open is audited</span>{% endif %}
+        </div>
+
+        {% if may_view_evidence and evidence %}
+          <div class="st-evidence-previews">
+            {% for item in evidence %}{% if item.previewable %}
+              {% if kind == 'kyc' %}
+                <figure>
+                  <a target="_blank" rel="noreferrer" href="{% url 'admin_console:kyc-evidence' record.pk item.slot %}">
+                    <img loading="lazy" referrerpolicy="no-referrer" src="{% url 'admin_console:kyc-evidence' record.pk item.slot %}" alt="{{ item.label }}, submitted for review">
+                  </a>
+                  <figcaption><b>{{ item.label }}</b><span>View evidence, full size &rarr;</span></figcaption>
+                </figure>
+              {% elif record.content_type == 'image/jpeg' or record.content_type == 'image/png' or record.content_type == 'image/webp' %}
+                <figure>
+                  <a target="_blank" rel="noreferrer" href="{% url 'admin_console:proof-evidence' record.pk %}">
+                    <img loading="lazy" referrerpolicy="no-referrer" src="{% url 'admin_console:proof-evidence' record.pk %}" alt="Uploaded flight proof">
+                  </a>
+                  <figcaption><b>Flight proof</b><span>View evidence, full size &rarr;</span></figcaption>
+                </figure>
+              {% endif %}
+            {% endif %}{% endfor %}
+          </div>
+        {% endif %}
+
+        {% comment %}A file that cannot be shown inline — a PDF, or a role
+        without evidence access — still needs a way in, or a reason there is
+        none.{% endcomment %}
+        {% if evidence %}
+          {% if not may_view_evidence %}
+            <p class="st-privacy-note">Your role can see that {{ evidence|length }} file{{ evidence|length|pluralize }} exist{{ evidence|length|pluralize:"s," }} but cannot open private evidence.</p>
+          {% else %}
+            <div class="st-evidence-grid">
+              {% for item in evidence %}{% if not item.previewable %}
+              <div class="st-evidence">
+                <div><strong>{{ item.label }}</strong><small>Cannot be shown inline</small></div>
+                {% if kind == 'kyc' %}
+                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:kyc-evidence' record.pk item.slot %}">View evidence</a>
+                {% else %}
+                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:proof-evidence' record.pk %}">View evidence</a>
+                {% endif %}
+              </div>
+              {% endif %}{% endfor %}
+            </div>
+          {% endif %}
+        {% else %}
+          <p class="st-muted">No evidence file was attached to this submission.</p>
+        {% endif %}
+        <small class="st-privacy-note">Previews and full-size files use short-lived authorized links and every access is recorded in the audit log. If a preview will not load, use View evidence to retry.</small>
+      </section>
+
+      <section class="st-card">
+        <p class="st-eyebrow">Context</p>
+        <h2>{% if kind == 'kyc' %}Who this is{% else %}Which flight this is{% endif %}</h2>
+
+        <div class="st-identity">
+          <span class="st-avatar" aria-hidden="true">{{ applicant.full_name|default:applicant.email|slice:":1"|upper }}</span>
+          <div class="st-identity-body">
+            <strong><a href="{% url 'admin_console:user-detail' applicant.pk %}">{{ applicant.full_name|default:"Name not provided" }}</a></strong>
+            <span>{{ applicant.email }}</span>
+          </div>
+        </div>
+
+        {% if kind == 'proof' and route_nodes %}
+          <p class="st-eyebrow">Leg route</p>
+          {% include "admin/console/_route.html" with nodes=route_nodes %}
+          <hr class="st-rule">
+        {% endif %}
+
+        <dl class="st-facts">
+          {% if kind == 'kyc' %}
+            <div><dt>Document type</dt><dd>{{ record.get_document_type_display }}</dd></div>
+            <div><dt>Submitted</dt><dd>{{ record.created_at|date:"d M Y, H:i" }}<small>{{ waiting_for }} ago</small></dd></div>
+            <div><dt>Document expires</dt><dd>{{ record.expires_at|date:"d M Y"|default:"Not recorded" }}</dd></div>
+          {% else %}
+            <div><dt>Journey</dt><dd>{% if perms.admin_panel.view_journeys %}<a href="{% url 'admin_console:journey-detail' leg.journey_id %}">Journey {{ leg.journey_id }}</a>{% else %}Journey {{ leg.journey_id }}{% endif %}<small>Leg {{ leg.position|add:1 }}</small></dd></div>
+            <div><dt>Flight</dt><dd>{{ leg.flight_number|default:"Not provided" }}</dd></div>
+            <div><dt>Departure</dt><dd>{{ leg.depart_at|date:"d M Y, H:i" }}</dd></div>
+            <div><dt>Submitted</dt><dd>{{ record.created_at|date:"d M Y, H:i" }}<small>{{ waiting_for }} ago</small></dd></div>
+            <div><dt>File</dt><dd>{{ record.content_type|default:"Type not recorded" }}<small>{{ record.bytes|default:0|filesizeformat }}</small></dd></div>
+          {% endif %}
+          {% if record.reviewed_at %}<div><dt>Decided</dt><dd>{{ record.reviewed_at|date:"d M Y, H:i" }}</dd></div>{% endif %}
+          {% if record.rejection_reason %}<div class="st-fact-wide"><dt>Reason given last time</dt><dd>{{ record.rejection_reason }}</dd></div>{% endif %}
+        </dl>
+      </section>
+
+      {% if previous %}
+      <section class="st-card">
+        <p class="st-eyebrow">History</p>
+        <h2>Earlier submissions from this person</h2>
+        <ol class="st-timeline">
+          {% for item in previous %}
+          <li>
+            <strong><a href="{% url 'admin_console:kyc-detail' item.pk %}">{{ item.get_document_type_display }}</a></strong>
+            <span><span class="st-chip st-{{ item.status|status_tone }}">{{ item.get_status_display }}</span> &middot; {{ item.created_at|date:"d M Y" }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+      </section>
+      {% endif %}
+    </div>
+
+    <aside>
+      <section class="st-card st-sticky{% if may_review and record.status == 'pending' %} st-decision-card{% endif %}">
+        <p class="st-eyebrow">Decision</p>
+        <h2>{% if kind == 'kyc' %}Approve or reject this identity{% else %}Approve or reject this proof{% endif %}</h2>
+        {% if may_review and record.status == 'pending' %}
+        <p>Approving lets this {% if kind == 'kyc' %}Traveler publish journeys{% else %}flight leg be matched{% endif %}. Rejecting sends the reason below to them. Both decisions are audited.</p>
+        <form method="post" class="st-form">{% csrf_token %}
+          {{ form.non_field_errors }}
+          <div class="st-field">
+            <label for="{{ form.reason.id_for_label }}">Reason, required to reject</label>
+            {{ form.reason }}
+            {{ form.reason.errors }}
+            <small>{{ form.reason.help_text }}</small>
+          </div>
+          <div class="st-check">{{ form.confirm }}<label for="{{ form.confirm.id_for_label }}">{{ form.confirm.label }}</label>{{ form.confirm.errors }}</div>
+          <div class="st-decide">
+            <button class="st-button-ok" type="submit" name="decision" value="approved">Approve</button>
+            <button class="st-button-danger" type="submit" name="decision" value="rejected">Reject</button>
+          </div>
+        </form>
+        {% elif record.status != 'pending' %}
+        <p>This submission was already decided as <strong>{{ record.get_status_display|lower }}</strong>. The record and its evidence stay available for audit.</p>
+        {% else %}
+        <p>Your role can inspect this submission but cannot decide it. Ask a Trust / Verification operator or the owner.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}

@@ -211,8 +211,13 @@ class AppChoiceSheet<T> extends StatelessWidget {
           final isSelected = option.value == selected;
           return Semantics(
             button: true,
+            enabled: option.enabled,
             selected: isSelected,
+            label: option.label,
             hint: isSelected ? l.a11ySelected : l.a11yNotSelected,
+            onTap: option.enabled
+                ? () => Navigator.of(context).pop(option.value)
+                : null,
             child: ExcludeSemantics(
               child: ListTile(
                 contentPadding: EdgeInsets.zero,

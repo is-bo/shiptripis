@@ -1,0 +1,116 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:deals' %}">Deals</a> &rsaquo; Deal {{ deal.pk }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Marketplace Deal</p>
+      <h1>Deal {{ deal.pk }}</h1>
+      <p>{{ deal.sender.full_name|default:deal.sender.email }} sending with {{ deal.traveler.full_name|default:deal.traveler.email }}.</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ protection.1 }}">{{ protection.0 }}</span>
+      <span class="st-chip st-{{ deal.status|status_tone }}">{{ deal.get_status_display }}</span>
+    </div>
+  </header>
+
+  {# Money first: it is what every question about a Deal eventually becomes. #}
+  <section class="st-card">
+    <p class="st-eyebrow">Agreed money, canonical EUR</p>
+    <h2>What each side owes</h2>
+    {% if terms %}
+      <div class="st-money-strip">
+        <div><span>Traveler reward</span><strong>{{ terms.traveler_reward_minor|eur }}</strong></div>
+        <div><span>ShipTrip fee</span><strong>{{ terms.platform_fee_minor|eur }}</strong></div>
+        <div class="is-total"><span>Sender total</span><strong>{{ terms.sender_total_minor|eur }}</strong></div>
+      </div>
+      <p class="st-muted">Snapshot taken when the Deal was agreed &mdash; pricing version {{ terms.pricing_version }}, settings version {{ terms.business_settings_version_id }}. Changing business settings never rewrites an agreed Deal.</p>
+    {% else %}
+      <p class="st-muted">No V1 terms snapshot exists for this Deal.</p>
+    {% endif %}
+  </section>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Route</p>
+    <h2>What was agreed to move</h2>
+    {% include "admin/console/_route.html" with nodes=route_nodes %}
+  </section>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">People and records</p>
+      <h2>Who and what</h2>
+      <dl class="st-facts">
+        <div><dt>Sender</dt><dd>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' deal.sender_id %}">{{ deal.sender.full_name|default:deal.sender.email }}</a>{% else %}{{ deal.sender.full_name|default:deal.sender.email }}{% endif %}<small>{{ deal.sender.email }}</small></dd></div>
+        <div><dt>Traveler</dt><dd>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' deal.traveler_id %}">{{ deal.traveler.full_name|default:deal.traveler.email }}</a>{% else %}{{ deal.traveler.full_name|default:deal.traveler.email }}{% endif %}<small>{{ deal.traveler.email }}</small></dd></div>
+        <div><dt>Delivery request</dt><dd>Request {{ deal.delivery_request_id }}</dd></div>
+        <div><dt>Journey</dt><dd>{% if perms.admin_panel.view_journeys %}<a href="{% url 'admin_console:journey-detail' deal.journey_id %}">Journey {{ deal.journey_id }}</a>{% else %}Journey {{ deal.journey_id }}{% endif %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="st-card">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Protection</p><h2>Handover and payout hold</h2></div>
+        <span class="st-chip st-{{ protection.1 }}">{{ protection.0 }}</span>
+      </div>
+      <dl class="st-facts">
+        <div><dt>Funded</dt><dd>{{ deal.funded_at|date:"d M Y, H:i"|default:"Not funded" }}</dd></div>
+        <div><dt>Pickup confirmed</dt><dd>{{ deal.pickup_confirmed_at|date:"d M Y, H:i"|default:"Not yet" }}</dd></div>
+        <div><dt>Delivery confirmed</dt><dd>{{ deal.delivery_confirmed_at|date:"d M Y, H:i"|default:"Not yet" }}</dd></div>
+        <div><dt>Protection ends</dt><dd>{{ deal.protection_ends_at|date:"d M Y, H:i"|default:"Not scheduled" }}</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">Payment</p>
+      <h2>Orders and attempts</h2>
+      {% for order in deal.payment_orders.all %}
+      <div class="st-record-block">
+        <strong>{{ order.get_purpose_display }} &middot; {{ order.amount_eur_cents|eur }}</strong>
+        <span class="st-chip st-{{ order.status|status_tone }}">{{ order.get_status_display }}</span>
+        <small>{{ order.public_reference }}</small>
+        {% for attempt in order.attempts.all %}
+        <p>{{ attempt.get_provider_display }} &middot; {{ attempt.amount_eur_cents|eur }} &middot; <span class="st-chip st-{{ attempt.status|status_tone }}">{{ attempt.get_status_display }}</span></p>
+        {% endfor %}
+      </div>
+      {% empty %}
+      <p class="st-muted">No V1 payment order exists for this Deal.</p>
+      {% endfor %}
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Cases</p>
+      <h2>Disputes</h2>
+      {% for dispute in deal.disputes.all %}
+      <div class="st-record-block">
+        <strong><a href="{% url 'admin_console:dispute-detail' dispute.pk %}">{{ dispute.get_category_display }}</a></strong>
+        <span class="st-chip st-{{ dispute.status|status_tone }}">{{ dispute.get_status_display }}</span>
+        <small>{{ dispute.public_reference }}</small>
+      </div>
+      {% empty %}
+      <p class="st-muted">No dispute has been opened against this Deal.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Lifecycle</p>
+    <h2>What happened, in order</h2>
+    <ol class="st-timeline">
+      {% for event in deal.events.all %}
+      <li><strong>{{ event.get_kind_display }}</strong><span>{{ event.created_at|date:"d M Y, H:i" }} &middot; {{ event.actor.email|default:"System" }}</span></li>
+      {% empty %}
+      <li class="is-empty">No lifecycle events have been recorded.</li>
+      {% endfor %}
+      {% for audit in audits %}
+      <li><strong>{{ audit.action|admin_action }}</strong><span>{{ audit.created_at|date:"d M Y, H:i" }} &middot; {{ audit.actor.email|default:"System" }}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+</main>
+{% endblock %}

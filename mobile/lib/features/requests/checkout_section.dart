@@ -568,6 +568,7 @@ class _ProviderTile extends StatelessWidget {
       selected: isSelected,
       label: name,
       hint: subtitle,
+      onTap: enabled ? onSelect : null,
       child: ExcludeSemantics(
         child: AppCard(
           onTap: onSelect,

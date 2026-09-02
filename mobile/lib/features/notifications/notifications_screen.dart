@@ -170,6 +170,7 @@ class _Row extends StatelessWidget {
     return Semantics(
       button: navigable,
       label: title,
+      onTap: navigable ? onTap : null,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: navigable ? onTap : null,

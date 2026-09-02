@@ -11,7 +11,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
 from apps.kyc.models import KycSubmission
-from apps.locations.models import Location
+from apps.locations.models import AirportLocalityMapping, Country, Location, Place
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 from apps.trips.services import JourneyDomainError, publish_journey
 
@@ -242,6 +242,84 @@ class JourneyApiTests(APITestCase):
         self.depart = timezone.now() + timedelta(days=7)
         self.client = _client(self.owner)
 
+        france = Country.objects.create(
+            code="FR",
+            name="France",
+            source="phase8c-test",
+            source_id="country-fr",
+            source_version="phase8c",
+        )
+        algeria = Country.objects.create(
+            code="DZ",
+            name="Algeria",
+            source="phase8c-test",
+            source_id="country-dz",
+            source_version="phase8c",
+        )
+
+        def locality(country, name, source_id, latitude, longitude):
+            return Place.objects.create(
+                country=country,
+                place_type=Place.PlaceType.LOCALITY,
+                source="phase8c-test",
+                source_id=source_id,
+                source_version="phase8c",
+                name=name,
+                latitude=latitude,
+                longitude=longitude,
+            )
+
+        self.paris_place = locality(
+            france, "Paris", "locality-paris", "48.856600", "2.352200"
+        )
+        self.algiers_place = locality(
+            algeria, "Algiers", "locality-algiers", "36.753800", "3.058800"
+        )
+        self.jijel_place = locality(
+            algeria, "Jijel", "locality-jijel", "36.820600", "5.766700"
+        )
+
+        def airport(country, locality_place, name, iata, latitude, longitude):
+            place = Place.objects.create(
+                country=country,
+                place_type=Place.PlaceType.AIRPORT,
+                source="phase8c-test",
+                source_id=f"airport-{iata}",
+                source_version="phase8c",
+                name=name,
+                iata_code=iata,
+                latitude=latitude,
+                longitude=longitude,
+                passenger_use=True,
+            )
+            AirportLocalityMapping.objects.create(
+                airport=place,
+                locality=locality_place,
+                relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+                is_primary=True,
+                source="phase8c-test",
+                source_id=f"mapping-{iata}",
+                source_version="phase8c",
+            )
+            return place
+
+        self.cdg_place = airport(
+            france,
+            self.paris_place,
+            "Paris Charles de Gaulle",
+            "CDG",
+            "49.009700",
+            "2.547900",
+        )
+        self.alg_place = airport(
+            algeria,
+            self.algiers_place,
+            "Houari Boumediene",
+            "ALG",
+            "36.691000",
+            "3.215400",
+        )
+
     def _payload(self) -> dict:
         return {
             "start_location": self.paris.pk,
@@ -270,17 +348,76 @@ class JourneyApiTests(APITestCase):
             ],
         }
 
-    def test_create_starts_draft_and_normalizes_leg_order(self):
+    def _canonical_payload(self) -> dict:
+        return {
+            "start_place_id": self.cdg_place.pk,
+            "destination_place_id": self.jijel_place.pk,
+            "notes": "Paris airport to Jijel via Algiers",
+            "legs": [
+                {
+                    "position": 0,
+                    "mode": JourneyLeg.Mode.FLIGHT,
+                    "origin_place_id": self.cdg_place.pk,
+                    "destination_place_id": self.alg_place.pk,
+                    "depart_at": self.depart.isoformat(),
+                    "arrive_at": (self.depart + timedelta(hours=3)).isoformat(),
+                    "capacity_kg": "10.00",
+                    "flight_number": "AH1006",
+                },
+                {
+                    "position": 1,
+                    "mode": JourneyLeg.Mode.DRIVE,
+                    "origin_place_id": self.algiers_place.pk,
+                    "destination_place_id": self.jijel_place.pk,
+                    "depart_at": (self.depart + timedelta(hours=5)).isoformat(),
+                    "arrive_at": (self.depart + timedelta(hours=8)).isoformat(),
+                    "capacity_kg": "8.50",
+                },
+            ],
+        }
+
+    def test_location_only_creation_is_rejected(self):
         response = self.client.post(
             reverse("journeys-list-create"),
             self._payload(),
             format="json",
         )
 
+        assert response.status_code == 400
+        assert "start_place_id" in response.data
+        assert "destination_place_id" in response.data
+        assert Journey.objects.count() == 0
+
+    def test_create_uses_canonical_places_and_locality_continuity(self):
+        response = self.client.post(
+            reverse("journeys-list-create"),
+            self._canonical_payload(),
+            format="json",
+        )
+
         assert response.status_code == 201, response.data
+        journey = Journey.objects.get(pk=response.data["id"])
+        assert journey.schema_version == 2
+        assert journey.start_place == self.cdg_place
+        assert journey.start_location is None
         assert response.data["status"] == Journey.Status.DRAFT
         assert [leg["position"] for leg in response.data["legs"]] == [0, 1]
-        assert response.data["start_location"]["public_label"] == "Paris"
+        assert (
+            response.data["start_place"]["matching_locality_id"] == self.paris_place.pk
+        )
+        assert response.data["legs"][1]["origin_place"]["id"] == self.algiers_place.pk
+
+    def test_canonical_flight_leg_requires_airport_endpoints(self):
+        payload = self._canonical_payload()
+        payload["legs"][0]["origin_place_id"] = self.paris_place.pk
+
+        response = self.client.post(
+            reverse("journeys-list-create"), payload, format="json"
+        )
+
+        assert response.status_code == 400
+        assert "origin_place_id" in str(response.data)
+        assert Journey.objects.count() == 0
 
     def test_list_contains_only_callers_journeys(self):
         own = Journey.objects.create(
@@ -301,7 +438,9 @@ class JourneyApiTests(APITestCase):
 
     def test_non_owner_cannot_publish_or_add_proof(self):
         create_response = self.client.post(
-            reverse("journeys-list-create"), self._payload(), format="json"
+            reverse("journeys-list-create"),
+            self._canonical_payload(),
+            format="json",
         )
         journey_id = create_response.data["id"]
         flight_leg_id = create_response.data["legs"][0]["id"]
@@ -328,7 +467,9 @@ class JourneyApiTests(APITestCase):
         self, _put_object, _valid_image
     ):
         create_response = self.client.post(
-            reverse("journeys-list-create"), self._payload(), format="json"
+            reverse("journeys-list-create"),
+            self._canonical_payload(),
+            format="json",
         )
         journey_id = create_response.data["id"]
         flight_leg_id = create_response.data["legs"][0]["id"]

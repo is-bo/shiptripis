@@ -31,6 +31,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/session/session.dart';
+import '../domain/canonical_place.dart';
 import '../domain/location.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
@@ -54,6 +55,7 @@ import '../features/journeys/journey_create_screen.dart';
 import '../features/journeys/journey_detail_screen.dart';
 import '../features/journeys/leg_proof_screen.dart';
 import '../features/kyc/kyc_screen.dart';
+import '../features/location/canonical_place_picker_screen.dart';
 import '../features/location/location_picker_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/offers/negotiation_screen.dart';
@@ -117,6 +119,7 @@ abstract final class Routes {
 
   static const kyc = 'kyc';
   static const locationPicker = 'location-picker';
+  static const preferredLocationPicker = 'preferred-location-picker';
   static const guestPay = 'guest-pay';
 
   static const profileLanguage = 'profile-language';
@@ -428,8 +431,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat/thread/:matchId',
         name: Routes.chatThread,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) =>
-            ChatThreadScreen(matchId: _id(state, 'matchId')),
+        builder: (context, state) => ChatThreadScreen(
+          matchId: _id(state, 'matchId'),
+          dealId: int.tryParse(state.uri.queryParameters['dealId'] ?? ''),
+        ),
       ),
 
       GoRoute(
@@ -442,10 +447,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/location/pick',
         name: Routes.locationPicker,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => LocationPickerScreen(
-          title: state.uri.queryParameters['title'],
-          requireExact: state.uri.queryParameters['exact'] == '1',
-        ),
+        builder: (context, state) {
+          final current = state.extra;
+          return CanonicalPlacePickerScreen(
+            title: state.uri.queryParameters['title'],
+            airportOnly: state.uri.queryParameters['airportOnly'] == 'true',
+            current: current is CanonicalPlace ? current : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/location/preferred',
+        name: Routes.preferredLocationPicker,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final place = state.extra;
+          if (place is! CanonicalPlace) return const RouteNotFoundScreen();
+          return LocationPickerScreen(
+            canonicalPlace: place,
+            title: state.uri.queryParameters['title'],
+          );
+        },
       ),
 
       GoRoute(
@@ -549,18 +571,36 @@ extension AppNavigation on BuildContext {
   void openDispute(int disputeId) =>
       pushNamed(Routes.disputeDetail, pathParameters: {'id': '$disputeId'});
 
-  void openChatThread(int matchId) =>
-      pushNamed(Routes.chatThread, pathParameters: {'matchId': '$matchId'});
+  void openChatThread(int matchId, {int? dealId}) => pushNamed(
+    Routes.chatThread,
+    pathParameters: {'matchId': '$matchId'},
+    queryParameters: {if (dealId != null) 'dealId': '$dealId'},
+  );
 
   void openKyc() => pushNamed(Routes.kyc);
 
-  /// Returns the chosen place, or null if the user backed out.
-  Future<AppLocation?> pickLocation({
+  /// Opens the country → place picker.
+  ///
+  /// [current] is what the caller already holds, if anything. Passing it is
+  /// what makes "change the pickup city" resume from the right country with
+  /// the current choice marked, instead of restarting from a blank screen.
+  Future<CanonicalPlace?> pickCanonicalPlace({
     String? title,
-    bool requireExact = true,
-  }) => pushNamed<AppLocation>(
+    bool airportOnly = false,
+    CanonicalPlace? current,
+  }) => pushNamed<CanonicalPlace>(
     Routes.locationPicker,
-    queryParameters: {'title': ?title, if (requireExact) 'exact': '1'},
+    queryParameters: {'title': ?title, if (airportOnly) 'airportOnly': 'true'},
+    extra: current,
+  );
+
+  Future<AppLocation?> pickPreferredLocation(
+    CanonicalPlace place, {
+    String? title,
+  }) => pushNamed<AppLocation>(
+    Routes.preferredLocationPicker,
+    queryParameters: {'title': ?title},
+    extra: place,
   );
 }
 

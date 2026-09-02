@@ -1,287 +1,1670 @@
-/* ShipTrip operations admin.
+/* ShipTrip operations console.
  *
- * This is an operations tool. It is not a postcard: an operator opening it at
- * 02:00 to decide whether a refund is safe should meet a dense, quiet, legible
- * table, not a brand experience. What it does take from the product identity is
- * the part that helps — the ink, the parchment ground, the terracotta reserved
- * for "you have to do something", and the display serif on page titles only.
+ * This is an operating console, not a postcard. The person opening it at 02:00
+ * to decide whether a refund is safe should meet a calm, dense, legible page —
+ * so the rules below spend their contrast budget on the three things that are
+ * actually scanned: a count, an amount, and a state. Everything else is quiet
+ * on purpose.
  *
- * The implementation is deliberately small. Django's admin already carries a
- * complete CSS-variable theme, including a dark scheme and a user-controlled
- * toggle. Re-pointing those variables retunes every screen, keeps the toggle
- * working, and leaves the DOM Django ships alone. Everything below the variable
- * blocks is either a component the operations views actually need (status
- * chips, aligned money, irreversible-action emphasis) or a legibility fix.
+ * What it keeps from the product identity is only the part that helps an
+ * operator: the ink, the parchment ground, a display serif on page titles, and
+ * terracotta reserved strictly for "you have to do something". It is not a
+ * transliteration of the mobile app, and it is deliberately not a blue SaaS
+ * dashboard: no metric tiles in five colours, no gradients, no card inside a
+ * card inside a card.
+ *
+ * Structure
+ *   1  Tokens                     9  Money
+ *   2  Django variable mapping   10  Routes
+ *   3  Shell and navigation      11  Overview queues
+ *   4  Page furniture            12  Evidence and cases
+ *   5  Cards and grids           13  Health and providers
+ *   6  Tables                    14  Forms
+ *   7  Chips and tones           15  Django's own screens
+ *   8  Lists, facts, timelines   16  Responsive, motion, print
  */
 
-/* --------------------------------------------------------------------------
-   1. Palette — the app's semantic tokens, mapped onto Django's variables
-   -------------------------------------------------------------------------- */
+/* ==========================================================================
+   1. Tokens
+   ==========================================================================
+   Named for the job, not the colour, so a value can be retuned without a
+   rename. Every semantic tone carries an ink, a ground and a line, because a
+   chip needs all three and a bare colour keyword needs none of them. */
 
 html[data-theme="light"], :root {
-  --st-ink: #0e1f2c;
-  --st-ink-soft: #2a3b49;
-  --st-parchment: #f4efe6;
-  --st-paper: #fdfbf7;
-  --st-paper-sunken: #eae3d2;
-  --st-hairline: rgba(14, 31, 44, .14);
+  /* Surfaces */
+  --st-canvas: #edeae2;
+  --st-surface: #fbfaf7;
+  --st-surface-2: #f3f0e9;
+  --st-surface-3: #e7e2d7;
 
-  --st-ok: #0e5a4f;
-  --st-ok-soft: #e6f2ef;
-  --st-wait: #6b4a05;
-  --st-wait-soft: #fdf5e2;
-  --st-attn: #9b4318;
-  --st-attn-soft: #fcebe0;
-  --st-bad: #8c2b20;
-  --st-bad-soft: #fcedeb;
-  --st-info: #1b4477;
-  --st-info-soft: #eaf2fb;
-  --st-mute: #2a3b49;
-  --st-mute-soft: #eae3d2;
-  --st-seal: #c9a961;
+  /* Text */
+  --st-ink: #14232e;
+  --st-ink-2: #465663;
+  --st-ink-3: #55636e;
+  --st-ink-invert: #f7f4ee;
 
-  /* Django's own variables, re-pointed. */
-  --primary: #1b2e3c;
-  --secondary: #0e1f2c;
-  --accent: #fbbc04;
-  --primary-fg: #faf6ee;
+  /* Lines */
+  --st-line: rgba(20, 35, 46, .13);
+  --st-line-2: rgba(20, 35, 46, .26);
 
-  --body-fg: #0e1f2c;
-  --body-bg: #f4efe6;
-  --body-quiet-color: #616c79;
-  --body-medium-color: #2a3b49;
-  --body-loud-color: #0e1f2c;
+  /* Identity */
+  --st-accent: #ad4b1c;
+  --st-accent-2: #8a3a13;
+  --st-accent-soft: #f7e5d9;
+  --st-seal: #bd9749;
+  --st-shell: #142430;
+  --st-shell-2: #1d3441;
+  --st-shell-ink: #e6e1d6;
+  --st-shell-fg: #f7f4ee;
+  --st-shell-muted: #9fb0bd;
 
-  --header-color: #d7cfbf;
-  --header-branding-color: #fbbc04;
-  --header-bg: #0e1f2c;
-  --header-link-color: #faf6ee;
+  /* Semantic tones: ink / ground / line */
+  --st-ok: #0e5647;        --st-ok-bg: #e2efe9;  --st-ok-line: rgba(14, 86, 71, .30);
+  --st-wait: #6a4906;      --st-wait-bg: #f8efd6; --st-wait-line: rgba(106, 73, 6, .30);
+  --st-attn: #9b4315;      --st-attn-bg: #fbe5d7; --st-attn-line: rgba(155, 67, 21, .38);
+  --st-bad: #8b2a20;       --st-bad-bg: #fbe4e0;  --st-bad-line: rgba(139, 42, 32, .34);
+  --st-info: #1b4270;      --st-info-bg: #e5eef9; --st-info-line: rgba(27, 66, 112, .26);
+  --st-mute: #5b6874;      --st-mute-bg: #e8e4db; --st-mute-line: rgba(20, 35, 46, .16);
 
-  --breadcrumbs-fg: #c2cdd5;
-  --breadcrumbs-link-fg: #faf6ee;
-  --breadcrumbs-bg: #1b2e3c;
+  /* Focus */
+  --st-focus: #1c62c4;
 
-  --link-fg: #1b4477;
-  --link-hover-color: #102a4c;
-  --link-selected-fg: #0e1f2c;
+  /* Depth. Two steps only; a console does not need a shadow ramp. */
+  --st-shadow-1: 0 1px 2px rgba(20, 35, 46, .05);
+  --st-shadow-2: 0 10px 28px -14px rgba(20, 35, 46, .38);
 
-  --hairline-color: rgba(14, 31, 44, .12);
-  --border-color: rgba(14, 31, 44, .22);
+  /* Radii */
+  --st-r-1: 3px;
+  --st-r-2: 6px;
+  --st-r-3: 10px;
+  --st-r-pill: 999px;
 
-  --error-fg: #8c2b20;
+  /* Spacing */
+  --st-1: 4px;
+  --st-2: 8px;
+  --st-3: 12px;
+  --st-4: 16px;
+  --st-5: 22px;
+  --st-6: 30px;
+  --st-7: 42px;
+  --st-8: 60px;
 
-  --message-success-bg: #e6f2ef;
-  --message-warning-bg: #fdf5e2;
-  --message-error-bg: #fcedeb;
+  /* Typography */
+  --st-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --st-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --st-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
-  --darkened-bg: #ece5da;
-  --selected-bg: #e6ddcc;
-  --selected-row: #fff0c2;
+  --st-fs-h1: clamp(1.5rem, 1.22rem + .8vw, 1.95rem);
+  --st-fs-h2: 1rem;
+  --st-fs-h3: .875rem;
+  --st-fs-body: .875rem;
+  --st-fs-sm: .8125rem;
+  --st-fs-xs: .75rem;
+  --st-fs-micro: .6875rem;
+  --st-fs-eyebrow: .625rem;
 
-  --button-fg: #faf6ee;
-  --button-bg: #1b2e3c;
-  --button-hover-bg: #0e1f2c;
-  --default-button-bg: #0e5a4f;
-  --default-button-hover-bg: #0a4a40;
-  --close-button-bg: #616c79;
-  --close-button-hover-bg: #2a3b49;
-  --delete-button-bg: #8c2b20;
-  --delete-button-hover-bg: #6e2116;
-
-  --object-tools-fg: #0e1f2c;
-  --object-tools-bg: #e0cb9b;
-  --object-tools-hover-bg: #c9a961;
+  /* Layout */
+  --st-page: 1400px;
+  --st-gutter: 40px;
 }
 
 @media (prefers-color-scheme: dark) {
   html[data-theme="auto"] {
-    --st-ink: #f2eee6;
-    --st-paper: #11212c;
-    --st-paper-sunken: #0d1b25;
-    --st-hairline: rgba(255, 255, 255, .16);
-    --st-ok: #4fa697;
-    --st-ok-soft: #0e332c;
-    --st-wait: #f6dfa4;
-    --st-wait-soft: #352706;
-    --st-attn: #f4b48d;
-    --st-attn-soft: #3a1e0e;
-    --st-bad: #f2bdb6;
-    --st-bad-soft: #361310;
-    --st-info: #b6d0eb;
-    --st-info-soft: #10243b;
-    --st-mute: #c2cdd5;
-    --st-mute-soft: #1b2c38;
+    --st-canvas: #0a151e;
+    --st-surface: #122029;
+    --st-surface-2: #0e1a23;
+    --st-surface-3: #1a2c37;
 
-    --body-bg: #091620;
-    --body-fg: #f2eee6;
-    --body-quiet-color: #93a0ab;
-    --body-medium-color: #c2cdd5;
-    --body-loud-color: #ffffff;
-    --header-bg: #06101a;
-    --breadcrumbs-bg: #11212c;
-    --darkened-bg: #11212c;
-    --selected-bg: #172a37;
-    --selected-row: #3a2c05;
-    --hairline-color: rgba(255, 255, 255, .10);
-    --border-color: rgba(255, 255, 255, .22);
-    --link-fg: #8fb6e4;
-    --link-hover-color: #b6d0eb;
-    --message-success-bg: #0e332c;
-    --message-warning-bg: #352706;
-    --message-error-bg: #361310;
-    --object-tools-bg: #a88842;
-    --object-tools-fg: #0e1f2c;
+    --st-ink: #eef1ef;
+    --st-ink-2: #b2bfc9;
+    --st-ink-3: #8493a0;
+    --st-ink-invert: #0a151e;
+
+    --st-line: rgba(255, 255, 255, .12);
+    --st-line-2: rgba(255, 255, 255, .24);
+
+    --st-accent: #e5854c;
+    --st-accent-2: #f0a171;
+    --st-accent-soft: #34190c;
+    --st-seal: #c2a05a;
+    --st-shell: #060f17;
+    --st-shell-2: #0f1e28;
+    --st-shell-ink: #d3dbe1;
+
+    --st-ok: #6bbca9;        --st-ok-bg: #0f3029;   --st-ok-line: rgba(107, 188, 169, .34);
+    --st-wait: #edd49a;      --st-wait-bg: #32260a; --st-wait-line: rgba(237, 212, 154, .30);
+    --st-attn: #f0a878;      --st-attn-bg: #351b0d; --st-attn-line: rgba(240, 168, 120, .38);
+    --st-bad: #f0aba1;       --st-bad-bg: #331411;  --st-bad-line: rgba(240, 171, 161, .36);
+    --st-info: #a9c8e9;      --st-info-bg: #10233a; --st-info-line: rgba(169, 200, 233, .28);
+    --st-mute: #adb9c3;      --st-mute-bg: #17262f; --st-mute-line: rgba(255, 255, 255, .16);
+
+    --st-focus: #8fb9f0;
+    --st-shadow-1: 0 1px 2px rgba(0, 0, 0, .34);
+    --st-shadow-2: 0 10px 28px -14px rgba(0, 0, 0, .7);
   }
 }
 
 html[data-theme="dark"] {
-  --st-ink: #f2eee6;
-  --st-paper: #11212c;
-  --st-paper-sunken: #0d1b25;
-  --st-hairline: rgba(255, 255, 255, .16);
-  --st-ok: #4fa697;
-  --st-ok-soft: #0e332c;
-  --st-wait: #f6dfa4;
-  --st-wait-soft: #352706;
-  --st-attn: #f4b48d;
-  --st-attn-soft: #3a1e0e;
-  --st-bad: #f2bdb6;
-  --st-bad-soft: #361310;
-  --st-info: #b6d0eb;
-  --st-info-soft: #10243b;
-  --st-mute: #c2cdd5;
-  --st-mute-soft: #1b2c38;
+  --st-canvas: #0a151e;
+  --st-surface: #122029;
+  --st-surface-2: #0e1a23;
+  --st-surface-3: #1a2c37;
 
-  --body-bg: #091620;
-  --body-fg: #f2eee6;
-  --header-bg: #06101a;
-  --breadcrumbs-bg: #11212c;
-  --darkened-bg: #11212c;
-  --selected-bg: #172a37;
-  --selected-row: #3a2c05;
-  --link-fg: #8fb6e4;
-  --link-hover-color: #b6d0eb;
-  --message-success-bg: #0e332c;
-  --message-warning-bg: #352706;
-  --message-error-bg: #361310;
-  --object-tools-bg: #a88842;
-  --object-tools-fg: #0e1f2c;
+  --st-ink: #eef1ef;
+  --st-ink-2: #b2bfc9;
+  --st-ink-3: #8493a0;
+  --st-ink-invert: #0a151e;
+
+  --st-line: rgba(255, 255, 255, .12);
+  --st-line-2: rgba(255, 255, 255, .24);
+
+  --st-accent: #e5854c;
+  --st-accent-2: #f0a171;
+  --st-accent-soft: #34190c;
+  --st-seal: #c2a05a;
+  --st-shell: #060f17;
+  --st-shell-2: #0f1e28;
+  --st-shell-ink: #d3dbe1;
+
+  --st-ok: #6bbca9;        --st-ok-bg: #0f3029;   --st-ok-line: rgba(107, 188, 169, .34);
+  --st-wait: #edd49a;      --st-wait-bg: #32260a; --st-wait-line: rgba(237, 212, 154, .30);
+  --st-attn: #f0a878;      --st-attn-bg: #351b0d; --st-attn-line: rgba(240, 168, 120, .38);
+  --st-bad: #f0aba1;       --st-bad-bg: #331411;  --st-bad-line: rgba(240, 171, 161, .36);
+  --st-info: #a9c8e9;      --st-info-bg: #10233a; --st-info-line: rgba(169, 200, 233, .28);
+  --st-mute: #adb9c3;      --st-mute-bg: #17262f; --st-mute-line: rgba(255, 255, 255, .16);
+
+  --st-focus: #8fb9f0;
+  --st-shadow-1: 0 1px 2px rgba(0, 0, 0, .34);
+  --st-shadow-2: 0 10px 28px -14px rgba(0, 0, 0, .7);
 }
 
-/* --------------------------------------------------------------------------
-   2. Shell
-   -------------------------------------------------------------------------- */
+/* ==========================================================================
+   2. Django's variables, re-pointed
+   ==========================================================================
+   Django's admin already carries a complete CSS-variable theme with a working
+   light/dark toggle. Re-pointing those variables retunes every screen Django
+   ships — including the owner-only technical records — without touching its
+   DOM or breaking the toggle. */
 
-#header { padding: 12px 40px; }
+:root, html[data-theme="light"], html[data-theme="dark"] {
+  --primary: var(--st-shell-2);
+  --secondary: var(--st-shell);
+  --accent: var(--st-seal);
+  --primary-fg: var(--st-ink-invert);
 
+  --body-fg: var(--st-ink);
+  --body-bg: var(--st-canvas);
+  --body-quiet-color: var(--st-ink-3);
+  --body-medium-color: var(--st-ink-2);
+  --body-loud-color: var(--st-ink);
+
+  --header-color: var(--st-shell-ink);
+  --header-branding-color: var(--st-seal);
+  --header-bg: var(--st-shell);
+  /* Always light: the header keeps its dark ground in both themes. */
+  --header-link-color: var(--st-shell-fg);
+
+  --breadcrumbs-fg: var(--st-ink-3);
+  --breadcrumbs-link-fg: var(--st-ink-2);
+  --breadcrumbs-bg: var(--st-canvas);
+
+  --link-fg: var(--st-info);
+  --link-hover-color: var(--st-ink);
+  --link-selected-fg: var(--st-ink);
+
+  --hairline-color: var(--st-line);
+  --border-color: var(--st-line-2);
+
+  --error-fg: var(--st-bad);
+
+  --message-success-bg: var(--st-ok-bg);
+  --message-warning-bg: var(--st-wait-bg);
+  --message-error-bg: var(--st-bad-bg);
+
+  --darkened-bg: var(--st-surface-2);
+  --selected-bg: var(--st-surface-2);
+  --selected-row: var(--st-wait-bg);
+
+  --button-fg: var(--st-ink-invert);
+  --button-bg: var(--st-shell-2);
+  --button-hover-bg: var(--st-shell);
+  --default-button-bg: var(--st-ok);
+  --default-button-hover-bg: var(--st-ok);
+  --close-button-bg: var(--st-ink-3);
+  --close-button-hover-bg: var(--st-ink-2);
+  --delete-button-bg: #8b2a20;
+  --approve-button-bg: #0e5647;
+  --approve-button-hover-bg: #0b463a;
+  --delete-button-hover-bg: #6f2019;
+
+  --object-tools-fg: var(--st-ink-invert);
+  --object-tools-bg: var(--st-shell-2);
+  --object-tools-hover-bg: var(--st-shell);
+}
+
+html[data-theme="dark"] {
+  --button-fg: var(--st-ink);
+  --primary-fg: var(--st-ink);
+  --object-tools-fg: var(--st-ink);
+  --default-button-bg: #14584a;
+  --default-button-hover-bg: #187061;
+  --delete-button-bg: #8f3229;
+  --approve-button-bg: #12705c;
+  --approve-button-hover-bg: #0f5f4e;
+  --delete-button-hover-bg: #a53c31;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="auto"] {
+    --button-fg: var(--st-ink);
+    --primary-fg: var(--st-ink);
+    --object-tools-fg: var(--st-ink);
+    --default-button-bg: #14584a;
+    --default-button-hover-bg: #187061;
+    --delete-button-bg: #8f3229;
+    --approve-button-bg: #12705c;
+    --approve-button-hover-bg: #0f5f4e;
+    --delete-button-hover-bg: #a53c31;
+  }
+}
+
+body { font-family: var(--st-sans); }
+
+/* ==========================================================================
+   3. Shell and navigation
+   ==========================================================================
+   Two rows. The first is the ten sections of the console; the second is only
+   the destinations inside the section the operator is in. The old shell showed
+   all twenty destinations at once, which answered "where can I go" and never
+   "where am I". */
+
+body #header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-3) var(--st-5);
+  padding: 0 var(--st-gutter);
+  /* `#container` is a column flex box the height of the viewport, so a header
+     that wraps onto a second line gets shrunk back to one on any page tall
+     enough to overflow. It must never shrink: the navigation lives in it. */
+  flex: 0 0 auto;
+  flex-direction: row;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 52px;
+  background: var(--st-shell);
+  color: var(--st-shell-ink);
+  line-height: 1.4;
+}
+
+body #site-name { margin: 0 !important; font-weight: 400; }
 #site-name a {
   display: inline-flex;
   align-items: center;
-  gap: .6rem;
+  gap: var(--st-2);
   text-decoration: none;
 }
 
 .st-brand-seal {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   border-radius: 50%;
-  background: #e8763a;
-  box-shadow: 0 0 0 2px var(--st-seal);
-  color: #0e1f2c;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 15px;
+  /* Terracotta dark enough for white text at 5.03:1. The mark is
+     `aria-hidden` decoration and so exempt from AA, but the letter is still
+     read by eye, and the previous #d0602c sat at 3.9:1 — legible only to
+     someone who already knew what it said. */
+  background: #b94e22;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
+  color: #fff;
+  font-family: var(--st-serif);
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
 }
 
 .st-brand-name {
-  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  font-size: 1.15rem;
-  letter-spacing: -.01em;
+  color: var(--st-shell-fg);
+  font-family: var(--st-serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -.005em;
 }
 
-/* Page titles read as the one serif on the screen. Everything else stays in
-   the system UI face, which is what a dense table wants. */
-#content h1, .module h2, #content-main > .module caption {
-  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+body #user-tools {
+  margin-left: auto;
+  padding: 0;
+  color: var(--st-shell-muted);
+  font-size: var(--st-fs-xs);
+  text-transform: none;
+  letter-spacing: 0;
 }
-#content h1 { font-weight: 600; letter-spacing: -.01em; }
+#user-tools a { color: var(--st-shell-ink); }
 
-div.breadcrumbs { padding: 10px 40px; font-size: .78rem; letter-spacing: .01em; }
+/* -- Row 1: sections ----------------------------------------------------- */
 
-/* No `overflow: hidden` here: Django's changelist relies on the results table
-   being able to spill under the filter rail, and clipping it silently truncates
-   a date column instead of scrolling it. */
-.module { border-radius: 8px; border: 1px solid var(--st-hairline); }
-#changelist .results { overflow-x: auto; }
-.module caption, .module h2 { letter-spacing: .01em; }
+body .st-primary-nav {
+  flex: 0 0 100%;
+  min-width: 0;
+  margin: 0 calc(var(--st-gutter) * -1);
+  background: var(--st-shell);
+}
 
-/* --------------------------------------------------------------------------
-   3. Result tables — density and scanning
-   -------------------------------------------------------------------------- */
+.st-nav-primary {
+  display: flex;
+  gap: 2px;
+  padding: 0 calc(var(--st-gutter) - 10px);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .10);
+}
 
-#changelist table { font-variant-numeric: tabular-nums; }
-#changelist table thead th {
-  font-size: .68rem;
-  letter-spacing: .08em;
+#header .st-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 10px 10px 9px;
+  border-bottom: 2px solid transparent;
+  color: var(--st-shell-ink);
+  font-size: var(--st-fs-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: .78;
+}
+#header .st-nav-tab:link, #header .st-nav-tab:visited { color: var(--st-shell-ink); }
+#header .st-nav-tab:hover, #header .st-nav-tab:focus { color: #fff; opacity: 1; }
+#header .st-nav-tab.is-current,
+#header .st-nav-tab.is-current:link,
+#header .st-nav-tab.is-current:visited {
+  border-bottom-color: var(--st-seal);
+  color: #fff;
+  font-weight: 600;
+  opacity: 1;
+}
+.st-nav-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+#header .st-nav-tab.is-current .st-nav-icon { color: var(--st-seal); }
+
+/* -- Row 2: the destinations inside the current section ------------------- */
+
+.st-nav-secondary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 var(--st-1);
+  padding: 0 var(--st-gutter);
+  background: var(--st-shell-2);
+}
+#header .st-nav-section {
+  margin-right: var(--st-3);
+  color: var(--st-shell-muted);
+  font-size: var(--st-fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: .12em;
   text-transform: uppercase;
 }
-#changelist table tbody td, #changelist table tbody th { padding: 8px 10px; }
-#changelist tbody tr:hover > * { background: var(--selected-bg); }
-
-/* An id column is a reference, not prose. */
-#changelist table tbody th a, #changelist .field-id, #changelist .field-public_reference {
-  font-variant-numeric: tabular-nums;
+#header .st-nav-link {
+  padding: 8px 10px;
+  border-radius: var(--st-r-1);
+  color: var(--st-shell-ink);
+  font-size: var(--st-fs-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: .8;
+}
+#header .st-nav-link:link, #header .st-nav-link:visited { color: var(--st-shell-ink); }
+#header .st-nav-link:hover, #header .st-nav-link:focus { background: rgba(255, 255, 255, .07); color: #fff; opacity: 1; }
+#header .st-nav-link.is-current,
+#header .st-nav-link.is-current:link,
+#header .st-nav-link.is-current:visited {
+  background: var(--st-canvas);
+  color: var(--st-ink);
+  font-weight: 600;
+  opacity: 1;
 }
 
-#changelist-filter { border-inline-start: 1px solid var(--st-hairline); }
+/* -- Breadcrumbs: a light line on the canvas, not a third dark band ------- */
 
-/* --------------------------------------------------------------------------
-   4. Status chips
-   -------------------------------------------------------------------------- */
+body div.breadcrumbs {
+  padding: var(--st-3) var(--st-gutter) 0;
+  background: var(--st-canvas);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+  border: 0;
+}
+div.breadcrumbs a { color: var(--st-ink-2); text-decoration: none; }
+div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
 
-.st-chip {
+/* ==========================================================================
+   4. Page furniture
+   ========================================================================== */
+
+.st-console {
+  width: min(var(--st-page), calc(100% - var(--st-gutter) * 2));
+  margin: 0 auto;
+  padding: var(--st-6) 0 var(--st-8);
+}
+.st-narrow { width: min(780px, calc(100% - var(--st-gutter) * 2)); }
+
+.st-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-6);
+  margin: 0 0 var(--st-5);
+  padding-bottom: var(--st-4);
+  border-bottom: 1px solid var(--st-line);
+}
+.st-page-head h1 {
+  margin: 0 0 var(--st-2);
+  color: var(--st-ink);
+  font-family: var(--st-serif);
+  font-size: var(--st-fs-h1);
+  font-weight: 600;
+  letter-spacing: -.012em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.st-page-head > div > p {
+  max-width: 74ch;
+  margin: 0;
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-body);
+}
+.st-page-aside { display: flex; align-items: center; gap: var(--st-2); flex-wrap: wrap; }
+
+/* A reference an operator may need to quote but should not have to read. */
+.st-page-ref {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: .72rem;
+  margin-top: var(--st-2);
+  color: var(--st-ink-3);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-micro);
+  overflow-wrap: anywhere;
+}
+
+.st-eyebrow {
+  margin: 0 0 var(--st-1) !important;
+  color: var(--st-accent) !important;
+  font-size: var(--st-fs-eyebrow) !important;
   font-weight: 700;
-  line-height: 1.5;
+  letter-spacing: .13em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.st-page-actions { display: flex; flex-wrap: wrap; gap: var(--st-2); }
+
+/* The one number the overview leads with. */
+.st-head-signal {
+  display: flex;
+  align-items: baseline;
+  gap: var(--st-2);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+}
+.st-head-signal strong {
+  color: var(--st-ink-3);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.st-head-signal span { color: var(--st-ink-2); font-size: var(--st-fs-xs); }
+.st-head-signal.has-alerts { border-color: var(--st-attn-line); background: var(--st-attn-bg); }
+.st-head-signal.has-alerts strong { color: var(--st-attn); }
+.st-head-signal.has-alerts span { color: var(--st-attn); }
+
+/* ==========================================================================
+   5. Cards and grids
+   ========================================================================== */
+
+.st-grid { display: grid; gap: var(--st-4); align-items: start; }
+.st-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.st-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.st-grid-main { grid-template-columns: minmax(0, 1.7fr) minmax(300px, .75fr); }
+.st-grid > .st-card { margin-bottom: 0; }
+
+.st-card {
+  margin: 0 0 var(--st-4);
+  padding: var(--st-5);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+  box-shadow: var(--st-shadow-1);
+}
+.st-card > h2 {
+  margin: 0 0 var(--st-4);
+  padding: 0;
+  background: none;
+  color: var(--st-ink);
+  font-family: var(--st-sans);
+  font-size: var(--st-fs-h2);
+  font-weight: 650;
+  letter-spacing: -.005em;
+  text-transform: none;
+}
+.st-card h3 {
+  margin: var(--st-5) 0 var(--st-3);
+  color: var(--st-ink);
+  font-size: var(--st-fs-h3);
+  font-weight: 650;
+}
+.st-card > .st-eyebrow + h2 { margin-top: 0; }
+.st-card > p { color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+
+.st-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin-bottom: var(--st-4);
+}
+.st-card-head h2 { margin-bottom: 0; }
+.st-card-head a { font-size: var(--st-fs-xs); white-space: nowrap; }
+
+/* The card that commits money or access. It is not a normal card and must not
+   look like one: a solid rule across the top, and the confirming control is
+   the danger button. */
+.st-decision-card {
+  border-color: var(--st-attn-line);
+  border-top: 3px solid var(--st-attn);
+  background: var(--st-surface);
+}
+.st-decision-card > .st-eyebrow { color: var(--st-attn) !important; }
+
+.st-muted { margin: var(--st-3) 0 0; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-readonly-note {
+  display: flex;
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-info-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-info-bg);
+  color: var(--st-info);
+  font-size: var(--st-fs-sm);
+}
+.st-readonly-note::before { content: "i"; font-weight: 800; font-style: italic; }
+
+.st-warning-panel {
+  margin-bottom: var(--st-4);
+  padding: var(--st-4);
+  border: 1px solid var(--st-bad-line);
+  border-top: 3px solid var(--st-bad);
+  border-radius: var(--st-r-2);
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+  font-weight: 650;
+}
+.st-warning-panel p { margin: var(--st-1) 0 0; color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 400; }
+
+.st-alert {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--st-1) var(--st-3);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid;
+  border-left-width: 3px;
+  border-radius: var(--st-r-2);
+  font-size: var(--st-fs-sm);
+}
+.st-alert strong { font-weight: 700; }
+.st-alert span { color: var(--st-ink-2); }
+.st-alert-bad { border-color: var(--st-bad-line); border-left-color: var(--st-bad); background: var(--st-bad-bg); color: var(--st-bad); }
+.st-alert-info { border-color: var(--st-info-line); border-left-color: var(--st-info); background: var(--st-info-bg); color: var(--st-info); }
+.st-alert-ok { border-color: var(--st-ok-line); border-left-color: var(--st-ok); background: var(--st-ok-bg); color: var(--st-ok); }
+
+/* Healthy emptiness should read as checked, never as broken. */
+.st-empty {
+  padding: var(--st-8) var(--st-5);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+  text-align: center;
+}
+.st-empty > span {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto var(--st-3);
+  border: 1px solid var(--st-ok-line);
+  border-radius: 50%;
+  background: var(--st-ok-bg);
+  color: var(--st-ok);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.st-empty h2 {
+  margin: 0 0 var(--st-1);
+  color: var(--st-ink);
+  font-family: var(--st-serif);
+  font-size: 1.12rem;
+  font-weight: 600;
+}
+.st-empty p { max-width: 46ch; margin: 0 auto; color: var(--st-ink-3); font-size: var(--st-fs-sm); }
+.st-table-card .st-empty { border: 0; border-radius: 0; }
+
+.st-sticky { position: sticky; top: var(--st-3); }
+
+.st-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+}
+.st-stat-grid > div, .st-stat-grid > a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-1);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+  color: inherit;
+  text-decoration: none;
+}
+.st-stat-grid > a:hover { border-color: var(--st-line-2); background: var(--st-surface-2); }
+.st-stat-grid strong {
+  color: var(--st-ink);
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.1;
+}
+.st-stat-grid span { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-stat-grid-small { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); margin: 0; }
+.st-stat-grid-small > div { padding: var(--st-3); border-color: transparent; background: var(--st-surface-2); }
+.st-stat-grid-small strong { font-size: 1.2rem; }
+
+/* ==========================================================================
+   6. Tables
+   ==========================================================================
+   Dense, quiet, and scannable: an uppercase micro header, hairline rows, a
+   single hover tint, and numbers that line up under a right-aligned header. */
+
+.st-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--st-2) var(--st-3);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+}
+.st-filters .st-filter { display: flex; flex-direction: column; gap: 5px; }
+.st-filters label {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.st-filters input[type="search"] { width: min(340px, 100%); }
+.st-filters a { align-self: center; padding: var(--st-2) var(--st-1); font-size: var(--st-fs-xs); }
+.st-filters button { align-self: flex-end; }
+
+.st-table-card {
+  overflow: hidden;
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+}
+.st-table-scroll { overflow-x: auto; }
+
+.st-data-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: var(--st-fs-sm);
+}
+.st-data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--st-3) var(--st-4);
+  border-bottom: 1px solid var(--st-line-2);
+  background: var(--st-surface-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-align: left;
+  text-transform: uppercase;
   white-space: nowrap;
 }
-.st-ok { background: var(--st-ok-soft); color: var(--st-ok); border-color: color-mix(in srgb, var(--st-ok) 28%, transparent); }
-.st-wait { background: var(--st-wait-soft); color: var(--st-wait); border-color: color-mix(in srgb, var(--st-wait) 28%, transparent); }
-.st-attn { background: var(--st-attn-soft); color: var(--st-attn); border-color: color-mix(in srgb, var(--st-attn) 34%, transparent); }
-.st-bad { background: var(--st-bad-soft); color: var(--st-bad); border-color: color-mix(in srgb, var(--st-bad) 30%, transparent); }
-.st-info { background: var(--st-info-soft); color: var(--st-info); border-color: color-mix(in srgb, var(--st-info) 28%, transparent); }
-.st-mute { background: var(--st-mute-soft); color: var(--st-mute); border-color: var(--st-hairline); }
+.st-data-table td {
+  padding: var(--st-3) var(--st-4);
+  border-bottom: 1px solid var(--st-line);
+  color: var(--st-ink);
+  vertical-align: top;
+}
+.st-data-table tbody tr:last-child td { border-bottom: 0; }
+.st-data-table tbody tr:hover td { background: var(--st-surface-2); }
+.st-data-table td small,
+.st-data-table td > span + small {
+  display: block;
+  margin-top: 3px;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  overflow-wrap: anywhere;
+}
+.st-data-table a { color: var(--st-ink); font-weight: 600; text-decoration: none; }
+.st-data-table a:hover { color: var(--st-accent); text-decoration: underline; }
+.st-cell-strong { font-weight: 650; }
+/* The leading column is the row's identity — a payment's provider, a refund's
+   reference. Auto table layout sizes it from whatever the current page happens
+   to hold, so a page of short real values ("Stripe", "Chargily") collapses a
+   column that a page of long seeded ones ("Mock (tests/local only)") made
+   comfortable, and the two pages read as different tables. A floor keeps them
+   the same, and the identity line itself does not wrap mid-word. */
+.st-data-table tbody td:first-child { min-width: 150px; }
+.st-data-table tbody td:first-child > strong,
+.st-data-table tbody td:first-child > .st-cell-strong { white-space: nowrap; }
+/* Numbers align on their last digit, under a header that agrees with them. */
+.st-data-table th.is-numeric, .st-data-table td.is-numeric { text-align: right; }
+.st-data-table td.is-numeric small { text-align: right; }
+/* A reference is quoted, not read. */
+.st-data-table .st-ref { font-family: var(--st-mono); font-size: var(--st-fs-micro); letter-spacing: -.01em; }
 
-/* --------------------------------------------------------------------------
-   5. Money
-   -------------------------------------------------------------------------- */
+.st-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  padding: var(--st-3) var(--st-4);
+  border-top: 1px solid var(--st-line);
+  background: var(--st-surface-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+}
+.st-pagination div { display: flex; gap: var(--st-4); }
+
+.st-keyvalues {
+  width: 100%;
+  margin: 0 0 var(--st-3);
+  border-collapse: collapse;
+  font-size: var(--st-fs-sm);
+  table-layout: fixed;
+}
+.st-keyvalues thead th {
+  padding: var(--st-2) var(--st-3);
+  border-bottom: 1px solid var(--st-line-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.st-keyvalues tbody th {
+  width: 44%;
+  padding: var(--st-2) var(--st-3);
+  border-bottom: 1px solid var(--st-line);
+  color: var(--st-ink);
+  font-weight: 500;
+  text-align: left;
+}
+.st-keyvalues tbody td {
+  padding: var(--st-2) var(--st-3);
+  border-bottom: 1px solid var(--st-line);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.st-keyvalues .st-source { width: 30%; font-weight: 400; }
+.st-keyvalues code {
+  color: var(--st-ink-3);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-micro);
+  overflow-wrap: anywhere;
+}
+.st-keyvalues-note { margin: 0; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-confirm-list { margin: 0; padding: var(--st-3) var(--st-4) var(--st-4) 34px; }
+.st-confirm-list li { padding: 3px 0; }
+
+/* ==========================================================================
+   7. Chips and tones
+   ==========================================================================
+   Colour is never the only signal. Every chip carries the word; the tones that
+   mean "someone has to act" carry a heavier weight and a stronger border as
+   well, so the queue still sorts itself for an operator who cannot separate
+   the hues. */
+
+.st-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--st-mute-line);
+  border-radius: var(--st-r-pill);
+  background: var(--st-mute-bg);
+  color: var(--st-mute);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.st-chip::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.st-chip.st-ok { border-color: var(--st-ok-line); background: var(--st-ok-bg); color: var(--st-ok); }
+.st-chip.st-wait { border-color: var(--st-wait-line); background: var(--st-wait-bg); color: var(--st-wait); }
+.st-chip.st-info { border-color: var(--st-info-line); background: var(--st-info-bg); color: var(--st-info); }
+.st-chip.st-mute { border-color: var(--st-mute-line); background: var(--st-mute-bg); color: var(--st-mute); }
+.st-chip.st-mute::before { background: none; box-shadow: inset 0 0 0 1px currentColor; }
+.st-chip.st-attn {
+  border-color: var(--st-attn-line);
+  border-width: 1.5px;
+  background: var(--st-attn-bg);
+  color: var(--st-attn);
+  font-weight: 700;
+}
+.st-chip.st-bad {
+  border-color: var(--st-bad-line);
+  border-width: 1.5px;
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+  font-weight: 700;
+}
+
+/* Text tone, deliberately separate from the chip so a bare word never picks up
+   a chip's ground. */
+.st-tone-ok { color: var(--st-ok); }
+.st-tone-wait { color: var(--st-wait); }
+.st-tone-attn { color: var(--st-attn); }
+.st-tone-bad { color: var(--st-bad); }
+.st-tone-info { color: var(--st-info); }
+.st-tone-mute { color: var(--st-ink-3); }
+
+/* ==========================================================================
+   8. Lists, facts, timelines
+   ========================================================================== */
+
+.st-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--st-4) var(--st-5);
+  margin: 0;
+}
+.st-facts > div { min-width: 0; }
+.st-facts dt {
+  margin-bottom: 3px;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.st-facts dd { margin: 0; color: var(--st-ink); font-size: var(--st-fs-body); overflow-wrap: anywhere; }
+.st-facts dd small { display: block; color: var(--st-ink-3); font-size: var(--st-fs-micro); }
+/* Money in a definition list is read, not summed down a column, so it
+   keeps the tabular figures and drops the column alignment. */
+.st-facts dd .st-money { min-width: 0; text-align: left; }
+.st-fact-wide { grid-column: 1 / -1; }
+
+.st-reading-list, .st-timeline, .st-leg-list, .st-route, .st-attention-list, .st-clear-list { list-style: none; }
+.st-reading-list > li::marker, .st-timeline > li::marker, .st-leg-list > li::marker,
+.st-route > li::marker, .st-attention-list > li::marker { content: ""; }
+.st-reading-list { margin: 0; padding: 0; list-style: none; }
+.st-reading-list > li, .st-reading-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  padding: var(--st-3) 0;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-reading-list > li:last-child, .st-reading-list > div:last-child { border-bottom: 0; }
+.st-reading-list > li > div, .st-reading-list > div > div { min-width: 0; }
+.st-reading-list strong { display: block; font-size: var(--st-fs-body); font-weight: 650; }
+.st-reading-list small { display: block; margin-top: 2px; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+
+.st-timeline { margin: 0; padding: 0; list-style: none; }
+.st-timeline li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--st-2) 0 var(--st-2) var(--st-4);
+  border-left: 1px solid var(--st-line-2);
+}
+.st-timeline li::before {
+  position: absolute;
+  top: 13px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-surface);
+  box-shadow: inset 0 0 0 2px var(--st-ink-3);
+  content: "";
+}
+.st-timeline li:first-child::before { box-shadow: inset 0 0 0 3px var(--st-accent); }
+.st-timeline li.is-empty { border-left-color: transparent; color: var(--st-ink-3); font-size: var(--st-fs-sm); }
+.st-timeline li.is-empty::before { display: none; }
+.st-timeline strong { font-size: var(--st-fs-sm); font-weight: 650; }
+.st-timeline span { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-timeline a { text-decoration: none; }
+
+.st-record-block {
+  margin-bottom: var(--st-3);
+  padding-bottom: var(--st-3);
+  border-bottom: 1px solid var(--st-line);
+}
+.st-record-block:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.st-record-block > strong { margin-right: var(--st-2); }
+.st-record-block small { display: block; margin-top: var(--st-1); color: var(--st-ink-3); font-family: var(--st-mono); font-size: var(--st-fs-micro); }
+.st-record-block p { margin: var(--st-2) 0 0; font-size: var(--st-fs-sm); }
+
+.st-technical-links { display: flex; flex-wrap: wrap; gap: var(--st-1) var(--st-4); }
+
+/* ==========================================================================
+   9. Money
+   ==========================================================================
+   Every amount here is a stored integer of euro cents rendered once. Nothing
+   below recomputes, converts or rounds; the rules only make a misread hard. */
 
 .st-money {
   display: inline-block;
   min-width: 5.5em;
-  text-align: right;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+  text-align: right;
   white-space: nowrap;
 }
 /* The amount that carries the consequence of the row. */
-.st-money-lead { font-weight: 700; color: var(--body-loud-color); }
-
+.st-money-lead { color: var(--st-ink); font-weight: 700; }
 td .st-money, th .st-money { width: 100%; }
 
-/* --------------------------------------------------------------------------
-   6. Irreversible actions
-   -------------------------------------------------------------------------- */
+/* Canonical obligation against what a provider actually moved. The canonical
+   euro figure is the larger of the two, always. */
+.st-money-pair { display: flex; flex-direction: column; gap: 2px; }
+.st-money-pair strong { font-size: var(--st-fs-body); font-variant-numeric: tabular-nums; font-weight: 700; }
+.st-money-pair small { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-variant-numeric: tabular-nums; }
 
-.submit-row input[name="_delete"],
-.deletelink, .deletelink-box a, a.deletelink {
+.st-money-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+}
+.st-money-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-1);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-money-strip span { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.st-money-strip strong {
+  color: var(--st-ink);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.st-money-strip .is-total {
+  border-color: var(--st-line-2);
+  border-left: 3px solid var(--st-accent);
+  background: var(--st-surface);
+}
+.st-money-strip .is-total strong { font-size: 1.35rem; }
+.st-money-stack { grid-template-columns: 1fr; }
+
+/* The commission worked example: reward, fee, total, as one sentence of
+   arithmetic rather than three unrelated fields. */
+.st-worked {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: var(--st-2);
+  margin: 0 0 var(--st-3);
+  padding: var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-worked > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.st-worked span { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.st-worked strong { color: var(--st-ink); font-size: 1.08rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+.st-worked .st-worked-op { color: var(--st-ink-3); font-size: 1rem; font-weight: 400; }
+.st-worked .is-result strong { color: var(--st-accent); }
+
+/* The posting deposit is a percentage held between a floor and a ceiling.
+   Three number fields never said that; this does. */
+.st-band {
+  display: flex;
+  align-items: stretch;
+  margin: 0 0 var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  overflow: hidden;
+}
+.st-band > div { flex: 1 1 0; padding: var(--st-3) var(--st-4); border-right: 1px solid var(--st-line); }
+.st-band > div:last-child { border-right: 0; }
+.st-band > div.is-lead { background: var(--st-surface); }
+.st-band span { display: block; color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.st-band strong { color: var(--st-ink); font-size: 1.05rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+
+.st-consequence {
+  margin-top: var(--st-4);
+  padding: var(--st-4);
+  border: 1px solid var(--st-attn-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-attn-bg);
+}
+.st-consequence h3 { margin: 0 0 var(--st-3); color: var(--st-attn); font-size: var(--st-fs-h3); }
+.st-consequence dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--st-3); margin: 0 0 var(--st-4); }
+.st-consequence dt { color: var(--st-ink-2); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.st-consequence dd { margin: 3px 0 0; font-size: 1.05rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ==========================================================================
+   10. Routes
+   ==========================================================================
+   A journey is the product. Printing it as `A · region · country → B · region ·
+   country` is technically complete and unreadable; these rules make the shape
+   of the trip the thing that is seen, and keep the administrative context as
+   the second line it belongs on. */
+
+.st-route {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--st-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-route-node {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--st-2) var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-route-node b {
+  color: var(--st-ink);
+  font-size: var(--st-fs-body);
+  font-weight: 650;
+  letter-spacing: -.005em;
+}
+.st-route-node .st-route-code {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-1);
+  color: var(--st-ink-2);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.st-route-node small { color: var(--st-ink-3); font-size: var(--st-fs-micro); }
+.st-route-leg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  align-self: center;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  white-space: nowrap;
+}
+.st-route-leg svg { width: 15px; height: 15px; }
+.st-route-leg.is-flight { color: var(--st-info); }
+.st-route-leg.is-drive { color: var(--st-ink-3); }
+
+/* The one-line form used inside a table cell. */
+.st-route-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: var(--st-fs-sm); }
+.st-route-line b { font-weight: 650; }
+.st-route-line .st-route-code {
+  padding: 0 4px;
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-1);
+  color: var(--st-ink-2);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-micro);
+}
+.st-route-line .st-route-sep { color: var(--st-ink-3); }
+.st-route-line svg { width: 13px; height: 13px; color: var(--st-ink-3); }
+
+.st-leg-list { margin: 0; padding: 0; list-style: none; }
+.st-leg-list > li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: var(--st-3);
+  padding: var(--st-4) 0;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-leg-list > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.st-leg-index {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--st-line-2);
+  border-radius: 50%;
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.st-leg-body { min-width: 0; display: flex; flex-direction: column; gap: var(--st-2); }
+.st-leg-meta { display: flex; flex-wrap: wrap; gap: var(--st-1) var(--st-4); color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-leg-meta b { color: var(--st-ink-2); font-weight: 600; }
+
+/* ==========================================================================
+   11. Overview queues
+   ==========================================================================
+   The count is what is scanned, so the count is the largest thing in the row.
+   A raised queue carries a tone rule down its edge; a cleared queue is filed
+   below in a quiet list, because "nothing to do" and "not checked" must never
+   look the same. */
+
+.dashboard #content { width: auto; max-width: 1180px; }
+
+.st-attention, .st-queues {
+  margin: 0 0 var(--st-5);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+  overflow: hidden;
+}
+.st-attention-head, .st-queues-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--st-2) var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border-bottom: 1px solid var(--st-line);
+  background: var(--st-surface-2);
+}
+.st-attention-head h2, .st-queues-head h2 {
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: var(--st-ink);
+  font-family: var(--st-sans);
+  font-size: var(--st-fs-h3);
+  font-weight: 700;
+  letter-spacing: .01em;
+  text-transform: none;
+}
+.st-attention-summary { margin: 0; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+
+.st-attention-list, .st-queue-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-attention-row {
+  margin: 0;
+  list-style: none;
+  border-top: 1px solid var(--st-line);
+  border-right: 1px solid var(--st-line);
+}
+.st-attention-list > .st-attention-row:first-child,
+.st-attention-list > .st-attention-row:nth-child(2):not(:nth-child(n + 3)) { border-top: 0; }
+.st-attention-row::marker { content: ""; }
+.st-attention-row a {
+  display: grid;
+  grid-template-columns: minmax(2.2ch, auto) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--st-3);
+  padding: var(--st-3) var(--st-4);
+  color: inherit;
+  text-decoration: none;
+}
+.st-attention-row a:hover { background: var(--st-surface-2); }
+.st-attention-count {
+  grid-row: span 2;
+  align-self: center;
+  color: var(--st-ink-3);
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1;
+  text-align: right;
+}
+.st-attention-label { color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 650; }
+.st-attention-hint { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-attention-bad { box-shadow: inset 3px 0 0 var(--st-bad); }
+.st-attention-bad .st-attention-count { color: var(--st-bad); }
+.st-attention-attn { box-shadow: inset 3px 0 0 var(--st-attn); }
+.st-attention-attn .st-attention-count { color: var(--st-attn); }
+.st-attention-foot {
+  margin: 0;
+  padding: var(--st-2) var(--st-4);
+  border-top: 1px solid var(--st-line);
+  background: var(--st-surface-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+}
+
+/* The map on the overview. A section tab shows where you can go; this shows
+   what is inside each section without making the shell carry twenty links. */
+.st-directory { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--st-4) var(--st-5); }
+.st-directory h3 {
+  margin: 0 0 var(--st-2);
+  padding-bottom: var(--st-1);
+  border-bottom: 1px solid var(--st-line);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.st-directory ul { margin: 0; padding: 0; list-style: none; }
+.st-directory li { margin: 0; list-style: none; }
+.st-directory li::marker { content: ""; }
+.st-directory a { display: block; padding: 3px 0; color: var(--st-ink); font-size: var(--st-fs-sm); text-decoration: none; }
+.st-directory a:hover { color: var(--st-accent); text-decoration: underline; }
+
+/* Cleared queues: present, checked, and quiet. */
+.st-clear-list { display: flex; flex-wrap: wrap; gap: var(--st-2); margin: 0; padding: var(--st-4); list-style: none; }
+.st-clear-list li { margin: 0; list-style: none; }
+.st-clear-list li::marker { content: ""; }
+.st-clear-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-2);
+  padding: var(--st-2) var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-pill);
+  background: var(--st-surface-2);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  text-decoration: none;
+}
+.st-clear-list a:hover { border-color: var(--st-line-2); color: var(--st-ink); }
+.st-clear-list a::before { color: var(--st-ok); content: "\2713"; font-weight: 700; }
+
+/* ==========================================================================
+   12. Evidence and cases
+   ==========================================================================
+   A document that has to be judged cannot be a thumbnail. The preview is the
+   largest object on the review screen, and opening it full size is one obvious
+   control away. */
+
+.st-evidence-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--st-4);
+  margin-bottom: var(--st-4);
+}
+.st-evidence-previews figure { margin: 0; min-width: 0; }
+.st-evidence-previews a { display: block; text-decoration: none; }
+.st-evidence-previews img {
+  display: block;
+  width: 100%;
+  height: 340px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-3);
+  object-fit: contain;
+}
+.st-evidence-previews a:hover img { border-color: var(--st-accent); }
+.st-evidence-previews figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--st-2);
+  margin-top: var(--st-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+}
+.st-evidence-previews figcaption b { color: var(--st-ink); font-weight: 650; }
+
+.st-evidence-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--st-2); }
+.st-evidence {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-evidence strong { display: block; font-size: var(--st-fs-sm); font-weight: 650; }
+.st-evidence small, .st-privacy-note { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-privacy-note { display: block; margin: var(--st-4) 0 0; }
+
+.st-evidence-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-4);
+  padding: var(--st-3) 0;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-evidence-row:last-child { border-bottom: 0; }
+.st-evidence-row > div { min-width: 0; }
+.st-evidence-row strong { display: block; font-size: var(--st-fs-sm); font-weight: 650; }
+.st-evidence-row small { display: block; margin-top: 2px; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-evidence-row p { margin: var(--st-2) 0 0; font-size: var(--st-fs-sm); white-space: pre-wrap; }
+.st-case-reason {
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border-left: 3px solid var(--st-line-2);
+  color: var(--st-ink);
+  font-size: var(--st-fs-body);
+  white-space: pre-wrap;
+}
+
+.st-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--st-3);
+  margin-bottom: var(--st-4);
+  padding-bottom: var(--st-4);
+  border-bottom: 1px solid var(--st-line);
+}
+.st-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid var(--st-line-2);
+  border-radius: 50%;
+  background: var(--st-surface-2);
+  color: var(--st-ink-2);
+  font-family: var(--st-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.st-identity-body { min-width: 0; }
+.st-identity-body strong { display: block; color: var(--st-ink); font-size: var(--st-fs-h3); font-weight: 650; }
+.st-identity-body span { color: var(--st-ink-3); font-size: var(--st-fs-xs); overflow-wrap: anywhere; }
+
+.st-role-list details { padding: var(--st-3) 0; border-bottom: 1px solid var(--st-line); }
+.st-role-list details:last-child { border-bottom: 0; }
+.st-role-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  cursor: pointer;
+  list-style: none;
+}
+.st-role-list summary::-webkit-details-marker { display: none; }
+.st-role-list summary strong { font-size: var(--st-fs-body); font-weight: 650; }
+.st-role-list summary span { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-role-list summary::after {
+  color: var(--st-ink-3);
+  content: "\203A";
+  font-size: 1.1rem;
+  line-height: 1;
+  transform: rotate(90deg);
+}
+.st-role-list details[open] summary::after { transform: rotate(-90deg); }
+.st-role-list p { margin: var(--st-2) 0 0; color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+
+.st-staff-actions { display: grid; gap: var(--st-4); min-width: 240px; padding-top: var(--st-3); }
+.st-disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--st-info);
+  font-size: var(--st-fs-xs);
+  font-weight: 600;
+  list-style: none;
+}
+.st-disclosure > summary::-webkit-details-marker { display: none; }
+.st-disclosure > summary::before { content: "\203A"; display: inline-block; transform: rotate(90deg); }
+.st-disclosure[open] > summary::before { transform: rotate(-90deg); }
+
+/* ==========================================================================
+   13. Health and providers
+   ========================================================================== */
+
+.st-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--st-2); margin-bottom: var(--st-4); }
+.st-health-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-1);
+  padding: var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+}
+.st-health-card > span {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.st-health-card strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--st-fs-h3);
+  font-weight: 650;
+}
+.st-health-card strong::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.st-health-card small { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-health-card.is-attn { border-color: var(--st-attn-line); background: var(--st-attn-bg); }
+.st-health-card.is-bad { border-color: var(--st-bad-line); background: var(--st-bad-bg); }
+
+/* ==========================================================================
+   14. Forms
+   ==========================================================================
+   A destructive control never looks like a normal one, and a normal one never
+   looks like the primary one. */
+
+.st-form p { margin: 0 0 var(--st-4); }
+.st-form p:last-of-type { margin-bottom: var(--st-4); }
+.st-field { margin: 0 0 var(--st-4); }
+.st-form label, .st-field label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  font-weight: 650;
+}
+.st-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.st-form select,
+.st-form textarea,
+.st-field input, .st-field textarea, .st-field select,
+.st-filters input, .st-filters select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-canvas);
+  color: var(--st-ink);
+  font: inherit;
+  font-size: var(--st-fs-sm);
+  line-height: 1.4;
+}
+.st-form textarea, .st-field textarea { min-height: 76px; resize: vertical; }
+.st-form select, .st-filters select { padding-right: 30px; }
+.st-form input:focus, .st-form select:focus, .st-form textarea:focus,
+.st-filters input:focus, .st-filters select:focus { border-color: var(--st-focus); }
+.st-form .helptext, .st-form small, .st-field small {
+  display: block;
+  margin-top: var(--st-1);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+}
+.st-form ul.errorlist, .st-field ul.errorlist {
+  margin: var(--st-1) 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--st-bad);
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+  font-size: var(--st-fs-xs);
+  font-weight: 600;
+  list-style: none;
+}
+
+/* A confirmation is a box the eye meets before the sentence, not a sentence
+   with an orphaned box under it. */
+.st-form p:has(> input[type="checkbox"]),
+.st-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-form p:has(> input[type="checkbox"]) label,
+.st-check label {
+  order: 2;
+  display: inline;
+  margin: 0;
+  color: var(--st-ink);
+  font-size: var(--st-fs-sm);
+  font-weight: 500;
+}
+.st-form p:has(> input[type="checkbox"]) > input[type="checkbox"],
+.st-check input[type="checkbox"] {
+  order: 1;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 2px 0 0;
+  accent-color: var(--st-accent);
+}
+.st-check label a { text-decoration: underline; }
+
+.st-split-actions, .st-inline-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--st-2);
+  margin-top: var(--st-4);
+}
+.st-split-actions .st-spacer { flex: 1 1 auto; }
+
+.st-filters button, .st-form button, .st-inline-actions button, .button,
+a.button, input[type="submit"].st-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--st-r-2);
+  background: var(--st-shell-2);
+  color: var(--st-ink-invert);
+  font-size: var(--st-fs-xs);
+  font-weight: 650;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+}
+.st-filters button:hover, .st-form button:hover, .button:hover { background: var(--st-shell); color: #fff; }
+html[data-theme="dark"] .st-filters button,
+html[data-theme="dark"] .st-form button,
+html[data-theme="dark"] .button { color: var(--st-ink); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="auto"] .st-filters button,
+  html[data-theme="auto"] .st-form button,
+  html[data-theme="auto"] .button { color: var(--st-ink); }
+}
+
+/* Quiet control: present, reachable, and clearly not the thing to press. */
+.st-button-quiet, a.button.st-button-quiet {
+  border-color: var(--st-line-2);
+  background: transparent;
+  color: var(--st-ink-2);
+  font-weight: 600;
+}
+.st-button-quiet:hover, a.button.st-button-quiet:hover { background: var(--st-surface-2); color: var(--st-ink); }
+
+.st-button-ok { background: var(--approve-button-bg) !important; color: #fff !important; }
+.st-button-ok:hover { background: var(--approve-button-hover-bg) !important; }
+.st-button-danger { background: var(--delete-button-bg) !important; color: #fff !important; }
+.st-button-danger:hover { background: var(--delete-button-hover-bg) !important; }
+button[disabled], .st-form button[disabled] {
+  background: var(--st-surface-3) !important;
+  color: var(--st-ink-3) !important;
+  cursor: not-allowed;
+}
+
+/* Approve and reject are the point of the review screen. They are large,
+   adjacent, and not the same colour as each other or as anything else. */
+.st-decide { display: grid; grid-template-columns: 1fr 1fr; gap: var(--st-2); margin-top: var(--st-4); }
+.st-decide button { justify-content: center; padding: 11px 12px; font-size: var(--st-fs-sm); }
+
+.st-inline-actions form { display: flex; align-items: center; gap: var(--st-1); }
+.st-inline-actions select { max-width: 150px; }
+
+/* Small shared utilities. */
+.st-rule { margin: var(--st-4) 0; border: 0; border-top: 1px solid var(--st-line); }
+.st-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.st-filter-clear { color: var(--st-ink-2); font-weight: 600; }
+
+/* ==========================================================================
+   15. Django's own screens
+   ==========================================================================
+   Reached only through the owner-only technical records escape hatch, but it
+   still has to be legible when it is. */
+
+.module { border: 1px solid var(--st-line); border-radius: var(--st-r-2); }
+.module caption, .module h2 { letter-spacing: .02em; }
+#content h1 { font-family: var(--st-serif); font-weight: 600; letter-spacing: -.01em; }
+/* No `overflow: hidden`: Django's changelist relies on the results table being
+   able to spill under the filter rail, and clipping it silently truncates a
+   date column instead of scrolling it. */
+#changelist .results { overflow-x: auto; }
+#changelist table { font-variant-numeric: tabular-nums; }
+#changelist table thead th { font-size: var(--st-fs-micro); letter-spacing: .07em; text-transform: uppercase; }
+#changelist table tbody td, #changelist table tbody th { padding: var(--st-2) var(--st-3); }
+#changelist tbody tr:hover > * { background: var(--st-surface-2); }
+#changelist table tbody th a, #changelist .field-id, #changelist .field-public_reference { font-variant-numeric: tabular-nums; }
+#changelist-filter { border-inline-start: 1px solid var(--st-line); }
+
+.submit-row input[name="_delete"], .deletelink, .deletelink-box a, a.deletelink {
   background: var(--delete-button-bg);
   color: #fff;
   font-weight: 700;
@@ -289,170 +1672,55 @@ td .st-money, th .st-money { width: 100%; }
 .delete-confirmation #content h1 { color: var(--st-bad); }
 .delete-confirmation .module { border-color: var(--st-bad); }
 
-/* A read-only financial page should say so rather than merely lack buttons. */
-.st-readonly-note {
-  margin: 0 0 14px;
-  padding: 10px 14px;
-  border: 1px dashed var(--st-attn);
-  border-radius: 8px;
-  background: var(--st-attn-soft);
-  color: var(--st-attn);
-  font-size: .82rem;
-}
+ul.messagelist li { border-radius: var(--st-r-2); }
 
-/* --------------------------------------------------------------------------
-   7. Messages and focus
-   -------------------------------------------------------------------------- */
-
-ul.messagelist li { border-radius: 6px; }
+/* ==========================================================================
+   16. Responsive, motion, print
+   ========================================================================== */
 
 a:focus-visible, button:focus-visible, input:focus-visible,
 select:focus-visible, textarea:focus-visible, summary:focus-visible {
-  outline: 3px solid #2a62a6;
+  outline: 3px solid var(--st-focus);
   outline-offset: 2px;
+  border-radius: var(--st-r-1);
+}
+
+@media (max-width: 1180px) {
+  :root { --st-gutter: 24px; }
+  .st-grid-main { grid-template-columns: minmax(0, 1.45fr) minmax(280px, .8fr); }
+}
+
+@media (max-width: 980px) {
+  .st-grid-main, .st-grid-2, .st-grid-3 { grid-template-columns: 1fr; }
+  .st-nav-secondary { overflow-x: auto; flex-wrap: nowrap; }
+  .st-sticky { position: static; }
+  .st-worked { grid-template-columns: 1fr; text-align: left; }
+  .st-worked .st-worked-op { display: none; }
+  .st-worked > div { padding: var(--st-2) 0; border-bottom: 1px solid var(--st-line); }
+  .st-worked > div:last-child { border-bottom: 0; }
+  .st-band { flex-direction: column; }
+  .st-band > div { border-right: 0; border-bottom: 1px solid var(--st-line); }
+  .st-band > div:last-child { border-bottom: 0; }
+}
+
+@media (max-width: 720px) {
+  :root { --st-gutter: 16px; }
+  body #header { padding: var(--st-2) var(--st-gutter); }
+  .st-page-head { display: block; }
+  .st-page-aside { margin-top: var(--st-3); }
+  .st-card { padding: var(--st-4); }
+  .st-facts { grid-template-columns: 1fr; }
+  .st-fact-wide { grid-column: auto; }
+  .st-decide { grid-template-columns: 1fr; }
+  .st-evidence-row { flex-direction: column; }
+  .st-evidence-previews img { height: 240px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
-/* --------------------------------------------------------------------------
-   8. The dashboard queue panel
-   --------------------------------------------------------------------------
-   Density over decoration: nine rows, each a number, a name and a link. The
-   count is set large because the count is what is being scanned; the tone is a
-   second signal behind the number, never the only one — a queue at zero is
-   muted rather than green, so "nothing to do" and "not checked" cannot be
-   confused. */
-
-/* Django caps the dashboard column at 600px, which was right when the page
-   was only a directory. The queue panel is the first thing on it now and reads
-   as a row of tiles, so the column is allowed to use the screen — the sidebar
-   still hangs off the right on its own negative margin. */
-.dashboard #content { width: auto; max-width: 1080px; }
-
-.st-attention {
-  margin-bottom: 24px;
-  border: 1px solid var(--st-hairline);
-  border-radius: 8px;
-  background: var(--st-paper);
-  overflow: hidden;
+@media print {
+  #header, .st-primary-nav, div.breadcrumbs, .st-filters, .st-page-actions { display: none !important; }
+  .st-card, .st-table-card { border-color: #999; box-shadow: none; break-inside: avoid; }
 }
-
-.st-attention-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 16px;
-  padding: 12px 16px;
-  background: var(--header-bg);
-  color: var(--header-link-color);
-}
-.st-attention-head h2 {
-  margin: 0;
-  padding: 0;
-  background: none;
-  color: var(--header-link-color);
-  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: .01em;
-  text-transform: none;
-}
-.st-attention-summary { margin: 0; color: var(--breadcrumbs-fg); font-size: .8rem; }
-.st-attention-raised { color: var(--accent); font-weight: 700; }
-
-.st-attention-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  background: var(--st-paper);
-}
-/* Separators are drawn by the cells, not by a gap over a coloured backing: a
-   gap leaves the backing showing wherever the last row is short of a full
-   set, which reads as a tenth, empty queue. */
-.st-attention-row {
-  margin: 0;
-  list-style: none;
-  background: var(--st-paper);
-  border-block-start: 1px solid var(--st-hairline);
-  border-inline-end: 1px solid var(--st-hairline);
-}
-.st-attention-row::marker { content: ""; }
-.st-attention-row a {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 12px;
-  padding: 12px 16px;
-  color: inherit;
-  text-decoration: none;
-}
-.st-attention-row a:hover { background: var(--selected-bg); }
-.st-attention-count {
-  grid-row: span 2;
-  align-self: center;
-  min-width: 1.6em;
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--body-quiet-color);
-}
-.st-attention-label { font-weight: 700; font-size: .88rem; color: var(--body-loud-color); }
-.st-attention-hint { font-size: .78rem; color: var(--body-quiet-color); }
-
-.st-attention-bad .st-attention-count { color: var(--st-bad); }
-.st-attention-attn .st-attention-count { color: var(--st-attn); }
-.st-attention-bad { box-shadow: inset 3px 0 0 var(--st-bad); }
-.st-attention-attn { box-shadow: inset 3px 0 0 var(--st-attn); }
-
-.st-attention .st-readonly-note {
-  margin: 0;
-  border: 0;
-  border-top: 1px solid var(--st-hairline);
-  border-radius: 0;
-  background: var(--st-paper-sunken);
-  color: var(--body-quiet-color);
-  font-size: .76rem;
-}
-
-/* --------------------------------------------------------------------------
-   9. Key-value readings (settings revision)
-   -------------------------------------------------------------------------- */
-
-.st-keyvalues {
-  width: 100%;
-  margin: 0 0 14px;
-  border-collapse: collapse;
-  font-size: .84rem;
-}
-.st-keyvalues thead th {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-color);
-  font-size: .68rem;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  text-align: left;
-  color: var(--body-quiet-color);
-}
-.st-keyvalues tbody th {
-  width: 34%;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--st-hairline);
-  font-weight: 600;
-  text-align: left;
-}
-.st-keyvalues tbody td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--st-hairline);
-  font-variant-numeric: tabular-nums;
-}
-.st-keyvalues code { font-size: .76rem; color: var(--body-quiet-color); }
-.st-keyvalues-note { margin: 0; color: var(--body-quiet-color); font-size: .78rem; }
-
-.st-confirm-list { margin: 0; padding: 10px 16px 16px 34px; }
-.st-confirm-list li { padding: 3px 0; }

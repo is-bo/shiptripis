@@ -1,6 +1,6 @@
 # ShipTrip V1 Implementation Status
 
-Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**
+Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -1296,6 +1296,1197 @@ Local release evidence after the final safety edits:
 This checkpoint does not authorize public launch. Provider credentials,
 provider webhooks, outbound email, Google Play submission, and public
 announcement remain disabled or pending explicit operator action.
+
+## Phase 8A — mobile reliability, performance and missing states (2026-08-31)
+
+Phase 8A is implemented. This was a bounded mobile reliability pass; it did not
+start the Phase 8B geography/location work, redesign the admin, activate a
+provider, or replace the Phase 5C visual identity.
+
+### Insets and compact layouts
+
+The shared `AppScaffold` applied horizontal `SafeArea` only and assumed an app
+bar, footer or shell navigation would always own both vertical insets. Welcome,
+authentication and onboarding routes have no app bar, and ordinary surfaces
+without a footer had no shared bottom owner, so their content could enter the
+Android status/cutout or navigation/gesture regions.
+
+`AppScaffold` now consumes the top system inset for app-bar-less or deliberately
+behind-app-bar bodies and the bottom inset whenever no footer owns it. Footer
+safe area, the docked shell navigation, `resizeToAvoidBottomInset`, and
+`AppScrollPadding` continue to own their existing parts without double-padding.
+The contract applies to welcome/onboarding, login/sign-up/password flows, Home,
+Deliveries, Chat, Profile and the task/form routes built on the shared scaffold.
+Sheets retain their existing modal safe-area handling. Coverage exercises
+Android buttons, Android gestures, an iPhone-style home inset, narrow portrait,
+844x390 landscape, 1.6x text, and a 280-pixel keyboard inset.
+
+The same device matrix exposed a separate shared empty-state defect: a
+full-surface `AppEmptyState` inside a sliver received an unbounded height and
+asked a nested scroll view to fill infinity. It now lets the parent own
+scrolling when height is unbounded, eliminating blank/exceptional list empties.
+
+### Performance and Android artifact evidence
+
+The reported slow artifact is a debug build, which carries JIT, assertions,
+service-protocol and widget-inspection overhead and is not a production
+performance measurement. The bounded code audit found no tab-switch refetch
+loop (the indexed shell keeps tabs mounted), no repeated Chat request loop, and
+the important lists already use lazy builders or have bounded result sets. No
+useful motion or identity element was removed.
+
+Two real paint costs were fixed. The full-screen `PaperGrain` painter is now
+isolated by a repaint boundary, and the looping route trace no longer redraws
+its static dashed path and city marks on every plane frame; the backdrop and
+moving plane are separate paint layers. Reduced-motion behavior remains intact.
+
+Android packaging evidence is deliberately split between observed and measured:
+
+- The device-tested debug footprint is the tester's approximately **160 MB**
+  observation. No ShipTrip debug APK file is present in this workspace, and a
+  fresh local ARM64 debug build stops with `No Android SDK found`, so that number
+  could not be independently re-measured here.
+- The available signed universal release APK is **58,651,019 bytes**
+  (**58.65 MB / 55.93 MiB**), SHA-256
+  `149370e8ac386efe7352d3557f18cc5435510b1087fa72b08c4aca9741641451`.
+  This AOT artifact is the realistic production-size evidence; a separate
+  profile APK was not built on the SDK-less workstation.
+- Its compressed native payload is the dominant contributor: x86_64
+  **19.74 MiB**, ARM64 **18.32 MiB**, and ARMv7 **16.01 MiB**. The complete
+  `country_flags` vector set is next at **1.15 MiB**; all other Flutter assets,
+  fonts and Android resources are small. No required font, animation, package
+  or asset was removed for a cosmetic size win.
+- An ARM64-only APK was not built locally. Removing the other two ABI payloads
+  from the measured universal artifact projects approximately **21.17 MB /
+  20.19 MiB**, before build-specific ZIP differences. The operator-triggered
+  Android workflow now defaults private phone-test APKs to ARM64, retains a
+  universal choice, and still builds the full signed release AAB.
+
+### Chat, empty/error states and Profile passport
+
+Chat now calls the server's authoritative eligibility pre-flight before message
+history. Loading, intentional inbox/thread empty, `payment_pending`, ready,
+offline and retryable failure states are distinct. An unfunded Deal is explained
+as a payment gate (with a payment action when the Deal id is known), not rendered
+as a raw 402/403-like failure, and history is not requested before funding.
+Closed funded conversations remain readable while their composer stays blocked.
+
+Chat, Notifications, Payouts and Ratings now render their intentional shared
+empty language without the unbounded-list failure. Deliveries and Home
+discovery/matching already had explicit loading, empty, error and ready states,
+so they were verified rather than redesigned. The user-facing failure audit
+found no screen rendering `DioException`, `serverDetail`, HTTP status or backend
+codes. Structured codes remain internal for control flow and map through the
+shared localized feedback/retry component; regression coverage proves both a
+network-offline state and a `capacity_exceeded` conflict hide raw details.
+
+The passport account concept was recovered from git revision `1640a45`, not
+recreated from memory. Its dark passport/stamp composition is restored with
+current authoritative name/email, KYC and email trust markers, Sender/Traveler
+capabilities, an exact server-filtered completed-Deal count, a clearly labeled
+recent received-rating average, join date and communication language. The old
+hard-coded member number, demo statistics and 12,400 DZD wallet were not
+restored; no internal id is exposed. Missing or failed optional facts render
+honest empty/unavailable values rather than invented data.
+
+### Verification and remaining findings
+
+- `dart format lib test` — clean, 115 files.
+- `flutter analyze --fatal-infos` — no issues.
+- `flutter test` — **224 passed** (205 baseline plus 19 Phase 8A tests).
+- Focused coverage includes all requested safe-area, Chat, Notifications,
+  Payouts, Ratings, passport populated/partial, structured-error and network
+  cases, plus the authoritative paginated completed-count contract.
+- Impeccable UI detector — no findings on the changed UI targets.
+- Workflow YAML parses; `git diff --check` is clean.
+
+No Phase 8A application **BLOCKER**, **MAJOR** or **MINOR** defect remains known.
+Release/profile frame timing and the exact ARM64 APK size remain hardware/build
+evidence gaps, not claimed measurements; the GitHub ARM64 option is the path to
+close them on the next explicitly authorized device build. Existing external
+release blockers below are unchanged.
+
+## Phase 8B — authoritative geography catalogue (2026-08-31)
+
+Phase 8B is implemented as a backend data foundation only. It does not start
+the Phase 8C Flutter country/place picker, alter Journey/DeliveryRequest
+matching, change exact-coordinate Location records, redesign the admin, or
+activate a provider.
+
+The new `locations.Country` and `locations.Place` catalogue uses stable
+`(source, source_id)` identities with an internal immutable primary key,
+canonical and normalized names, parent administration, optional coordinates,
+active state and source/version metadata. `Place` represents administrative
+regions, localities/communes and airports. `PlaceAlternateName` stores only
+source-backed localized names. `AirportLocalityMapping` is an explicit,
+inspectable relationship for an airport's commercially served locality;
+physical context remains on the airport's parent/metadata and is never guessed
+from a display name. Existing user-owned `Location`, legacy `trips.Airport`,
+Journey, JourneyLeg and DeliveryRequest relationships remain intact.
+
+`manage.py import_geography --manifest ...` is transactional, rerunnable and
+source-identity based. It preserves primary keys across renames, updates
+metadata, supports additions and can inactivate missing records only for
+explicitly refreshed sources. `tools/geography/normalize_sources.py` downloads
+fixed allow-listed sources on operator request and produces the normalized
+manifest; bulk geography is intentionally not embedded in migrations.
+
+The verified 2026 manifest contains 56,134 places and 3,833 source-backed
+alternate names. Coverage is 69 Algerian wilayas and 1,541 communes (including
+wilayas 59–69), 34,875 INSEE communes plus 119 parents, 8,132 INE
+municipalities plus 52 provinces/19 autonomous communities, and 10,749
+Destatis AGS municipalities plus 16 states/401 district parents. Germany
+excludes 194 uninhabited
+municipality-free `Textkennzeichen=66` rows and retains the two inhabited type
+65 rows. The conservative OurAirports policy yields 161 scheduled-service
+airports (DZ 31, FR 49, ES 42, DE 39) and excludes closed/unsupported types and
+all unscheduled military, private and general-aviation records.
+
+Algeria now parses the official ONS CGN 2021 PDF for all 1,541 stable commune
+W/C identities and the official JORADP Law 26-06 PDF for every amended mother
+and new-wilaya commune list. Each ONS identity must reconcile exactly once and
+each Law 26-06 list must match exactly. The third-party JSON contributes only
+coordinates, Arabic names, daïra hints and reviewed spelling reconciliation;
+its five-digit `post_code` is not represented as an official ONS identifier.
+France uses INSEE COG 2026, Spain the INE register at 1 January 2026, and
+Germany the Destatis GV-ISys 30 June 2026 extract.
+
+The public API is bounded and read-only: `GET /api/geography/countries` and
+paginated `GET /api/geography/places` support country, query, place type,
+parent and active filters. Responses include stable IDs, parent context,
+airport labels/codes and served-locality context when an explicit mapping is
+present. Search normalization is Unicode-aware (case/accents/combining marks,
+hyphens/apostrophes and Arabic retained) and searches canonical plus
+source-backed alternate names. Catalogue/admin indexes cover source identity,
+country/type/parent/active and normalized names. PostgreSQL partial
+`varchar_pattern_ops` indexes support the default active prefix search without
+requiring another extension; one-character queries use exact matching and
+punctuation-only queries are rejected. Querysets use select/prefetch to avoid
+N+1 responses.
+
+Every airport has a canonical administrative parent through a reviewed
+country-specific ISO-region crosswalk. The versioned mapping file retains the
+seven reviewed commercial contexts (ALG, CDG, ORY, BCN, MAD, FRA and MUC) plus
+separate physical links for ALG, CDG, ORY and BCN. Phase 8C expands this into
+161 active primary served mappings through deterministic source-identity and
+municipality resolution. No display-name inference occurs in the Django
+importer.
+
+Focused import/API/data-quality tests cover idempotence, rename preservation,
+source-scoped retirement, invalid boundary values, hierarchy cycles, Unicode,
+same-name context, inactive filtering and mapping safety. Phase 8C adds an
+exact coverage gate: every selectable airport has one active primary served
+locality, and an unresolved airport is unavailable for matching. OurAirports
+municipality hints are never promoted without deterministic catalogue
+resolution.
+
+Final Phase 8B verification:
+
+- the Phase 8B baseline normalizer completed with 4 countries, 56,134 places,
+  3,833 alternate names and 11 reviewed mappings; nine input artefacts have recorded SHA-256
+  checksums, and the focused PDF/airport normalizer suite passed 3/3;
+- the complete manifest imported transactionally into PostgreSQL 16 and a
+  populated rerun completed in about 143 seconds with counts unchanged;
+  Aflou retained internal ID 56106 / ONS source ID `0319` while remaining
+  parented to wilaya 59;
+- focused final geography import/API tests passed 14/14 on SQLite and 14/14 on
+  PostgreSQL; the wider 251-test Locations/Trips/Parcels/Matching suite was
+  green on both databases (SQLite: 39 expected skips; PostgreSQL: 34 expected
+  skips);
+- PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` used the partial normalized-name
+  pattern indexes for canonical and alternate-prefix branches (0.256 ms in the
+  local 56k-row rehearsal); API serialization is held to three queries by a
+  regression assertion;
+- Ruff, Django check, `makemigrations --check --dry-run`, and `git diff
+  --check` are clean. Two UTF-8 PostgreSQL schema exports were byte-identical
+  at SHA-256 `B16C470B0D25FB851AABE98D01AD6B1778CB90B31A742A670C9C1092AF1FCAA3`.
+  The sqlc query directories remain empty, so no generated Go repository was
+  changed.
+
+## Phase 8C — canonical location UX and locality-based matching (2026-09-01)
+
+Phase 8C is implemented end to end. Active V1 creation now follows
+**Country → canonical Place → optional preferred exact point** for both Sender
+requests and Traveler journeys. Flutter receives only bounded server-side
+catalogue search results; it never downloads the 56k-row catalogue, creates
+matching cities, or infers a locality from a pin. The same canonical Place
+references are used by `DeliveryRequest`, `Journey`, and ordered `JourneyLeg`.
+
+Matching locality is derived authoritatively from the selected `Place` (rather
+than snapshotted or copied): a locality/municipality/commune resolves to itself,
+and an airport resolves through its one active primary `SERVED`
+`AirportLocalityMapping`. This keeps the identity stable and avoids drift if a
+reviewed mapping changes. Compatibility compares only these canonical locality
+IDs. Preferred coordinates, free-text labels, nearby cities, radius, and
+geographic detour do not change basic V1 compatibility. Ordered multi-leg
+subroutes, mode semantics, capacity, proof requirements and start/end leg
+selection remain intact.
+
+Every one of the 161 selectable scheduled-service airports has a deterministic
+primary served-locality mapping: DZ 31, FR 49, ES 42, DE 39. The normalized
+manifest contains 165 mappings total (161 served + four physical context
+rows). `tools/geography/airport_locality_mappings_2026.json` seeds seven
+high-impact served-city policies and four physical contexts. Of the remaining
+154 airports, 81 use the maintained stable-ID source-context override table
+for commercial semantics or ambiguous municipality nomenclature, and 73 use a
+unique authoritative/source municipality-context resolution. Display-name
+guessing is rejected. CDG and ORY both resolve to canonical Paris; ALG resolves
+to the canonical Alger Centre commune under the reviewed commercial Algiers
+policy. An airport that cannot be resolved is not selectable for matching.
+
+Preferred exact points retain the legacy `Location` model but must reference
+the selected canonical Place. The backend uses the existing route-provider
+reverse-geocoding abstraction to validate country/locality context, ignores
+client-supplied provider metadata, fails safely when provider context is
+insufficient, and never promotes a point into a new city. Exact address,
+coordinates, provider metadata and private notes remain hidden before the
+funded Deal state under the existing backend authorization rules.
+
+Legacy schema-2 requests and schema-1 journeys remain readable for private
+fixtures and bounded compatibility tests. They are not guessed or backfilled
+from arbitrary historical pins. The active DeliveryRequest and Journey write
+contracts reject location-only payloads, and the active Location write API
+requires `canonical_place`: all new V1 records use canonical Place references,
+while optional Location IDs must be scoped to those Places. No unrelated
+accounts or lifecycle/finance records were deleted.
+
+Mobile localization covers English, French and Arabic, including RTL. Picker
+states include loading, empty, error/retry, selected, debounce and stale
+request cancellation; changing country clears incompatible results. Optional
+preferred points can be skipped or marked flexible. Flight legs require airport
+endpoints; DRIVE legs accept catalogue localities or airports.
+
+Phase 8C migrations are additive and Django-owned:
+`locations.0005_location_canonical_place`,
+`parcels.0008_remove_deliveryrequest_parcels_delivery_schema_ver_and_more`, and
+`trips.0007_remove_journey_journey_distinct_endpoints_and_more`. The
+PostgreSQL `contracts/sql/schema.sql` was regenerated after applying them;
+sqlc query directories remain empty, so no generated Go repository changed.
+
+Verification:
+
+- Django canonical/location/trips/parcels/matching plus posting-deposit
+  integration suite: **97 passed** on SQLite and **97 passed** on PostgreSQL.
+  The broader matching plus posting-deposit suite passes **181 tests with 29
+  expected skips**.
+- Flutter targeted Phase 8C picker/contract tests: **15 passed**; full mobile
+  suite: **239 passed**; `flutter analyze --fatal-infos`: clean; Dart format:
+  clean.
+- Geography normalizer: **4 countries, 56,134 places, 3,833 alternate names,
+  165 airport mappings**; normalizer unit tests **3/3**; exact airport coverage
+  **161/161**.
+- `manage.py check`, `makemigrations --check --dry-run`, Ruff on changed
+  backend/tools paths, schema export and `git diff --check`: clean. Two local
+  PostgreSQL schema dumps differed only in pg_dump's per-run nonce/version
+  headers and were byte-identical after the repository's documented narrow
+  normalization; sqlc generation is an explicit no-op because all query
+  directories are empty.
+
+Stripe, Chargily, email, map/geocoding and other external providers were not
+activated.
+
+### Phase 8D-V — admin visual and taste pass (2026-09-02, Claude)
+
+A presentation-only pass over the Phase 8D operations console. No business
+logic, no financial locking, no matching, no permission check and no migration
+was touched; no provider was activated; no Flutter file was opened; Phase 8E
+was not started. The work was reviewed against representative seeded states
+rather than blank pages, using a new local dump of all 34 console screens.
+
+**What was wrong.** The Phase 8D information architecture was right, but it
+read as Django admin wearing a new palette. Two `.st-` layers fought Django's
+own variables at the wrong specificity; the navigation was a wrapping band of
+twenty flat links with no current-section anchor; routes printed as
+`Paris · CDG · France → Algiers · ALG · Algeria` run-on strings; money sat in
+prose; the "attention" panel disappeared when it was empty; a KYC operator met
+tiny thumbnails and a generic dropdown instead of an evidence viewer and two
+obvious decisions; and commission, deposit and FX were raw numeric fields with
+no read-back.
+
+**Design system.** `apps/core/static/shiptrip/admin.css` was rewritten as a
+single token layer (canvas / surface / surface-2 / surface-3, three ink tones,
+two line weights, six status families each with text/ground/line, accent, seal,
+plus scales for radius, spacing, shadow and type). Both themes are defined for
+every token. The shell keeps a dark ground in both themes, so it now carries
+its own `--st-shell-fg` / `--st-shell-muted` that do not invert with the
+content palette.
+
+**Navigation.** One row of ten sections with icons and a seal-coloured current
+underline, plus a second band listing the destinations inside the current
+section only. Because a section tab alone would hide its siblings, the overview
+carries a role-filtered map of every destination the signed-in role can open,
+so nothing is more than one click from the landing page.
+
+**Screens.** Overview separates raised queues from cleared ones without hiding
+either. KYC and flight proof lead with large evidence, a waiting-time alert and
+a distinct Approve / Reject pair in a bordered decision card. Journeys, Deals
+and proofs render routes as a node ribbon with airport codes and per-leg mode.
+Deal and Dispute lead with money. Settings explains commission as a worked
+euro example from the real pricing engine, the deposit as a floor/rate/ceiling
+band, and the Chargily rate as `1 EUR = 150.00 DZD` with the euro obligation
+still named as canonical. System reports Healthy / Degraded / Needs attention
+with a dot plus words, and still refuses to imply a worker heartbeat.
+
+**Defects found and fixed during the pass** (all presentation-layer):
+
+- Django's `#container` is a viewport-height column flex box, so the header
+  shrank back to one line on any page tall enough to overflow, clipping the
+  navigation under the breadcrumbs. Fixed with `flex: 0 0 auto`.
+- Django's `responsive.css` turns the header into a column below 1024px, which
+  gave the full-width navigation a 100% *height* basis and broke the shell at
+  laptop and tablet widths. Beaten with a `body`-scoped rule.
+- `#header a:link` outranks a two-class selector, so navigation links took
+  Django's header link colour; in dark mode that resolved to dark ink on the
+  dark shell and the whole navigation went invisible. Fixed by stating the
+  navigation's own `:link`/`:visited` colours.
+- A Django `{# … #}` comment cannot span lines (`tag_re` has no `DOTALL`).
+  Three multi-line comments would have rendered as literal text on the page;
+  one already did. All converted to `{% comment %}`.
+- `--st-ink-3` failed WCAG AA at 11px on the sunken surface (3.58:1), which
+  covered every table header, field label and secondary line in the console.
+  Darkened to `#55636e`; the whole console now passes AA in both themes.
+- The Approve button used `--st-ok`, a *text* token that inverts to a light
+  mint in dark mode, putting white on mint at 2.24:1. Given its own
+  `--approve-button-bg`, dark enough for white text in both themes.
+- The overview's queue counts never reached the template, so the page said
+  "Every queue is empty" beside "7 queues with work waiting".
+- Evidence was listed twice on the KYC screen — once as a preview, once as a
+  link row. The link row is now shown only for files that cannot be previewed.
+
+**Accessibility.** Every rendered console page was audited with a computed
+contrast sweep in both themes; the sweep reports zero failures. Status is never
+colour alone (chip = dot + word); table headers are scoped; the search and
+filter controls are labelled; `:focus-visible` is a 3px ring; destructive
+actions are visually distinct from confirmations; `prefers-reduced-motion` is
+honoured.
+
+Files: `apps/core/static/shiptrip/admin.css` (rewritten),
+`apps/core/admin_display.py`, `apps/core/templatetags/shiptrip_admin.py`,
+`apps/admin_panel/console_views.py`, `apps/admin_panel/console_presenters.py`,
+`apps/admin_panel/console_forms.py`,
+`apps/admin_panel/tests/test_phase8d_console.py`, all fifteen
+`templates/admin/console/*.html` (including a new `_route.html` partial),
+`templates/admin/base_site.html`, `templates/admin/index.html`,
+`tools/preview/dump_console_pages.py` (new),
+`tools/preview/enrich_admin_preview.py` (new), `tools/preview/README.md`,
+`docs/ADMIN_OPERATIONS.md`, `.claude/launch.json`.
+
+Verification: full SQLite suite **1074 passed** (80 skipped);
+PostgreSQL `admin_panel` + `core` + `disputes` + `kyc` + `accounts`
+**206 passed**; `apps.admin_panel` **43 passed**; Ruff clean;
+`manage.py check` clean; `git diff --check` clean. Four console tests were
+updated where they asserted on copy this pass deliberately changed, and one
+where it depended on an unescaped `&` the templates no longer emit.
+
+Known remaining items, none blocking:
+
+- **MINOR** — `apps/core/admin_display.py` and roughly thirty pre-existing
+  files are not `ruff format` clean. The project gate is `ruff check`, which
+  passes; this pass did not reformat files it only edited.
+- **MINOR** — the brand seal's single letter sits at 3.9:1 on the terracotta
+  disc. It is `aria-hidden` decoration rather than content, so it is exempt,
+  but a darker disc would clear AA if the mark is ever made meaningful.
+- **MINOR** — the payments table's provider column is sized for the seeded
+  "Mock (tests/local only)" label and will read tighter than it will in
+  production, where the values are "Stripe" and "Chargily".
+
+### Phase 8D-F — finance refund/reconciliation deadlock repair (2026-09-02)
+
+A focused concurrency repair for the MAJOR Phase 8D-R handed off. No payment,
+pricing or refund product semantic changed, no migration was added, no provider
+was activated, no Flutter file was touched, the admin visual redesign was not
+started and Phase 8E was not started.
+
+**The deadlock, reproduced.** `RefundRaceTests.
+test_a_refund_racing_a_reconciliation_never_exceeds_the_capture` was run
+repeatedly against a local PostgreSQL 16.2 cluster with `log_statement = all`,
+`log_lock_waits = on` and `deadlock_timeout = 200ms`. It deadlocked in 2 of the
+first 5 runs, and PostgreSQL reported:
+
+```
+ERROR:  deadlock detected
+DETAIL: Process 4396 waits for ShareLock on transaction 2818; blocked by 14900.
+        Process 14900 waits for ShareLock on transaction 2819; blocked by 4396.
+        Process 4396: COMMIT
+        Process 14900: SELECT ... FROM "finance_payment_attempt" ...
+CONTEXT: while locking tuple (0,2) in relation "finance_payment_order"
+         SQL statement "SELECT 1 FROM ONLY "public"."finance_payment_order" x
+                        WHERE "id" = $1 FOR KEY SHARE OF x"
+```
+
+**The two transactions.** The statement log named them exactly.
+
+* **A — `finance.services.request_refund` (pid 14900).** `_order_for_update` ->
+  `PaymentOrder` id 1 `FOR UPDATE`; then `PaymentAttempt` id 1 `FOR UPDATE`.
+  Order then attempt: the canonical direction.
+* **B — `finance.services._persist_provider_event` (pid 4396),** the short
+  transaction the webhook opens before any business row.
+  `INSERT INTO finance_provider_event (..., attempt_id, order_id, ...)`, then a
+  `ScheduledJob` insert, then `COMMIT`. It asks for no row lock at all.
+
+**The cycle.** Django emits every foreign key as `DEFERRABLE INITIALLY
+DEFERRED`, so B's foreign keys are not checked when the `INSERT` runs; they are
+checked at `COMMIT`, as one `SELECT 1 FROM <parent> WHERE id = $1 FOR KEY SHARE`
+per constraint, fired in constraint-creation order. For
+`finance_provider_event` that order is `finance_payment_attempt` first and
+`finance_payment_order` second — model field order, chosen by no application
+code.
+
+```
+A holds  PaymentOrder   FOR UPDATE     ->  waits for PaymentAttempt FOR UPDATE
+B holds  PaymentAttempt FOR KEY SHARE  ->  waits for PaymentOrder   FOR KEY SHARE
+```
+
+`FOR KEY SHARE` conflicts with `FOR UPDATE`, so each transaction blocks the
+other and PostgreSQL kills B. The failure is intermittent because it needs B to
+reach `COMMIT` inside the window where A holds the order row and has not yet
+taken the attempt row.
+
+**Root cause.** *Not* the ordering Phase 8D-R suspected. `reconcile_attempt`
+does take `lock_payment_order_aggregate` before `PaymentOrder`, and
+`request_refund` takes only `PaymentOrder -> PaymentAttempt`, but a suffix of the
+canonical order is not an inversion, and the two never met in this deadlock —
+`_persist_provider_event` commits before `reconcile_attempt` ever runs. The real
+inverted order was the database's referential-integrity trigger order, and no
+amount of reordering application statements can fix it, because one of the two
+orders does not belong to the application.
+
+**Canonical order, restated with a strength rule.** The order in
+`apps/core/financial_locks.py` is unchanged:
+
+```
+DeliveryRequest/ParcelRequest -> Match -> Offer -> BoostPurchase -> Journey
+  -> JourneyLeg -> KYC/proof/User witnesses -> Deal -> DealLegAllocation
+  -> DealRecipient -> DealHandoverCode -> Dispute -> Rating -> PaymentOrder
+  -> PaymentAttempt -> PaymentProviderEvent -> PaymentRefund -> Payout
+  -> ledger -> ScheduledJob
+```
+
+What is new is the mode. **Every row in that graph is now acquired
+`FOR NO KEY UPDATE`** — `select_for_update(no_key=True)` — never a bare
+`select_for_update()`. PostgreSQL's row-lock conflict matrix is the whole
+argument: `FOR KEY SHARE` conflicts with `FOR UPDATE` and with nothing else,
+while `FOR NO KEY UPDATE` still conflicts with `FOR SHARE`, `FOR NO KEY UPDATE`
+and `FOR UPDATE`. Two writers therefore still exclude each other exactly as
+before, and a deferred foreign-key check no longer waits on either of them. The
+stronger mode buys only the right to delete a locked row or change its primary
+key; no writer in this graph does either — every row here is append-only or
+updated in place — so nothing was given up. This removes the whole class of
+implicit reverse edges in one move, including two more the audit found:
+inserting a `finance_ledger_entry` or a `notification_outbound_message` while
+holding a `PaymentOrder` lock takes `FOR KEY SHARE` on `deals_deal` at commit,
+which inverts against every writer that enters through `lock_deal_aggregate`.
+
+**Sibling paths audited.** Refund request, provider-event persistence, webhook
+processing, `reconcile_attempt`, payment success and failure, manual refund
+settlement, `refund_order_in_full`, deposit-expiry refund, order cancellation
+and close-to-collection, guest links, payout release and freeze, dispute
+settlement and manual payout were all read for application-level inversion.
+None was found: every one of them either enters through `lock_deal_aggregate` /
+`lock_payment_order_aggregate` or takes a suffix of the canonical order.
+`_fund_deal_if_covered` and `apply_posting_deposit_credit` re-enter
+`lock_deal_aggregate` from inside a finance transaction, and both callers
+already hold that aggregate, so the re-lock is a no-op rather than a reverse
+edge. `BusinessSettingsVersion` was added to the rule because
+`PaymentOrder.business_settings_version` and
+`PaymentAttempt.fx_settings_version` reference it, so an FX/pricing activation
+held a lock a concurrent checkout's commit needed.
+
+**One idempotency strengthening.** `request_refund` promised idempotency on the
+key but only looked the key up *before* opening its transaction. Three
+simultaneous operator clicks therefore all missed it, one created the refund and
+the other two were refused with `RefundExceedsCapture` — safe for the money,
+wrong as an answer. The key is now re-read inside the transaction, after the
+order row is held, so simultaneous duplicates receive the same refund the
+sequential retry already received. No amount, status, provider behaviour, or
+error surface for a genuine over-refund changed.
+
+**Financial safety.** Nothing was unlocked and no lock was removed. Every writer
+still serializes on the same rows in the same order; only the conflict class
+against foreign-key references changed. The layered over-refund guard is
+untouched: `request_refund` refuses to exceed the attempt's capture,
+`_recompute_order_money` clamps `refunded_eur_cents` to `paid_eur_cents`, and
+the `fin_order_refund_within_capture` check constraint holds at the database.
+EUR-cent canonical truth, Stripe EUR settlement, the Chargily DZD conversion
+model and its frozen per-attempt FX rate, traveler reward, ShipTrip fee, posting
+deposit, guest payment, payment protection and refund policy are all unchanged.
+
+**Concurrency evidence.** New module
+`apps/finance/tests/test_phase8df_lock_order.py`, 14 tests:
+
+- **Structural contract (2).** An AST guard over the ten modules that lock
+  canonical-graph rows asserts every `select_for_update` passes `no_key=True`,
+  and a second test asserts the contract is still written beside the helper.
+- **Emitted SQL (2).** `lock_payment_order_aggregate` and `lock_deal_lifecycle`
+  are run under `CaptureQueriesContext`; every locking statement must say
+  `FOR NO KEY UPDATE` and none may say a bare `FOR UPDATE`.
+- **A — refund vs reconciliation (3).** The reproduction, asserting the webhook
+  answers 200 rather than the 500 a `DeadlockDetected` becomes; a **30-round**
+  repeated stress on one order and attempt; and a full refund followed by a
+  racing one-cent refund that must be refused.
+- **B — webhook vs refund (1).** A first-time capture on a second attempt
+  landing while the first attempt is refunded. Every succeeded attempt ends
+  either applied or carried unapplied and fully obligated for refund.
+- **C — duplicate refunds (2).** Two partial refunds that both fit, and three
+  simultaneous identical operator requests returning one obligation.
+- **D — reconciliation concurrency (3).** Three distinct provider events for one
+  attempt captured once; reconciliation after webhook; webhook after
+  reconciliation.
+- **E — failure/rollback (1).** A refund transaction killed mid-flight leaves no
+  refund row, no ledger fact and no money-column drift, and the attempt is still
+  refundable afterwards.
+
+Every race asserts the ledger transactions the order touched still net to zero.
+
+Verification:
+
+- **Negative control.** Reverting only the `PaymentOrder` and `PaymentAttempt`
+  lock modes in `_order_for_update`/`request_refund` reproduces the deadlock in
+  **6 of 6** runs, and the new test fails deterministically with
+  `Round 0 lost the provider event: the webhook answered 500`. The original test
+  passed silently on those same runs, because the webhook view converts every
+  exception into a 500 and the assertion it made still held. Restoring the
+  repair returns it to **0 of 6**.
+- **Stress.** `RefundRaceTests` — both tests, so 80 executions of the racing
+  pair — ran **40 consecutive times: 40 passed, 0 failed, and 0 deadlocks
+  recorded in the PostgreSQL server log.** A separate earlier loop ran the
+  single original test **12 times, 12 clean**. Before the repair the same test
+  deadlocked in 2 of the first 5 runs and then in the very next run.
+- `apps.finance` on PostgreSQL 16: **356 tests, OK.**
+- New module on PostgreSQL: **14 passed**; on SQLite **2 passed, 12 skipped**
+  (`no_key` is a silent no-op where `has_select_for_update` is false, and the
+  concurrency classes are correctly gated).
+- **Full Django suite on PostgreSQL 16: 1074 tests, OK, 34 skipped — zero
+  failures and zero errors.** Phase 8D-R ended this gate at 1060 tests with
+  1 error and 34 skips; that error was this deadlock, and no previously
+  hidden failure appeared behind it. The test count rose by exactly the 14
+  added here and the skip count is unchanged.
+- Full Django suite on SQLite: **1074 tests, OK, 80 skipped** (the 1060/68
+  Phase 8D-R baseline plus this phase's 14, of which 12 correctly skip).
+- Phase 8D integration re-verification on PostgreSQL — `admin_panel`, `kyc`,
+  the admin dashboard, `disputes`, `finance`, `payments` and `deals`
+  together: **514 passed** (8D-R's 500 plus this phase's 14). Admin console,
+  finance, payments, refunds, payouts, disputes and verification/settings
+  are unchanged in behaviour and no admin visual was touched.
+- **One stale sibling guard was updated, not weakened.** Phase 8D-R's
+  `CanonicalOfferLockShapeTests._assert_locks_are_well_formed` selected locking
+  statements by the literal substring `FOR UPDATE`, which `FOR NO KEY UPDATE`
+  does not contain, so the first full run reported `0 not greater than 0: this
+  backend locks rows, so the negotiation must emit locks`. The helper now
+  recognises both modes and still asserts the rule it exists for — a locking
+  query over a `LEFT OUTER JOIN` must name its tables — against whichever mode
+  the statement used. `apps.matching.tests.test_phase8dr_offer_locks`:
+  **17 passed** on PostgreSQL afterwards, and the guard is still non-vacuous.
+- `ruff check .`, `manage.py check`, `makemigrations --check --dry-run` and
+  `git diff --check`: clean. **No migration was added**; a lock-mode repair
+  changes no schema, so `contracts/sql/schema.sql` and sqlc regeneration do not
+  apply.
+
+Local harness note: the workstation's embedded PostgreSQL data directory lived
+under the user temp folder and had lost `global/pg_control` between phases. It
+was re-initialised under LocalAppData and reached through the existing
+`SHIPTRIP_TEST_PGDATA` override that `config/settings/test_pg.py` already
+honours. No repository file changed for it.
+
+Remaining findings:
+
+- **MINOR — legacy rails still lock `FOR UPDATE`.** The unrouted legacy views in
+  `apps/matching/views.py`, `apps/verification/services.py` (refused for V1
+  Deals), `apps/wallet` and `apps/payments` were deliberately left out of the
+  strength rule and out of the structural guard's module list. They cannot
+  execute against a V1 Deal, and Phase 8D-R already recorded the first two as
+  removal candidates. They belong to the Phase 8E cleanup, not to this repair.
+- **MINOR — `AdminInvitation` and `OutboundMessage`** are still locked
+  `FOR UPDATE` and are outside the canonical graph. Neither is a foreign-key
+  parent of a finance row, so neither can produce this cycle.
+- The Phase 8D-R MINORs (`_covered_legs` dead code, unrouted legacy matching
+  views), the Phase 8D telemetry MINOR and the three Phase 8C MINORs are
+  unchanged and were deliberately not touched.
+
+Phase 8D-F files: `apps/core/financial_locks.py`,
+`apps/core/business_settings.py`, `apps/finance/services.py`,
+`apps/finance/jobs.py`, `apps/finance/payout_release.py`,
+`apps/finance/settlement.py`, `apps/parcels/services.py`,
+`apps/disputes/services.py`, `apps/trips/services.py`,
+`apps/matching/v1_services.py`, `apps/admin_panel/services.py`,
+`apps/admin_panel/views.py`, `apps/admin_panel/console_views.py`,
+`apps/admin_panel/management/commands/bootstrap_super_admin.py`,
+`apps/accounts/views.py`, `apps/finance/tests/test_phase8df_lock_order.py`
+(new), `apps/matching/tests/test_phase8dr_offer_locks.py` (the stale guard above)
+and this status document. Nothing else in the working tree was modified.
+
+### Phase 8D-R — PostgreSQL matching lock repair (2026-09-02)
+
+A focused transaction/query repair for the blocker Phase 8D handed off. No
+matching rule, price, money semantic, API contract, migration or admin visual
+was changed, no provider was activated, no Flutter file was touched, and
+Phase 8E was not started.
+
+**Blocker.** On PostgreSQL the V1 sender-offer transaction could not create a
+single offer:
+
+```
+django.db.utils.NotSupportedError:
+FOR UPDATE cannot be applied to the nullable side of an outer join
+```
+
+(`psycopg.errors.FeatureNotSupported`), raised while locking the covered
+`JourneyLeg` rows in `apps/matching/v1_services.py`. Reproduced with
+`apps.matching.tests.test_v1_matching.V1NegotiationConcurrencyTests` against a
+local PostgreSQL 16 cluster: both tests errored inside `setUp`, at the very
+first `create_sender_offer` call.
+
+**Root cause.** `JourneyLeg.origin` and `JourneyLeg.destination` became
+nullable with Phase 8C canonical geography, so
+`select_related("origin", "destination")` compiles to two
+`LEFT OUTER JOIN "locations_location"` clauses. The leg lock in
+`_create_sender_offer_locked` and `_counter_offer_locked` was a bare
+`select_for_update()`, which emits a trailing `FOR UPDATE` covering every table
+in the query — including the nullable side of those joins. PostgreSQL rejects
+that form outright. `_accept_offer_locked` already used
+`select_for_update(of=("self",))` and was unaffected, which is why acceptance
+paths looked healthy while every offer creation failed. The neighbouring
+`DeliveryRequest` locks were likewise already scoped with
+`of=("self", "parcelrequest_ptr")` and compile correctly despite their own
+nullable `pickup_location`/`delivery_location` joins.
+
+**Why SQLite never exposed it.** The SQLite backend reports
+`has_select_for_update = False`, so Django drops the locking clause before the
+query is compiled — `select_for_update()` is a silent no-op there and no
+`FOR UPDATE` is ever emitted. The dedicated concurrency classes are
+additionally gated on `@skipUnlessDBFeature("has_select_for_update")`, so no
+SQLite run could reach the statement even in principle. The repository's CI
+Django job does run on PostgreSQL 16, but the Phase 8B–8D canonical-geography
+work is still uncommitted, so CI has never seen this tree.
+
+**Repair.** One documented helper, `_lock_journey_legs(journey)`, now performs
+the leg lock for creation, counter and acceptance with
+`select_for_update(of=("self",))`, emitting
+`... FOR UPDATE OF "trips_journey_leg"`. The locked set is unchanged in intent:
+the per-segment capacity rows the transaction actually writes. The read-only
+`Location` rows — which this statement could never have locked, and which no
+caller meant to lock — are simply read through the same join. The identical
+latent defect was found by audit and repaired in the unrouted legacy
+`OfferAcceptView` (`Match.select_related("trip")`, also nullable). No other
+`select_for_update` call site in the monolith joins to a nullable relation.
+
+**Transaction safety.** Nothing was unlocked to make the query compile. Before
+the repair PostgreSQL took no leg lock at all, because the statement never
+executed; after it, the leg rows are locked on that backend for the first time.
+The lock order is unchanged and consistent across every writer:
+
+```
+DeliveryRequest (+ ParcelRequest base) → Match → Offer → Journey → JourneyLeg
+  → KycSubmission → JourneyLegProof → User
+```
+
+Creation takes request → journey → legs and then inserts its Match/Offer, so it
+never holds a negotiation row lock ahead of the journey; `counter_offer`,
+`accept_offer` and `core.financial_locks.lock_deal_aggregate` approach the same
+rows in the same direction. The request-row lock still serializes competing
+writers for one request, the `match_unique_pending_journey` partial unique index
+still makes a duplicate pending Match impossible, and the post-lock re-reads of
+request status and journey status are still what decide — not the pre-lock
+preflight.
+
+**Regression coverage.** `apps/matching/tests/test_phase8dr_offer_locks.py`
+(new, 17 tests) exercises the repaired path over the production shape: a
+canonical Paris → Jijel request against a CDG → ALG → Jijel FLIGHT + DRIVE
+journey whose legs carry `origin_place`/`destination_place` only and no
+`Location` rows at all. It covers a valid offer with the correct start/end
+legs, Match and Offer contents and the OFFER_CREATED event; wrong sender;
+closed request; inactive journey; self-match; the target-traveler restriction;
+canonical locality identity (a metres-away twin Paris is refused while the real
+one is accepted, so proximity can never stand in for identity); an invalid leg
+range; counter; and acceptance allocating both legs. Two tests flip request and
+journey state *between* preflight and lock to prove the locked re-read decides.
+A structural guard asserts that every `FOR UPDATE` the negotiation emits names
+its tables whenever the query outer-joins. Three PostgreSQL-only concurrency
+tests prove the lock is real: an in-flight proposal blocks a competing
+`JourneyLeg` capacity write until commit (and the same write succeeds
+afterwards), two racing proposals on one request/journey leave exactly one
+pending Match, and two requests sharing one journey both settle without
+deadlock.
+
+Verification:
+
+- The new module fails **8 of 17** against the pre-repair code and passes
+  **17/17** on PostgreSQL; on SQLite it is **14 passed, 3 skipped** (the
+  concurrency class is correctly gated).
+- `apps.matching` + `apps.parcels` + `apps.trips` on PostgreSQL: **251 passed,
+  34 skipped** (234 existing plus the 17 new; every skip is a retired legacy
+  Trip/DZD path). `apps.matching.tests.test_v1_matching` alone: **18 passed**.
+- Full Django suite on PostgreSQL 16, **before** the repair: 1043 tests,
+  **413 errors**. The exact `FOR UPDATE cannot be applied to the nullable side
+  of an outer join` message appears **826** times, across `finance` (209),
+  `disputes` (47), `matching` (42), `handover` (40), `notifications` (33),
+  `deals` (22), `ratings` (15), `admin_panel` (4) and `core` (1). Phase 8D's
+  66 errors were a 102-test slice of this same cascade.
+- Full Django suite on PostgreSQL 16, **after** the repair: 1060 tests,
+  **1 error, 34 skipped** — the cascade is gone, and the one remaining error is
+  the independent finance deadlock recorded below.
+- Phase 8D integration re-verification on PostgreSQL — `admin_panel`, `kyc`,
+  the admin dashboard, `disputes`, `finance`, `payments` and `deals` together:
+  **500 passed**. Matching no longer poisons the integration run.
+- Full Django suite on SQLite after the repair: **1060 tests, all passed,
+  68 skipped**. Nothing regressed on the fast backend.
+- `ruff check .`, `manage.py check`, `makemigrations --check --dry-run` and
+  `git diff --check`: clean. **No migration was added** — this was a query and
+  locking repair, and `contracts/sql/schema.sql` is untouched by it, so no
+  schema or sqlc regeneration applies.
+
+Local test-harness note: `config/settings/test_pg.py` is the gitignored local
+PostgreSQL runner. It lacked the throttle-rate override that
+`config/settings/test_local.py` and the CI Django job both carry, so a long run
+tripped the 60/min anon budget and reported 429s as `apps.accounts` failures.
+The same documented override was added to that local file; no repository file
+and no product throttle changed.
+
+Remaining findings:
+
+- **MAJOR — independent finance deadlock, newly visible. RESOLVED in
+  Phase 8D-F, above.** The suspected `lock_payment_order_aggregate`
+  ordering below turned out not to be the cycle; the reproduction showed
+  the inverted order was PostgreSQL's own deferred foreign-key check
+  order on `finance_provider_event`, and the deadlock is on
+  `finance_payment_order`, not `finance_payment_attempt`. The original
+  observation is kept verbatim below because it is what led there.
+  `apps.finance.tests.test_concurrency.RefundRaceTests.test_a_refund_racing_a_reconciliation_never_exceeds_the_capture`
+  intermittently raises `psycopg.errors.DeadlockDetected` on
+  `finance_payment_attempt` (roughly one run in three in isolation) when
+  `finance.services.request_refund` races a webhook-driven
+  `finance.services.reconcile_attempt`. `reconcile_attempt` takes the full
+  cross-domain aggregate through `lock_payment_order_aggregate` before the
+  `PaymentOrder` row; `request_refund` opens with `_order_for_update` and takes
+  no aggregate first. This is not a matching defect and is not caused by this
+  repair — before it, the same test errored on the nullable-join lock during
+  fixture setup, so the deadlock could never be reached. It belongs to the
+  finance/concurrency owner.
+- **MINOR** — `apps/matching/v1_services.py:_covered_legs` is now unreachable;
+  its `for_update` branch is dead code kept only by its own definition.
+- **MINOR** — the legacy, unrouted `OfferAcceptView` and `CounterOfferView` in
+  `apps/matching/views.py` are dead alongside the retired legacy routes. The
+  nullable-join lock in the former was repaired rather than left broken, but
+  the classes themselves remain candidates for removal.
+- The three Phase 8C MINORs (parent `admin_level`, remaining Flutter semantic
+  activation controls, retired manual-address strings) and the Phase 8D
+  telemetry MINOR are unchanged.
+
+Phase 8D-R files: `apps/matching/v1_services.py`, `apps/matching/views.py`,
+`apps/matching/tests/test_phase8dr_offer_locks.py` (new) and this status
+document. Nothing else in the working tree was modified.
+
+### Phase 8D — Admin functional UX rebuild (2026-09-02)
+
+The Django admin entry point is now a role-aware ShipTrip operations console
+for the nontechnical owner and staff roles. `/admin/` opens an actionable
+overview instead of the raw model directory. The primary navigation is filtered
+by the existing Phase 6A capability matrix (Ops, Support, Finance, Trust /
+Verification and Super Admin); the primary navigation exposes raw Django model
+screens only through the explicit Super Admin “Technical records” escape hatch.
+Existing model-level authorization on bookmarked technical URLs is unchanged.
+
+Delivered surfaces:
+
+- Action queues for KYC, flight proofs, disputes, payment failures, refunds,
+  payouts, failed jobs, email and provider readiness. Counts are authoritative
+  database counts and link to the matching filtered queue; zero queues stay
+  visible as checked, quiet states.
+- Users with name/email search, account and KYC state, activity totals and a
+  safe detail page. Requests, Journeys, Deals and disputes link back to the
+  user without exposing exact private locations to roles that cannot see them.
+- KYC and flight-proof review with applicant/Traveler context, canonical route
+  and flight details, previous attempts, authorized image previews and
+  short-lived private evidence links,
+  explicit Approve/Reject actions and required rejection reasons. Evidence
+  access is capability-gated and audited; object-store bucket/key values never
+  appear in HTML.
+- Delivery requests, ordered FLIGHT/DRIVE Journeys, segment capacity and proof
+  readiness, plus coherent Deal pages showing Sender/Traveler, canonical route,
+  agreed EUR terms, payment attempts, lifecycle, protection and dispute state.
+- Dispute queue/detail with age, participants, evidence, money at stake, payout
+  freeze state, status notes and a two-step server-side resolution preview /
+  confirmation. Final resolution re-locks and re-plans through the existing
+  settlement service, so the preview is never authoritative and double
+  settlement remains impossible.
+- Finance pages for payments, refunds, payouts and append-only ledger. Amounts
+  are rendered in human EUR units while provider currency/reference and failure
+  context remain visible. Refund requests and manual refund/payout evidence
+  use existing idempotent audited services; no mock payment path was added.
+- Staff invitations, fixed role matrix, role replacement, access enable/disable,
+  revoke and replace actions. Invitation plaintext tokens remain email-only and
+  are never rendered in the browser; self-disable and Super Admin guardrails
+  remain enforced by the service layer.
+- Grouped business settings for commission, deposit, EUR floors, FX and
+  provider availability, with human units, immutable revision creation,
+  explicit confirmation/reason fields and readable policy guardrails including
+  the 30-minute delivery-code buffer and 48-hour payout protection window.
+  Existing Deal snapshots are not rewritten. No provider was enabled by this
+  phase.
+- System & operations health for database, Redis, routing, KYC limiter mode,
+  durable jobs, email and finance worker signals; filtered failed-job and email
+  queues; geography catalogue summary;
+  and readable audited admin activity. Technical records are owner-only.
+
+Implementation is additive and backend-only for Phase 8D: new console views,
+forms, presenters, templates, navigation and CSS sit on top of the existing
+audit services. No schema migration or contract regeneration was required.
+No Flutter/mobile files, provider credentials, external
+provider activation or Phase 8E work was included.
+
+Verification:
+
+- `manage.py check`: clean; all new Python modules compile; Ruff on changed
+  backend/admin files: clean.
+- Direct render smoke test against a freshly migrated SQLite schema: all 18
+  overview, queue, finance, staff, settings, system, geography, audit and
+  technical routes returned HTTP 200; KYC detail rendered evidence and review
+  controls.
+- The expanded SQLite regression slice passed **189 tests**, including the
+  Phase 8D HTTP/session/CSRF task tests, Phase 6A staff and permission tests,
+  review-email events, raw Django dashboard, KYC, Journeys, finance/policy/jobs,
+  disputes and dispute presentation. The 24 new console tests exercise real
+  HTTP handling, not direct view dispatch: confirmed KYC and proof decisions,
+  private signed retrieval and denied roles, audit records, invite/revoke/role/
+  access flows, commission and FX revision creation, dispute preview versus
+  settlement, refund creation, currency exponents and sanitized storage errors.
+- **33 PostgreSQL admin/verification/staff/settings tests passed** against a
+  uniquely named disposable local database. The broader 102-test PostgreSQL
+  finance/dispute/concurrency attempt had **66 errors**, predominantly during
+  fixture offer creation, due to the pre-existing nullable-join lock failure
+  below. It is not a green PostgreSQL integration result.
+- Local Python 3.14 / Django 5.1.4 raises `Context.__copy__` errors even in
+  unmodified admin tests. Verification was therefore rerun with Python 3.12
+  and the repository's pinned requirements, matching the production Dockerfile;
+  full HTTP and raw Django admin tests pass on that runtime. No production
+  dependency was changed.
+- Desktop and 700px-wide visual checks cover navigation, evidence, staff,
+  settings and disputes. Review-only evidence is explicitly synthetic; no
+  real private identity document or external provider was accessed. The
+  Impeccable check returned no findings. Migration dry-run reports no changes.
+
+Final review corrections within Phase 8D include visible staff confirmations,
+atomic invitation replacement, private dispute text remaining evidence-gated,
+currency-aware manual payout amounts (whole DZD versus EUR cents), proof
+readiness across every flight leg, current KYC approval rather than a stale
+denormalized flag, distinct form label IDs, and filtered queue destinations.
+
+Remaining findings / handoff:
+
+- **MAJOR — existing PostgreSQL matching integration regression. RESOLVED in
+  Phase 8D-R, above.** `apps/matching/v1_services.py:603` applied
+  `select_for_update()` to JourneyLeg with
+  `select_related("origin", "destination")`. Those relations are nullable after
+  canonical geography, so PostgreSQL rejected the outer-join lock before an
+  offer could be created. Reproduced independently through the real scenario
+  factory; this file had no Phase 8D edits. The broader finance/dispute/race
+  regression could not be signed off until it was handled in a separately
+  authorized integration fix, which Phase 8D-R is. Matching business behavior
+  was not changed by Phase 8D or by the repair.
+- **MINOR — telemetry limitation.** The existing system has durable queue
+  state but no reliable per-worker heartbeat for email/finance/reservations.
+  The console explicitly distinguishes queue state from worker liveness rather
+  than inventing an “online” indicator.
+- The three existing Phase 8C MINORs remain tracked below: parent `admin_level`,
+  roughly twelve remaining Flutter semantic activation controls, and retired
+  manual-address localization strings. They were not changed by Phase 8D.
+- Functional UI is ready for Claude's focused visual review. PostgreSQL
+  integration is not fully cleared; Phase 8E has not been started.
+
+Phase 8D files: `apps/admin_panel/console_{forms,presenters,urls,views}.py`,
+`apps/admin_panel/services.py`, `apps/admin_panel/tests/test_phase8d_console.py`,
+`apps/disputes/services.py`, `apps/core/admin_display.py`,
+`apps/core/templatetags/shiptrip_admin.py`, `apps/core/tests/test_admin_dashboard.py`,
+`apps/core/static/shiptrip/admin.css`, `config/urls.py`,
+`templates/admin/base_site.html`, `templates/admin/console/*`,
+`tools/preview/dump_console.py`, `docs/ADMIN_OPERATIONS.md`, this status document
+and the preview-tool README. Other existing working-tree changes were preserved.
+
+### Phase 8C UX review pass (2026-09-02)
+
+A bounded Flutter UX/quality review of the shipped Phase 8C flow. No backend
+geography model, canonical Place identity, matching-locality derivation,
+airport mapping, API semantics, privacy rule or Journey semantic was changed;
+the pass is frontend-only and Phase 8D was not started.
+
+What the review found and fixed:
+
+- **Country selection.** The step was headed with `locationCountryField`
+  ("Country code"), a leftover from the retired manual-address form, above raw
+  Material `ChoiceChip`s, and the catalogue's English country names were shown
+  verbatim in French and Arabic. It is now a titled question with flag-bearing
+  ShipTrip pills, localized names for the four launch countries (server name
+  retained as fallback), and a selected state carried by fill *and* a check
+  rather than colour alone.
+- **Search layout.** The search field lived inside the results `ListView`, so
+  it scrolled away with its own results, and the list used a hard-coded
+  48 dp bottom pad instead of `AppScrollPadding`. The country question now owns
+  the page until it is answered, then collapses to one pinned row — chosen
+  country plus a Change affordance — above a pinned search box, with the
+  results scrolling beneath. A first attempt at a horizontally scrolled country
+  strip was rejected because it pushed Germany off a 411 dp viewport.
+- **Result rows.** Rows were `Card`+`ListTile` with an LTR-hard-coded chevron
+  and a `Locality`/`Airport` type word. They are now a shared `PlaceResultRow`:
+  a mode-tinted glyph tile, the name, an AIRPORT mark and a monospaced
+  LTR-locked IATA badge for airports, a direction-aware chevron, and a merged
+  semantic label.
+- **Algeria and same-name context.** A commune whose wilaya shares its name
+  rendered as two stacked copies of one word ("Jijel" over "Locality · Jijel").
+  Context now falls through to the country when the parent adds nothing, and
+  keeps the parent whenever it disambiguates. Exposing the parent's tier
+  ("Jijel Wilaya", "Nord department") would need the API to serve the parent's
+  `admin_level`; it is recorded below as a MINOR enhancement, not assumed.
+- **Airports.** An airport with no catalogue parent fell back to the raw
+  country code ("Airport · FR"). It now falls back to the country's localized
+  name. The server's matching locality is still never surfaced.
+- **Preferred point.** The field could set and replace a point but never
+  remove one, and its copy did not distinguish the required matching place
+  from the optional operational preference. `PreferredPointField` now shows
+  "Flexible within {place}" as a real answer in primary ink, carries an
+  Optional mark, states outright that matching runs on the place, and offers
+  removal. The map step gained a Decide later action.
+- **Map transition.** The map opened titled "Choose a place" with no indication
+  of which place constrained it, and silently fell back to the Algiers frame
+  for a catalogue row without coordinates. It now shows a persistent context
+  strip naming the selected place, names that place in the confirm helper, and
+  says so when the catalogue has no centre to open on.
+- **Dependent resets.** Changing a canonical place silently discarded its
+  preferred point. The user is now told. Changing country is a visible return
+  to the country question rather than an invisible clear.
+- **Review step.** Two rows both labelled "Preferred meeting point" were
+  indistinguishable; they now name their end and state the flexible case
+  instead of omitting it.
+- **Accessibility.** `Semantics(button: true, …)` wrapped around
+  `ExcludeSemantics` produces a control a screen reader announces correctly and
+  cannot activate — the tap action is discarded on the way up. Fixed on the
+  Phase 8C path (`AppSelectField`, `AppIconButton`, `PlaceResultRow`,
+  `CountryChoiceTile`, the country row) and covered by a regression test. The
+  same pattern remains elsewhere in the app and is recorded below.
+
+Files changed: `mobile/lib/design/components/place.dart` (new),
+`mobile/lib/features/location/preferred_point_field.dart` (new),
+`mobile/lib/features/location/canonical_place_picker_screen.dart`,
+`mobile/lib/features/location/location_picker_screen.dart`,
+`mobile/lib/features/requests/request_create_screen.dart`,
+`mobile/lib/features/journeys/journey_create_screen.dart`,
+`mobile/lib/app/router.dart`, `mobile/lib/design/components/forms.dart`,
+`mobile/lib/design/components/primitives.dart`, the three ARB files and their
+generated localizations, plus `mobile/test/canonical_place_picker_test.dart`,
+`mobile/test/preferred_point_test.dart` (new) and
+`mobile/test/design/place_semantics_test.dart` (new).
+
+Verification: `dart format` clean; `flutter analyze --fatal-infos` clean;
+`flutter test` **269 passed** (239 baseline plus 30 review tests, including a
+6-device x 3-locale render matrix over the picker). No Django, tools or
+contract file was touched.
+
+Known remaining items, none blocking:
+
+- **MINOR** — naming a parent's administrative tier in a result ("Jijel
+  Wilaya", "Nord department", "Madrid province") would need
+  `GET /api/geography/places` to serve the parent's `admin_level` alongside
+  `parent_name`. Left for Codex to decide; the client does not guess it.
+- **MINOR** — the `Semantics` + `ExcludeSemantics` activation defect above
+  still affects roughly a dozen controls outside the Phase 8C path
+  (`chat_list_screen`, `home_screen`, `notifications_screen`,
+  `language_screen`, `appearance_screen`, `rate_screen`, `guest_pay_screen`,
+  `navigation.dart`, `sheets.dart`, `forms.dart` check/segmented/step
+  controls). The fix is one `onTap:` on the outer `Semantics`; it belongs to an
+  app-wide accessibility pass, not to a location review.
+- **MINOR** — the retired manual-address strings (`locationCountryField`,
+  `locationCountryHint`, `locationCountryInvalid`, `locationCityField`,
+  `locationRecent`, `locationCityOnly`, `locationExactAddress`,
+  `locationAirports`, `locationExactRequired*`) are now unreferenced in all
+  three ARB files. They were left in place rather than removed inside a UX pass.
+- Hardware QA on a physical device is still pending, as for Phase 8A/8C.
+
+### Phase 8E — final integration, tracked cleanup and release candidate (2026-09-02)
+
+Phase 8E closes the bounded items Phases 8C and 8D-V recorded, repairs two
+defects found while assembling the release, ships the reviewed geography
+catalogue inside the artefact, and takes the accumulated Phase 8A–8D worktree to
+a committed, deployed private release candidate. No V1 decision was revisited:
+Kaba/ProductRequest stays retired, economics stay canonical EUR, the sender
+still proposes first, exact locations stay hidden until funding, the traveler
+still cannot retrieve a delivery code, and matching still compares canonical
+locality identities only.
+
+**Geography parent tier (Phase 8C MINOR, closed).** `GET /api/geography/places`
+now serves `parent_admin_level` beside `parent_name`, and inside
+`matching_locality` / `served_locality`, taken verbatim from the reviewed
+source — `wilaya`, `region`, `department`, `autonomous_community`, `province`,
+`state`, `district`. It was already on every row; nothing was fabricated, and a
+source that records no tier serves an empty string. Flutter uses it to say
+"Jijel Wilaya" where it previously had to fall through to "Algeria", because a
+commune stacked under an identically named parent read as two copies of one
+word. A tier the app has no phrasing for falls back to the bare parent name
+rather than being inferred from the country. Seven localized tier phrasings were
+added in EN/FR/AR; the French and Arabic forms use apposition and idafa
+respectively, so no elision or agreement is guessed. The place search stays at
+three queries.
+
+**Flutter activation defect (Phase 8C MINOR, closed).** `Semantics(button:
+true, …)` wrapped around `ExcludeSemantics` announces a control correctly and
+discards its tap action, so the control is a button a screen reader cannot
+press — worse than an unlabelled one, because it looks finished. Phase 8C fixed
+the five controls on the location path. The audit found 22 such pairs; 17 were
+unfixed and 16 of those were genuinely interactive. All are now fixed: the
+segmented choice, the check tile, the step indicator, the bottom navigation bar,
+the option sheet, chat rows, notification rows, appearance and language options,
+profile rows, boost packages, guest and checkout payment tiles, the rating tag
+chips, and the star rating. Six of those nodes were also announcing *nothing* —
+`ExcludeSemantics` had eaten the only text they had — and were given labels.
+Two cases were not a missing `onTap:`:
+
+- The star rating declares `slider: true`, which is operated with increase and
+  decrease rather than a tap; it now carries `onIncrease` / `onDecrease`.
+- The step indicator's outer node is a progress readout, not a button. Wrapping
+  the whole row in `ExcludeSemantics` threw away back-navigation to completed
+  steps. Each completed step is now its own semantic button; steps still ahead
+  of the user stay out of the tree, as before.
+
+`PlaceContextStrip` and the decorative glyphs stay excluded — they are not
+controls. Beyond per-control tests, a source-level guard
+(`test/design/semantics_activation_guard_test.dart`) fails the suite if any
+`Semantics` node claiming an interactive role sits above an `ExcludeSemantics`
+without the matching action. It was verified to actually catch a reintroduction
+rather than pass vacuously.
+
+**Retired localization strings (Phase 8C MINOR, closed).** The ten
+manual-address keys (`locationCountryField`, `locationCountryHint`,
+`locationCountryInvalid`, `locationCityField`, `locationRecent`,
+`locationCityOnly`, `locationExactAddress`, `locationAirports`,
+`locationExactRequiredNotice`, `locationExactRequiredRow`) were confirmed
+unreferenced by a word-boundary search over `lib/` and `test/` and removed from
+all three ARB files. No active key was touched, and `flutter gen-l10n` reports
+no untranslated messages.
+
+**Matching dead code (Phase 8D-R MINOR, partly closed).**
+`apps/matching/v1_services.py:_covered_legs` had no caller anywhere in the
+repository and was removed; `InvalidLegRange`, which it raised, is still used by
+the live leg-range validation and stays. The unrouted legacy
+`TravelerApplyView`, `SenderApplyView`, `CounterOfferView` and `OfferAcceptView`
+are **retained and documented** rather than deleted. Nothing routes, imports or
+calls them, but they are the pre-V1 traveler-first behaviour that comments in
+`apps.parcels` still point at, and they are the reason
+`apps/finance/tests/test_phase8df_lock_order.py` excludes `apps.matching.views`
+from the canonical finance lock graph. Removing them is a legacy-retirement
+change, not a release-candidate cleanup. The module docstring was corrected: it
+had been advertising retired endpoints as if they were live, and now names the
+routed set, points every V1 negotiation write at `v1_views`, and says outright
+that the legacy classes must not be given a route.
+
+**Legacy lock rails (unchanged, as instructed).** `apps.verification`,
+`apps.wallet` and `apps.payments` were not refactored. Active V1 does not reach
+them and they do not participate in the finance lock graph.
+
+**Admin MINORs (Phase 8D-V, two closed, one declined).** The brand seal moved
+from `#d0602c` (3.9:1 against its white letter) to `#b94e22` (5.03:1); it is
+`aria-hidden` decoration and formally exempt, but the letter is still read by
+eye. The console's leading table column got a 150 px floor and a non-wrapping
+identity line, so a page of short real provider values ("Stripe", "Chargily")
+no longer collapses a column that the long seeded label made comfortable. The
+`ruff format` MINOR was **declined**: the project gate is `ruff check`, which
+passes, and reformatting roughly thirty pre-existing files would bury this
+release in an unrelated diff.
+
+**Defect found: the SQL schema contract carried a foreign database.** The
+worktree's regenerated `backend/contracts/sql/schema.sql` contained pre-Django
+Prisma-era enum types (`MatchStatus`, `ParcelStatus`, `ParcelType`, `Role`,
+`TransactionType`) and their tables — 1,384 added lines against HEAD's 7,296.
+No migration creates those objects; the file had been dumped from a developer
+database that still carried them. CI's schema-drift gate regenerates from a
+fresh `migrate`, so this would have failed the gate, and as a contract it
+described a database that does not exist. It was regenerated from a clean
+PostgreSQL 16 database built by `migrate` alone: 7,955 lines, 671 added and 12
+removed against HEAD — the five geography tables plus the constraints the Phase
+8C migrations dropped, and nothing else. Two consecutive dumps were identical
+after the documented nonce normalisation (SHA-256
+`82B24DB8D0465BA1B86557197E732F123B30A0B1D7B337097763F7B56858C45C`).
+
+**Defect found: the release had no geography data.** The Phase 8C write
+contract refuses a `DeliveryRequest` or a `Journey` that does not reference a
+canonical `Place`, and the catalogue lived only as a 28 MB manifest outside the
+repository. A deployment of this code with an empty catalogue is a deployment on
+which nobody can create anything — and the previously deployed release answers
+404 for `/api/geography/countries`, so this is the first release that needs it.
+The reviewed manifest now ships in the image as
+`backend/monolith/apps/locations/data/geography_manifest_2026.json.gz`
+(deterministically gzipped, 1.05 MB; uncompressed SHA-256
+`b4aad209f4ae7ecb264fc9ae4b5d9b4b61b7ff9d918ca470729db93d1abb7692`), so one
+release identifier carries the code and the exact reviewed data.
+
+`import_geography` reads `.gz`, defaults to the bundled artefact, and gained
+`--skip-if-current`, which compares the manifest's uncompressed-content digest
+against a new `locations_geography_catalogue_import` row and returns after one
+indexed read when they match. The marker is written inside the same transaction
+as the rows it describes, so a rolled-back import cannot leave a marker that
+makes the next boot skip a catalogue that is not there. `backend/railway/start.py`
+runs it **after** the gateway is listening: a first import takes minutes, and
+ahead of readiness it would fail the platform health check and roll the
+deployment back. A failure is loud and non-fatal — the service keeps serving and
+the console reports a catalogue that is not at the shipped digest.
+`--deactivate-missing` is deliberately absent from the boot path, and a test
+asserts all of this positionally, including that no `.dockerignore` pattern
+drops the artefact.
+
+Rehearsed against PostgreSQL 16: migrations applied clean, the first import took
+145.7 s at a 280 MB peak and produced 4 countries / 56,134 places / 3,833
+alternate names / 165 mappings, and the second run was a 2.9 s no-op. This
+reverses the earlier "keep the data out of the release" position, and
+`tools/geography/README.md` records why.
+
+**Provider mode is now readable without reading a secret.** Configuration,
+enablement and test-versus-live are three different facts, and only the first
+two were reported anywhere. Each gateway now derives a `credential_mode` —
+`test`, `live`, `unknown` or `not_configured` — from its credential's documented
+shape: Stripe's key prefix, and for Chargily the key prefix cross-checked
+against the API base, where a live key against the test base (or the reverse)
+reports `unknown` rather than picking a half. It never returns, logs or compares
+a key value. It surfaces in `/api/admin/health/deep`, in
+`/api/admin/provider-health` through a new operator-only `as_operator_dict()`,
+and on the console's System and Settings pages. The payer-facing `as_dict()`
+contract is unchanged, and a test pins that the operational fields cannot leak
+into a checkout response.
+
+Deployed provider state was established **without reading any key**: an unsigned
+webhook returns 400 `invalid_webhook_signature` when the signing secret is
+configured and 503 `provider_not_configured` when it is not. Both Stripe and
+Chargily answered 400 and the mock rail answered 503, confirming that both real
+rails have signing secrets configured and that the mock rail is correctly
+refused in production. Test-versus-live and business-settings enablement were
+**not** determined in this phase: both need either an authenticated admin
+session or the raw keys, and the operator reads them from the console once this
+release is deployed. No provider was enabled, disabled or otherwise changed, and
+no charge of any kind was created.
+
+**Object storage.** KYC evidence is stored in the private `S3_BUCKET_KYC` and
+reachable only through a short-lived presigned redirect behind `view_kyc` plus
+`view_evidence`, audited, with `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`. Dispute evidence **does** have a safe private
+path — `S3_BUCKET_DISPUTE` (falling back to the KYC bucket), the same presigned
+TTL, and an authorization check that admits only the two deal parties or staff.
+The earlier concern that it lacked one is closed. The deployed gateway exposes
+no bucket: unauthenticated `POST /api/kyc/submit` answers 401 through the Go KYC
+service rather than 404, and the alias `/kyc/submit` behaves identically.
+
+**Email.** Outbound transactional email remains intentionally inactive. It was
+not enabled, and no transactional mail was sent in this phase.
+
+**Local harness note.** A full SQLite run on a workstation that also has the
+gitignored `config/settings/test_pg.py` reports one discovery error unless
+`SHIPTRIP_TEST_PGDATA` points at a healthy embedded cluster: Django's test
+discovery imports every module under `config/settings/`, and that module boots
+an embedded PostgreSQL on import. It is a local-only artefact — the file is
+gitignored and never reaches CI — but it will confuse the next person who runs
+the suite without the variable set.
+
+Known remaining items:
+
+- **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
+  files, deliberately not taken in a release phase (see above).
+- Hardware QA on a physical device is still pending and is written up as
+  `docs/PHASE8E_DEVICE_QA.md`.
 
 ## External dependencies/blockers
 

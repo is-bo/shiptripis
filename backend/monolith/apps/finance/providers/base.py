@@ -150,6 +150,19 @@ class PayoutCapability:
     raw: dict = field(default_factory=dict)
 
 
+#: What a rail's configured credentials point at. Derived from the credential's
+#: own documented shape, never from a value anybody has to read or log: an
+#: operator must be able to see that a deployment is pointed at real money
+#: without being shown the key that moves it.
+MODE_TEST = "test"
+MODE_LIVE = "live"
+#: Configured, but the credential does not carry a shape this code recognises.
+#: Reported rather than guessed — assuming "test" here is how a live rail gets
+#: transacted against by accident.
+MODE_UNKNOWN = "unknown"
+MODE_NOT_CONFIGURED = "not_configured"
+
+
 class PaymentGateway(Protocol):
     """The full rail interface. Not every rail supports every capability."""
 
@@ -158,6 +171,8 @@ class PaymentGateway(Protocol):
     payment_currency: str
 
     def is_configured(self) -> bool: ...
+
+    def credential_mode(self) -> str: ...
 
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult: ...
 

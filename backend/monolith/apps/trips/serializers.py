@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.locations.models import Location
+from apps.locations.models import Location, Place
 from apps.locations.serializers import PublicLocationSerializer
 from apps.matching.public_contract import distance_band
 from apps.routing.geometry import GeoPoint
@@ -113,8 +113,24 @@ class TripSerializer(serializers.ModelSerializer):
 class JourneyLegInputSerializer(serializers.Serializer):
     position = serializers.IntegerField(min_value=0, required=False)
     mode = serializers.ChoiceField(choices=JourneyLeg.Mode.choices)
-    origin = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
-    destination = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
+    origin_place_id = serializers.PrimaryKeyRelatedField(
+        source="origin_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
+    destination_place_id = serializers.PrimaryKeyRelatedField(
+        source="destination_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
+    origin = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(), required=False, allow_null=True
+    )
+    destination = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(), required=False, allow_null=True
+    )
     depart_at = serializers.DateTimeField()
     arrive_at = serializers.DateTimeField(required=False, allow_null=True)
     capacity_kg = serializers.DecimalField(
@@ -139,9 +155,7 @@ class JourneyLegInputSerializer(serializers.Serializer):
             "allowed_detour_meters",
             "route_metadata",
         }
-        supplied = server_route_fields.intersection(
-            getattr(self, "initial_data", {})
-        )
+        supplied = server_route_fields.intersection(getattr(self, "initial_data", {}))
         if supplied:
             raise serializers.ValidationError(
                 {
@@ -149,9 +163,26 @@ class JourneyLegInputSerializer(serializers.Serializer):
                     for field in sorted(supplied)
                 }
             )
-        if attrs["origin"].pk == attrs["destination"].pk:
+        origin_place = attrs["origin_place"]
+        destination_place = attrs["destination_place"]
+        for field, place in (
+            ("origin_place_id", origin_place),
+            ("destination_place_id", destination_place),
+        ):
+            if place.place_type not in {
+                Place.PlaceType.LOCALITY,
+                Place.PlaceType.AIRPORT,
+            }:
+                raise serializers.ValidationError(
+                    {field: "Choose a locality or airport."}
+                )
+            if place.resolve_matching_locality() is None:
+                raise serializers.ValidationError(
+                    {field: "This place is temporarily unavailable for matching."}
+                )
+        if origin_place.pk == destination_place.pk:
             raise serializers.ValidationError(
-                {"destination": "Leg origin and destination must differ."}
+                {"destination_place_id": "Leg endpoints must differ."}
             )
         arrive_at = attrs.get("arrive_at")
         if arrive_at is not None and arrive_at <= attrs["depart_at"]:
@@ -163,6 +194,17 @@ class JourneyLegInputSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"flight_number": "Flight legs require a flight number."}
                 )
+            if (
+                origin_place.place_type != Place.PlaceType.AIRPORT
+                or destination_place.place_type != Place.PlaceType.AIRPORT
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "origin_place_id": (
+                            "Canonical flight legs must start and end at airports."
+                        )
+                    }
+                )
         elif attrs.get("flight_number", "").strip():
             raise serializers.ValidationError(
                 {"flight_number": "Drive legs cannot have a flight number."}
@@ -171,14 +213,33 @@ class JourneyLegInputSerializer(serializers.Serializer):
 
 
 class JourneyCreateSerializer(serializers.Serializer):
-    start_location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
+    start_place_id = serializers.PrimaryKeyRelatedField(
+        source="start_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
+    destination_place_id = serializers.PrimaryKeyRelatedField(
+        source="destination_place",
+        queryset=Place.objects.filter(active=True),
+        required=True,
+        allow_null=False,
+    )
+    start_location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(), required=False, allow_null=True
+    )
     destination_location = serializers.PrimaryKeyRelatedField(
-        queryset=Location.objects.all()
+        queryset=Location.objects.all(), required=False, allow_null=True
     )
     notes = serializers.CharField(
         required=False, allow_blank=True, max_length=2000, default=""
     )
     legs = JourneyLegInputSerializer(many=True, allow_empty=False, max_length=20)
+
+    @staticmethod
+    def _matching_place_id(place: Place) -> int | None:
+        locality = place.resolve_matching_locality()
+        return locality.pk if locality is not None else None
 
     def _validate_location_access(self, locations: set[Location]) -> None:
         request = self.context.get("request")
@@ -221,9 +282,28 @@ class JourneyCreateSerializer(serializers.Serializer):
                         }
                     }
                 )
-        if attrs["start_location"].pk == attrs["destination_location"].pk:
+        start_place = attrs["start_place"]
+        destination_place = attrs["destination_place"]
+        start_location = attrs.get("start_location")
+        destination_location = attrs.get("destination_location")
+        for field, place in (
+            ("start_place_id", start_place),
+            ("destination_place_id", destination_place),
+        ):
+            if place.place_type not in {
+                Place.PlaceType.LOCALITY,
+                Place.PlaceType.AIRPORT,
+            }:
+                raise serializers.ValidationError(
+                    {field: "Choose a locality or airport."}
+                )
+            if self._matching_place_id(place) is None:
+                raise serializers.ValidationError(
+                    {field: "Place is unavailable for matching."}
+                )
+        if start_place.pk == destination_place.pk:
             raise serializers.ValidationError(
-                {"destination_location": "Journey endpoints must differ."}
+                {"destination_place_id": "Journey endpoints must differ."}
             )
 
         legs = attrs["legs"]
@@ -236,10 +316,11 @@ class JourneyCreateSerializer(serializers.Serializer):
             leg["position"] = positions[index]
         legs.sort(key=lambda leg: leg["position"])
 
-        if (
-            legs[0]["origin"].pk != attrs["start_location"].pk
-            or legs[-1]["destination"].pk != attrs["destination_location"].pk
-        ):
+        if self._matching_place_id(
+            legs[0]["origin_place"]
+        ) != self._matching_place_id(start_place) or self._matching_place_id(
+            legs[-1]["destination_place"]
+        ) != self._matching_place_id(destination_place):
             raise serializers.ValidationError(
                 {"legs": "First and last leg must match the journey endpoints."}
             )
@@ -247,7 +328,9 @@ class JourneyCreateSerializer(serializers.Serializer):
         for index in range(1, len(legs)):
             previous = legs[index - 1]
             current = legs[index]
-            if previous["destination"].pk != current["origin"].pk:
+            previous_node = self._matching_place_id(previous["destination_place"])
+            current_node = self._matching_place_id(current["origin_place"])
+            if previous_node != current_node:
                 raise serializers.ValidationError(
                     {"legs": "Every leg must connect to the next leg."}
                 )
@@ -263,10 +346,51 @@ class JourneyCreateSerializer(serializers.Serializer):
                     {"legs": "A leg cannot depart before the previous leg arrives."}
                 )
 
-        locations = {attrs["start_location"], attrs["destination_location"]}
-        locations.update(leg["origin"] for leg in legs)
-        locations.update(leg["destination"] for leg in legs)
-        self._validate_location_access(locations)
+        scoped_locations = {
+            location
+            for location in (start_location, destination_location)
+            if location is not None
+        }
+        scoped_locations.update(
+            location
+            for leg in legs
+            for location in (leg.get("origin"), leg.get("destination"))
+            if location is not None
+        )
+        self._validate_location_access(scoped_locations)
+        scoped_pairs = [
+            ("start_location", start_location, start_place),
+            ("destination_location", destination_location, destination_place),
+        ]
+        for index, leg in enumerate(legs):
+            scoped_pairs.extend(
+                (
+                    (
+                        f"legs.{index}.origin",
+                        leg.get("origin"),
+                        leg["origin_place"],
+                    ),
+                    (
+                        f"legs.{index}.destination",
+                        leg.get("destination"),
+                        leg["destination_place"],
+                    ),
+                )
+            )
+        invalid = [
+            field
+            for field, location, place in scoped_pairs
+            if location is not None and location.canonical_place_id != place.pk
+        ]
+        if invalid:
+            raise serializers.ValidationError(
+                {
+                    "locations": (
+                        "Every preferred point must belong to its selected "
+                        f"canonical place: {', '.join(invalid)}."
+                    )
+                }
+            )
         return attrs
 
     def create(self, validated_data: dict) -> Journey:
@@ -276,15 +400,23 @@ class JourneyCreateSerializer(serializers.Serializer):
             if leg["mode"] != JourneyLeg.Mode.DRIVE:
                 continue
             try:
+                origin = leg.get("origin")
+                destination = leg.get("destination")
+                if origin is None:
+                    origin = leg["origin_place"]
+                if destination is None:
+                    destination = leg["destination_place"]
+                if origin.latitude is None or destination.latitude is None:
+                    continue
                 route = provider.directions(
                     [
                         GeoPoint(
-                            float(leg["origin"].latitude),
-                            float(leg["origin"].longitude),
+                            float(origin.latitude),
+                            float(origin.longitude),
                         ),
                         GeoPoint(
-                            float(leg["destination"].latitude),
-                            float(leg["destination"].longitude),
+                            float(destination.latitude),
+                            float(destination.longitude),
                         ),
                     ],
                     profile="drive",
@@ -315,6 +447,7 @@ class JourneyCreateSerializer(serializers.Serializer):
         with transaction.atomic():
             journey = Journey.objects.create(
                 traveler=self.context["request"].user,
+                schema_version=2,
                 status=Journey.Status.DRAFT,
                 **validated_data,
             )
@@ -327,6 +460,8 @@ class JourneyCreateSerializer(serializers.Serializer):
 class JourneySearchFilterSerializer(serializers.Serializer):
     start_location_id = serializers.IntegerField(min_value=1, required=False)
     destination_location_id = serializers.IntegerField(min_value=1, required=False)
+    start_place_id = serializers.IntegerField(min_value=1, required=False)
+    destination_place_id = serializers.IntegerField(min_value=1, required=False)
     mode = serializers.ChoiceField(choices=JourneyLeg.Mode.choices, required=False)
     departure_after = serializers.DateTimeField(required=False)
     min_capacity_kg = serializers.DecimalField(
@@ -382,6 +517,8 @@ class JourneyLegProofSerializer(serializers.ModelSerializer):
 class JourneyLegSerializer(serializers.ModelSerializer):
     origin = PublicLocationSerializer(read_only=True)
     destination = PublicLocationSerializer(read_only=True)
+    origin_place = serializers.SerializerMethodField()
+    destination_place = serializers.SerializerMethodField()
     proofs = JourneyLegProofSerializer(many=True, read_only=True)
     has_approved_proof = serializers.SerializerMethodField()
 
@@ -393,6 +530,8 @@ class JourneyLegSerializer(serializers.ModelSerializer):
             "mode",
             "origin",
             "destination",
+            "origin_place",
+            "destination_place",
             "depart_at",
             "arrive_at",
             "capacity_kg",
@@ -422,6 +561,31 @@ class JourneyLegSerializer(serializers.ModelSerializer):
             proof.status == JourneyLegProof.Status.APPROVED
             for proof in obj.proofs.all()
         )
+
+    @staticmethod
+    def _place_summary(place: Place | None) -> dict | None:
+        if place is None:
+            return None
+        locality = place.resolve_matching_locality()
+        return {
+            "id": place.pk,
+            "name": place.name,
+            "display_label": place.display_label,
+            "place_type": place.place_type,
+            "iata_code": place.iata_code or None,
+            "country_code": place.country_id,
+            "parent_name": place.parent.name
+            if place.parent_id and place.parent
+            else None,
+            "matching_locality_id": locality.pk if locality else None,
+            "matching_locality_name": locality.name if locality else None,
+        }
+
+    def get_origin_place(self, obj: JourneyLeg) -> dict | None:
+        return self._place_summary(obj.origin_place)
+
+    def get_destination_place(self, obj: JourneyLeg) -> dict | None:
+        return self._place_summary(obj.destination_place)
 
     def to_representation(self, instance: JourneyLeg) -> dict:
         data = super().to_representation(instance)
@@ -456,6 +620,8 @@ class JourneySerializer(serializers.ModelSerializer):
     traveler_name = serializers.CharField(source="traveler.full_name", read_only=True)
     start_location = PublicLocationSerializer(read_only=True)
     destination_location = PublicLocationSerializer(read_only=True)
+    start_place = serializers.SerializerMethodField()
+    destination_place = serializers.SerializerMethodField()
     legs = JourneyLegSerializer(many=True, read_only=True)
     legacy_trip_id = serializers.IntegerField(read_only=True)
 
@@ -467,6 +633,8 @@ class JourneySerializer(serializers.ModelSerializer):
             "traveler_name",
             "start_location",
             "destination_location",
+            "start_place",
+            "destination_place",
             "legacy_trip_id",
             "status",
             "published_at",
@@ -476,3 +644,28 @@ class JourneySerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    @staticmethod
+    def _place_summary(place: Place | None) -> dict | None:
+        if place is None:
+            return None
+        locality = place.resolve_matching_locality()
+        return {
+            "id": place.pk,
+            "name": place.name,
+            "display_label": place.display_label,
+            "place_type": place.place_type,
+            "iata_code": place.iata_code or None,
+            "country_code": place.country_id,
+            "parent_name": place.parent.name
+            if place.parent_id and place.parent
+            else None,
+            "matching_locality_id": locality.pk if locality else None,
+            "matching_locality_name": locality.name if locality else None,
+        }
+
+    def get_start_place(self, obj: Journey) -> dict | None:
+        return self._place_summary(obj.start_place)
+
+    def get_destination_place(self, obj: Journey) -> dict | None:
+        return self._place_summary(obj.destination_place)

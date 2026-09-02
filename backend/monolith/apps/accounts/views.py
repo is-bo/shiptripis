@@ -194,7 +194,7 @@ class PasswordResetConfirmView(APIView):
         new_password = s.validated_data["new_password"]
 
         with transaction.atomic():
-            user = User.objects.select_for_update().filter(email__iexact=email).first()
+            user = User.objects.select_for_update(no_key=True).filter(email__iexact=email).first()
             if user is None:
                 return Response(
                     {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST

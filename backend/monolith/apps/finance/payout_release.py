@@ -56,7 +56,7 @@ def _financial_state_is_clean(deal_id: int) -> tuple[bool, str]:
     """
 
     orders = list(
-        PaymentOrder.objects.select_for_update()
+        PaymentOrder.objects.select_for_update(no_key=True)
         .filter(deal_id=deal_id, purpose=PaymentOrder.Purpose.DEAL_BALANCE)
         .order_by("pk")
     )
@@ -88,7 +88,7 @@ def freeze_payout(
     """
 
     deal = aggregate.deal
-    payout = Payout.objects.select_for_update().filter(deal_id=deal.pk).first()
+    payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=deal.pk).first()
     if payout is None:
         return "no_payout"
     if payout.status == Payout.Status.PAID:
@@ -170,7 +170,7 @@ def evaluate_payout_release(
             )
             return f"financial_state_{problem}"
 
-        payout = Payout.objects.select_for_update().filter(deal_id=deal.pk).first()
+        payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=deal.pk).first()
         if payout is None:
             return "no_payout"
         if payout.status in (

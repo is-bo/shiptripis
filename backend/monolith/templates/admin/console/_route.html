@@ -1,0 +1,43 @@
+{% comment %}
+  A journey, drawn as a journey.
+
+  `nodes` is an ordered list of stops from the console presenters. Every stop
+  after the first carries the mode of the leg that arrives at it, so the shape
+  of the trip — which hop is a flight and which is a drive — is visible without
+  reading a word. `variant` is "line" inside a table cell and the full stacked
+  ribbon everywhere else.
+{% endcomment %}
+{% if variant == "line" %}
+<span class="st-route-line">
+  {% for node in nodes %}
+    {% if not forloop.first %}
+      {% if node.mode == "FLIGHT" %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="then by flight to"><path d="M3.5 13.5 21 8l-3 6.5-4.5 1-2.5 5-2-4-6-3Z"/></svg>
+      {% elif node.mode == "DRIVE" %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="then by road to"><path d="M4 15.5h16M5.5 15.5l1.6-5.2A2 2 0 0 1 9 8.8h6a2 2 0 0 1 1.9 1.5l1.6 5.2M7.5 18.5v-3M16.5 18.5v-3"/></svg>
+      {% else %}
+        <span class="st-route-sep" aria-hidden="true">&rarr;</span><span class="st-visually-hidden">then to</span>
+      {% endif %}
+    {% endif %}
+    <b>{{ node.name }}</b>{% if node.code %}<span class="st-route-code">{{ node.code }}</span>{% endif %}
+  {% endfor %}
+</span>
+{% else %}
+<ol class="st-route">
+  {% for node in nodes %}
+    {% if not forloop.first %}
+      {% if node.mode == "FLIGHT" %}
+        <li class="st-route-leg is-flight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 13.5 21 8l-3 6.5-4.5 1-2.5 5-2-4-6-3Z"/></svg>{% if node.flight_number %}{{ node.flight_number }}{% else %}Flight{% endif %}</li>
+      {% elif node.mode == "DRIVE" %}
+        <li class="st-route-leg is-drive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15.5h16M5.5 15.5l1.6-5.2A2 2 0 0 1 9 8.8h6a2 2 0 0 1 1.9 1.5l1.6 5.2M7.5 18.5v-3M16.5 18.5v-3"/></svg>Drive</li>
+      {% else %}
+        <li class="st-route-leg" aria-hidden="true">&rarr;</li>
+      {% endif %}
+    {% endif %}
+    <li class="st-route-node">
+      <b>{{ node.name }}{% if node.code %}<span class="st-route-code">{{ node.code }}</span>{% endif %}</b>
+      {% if node.context %}<small>{{ node.context }}</small>{% endif %}
+    </li>
+  {% endfor %}
+</ol>
+{% endif %}

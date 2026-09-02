@@ -31,6 +31,7 @@ import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
 import '../../design/components/navigation.dart';
+import '../../design/components/place.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
 import '../../design/components/sheets.dart';
@@ -38,9 +39,11 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/delivery_request.dart';
+import '../../domain/canonical_place.dart';
 import '../../domain/location.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
+import '../location/preferred_point_field.dart';
 
 /// The smallest and largest parcel the V1 contract accepts, in kilograms.
 /// Enforced here only so an obvious typo never becomes a round trip; the
@@ -65,6 +68,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   static const _claimedFields = {
     'pickup_location_id',
     'delivery_location_id',
+    'pickup_place_id',
+    'delivery_place_id',
     'ready_window_start',
     'ready_window_end',
     'deadline_at',
@@ -100,8 +105,10 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   final _handlingNotes = TextEditingController();
   final _reward = TextEditingController();
 
-  AppLocation? _pickup;
-  AppLocation? _delivery;
+  CanonicalPlace? _pickup;
+  CanonicalPlace? _delivery;
+  AppLocation? _pickupPreferred;
+  AppLocation? _deliveryPreferred;
   ItemCategory? _category;
   bool _fragile = false;
 
@@ -207,18 +214,59 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
   Future<void> _pickPlace({required bool isPickup}) async {
     final l = L.of(context);
-    // The picker creates the location under this account, which is what makes
-    // it a legal `pickup_location_id` — the server refuses one owned by
-    // anybody else.
-    final chosen = await context.pickLocation(
+    final chosen = await context.pickCanonicalPlace(
       title: isPickup ? l.requestPickupLocation : l.requestDeliveryLocation,
+      current: isPickup ? _pickup : _delivery,
+    );
+    if (!mounted || chosen == null) return;
+
+    // A preferred point belongs to one canonical place; changing the place has
+    // to drop it. Dropping it silently is the part that is not acceptable —
+    // the user set that pin deliberately and would otherwise submit without it
+    // and without knowing.
+    final droppedPoint = isPickup
+        ? (_pickup?.id != chosen.id && _pickupPreferred != null)
+        : (_delivery?.id != chosen.id && _deliveryPreferred != null);
+
+    setState(() {
+      if (isPickup) {
+        if (_pickup?.id != chosen.id) _pickupPreferred = null;
+        _pickup = chosen;
+      } else {
+        if (_delivery?.id != chosen.id) _deliveryPreferred = null;
+        _delivery = chosen;
+      }
+    });
+
+    if (droppedPoint) {
+      AppSnack.info(context, l.locationPreferredClearedByPlace);
+    }
+  }
+
+  void _removePreferredPoint({required bool isPickup}) {
+    setState(() {
+      if (isPickup) {
+        _pickupPreferred = null;
+      } else {
+        _deliveryPreferred = null;
+      }
+    });
+    AppSnack.info(context, L.of(context).locationPreferredRemoved);
+  }
+
+  Future<void> _pickPreferredPoint({required bool isPickup}) async {
+    final place = isPickup ? _pickup : _delivery;
+    if (place == null) return;
+    final chosen = await context.pickPreferredLocation(
+      place,
+      title: L.of(context).locationPreferredMeetingPoint,
     );
     if (!mounted || chosen == null) return;
     setState(() {
       if (isPickup) {
-        _pickup = chosen;
+        _pickupPreferred = chosen;
       } else {
-        _delivery = chosen;
+        _deliveryPreferred = chosen;
       }
     });
   }
@@ -293,8 +341,10 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
     try {
       final draft = DeliveryRequestDraft(
-        pickupLocationId: _pickup!.id,
-        deliveryLocationId: _delivery!.id,
+        pickupPlaceId: _pickup!.id,
+        deliveryPlaceId: _delivery!.id,
+        pickupLocationId: _pickupPreferred?.id,
+        deliveryLocationId: _deliveryPreferred?.id,
         readyWindowStart: _readyStart!,
         readyWindowEnd: _readyEnd!,
         deadlineAt: _deadline!,
@@ -356,7 +406,13 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   /// question rather than on a banner about it.
   int? _stepOwning(FieldErrorMap errors) {
     const byStep = <int, List<String>>{
-      0: ['pickup_location_id', 'delivery_location_id', 'target_traveler_id'],
+      0: [
+        'pickup_place_id',
+        'delivery_place_id',
+        'pickup_location_id',
+        'delivery_location_id',
+        'target_traveler_id',
+      ],
       1: [
         'title',
         'description',
@@ -479,23 +535,33 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         label: l.requestPickupLocation,
         isRequired: true,
         placeholder: l.actionSelect,
-        value: _pickup == null ? null : _placeLabel(_pickup!),
-        secondary: _pickup?.region.isEmpty ?? true ? null : _pickup!.region,
+        value: _pickup == null ? null : placeLabel(_pickup!),
+        secondary: _pickup == null ? null : placeContext(context, _pickup!),
         helper: l.requestPickupHint,
         errorText:
+            _errors['pickup_place_id'] ??
             _errors['pickup_location_id'] ??
             (_touched && _pickup == null ? routeProblem : null),
         icon: Icons.outbox_rounded,
         onTap: () => _pickPlace(isPickup: true),
       ),
+      if (_pickup != null)
+        PreferredPointField(
+          place: _pickup!,
+          point: _pickupPreferred,
+          enabled: !_busy,
+          onChoose: () => _pickPreferredPoint(isPickup: true),
+          onRemove: () => _removePreferredPoint(isPickup: true),
+        ),
       AppSelectField(
         label: l.requestDeliveryLocation,
         isRequired: true,
         placeholder: l.actionSelect,
-        value: _delivery == null ? null : _placeLabel(_delivery!),
-        secondary: _delivery?.region.isEmpty ?? true ? null : _delivery!.region,
+        value: _delivery == null ? null : placeLabel(_delivery!),
+        secondary: _delivery == null ? null : placeContext(context, _delivery!),
         helper: l.requestDeliveryHint,
         errorText:
+            _errors['delivery_place_id'] ??
             _errors['delivery_location_id'] ??
             (_touched && (_delivery == null || sameProblem)
                 ? routeProblem
@@ -503,6 +569,14 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         icon: Icons.place_outlined,
         onTap: () => _pickPlace(isPickup: false),
       ),
+      if (_delivery != null)
+        PreferredPointField(
+          place: _delivery!,
+          point: _deliveryPreferred,
+          enabled: !_busy,
+          onChoose: () => _pickPreferredPoint(isPickup: false),
+          onRemove: () => _removePreferredPoint(isPickup: false),
+        ),
       if (sameProblem) ...[
         const SizedBox(height: AppSpace.sm),
         InfoNotice(
@@ -756,9 +830,28 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (pickup != null && delivery != null)
-              RouteSummary(
-                from: _placeLabel(pickup),
-                to: _placeLabel(delivery),
+              RouteSummary(from: placeLabel(pickup), to: placeLabel(delivery)),
+            // Two rows both labelled "Preferred meeting point" are two rows
+            // the reader cannot tell apart. The label names the end; the
+            // flexible case is stated rather than left as an absence, because
+            // "no row" and "no point" look identical on a review screen.
+            if (pickup != null)
+              DetailRow(
+                label: l.requestPickupLocation,
+                value: Text(
+                  _pickupPreferred?.displayLabel ??
+                      l.locationFlexibleWithin(pickup.name),
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            if (delivery != null)
+              DetailRow(
+                label: l.requestDeliveryLocation,
+                value: Text(
+                  _deliveryPreferred?.displayLabel ??
+                      l.locationFlexibleWithin(delivery.name),
+                  textAlign: TextAlign.end,
+                ),
               ),
             const SizedBox(height: AppSpace.md),
             DetailRow(label: l.requestTitle, value: Text(_title.text.trim())),
@@ -881,9 +974,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       },
     );
   }
-
-  String _placeLabel(AppLocation place) =>
-      place.isExact ? place.displayLabel : place.coarseLabel;
 }
 
 // ---------------------------------------------------------------------------

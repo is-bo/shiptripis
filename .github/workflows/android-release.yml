@@ -15,6 +15,14 @@ on:
         options:
           - release
           - debug
+      apk_architecture:
+        description: ARM64 is the smaller private phone-test APK; universal also includes 32-bit ARM and x64
+        required: true
+        default: arm64
+        type: choice
+        options:
+          - arm64
+          - universal
       release_id:
         description: Optional label (for example v1.0.0-rc.1); defaults from the pubspec version/build
         required: false
@@ -24,7 +32,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-android-${{ github.ref }}-${{ inputs.build_type }}
+  group: build-android-${{ github.ref }}-${{ inputs.build_type }}-${{ inputs.apk_architecture }}
   cancel-in-progress: false
 
 jobs:
@@ -69,6 +77,7 @@ jobs:
         env:
           INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
           INPUT_BUILD_TYPE: ${{ inputs.build_type }}
+          INPUT_APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
           INPUT_RELEASE_ID: ${{ inputs.release_id }}
         run: |
           python - <<'PY'
@@ -80,6 +89,7 @@ jobs:
 
           api_base_url = os.environ["INPUT_API_BASE_URL"].strip()
           build_type = os.environ["INPUT_BUILD_TYPE"]
+          apk_architecture = os.environ["INPUT_APK_ARCHITECTURE"]
           parsed = urlsplit(api_base_url)
           try:
               parsed.port
@@ -129,7 +139,7 @@ jobs:
               )
 
           short_sha = os.environ["GITHUB_SHA"][:7]
-          stem = f"shiptrip-{release_id}-{short_sha}-{build_type}"
+          stem = f"shiptrip-{release_id}-{short_sha}-{build_type}-{apk_architecture}"
           output = Path(os.environ["GITHUB_OUTPUT"])
           with output.open("a", encoding="utf-8") as handle:
               handle.write(f"api_base_url={api_base_url.rstrip('/')}\n")
@@ -157,6 +167,7 @@ jobs:
         if: inputs.build_type == 'release'
         env:
           API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
+          APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
           ANDROID_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -168,14 +179,24 @@ jobs:
               exit 1
             fi
           done
-          flutter build apk --release "--dart-define=API_BASE_URL=$API_BASE_URL"
+          apk_target=()
+          if [ "$APK_ARCHITECTURE" = "arm64" ]; then
+            apk_target+=(--target-platform android-arm64)
+          fi
+          flutter build apk --release "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
           flutter build appbundle --release "--dart-define=API_BASE_URL=$API_BASE_URL"
 
       - name: Build debug fallback APK
         if: inputs.build_type == 'debug'
         env:
           API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
-        run: flutter build apk --debug "--dart-define=API_BASE_URL=$API_BASE_URL"
+          APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
+        run: |
+          apk_target=()
+          if [ "$APK_ARCHITECTURE" = "arm64" ]; then
+            apk_target+=(--target-platform android-arm64)
+          fi
+          flutter build apk --debug "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
 
       - name: Verify signatures and stage artifacts
         env:

@@ -1,0 +1,126 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Staff &amp; access</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Owner controls</p>
+      <h1>Staff &amp; access</h1>
+      <p>Invite someone, give them exactly one role, and switch their access off when they leave. There are no permission lists to edit.</p>
+    </div>
+  </header>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">Step 1</p>
+      <h2>Invite a staff member</h2>
+      <p>ShipTrip emails them a one-time link through the durable email queue. The link never appears in this browser and cannot be recovered from this page.</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        {{ form.as_p }}
+        <div class="st-split-actions"><button type="submit">Send the invitation</button></div>
+      </form>
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Step 2</p>
+      <h2>What each role can do</h2>
+      <p>One role per person. Open a role to see what it covers.</p>
+      <div class="st-role-list">
+        {% for role in roles %}
+        <details>
+          <summary><strong>{{ role.name }}</strong><span>{{ role.permissions }} things they can do</span></summary>
+          <p>{{ role.description }}</p>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section class="st-card">
+    <div class="st-card-head">
+      <div><p class="st-eyebrow">Current access</p><h2>People who can sign in</h2></div>
+      <span class="st-muted">{{ staff_users|length }} shown</span>
+    </div>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Sign-in</th><th scope="col">Joined</th><th scope="col">Change</th></tr></thead>
+        <tbody>
+        {% for member in staff_users %}
+        <tr>
+          <td><strong>{{ member.full_name|default:"Name not provided" }}</strong><small>{{ member.email }}</small></td>
+          <td>{% if member.is_superuser %}<span class="st-chip st-info">Super Admin</span>{% else %}{% for group in member.groups.all %}<span class="st-chip st-info">{{ group.name }}</span>{% empty %}<span class="st-chip st-mute">No fixed role</span>{% endfor %}{% endif %}</td>
+          <td><span class="st-chip {% if member.is_active %}st-ok">Enabled{% else %}st-bad">Blocked{% endif %}</span></td>
+          <td>{{ member.date_joined|date:"d M Y" }}</td>
+          <td>
+            <details class="st-disclosure">
+              <summary>Change role or access</summary>
+              <div class="st-staff-actions">
+                <form method="post" action="{% url 'admin_console:staff-role' member.pk %}" class="st-form">{% csrf_token %}
+                  <label for="role-{{ member.pk }}">Role</label>
+                  <select id="role-{{ member.pk }}" name="role">{% for role in roles %}<option value="{{ role.slug }}"{% if role.slug == member.console_role %} selected{% endif %}>{{ role.name }}</option>{% endfor %}</select>
+                  <div class="st-check"><input id="confirm-role-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-role-{{ member.pk }}">Replace this person's current role.</label></div>
+                  <div class="st-split-actions"><button type="submit">Set role</button></div>
+                </form>
+                <form method="post" action="{% url 'admin_console:staff-access' member.pk %}" class="st-form">{% csrf_token %}
+                  <input type="hidden" name="enabled" value="{% if member.is_active %}False{% else %}True{% endif %}">
+                  <div class="st-check"><input id="confirm-access-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-access-{{ member.pk }}">{% if member.is_active %}Block this person from signing in.{% else %}Let this person sign in again.{% endif %}</label></div>
+                  <div class="st-split-actions"><button type="submit"{% if member.is_active %} class="st-button-danger"{% endif %}{% if member.pk == request.user.pk and member.is_active %} disabled title="You cannot block your own account"{% endif %}>{% if member.is_active %}Block sign-in{% else %}Restore sign-in{% endif %}</button></div>
+                </form>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No staff accounts yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="st-card">
+    <div class="st-card-head">
+      <div><p class="st-eyebrow">Not yet accepted</p><h2>Invitations</h2></div>
+    </div>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">State</th><th scope="col">Expires</th><th scope="col">Action</th></tr></thead>
+        <tbody>
+        {% for invitation in invitations %}
+        <tr>
+          <td><strong>{{ invitation.email }}</strong></td>
+          <td>{{ invitation.get_role_display }}</td>
+          <td>{% if invitation.is_active %}<span class="st-chip st-wait">Pending acceptance</span>{% elif invitation.used_at %}<span class="st-chip st-ok">Accepted</span>{% elif invitation.revoked_at %}<span class="st-chip st-bad">Revoked</span>{% else %}<span class="st-chip st-mute">Expired</span>{% endif %}</td>
+          <td>{{ invitation.expires_at|date:"d M Y, H:i" }}</td>
+          <td>
+            {% if not invitation.used_at %}
+            <details class="st-disclosure">
+              <summary>Manage invitation</summary>
+              <div class="st-staff-actions">
+                {% if invitation.is_active %}
+                <form method="post" action="{% url 'admin_console:staff-invitation-action' invitation.pk 'revoke' %}" class="st-form">{% csrf_token %}
+                  <div class="st-check"><input id="revoke-{{ invitation.pk }}" type="checkbox" name="confirm" value="yes" required><label for="revoke-{{ invitation.pk }}">Make this link stop working.</label></div>
+                  <div class="st-split-actions"><button class="st-button-danger" type="submit">Revoke</button></div>
+                </form>
+                {% endif %}
+                <form method="post" action="{% url 'admin_console:staff-invitation-action' invitation.pk 'replace' %}" class="st-form">{% csrf_token %}
+                  <div class="st-check"><input id="replace-{{ invitation.pk }}" type="checkbox" name="confirm" value="yes" required><label for="replace-{{ invitation.pk }}">Send a new link and cancel the old one.</label></div>
+                  <div class="st-split-actions"><button type="submit">Replace invitation</button></div>
+                </form>
+              </div>
+            </details>
+            {% else %}&mdash;{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No invitations have been sent.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

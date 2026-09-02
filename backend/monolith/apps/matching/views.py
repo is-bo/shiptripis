@@ -1,16 +1,29 @@
-"""Matching API.
+"""Matching API — the routed V1 reads plus a retained legacy write block.
 
-Endpoints:
+Routed here (see `urls.py`):
   GET  /api/matches                          — list (mine, ?role=sender|traveler, ?status=)
   GET  /api/matches/<id>                     — detail (party-only)
-  POST /api/matches/apply                    — traveler creates Match + first Offer
-  POST /api/matches/apply-to-trip            — sender applies existing parcel to a trip
   POST /api/matches/<id>/cancel              — either party cancels (only while pending)
   GET  /api/matches/<id>/offers              — list offers on a match (party-only)
-  POST /api/matches/<id>/offers/counter      — counter the current pending offer
-  POST /api/offers/<id>/accept               — counterparty accepts (locks pricing)
+  GET  /api/matches/<id>/chat-eligibility    — whether chat is open on this match
   POST /api/offers/<id>/decline              — counterparty declines
   POST /api/offers/<id>/withdraw             — proposer withdraws their own offer
+
+Every V1 *negotiation write* lives in `v1_views.py` and `v1_services.py`
+instead: `SenderProposeV1View`, `CounterOfferV1View` and `OfferAcceptV1View`.
+`urls.py` points the retired traveler-first paths at
+`RetiredLegacyMatchingWriteView`.
+
+**Unrouted legacy classes.** `TravelerApplyView`, `SenderApplyView`,
+`CounterOfferView` and `OfferAcceptView` below are the pre-V1 traveler-first,
+DZD-priced write path. Nothing in the repository routes, imports or calls them;
+they are reachable only by reading this file. They are kept rather than deleted
+because they still document the retired behaviour that several comments in
+`apps.parcels` point at, and because they are the reason
+`apps/finance/tests/test_phase8df_lock_order.py` excludes this module from the
+canonical finance lock graph — they cannot execute against a V1 Deal. Removing
+them is a separate legacy-retirement change, not a release-candidate cleanup.
+Do not add a route to them.
 
 State machine details in `models.py`.
 
@@ -64,7 +77,9 @@ def _quote_for_parcel(parcel: ParcelRequest, base_amount_dzd: int | None) -> dic
         from apps.parcels.models import DeliveryRequest
 
         delivery = DeliveryRequest.objects.get(pk=parcel.pk)
-        amount = base_amount_dzd if base_amount_dzd is not None else delivery.base_amount_dzd
+        amount = (
+            base_amount_dzd if base_amount_dzd is not None else delivery.base_amount_dzd
+        )
         q = quote_delivery(amount)
         return {
             "base_amount_dzd": q.base_amount_dzd,
@@ -79,7 +94,9 @@ def _quote_for_parcel(parcel: ParcelRequest, base_amount_dzd: int | None) -> dic
     from apps.parcels.models import ProductRequest
 
     product = ProductRequest.objects.get(pk=parcel.pk)
-    amount = base_amount_dzd if base_amount_dzd is not None else product.product_price_dzd
+    amount = (
+        base_amount_dzd if base_amount_dzd is not None else product.product_price_dzd
+    )
     q = quote_product(amount)
     return {
         "base_amount_dzd": q.product_price_dzd,
@@ -125,10 +142,7 @@ def _domain_error(
 
 
 def _refetch_match(pk: int) -> Match:
-    return (
-        _match_read_queryset()
-        .get(pk=pk)
-    )
+    return _match_read_queryset().get(pk=pk)
 
 
 def _match_read_queryset():
@@ -137,6 +151,8 @@ def _match_read_queryset():
         "parcel__deliveryrequest",
         "parcel__deliveryrequest__pickup_location",
         "parcel__deliveryrequest__delivery_location",
+        "parcel__deliveryrequest__pickup_place",
+        "parcel__deliveryrequest__delivery_place",
         "trip",
         "sender",
         "traveler",
@@ -165,7 +181,7 @@ class MatchListView(APIView):
             qs = qs.filter(traveler=request.user)
         else:
             qs = qs.filter(sender=request.user) | qs.filter(traveler=request.user)
-        if (s := request.query_params.get("status")):
+        if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
         return Response(
             MatchSerializer(
@@ -231,7 +247,10 @@ class TravelerApplyView(APIView):
                 {"detail": f"Trip is not bookable (status={trip.status})."},
                 status=http.HTTP_409_CONFLICT,
             )
-        if (parcel.origin_id, parcel.destination_id) != (trip.origin_id, trip.destination_id):
+        if (parcel.origin_id, parcel.destination_id) != (
+            trip.origin_id,
+            trip.destination_id,
+        ):
             return Response(
                 {"detail": "Parcel and trip must share origin and destination."},
                 status=http.HTTP_400_BAD_REQUEST,
@@ -247,7 +266,10 @@ class TravelerApplyView(APIView):
             ).first()
             if existing is not None:
                 return Response(
-                    {"detail": "A pending match already exists.", "match_id": existing.id},
+                    {
+                        "detail": "A pending match already exists.",
+                        "match_id": existing.id,
+                    },
                     status=http.HTTP_409_CONFLICT,
                 )
 
@@ -350,7 +372,10 @@ class SenderApplyView(APIView):
                 {"detail": f"Trip is not bookable (status={trip.status})."},
                 status=http.HTTP_409_CONFLICT,
             )
-        if (parcel.origin_id, parcel.destination_id) != (trip.origin_id, trip.destination_id):
+        if (parcel.origin_id, parcel.destination_id) != (
+            trip.origin_id,
+            trip.destination_id,
+        ):
             return Response(
                 {"detail": "Parcel and trip must share origin and destination."},
                 status=http.HTTP_400_BAD_REQUEST,
@@ -364,7 +389,10 @@ class SenderApplyView(APIView):
             ).first()
             if existing is not None:
                 return Response(
-                    {"detail": "A pending match already exists.", "match_id": existing.id},
+                    {
+                        "detail": "A pending match already exists.",
+                        "match_id": existing.id,
+                    },
                     status=http.HTTP_409_CONFLICT,
                 )
 
@@ -490,9 +518,7 @@ class MatchCancelView(APIView):
             )
 
         return Response(
-            MatchSerializer(
-                _refetch_match(match.pk), context={"request": request}
-            ).data
+            MatchSerializer(_refetch_match(match.pk), context={"request": request}).data
         )
 
 
@@ -594,7 +620,9 @@ class CounterOfferView(APIView):
                 payload={"parent_offer_id": pending.id, "total_dzd": child.total_dzd},
             )
             recipient = (
-                match.traveler_id if my_side == Offer.ProposedBy.SENDER else match.sender_id
+                match.traveler_id
+                if my_side == Offer.ProposedBy.SENDER
+                else match.sender_id
             )
             redis_bus.publish_after_commit(
                 channels.OFFER_CREATED,
@@ -609,9 +637,7 @@ class CounterOfferView(APIView):
             )
 
         return Response(
-            OfferSerializer(
-                child, context={"request": request, "match": match}
-            ).data,
+            OfferSerializer(child, context={"request": request, "match": match}).data,
             status=http.HTTP_201_CREATED,
         )
 
@@ -643,7 +669,10 @@ class OfferAcceptView(APIView):
                 pk=initial_offer.match.parcel_id,
             )
             match = get_object_or_404(
-                Match.objects.select_for_update().select_related("trip"),
+                # `trip` is nullable, so this select_related outer-joins and a
+                # bare FOR UPDATE would be rejected by PostgreSQL. Name the row
+                # actually being locked.
+                Match.objects.select_for_update(of=("self",)).select_related("trip"),
                 pk=initial_offer.match_id,
             )
             offer = get_object_or_404(
@@ -708,9 +737,7 @@ class OfferAcceptView(APIView):
             )
 
         return Response(
-            OfferSerializer(
-                offer, context={"request": request, "match": match}
-            ).data
+            OfferSerializer(offer, context={"request": request, "match": match}).data
         )
 
 
@@ -782,9 +809,7 @@ class OfferDeclineView(APIView):
             )
 
         return Response(
-            OfferSerializer(
-                offer, context={"request": request, "match": match}
-            ).data
+            OfferSerializer(offer, context={"request": request, "match": match}).data
         )
 
 
@@ -827,9 +852,7 @@ class MatchChatEligibilityView(APIView):
         # 200 with eligible=false (not 403) -- caller may be the Go chat-service
         # calling on behalf of a user; we want a uniform shape it can cache.
         eligible, reason = chat_eligibility(match, request.user.id)
-        return Response(
-            {"eligible": eligible, "reason": reason, "match_id": match.id}
-        )
+        return Response({"eligible": eligible, "reason": reason, "match_id": match.id})
 
 
 class OfferWithdrawView(APIView):
@@ -902,7 +925,5 @@ class OfferWithdrawView(APIView):
             )
 
         return Response(
-            OfferSerializer(
-                offer, context={"request": request, "match": match}
-            ).data
+            OfferSerializer(offer, context={"request": request, "match": match}).data
         )

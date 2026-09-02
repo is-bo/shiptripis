@@ -117,6 +117,8 @@ PUBLIC_LEG_SUMMARY_FIELDS: tuple[str, ...] = (
     "mode",
     "origin",
     "destination",
+    "origin_place",
+    "destination_place",
     "depart_at",
     "arrive_at",
 )
@@ -124,6 +126,7 @@ PUBLIC_LEG_SUMMARY_FIELDS: tuple[str, ...] = (
 #: Sub-keys of a covered leg that are themselves location objects and must be
 #: re-projected through `PUBLIC_LOCATION_SUMMARY_FIELDS`.
 PUBLIC_LEG_LOCATION_KEYS: frozenset[str] = frozenset({"origin", "destination"})
+PUBLIC_LEG_PLACE_KEYS: frozenset[str] = frozenset({"origin_place", "destination_place"})
 
 #: Policy keys a party is entitled to see because they are terms of their own
 #: deal. Everything else in the policy object (ranking weights, boost points,
@@ -192,6 +195,25 @@ def public_location_summary(location: object) -> dict | None:
     return {field: location.get(field) for field in PUBLIC_LOCATION_SUMMARY_FIELDS}
 
 
+def public_place_summary(place: object) -> dict | None:
+    """Project canonical place data safe for pre-funding counterparties."""
+
+    if not isinstance(place, dict):
+        return None
+    return {
+        key: place.get(key)
+        for key in (
+            "id",
+            "name",
+            "display_label",
+            "place_type",
+            "country_code",
+            "iata_code",
+            "matching_locality_id",
+        )
+    }
+
+
 def public_leg_summary(leg: object) -> dict | None:
     """Re-project one covered-leg summary through the public field allowlist.
 
@@ -208,6 +230,8 @@ def public_leg_summary(leg: object) -> dict | None:
         projected[field] = (
             public_location_summary(value)
             if field in PUBLIC_LEG_LOCATION_KEYS
+            else public_place_summary(value)
+            if field in PUBLIC_LEG_PLACE_KEYS
             else value
         )
     return projected
@@ -253,7 +277,9 @@ def public_compatibility_payload(internal: object) -> dict | None:
         "covered_leg_ids": list(covered_leg_ids),
         "covered_leg_positions": list(internal.get("covered_leg_positions") or []),
         "covered_legs": covered_legs,
-        "estimated_pickup_window": _leg_window(covered_legs[0] if covered_legs else None),
+        "estimated_pickup_window": _leg_window(
+            covered_legs[0] if covered_legs else None
+        ),
         "estimated_delivery_window": _leg_window(
             covered_legs[-1] if covered_legs else None
         ),

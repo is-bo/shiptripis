@@ -92,9 +92,12 @@ class _ThreadRow extends StatelessWidget {
       label: thread.hasUnread
           ? '${thread.counterpartyName}, ${thread.unreadCount}'
           : thread.counterpartyName,
+      onTap: () =>
+          context.openChatThread(thread.matchId, dealId: thread.dealId),
       child: ExcludeSemantics(
         child: InkWell(
-          onTap: () => context.openChatThread(thread.matchId),
+          onTap: () =>
+              context.openChatThread(thread.matchId, dealId: thread.dealId),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
             child: Row(

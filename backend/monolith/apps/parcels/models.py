@@ -147,15 +147,29 @@ class ParcelRequest(models.Model):
 class DeliveryRequest(ParcelRequest):
     """Sender already owns the item; offers a base amount, traveler keeps 75%.
 
-    `base_amount_dzd` is the **sender-proposed** payout to the traveler before
-    the 25% commission is added on top (CLAUDE.md §6). Final numbers are
-    frozen on the Offer row when accepted.
+    New V1 rows use canonical catalogue places (schema_version=3).  The
+    optional Location rows are operational preferred pickup/dropoff details;
+    they are scoped to the selected Place and never participate in matching.
     """
 
     schema_version = models.PositiveSmallIntegerField(
         default=1,
-        validators=[MinValueValidator(1), MaxValueValidator(2)],
-        help_text="1 is the legacy airport/DZD contract; 2 is the V1 location/EUR contract.",
+        validators=[MinValueValidator(1), MaxValueValidator(3)],
+        help_text="1 is legacy airport/DZD, 2 is legacy V1 pins, 3 is canonical geography V1.",
+    )
+    pickup_place = models.ForeignKey(
+        "locations.Place",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="delivery_requests_pickup",
+    )
+    delivery_place = models.ForeignKey(
+        "locations.Place",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="delivery_requests_delivery",
     )
     pickup_location = models.ForeignKey(
         "locations.Location",
@@ -265,6 +279,10 @@ class DeliveryRequest(ParcelRequest):
                 name="parcels_v1_route_idx",
             ),
             models.Index(
+                fields=["schema_version", "pickup_place", "delivery_place"],
+                name="parcels_v1_place_route_idx",
+            ),
+            models.Index(
                 fields=["schema_version", "ready_window_start", "ready_window_end"],
                 name="parcels_v1_ready_window_idx",
             ),
@@ -275,15 +293,16 @@ class DeliveryRequest(ParcelRequest):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(schema_version__in=(1, 2)),
+                condition=models.Q(schema_version__in=(1, 2, 3)),
                 name="parcels_delivery_schema_ver",
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(schema_version=1)
+                    models.Q(schema_version__in=(1, 2))
                     | (
-                        models.Q(pickup_location__isnull=False)
-                        & models.Q(delivery_location__isnull=False)
+                        models.Q(schema_version=3)
+                        & models.Q(pickup_place__isnull=False)
+                        & models.Q(delivery_place__isnull=False)
                         & models.Q(ready_window_start__isnull=False)
                         & models.Q(ready_window_end__isnull=False)
                         & models.Q(actual_weight_kg__isnull=False)
@@ -338,9 +357,10 @@ class DeliveryRequest(ParcelRequest):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(schema_version=1)
+                    models.Q(schema_version__in=(1, 2))
                     | (
-                        models.Q(description_is_accurate=True)
+                        models.Q(schema_version=3)
+                        & models.Q(description_is_accurate=True)
                         & models.Q(item_is_legal=True)
                         & models.Q(no_prohibited_goods=True)
                         & models.Q(declared_value_is_accurate=True)
@@ -351,8 +371,7 @@ class DeliveryRequest(ParcelRequest):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(schema_version=1)
-                    | models.Q(base_amount_dzd__isnull=True)
+                    models.Q(schema_version=1) | models.Q(base_amount_dzd__isnull=True)
                 ),
                 name="parcels_delivery_v1_no_dzd",
             ),
@@ -373,11 +392,44 @@ class DeliveryRequest(ParcelRequest):
 
     def clean(self):
         super().clean()
-        if self.schema_version != 2:
+        if self.schema_version not in (2, 3):
             return
         errors = {}
+        if self.schema_version == 3:
+            for field in ("pickup_place", "delivery_place"):
+                place = getattr(self, field, None)
+                if place is None:
+                    errors[field] = "A canonical locality or airport is required."
+                elif not place.active or place.place_type not in {
+                    "locality",
+                    "airport",
+                }:
+                    errors[field] = (
+                        "Place must be an active selectable locality or airport."
+                    )
+            if self.pickup_place_id == self.delivery_place_id and self.pickup_place_id:
+                errors["delivery_place"] = "Pickup and delivery places must differ."
+            for field, place_field in (
+                ("pickup_location", "pickup_place"),
+                ("delivery_location", "delivery_place"),
+            ):
+                location = getattr(self, field, None)
+                place = getattr(self, place_field, None)
+                if location is not None and location.canonical_place_id != getattr(
+                    place, "pk", None
+                ):
+                    errors[field] = (
+                        "Preferred point must belong to its selected canonical place."
+                    )
+        if self.schema_version == 2:
+            # Schema 2 is retained for private pre-Phase-8C fixtures only.
+            # New marketplace writes use schema 3 below.
+            pass
         for field in ("origin", "destination", "weight_kg"):
-            if getattr(self, f"{field}_id" if field != "weight_kg" else field) is not None:
+            if (
+                getattr(self, f"{field}_id" if field != "weight_kg" else field)
+                is not None
+            ):
                 errors[field] = "Legacy route/weight fields must be empty for V1."
         for field in ("pickup_city", "delivery_city"):
             if getattr(self, field):

@@ -16,10 +16,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_client.dart';
+import '../core/api/api_exception.dart';
+import '../core/api/error_codes.dart';
 import '../core/env/app_config.dart';
 import '../core/session/session.dart';
 import '../domain/boost.dart';
 import '../domain/cancellation.dart';
+import '../domain/canonical_place.dart';
 import '../domain/chat.dart';
 import '../domain/communication_language.dart';
 import '../domain/deal.dart';
@@ -28,6 +31,7 @@ import '../domain/discovery.dart';
 import '../domain/dispute.dart';
 import '../domain/handover.dart';
 import '../domain/journey.dart';
+import '../domain/json.dart';
 import '../domain/kyc.dart';
 import '../domain/location.dart';
 import '../domain/notification.dart';
@@ -79,6 +83,7 @@ class LocationRepository {
     String? provider,
     String? providerPlaceId,
     String? airportIata,
+    int? canonicalPlaceId,
   }) async => AppLocation.fromJson(
     await _api.postObject(
       '/api/locations',
@@ -95,6 +100,7 @@ class LocationRepository {
         if (provider != null && provider.isNotEmpty) 'provider': provider,
         if (providerPlaceId != null && providerPlaceId.isNotEmpty)
           'provider_place_id': providerPlaceId,
+        'canonical_place': ?canonicalPlaceId,
         'airport': ?airportIata,
       },
     ),
@@ -132,6 +138,50 @@ class LocationRepository {
       };
 }
 
+class GeographyRepository {
+  const GeographyRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<GeographyCountry>> countries({CancelToken? cancelToken}) async {
+    final rows = await _api.getList(
+      '/api/geography/countries',
+      cancelToken: cancelToken,
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => GeographyCountry.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+  }
+
+  Future<List<CanonicalPlace>> searchPlaces({
+    required String countryCode,
+    String query = '',
+    bool airportOnly = false,
+    CancelToken? cancelToken,
+  }) async {
+    final rows = await _api.getList(
+      '/api/geography/places',
+      query: {
+        'country': countryCode.toUpperCase(),
+        if (query.trim().isNotEmpty) 'q': query.trim(),
+        'place_type': airportOnly ? 'airport' : 'locality,airport',
+        'page_size': '25',
+      },
+      cancelToken: cancelToken,
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => CanonicalPlace.fromJson(Map<String, dynamic>.from(row)))
+        .where(
+          (place) =>
+              place.type == CanonicalPlaceType.locality || place.isAirport,
+        )
+        .where((place) => place.availableForMatching)
+        .toList(growable: false);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Journeys
 // ---------------------------------------------------------------------------
@@ -141,8 +191,10 @@ class JourneyLegDraft {
   const JourneyLegDraft({
     required this.position,
     required this.mode,
-    required this.originId,
-    required this.destinationId,
+    this.originId,
+    this.destinationId,
+    this.originPlaceId,
+    this.destinationPlaceId,
     required this.departAt,
     required this.capacityKg,
     this.arriveAt,
@@ -151,8 +203,10 @@ class JourneyLegDraft {
 
   final int position;
   final TransportModeDraft mode;
-  final int originId;
-  final int destinationId;
+  final int? originId;
+  final int? destinationId;
+  final int? originPlaceId;
+  final int? destinationPlaceId;
   final DateTime departAt;
   final DateTime? arriveAt;
   final double capacityKg;
@@ -163,8 +217,10 @@ class JourneyLegDraft {
   Map<String, dynamic> toJson() => {
     'position': position,
     'mode': mode.wire,
-    'origin': originId,
-    'destination': destinationId,
+    if (originPlaceId != null) 'origin_place_id': originPlaceId,
+    if (destinationPlaceId != null) 'destination_place_id': destinationPlaceId,
+    if (originId != null) 'origin': originId,
+    if (destinationId != null) 'destination': destinationId,
     'depart_at': departAt.toUtc().toIso8601String(),
     if (arriveAt != null) 'arrive_at': arriveAt!.toUtc().toIso8601String(),
     'capacity_kg': capacityKg.toStringAsFixed(2),
@@ -204,16 +260,20 @@ class JourneyRepository {
       );
 
   Future<Journey> create({
-    required int startLocationId,
-    required int destinationLocationId,
+    int? startLocationId,
+    int? destinationLocationId,
+    int? startPlaceId,
+    int? destinationPlaceId,
     required List<JourneyLegDraft> legs,
     String notes = '',
   }) async => Journey.fromJson(
     await _api.postObject(
       '/api/journeys',
       body: {
-        'start_location': startLocationId,
-        'destination_location': destinationLocationId,
+        'start_place_id': ?startPlaceId,
+        'destination_place_id': ?destinationPlaceId,
+        'start_location': ?startLocationId,
+        'destination_location': ?destinationLocationId,
         'notes': notes,
         'legs': legs.map((l) => l.toJson()).toList(growable: false),
       },
@@ -268,6 +328,8 @@ class JourneyRepository {
     TransportModeDraft? mode,
     DateTime? departureAfter,
     double? minCapacityKg,
+    int? startPlaceId,
+    int? destinationPlaceId,
     CancelToken? cancelToken,
   }) async {
     final rows = await _api.getList(
@@ -275,6 +337,8 @@ class JourneyRepository {
       query: {
         'start_location_id': ?startLocationId,
         'destination_location_id': ?destinationLocationId,
+        'start_place_id': ?startPlaceId,
+        'destination_place_id': ?destinationPlaceId,
         if (mode != null) 'mode': mode.wire,
         if (departureAfter != null)
           'departure_after': departureAfter.toUtc().toIso8601String(),
@@ -306,8 +370,10 @@ class JourneyRepository {
 /// so this carries exactly the accepted set and nothing else.
 class DeliveryRequestDraft {
   const DeliveryRequestDraft({
-    required this.pickupLocationId,
-    required this.deliveryLocationId,
+    this.pickupLocationId,
+    this.deliveryLocationId,
+    this.pickupPlaceId,
+    this.deliveryPlaceId,
     required this.readyWindowStart,
     required this.readyWindowEnd,
     required this.deadlineAt,
@@ -326,8 +392,10 @@ class DeliveryRequestDraft {
     this.targetTravelerId,
   });
 
-  final int pickupLocationId;
-  final int deliveryLocationId;
+  final int? pickupLocationId;
+  final int? deliveryLocationId;
+  final int? pickupPlaceId;
+  final int? deliveryPlaceId;
   final DateTime readyWindowStart;
   final DateTime readyWindowEnd;
   final DateTime deadlineAt;
@@ -352,8 +420,10 @@ class DeliveryRequestDraft {
   final SafetyAcknowledgements acknowledgements;
 
   Map<String, dynamic> toJson() => {
-    'pickup_location_id': pickupLocationId,
-    'delivery_location_id': deliveryLocationId,
+    if (pickupPlaceId != null) 'pickup_place_id': pickupPlaceId,
+    if (deliveryPlaceId != null) 'delivery_place_id': deliveryPlaceId,
+    if (pickupLocationId != null) 'pickup_location_id': pickupLocationId,
+    if (deliveryLocationId != null) 'delivery_location_id': deliveryLocationId,
     'ready_window_start': readyWindowStart.toUtc().toIso8601String(),
     'ready_window_end': readyWindowEnd.toUtc().toIso8601String(),
     'deadline_at': deadlineAt.toUtc().toIso8601String(),
@@ -654,6 +724,26 @@ class DealRepository {
         .whereType<Map>()
         .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
+  }
+
+  /// Exact server-side count for a filtered Deal set. Unlike [list], this
+  /// keeps the paginated envelope's authoritative `count` instead of
+  /// inferring activity from the first 20 rows.
+  Future<int> count({DealStatus? status, CancelToken? cancelToken}) async {
+    final page = await _api.getObject(
+      '/api/deals',
+      query: {if (status != null) 'status': dealStatusWire(status)},
+      cancelToken: cancelToken,
+    );
+    final count = readInt(page['count']);
+    if (count == null || count < 0) {
+      throw ApiException(
+        kind: ApiFailureKind.malformed,
+        code: ApiErrorCode.unknown,
+        serverDetail: 'GET /api/deals returned no valid count.',
+      );
+    }
+    return count;
   }
 
   /// The aggregate: terms, allocations, recipient, handover, protection,
@@ -1178,6 +1268,19 @@ class ChatRepository {
 
   final ApiClient _api;
 
+  /// Fetches the server's authoritative chat gate before attempting history.
+  /// The endpoint always returns 200 with a structured reason, including the
+  /// normal pre-funding `payment_pending` state.
+  Future<ChatEligibility> eligibility({
+    required int matchId,
+    CancelToken? cancelToken,
+  }) async => ChatEligibility.fromJson(
+    await _api.getObject(
+      '/api/matches/$matchId/chat-eligibility',
+      cancelToken: cancelToken,
+    ),
+  );
+
   /// Every thread the caller may read, including ones they can no longer write
   /// to. `can_send` on each row is the composer's gate.
   Future<List<ChatThread>> threads({CancelToken? cancelToken}) async {
@@ -1316,6 +1419,10 @@ class KycRepository {
 
 final locationRepositoryProvider = Provider<LocationRepository>(
   (ref) => LocationRepository(ref.watch(apiClientProvider)),
+);
+
+final geographyRepositoryProvider = Provider<GeographyRepository>(
+  (ref) => GeographyRepository(ref.watch(apiClientProvider)),
 );
 
 final journeyRepositoryProvider = Provider<JourneyRepository>(

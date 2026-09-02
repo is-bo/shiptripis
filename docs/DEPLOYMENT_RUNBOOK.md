@@ -65,9 +65,38 @@ Remove-Item Env:PGPASSWORD
 
 Run Django checks, migration plan (expected empty), row-count/invariant queries, sampled ledger balance checks, provider-event uniqueness checks, and application smoke tests against the isolated restore. Record recovery time and recovery point. A backup without a successful recent restore is not a release gate.
 
+## 4b. Geography catalogue (from Phase 8E)
+
+The release ships the reviewed catalogue as
+`backend/monolith/apps/locations/data/geography_manifest_2026.json.gz`, and the
+combined launcher applies it with `manage.py import_geography --skip-if-current`
+**after** the gateway is listening. Read the sequence rather than repeating it:
+
+- [ ] Confirm the release-data test passes, so the artefact is the reviewed
+      manifest (uncompressed SHA-256
+      `b4aad209f4ae7ecb264fc9ae4b5d9b4b61b7ff9d918ca470729db93d1abb7692`,
+      56,134 places / 3,833 alternate names / 165 mappings / 161 airports).
+- [ ] Expect the first boot after this release to log
+      `applying bundled geography catalogue (skip-if-current)` and then the
+      import counts. Rehearsed at 145.7 s and a 280 MB peak against
+      PostgreSQL 16; every boot after it is a ~1 s indexed no-op.
+- [ ] The service is **ready before the catalogue lands**. During that window
+      canonical place search returns nothing and request/journey creation is
+      refused. This is expected on a first deployment and is not a rollback
+      trigger; the import is one transaction, so a partial catalogue is never
+      visible.
+- [ ] Verify afterwards on **Operations → Geography catalogue**: the applied
+      manifest digest, the per-country counts, and 161 airport-to-locality
+      links. `No catalogue import is recorded` means the import failed — check
+      the deployment log for `geography catalogue import FAILED`. Re-running is
+      safe: the command is transactional and rerunnable.
+- [ ] Do not add `--deactivate-missing` to the boot path. Retiring catalogue
+      rows a live deployment is matching on is an operator decision, not a
+      restart side effect.
+
 ## 5. Deploy sequence
 
-The combined launcher currently runs migrations and `collectstatic` before starting the web process, then starts Django web, Django gRPC, reservation releaser, durable finance worker, Go services, and Caddy. Because application and migration are one rollout unit, migrations must be backward-compatible with the previous release.
+The combined launcher currently runs migrations and `collectstatic` before starting the web process, then starts Django web, Django gRPC, reservation releaser, durable finance worker, Go services, and Caddy, and finally applies the bundled geography catalogue (§4b). Because application and migration are one rollout unit, migrations must be backward-compatible with the previous release.
 
 1. Announce the release window and confirm the backup/restore evidence.
 2. Ensure the new image is built from the reviewed commit and tagged with the release identifier.
@@ -76,7 +105,7 @@ The combined launcher currently runs migrations and `collectstatic` before start
 5. Watch migration output. Abort on an unexpected plan, precondition failure, lock timeout, or table rewrite beyond rehearsal.
 6. Watch child startup. All required processes must listen; any child exit makes the combined launcher fail.
 7. Require `/healthz` 200 with the expected release, then `/readyz` 200 with database, migrations, and `rate_limit_cache` all `ok`. Railway entrypoint health checks target `/readyz`; do not route new traffic on liveness alone.
-8. Authenticate as a least-privilege Ops user and inspect `/api/admin/health/deep`, provider health, scheduled jobs, provider events, email backlog, and audit log.
+8. Authenticate as a least-privilege Ops user and inspect `/api/admin/health/deep`, provider health, scheduled jobs, provider events, email backlog, and audit log. From Phase 8E the provider block also reports `stripe_mode` / `chargily_mode` — `test`, `live`, `unknown` or `not_configured` — derived from each credential's documented shape. It is the supported way to confirm which rail a deployment is armed against; reading a key to find out is not. `unknown` on a configured rail means the credential and the API base disagree, or the key is not a shape this code recognises: treat it as a stop condition, not as `test`.
 9. Verify public EN/FR/AR routes, assets, security headers, legal/support placeholders, 404 behavior, API/admin framing refusal, and TLS/HSTS.
 10. Run the production smoke checklist below with controlled test accounts and no live provider calls unless activation is separately authorized.
 11. Observe error rate, p95 latency, PostgreSQL connections/locks, worker claims, retry backlog, Redis status, and 4xx/5xx request IDs for at least one normal job interval plus the agreed soak period.

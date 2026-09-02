@@ -1106,7 +1106,7 @@ def set_dispute_status(
     deal_id = Dispute.objects.values_list("deal_id", flat=True).get(pk=dispute_id)
     with transaction.atomic():
         aggregate = lock_deal_lifecycle(deal_id)
-        dispute = Dispute.objects.select_for_update().get(pk=dispute_id)
+        dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
         if dispute.status in (Dispute.Status.RESOLVED, Dispute.Status.CLOSED):
             raise DisputeError(
                 "This dispute is already finished and cannot be reopened.",
@@ -1157,7 +1157,7 @@ def close_dispute(
     deal_id = Dispute.objects.values_list("deal_id", flat=True).get(pk=dispute_id)
     with transaction.atomic():
         aggregate = lock_deal_lifecycle(deal_id)
-        dispute = Dispute.objects.select_for_update().get(pk=dispute_id)
+        dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
         if dispute.status == Dispute.Status.CLOSED:
             return dispute
 
@@ -1259,6 +1259,44 @@ def _resolution_deal_status(*, plan: SettlementPlan, collected: int) -> str:
     return Deal.Status.PARTIALLY_REFUNDED
 
 
+def preview_dispute_resolution(
+    *,
+    dispute_id: int,
+    resolution: str,
+    sender_refund_eur_cents: int | None = None,
+    traveler_payout_eur_cents: int | None = None,
+) -> SettlementPlan:
+    """Return the exact server-side consequence of a proposed resolution.
+
+    This is a confirmation aid only. It takes the same aggregate lock and calls
+    the same settlement planner as :func:`resolve_dispute`, but writes nothing.
+    The final action re-plans under a fresh lock, so a payment or payout change
+    between preview and confirmation cannot make the preview authoritative.
+    """
+
+    if resolution not in Dispute.Resolution.values:
+        raise DisputeError(
+            "That is not a dispute resolution.",
+            code="dispute_resolution_invalid",
+        )
+    deal_id = Dispute.objects.values_list("deal_id", flat=True).get(pk=dispute_id)
+    with transaction.atomic():
+        aggregate = lock_deal_lifecycle(deal_id)
+        dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
+        if dispute.status in (Dispute.Status.RESOLVED, Dispute.Status.CLOSED):
+            raise DisputeError(
+                "This dispute is already finished.",
+                code="dispute_already_finished",
+            )
+        return _plan_resolution(
+            deal=aggregate.deal,
+            money=read_deal_money(aggregate.deal),
+            resolution=resolution,
+            sender_refund_eur_cents=sender_refund_eur_cents,
+            traveler_payout_eur_cents=traveler_payout_eur_cents,
+        )
+
+
 def resolve_dispute(
     *,
     dispute_id: int,
@@ -1297,7 +1335,7 @@ def resolve_dispute(
     deal_id = Dispute.objects.values_list("deal_id", flat=True).get(pk=dispute_id)
     with transaction.atomic():
         aggregate = lock_deal_lifecycle(deal_id)
-        dispute = Dispute.objects.select_for_update().get(pk=dispute_id)
+        dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
         if dispute.status == Dispute.Status.RESOLVED:
             return dispute
         if dispute.status == Dispute.Status.CLOSED:

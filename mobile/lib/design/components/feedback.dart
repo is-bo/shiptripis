@@ -284,13 +284,20 @@ class AppEmptyState extends StatelessWidget {
     // the moment the user wants a way out. Scrollable, always-scrollable
     // physics, and tall enough to centre.
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(child: content),
-        ),
-      ),
+      builder: (context, constraints) {
+        // Sliver/list children receive an unbounded main-axis constraint. In
+        // that context the parent already owns scrolling, so asking this
+        // state to fill `maxHeight` would create an infinite-height box.
+        if (!constraints.hasBoundedHeight) return content;
+
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: content),
+          ),
+        );
+      },
     );
   }
 }

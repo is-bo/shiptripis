@@ -3,7 +3,7 @@
 Endpoints:
   GET  /api/parcels                    — list (mine, ?status=, ?kind=)
   POST /api/parcels/delivery           — legacy airport/DZD compatibility write
-  POST /api/parcels/delivery/v1        — create a V1 location/EUR delivery request
+  POST /api/parcels/delivery/v1        — create a canonical-place/EUR request
   POST /api/parcels/product            — retired (410 Gone)
   GET  /api/parcels/<id>               — retrieve
   POST /api/parcels/<id>/cancel        — cancel (owner only, while open)
@@ -18,7 +18,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -43,6 +43,7 @@ from apps.finance.serializers import PaymentOrderSummarySerializer
 from apps.finance.services import (
     ensure_posting_deposit_order,
 )
+from apps.locations.models import AirportLocalityMapping
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest
 from .serializers import (
@@ -61,6 +62,12 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB cap, V1 (client should pre-resize)
 
 
 def _read_queryset():
+    active_mapping = AirportLocalityMapping.objects.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality", "locality__parent")
     return ParcelRequest.objects.select_related(
         "origin",
         "destination",
@@ -68,8 +75,23 @@ def _read_queryset():
         "deliveryrequest",
         "deliveryrequest__pickup_location",
         "deliveryrequest__delivery_location",
+        "deliveryrequest__pickup_place",
+        "deliveryrequest__delivery_place",
         "productrequest",
-    ).prefetch_related("media", "deliveryrequest__deals")
+    ).prefetch_related(
+        "media",
+        "deliveryrequest__deals",
+        Prefetch(
+            "deliveryrequest__pickup_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+        Prefetch(
+            "deliveryrequest__delivery_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+    )
 
 
 def _refetch(pk: int) -> ParcelRequest:
@@ -119,7 +141,7 @@ class OpenParcelSearchView(APIView):
             .filter(
                 status=ParcelRequest.Status.OPEN,
                 kind=ParcelRequest.Kind.DELIVERY,
-                deliveryrequest__schema_version=2,
+                deliveryrequest__schema_version__in=(2, 3),
                 deadline_at__gt=timezone.now(),
                 target_traveler__isnull=True,
             )
@@ -166,7 +188,10 @@ class DeliveryCreateView(APIView):
         return Response(
             {
                 "code": "legacy_delivery_flow_retired",
-                "detail": "Use POST /api/parcels/delivery/v1 with Location IDs and EUR cents.",
+                "detail": (
+                    "Use POST /api/parcels/delivery/v1 with canonical Place IDs "
+                    "and EUR cents. Preferred Location IDs are optional."
+                ),
             },
             status=status.HTTP_410_GONE,
         )
@@ -182,8 +207,10 @@ class DeliveryV1CreateView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        pickup_location = data["pickup_location"]
-        delivery_location = data["delivery_location"]
+        pickup_location = data.get("pickup_location")
+        delivery_location = data.get("delivery_location")
+        pickup_place = data["pickup_place"]
+        delivery_place = data["delivery_place"]
 
         # Publication timing is a server decision read from versioned policy.
         # In posting-deposit mode the request is created unpublished and only
@@ -193,8 +220,10 @@ class DeliveryV1CreateView(APIView):
             payment_policy = phase3_policy()
         except (NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return Response(
-                {"code": getattr(exc, "code", "payment_policy_unavailable"),
-                 "detail": str(exc)},
+                {
+                    "code": getattr(exc, "code", "payment_policy_unavailable"),
+                    "detail": str(exc),
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         deposit_required = payment_policy.deposit_required
@@ -208,10 +237,12 @@ class DeliveryV1CreateView(APIView):
             parcel = DeliveryRequest.objects.create(
                 sender=request.user,
                 kind=ParcelRequest.Kind.DELIVERY,
-                schema_version=2,
+                schema_version=3,
                 status=initial_status,
                 origin=None,
                 destination=None,
+                pickup_place=pickup_place,
+                delivery_place=delivery_place,
                 pickup_location=pickup_location,
                 delivery_location=delivery_location,
                 weight_kg=None,
@@ -290,10 +321,10 @@ class ParcelDetailView(APIView):
                 {"detail": "ProductRequest history is admin-only in ShipTrip V1."},
                 status=status.HTTP_410_GONE,
             )
-        if (
-            parcel.target_traveler_id is not None
-            and request.user.id not in {parcel.sender_id, parcel.target_traveler_id}
-        ):
+        if parcel.target_traveler_id is not None and request.user.id not in {
+            parcel.sender_id,
+            parcel.target_traveler_id,
+        }:
             return Response(
                 {"detail": "This targeted request is private."},
                 status=status.HTTP_403_FORBIDDEN,
