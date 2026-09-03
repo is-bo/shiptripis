@@ -221,6 +221,24 @@ class _StubPlacePickerState extends State<_StubPlacePicker> {
   Widget build(BuildContext context) => const Scaffold(body: SizedBox.shrink());
 }
 
+/// A file large enough to fail the client-side ceiling.
+String _oversizedFile() {
+  final dir = Directory.systemTemp.createTempSync('shiptrip-big-photo');
+  addTearDown(() {
+    try {
+      dir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // The OS reclaims it.
+    }
+  });
+  final file = File('${dir.path}${Platform.pathSeparator}big.jpg');
+  file.writeAsBytesSync(<int>[
+    ..._jpeg,
+    ...List<int>.filled(10 * 1024 * 1024, 0),
+  ]);
+  return file.path;
+}
+
 /// A picker that always hands back the same file, and records how it was asked.
 ItemPhotoPicker _pickerReturning(String path, {List<ImageSource>? calls}) =>
     (source) async {
@@ -549,6 +567,61 @@ void main() {
 
       expect(calls, [ImageSource.camera]);
       expect(find.text(l.requestItemPhotoReady), findsWidgets);
+    });
+
+    testWidgets('a file this device will not send is refused on the spot', (
+      tester,
+    ) async {
+      final backend = FakeBackend();
+      final harness = _FormHarness(
+        backend,
+        picker: _pickerReturning(_oversizedFile()),
+      );
+      await harness.pump(tester);
+      await _completeRouteStep(tester, harness);
+      final l = harness.l(tester);
+
+      // Answered immediately, not held back until Next is pressed. A sender
+      // whose gallery sheet closes with nothing on screen concludes the app
+      // is broken, and picks the same photo again.
+      await _tapPhotoAction(
+        tester,
+        _button(l.requestItemPhotoFromGallery),
+        until: () => _present(find.text(l.requestItemPhotoTooLarge)),
+      );
+
+      expect(find.text(l.requestItemPhotoTooLarge), findsOneWidget);
+      // Nothing crossed the wire: the ceiling is checked before the upload,
+      // not discovered by sending ten megabytes up a mobile uplink.
+      expect(backend.to('POST', _stagePath), isEmpty);
+      // And the requirement is still unmet, so the step still blocks.
+      await tester.tap(_button(l.actionNext));
+      await tester.pumpAndSettle();
+      expect(find.text(l.requestTitle), findsOneWidget);
+    });
+
+    testWidgets('a wrong file type is refused on the spot too', (tester) async {
+      final backend = FakeBackend();
+      final harness = _FormHarness(
+        backend,
+        picker: (source) async => XFile(
+          _photoFile('scan.pdf'),
+          mimeType: 'application/pdf',
+          name: 'scan.pdf',
+        ),
+      );
+      await harness.pump(tester);
+      await _completeRouteStep(tester, harness);
+      final l = harness.l(tester);
+
+      await _tapPhotoAction(
+        tester,
+        _button(l.requestItemPhotoFromGallery),
+        until: () => _present(find.text(l.requestItemPhotoTypeNotAllowed)),
+      );
+
+      expect(find.text(l.requestItemPhotoTypeNotAllowed), findsOneWidget);
+      expect(backend.to('POST', _stagePath), isEmpty);
     });
 
     testWidgets('removing it puts the requirement back', (tester) async {

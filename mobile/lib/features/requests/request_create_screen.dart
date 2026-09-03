@@ -1193,6 +1193,10 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         state: _photoState,
         file: _photoFile,
         progress: _photoProgress,
+        // Shown the instant it happens, not held back until the step is
+        // revealed. A sender who picks a 12 MB original and sees the sheet
+        // close with nothing on screen has been told their phone is broken.
+        localError: _photoLocalError,
         errorText: _errorFor(l, 'item_photo_media_id'),
         failureCopy: _photoFailure == null
             ? null
@@ -1639,6 +1643,7 @@ class _ItemPhotoSection extends StatelessWidget {
     required this.state,
     required this.file,
     required this.progress,
+    required this.localError,
     required this.errorText,
     required this.failureCopy,
     required this.canRetry,
@@ -1653,6 +1658,11 @@ class _ItemPhotoSection extends StatelessWidget {
   final _PhotoState state;
   final XFile? file;
   final double progress;
+
+  /// A refusal this device made — too large, wrong type. Always shown,
+  /// because it is the answer to a tap the user just made.
+  final String? localError;
+
   final String? errorText;
   final String? failureCopy;
   final bool canRetry;
@@ -1758,7 +1768,18 @@ class _ItemPhotoSection extends StatelessWidget {
           ),
         ],
 
-        if (errorText != null && state != _PhotoState.failed) ...[
+        if (localError != null) ...[
+          const SizedBox(height: AppSpace.md),
+          InfoNotice(
+            message: localError!,
+            tone: StatusTone.bad,
+            icon: Icons.error_outline_rounded,
+          ),
+        ],
+
+        if (localError == null &&
+            errorText != null &&
+            state != _PhotoState.failed) ...[
           const SizedBox(height: AppSpace.md),
           InfoNotice(
             message: errorText!,
