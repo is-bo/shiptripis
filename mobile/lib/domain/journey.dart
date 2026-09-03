@@ -190,6 +190,8 @@ class Journey {
     this.publishedAt,
     this.createdAt,
     this.updatedAt,
+    this.editable,
+    this.editBlockedCode,
   });
 
   factory Journey.fromJson(Map<String, dynamic> json) => Journey(
@@ -211,6 +213,10 @@ class Journey {
       ..sort((a, b) => a.position.compareTo(b.position))),
     createdAt: readDate(json['created_at']),
     updatedAt: readDate(json['updated_at']),
+    // Served only to the owner, and only on the detail endpoint. Absent means
+    // "not this viewer's business", which is not the same as "no".
+    editable: json['editable'] is bool ? json['editable'] as bool : null,
+    editBlockedCode: readString(json['edit_blocked_code']),
   );
 
   final int id;
@@ -226,6 +232,21 @@ class Journey {
   final List<JourneyLeg> legs;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Whether the server will accept an edit to this journey's route.
+  ///
+  /// The server decides, not the client: a draft can still be uneditable
+  /// because a sender is already proposing against it. Null when the payload
+  /// carried no answer — a counterparty's view, or a list row.
+  final bool? editable;
+
+  /// Why an edit is refused, when it is. One of `journey_not_editable`,
+  /// `journey_has_dependent_state` or `journey_not_owned`.
+  final String? editBlockedCode;
+
+  /// True only when the server has said so. A journey whose payload said
+  /// nothing is not assumed editable just because its status looks right.
+  bool get canEdit => editable == true;
 
   DateTime? get firstDeparture => legs.isEmpty ? null : legs.first.departAt;
   DateTime? get lastArrival => legs.isEmpty ? null : legs.last.arriveAt;
@@ -252,6 +273,44 @@ class Journey {
     if (values.isEmpty) return null;
     return values.reduce((a, b) => a < b ? a : b);
   }
+}
+
+/// What one route edit did, as the server reports it.
+///
+/// Not decoration. An edit that sent a reviewed boarding pass back to the
+/// queue has changed when the journey can go live, and the traveller has to
+/// hear that from the screen that did it — not from a publish refusal days
+/// later.
+class JourneyRouteChange {
+  const JourneyRouteChange({
+    this.legsCreated = 0,
+    this.legsUpdated = 0,
+    this.legsRemoved = 0,
+    this.proofsResetForReview = 0,
+    this.proofsDiscarded = 0,
+  });
+
+  factory JourneyRouteChange.fromJson(Map<String, dynamic> json) =>
+      JourneyRouteChange(
+        legsCreated: readInt(json['legs_created']) ?? 0,
+        legsUpdated: readInt(json['legs_updated']) ?? 0,
+        legsRemoved: readInt(json['legs_removed']) ?? 0,
+        proofsResetForReview: readInt(json['proofs_reset_for_review']) ?? 0,
+        proofsDiscarded: readInt(json['proofs_discarded']) ?? 0,
+      );
+
+  final int legsCreated;
+  final int legsUpdated;
+  final int legsRemoved;
+
+  /// Approved or pending proof that has to be reviewed again, because the
+  /// flight it evidenced materially changed.
+  final int proofsResetForReview;
+
+  /// Proof that went with a leg the edit removed entirely.
+  final int proofsDiscarded;
+
+  bool get touchedProof => proofsResetForReview > 0 || proofsDiscarded > 0;
 }
 
 CanonicalPlace? _place(Object? raw) {

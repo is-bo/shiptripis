@@ -343,6 +343,11 @@ class ApiException implements Exception {
       409 => ApiFailureKind.conflict,
       410 => ApiFailureKind.gone,
       429 => ApiFailureKind.rateLimited,
+      // A file that is too big or the wrong type is the *user's* to fix, and
+      // the fix is specific. Falling through to `server` told a traveller
+      // trying to upload a PDF boarding pass that it was not their fault and
+      // to try again in a moment, which is both wrong and unactionable.
+      413 || 415 => ApiFailureKind.validation,
       400 || 422 => ApiFailureKind.validation,
       >= 500 => ApiFailureKind.server,
       _ => ApiFailureKind.server,

@@ -93,6 +93,7 @@ class AdminDeepHealthView(APIView):
             "kyc_bucket_configured": bool(settings.S3_BUCKET_KYC),
             "parcel_bucket_configured": bool(settings.S3_BUCKET_PARCEL),
             "dispute_bucket_configured": bool(settings.S3_BUCKET_DISPUTE),
+            "proof_bucket_configured": bool(settings.S3_BUCKET_PROOF),
         }
         response = Response(
             {"status": "ok", "release": settings.RELEASE_ID, "checks": checks}

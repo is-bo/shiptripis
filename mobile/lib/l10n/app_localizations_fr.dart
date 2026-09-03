@@ -991,6 +991,142 @@ class LFr extends L {
       'Nous n’avons pas pu charger les colis pour ce trajet.';
 
   @override
+  String get routeStopsTitle => 'Vos arrêts';
+
+  @override
+  String get routeStopsHelp =>
+      'Indiquez votre départ, votre arrivée et vos arrêts en chemin. Nous en déduisons les tronçons.';
+
+  @override
+  String get routeStopLabel => 'Arrêt';
+
+  @override
+  String get routeAddStopHere => 'Ajouter un arrêt ici';
+
+  @override
+  String get routeAddStopTitle => 'Où vous arrêtez-vous ?';
+
+  @override
+  String get routeChangeStopTitle => 'Changer cet arrêt';
+
+  @override
+  String get routeRemoveStop => 'Supprimer cet arrêt';
+
+  @override
+  String get routeMoveStopEarlier => 'Déplacer cet arrêt plus tôt';
+
+  @override
+  String get routeMoveStopLater => 'Déplacer cet arrêt plus tard';
+
+  @override
+  String get routeStopSameAsPrevious =>
+      'C\'est la même ville que l\'arrêt précédent. Choisissez-en une autre ou supprimez l\'un des deux.';
+
+  @override
+  String routeSegmentBetween(String from, String to) {
+    return '$from → $to';
+  }
+
+  @override
+  String get routeFlightOnlyExplainer =>
+      'Il n\'existe pas de route entre ces deux pays : cette partie doit être un vol.';
+
+  @override
+  String get routeFlightAirportsRequired =>
+      'Un vol part et arrive dans un aéroport. Choisissez l\'aéroport à chaque extrémité.';
+
+  @override
+  String get routeAirportNeededTitle => 'Quel aéroport ?';
+
+  @override
+  String routeAirportNeededBody(String stop) {
+    return 'Vous décollez de $stop : indiquez l\'aéroport. L\'arrêt reste $stop, il nous faut seulement savoir comment vous en partez.';
+  }
+
+  @override
+  String get routeChooseAirport => 'Choisir l\'aéroport';
+
+  @override
+  String get routeChooseAirportTitle => 'Quel aéroport ?';
+
+  @override
+  String get routeChangeAirport => 'Modifier';
+
+  @override
+  String routeAirportChosen(String airport) {
+    return 'Vol via $airport';
+  }
+
+  @override
+  String get routeErrorModeUnavailable =>
+      'Cette partie du trajet ne peut pas se faire en voiture : il n\'y a pas de route entre ces deux pays, ce doit être un vol.';
+
+  @override
+  String get journeyEditTitle => 'Modifier le trajet';
+
+  @override
+  String get journeyEditAction => 'Modifier';
+
+  @override
+  String get journeySaveChanges => 'Enregistrer';
+
+  @override
+  String get journeyEditSaved => 'Trajet mis à jour.';
+
+  @override
+  String journeyEditSavedProofReset(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Trajet mis à jour. $count justificatifs de vol repassent en vérification car ces vols ont changé.',
+      one:
+          'Trajet mis à jour. Un justificatif de vol repasse en vérification car ce vol a changé.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyEditBlockedTitle => 'Ce trajet ne peut plus être modifié';
+
+  @override
+  String get journeyEditBlockedStatus =>
+      'Ce trajet ne peut plus être modifié car il est déjà publié. Annulez-le et créez-en un nouveau si l\'itinéraire a changé.';
+
+  @override
+  String get journeyEditBlockedDependent =>
+      'Ce trajet ne peut plus être modifié car un expéditeur compte déjà sur cet itinéraire.';
+
+  @override
+  String get journeyEditStaleRoute =>
+      'Cet itinéraire a changé pendant votre modification. Rouvrez-le et réessayez.';
+
+  @override
+  String get journeyEditProofNotice =>
+      'Modifier les aéroports, le numéro ou les horaires d\'un vol rend son justificatif obsolète : nous le revérifierons.';
+
+  @override
+  String get journeyEditProofWarningTitle =>
+      'Votre justificatif de vol sera revérifié';
+
+  @override
+  String get journeyEditProofWarningBody =>
+      'Vous avez modifié un vol qui possède déjà un justificatif. Ce justificatif ne correspond plus à ce vol : il repasse en vérification et le trajet ne pourra être publié qu\'après une nouvelle approbation.';
+
+  @override
+  String get proofErrorStorageUnavailable =>
+      'Nous n\'avons pas pu enregistrer votre fichier pour l\'instant.';
+
+  @override
+  String get proofRetryTitle => 'L\'envoi n\'a pas abouti';
+
+  @override
+  String get proofRetryFileKept => 'Votre image est toujours sélectionnée.';
+
+  @override
+  String get proofRetry => 'Réessayer';
+
+  @override
   String get proofTitle => 'Justificatif de vol';
 
   @override

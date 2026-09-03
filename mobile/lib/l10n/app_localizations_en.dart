@@ -983,6 +983,142 @@ class LEn extends L {
       'We couldn\'t load parcels for this journey.';
 
   @override
+  String get routeStopsTitle => 'Your stops';
+
+  @override
+  String get routeStopsHelp =>
+      'Add where you start, where you end, and anywhere you stop on the way. We work out the legs between them.';
+
+  @override
+  String get routeStopLabel => 'Stop';
+
+  @override
+  String get routeAddStopHere => 'Add a stop here';
+
+  @override
+  String get routeAddStopTitle => 'Where do you stop?';
+
+  @override
+  String get routeChangeStopTitle => 'Change this stop';
+
+  @override
+  String get routeRemoveStop => 'Remove this stop';
+
+  @override
+  String get routeMoveStopEarlier => 'Move this stop earlier';
+
+  @override
+  String get routeMoveStopLater => 'Move this stop later';
+
+  @override
+  String get routeStopSameAsPrevious =>
+      'This is the same city as the stop before it. Choose somewhere else, or remove one of them.';
+
+  @override
+  String routeSegmentBetween(String from, String to) {
+    return '$from to $to';
+  }
+
+  @override
+  String get routeFlightOnlyExplainer =>
+      'There\'s no road between these two countries, so this part has to be a flight.';
+
+  @override
+  String get routeFlightAirportsRequired =>
+      'A flight starts and ends at an airport. Choose the airport for each end of this part.';
+
+  @override
+  String get routeAirportNeededTitle => 'Which airport?';
+
+  @override
+  String routeAirportNeededBody(String stop) {
+    return 'You\'re flying from $stop, so we need the airport. The stop stays $stop — we just need to know how you leave it.';
+  }
+
+  @override
+  String get routeChooseAirport => 'Choose airport';
+
+  @override
+  String get routeChooseAirportTitle => 'Which airport?';
+
+  @override
+  String get routeChangeAirport => 'Change';
+
+  @override
+  String routeAirportChosen(String airport) {
+    return 'Flying via $airport';
+  }
+
+  @override
+  String get routeErrorModeUnavailable =>
+      'That part of the route can\'t be driven. There\'s no road between those two countries, so it has to be a flight.';
+
+  @override
+  String get journeyEditTitle => 'Edit journey';
+
+  @override
+  String get journeyEditAction => 'Edit';
+
+  @override
+  String get journeySaveChanges => 'Save changes';
+
+  @override
+  String get journeyEditSaved => 'Journey updated.';
+
+  @override
+  String journeyEditSavedProofReset(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Journey updated. $count flight proofs went back for review because those flights changed.',
+      one:
+          'Journey updated. One flight proof went back for review because that flight changed.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyEditBlockedTitle => 'This journey can\'t be edited';
+
+  @override
+  String get journeyEditBlockedStatus =>
+      'This journey can no longer be edited because it is already published. Cancel it and create a new one if the route has changed.';
+
+  @override
+  String get journeyEditBlockedDependent =>
+      'This journey can no longer be edited because a sender is already counting on this route.';
+
+  @override
+  String get journeyEditStaleRoute =>
+      'This route changed while you were editing it. Reopen it and try again.';
+
+  @override
+  String get journeyEditProofNotice =>
+      'Changing a flight\'s airports, number or times means its proof no longer shows that flight, so we\'ll check it again.';
+
+  @override
+  String get journeyEditProofWarningTitle =>
+      'Your flight proof will be checked again';
+
+  @override
+  String get journeyEditProofWarningBody =>
+      'You\'ve changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can\'t go live until it\'s approved again.';
+
+  @override
+  String get proofErrorStorageUnavailable =>
+      'We couldn\'t store your file just now.';
+
+  @override
+  String get proofRetryTitle => 'Upload didn\'t finish';
+
+  @override
+  String get proofRetryFileKept => 'Your image is still selected.';
+
+  @override
+  String get proofRetry => 'Try again';
+
+  @override
   String get proofTitle => 'Flight proof';
 
   @override

@@ -465,6 +465,11 @@ class JourneyLegProof(models.Model):
     bytes = models.PositiveIntegerField(default=0)
     kind = models.CharField(max_length=24, default="ticket")
     metadata = models.JSONField(default=dict, blank=True)
+    # A phone loses its connection mid-upload more often than it succeeds
+    # first time. The client stamps one key per *selected file* so a retry
+    # re-attaches to the row the first attempt may already have created,
+    # instead of leaving a reviewer with three copies of one boarding pass.
+    idempotency_key = models.CharField(max_length=64, blank=True, default="")
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
@@ -496,6 +501,11 @@ class JourneyLegProof(models.Model):
             models.UniqueConstraint(
                 fields=["bucket", "object_key"],
                 name="journey_proof_unique_object",
+            ),
+            models.UniqueConstraint(
+                fields=["leg", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="journey_proof_unique_idempotency_key",
             ),
             models.CheckConstraint(
                 condition=(

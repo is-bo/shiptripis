@@ -74,6 +74,23 @@ class ApiErrorCode {
     'journey_proof_upload_closed',
   );
   static const proofOnlyForFlight = ApiErrorCode('proof_only_for_flight');
+  static const proofFileMissing = ApiErrorCode('proof_file_missing');
+  static const proofFileTooLarge = ApiErrorCode('proof_file_too_large');
+  static const proofMediaTypeUnsupported = ApiErrorCode(
+    'proof_media_type_unsupported',
+  );
+  static const proofKindUnknown = ApiErrorCode('proof_kind_unknown');
+  static const proofStorageUnavailable = ApiErrorCode(
+    'proof_storage_unavailable',
+  );
+  static const journeyNotEditable = ApiErrorCode('journey_not_editable');
+  static const journeyHasDependentState = ApiErrorCode(
+    'journey_has_dependent_state',
+  );
+  static const journeyLegNotFound = ApiErrorCode('journey_leg_not_found');
+  static const journeyLegModeUnavailable = ApiErrorCode(
+    'journey_leg_mode_unavailable',
+  );
   static const flightProofNotApproved = ApiErrorCode(
     'flight_proof_not_approved',
   );

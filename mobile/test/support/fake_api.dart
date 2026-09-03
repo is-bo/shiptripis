@@ -109,7 +109,22 @@ class _FakeAdapter implements HttpClientAdapter {
     final request = RecordedRequest(
       method: options.method.toUpperCase(),
       path: options.uri.path,
-      body: raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{},
+      body: switch (raw) {
+        final Map<dynamic, dynamic> map => Map<String, dynamic>.from(map),
+        // A multipart upload is a wire contract too — the field names, the
+        // idempotency key, the declared content type. Flattening it here lets
+        // a test assert on what would actually reach Django instead of
+        // stopping at "something was posted".
+        final FormData form => {
+          for (final field in form.fields) field.key: field.value,
+          for (final file in form.files)
+            '${file.key}__filename': file.value.filename ?? '',
+          for (final file in form.files)
+            '${file.key}__content_type':
+                file.value.contentType?.toString() ?? '',
+        },
+        _ => <String, dynamic>{},
+      },
       query: Map<String, dynamic>.from(options.queryParameters),
     );
 

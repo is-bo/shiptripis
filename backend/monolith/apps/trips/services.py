@@ -13,6 +13,11 @@ from apps.kyc.models import KycSubmission
 from apps.locations.models import AirportLocalityMapping, Place
 
 from .models import Journey, JourneyLeg, JourneyLegProof
+from .transport_rules import (
+    MODE_UNAVAILABLE_CODE,
+    check_leg_mode,
+    mode_violation_message,
+)
 
 
 @dataclass(frozen=True)
@@ -148,6 +153,21 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
             raise JourneyDomainError(
                 "journey_leg_time_invalid",
                 f"Leg {leg.position} arrival must be after departure.",
+            )
+        # A leg can become impossible after it was written: the catalogue can
+        # move a place between countries, and a legacy row predates the rule
+        # entirely.  Publication is the last gate before senders see it, so
+        # the check runs again here rather than being trusted from write time.
+        violation = check_leg_mode(
+            position=leg.position,
+            mode=leg.mode,
+            origin=leg.origin_place,
+            destination=leg.destination_place,
+        )
+        if violation is not None:
+            raise JourneyDomainError(
+                MODE_UNAVAILABLE_CODE,
+                mode_violation_message(violation),
             )
         if index == 0:
             continue
@@ -329,4 +349,336 @@ def cancel_journey(*, journey: Journey, actor) -> JourneyCancellationResult:
         journey=locked,
         released_allocations=released,
         changed=changed,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Editing a journey
+# ---------------------------------------------------------------------------
+
+#: Statuses whose route the owner may still rewrite.
+#:
+#: A draft is private and a pending-verification journey is still private —
+#: nobody has matched it, reserved capacity on it, or paid for it, so the
+#: route is still the traveller's own business.  Every other status has
+#: somebody else's expectations attached: an ACTIVE journey is discoverable
+#: and may already be under offer, IN_PROGRESS is being flown, and the
+#: terminal statuses are history.  Rewriting any of those would silently move
+#: a delivery somebody bought.
+EDITABLE_JOURNEY_STATUSES = frozenset(
+    {
+        Journey.Status.DRAFT,
+        Journey.Status.PENDING_VERIFICATION,
+    }
+)
+
+#: Match states that mean a sender is already looking at this exact route.
+_BLOCKING_MATCH_STATUSES = ("pending", "accepted")
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyEditability:
+    """Whether a journey may be rewritten, and if not, why."""
+
+    editable: bool
+    code: str = ""
+    message: str = ""
+
+    def raise_if_blocked(self) -> None:
+        if not self.editable:
+            raise JourneyDomainError(self.code, self.message)
+
+
+def journey_editability(journey: Journey, *, actor) -> JourneyEditability:
+    """Answer "can this journey still be edited?" with a reason.
+
+    Callers use this both to authorise a write and to tell the owner why the
+    edit affordance is unavailable.  Hiding the button explains nothing; the
+    reason is the useful part.
+    """
+
+    # Imported lazily: deals -> matching -> trips would otherwise cycle.
+    from apps.deals.models import Deal
+    from apps.matching.models import Match
+
+    if journey.traveler_id != getattr(actor, "pk", None):
+        return JourneyEditability(
+            False,
+            "journey_not_owned",
+            "Only the journey owner can edit it.",
+        )
+    if journey.status not in EDITABLE_JOURNEY_STATUSES:
+        return JourneyEditability(
+            False,
+            "journey_not_editable",
+            f"A journey in status '{journey.status}' can no longer be edited.",
+        )
+    # Belt and braces.  A draft should never carry these, but if one ever
+    # does, the route is load-bearing for somebody else and must not move.
+    if Deal.objects.filter(journey_id=journey.pk).exists():
+        return JourneyEditability(
+            False,
+            "journey_has_dependent_state",
+            "A delivery is already attached to this journey's route.",
+        )
+    if Match.objects.filter(
+        journey_id=journey.pk, status__in=_BLOCKING_MATCH_STATUSES
+    ).exists():
+        return JourneyEditability(
+            False,
+            "journey_has_dependent_state",
+            "A sender is already proposing against this journey's route.",
+        )
+    return JourneyEditability(True)
+
+
+#: Server-owned route snapshot fields and the value that means "not
+#: measured".  An edit that turns a drive leg into a flight must not keep the
+#: road distance it used to have; leaving it would let a stale polyline
+#: describe a segment nobody drives.
+_ROUTE_SNAPSHOT_DEFAULTS = {
+    "distance_meters": None,
+    "route_duration_seconds": None,
+    "route_polyline": "",
+    "route_provider": "",
+    "route_profile": "",
+    "route_captured_at": None,
+    "allowed_detour_meters": None,
+    "route_metadata": dict,
+}
+
+
+#: Leg fields whose change makes an approved flight proof prove a different
+#: flight.  Item for item, this is what a boarding pass actually evidences.
+_PROOF_BEARING_LEG_FIELDS = (
+    "mode",
+    "origin_place_id",
+    "destination_place_id",
+    "flight_number",
+    "depart_at",
+    "arrive_at",
+)
+
+
+def _normalized_flight_number(value: str | None) -> str:
+    return (value or "").replace(" ", "").upper()
+
+
+def _materially_changed_fields(existing: JourneyLeg, incoming: dict) -> list[str]:
+    """Which proof-bearing fields differ between a stored leg and its edit."""
+
+    changed: list[str] = []
+    for field in _PROOF_BEARING_LEG_FIELDS:
+        if field == "flight_number":
+            before = _normalized_flight_number(existing.flight_number)
+            after = _normalized_flight_number(incoming.get("flight_number", ""))
+        elif field.endswith("_place_id"):
+            before = getattr(existing, field)
+            after = getattr(incoming.get(field[: -len("_id")]), "pk", None)
+        else:
+            before = getattr(existing, field)
+            after = incoming.get(field)
+        if before != after:
+            changed.append(field)
+    return changed
+
+
+def _invalidate_leg_proofs(leg: JourneyLeg, *, changed_fields: list[str]) -> int:
+    """Send a changed flight leg's live proofs back for review.
+
+    An approved proof is demoted to pending rather than deleted.  The image is
+    still the evidence a reviewer needs, and the reviewer's earlier decision
+    is preserved in ``metadata`` — the row's own constraint requires an
+    approval to carry a reviewer, so the audit lives beside the status rather
+    than inside it.
+
+    A rejected proof is left alone: it was already refused, and re-opening it
+    would erase the refusal.
+    """
+
+    now = timezone.now()
+    affected = list(
+        JourneyLegProof.objects.select_for_update(no_key=True)
+        .filter(
+            leg=leg,
+            status__in=(
+                JourneyLegProof.Status.APPROVED,
+                JourneyLegProof.Status.PENDING,
+            ),
+        )
+        .order_by("pk")
+    )
+    for proof in affected:
+        history = list(proof.metadata.get("invalidations", []))
+        history.append(
+            {
+                "at": now.isoformat(),
+                "reason": "flight_leg_materially_changed",
+                "changed_fields": changed_fields,
+                "previous_status": proof.status,
+                "previous_reviewer_id": proof.reviewer_id,
+                "previous_reviewed_at": (
+                    proof.reviewed_at.isoformat() if proof.reviewed_at else None
+                ),
+            }
+        )
+        proof.metadata = {**proof.metadata, "invalidations": history}
+        proof.status = JourneyLegProof.Status.PENDING
+        proof.reviewer = None
+        proof.reviewed_at = None
+        proof.rejection_reason = ""
+        proof.save(
+            update_fields=[
+                "metadata",
+                "status",
+                "reviewer",
+                "reviewed_at",
+                "rejection_reason",
+                "updated_at",
+            ]
+        )
+    return len(affected)
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyRouteChange:
+    """What one route edit did, in terms the owner needs to be told."""
+
+    journey: Journey
+    legs_created: int
+    legs_updated: int
+    legs_removed: int
+    proofs_reset_for_review: int
+    proofs_discarded: int
+
+
+def replace_journey_route(
+    *,
+    journey: Journey,
+    actor,
+    start_place,
+    destination_place,
+    start_location,
+    destination_location,
+    notes: str,
+    legs: list[dict],
+) -> JourneyRouteChange:
+    """Rewrite an editable journey's endpoints and whole leg chain.
+
+    The chain is replaced as a unit under the aggregate lock.  Legs the client
+    identified by ``id`` are updated in place, which is what carries an
+    unchanged flight leg's reviewed proof across the edit; anything else is
+    created, and any stored leg the client did not send is removed along with
+    its proofs.
+
+    The counts come back so the caller can say what happened, rather than
+    letting a reviewed proof quietly become pending again.
+    """
+
+    with transaction.atomic():
+        locked = Journey.objects.select_for_update(no_key=True).get(pk=journey.pk)
+        journey_editability(locked, actor=actor).raise_if_blocked()
+
+        stored = {
+            leg.pk: leg
+            for leg in JourneyLeg.objects.select_for_update(no_key=True)
+            .filter(journey=locked)
+            .order_by("position", "pk")
+        }
+        kept_ids = {leg["id"] for leg in legs if leg.get("id")}
+        unknown = sorted(kept_ids - set(stored))
+        if unknown:
+            raise JourneyDomainError(
+                "journey_leg_not_found",
+                "This edit refers to legs that are not part of this journey.",
+            )
+
+        created = 0
+        updated = 0
+        reset_for_review = 0
+
+        # Positions are unique per journey, so the incoming chain is parked in
+        # a scratch band first.  Without it, moving leg 1 to position 0
+        # collides with the leg still sitting there.
+        scratch_offset = max((leg.position for leg in stored.values()), default=0) + (
+            len(legs) + 1
+        )
+        for leg in stored.values():
+            JourneyLeg.objects.filter(pk=leg.pk).update(
+                position=leg.position + scratch_offset
+            )
+
+        for index, incoming in enumerate(legs):
+            leg_id = incoming.pop("id", None)
+            payload = {
+                **{
+                    field: (default() if callable(default) else default)
+                    for field, default in _ROUTE_SNAPSHOT_DEFAULTS.items()
+                },
+                **incoming,
+                "position": index,
+            }
+            if leg_id and leg_id in stored:
+                existing = stored[leg_id]
+                changed = _materially_changed_fields(existing, payload)
+                for field, value in payload.items():
+                    setattr(existing, field, value)
+                existing.save()
+                updated += 1
+                # Only a flight leg carries proof, and only a change to what
+                # the proof evidences invalidates it.  A capacity edit does
+                # not make a boarding pass wrong.
+                if changed and (
+                    existing.mode == JourneyLeg.Mode.FLIGHT or "mode" in changed
+                ):
+                    reset_for_review += _invalidate_leg_proofs(
+                        existing, changed_fields=changed
+                    )
+            else:
+                JourneyLeg.objects.create(journey=locked, **payload)
+                created += 1
+
+        removed_ids = set(stored) - kept_ids
+        discarded = (
+            JourneyLegProof.objects.filter(leg_id__in=removed_ids).count()
+            if removed_ids
+            else 0
+        )
+        removed = len(removed_ids)
+        if removed_ids:
+            JourneyLeg.objects.filter(pk__in=removed_ids).delete()
+
+        locked.start_place = start_place
+        locked.destination_place = destination_place
+        locked.start_location = start_location
+        locked.destination_location = destination_location
+        locked.notes = notes
+        locked.save(
+            update_fields=[
+                "start_place",
+                "destination_place",
+                "start_location",
+                "destination_location",
+                "notes",
+                "updated_at",
+            ]
+        )
+
+        # The chain is re-read and re-validated exactly as publication would,
+        # so an edit can never leave a journey in a shape publish will refuse.
+        rewritten = list(
+            JourneyLeg.objects.filter(journey=locked)
+            .select_related("origin_place", "destination_place")
+            .order_by("position", "pk")
+        )
+        _validate_leg_sequence(locked, rewritten)
+
+    locked.refresh_from_db()
+    return JourneyRouteChange(
+        journey=locked,
+        legs_created=created,
+        legs_updated=updated,
+        legs_removed=removed,
+        proofs_reset_for_review=reset_for_review,
+        proofs_discarded=discarded,
     )

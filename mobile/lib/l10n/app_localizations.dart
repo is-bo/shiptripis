@@ -1881,6 +1881,222 @@ abstract class L {
   /// **'We couldn\'t load parcels for this journey.'**
   String get journeyMatchesLoadFailed;
 
+  /// No description provided for @routeStopsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your stops'**
+  String get routeStopsTitle;
+
+  /// No description provided for @routeStopsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Add where you start, where you end, and anywhere you stop on the way. We work out the legs between them.'**
+  String get routeStopsHelp;
+
+  /// No description provided for @routeStopLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get routeStopLabel;
+
+  /// No description provided for @routeAddStopHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a stop here'**
+  String get routeAddStopHere;
+
+  /// No description provided for @routeAddStopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where do you stop?'**
+  String get routeAddStopTitle;
+
+  /// No description provided for @routeChangeStopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change this stop'**
+  String get routeChangeStopTitle;
+
+  /// No description provided for @routeRemoveStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this stop'**
+  String get routeRemoveStop;
+
+  /// No description provided for @routeMoveStopEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Move this stop earlier'**
+  String get routeMoveStopEarlier;
+
+  /// No description provided for @routeMoveStopLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Move this stop later'**
+  String get routeMoveStopLater;
+
+  /// No description provided for @routeStopSameAsPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the same city as the stop before it. Choose somewhere else, or remove one of them.'**
+  String get routeStopSameAsPrevious;
+
+  /// Heading on the leg editor between two stops.
+  ///
+  /// In en, this message translates to:
+  /// **'{from} to {to}'**
+  String routeSegmentBetween(String from, String to);
+
+  /// No description provided for @routeFlightOnlyExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'There\'s no road between these two countries, so this part has to be a flight.'**
+  String get routeFlightOnlyExplainer;
+
+  /// No description provided for @routeFlightAirportsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A flight starts and ends at an airport. Choose the airport for each end of this part.'**
+  String get routeFlightAirportsRequired;
+
+  /// No description provided for @routeAirportNeededTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Which airport?'**
+  String get routeAirportNeededTitle;
+
+  /// Asks for the airport a stop is reached by, without replacing the city.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re flying from {stop}, so we need the airport. The stop stays {stop} — we just need to know how you leave it.'**
+  String routeAirportNeededBody(String stop);
+
+  /// No description provided for @routeChooseAirport.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose airport'**
+  String get routeChooseAirport;
+
+  /// No description provided for @routeChooseAirportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Which airport?'**
+  String get routeChooseAirportTitle;
+
+  /// No description provided for @routeChangeAirport.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get routeChangeAirport;
+
+  /// Confirms the airport a stop is reached by.
+  ///
+  /// In en, this message translates to:
+  /// **'Flying via {airport}'**
+  String routeAirportChosen(String airport);
+
+  /// No description provided for @routeErrorModeUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'That part of the route can\'t be driven. There\'s no road between those two countries, so it has to be a flight.'**
+  String get routeErrorModeUnavailable;
+
+  /// No description provided for @journeyEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit journey'**
+  String get journeyEditTitle;
+
+  /// No description provided for @journeyEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get journeyEditAction;
+
+  /// No description provided for @journeySaveChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get journeySaveChanges;
+
+  /// No description provided for @journeyEditSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Journey updated.'**
+  String get journeyEditSaved;
+
+  /// How much reviewed flight proof an edit sent back to the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Journey updated. One flight proof went back for review because that flight changed.} other{Journey updated. {count} flight proofs went back for review because those flights changed.}}'**
+  String journeyEditSavedProofReset(int count);
+
+  /// No description provided for @journeyEditBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey can\'t be edited'**
+  String get journeyEditBlockedTitle;
+
+  /// No description provided for @journeyEditBlockedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey can no longer be edited because it is already published. Cancel it and create a new one if the route has changed.'**
+  String get journeyEditBlockedStatus;
+
+  /// No description provided for @journeyEditBlockedDependent.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey can no longer be edited because a sender is already counting on this route.'**
+  String get journeyEditBlockedDependent;
+
+  /// No description provided for @journeyEditStaleRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'This route changed while you were editing it. Reopen it and try again.'**
+  String get journeyEditStaleRoute;
+
+  /// No description provided for @journeyEditProofNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Changing a flight\'s airports, number or times means its proof no longer shows that flight, so we\'ll check it again.'**
+  String get journeyEditProofNotice;
+
+  /// No description provided for @journeyEditProofWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your flight proof will be checked again'**
+  String get journeyEditProofWarningTitle;
+
+  /// No description provided for @journeyEditProofWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can\'t go live until it\'s approved again.'**
+  String get journeyEditProofWarningBody;
+
+  /// No description provided for @proofErrorStorageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t store your file just now.'**
+  String get proofErrorStorageUnavailable;
+
+  /// No description provided for @proofRetryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload didn\'t finish'**
+  String get proofRetryTitle;
+
+  /// No description provided for @proofRetryFileKept.
+  ///
+  /// In en, this message translates to:
+  /// **'Your image is still selected.'**
+  String get proofRetryFileKept;
+
+  /// No description provided for @proofRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get proofRetry;
+
   /// No description provided for @proofTitle.
   ///
   /// In en, this message translates to:

@@ -26,7 +26,6 @@ import 'package:flutter/services.dart';
 import '../../core/api/api_exception.dart';
 import '../../l10n/app_localizations.dart';
 import '../tokens.dart';
-import '../typography.dart';
 import 'primitives.dart';
 
 // ---------------------------------------------------------------------------
@@ -151,6 +150,7 @@ class AppTextField extends StatelessWidget {
     this.autofillHints,
     this.prefixIcon,
     this.suffix,
+    this.unit,
     this.inputFormatters,
     this.onChanged,
     this.onSubmitted,
@@ -179,7 +179,16 @@ class AppTextField extends StatelessWidget {
   final bool isRequired;
   final Iterable<String>? autofillHints;
   final IconData? prefixIcon;
+
+  /// A trailing *control* — a reveal-password button, a clear button. Lives in
+  /// Material's `suffixIcon` slot, which is centred in a 48pt tap target, and
+  /// that is right for something you press.
   final Widget? suffix;
+
+  /// A trailing *unit* — `€`, `kg`, `cm`. Not a control, and emphatically not
+  /// an icon: see [_FieldUnit] for why it cannot share the `suffix` slot.
+  final String? unit;
+
   final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -221,7 +230,15 @@ class AppTextField extends StatelessWidget {
             prefixIcon: prefixIcon == null
                 ? null
                 : Icon(prefixIcon, size: 19, color: c.textTertiary),
-            suffixIcon: suffix,
+            suffixIcon: unit == null ? suffix : _FieldUnit(label: unit!),
+            // A unit is text, and text has to line up with the number beside
+            // it. The default 48pt minimum turns the slot into a tap target
+            // whose *top edge* the label is pinned to, which is what left `€`
+            // and `kg` floating above the digits. Shrink-wrapping the box lets
+            // the decorator centre it on the input instead.
+            suffixIconConstraints: unit == null
+                ? null
+                : const BoxConstraints(minWidth: 0, minHeight: 0),
             // The counter is noise on every field we have; length limits are
             // enforced silently and explained in the helper where they matter.
             counterText: '',
@@ -245,6 +262,42 @@ class AppTextField extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A unit label inside a field: `€`, `kg`, `cm`.
+///
+/// Material has two trailing slots and they behave differently. `suffix` is
+/// baseline-aligned with the input but only *appears* once the field has focus
+/// or content, so a unit put there vanishes from an empty field. `suffixIcon`
+/// is always visible but is laid out as an icon: centred inside a box whose
+/// minimum height is 48, with a bare `Padding` child pinned to that box's top
+/// edge. That is the bug the owner saw — the glyph sat well above the digits.
+///
+/// So the unit goes in `suffixIcon` with the minimum dropped, which
+/// shrink-wraps the box to the text and lets the decorator centre it on the
+/// input line. The style deliberately matches the input's own `bodyLarge`, so
+/// centring the two boxes lines up their baselines rather than merely their
+/// middles. It holds in RTL, where the slot moves to the leading edge, and at
+/// large text sizes, where both sides scale together.
+class _FieldUnit extends StatelessWidget {
+  const _FieldUnit({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsetsDirectional.only(
+      start: AppSpace.sm,
+      end: AppSpace.lg,
+    ),
+    child: Text(
+      label,
+      textAlign: TextAlign.center,
+      style: Theme.of(
+        context,
+      ).textTheme.bodyLarge?.copyWith(color: context.colors.textSecondary),
+    ),
+  );
 }
 
 class _FieldLabel extends StatelessWidget {
@@ -728,7 +781,6 @@ class AppAmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return AppTextField(
       label: label,
       controller: controller,
@@ -744,13 +796,7 @@ class AppAmountField extends StatelessWidget {
         LengthLimitingTextInputFormatter(9),
       ],
       prefixIcon: null,
-      suffix: Padding(
-        padding: const EdgeInsetsDirectional.only(end: AppSpace.lg),
-        child: Text(
-          '€',
-          style: AppTypography.money(context, color: c.textSecondary, size: 17),
-        ),
-      ),
+      unit: '€',
     );
   }
 }

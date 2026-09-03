@@ -40,6 +40,7 @@ import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+import 'journey_labels.dart';
 
 final _compatibleRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryResults, int>((ref, journeyId) async {
@@ -90,6 +91,7 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
       'journey_leg_time_invalid' => l.journeyErrorLegTime,
       'journey_legs_disconnected' => l.journeyErrorLegsDisconnected,
       'journey_leg_time_order_invalid' => l.journeyErrorLegTimeOrder,
+      'journey_leg_mode_unavailable' => l.routeErrorModeUnavailable,
       'traveler_kyc_not_approved' => l.kycRequiredForJourney,
       'flight_proof_not_approved' => l.journeyPublishBlockedProof,
       'journey_not_owned' => l.journeyErrorNotOwned,
@@ -141,6 +143,16 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
     }
   }
 
+  /// Why the edit button is inert, in the traveller's terms.
+  String _editBlockedReason(Journey journey) {
+    final l = L.of(context);
+    return switch (journey.editBlockedCode) {
+      'journey_has_dependent_state' => l.journeyEditBlockedDependent,
+      'journey_not_owned' => l.journeyErrorNotOwned,
+      _ => l.journeyEditBlockedStatus,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
@@ -180,7 +192,32 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                   const SizedBox(height: AppSpace.xl),
                 ],
 
-                SectionHeader(title: l.journeyRouteShape),
+                Row(
+                  children: [
+                    Expanded(child: SectionHeader(title: l.journeyRouteShape)),
+                    if (isOwner && data.editable != null)
+                      AppButton(
+                        label: l.journeyEditAction,
+                        icon: Icons.edit_outlined,
+                        variant: AppButtonVariant.tertiary,
+                        expand: false,
+                        // Present but inert when the server says no, with the
+                        // reason underneath. A button that vanishes explains
+                        // nothing to the traveller looking for it.
+                        onPressed: data.canEdit && !_busy
+                            ? () => context.openJourneyEdit(data.id)
+                            : null,
+                      ),
+                  ],
+                ),
+                if (isOwner && data.editable == false) ...[
+                  InfoNotice(
+                    message: _editBlockedReason(data),
+                    tone: StatusTone.neutral,
+                    icon: Icons.lock_outline_rounded,
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                ],
                 _Route(journey: data),
 
                 if (data.notes.isNotEmpty) ...[
@@ -268,8 +305,8 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.md),
           RouteSummary(
-            from: journey.startLocation?.coarseLabel ?? '',
-            to: journey.destinationLocation?.coarseLabel ?? '',
+            from: journeyStartLabel(journey),
+            to: journeyDestinationLabel(journey),
           ),
           if (departure != null) ...[
             const SizedBox(height: AppSpace.md),
@@ -351,8 +388,8 @@ class _Blockers extends StatelessWidget {
                         Text(
                           l.proofLegLabel(
                             leg.position + 1,
-                            leg.origin?.coarseLabel ?? '',
-                            leg.destination?.coarseLabel ?? '',
+                            legOriginLabel(leg),
+                            legDestinationLabel(leg),
                           ),
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
@@ -413,19 +450,30 @@ class _Route extends StatelessWidget {
     }
 
     // N legs join N+1 stops: every leg's origin, plus the final destination.
+    // Each stop carries its own context line — "Jijel Wilaya", "Paris
+    // department" — so a route of four unfamiliar names is readable without
+    // decoding the cards underneath it.
     final stops = <RouteStop>[
       for (final leg in legs)
         RouteStop(
-          label: leg.origin?.coarseLabel ?? '',
+          label: legOriginLabel(leg),
+          detail: endpointContext(context, leg.originPlace, leg.origin),
           timeLabel: leg.departAt == null
               ? null
-              : LocaleFormats.dateTime(locale, leg.departAt!),
+              : '${l.journeyDeparts} '
+                    '${LocaleFormats.dateTime(locale, leg.departAt!)}',
         ),
       RouteStop(
-        label: legs.last.destination?.coarseLabel ?? '',
+        label: legDestinationLabel(legs.last),
+        detail: endpointContext(
+          context,
+          legs.last.destinationPlace,
+          legs.last.destination,
+        ),
         timeLabel: legs.last.arriveAt == null
             ? null
-            : LocaleFormats.dateTime(locale, legs.last.arriveAt!),
+            : '${l.journeyArrives} '
+                  '${LocaleFormats.dateTime(locale, legs.last.arriveAt!)}',
       ),
     ];
 

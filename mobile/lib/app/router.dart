@@ -53,6 +53,7 @@ import '../features/guest/guest_pay_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/journeys/journey_create_screen.dart';
 import '../features/journeys/journey_detail_screen.dart';
+import '../features/journeys/journey_edit_screen.dart';
 import '../features/journeys/leg_proof_screen.dart';
 import '../features/kyc/kyc_screen.dart';
 import '../features/location/canonical_place_picker_screen.dart';
@@ -100,6 +101,7 @@ abstract final class Routes {
 
   static const journeyCreate = 'journey-create';
   static const journeyDetail = 'journey-detail';
+  static const journeyEdit = 'journey-edit';
   static const legProof = 'leg-proof';
 
   static const negotiation = 'negotiation';
@@ -341,6 +343,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             JourneyDetailScreen(journeyId: _id(state, 'id')),
         routes: [
           GoRoute(
+            path: 'edit',
+            name: Routes.journeyEdit,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                JourneyEditScreen(journeyId: _id(state, 'id')),
+          ),
+          GoRoute(
             path: 'legs/:legId/proof',
             name: Routes.legProof,
             parentNavigatorKey: _rootNavigatorKey,
@@ -532,6 +541,9 @@ extension AppNavigation on BuildContext {
       pushNamed(Routes.requestBoost, pathParameters: {'id': '$requestId'});
 
   Future<void> openJourneyCreate() => pushNamed(Routes.journeyCreate);
+
+  Future<void> openJourneyEdit(int id) =>
+      pushNamed(Routes.journeyEdit, pathParameters: {'id': '$id'});
 
   void openJourney(int id) =>
       pushNamed(Routes.journeyDetail, pathParameters: {'id': '$id'});

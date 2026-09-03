@@ -358,6 +358,77 @@
   "journeyMatchesInfoTitle": "Senders make the first move",
   "journeyMatchesInfoBody": "You can't offer on these. If one of these senders picks you, their offer arrives in Deliveries.",
   "journeyMatchesLoadFailed": "We couldn't load parcels for this journey.",
+  "routeStopsTitle": "Your stops",
+  "routeStopsHelp": "Add where you start, where you end, and anywhere you stop on the way. We work out the legs between them.",
+  "routeStopLabel": "Stop",
+  "routeAddStopHere": "Add a stop here",
+  "routeAddStopTitle": "Where do you stop?",
+  "routeChangeStopTitle": "Change this stop",
+  "routeRemoveStop": "Remove this stop",
+  "routeMoveStopEarlier": "Move this stop earlier",
+  "routeMoveStopLater": "Move this stop later",
+  "routeStopSameAsPrevious": "This is the same city as the stop before it. Choose somewhere else, or remove one of them.",
+  "routeSegmentBetween": "{from} to {to}",
+  "@routeSegmentBetween": {
+    "description": "Heading on the leg editor between two stops.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "routeFlightOnlyExplainer": "There's no road between these two countries, so this part has to be a flight.",
+  "routeFlightAirportsRequired": "A flight starts and ends at an airport. Choose the airport for each end of this part.",
+  "routeAirportNeededTitle": "Which airport?",
+  "routeAirportNeededBody": "You're flying from {stop}, so we need the airport. The stop stays {stop} — we just need to know how you leave it.",
+  "@routeAirportNeededBody": {
+    "description": "Asks for the airport a stop is reached by, without replacing the city.",
+    "placeholders": {
+      "stop": {
+        "type": "String"
+      }
+    }
+  },
+  "routeChooseAirport": "Choose airport",
+  "routeChooseAirportTitle": "Which airport?",
+  "routeChangeAirport": "Change",
+  "routeAirportChosen": "Flying via {airport}",
+  "@routeAirportChosen": {
+    "description": "Confirms the airport a stop is reached by.",
+    "placeholders": {
+      "airport": {
+        "type": "String"
+      }
+    }
+  },
+  "routeErrorModeUnavailable": "That part of the route can't be driven. There's no road between those two countries, so it has to be a flight.",
+  "journeyEditTitle": "Edit journey",
+  "journeyEditAction": "Edit",
+  "journeySaveChanges": "Save changes",
+  "journeyEditSaved": "Journey updated.",
+  "journeyEditSavedProofReset": "{count, plural, =1{Journey updated. One flight proof went back for review because that flight changed.} other{Journey updated. {count} flight proofs went back for review because those flights changed.}}",
+  "@journeyEditSavedProofReset": {
+    "description": "How much reviewed flight proof an edit sent back to the queue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "journeyEditBlockedTitle": "This journey can't be edited",
+  "journeyEditBlockedStatus": "This journey can no longer be edited because it is already published. Cancel it and create a new one if the route has changed.",
+  "journeyEditBlockedDependent": "This journey can no longer be edited because a sender is already counting on this route.",
+  "journeyEditStaleRoute": "This route changed while you were editing it. Reopen it and try again.",
+  "journeyEditProofNotice": "Changing a flight's airports, number or times means its proof no longer shows that flight, so we'll check it again.",
+  "journeyEditProofWarningTitle": "Your flight proof will be checked again",
+  "journeyEditProofWarningBody": "You've changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can't go live until it's approved again.",
+  "proofErrorStorageUnavailable": "We couldn't store your file just now.",
+  "proofRetryTitle": "Upload didn't finish",
+  "proofRetryFileKept": "Your image is still selected.",
+  "proofRetry": "Try again",
   "proofTitle": "Flight proof",
   "proofExplainer": "Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.",
   "proofDriveNotRequired": "Driving legs don't need any proof.",

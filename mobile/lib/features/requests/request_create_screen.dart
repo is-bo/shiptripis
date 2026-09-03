@@ -645,7 +645,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         errorText: _errors['actual_weight_kg'],
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         textInputAction: TextInputAction.next,
-        suffix: _UnitSuffix(label: l.requestWeightUnit),
+        unit: l.requestWeightUnit,
         validator: (value) {
           final shape = validators.positiveNumber(value);
           if (shape != null) return shape;
@@ -1020,25 +1020,8 @@ class _DimensionField extends StatelessWidget {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textInputAction: TextInputAction.next,
       onChanged: onChanged,
-      suffix: _UnitSuffix(label: unit),
+      unit: unit,
       validator: (value) => validators.positiveNumber(value, allowEmpty: true),
     );
   }
-}
-
-class _UnitSuffix extends StatelessWidget {
-  const _UnitSuffix({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsetsDirectional.only(end: AppSpace.lg),
-    child: Text(
-      label,
-      style: Theme.of(
-        context,
-      ).textTheme.bodyMedium?.copyWith(color: context.colors.textSecondary),
-    ),
-  );
 }

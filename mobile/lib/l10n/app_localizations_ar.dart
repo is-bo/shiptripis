@@ -979,6 +979,144 @@ class LAr extends L {
       'تعذّر علينا تحميل الطرود الخاصة بهذه الرحلة.';
 
   @override
+  String get routeStopsTitle => 'محطاتك';
+
+  @override
+  String get routeStopsHelp =>
+      'أضف نقطة الانطلاق والوصول وأي محطة في الطريق. نحن نستنتج المراحل بينها.';
+
+  @override
+  String get routeStopLabel => 'محطة';
+
+  @override
+  String get routeAddStopHere => 'أضف محطة هنا';
+
+  @override
+  String get routeAddStopTitle => 'أين تتوقف؟';
+
+  @override
+  String get routeChangeStopTitle => 'تغيير هذه المحطة';
+
+  @override
+  String get routeRemoveStop => 'حذف هذه المحطة';
+
+  @override
+  String get routeMoveStopEarlier => 'نقل المحطة إلى الأمام';
+
+  @override
+  String get routeMoveStopLater => 'نقل المحطة إلى الخلف';
+
+  @override
+  String get routeStopSameAsPrevious =>
+      'هذه نفس مدينة المحطة السابقة. اختر مدينة أخرى أو احذف إحداهما.';
+
+  @override
+  String routeSegmentBetween(String from, String to) {
+    return '$from ← $to';
+  }
+
+  @override
+  String get routeFlightOnlyExplainer =>
+      'لا يوجد طريق بري بين هذين البلدين، لذا يجب أن يكون هذا الجزء رحلة جوية.';
+
+  @override
+  String get routeFlightAirportsRequired =>
+      'الرحلة الجوية تبدأ وتنتهي في مطار. اختر المطار لكل طرف من هذا الجزء.';
+
+  @override
+  String get routeAirportNeededTitle => 'أي مطار؟';
+
+  @override
+  String routeAirportNeededBody(String stop) {
+    return 'أنت تسافر جواً من $stop، لذا نحتاج إلى المطار. تبقى المحطة $stop، نحتاج فقط معرفة كيف تغادرها.';
+  }
+
+  @override
+  String get routeChooseAirport => 'اختر المطار';
+
+  @override
+  String get routeChooseAirportTitle => 'أي مطار؟';
+
+  @override
+  String get routeChangeAirport => 'تغيير';
+
+  @override
+  String routeAirportChosen(String airport) {
+    return 'عبر $airport';
+  }
+
+  @override
+  String get routeErrorModeUnavailable =>
+      'لا يمكن قطع هذا الجزء بالسيارة. لا يوجد طريق بري بين هذين البلدين، لذا يجب أن يكون رحلة جوية.';
+
+  @override
+  String get journeyEditTitle => 'تعديل الرحلة';
+
+  @override
+  String get journeyEditAction => 'تعديل';
+
+  @override
+  String get journeySaveChanges => 'حفظ التغييرات';
+
+  @override
+  String get journeyEditSaved => 'تم تحديث الرحلة.';
+
+  @override
+  String journeyEditSavedProofReset(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم تحديث الرحلة. أُعيد $count إثبات إلى المراجعة.',
+      many: 'تم تحديث الرحلة. أُعيد $count إثباتاً إلى المراجعة.',
+      few: 'تم تحديث الرحلة. أُعيدت $count إثباتات إلى المراجعة.',
+      two: 'تم تحديث الرحلة. أُعيد إثباتا رحلتين إلى المراجعة.',
+      one:
+          'تم تحديث الرحلة. أُعيد إثبات رحلة واحدة إلى المراجعة لأن الرحلة تغيّرت.',
+      zero: 'تم تحديث الرحلة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyEditBlockedTitle => 'لا يمكن تعديل هذه الرحلة';
+
+  @override
+  String get journeyEditBlockedStatus =>
+      'لا يمكن تعديل هذه الرحلة لأنها منشورة بالفعل. ألغِها وأنشئ رحلة جديدة إذا تغيّر المسار.';
+
+  @override
+  String get journeyEditBlockedDependent =>
+      'لا يمكن تعديل هذه الرحلة لأن مُرسِلاً يعتمد بالفعل على هذا المسار.';
+
+  @override
+  String get journeyEditStaleRoute =>
+      'تغيّر هذا المسار أثناء تعديله. أعد فتحه وحاول مرة أخرى.';
+
+  @override
+  String get journeyEditProofNotice =>
+      'تغيير مطارات الرحلة أو رقمها أو مواعيدها يعني أن إثباتها لم يعد يخصّ تلك الرحلة، لذا سنراجعه من جديد.';
+
+  @override
+  String get journeyEditProofWarningTitle => 'سيُعاد التحقق من إثبات رحلتك';
+
+  @override
+  String get journeyEditProofWarningBody =>
+      'لقد غيّرت رحلة لها إثبات بالفعل. لم يعد ذلك الإثبات يخصّ هذه الرحلة، لذا سيعود إلى المراجعة ولن تُنشر الرحلة حتى تتم الموافقة عليه من جديد.';
+
+  @override
+  String get proofErrorStorageUnavailable =>
+      'لم نتمكن من حفظ ملفك في الوقت الحالي.';
+
+  @override
+  String get proofRetryTitle => 'لم يكتمل الرفع';
+
+  @override
+  String get proofRetryFileKept => 'لا تزال صورتك محددة.';
+
+  @override
+  String get proofRetry => 'أعد المحاولة';
+
+  @override
   String get proofTitle => 'إثبات الرحلة الجوية';
 
   @override

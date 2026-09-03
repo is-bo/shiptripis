@@ -11,6 +11,7 @@
 library;
 
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +31,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
+import 'journey_labels.dart';
 
 /// What the server accepts. Duplicated here only to avoid a doomed upload.
 const _maxProofBytes = 10 * 1024 * 1024;
@@ -44,6 +46,33 @@ enum _ProofKind {
     _ProofKind.ticket => 'ticket',
     _ProofKind.boardingPass => 'boarding_pass',
     _ProofKind.bookingConfirmation => 'booking_confirmation',
+  };
+}
+
+/// Copy for every proof refusal the server can send.
+///
+/// Branching on the machine code, never on the server's English, and never on
+/// a raw provider message: the deployed failure that started Phase 8F-A was a
+/// storage `AccessDenied` surfacing as "this isn't your fault, try again in a
+/// moment", which was both untrue and unactionable. Each of these says what
+/// went wrong and what to do about it; the request id stays available to
+/// support through the failure's own affordance rather than in the sentence.
+String? proofFailureCopy(BuildContext context, ApiException error) {
+  final l = L.of(context);
+  return switch (error.code.raw) {
+    'journey_proof_upload_closed' => l.proofErrorUploadClosed,
+    'proof_only_for_flight' => l.proofDriveNotRequired,
+    'journey_not_owned' => l.journeyErrorNotOwned,
+    'proof_file_missing' => l.proofChooseImage,
+    'proof_file_too_large' => l.proofFileTooLarge,
+    'proof_media_type_unsupported' => l.proofFileTypeNotAllowed,
+    'proof_kind_unknown' => l.proofKindLabel,
+    'proof_storage_unavailable' => l.proofErrorStorageUnavailable,
+    _ => switch (error.statusCode) {
+      413 => l.proofFileTooLarge,
+      415 => l.proofFileTypeNotAllowed,
+      _ => null,
+    },
   };
 }
 
@@ -66,9 +95,21 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
 
   _ProofKind _kind = _ProofKind.ticket;
   XFile? _file;
+  String? _fileMime;
+
+  /// Identifies the *file*, not the attempt, and is regenerated only when a
+  /// different image is chosen. That is what makes Retry safe: the server
+  /// recognises the second attempt as the same upload and returns the row the
+  /// first one may already have created.
+  String? _idempotencyKey;
+
   bool _busy = false;
   double _progress = 0;
   String? _fileError;
+
+  /// The last failure, kept so the screen can offer Retry beside the file
+  /// that is still selected rather than dropping the user back to the gallery.
+  ApiException? _lastFailure;
 
   Future<void> _pick(ImageSource source) async {
     final l = L.of(context);
@@ -89,8 +130,22 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
 
     setState(() {
       _fileError = null;
+      _lastFailure = null;
       _file = picked;
+      _fileMime = mime;
+      _idempotencyKey = _newIdempotencyKey();
     });
+  }
+
+  /// Random rather than derived from the file: two different boarding passes
+  /// can be byte-identical after the picker re-encodes them, and collapsing
+  /// those into one proof would be worse than an extra row.
+  static String _newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      4,
+      (_) => random.nextInt(1 << 32).toRadixString(36),
+    ).join();
   }
 
   static String _mimeFromPath(String path) {
@@ -108,6 +163,7 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
     setState(() {
       _busy = true;
       _progress = 0;
+      _lastFailure = null;
     });
     final l = L.of(context);
 
@@ -120,6 +176,8 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
             filePath: file.path,
             fileName: file.name,
             kind: _kind.wire,
+            contentType: _fileMime,
+            idempotencyKey: _idempotencyKey,
             onProgress: (sent, total) {
               if (mounted && total > 0) {
                 setState(() => _progress = sent / total);
@@ -133,19 +191,13 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
       context.pop();
     } on ApiException catch (error) {
       if (!mounted) return;
+      // The file stays selected. A storage hiccup or a dropped connection is
+      // not a reason to make someone find their boarding pass again.
+      setState(() => _lastFailure = error);
       AppSnack.failure(
         context,
         error,
-        fallback: switch (error.code.raw) {
-          'journey_proof_upload_closed' => l.proofErrorUploadClosed,
-          'proof_only_for_flight' => l.proofDriveNotRequired,
-          'journey_not_owned' => l.journeyErrorNotOwned,
-          _ => switch (error.statusCode) {
-            413 => l.proofFileTooLarge,
-            415 => l.proofFileTypeNotAllowed,
-            _ => null,
-          },
-        },
+        fallback: proofFailureCopy(context, error),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -197,8 +249,8 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
               Text(
                 l.proofLegLabel(
                   leg.position + 1,
-                  leg.origin?.coarseLabel ?? '',
-                  leg.destination?.coarseLabel ?? '',
+                  legOriginLabel(leg),
+                  legDestinationLabel(leg),
                 ),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
@@ -253,6 +305,32 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
                     message: _fileError!,
                     tone: StatusTone.bad,
                     icon: Icons.error_outline_rounded,
+                  ),
+                  const SizedBox(height: AppSpace.lg),
+                ],
+
+                // A failed attempt keeps the file. Retrying reuses the same
+                // idempotency key, so a request that actually reached the
+                // server before the connection died attaches to that proof
+                // instead of creating a second one.
+                if (_lastFailure != null && _file != null) ...[
+                  InfoNotice(
+                    title: l.proofRetryTitle,
+                    message: [
+                      proofFailureCopy(context, _lastFailure!) ??
+                          l.proofErrorStorageUnavailable,
+                      l.proofRetryFileKept,
+                    ].join(' '),
+                    tone: _lastFailure!.isRetryable
+                        ? StatusTone.waiting
+                        : StatusTone.bad,
+                    icon: Icons.refresh_rounded,
+                    actionLabel: _lastFailure!.isRetryable
+                        ? l.proofRetry
+                        : null,
+                    onAction: _lastFailure!.isRetryable && !_busy
+                        ? _upload
+                        : null,
                   ),
                   const SizedBox(height: AppSpace.lg),
                 ],

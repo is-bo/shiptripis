@@ -2664,6 +2664,240 @@ Known remaining items:
   exist as repository Actions secrets. The debug artifact is for controlled
   private installation only, not distribution.
 
+## Phase 8F-A — journey UX, editing, route validity and flight-proof repair (2026-09-03)
+
+Five findings from the owner's second real-device QA on the Phase 8E-A profile
+APK. Scope was held to exactly those: parcel creation, KYC admin evidence,
+payment rails and push notifications were deliberately not touched, and Phase
+8F-B was not started.
+
+### 1. The route builder asked for the wrong noun
+
+**The finding.** Start Jijel, destination Paris. The app immediately made one
+leg, Jijel → Paris. The traveller then wanted Jijel → Algiers → Paris and had
+no way in: "Add a leg" *appended*, producing Jijel → Paris → Algiers. The only
+route to the answer was to delete Paris, add Algiers, and add Paris again.
+
+**Root cause.** The screen was leg-centric. `_addLeg()` could only push onto
+the end of the chain; there was no insert at a position, and changing leg 0's
+destination moved the journey's destination instead of splitting the span.
+
+**The change.** The model is now **stops**, and the legs between them are
+derived. `mobile/lib/features/journeys/journey_route_draft.dart` holds an
+ordered list of stops plus one segment per gap; segment *k* runs from stop *k*
+to stop *k+1*. That makes three server rules structurally impossible to break
+rather than merely validated — contiguous positions from zero, first leg
+begins where the journey does, each leg starts where the last ended.
+
+The affordance the old screen lacked sits between every pair of stops:
+**"Add a stop here"**. Inserting Algiers between Jijel and Paris splits that
+segment into two and leaves the destination alone. Also supported: change any
+stop including an endpoint, remove an intermediate stop (the two segments it
+separated rejoin), and move an intermediate stop earlier or later. No list
+index is ever shown.
+
+`JourneyLeg` and its ordered-position architecture are unchanged. This is a
+different way of *editing* the same chain, not a different chain.
+
+### 2. A stop is a place, and sometimes an airport at that place
+
+The catalogue resolves CDG to Paris and ALG to Algiers, so an airport and the
+city it serves are **the same stop**: "CDG then Paris" is not a leg, it is one
+place twice. A stop therefore carries an optional airport it is *reached by*,
+and the leg endpoints use that airport while the journey's own start and
+destination stay the places the traveller named. The route reads
+
+    Jijel  —drive→  Algiers · ALG  —flight→  Paris · CDG
+
+A city is never silently converted into an airport. When a segment must fly
+and an end is a city, the editor says so and asks which airport, seeding the
+picker with that city's country.
+
+### 3. DRIVE between Algeria and France was accepted
+
+**Locked rule.** Countries belong to declared **road networks**; DRIVE is
+available only within one. Algeria is its own network; France, Spain and
+Germany share the continental European one; an undeclared country is its own
+island, which fails closed.
+
+So **any leg between Algeria and any non-Algerian country must be FLIGHT** —
+Algiers → Paris, Jijel → Marseille, Madrid → Algiers. Algerian domestic DRIVE
+is allowed. France → Germany and France → Spain DRIVE remain allowed. No
+ferry or sea transport was invented.
+
+**Enforced server-side**, not only in Flutter. `apps/trips/transport_rules.py`
+owns the table; `JourneyRouteWriteSerializer._validate_leg_modes` refuses a
+create *or* an edit with the structured code `journey_leg_mode_unavailable`,
+carrying `leg_position`, `required_mode`, `origin_country` and
+`destination_country`. `_validate_leg_sequence` re-checks at publication, so a
+leg that became impossible after it was written — a legacy row, or a catalogue
+refresh that moved a place — cannot reach senders. Flutter mirrors the table
+in `mobile/lib/domain/transport_rules.dart` and simply does not offer DRIVE on
+such a segment, with a sentence saying why.
+
+Defaults help without ever proposing an impossible mode: airport→airport
+across countries defaults to FLIGHT, locality→locality inside one road network
+to DRIVE, and any pair that can only fly to FLIGHT.
+
+### 4. A configured journey could not be edited
+
+`PATCH /api/journeys/<id>` now rewrites an editable journey's endpoints, whole
+leg chain and notes in one authoritative write under the aggregate lock,
+re-validated exactly as publication would be.
+
+**What may be edited.** DRAFT and PENDING_VERIFICATION, owned by the caller,
+*and* carrying no dependent state. ACTIVE, IN_PROGRESS, COMPLETED, CANCELLED
+and EXPIRED are refused, as is any journey with a Deal or a pending/accepted
+Match — a draft can be uneditable because a sender is already proposing
+against it.
+
+**The refusal explains itself.** The detail endpoint serves `editable` and
+`edit_blocked_code` to the owner only; the detail screen keeps the Edit button
+visible but inert with the reason beneath it, and the edit screen states it
+rather than showing a form that cannot be saved. Hiding the button explains
+nothing to someone looking for it.
+
+The edit screen reuses the create screen's route editor rather than growing a
+second form.
+
+### 5. Editing a flight leg no longer leaves stale proof attached
+
+Changing a flight leg's origin airport, destination airport, flight number,
+departure time or arrival time means its proof no longer evidences that
+flight. A leg the client is keeping carries its `id`, so an **unchanged**
+flight leg keeps its approved proof across an edit; a materially changed one
+has its approved or pending proof returned to `pending` for re-review, with
+the previous status, reviewer, review time and the changed field names
+preserved in the row's `metadata` audit trail. A rejected proof is left
+rejected. Proof on a leg the edit removes is discarded with it.
+
+Both counts come back in the response, the app warns *before* sending an edit
+that would cost a reviewed proof, and reports what actually happened after.
+A capacity edit does not invalidate anything — a boarding pass does not stop
+proving a flight because the traveller decided to carry less.
+
+### 6. Flight-proof upload: the real root cause
+
+**Reproduced on the deployment first.** Railway HTTP logs show four
+`POST /api/journeys/1/legs/2/proof` → **500** at 12:09–12:10 UTC on 3 Sep,
+455/411/279/1213 ms — long enough to have reached object storage and failed
+there. The Django log line carried no provider detail.
+
+**Root cause, proved directly.** Django writes flight proof with *Django's*
+S3 credential, but the view wrote it to `settings.S3_BUCKET_KYC` — the bucket
+whose credential belongs to the **Go KYC service**. Probing the deployed
+endpoint with each credential:
+
+| Credential | `shiptrip-kyc-…` | `shiptrip-media-…` |
+| --- | --- | --- |
+| Django `S3_*` | **403 AccessDenied** | put/get OK |
+| Go `KYC_S3_*` | put/get OK | 403 AccessDenied |
+
+`boto3` raised `ClientError`, nothing caught it, Django returned 500, and
+Flutter's status mapping turned that into *"This isn't your fault. Try again
+in a moment."* — which was both untrue and unactionable. This is why KYC
+upload succeeded on the same phone in the same session: it goes through the Go
+service with the other credential.
+
+**The repair.**
+
+- New `S3_BUCKET_PROOF` setting, defaulting to `S3_BUCKET_PARCEL`. Flight
+  proof is journey evidence, not identity evidence, and belongs in the private
+  media bucket Django owns — alongside dispute evidence, which already has the
+  same shape. Storage stays private; the admin console still serves it only
+  through an authorised, presigned, no-store redirect.
+- Storage failures are caught and answered `503 proof_storage_unavailable`.
+  The provider's own message names buckets and keys, so it goes to the log
+  with the request id and never to the phone.
+- Every proof refusal now carries a machine code: `proof_file_missing`,
+  `proof_file_too_large`, `proof_media_type_unsupported`, `proof_kind_unknown`,
+  `proof_only_for_flight`, `journey_not_owned`, `journey_proof_upload_closed`,
+  `proof_storage_unavailable`.
+- `manage.py check_object_storage` does a real put/get/delete round trip per
+  configured bucket with the credential the application actually uses. A
+  bucket name in an environment variable is not access, and nothing in
+  `readyz`, settings validation or the console could previously tell the
+  difference.
+- `/api/ops/health` reports `proof_bucket_configured`.
+
+**Client half.** `ApiException._kindFor` mapped 413 and 415 to `server`, so a
+file that was too large or the wrong type told the user it was not their
+fault; both are now `validation`. A failed upload keeps the chosen file and
+offers Retry rather than sending someone back to the gallery, and the retry
+carries the **same idempotency key** — new column plus a partial unique index
+on `(leg, idempotency_key)` — so an attempt that reached the server before the
+connection died attaches to that proof instead of leaving a reviewer a second
+copy. The multipart part now states its content type instead of leaving the
+transport to infer one from a gallery path that may have no extension.
+
+### 7. € and kg sat above the digits
+
+**Root cause, not a nudge.** Unit labels were passed to Material's
+`suffixIcon` slot. That slot is laid out as an *icon*: centred inside a box
+with a 48-point minimum height, with a bare `Padding` child pinned to that
+box's **top edge**. The result was roughly thirteen logical pixels of drift
+above the number. Material's other trailing slot, `suffix`, is baseline
+aligned but fades to zero opacity until the field has focus or content, so a
+unit put there vanishes from an empty field.
+
+Fixed once, centrally: `AppTextField` gained a `unit` parameter that renders
+the label in `suffixIcon` with `suffixIconConstraints` minimum dropped to
+zero, which shrink-wraps the box to the text and lets the decorator centre it
+on the input. The style matches the input's own `bodyLarge`, so centring the
+boxes lines up the baselines rather than merely the middles. `AppAmountField`
+(€), the request weight (kg) and dimension (cm) fields and the journey
+capacity field all route through it; the one-off `_UnitSuffix` widget is gone.
+No `Padding(top: …)` was added anywhere.
+
+### 8. Route summary
+
+The journey detail screen read `leg.origin?.coarseLabel` — a legacy
+`Location` field that is **null on every journey created since Phase 8C** — so
+the header and the leg list rendered blank endpoint labels. Endpoint naming
+now goes through `journey_labels.dart`: canonical place first, coarse Location
+only as a legacy fallback, an em dash rather than an empty string. Each stop
+on the route line also carries its own context ("Jijel Wilaya", "Paris
+department") and a Departs/Arrives prefix on its time.
+
+### Matching semantics: unchanged
+
+Compatibility is still equality of derived canonical matching-locality IDs.
+Nothing in this phase touches `apps/matching`. No radius, pin, display-name or
+nearby-city matching was reintroduced. Route editing changes which
+`JourneyLeg` rows exist; it does not change how compatibility is calculated.
+The 8C matching tests pass unchanged.
+
+### Files changed
+
+Backend: `apps/trips/transport_rules.py` (new), `apps/trips/services.py`,
+`apps/trips/serializers.py`, `apps/trips/views.py`, `apps/trips/models.py`,
+`apps/trips/migrations/0008_journeylegproof_idempotency_key_and_more.py`
+(new), `apps/core/management/commands/check_object_storage.py` (new),
+`apps/admin_panel/health.py`, `config/settings/base.py`,
+`apps/trips/tests/test_phase8fa_journey_editing.py` (new).
+
+Flutter: `domain/transport_rules.dart` (new),
+`features/journeys/journey_route_draft.dart` (new),
+`features/journeys/journey_route_editor.dart` (new),
+`features/journeys/journey_edit_screen.dart` (new),
+`features/journeys/journey_labels.dart` (new),
+`features/journeys/journey_create_screen.dart`,
+`features/journeys/journey_detail_screen.dart`,
+`features/journeys/leg_proof_screen.dart`,
+`features/requests/request_create_screen.dart`,
+`design/components/forms.dart`, `domain/journey.dart`,
+`data/repositories.dart`, `core/api/api_exception.dart`,
+`core/api/error_codes.dart`, `app/router.dart`, the three ARB catalogues and
+their generated localisations, `test/support/fake_api.dart`, and three new
+Phase 8F-A test files.
+
+### Migration
+
+One, additive: `trips.0008` adds a defaulted `idempotency_key` column and a
+partial unique index that excludes the empty string, so a client that sends no
+key keeps today's behaviour. No backfill, no table rewrite, no lock beyond the
+metadata change.
+
 ## External dependencies/blockers
 
 - Stripe credentials (secret key + webhook signing secret) and payout/transfer

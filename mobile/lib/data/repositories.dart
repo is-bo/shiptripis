@@ -186,11 +186,12 @@ class GeographyRepository {
 // Journeys
 // ---------------------------------------------------------------------------
 
-/// One leg as the create endpoint wants it.
+/// One leg as the create and edit endpoints want it.
 class JourneyLegDraft {
   const JourneyLegDraft({
     required this.position,
     required this.mode,
+    this.id,
     this.originId,
     this.destinationId,
     this.originPlaceId,
@@ -200,6 +201,12 @@ class JourneyLegDraft {
     this.arriveAt,
     this.flightNumber = '',
   });
+
+  /// The server's id for a leg this edit is *keeping*, and null for one it is
+  /// creating. Identity is what lets an unchanged flight leg carry its
+  /// reviewed proof across a route edit instead of being rebuilt without it.
+  /// Ignored on create.
+  final int? id;
 
   final int position;
   final TransportModeDraft mode;
@@ -215,6 +222,7 @@ class JourneyLegDraft {
   final String flightNumber;
 
   Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
     'position': position,
     'mode': mode.wire,
     if (originPlaceId != null) 'origin_place_id': originPlaceId,
@@ -280,6 +288,44 @@ class JourneyRepository {
     ),
   );
 
+  /// Rewrites an editable journey's whole route.
+  ///
+  /// The whole chain goes every time, exactly as on create: a route only
+  /// means anything as a whole, and a stop inserted in the middle changes two
+  /// segments at once. Legs the client is *keeping* carry their `id`, which
+  /// is what lets an unchanged flight leg keep its reviewed proof.
+  ///
+  /// Returns the rebuilt journey alongside what the edit cost — most
+  /// importantly, how much approved proof went back for review because the
+  /// flight it evidenced changed.
+  Future<({Journey journey, JourneyRouteChange change})> update({
+    required int id,
+    required int startPlaceId,
+    required int destinationPlaceId,
+    required List<JourneyLegDraft> legs,
+    String notes = '',
+    int? startLocationId,
+    int? destinationLocationId,
+  }) async {
+    final body = await _api.patchObject(
+      '/api/journeys/$id',
+      body: {
+        'start_place_id': startPlaceId,
+        'destination_place_id': destinationPlaceId,
+        'start_location': ?startLocationId,
+        'destination_location': ?destinationLocationId,
+        'notes': notes,
+        'legs': legs.map((l) => l.toJson()).toList(growable: false),
+      },
+    );
+    return (
+      journey: Journey.fromJson(body),
+      change: JourneyRouteChange.fromJson(
+        Map<String, dynamic>.from(body['route_change'] as Map? ?? const {}),
+      ),
+    );
+  }
+
   /// Idempotent: publishing an already-active journey returns it unchanged.
   Future<Journey> publish(int id) async =>
       Journey.fromJson(await _api.postObject('/api/journeys/$id/publish'));
@@ -300,12 +346,22 @@ class JourneyRepository {
 
   /// Uploads flight proof for one leg. Only accepted before publication, and
   /// only on a flight leg.
+  /// [idempotencyKey] identifies the *file*, not the attempt. A phone that
+  /// times out mid-upload retries, and without a key each retry would leave a
+  /// reviewer another copy of the same boarding pass; with one, the server
+  /// hands back the row the first attempt already created.
+  ///
+  /// The content type is stated rather than left to the transport. Dio infers
+  /// it from the filename, which is right until a gallery hands back a path
+  /// with no extension.
   Future<JourneyLegProof> uploadProof({
     required int journeyId,
     required int legId,
     required String filePath,
     required String fileName,
     String kind = 'ticket',
+    String? contentType,
+    String? idempotencyKey,
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async => JourneyLegProof.fromJson(
@@ -313,7 +369,14 @@ class JourneyRepository {
       '/api/journeys/$journeyId/legs/$legId/proof',
       form: FormData.fromMap({
         'kind': kind,
-        'photo': await MultipartFile.fromFile(filePath, filename: fileName),
+        'idempotency_key': ?idempotencyKey,
+        'photo': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+          contentType: contentType == null
+              ? null
+              : DioMediaType.parse(contentType),
+        ),
       }),
       onProgress: onProgress,
       cancelToken: cancelToken,

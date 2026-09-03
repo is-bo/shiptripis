@@ -297,6 +297,14 @@ S3_SECRET_KEY = env.str("S3_SECRET_KEY")
 S3_USE_PATH_STYLE = env.bool("S3_USE_PATH_STYLE", default=bool(S3_ENDPOINT_URL))
 S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
 S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
+# Flight proof is journey evidence, not identity evidence, and Django writes
+# it with Django's own credential. Hosting it in the KYC bucket coupled it to
+# a credential that belongs to the Go KYC service instead — which is exactly
+# how every deployed proof upload came to fail with AccessDenied. It shares
+# the private media bucket with dispute evidence, which has the same shape:
+# private objects Django writes and serves back only through a presigned,
+# authorised admin redirect.
+S3_BUCKET_PROOF = env.str("S3_BUCKET_PROOF", default=S3_BUCKET_PARCEL)
 
 # --- gRPC ---
 GRPC_AUTH_MODE = env.str("GRPC_AUTH_MODE", default="bearer")

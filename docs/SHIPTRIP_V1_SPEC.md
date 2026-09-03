@@ -281,16 +281,102 @@ No transport proof at launch.
 
 Store route/polyline when possible and allowed detour parameters.
 
-### Creation UX
+### Transport-mode availability (locked, Phase 8F-A)
+
+A leg's mode is constrained by geography, not chosen freely. Countries belong
+to **road networks**; two places may be joined by DRIVE only when they sit on
+the same one.
+
+- Algeria is its own road network.
+- France, Spain and Germany share the continental European road network.
+- A country with no declared network is its own island, which fails closed.
+
+Therefore, for V1:
+
+- **Any leg between Algeria and any non-Algerian country must be FLIGHT.**
+  Algiers → Paris, Jijel → Marseille and Madrid → Algiers are flight-only.
+  DRIVE is refused for these pairs.
+- Within Algeria, DRIVE is allowed.
+- Between supported European countries, DRIVE remains allowed
+  (France → Germany, France → Spain).
+- V1 has no ferry or sea transport. Adding one is a product decision with
+  proof, capacity and timing consequences, not a table entry.
+
+This is enforced **server-side** as the authority. A stale or hand-written
+client that submits an Algeria ↔ Europe DRIVE leg is refused with the
+structured code `journey_leg_mode_unavailable`, carrying `leg_position`,
+`required_mode`, `origin_country` and `destination_country`. Publication
+re-checks the rule, so a leg that became impossible after it was written
+cannot reach senders. The Flutter route editor prevents the choice
+proactively and never offers a mode the pair cannot have.
+
+### Route UX: stops, not legs (locked, Phase 8F-A)
+
+Travellers build a route by naming **stops**; ShipTrip derives the legs
+between them. Segment *k* runs from stop *k* to stop *k+1*, which makes leg
+positions contiguous, the first leg's origin the journey's start, and every
+leg's origin the previous leg's destination — structurally, not by
+validation.
+
+Required behaviour:
+
+- set origin, set destination, **insert an intermediate stop between any two
+  existing stops**, add further stops, remove an intermediate stop, change any
+  stop, and reorder intermediate stops where safe.
+- Inserting a stop must never require deleting the destination first.
+- Positions are never exposed as list indexes in the interface.
+
+Two consecutive stops must resolve to **different canonical matching
+localities**. Because an airport resolves to the locality it serves, an
+airport and its city are the same stop, not two — "CDG then Paris" is not a
+leg.
+
+### Airports as a facet of a stop (locked, Phase 8F-A)
+
+A FLIGHT leg still starts and ends at airports. A city is **never silently
+converted** into an airport. Instead a stop carries the airport it is reached
+by, chosen explicitly, and the route reads:
+
+    Jijel  —DRIVE→  Algiers · ALG  —FLIGHT→  Paris · CDG
+
+The journey's own start and destination stay the places the traveller named;
+the legs carry the airports. The two agree because the endpoint check
+compares matching localities, not place ids.
+
+### Creation and editing UX
 
 Support both:
 
-- manual multi-leg creation
+- manual multi-stop creation
 - assisted journey creation
 
 Example assisted flow:
 
 User says overall route Paris → Jijel, enters Paris → Algiers flight, and the app offers to add Algiers → Jijel as a drive leg.
+
+### Editing an existing Journey (locked, Phase 8F-A)
+
+A Journey the traveller owns is editable while it is **draft** or
+**pending_verification** *and* nothing depends on its route. Every other
+status — active, in_progress, completed, cancelled, expired — is refused,
+as is any journey carrying a Deal or a pending/accepted Match.
+
+- The edit replaces the whole ordered chain in one authoritative write, under
+  the aggregate lock, and is re-validated exactly as publication would be.
+- A leg the client is keeping carries its `id`. That identity is what lets an
+  unchanged flight leg keep its reviewed proof across an edit.
+- A refusal is **explained**, never merely hidden: the API serves `editable`
+  and `edit_blocked_code` to the owner, and the interface states the reason.
+
+### Proof consequences of an edit (locked, Phase 8F-A)
+
+Changing a flight leg's **origin airport, destination airport, flight number,
+departure time or arrival time** means its proof no longer evidences that
+flight. Such proof is **not left attached**: an approved or pending proof is
+returned to `pending` for re-review, with the previous decision, reviewer and
+changed fields preserved in the row's `metadata` audit trail. A rejected
+proof is left rejected. Proof belonging to a leg the edit removes is
+discarded with it. The API reports both counts so the traveller is told.
 
 ---
 

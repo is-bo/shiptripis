@@ -20,6 +20,11 @@ from .models import (
     Trip,
     TripStopover,
 )
+from .transport_rules import (
+    MODE_UNAVAILABLE_CODE,
+    check_leg_mode,
+    mode_violation_message,
+)
 
 
 class AirportSerializer(serializers.ModelSerializer):
@@ -111,6 +116,13 @@ class TripSerializer(serializers.ModelSerializer):
 
 
 class JourneyLegInputSerializer(serializers.Serializer):
+    # Present only on an edit, and only for a leg the client believes it is
+    # keeping.  Identity is what lets an existing flight leg carry its
+    # reviewed proof across a route edit instead of being rebuilt as a new
+    # row that quietly loses it.
+    id = serializers.IntegerField(
+        min_value=1, required=False, allow_null=True, default=None
+    )
     position = serializers.IntegerField(min_value=0, required=False)
     mode = serializers.ChoiceField(choices=JourneyLeg.Mode.choices)
     origin_place_id = serializers.PrimaryKeyRelatedField(
@@ -125,14 +137,26 @@ class JourneyLegInputSerializer(serializers.Serializer):
         required=True,
         allow_null=False,
     )
+    # Every optional field carries an explicit default so `validated_data`
+    # always describes a whole leg. On an edit that matters: a field the
+    # client leaves out has to *clear*, not quietly keep the value it had, or
+    # a route with the arrival time removed would still carry yesterday's.
     origin = serializers.PrimaryKeyRelatedField(
-        queryset=Location.objects.all(), required=False, allow_null=True
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
     )
     destination = serializers.PrimaryKeyRelatedField(
-        queryset=Location.objects.all(), required=False, allow_null=True
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
     )
     depart_at = serializers.DateTimeField()
-    arrive_at = serializers.DateTimeField(required=False, allow_null=True)
+    arrive_at = serializers.DateTimeField(
+        required=False, allow_null=True, default=None
+    )
     capacity_kg = serializers.DecimalField(
         max_digits=8,
         decimal_places=2,
@@ -212,7 +236,15 @@ class JourneyLegInputSerializer(serializers.Serializer):
         return attrs
 
 
-class JourneyCreateSerializer(serializers.Serializer):
+class JourneyRouteWriteSerializer(serializers.Serializer):
+    """Everything a journey write must agree on, whether new or edited.
+
+    Create and edit validate the identical route contract — connected legs,
+    increasing times, canonical endpoints, possible transport modes — because
+    an edit that could produce a route creation would refuse is a hole, not a
+    convenience.
+    """
+
     start_place_id = serializers.PrimaryKeyRelatedField(
         source="start_place",
         queryset=Place.objects.filter(active=True),
@@ -391,59 +423,105 @@ class JourneyCreateSerializer(serializers.Serializer):
                     )
                 }
             )
+        self._validate_leg_modes(legs)
         return attrs
+
+    def _validate_leg_modes(self, legs: list[dict]) -> None:
+        """Refuse a mode the geography cannot support.
+
+        Enforced here rather than only in Flutter: a stale build, a replayed
+        request or a hand-written client must not be able to publish a road
+        leg across the Mediterranean.  The error carries a machine code and
+        the leg's position so a client can point at the segment it belongs
+        to instead of failing the whole form.
+        """
+
+        for leg in legs:
+            violation = check_leg_mode(
+                position=leg.get("position", 0),
+                mode=leg["mode"],
+                origin=leg["origin_place"],
+                destination=leg["destination_place"],
+            )
+            if violation is None:
+                continue
+            raise serializers.ValidationError(
+                {
+                    "code": MODE_UNAVAILABLE_CODE,
+                    "detail": mode_violation_message(violation),
+                    **violation.as_payload(),
+                }
+            )
+
+
+def _attach_drive_route_snapshots(legs: list[dict]) -> None:
+    """Fill each drive leg's server-owned route snapshot, in place.
+
+    Provider failure is not fatal: a leg without a snapshot is still a valid
+    leg, and matching re-derives what it needs.  The client is never allowed
+    to supply these fields, which is why they are written here and nowhere
+    else.
+    """
+
+    provider = get_route_provider(external_call_budget=max(1, len(legs)))
+    for leg in legs:
+        if leg["mode"] != JourneyLeg.Mode.DRIVE:
+            continue
+        try:
+            origin = leg.get("origin")
+            destination = leg.get("destination")
+            if origin is None:
+                origin = leg["origin_place"]
+            if destination is None:
+                destination = leg["destination_place"]
+            if origin.latitude is None or destination.latitude is None:
+                continue
+            route = provider.directions(
+                [
+                    GeoPoint(
+                        float(origin.latitude),
+                        float(origin.longitude),
+                    ),
+                    GeoPoint(
+                        float(destination.latitude),
+                        float(destination.longitude),
+                    ),
+                ],
+                profile="drive",
+            )
+        except RouteProviderError:
+            continue
+        leg.update(
+            {
+                "distance_meters": route.distance_meters,
+                "route_duration_seconds": route.duration_seconds,
+                "route_polyline": route.polyline,
+                "route_provider": route.provider,
+                "route_profile": route.profile,
+                "route_captured_at": timezone.now(),
+                "route_metadata": {
+                    "cache_namespace": provider.cache_namespace,
+                    "corridor_points": [
+                        {
+                            "latitude": point.latitude,
+                            "longitude": point.longitude,
+                        }
+                        for point in route.corridor_points
+                    ],
+                    "provider_metadata": route.metadata,
+                },
+            }
+        )
+
+
+class JourneyCreateSerializer(JourneyRouteWriteSerializer):
+    """Creates a fresh draft journey and its whole ordered leg chain."""
 
     def create(self, validated_data: dict) -> Journey:
         legs = validated_data.pop("legs")
-        provider = get_route_provider(external_call_budget=max(1, len(legs)))
         for leg in legs:
-            if leg["mode"] != JourneyLeg.Mode.DRIVE:
-                continue
-            try:
-                origin = leg.get("origin")
-                destination = leg.get("destination")
-                if origin is None:
-                    origin = leg["origin_place"]
-                if destination is None:
-                    destination = leg["destination_place"]
-                if origin.latitude is None or destination.latitude is None:
-                    continue
-                route = provider.directions(
-                    [
-                        GeoPoint(
-                            float(origin.latitude),
-                            float(origin.longitude),
-                        ),
-                        GeoPoint(
-                            float(destination.latitude),
-                            float(destination.longitude),
-                        ),
-                    ],
-                    profile="drive",
-                )
-            except RouteProviderError:
-                continue
-            leg.update(
-                {
-                    "distance_meters": route.distance_meters,
-                    "route_duration_seconds": route.duration_seconds,
-                    "route_polyline": route.polyline,
-                    "route_provider": route.provider,
-                    "route_profile": route.profile,
-                    "route_captured_at": timezone.now(),
-                    "route_metadata": {
-                        "cache_namespace": provider.cache_namespace,
-                        "corridor_points": [
-                            {
-                                "latitude": point.latitude,
-                                "longitude": point.longitude,
-                            }
-                            for point in route.corridor_points
-                        ],
-                        "provider_metadata": route.metadata,
-                    },
-                }
-            )
+            leg.pop("id", None)
+        _attach_drive_route_snapshots(legs)
         with transaction.atomic():
             journey = Journey.objects.create(
                 traveler=self.context["request"].user,
@@ -455,6 +533,63 @@ class JourneyCreateSerializer(serializers.Serializer):
                 [JourneyLeg(journey=journey, **leg) for leg in legs]
             )
         return journey
+
+
+class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
+    """Replaces an editable journey's route in one authoritative write.
+
+    The client sends the whole chain, exactly as it does on create, because a
+    route is only meaningful as a whole: a stop inserted in the middle changes
+    two segments at once, and a patch of one of them describes a route that
+    never existed.
+
+    A leg the client means to keep carries its ``id``.  That identity is what
+    lets an unchanged flight leg keep its reviewed proof while a materially
+    changed one loses it — see :func:`apps.trips.services.replace_journey_route`.
+    """
+
+    def validate_legs(self, legs: list[dict]) -> list[dict]:
+        journey = self.instance
+        if journey is None:
+            return legs
+        supplied = [leg["id"] for leg in legs if leg.get("id")]
+        if len(supplied) != len(set(supplied)):
+            raise serializers.ValidationError(
+                "The same leg cannot appear twice in one route."
+            )
+        if supplied:
+            owned = set(
+                JourneyLeg.objects.filter(
+                    journey=journey, pk__in=supplied
+                ).values_list("pk", flat=True)
+            )
+            unknown = sorted(set(supplied) - owned)
+            if unknown:
+                raise serializers.ValidationError(
+                    "These legs do not belong to this journey: "
+                    f"{', '.join(str(pk) for pk in unknown)}."
+                )
+        return legs
+
+    def update(self, instance: Journey, validated_data: dict) -> Journey:
+        # Imported here to keep the serializer module free of a service
+        # import cycle; the service owns locking and proof consequences.
+        from .services import replace_journey_route
+
+        legs = validated_data.pop("legs")
+        _attach_drive_route_snapshots(legs)
+        result = replace_journey_route(
+            journey=instance,
+            actor=self.context["request"].user,
+            start_place=validated_data["start_place"],
+            destination_place=validated_data["destination_place"],
+            start_location=validated_data.get("start_location"),
+            destination_location=validated_data.get("destination_location"),
+            notes=validated_data.get("notes", ""),
+            legs=legs,
+        )
+        self.route_change = result
+        return result.journey
 
 
 class JourneySearchFilterSerializer(serializers.Serializer):
@@ -624,6 +759,8 @@ class JourneySerializer(serializers.ModelSerializer):
     destination_place = serializers.SerializerMethodField()
     legs = JourneyLegSerializer(many=True, read_only=True)
     legacy_trip_id = serializers.IntegerField(read_only=True)
+    editable = serializers.SerializerMethodField()
+    edit_blocked_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Journey
@@ -640,10 +777,43 @@ class JourneySerializer(serializers.ModelSerializer):
             "published_at",
             "notes",
             "legs",
+            "editable",
+            "edit_blocked_code",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_editability(self):
+        """The view's precomputed answer, or nothing for a non-owner.
+
+        Deliberately not computed per row: deciding editability touches deals
+        and matches, and doing that inside a hundred-row list serializer is a
+        query storm for a field only a detail screen reads.
+        """
+
+        return self.context.get("editability")
+
+    def get_editable(self, obj: Journey) -> bool | None:
+        del obj
+        editability = self.get_editability()
+        return None if editability is None else editability.editable
+
+    def get_edit_blocked_code(self, obj: Journey) -> str | None:
+        del obj
+        editability = self.get_editability()
+        if editability is None or editability.editable:
+            return None
+        return editability.code
+
+    def to_representation(self, instance: Journey) -> dict:
+        data = super().to_representation(instance)
+        if data.get("editable") is None:
+            # A viewer who is not the owner is told nothing about whether the
+            # owner could still change it. That is not their business.
+            data.pop("editable", None)
+            data.pop("edit_blocked_code", None)
+        return data
 
     @staticmethod
     def _place_summary(place: Place | None) -> dict | None:
