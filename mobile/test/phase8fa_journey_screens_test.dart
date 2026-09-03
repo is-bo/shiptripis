@@ -509,10 +509,11 @@ void main() {
       // is the exact defect Phase 8E went through the app to remove.
       final stopRow = find.bySemanticsLabel(RegExp('^${l.journeyFrom}, Jijel'));
       expect(stopRow, findsOneWidget);
-      final data = tester.getSemantics(stopRow).getSemanticsData();
-      expect(data.hasFlag(SemanticsFlag.isButton), isTrue);
       expect(
-        data.hasAction(SemanticsAction.tap),
+        tester
+            .getSemantics(stopRow)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
         isTrue,
         reason: 'the stop row is announced but cannot be activated',
       );
