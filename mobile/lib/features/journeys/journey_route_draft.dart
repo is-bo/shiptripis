@@ -290,12 +290,6 @@ class JourneyRouteDraft extends ChangeNotifier {
     _reconcile();
   }
 
-  void clearStopAirport(int index) {
-    if (index < 0 || index >= _stops.length) return;
-    _stops[index].airport = null;
-    _reconcile();
-  }
-
   /// Inserts a stop **after** [afterIndex], splitting the segment that used to
   /// run past it.
   ///

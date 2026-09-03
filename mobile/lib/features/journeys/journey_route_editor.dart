@@ -321,9 +321,6 @@ class _StopBlock extends StatelessWidget {
                 stop: stop,
                 enabled: enabled,
                 onChoose: () => _chooseAirport(context),
-                onClear: stop.airport == null
-                    ? null
-                    : () => draft.clearStopAirport(index),
               ),
             ],
             if (!_isLast) ...[
@@ -376,13 +373,11 @@ class _AirportPrompt extends StatelessWidget {
     required this.stop,
     required this.enabled,
     required this.onChoose,
-    required this.onClear,
   });
 
   final RouteStopDraft stop;
   final bool enabled;
   final VoidCallback onChoose;
-  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
