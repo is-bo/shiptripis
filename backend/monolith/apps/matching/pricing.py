@@ -97,14 +97,23 @@ def calculate_pricing_quote(
         delivery_request.width_cm,
         delivery_request.height_cm,
     )
+    # Dimensions are optional from Phase 8F-B, so a request may legitimately
+    # arrive here with none. Volumetric weight is then zero and the chargeable
+    # weight is the actual weight — the ordinary freight rule for an unmeasured
+    # consignment, and the same number a small dense box would produce. It is
+    # deliberately not an error: refusing to price would leave a posted request
+    # undiscoverable and unmatched, which is a worse outcome than pricing a
+    # light bulky parcel on its weight alone. Weight itself stays required, and
+    # a partial set is refused before a request is ever written.
     if any(value is None for value in dimensions):
-        raise PricingError("The delivery request has no complete dimensions.")
-    volumetric_weight = (
-        Decimal(dimensions[0])
-        * Decimal(dimensions[1])
-        * Decimal(dimensions[2])
-        / policy.volumetric_divisor
-    )
+        volumetric_weight = Decimal(0)
+    else:
+        volumetric_weight = (
+            Decimal(dimensions[0])
+            * Decimal(dimensions[1])
+            * Decimal(dimensions[2])
+            / policy.volumetric_divisor
+        )
     raw_chargeable = max(actual_weight, volumetric_weight)
     chargeable_weight = (raw_chargeable / policy.weight_increment_kg).to_integral_value(
         rounding=ROUND_CEILING

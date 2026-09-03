@@ -42,6 +42,7 @@ void main() {
       title: 'Documents',
       description: 'Sealed documents',
       category: ItemCategory.documents,
+      itemPhotoMediaId: 7001,
       acknowledgements: const SafetyAcknowledgements(
         descriptionIsAccurate: true,
         itemIsLegal: true,
@@ -64,6 +65,7 @@ void main() {
       title: base.title,
       description: base.description,
       category: base.category,
+      itemPhotoMediaId: base.itemPhotoMediaId,
       acknowledgements: base.acknowledgements,
     );
 

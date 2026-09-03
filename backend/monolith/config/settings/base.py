@@ -305,6 +305,14 @@ S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
 # private objects Django writes and serves back only through a presigned,
 # authorised admin redirect.
 S3_BUCKET_PROOF = env.str("S3_BUCKET_PROOF", default=S3_BUCKET_PARCEL)
+#: Lifetime of a signed parcel item-photo URL, in seconds. Minutes, not hours:
+#: a link forwarded out of the app should stop working quickly, and the client
+#: asks for a fresh one whenever it needs to render the image again.
+PARCEL_MEDIA_URL_TTL_SECONDS = env.int("PARCEL_MEDIA_URL_TTL_SECONDS", default=300)
+#: How long an uploaded-but-unclaimed item photo is kept before
+#: `manage.py purge_staged_parcel_media` may reclaim it. Long enough that a
+#: sender can leave the form, come back and still post.
+PARCEL_STAGED_MEDIA_TTL_HOURS = env.int("PARCEL_STAGED_MEDIA_TTL_HOURS", default=48)
 
 # --- gRPC ---
 GRPC_AUTH_MODE = env.str("GRPC_AUTH_MODE", default="bearer")

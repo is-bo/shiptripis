@@ -1,6 +1,6 @@
 # ShipTrip V1 Implementation Status
 
-Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**
+Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / NOT DEPLOYED — batched with the remaining 8F phases**
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -3043,7 +3043,257 @@ below.
   `ANDROID_KEYSTORE_*` Actions secrets exist; provider mode remains an owner
   reading from the admin console.
 
+## Phase 8F-B — parcel posting UX, validation flow and the required item photo (2026-09-04)
+
+Two owner findings from posting a parcel on the device, and one new locked
+product rule. Both findings turned out to be the same root disagreement seen
+from two angles: **the client and the server did not agree on what a delivery
+request requires**, and the form had no way to say so.
+
+### 1. The form let a sender past a step the server would refuse
+
+`DeliveryV1CreateSerializer` declared `length_cm`, `width_cm` and `height_cm`
+as required `DecimalField`s. The Flutter form treated them as optional, and its
+own helper text said so in as many words: *"Optional. Enter all three, or leave
+all three empty."* So a sender who did not measure the box was waved through
+the parcel step, the timing step and the review step, and was refused at Post.
+
+That is the whole of the owner's first finding. The field that "was left empty"
+and that "the app allowed progression" past was a required one — required by
+the server, and only by the server.
+
+**Locked**: parcel dimensions are **optional** in V1. All three, or none. An
+empty set is accepted; a partial set is refused once, under a single
+`dimensions` key, because pricing and capacity read a volume rather than a
+side.
+
+Making the write contract optional was not, on its own, enough — and this is
+the part that mattered most. Three other places read the same three columns:
+
+- `matching/pricing.py` raised `PricingError("The delivery request has no
+  complete dimensions.")`. That call sits inside `ensure_posting_deposit_order`,
+  so a dimensionless request would have **500'd at creation** rather than being
+  posted.
+- `matching/compatibility.py` counted them in `pricing_inputs_complete`, so a
+  dimensionless request would have failed every compatibility check.
+- `matching/discovery.py` filtered on `length_cm__isnull=False` and friends, so
+  a dimensionless request would have been invisible to every traveller.
+
+Loosening only the serializer would therefore have produced something worse
+than the bounce it was meant to fix: a request that posts, charges a deposit,
+and then can never be found or matched. So the contract change goes all the way
+through. Absent dimensions now mean **zero volumetric weight**, which is the
+ordinary freight treatment of an unmeasured consignment and yields the same
+price a small dense box of the same weight would. Weight itself stays required
+and its bounds are unchanged.
+
+### 2. The refusal was invisible, and then the form deadlocked
+
+When the server did refuse, it answered with `length_cm`, `width_cm` and
+`height_cm`. Those keys were listed in the form's `_claimedFields` — the set
+that suppresses an error from the catch-all banner on the promise that some
+widget renders it — and **no widget rendered them**. `_DimensionField` did not
+even accept an `errorText`. The screen therefore jumped the sender back to the
+parcel step and said nothing whatsoever. That is the owner's second finding
+verbatim: *"nothing clearly explained the problem."*
+
+The third defect is the one that made the form unusable rather than merely
+annoying, and it is worth stating precisely because it is not obvious from any
+one file:
+
+1. `AppTextField` passes its server error into the field's validator —
+   `validator: (value) => errorText ?? validator?.call(value)`.
+2. `_stepIsValid` gated the Next button on `_formKey.currentState.validate()`.
+3. `_errors` — the map holding server errors — was cleared in exactly one
+   place: the top of `_submit()`.
+
+So one server error on any step-1 text field kept `validate()` false forever,
+Next never advanced, `_submit()` was never reached, and the only code that
+could have cleared the error sat behind the gate the error was holding shut.
+Correcting the field changed nothing. The only escape from a four-step form
+was to abandon it and retype everything.
+
+**The repair is structural, not another `setState`:**
+
+- **The screen owns its validation.** `request_create_screen.dart` no longer
+  has a `Form` or a `GlobalKey<FormState>`. Every message is computed fresh in
+  `_localProblems(step)` — a pure function of controllers and state — or read
+  from `FieldErrorMap`, and passed down as `errorText`. There is no widget-tree
+  validation state left to go stale.
+- **A server error is superseded the moment its field is edited.**
+  `FieldErrorMap.without(fields)` is new; every input on the screen calls it
+  from `onChanged`. Per-field on purpose: correcting a weight says nothing
+  about a title, so a title's error survives.
+- **Every claimed key is now rendered.** `_DimensionField` takes an
+  `errorText`; `length_cm`, `width_cm`, `height_cm` and `dimensions` all have a
+  place to land.
+- **Post cannot bounce silently.** Submission re-checks *every* step locally
+  first, so the round trip that discovers step 1 was incomplete does not
+  happen. When the server does refuse a field, the form moves to the owning
+  step, marks it, scrolls the first refused field into view, focuses it, and
+  puts a notice at the head of the step saying the server refused this and the
+  problem is marked below.
+- **A blocked Next explains itself.** It stays on the step, reveals the errors,
+  announces them through `SemanticsService.sendAnnouncement`, and scrolls to
+  the first one. The footer names the count.
+- **Forward step-tapping cannot skip a prerequisite.** Backward navigation is
+  free; tapping ahead lands the user on the earliest incomplete step with its
+  problems revealed rather than on the step they asked for.
+
+The final Post button stays enabled deliberately. A dead primary action with
+nothing to explain it is the most common dead end in a form like this; pressing
+it reveals exactly what is missing and goes there. What it will never do is
+submit data the device already knows is incomplete.
+
+### 3. Every delivery request now carries a photograph of the item
+
+**Locked**: at least one photo of the actual item being sent is **required**.
+Not an avatar, not a category icon — evidence of the physical object a
+traveller is agreeing to carry across a border.
+
+**The ordering is the enforcement.** The alternatives are both worse. Creating
+the request first and uploading afterwards leaves a live, discoverable request
+with no photo every time the second call fails, and on this corridor the second
+call fails often. Folding the image into the create call would turn a strict
+JSON contract into multipart. So:
+
+1. `POST /api/parcels/media` stores the photo and returns a media id. The row
+   is *staged*: `parcel IS NULL`, `uploaded_by` set, `purpose = item_photo`. It
+   belongs to its uploader and to nobody else.
+2. `POST /api/parcels/delivery/v1` takes a **required** `item_photo_media_id`,
+   re-checks ownership and availability under `SELECT … FOR UPDATE`, and
+   attaches the photo in the same transaction that writes the request.
+
+There is therefore no window in which a schema-3 request exists without its
+image, and a failed upload produces no request at all — it never yields an id
+to send. A staged photo is single-use: a second create call naming the same id
+is refused rather than quietly stealing the first request's photo.
+
+Enforcement is the server's. A stale or hostile client cannot post without a
+photo, cannot claim another sender's staged row, and cannot pass off an
+`attachment` as the required `item_photo`.
+
+**Retries do not duplicate.** `idempotency_key` identifies the *file*, not the
+attempt, scoped to the uploader by a partial unique index. A phone that times
+out mid-upload retries with the same key and gets back the row the first
+attempt may already have written.
+
+### 4. Storage, and the 8F-A credential mistake guarded rather than remembered
+
+Item photos go to **`S3_BUCKET_PARCEL`** — the private media bucket Django's
+own credential owns, the same one that already holds flight proof and dispute
+evidence. Emphatically **not** `S3_BUCKET_KYC`: that bucket belongs to the Go
+KYC service's key, and pointing Django at it is exactly what made every
+deployed flight-proof upload answer 500 before 8F-A. A test asserts the bucket
+the code chose, because that is the part a future edit could get wrong
+silently. No new bucket was created and no KYC storage setting was touched.
+
+**Access policy.** The bucket is private and object keys never leave the
+server. `GET /api/parcels/<id>/media/<media_id>/url` issues a signed URL that
+expires in five minutes (`PARCEL_MEDIA_URL_TTL_SECONDS`), to:
+
+- the sender, always;
+- staff, for support and trust review;
+- the addressee of a targeted request, and nobody else on one;
+- any authenticated user once the request has actually been published — that
+  is the audience the photo exists for.
+
+A request still `awaiting_deposit` has never been published, so its photo stays
+with its sender. The request payload gained `item_photo_media_id` and a
+`purpose` on each media row; it still carries no bucket, no key and no URL.
+
+**Validation** is the same on both sides: JPEG, PNG or WebP, 10 MiB ceiling.
+The server parses the real header with Pillow rather than believing the
+declared content type, and rejects decompression bombs. The client resizes to a
+2048-point long edge at quality 88 before sending, so a 6 MB camera original
+does not cross a mobile uplink at full size.
+
+**Unclaimed photos** — a sender who uploads and then abandons the form — are
+reclaimed by `manage.py purge_staged_parcel_media`, default 48 hours. Nothing
+depends on it running; an unclaimed row is inert and invisible to everyone but
+its uploader.
+
+### 5. The parcel step, re-read as a whole
+
+Order now follows what the sender is holding and what a traveller will look at:
+item photo, title, description, category, weight, optional dimensions, declared
+value, fragile, optional handling notes. Optionality is *stated* — `Size ·
+Optional`, `Handling notes · Optional` — rather than discovered by pressing
+Next and seeing what happens. The 8F-A unit alignment is untouched: `kg` and
+`€` still sit on the digits, and a test asserts it.
+
+The request detail screen now *shows* the item photo instead of counting it.
+The old comment there — "the media list carries an id, a content type and a
+byte count and no URL, so the photos can be counted but not shown" — was true
+until this phase; a required photograph nobody can look at would not be a
+requirement worth having.
+
+### Files changed
+
+**Backend**
+
+| File | What |
+|---|---|
+| `apps/parcels/models.py` | `ParcelMedia` gains `uploaded_by`, `purpose`, `idempotency_key`, a nullable `parcel`, an ownership check constraint and a partial unique index; `DeliveryRequest.clean` drops the required-dimensions rule for an all-or-none one |
+| `apps/parcels/serializers.py` | dimensions optional; `item_photo_media_id` required; `purpose` and `item_photo_media_id` exposed on reads |
+| `apps/parcels/views.py` | `ParcelItemPhotoStageView`, `ParcelMediaUrlView`, `may_view_parcel_media`, shared image validation/storage helpers with structured codes, and photo consumption inside the create transaction |
+| `apps/parcels/urls.py` | `POST /api/parcels/media`, `GET /api/parcels/<id>/media/<mid>/url` |
+| `apps/parcels/management/commands/purge_staged_parcel_media.py` | reclaims unclaimed staged photos |
+| `apps/matching/pricing.py` | absent dimensions → zero volumetric weight instead of `PricingError` |
+| `apps/matching/compatibility.py` | dimensions removed from `pricing_inputs_complete` |
+| `apps/matching/discovery.py` | dimension `isnull` filters removed |
+| `config/settings/base.py` | `PARCEL_MEDIA_URL_TTL_SECONDS`, `PARCEL_STAGED_MEDIA_TTL_HOURS` — two additive lines, nothing else |
+
+**Mobile**
+
+| File | What |
+|---|---|
+| `features/requests/request_create_screen.dart` | rewritten validation: no `Form`/`FormState`, per-step problems, supersede-on-edit, scroll+focus+announce, guarded forward navigation, the item-photo section |
+| `features/requests/request_detail_screen.dart` | shows the item photo through a signed URL |
+| `design/components/forms.dart` | `FieldErrorMap.without`/`touchesAny`; `AppAmountField` takes a `focusNode` |
+| `data/repositories.dart` | `stageItemPhoto`, `photoUrl`, required `itemPhotoMediaId` on the draft |
+| `domain/delivery_request.dart` | `ParcelMediaPurpose`, `itemPhotoMediaId` |
+| `app/app_state.dart` | `parcelPhotoUrlProvider` |
+| `core/api/error_codes.dart` | the five parcel-photo codes |
+| `l10n/app_{en,fr,ar}.arb` | 24 new keys, all three locales |
+
+### Migration
+
+One, `parcels.0009_phase8fb_staged_parcel_media`, additive: three defaulted
+columns on `parcels_media`, `parcel` made nullable, one index and two
+constraints. Existing rows satisfy the ownership constraint through `parcel`.
+No backfill, no table rewrite. **Committed and tested, not deployed** — this
+phase deliberately leaves Railway on the current release.
+
+Dimensions needed no migration: the columns were already nullable and the
+`parcels_delivery_dimensions` check constraint already permitted an all-NULL
+set.
+
+### Deliberately not done
+
+- **KYC admin evidence remains broken and remains open for 8F-C.** Django
+  presigns `S3_BUCKET_KYC` with a credential that has no grant on it, so a
+  reviewer gets a broken evidence link. Untouched here by instruction, and no
+  KYC storage setting was reconfigured while building parcel media.
+- **No payment work.** Stripe and Chargily settings, credentials and code paths
+  are untouched; no checkout was created and no payment executed.
+- **No APK, no Android workflow, no AAB.** The next artifact is built once the
+  remaining 8F phases pass.
+- **No Railway deployment.** Backend changes were validated locally against
+  PostgreSQL; the consolidated deployment comes later.
+- **No request editor.** DeliveryRequest editing does not exist in V1, so there
+  is no path by which a sender can delete the only photo and leave an invalid
+  active request. The `item_photo` purpose and the create-time consumption are
+  what a future editor will have to respect.
+
 ## External dependencies/blockers
+
+- **MAJOR, open for Phase 8F-C — KYC admin evidence cannot be viewed.**
+  `admin_panel.console_views.kyc_evidence` presigns `settings.S3_BUCKET_KYC`
+  with Django's credential, which has no grant on that bucket, so a reviewer
+  gets a broken link rather than the image. `manage.py check_object_storage`
+  reports `kyc … head_bucket failed: 403`. Phases 8F-A and 8F-B were both
+  scoped away from it; it is a bucket/credential decision for 8F-C.
 
 - Stripe credentials (secret key + webhook signing secret) and payout/transfer
   capability approval; until configured, Stripe is reported unavailable and

@@ -35,7 +35,7 @@ from apps.finance.services import (
 )
 from apps.finance import ledger
 from apps.locations.models import Country, Place
-from apps.parcels.models import DeliveryRequest, ParcelRequest
+from apps.parcels.models import DeliveryRequest, ParcelMedia, ParcelRequest
 
 from .factories import (
     build_scenario,
@@ -206,11 +206,25 @@ class DepositPublicationTests(DepositTestCase):
         dropoff.canonical_place = dropoff_place
         dropoff.save(update_fields=["canonical_place", "updated_at"])
         at = timezone.now()
+        # Phase 8F-B: posting requires a photo of the item, staged before the
+        # request exists. The deposit behaviour under test is unchanged by it;
+        # what would change is nothing at all if the create call were simply
+        # refused, so the fixture supplies one.
+        item_photo = ParcelMedia.objects.create(
+            parcel=None,
+            uploaded_by=self.scenario.sender,
+            purpose=ParcelMedia.Purpose.ITEM_PHOTO,
+            bucket="shiptrip-parcel-test",
+            object_key=f"parcels/staged/{self.scenario.sender.pk}/{self.prefix}.jpg",
+            content_type="image/jpeg",
+            bytes=1024,
+        )
         response = self.client_for(self.scenario.sender).post(
             reverse("parcels-delivery-v1-create"),
             {
                 "pickup_place_id": pickup_place.pk,
                 "delivery_place_id": dropoff_place.pk,
+                "item_photo_media_id": item_photo.pk,
                 "pickup_location_id": pickup.pk,
                 "delivery_location_id": dropoff.pk,
                 "ready_window_start": (at + timedelta(hours=1)).isoformat(),

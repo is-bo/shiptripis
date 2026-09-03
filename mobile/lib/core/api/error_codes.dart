@@ -62,6 +62,17 @@ class ApiErrorCode {
   static const requestNotDepositable = ApiErrorCode('request_not_depositable');
   static const requestWeightInvalid = ApiErrorCode('request_weight_invalid');
   static const parcelNotCancellable = ApiErrorCode('parcel_not_cancellable');
+  static const parcelPhotoMissing = ApiErrorCode('parcel_photo_missing');
+  static const parcelPhotoTooLarge = ApiErrorCode('parcel_photo_too_large');
+  static const parcelPhotoMediaTypeUnsupported = ApiErrorCode(
+    'parcel_photo_media_type_unsupported',
+  );
+  static const parcelPhotoStorageUnavailable = ApiErrorCode(
+    'parcel_photo_storage_unavailable',
+  );
+  static const parcelItemPhotoUnavailable = ApiErrorCode(
+    'parcel_item_photo_unavailable',
+  );
   static const parcelCancellationForbidden = ApiErrorCode(
     'parcel_cancellation_forbidden',
   );

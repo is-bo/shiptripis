@@ -1,12 +1,15 @@
 """Parcels API.
 
 Endpoints:
-  GET  /api/parcels                    — list (mine, ?status=, ?kind=)
-  POST /api/parcels/delivery           — legacy airport/DZD compatibility write
-  POST /api/parcels/delivery/v1        — create a canonical-place/EUR request
-  POST /api/parcels/product            — retired (410 Gone)
-  GET  /api/parcels/<id>               — retrieve
-  POST /api/parcels/<id>/cancel        — cancel (owner only, while open)
+  GET  /api/parcels                         — list (mine, ?status=, ?kind=)
+  POST /api/parcels/media                   — stage the required item photo
+  POST /api/parcels/delivery                — legacy airport/DZD compat write
+  POST /api/parcels/delivery/v1             — create a canonical-place request
+  POST /api/parcels/product                 — retired (410 Gone)
+  GET  /api/parcels/<id>                    — retrieve
+  POST /api/parcels/<id>/cancel             — cancel (owner only, while open)
+  POST /api/parcels/<id>/media              — attach a further photo
+  GET  /api/parcels/<id>/media/<mid>/url    — short-lived signed read
 
 Per CLAUDE.md G6: every state change publishes via
 `redis_bus.publish_after_commit`.
@@ -14,10 +17,11 @@ Per CLAUDE.md G6: every state change publishes via
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -36,6 +40,7 @@ from apps.core.storage import (
     image_bytes_match_extension,
     make_key,
     put_object,
+    s3_client,
 )
 
 from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
@@ -58,7 +63,101 @@ from .services import (
     cancel_delivery_request,
 )
 
+logger = logging.getLogger(__name__)
+
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB cap, V1 (client should pre-resize)
+
+
+def _error(code: str, detail: str, http_status: int, **extra) -> Response:
+    """A refusal the client can branch on without reading English."""
+
+    return Response({"code": code, "detail": detail, **extra}, status=http_status)
+
+
+class _RejectedUpload(Exception):
+    """An image the server will not accept, with the answer already shaped."""
+
+    def __init__(self, response: Response):
+        self.response = response
+
+
+def _read_image_upload(request: Request, *, field: str = "photo"):
+    """Validate one uploaded image and return ``(upload, bytes, extension)``.
+
+    Three parcel endpoints accept an image and each has to make the same four
+    judgements. Sharing them is not only less code: it is the only way the
+    *bytes* check cannot be forgotten on one of them. A declared content type
+    is a claim by the caller, so Pillow parses the real header and the
+    declaration is believed only when it agrees.
+    """
+
+    upload = request.FILES.get(field)
+    if upload is None:
+        raise _RejectedUpload(
+            _error(
+                "parcel_photo_missing",
+                "Send the file under the '" + field + "' field.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        )
+    if upload.size > MAX_UPLOAD_BYTES:
+        raise _RejectedUpload(
+            _error(
+                "parcel_photo_too_large",
+                "File exceeds 10 MiB.",
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                max_bytes=MAX_UPLOAD_BYTES,
+            )
+        )
+    ext = ext_for_content_type(upload.content_type or "")
+    if ext is None:
+        raise _RejectedUpload(
+            _error(
+                "parcel_photo_media_type_unsupported",
+                "Only JPEG / PNG / WebP images are allowed.",
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            )
+        )
+    body = upload.read()
+    if not image_bytes_match_extension(body, ext):
+        raise _RejectedUpload(
+            _error(
+                "parcel_photo_media_type_unsupported",
+                "File content is not a valid image of the declared type.",
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            )
+        )
+    return upload, body, ext
+
+
+def _store_image(*, key_prefix: str, body: bytes, ext: str, content_type: str):
+    """Write one image to the private parcel bucket, or refuse cleanly.
+
+    The bucket is ``S3_BUCKET_PARCEL`` — Django's own credential, the same
+    private media bucket that already holds flight proof and dispute
+    evidence. Emphatically **not** ``S3_BUCKET_KYC``: that bucket belongs to
+    the Go KYC service's key, and pointing Django at it is precisely the
+    mistake that made every deployed flight-proof upload answer 500 before
+    Phase 8F-A. An item photo is marketplace evidence, not identity evidence,
+    and the two must not share a credential or a retention policy.
+    """
+
+    bucket = settings.S3_BUCKET_PARCEL
+    key = make_key(key_prefix, ext)
+    try:
+        put_object(bucket=bucket, key=key, body=body, content_type=content_type)
+    except Exception:
+        # The provider's message names buckets, keys and credentials. It goes
+        # to the log with the request id and never to the phone.
+        logger.exception("parcel photo upload failed", extra={"prefix": key_prefix})
+        raise _RejectedUpload(
+            _error(
+                "parcel_photo_storage_unavailable",
+                "Photo storage is temporarily unavailable.",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        ) from None
+    return bucket, key
 
 
 def _read_queryset():
@@ -234,6 +333,32 @@ class DeliveryV1CreateView(APIView):
         )
 
         with transaction.atomic():
+            # Re-read the staged photo under a row lock. The serializer
+            # already checked that it is this sender's and unattached, but
+            # two creates racing on one staged id would otherwise both pass
+            # validation and the second would silently steal the first
+            # request's photo. Locking here makes the loser lose visibly.
+            photo = (
+                ParcelMedia.objects.select_for_update()
+                .filter(
+                    pk=data["item_photo_media"].pk,
+                    uploaded_by_id=request.user.pk,
+                    purpose=ParcelMedia.Purpose.ITEM_PHOTO,
+                    parcel__isnull=True,
+                )
+                .first()
+            )
+            if photo is None:
+                return Response(
+                    {
+                        "item_photo_media_id": [
+                            "This item photo is no longer available. "
+                            "Upload the photo again."
+                        ],
+                        "code": "parcel_item_photo_unavailable",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             parcel = DeliveryRequest.objects.create(
                 sender=request.user,
                 kind=ParcelRequest.Kind.DELIVERY,
@@ -271,6 +396,14 @@ class DeliveryV1CreateView(APIView):
                 ],
                 base_amount_dzd=None,
             )
+            # The photo is attached in the same commit as the request it
+            # belongs to. There is therefore no window in which a request
+            # exists — published or awaiting its deposit — without the image
+            # V1 requires, and no failed upload can leave one behind: a photo
+            # that never stored never produced an id to send here.
+            photo.parcel_id = parcel.parcelrequest_ptr_id
+            photo.save(update_fields=["parcel"])
+
             deposit_order = None
             if deposit_required:
                 deposit_order = ensure_posting_deposit_order(
@@ -388,7 +521,89 @@ class DeliveryQuoteView(APIView):
         )
 
 
+class ParcelItemPhotoStageView(APIView):
+    """Upload the required item photo *before* the request exists.
+
+    V1 requires every delivery request to carry a photograph of the actual
+    thing being sent, and the order of operations is what makes that rule
+    safe rather than merely stated. Creating the request first and uploading
+    afterwards leaves a live, discoverable request with no photo every time
+    the second call fails — on a corridor whose senders are frequently on a
+    poor connection, that is not a rare case. So the photo is stored first,
+    and `POST /api/parcels/delivery/v1` consumes the id it returns.
+
+    A staged row belongs to the uploader and to nothing else. It becomes part
+    of a request only when a create call claims it, and it is never visible
+    to anyone but its uploader until then.
+
+    `idempotency_key` identifies the *file*, not the attempt: a phone that
+    times out mid-upload retries with the same key and gets the row the first
+    attempt may already have written, instead of leaving an orphan object in
+    the bucket for every dropped connection.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "media_upload"
+
+    def post(self, request: Request) -> Response:
+        key_value = str(request.data.get("idempotency_key") or "").strip()[:64]
+        if key_value:
+            existing = ParcelMedia.objects.filter(
+                uploaded_by=request.user, idempotency_key=key_value
+            ).first()
+            if existing is not None:
+                return Response(
+                    ParcelMediaSerializer(existing).data, status=status.HTTP_200_OK
+                )
+
+        try:
+            upload, body, ext = _read_image_upload(request)
+            bucket, object_key = _store_image(
+                key_prefix=f"parcels/staged/{request.user.pk}",
+                body=body,
+                ext=ext,
+                content_type=upload.content_type,
+            )
+        except _RejectedUpload as rejected:
+            return rejected.response
+
+        try:
+            media = ParcelMedia.objects.create(
+                parcel=None,
+                uploaded_by=request.user,
+                purpose=ParcelMedia.Purpose.ITEM_PHOTO,
+                idempotency_key=key_value,
+                bucket=bucket,
+                object_key=object_key,
+                content_type=upload.content_type,
+                bytes=len(body),
+            )
+        except IntegrityError:
+            # Two retries raced. The first one's row is the answer; the object
+            # this attempt wrote is an orphan the purge command reclaims.
+            media = ParcelMedia.objects.filter(
+                uploaded_by=request.user, idempotency_key=key_value
+            ).first()
+            if media is None:
+                raise
+            return Response(
+                ParcelMediaSerializer(media).data, status=status.HTTP_200_OK
+            )
+        return Response(
+            ParcelMediaSerializer(media).data, status=status.HTTP_201_CREATED
+        )
+
+
 class ParcelMediaUploadView(APIView):
+    """Attach a further photo to a request that already exists.
+
+    The item photo does not come through here — it is staged before creation
+    and consumed by it. Anything added afterwards is an extra, recorded as
+    `attachment` so nothing can mistake it for the required one.
+    """
+
     permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser,)
     throttle_classes = (ScopedRateThrottle,)
@@ -397,50 +612,116 @@ class ParcelMediaUploadView(APIView):
     def post(self, request: Request, pk: int) -> Response:
         parcel = get_object_or_404(ParcelRequest, pk=pk)
         if parcel.kind == ParcelRequest.Kind.PRODUCT:
-            return Response(
-                {
-                    "detail": "ProductRequest is retired and preserved as read-only history."
-                },
-                status=status.HTTP_410_GONE,
+            return _error(
+                "product_request_retired",
+                "ProductRequest is retired and preserved as read-only history.",
+                status.HTTP_410_GONE,
             )
         if parcel.sender_id != request.user.id:
-            return Response(
-                {"detail": "Only the sender can attach photos."},
-                status=status.HTTP_403_FORBIDDEN,
+            return _error(
+                "not_authorized",
+                "Only the sender can attach photos.",
+                status.HTTP_403_FORBIDDEN,
             )
-        f = request.FILES.get("photo")
-        if f is None:
-            return Response(
-                {"detail": "Send the file under the 'photo' field."},
-                status=status.HTTP_400_BAD_REQUEST,
+        try:
+            upload, body, ext = _read_image_upload(request)
+            bucket, object_key = _store_image(
+                key_prefix=f"parcels/{parcel.id}",
+                body=body,
+                ext=ext,
+                content_type=upload.content_type,
             )
-        if f.size > MAX_UPLOAD_BYTES:
-            return Response(
-                {"detail": "File exceeds 10 MiB."},
-                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            )
-        ext = ext_for_content_type(f.content_type or "")
-        if ext is None:
-            return Response(
-                {"detail": "Only JPEG / PNG / WebP images are allowed."},
-                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            )
-        body = f.read()
-        if not image_bytes_match_extension(body, ext):
-            return Response(
-                {"detail": "File content is not a valid image of the declared type."},
-                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            )
-        bucket = settings.S3_BUCKET_PARCEL
-        key = make_key(f"parcels/{parcel.id}", ext)
-        put_object(bucket=bucket, key=key, body=body, content_type=f.content_type)
+        except _RejectedUpload as rejected:
+            return rejected.response
+
         media = ParcelMedia.objects.create(
             parcel=parcel,
+            uploaded_by=request.user,
+            purpose=ParcelMedia.Purpose.ATTACHMENT,
             bucket=bucket,
-            object_key=key,
-            content_type=f.content_type,
+            object_key=object_key,
+            content_type=upload.content_type,
             bytes=len(body),
         )
         return Response(
             ParcelMediaSerializer(media).data, status=status.HTTP_201_CREATED
         )
+
+
+def may_view_parcel_media(user, parcel: ParcelRequest) -> bool:
+    """Who may read the bytes of a parcel photo.
+
+    An item photo is marketplace information, not identity evidence, so the
+    policy is deliberately looser than KYC's and deliberately tighter than
+    "public URL":
+
+    * the sender, always — it is their parcel;
+    * staff, for support and trust review;
+    * the addressee of a targeted request, and nobody else on one;
+    * any authenticated user on a request that has actually been published,
+      because that is the audience the photo exists for — a traveller
+      deciding whether to carry it.
+
+    A request still `awaiting_deposit` has never been published, so its photo
+    stays with its sender. Everything above is enforced per read, against a
+    private bucket, through a URL that expires in minutes.
+    """
+
+    if not user.is_authenticated:
+        return False
+    if parcel.sender_id == user.id:
+        return True
+    if user.is_staff:
+        return True
+    if parcel.target_traveler_id is not None:
+        return parcel.target_traveler_id == user.id
+    return parcel.status != ParcelRequest.Status.AWAITING_DEPOSIT
+
+
+class ParcelMediaUrlView(APIView):
+    """Issue a short-lived signed URL for one parcel photo.
+
+    The bucket is private and the object key is never serialized, so this is
+    the only route from an authorised caller to the bytes. Minutes, not
+    hours: a link pasted into a support chat should stop working long before
+    the conversation is over.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "media_upload"
+
+    def get(self, request: Request, pk: int, media_id: int) -> Response:
+        parcel = get_object_or_404(ParcelRequest, pk=pk)
+        media = get_object_or_404(ParcelMedia, pk=media_id, parcel_id=parcel.pk)
+        if not may_view_parcel_media(request.user, parcel):
+            return _error(
+                "not_authorized",
+                "This parcel photo belongs to someone else's request.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        ttl = int(getattr(settings, "PARCEL_MEDIA_URL_TTL_SECONDS", 300) or 300)
+        try:
+            url = s3_client().generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": media.bucket,
+                    "Key": media.object_key,
+                    "ResponseContentDisposition": "inline",
+                },
+                ExpiresIn=ttl,
+            )
+        except Exception:
+            logger.exception(
+                "parcel media presign failed",
+                extra={"parcel_id": parcel.pk, "parcel_media_id": media.pk},
+            )
+            return _error(
+                "parcel_photo_storage_unavailable",
+                "Photo storage is temporarily unavailable.",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        response = Response({"url": url, "expires_in": ttl})
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        return response

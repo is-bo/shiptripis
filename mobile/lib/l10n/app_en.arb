@@ -1819,5 +1819,37 @@
   },
   "authForgotSubhead": "Tell us the address on your account and we'll send a six-digit code to it.",
   "authVerifySubhead": "Enter the six-digit code we emailed you. It's the last step.",
-  "onboardingGetStartedShort": "Get started"
+  "onboardingGetStartedShort": "Get started",
+  "requestItemPhoto": "Photo of the item",
+  "requestItemPhotoHelp": "Add a clear photo of what you're sending. Travellers decide from this.",
+  "requestItemPhotoChoose": "Choose a photo",
+  "requestItemPhotoFromGallery": "From gallery",
+  "requestItemPhotoTakePhoto": "Take a photo",
+  "requestItemPhotoReplace": "Replace",
+  "requestItemPhotoRemove": "Remove photo",
+  "requestItemPhotoUploading": "Uploading your photo…",
+  "requestItemPhotoReady": "Photo added",
+  "requestItemPhotoRequired": "A photo of the item is required.",
+  "requestItemPhotoFormatRule": "JPEG, PNG or WebP, up to 10 MB.",
+  "requestItemPhotoTooLarge": "That image is too large. Choose one under 10 MB.",
+  "requestItemPhotoTypeNotAllowed": "That file type isn't accepted. Use a JPEG, PNG or WebP image.",
+  "requestItemPhotoUploadFailed": "The photo didn't upload. It's still selected — try again.",
+  "requestItemPhotoStorageUnavailable": "Photo storage is unavailable right now. Try again in a moment.",
+  "requestItemPhotoExpired": "That photo is no longer available. Add it again.",
+  "requestItemPhotoPrivacy": "Only travellers who can see this request can see the photo.",
+  "fieldOptional": "Optional",
+  "requestDimensionsOptionalHelp": "Optional. Leave empty if you haven't measured it — or enter all three.",
+  "requestDimensionsPartialFix": "Enter length, width and height together, or clear all three.",
+  "formFixBeforeContinuing": "Fix the highlighted field before continuing.",
+  "formFixCountBeforeContinuing": "{count, plural, =1{Fix 1 field before continuing.} other{Fix {count} fields before continuing.}}",
+  "@formFixCountBeforeContinuing": {
+    "description": "Shown when a step cannot be left because fields are invalid.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formServerRefusedOnStep": "The server refused this request. The problem is on this step, marked below.",
+  "formStepLockedUntilValid": "Finish this step first."
 }

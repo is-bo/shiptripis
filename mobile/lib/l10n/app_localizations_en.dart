@@ -3639,4 +3639,95 @@ class LEn extends L {
 
   @override
   String get onboardingGetStartedShort => 'Get started';
+
+  @override
+  String get requestItemPhoto => 'Photo of the item';
+
+  @override
+  String get requestItemPhotoHelp =>
+      'Add a clear photo of what you\'re sending. Travellers decide from this.';
+
+  @override
+  String get requestItemPhotoChoose => 'Choose a photo';
+
+  @override
+  String get requestItemPhotoFromGallery => 'From gallery';
+
+  @override
+  String get requestItemPhotoTakePhoto => 'Take a photo';
+
+  @override
+  String get requestItemPhotoReplace => 'Replace';
+
+  @override
+  String get requestItemPhotoRemove => 'Remove photo';
+
+  @override
+  String get requestItemPhotoUploading => 'Uploading your photo…';
+
+  @override
+  String get requestItemPhotoReady => 'Photo added';
+
+  @override
+  String get requestItemPhotoRequired => 'A photo of the item is required.';
+
+  @override
+  String get requestItemPhotoFormatRule => 'JPEG, PNG or WebP, up to 10 MB.';
+
+  @override
+  String get requestItemPhotoTooLarge =>
+      'That image is too large. Choose one under 10 MB.';
+
+  @override
+  String get requestItemPhotoTypeNotAllowed =>
+      'That file type isn\'t accepted. Use a JPEG, PNG or WebP image.';
+
+  @override
+  String get requestItemPhotoUploadFailed =>
+      'The photo didn\'t upload. It\'s still selected — try again.';
+
+  @override
+  String get requestItemPhotoStorageUnavailable =>
+      'Photo storage is unavailable right now. Try again in a moment.';
+
+  @override
+  String get requestItemPhotoExpired =>
+      'That photo is no longer available. Add it again.';
+
+  @override
+  String get requestItemPhotoPrivacy =>
+      'Only travellers who can see this request can see the photo.';
+
+  @override
+  String get fieldOptional => 'Optional';
+
+  @override
+  String get requestDimensionsOptionalHelp =>
+      'Optional. Leave empty if you haven\'t measured it — or enter all three.';
+
+  @override
+  String get requestDimensionsPartialFix =>
+      'Enter length, width and height together, or clear all three.';
+
+  @override
+  String get formFixBeforeContinuing =>
+      'Fix the highlighted field before continuing.';
+
+  @override
+  String formFixCountBeforeContinuing(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Fix $count fields before continuing.',
+      one: 'Fix 1 field before continuing.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get formServerRefusedOnStep =>
+      'The server refused this request. The problem is on this step, marked below.';
+
+  @override
+  String get formStepLockedUntilValid => 'Finish this step first.';
 }

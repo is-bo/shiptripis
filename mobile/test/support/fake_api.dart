@@ -192,14 +192,24 @@ class FakeTokenStore extends TokenStore {
 /// Everything else — repositories, session, providers — is the real thing.
 ProviderContainer containerFor(FakeBackend backend, {FakeTokenStore? tokens}) {
   final store = tokens ?? FakeTokenStore();
-  final dio = Dio()..httpClientAdapter = _FakeAdapter(backend);
   return ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
-      apiClientProvider.overrideWithValue(ApiClient(tokens: store, dio: dio)),
+      apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
     ],
   );
 }
+
+/// The real [ApiClient], talking to [backend].
+///
+/// Exposed for a test that needs to build its own container — one standing in
+/// for a camera, say. `Override` is not nameable from Riverpod 3's public API,
+/// so the override list has to be written as a literal at the call site rather
+/// than passed in here.
+ApiClient apiClientFor(FakeBackend backend, FakeTokenStore tokens) => ApiClient(
+  tokens: tokens,
+  dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
+);
 
 // ---------------------------------------------------------------------------
 // Fixtures, shaped from the real Phase 6C responses

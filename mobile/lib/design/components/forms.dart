@@ -60,6 +60,31 @@ class FieldErrorMap {
     return (list == null || list.isEmpty) ? null : list.first;
   }
 
+  /// True when any of [fields] currently carries a server error.
+  bool touchesAny(Iterable<String> fields) => fields.any(_errors.containsKey);
+
+  /// The same map without [fields].
+  ///
+  /// A server error is a verdict on the value that was sent. The moment the
+  /// user changes that value the verdict is about something that no longer
+  /// exists, and keeping it is worse than useless: it goes on colouring the
+  /// field red and — on any screen that gates its submit on the absence of
+  /// server errors — goes on blocking the user from correcting anything.
+  ///
+  /// That was a real dead end in the request form. A rejected field kept its
+  /// error, the error kept `Form.validate()` false, and `validate()` kept the
+  /// Next button inert; the only escape from a four-step form was to abandon
+  /// it and re-enter everything. Superseding on edit is the fix, and it is
+  /// deliberately per-field: correcting a weight says nothing about a title.
+  FieldErrorMap without(Iterable<String> fields) {
+    final drop = fields.toSet();
+    if (!drop.any(_errors.containsKey)) return this;
+    return FieldErrorMap({
+      for (final entry in _errors.entries)
+        if (!drop.contains(entry.key)) entry.key: entry.value,
+    });
+  }
+
   /// Errors the form has no field for — `non_field_errors` and anything whose
   /// key the screen did not claim. Shown as a notice above the form so a
   /// rejection is never silent.
@@ -761,6 +786,7 @@ class AppAmountField extends StatelessWidget {
     this.isRequired = true,
     this.enabled = true,
     this.onChanged,
+    this.focusNode,
     super.key,
   });
 
@@ -771,6 +797,11 @@ class AppAmountField extends StatelessWidget {
   final bool isRequired;
   final bool enabled;
   final ValueChanged<String>? onChanged;
+
+  /// Held by the screen when it needs to put the cursor on this field — a
+  /// multi-step form that refuses to advance has to say *where*, and moving
+  /// focus is half of saying it.
+  final FocusNode? focusNode;
 
   /// Cents currently in the field, or null if it is not a usable amount.
   static int? centsOf(TextEditingController controller) {
@@ -789,6 +820,7 @@ class AppAmountField extends StatelessWidget {
       isRequired: isRequired,
       enabled: enabled,
       onChanged: onChanged,
+      focusNode: focusNode,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textInputAction: TextInputAction.done,
       inputFormatters: [

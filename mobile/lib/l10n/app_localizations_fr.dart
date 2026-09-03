@@ -3669,4 +3669,96 @@ class LFr extends L {
 
   @override
   String get onboardingGetStartedShort => 'Commencer';
+
+  @override
+  String get requestItemPhoto => 'Photo de l\'objet';
+
+  @override
+  String get requestItemPhotoHelp =>
+      'Ajoutez une photo nette de ce que vous envoyez. Les voyageurs décident sur cette base.';
+
+  @override
+  String get requestItemPhotoChoose => 'Choisir une photo';
+
+  @override
+  String get requestItemPhotoFromGallery => 'Depuis la galerie';
+
+  @override
+  String get requestItemPhotoTakePhoto => 'Prendre une photo';
+
+  @override
+  String get requestItemPhotoReplace => 'Remplacer';
+
+  @override
+  String get requestItemPhotoRemove => 'Retirer la photo';
+
+  @override
+  String get requestItemPhotoUploading => 'Envoi de votre photo…';
+
+  @override
+  String get requestItemPhotoReady => 'Photo ajoutée';
+
+  @override
+  String get requestItemPhotoRequired =>
+      'Une photo de l\'objet est obligatoire.';
+
+  @override
+  String get requestItemPhotoFormatRule => 'JPEG, PNG ou WebP, jusqu\'à 10 Mo.';
+
+  @override
+  String get requestItemPhotoTooLarge =>
+      'Cette image est trop lourde. Choisissez-en une de moins de 10 Mo.';
+
+  @override
+  String get requestItemPhotoTypeNotAllowed =>
+      'Ce type de fichier n\'est pas accepté. Utilisez une image JPEG, PNG ou WebP.';
+
+  @override
+  String get requestItemPhotoUploadFailed =>
+      'La photo n\'a pas été envoyée. Elle est toujours sélectionnée — réessayez.';
+
+  @override
+  String get requestItemPhotoStorageUnavailable =>
+      'Le stockage des photos est indisponible. Réessayez dans un instant.';
+
+  @override
+  String get requestItemPhotoExpired =>
+      'Cette photo n\'est plus disponible. Ajoutez-la de nouveau.';
+
+  @override
+  String get requestItemPhotoPrivacy =>
+      'Seuls les voyageurs qui voient cette demande voient la photo.';
+
+  @override
+  String get fieldOptional => 'Facultatif';
+
+  @override
+  String get requestDimensionsOptionalHelp =>
+      'Facultatif. Laissez vide si vous ne l\'avez pas mesuré — ou saisissez les trois.';
+
+  @override
+  String get requestDimensionsPartialFix =>
+      'Saisissez longueur, largeur et hauteur ensemble, ou effacez les trois.';
+
+  @override
+  String get formFixBeforeContinuing =>
+      'Corrigez le champ signalé avant de continuer.';
+
+  @override
+  String formFixCountBeforeContinuing(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Corrigez $count champs avant de continuer.',
+      one: 'Corrigez 1 champ avant de continuer.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get formServerRefusedOnStep =>
+      'Le serveur a refusé cette demande. Le problème est à cette étape, signalé ci-dessous.';
+
+  @override
+  String get formStepLockedUntilValid => 'Terminez d\'abord cette étape.';
 }

@@ -267,13 +267,26 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                   label: l.requestHandlingNotes,
                   value: Text(request.handlingNotes),
                 ),
-              // The media list carries an id, a content type and a byte count
-              // and no URL, so the photos can be counted but not shown.
-              DetailRow(
-                label: l.requestPhotos,
-                value: Text(l.requestPhotoCount(request.media.length)),
-                icon: Icons.photo_library_outlined,
-              ),
+              // The required photograph of the item, shown rather than
+              // counted. Phase 8F-B made one mandatory precisely so a
+              // traveller can see what they are agreeing to carry, and a
+              // requirement whose answer nobody can look at is not one.
+              if (request.itemPhotoMediaId != null) ...[
+                const SizedBox(height: AppSpace.md),
+                _ItemPhoto(
+                  requestId: request.id,
+                  mediaId: request.itemPhotoMediaId!,
+                ),
+              ],
+              // Anything beyond the required one is still only counted: the
+              // media list carries an id, a type and a byte count, and each
+              // URL costs its own signed round trip.
+              if (request.media.length > 1)
+                DetailRow(
+                  label: l.requestPhotos,
+                  value: Text(l.requestPhotoCount(request.media.length)),
+                  icon: Icons.photo_library_outlined,
+                ),
             ],
           ),
         ),
@@ -503,3 +516,75 @@ String _categoryLabel(L l, ItemCategory category) => switch (category) {
   ItemCategory.clothing => l.requestCategoryClothing,
   ItemCategory.other || ItemCategory.unknown => l.requestCategoryOther,
 };
+
+/// The item photograph, fetched through a signed URL that expires in minutes.
+///
+/// The URL is asked for when the image is about to be drawn rather than
+/// carried on the request payload, because a link that outlives the screen is
+/// a link that has stopped working by the time anyone follows it.
+class _ItemPhoto extends ConsumerWidget {
+  const _ItemPhoto({required this.requestId, required this.mediaId});
+
+  final int requestId;
+  final int mediaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final c = context.colors;
+    final url = ref.watch(
+      parcelPhotoUrlProvider((requestId: requestId, mediaId: mediaId)),
+    );
+
+    return Semantics(
+      image: true,
+      label: l.requestItemPhoto,
+      child: ExcludeSemantics(
+        child: ClipRRect(
+          borderRadius: AppRadius.rMd,
+          child: Container(
+            height: 200,
+            width: double.infinity,
+            color: c.surfaceSunken,
+            child: url.when(
+              loading: () => const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              // A photo that will not load is a fact worth stating plainly.
+              // Retrying is one tap, because the usual cause is a signed URL
+              // that expired while the screen sat open.
+              error: (_, _) => Center(
+                child: AppButton(
+                  label: l.actionRetry,
+                  variant: AppButtonVariant.tertiary,
+                  icon: Icons.refresh_rounded,
+                  expand: false,
+                  onPressed: () => ref.invalidate(
+                    parcelPhotoUrlProvider((
+                      requestId: requestId,
+                      mediaId: mediaId,
+                    )),
+                  ),
+                ),
+              ),
+              data: (value) => Image.network(
+                value,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Icon(
+                    Icons.image_not_supported_outlined,
+                    color: c.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

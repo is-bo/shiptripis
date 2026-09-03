@@ -509,10 +509,11 @@ def compatible_requests_for_journey(
             ready_window_start__lte=coverage_end,
             ready_window_end__gte=first_departure,
             deadline_at__gte=first_departure,
+            # Dimensions are optional (Phase 8F-B). Filtering on them here
+            # would have made every unmeasured request invisible to every
+            # traveller — a posted request nobody can find is worse than the
+            # bounce the rule was meant to prevent.
             actual_weight_kg__isnull=False,
-            length_cm__isnull=False,
-            width_cm__isnull=False,
-            height_cm__isnull=False,
         )
         .filter(
             Q(target_traveler__isnull=True) | Q(target_traveler_id=journey.traveler_id)

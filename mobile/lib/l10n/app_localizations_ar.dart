@@ -3657,4 +3657,94 @@ class LAr extends L {
 
   @override
   String get onboardingGetStartedShort => 'لنبدأ';
+
+  @override
+  String get requestItemPhoto => 'صورة الغرض';
+
+  @override
+  String get requestItemPhotoHelp =>
+      'أضف صورة واضحة لما ترسله. يقرّر المسافرون بناءً عليها.';
+
+  @override
+  String get requestItemPhotoChoose => 'اختر صورة';
+
+  @override
+  String get requestItemPhotoFromGallery => 'من المعرض';
+
+  @override
+  String get requestItemPhotoTakePhoto => 'التقاط صورة';
+
+  @override
+  String get requestItemPhotoReplace => 'استبدال';
+
+  @override
+  String get requestItemPhotoRemove => 'إزالة الصورة';
+
+  @override
+  String get requestItemPhotoUploading => 'جارٍ رفع صورتك…';
+
+  @override
+  String get requestItemPhotoReady => 'تمت إضافة الصورة';
+
+  @override
+  String get requestItemPhotoRequired => 'صورة الغرض مطلوبة.';
+
+  @override
+  String get requestItemPhotoFormatRule =>
+      'JPEG أو PNG أو WebP، حتى 10 ميغابايت.';
+
+  @override
+  String get requestItemPhotoTooLarge =>
+      'هذه الصورة كبيرة جداً. اختر صورة أقل من 10 ميغابايت.';
+
+  @override
+  String get requestItemPhotoTypeNotAllowed =>
+      'نوع الملف غير مقبول. استخدم صورة JPEG أو PNG أو WebP.';
+
+  @override
+  String get requestItemPhotoUploadFailed =>
+      'لم يتم رفع الصورة. ما زالت محدّدة — أعد المحاولة.';
+
+  @override
+  String get requestItemPhotoStorageUnavailable =>
+      'تخزين الصور غير متاح حالياً. أعد المحاولة بعد قليل.';
+
+  @override
+  String get requestItemPhotoExpired => 'لم تعد الصورة متاحة. أضفها من جديد.';
+
+  @override
+  String get requestItemPhotoPrivacy =>
+      'لا يرى الصورة إلا المسافرون الذين يمكنهم رؤية هذا الطلب.';
+
+  @override
+  String get fieldOptional => 'اختياري';
+
+  @override
+  String get requestDimensionsOptionalHelp =>
+      'اختياري. اتركه فارغاً إن لم تقس الطرد — أو أدخل الأبعاد الثلاثة.';
+
+  @override
+  String get requestDimensionsPartialFix =>
+      'أدخل الطول والعرض والارتفاع معاً، أو امسح الثلاثة.';
+
+  @override
+  String get formFixBeforeContinuing => 'صحّح الحقل المحدّد قبل المتابعة.';
+
+  @override
+  String formFixCountBeforeContinuing(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'صحّح $count حقول قبل المتابعة.',
+      one: 'صحّح حقلاً واحداً قبل المتابعة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get formServerRefusedOnStep =>
+      'رفض الخادم هذا الطلب. المشكلة في هذه الخطوة، وهي موضّحة أدناه.';
+
+  @override
+  String get formStepLockedUntilValid => 'أكمل هذه الخطوة أولاً.';
 }

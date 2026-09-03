@@ -447,6 +447,7 @@ class DeliveryRequestDraft {
     required this.description,
     required this.category,
     required this.acknowledgements,
+    required this.itemPhotoMediaId,
     this.lengthCm,
     this.widthCm,
     this.heightCm,
@@ -464,7 +465,8 @@ class DeliveryRequestDraft {
   final DateTime deadlineAt;
   final double actualWeightKg;
 
-  /// All three together or none: the server refuses a partial set.
+  /// Optional. All three together or none — the server accepts an empty set
+  /// and refuses a partial one, because a volume needs three sides.
   final double? lengthCm;
   final double? widthCm;
   final double? heightCm;
@@ -481,6 +483,12 @@ class DeliveryRequestDraft {
   final bool fragile;
   final int? targetTravelerId;
   final SafetyAcknowledgements acknowledgements;
+
+  /// The staged item photo this request will own, from
+  /// [RequestRepository.stageItemPhoto]. Required: the server refuses a
+  /// request without one, and the photo is uploaded first precisely so a
+  /// failed upload can never leave a live request with nothing to show.
+  final int itemPhotoMediaId;
 
   Map<String, dynamic> toJson() => {
     if (pickupPlaceId != null) 'pickup_place_id': pickupPlaceId,
@@ -501,6 +509,7 @@ class DeliveryRequestDraft {
     'category': _categoryWire(category),
     'handling_notes': handlingNotes,
     'fragile': fragile,
+    'item_photo_media_id': itemPhotoMediaId,
     if (targetTravelerId != null) 'target_traveler_id': targetTravelerId,
     ...acknowledgements.toJson(),
   };
@@ -563,6 +572,46 @@ class RequestRepository {
     await _api.postObject('/api/parcels/$id/cancel'),
   );
 
+  /// Uploads the required item photo *before* the request exists.
+  ///
+  /// The order is the guarantee. Creating the request first and uploading
+  /// afterwards would leave a live, discoverable request with no photo every
+  /// time the second call failed — and on this corridor the second call fails
+  /// often. Staging first means a failed upload costs the sender a retry and
+  /// nothing else: there is no request yet to be broken.
+  ///
+  /// [idempotencyKey] identifies the *file*, not the attempt, so a retry after
+  /// a timeout re-attaches to the row the first attempt may already have
+  /// written instead of leaving an orphan behind for every dropped
+  /// connection. The content type is stated rather than inferred, because a
+  /// gallery can hand back a path with no extension at all.
+  Future<ParcelMedia> stageItemPhoto({
+    required String filePath,
+    required String fileName,
+    String? contentType,
+    String? idempotencyKey,
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async => ParcelMedia.fromJson(
+    await _api.upload(
+      '/api/parcels/media',
+      form: FormData.fromMap({
+        'idempotency_key': ?idempotencyKey,
+        'photo': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+          contentType: contentType == null
+              ? null
+              : DioMediaType.parse(contentType),
+        ),
+      }),
+      onProgress: onProgress,
+      cancelToken: cancelToken,
+    ),
+  );
+
+  /// Attaches a further photo to a request that already exists. The required
+  /// item photo does not come through here — see [stageItemPhoto].
   Future<ParcelMedia> uploadPhoto({
     required int requestId,
     required String filePath,
@@ -579,6 +628,24 @@ class RequestRepository {
       cancelToken: cancelToken,
     ),
   );
+
+  /// A short-lived signed URL for one parcel photo.
+  ///
+  /// The bucket is private and its object keys never leave the server, so
+  /// this is the only route to the bytes. The URL expires in minutes, which
+  /// is why it is fetched when the image is about to be shown rather than
+  /// cached alongside the request.
+  Future<String> photoUrl({
+    required int requestId,
+    required int mediaId,
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.getObject(
+      '/api/parcels/$requestId/media/$mediaId/url',
+      cancelToken: cancelToken,
+    );
+    return (body['url'] as String?) ?? '';
+  }
 
   /// Open requests from other senders, for a browsing traveller.
   ///

@@ -21,13 +21,15 @@ class ParcelMediaSerializer(serializers.ModelSerializer):
     """Public parcel media metadata.
 
     We deliberately do NOT expose `bucket` or `object_key` — those are
-    internal storage paths. The Go media-service issues short-lived
-    presigned URLs on demand; the client never sees the raw S3 key.
+    internal storage paths. Bytes are reached only through
+    `GET /api/parcels/<id>/media/<media_id>/url`, which authorises the caller
+    and answers with a short-lived signed URL; the client never sees the raw
+    S3 key and the bucket is never public.
     """
 
     class Meta:
         model = ParcelMedia
-        fields = ("id", "content_type", "bytes", "created_at")
+        fields = ("id", "purpose", "content_type", "bytes", "created_at")
         read_only_fields = fields
 
 
@@ -125,23 +127,33 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
         min_value=Decimal("0.01"),
         max_value=Decimal("100.00"),
     )
+    # Optional since Phase 8F-B. A sender who has not measured the box must
+    # still be able to post; weight is the required physical fact. Supplying
+    # one measurement without the other two is still refused, because pricing
+    # and capacity read a volume, not a side.
     length_cm = serializers.DecimalField(
         max_digits=6,
         decimal_places=2,
         min_value=Decimal("0.01"),
         max_value=Decimal("500.00"),
+        required=False,
+        allow_null=True,
     )
     width_cm = serializers.DecimalField(
         max_digits=6,
         decimal_places=2,
         min_value=Decimal("0.01"),
         max_value=Decimal("500.00"),
+        required=False,
+        allow_null=True,
     )
     height_cm = serializers.DecimalField(
         max_digits=6,
         decimal_places=2,
         min_value=Decimal("0.01"),
         max_value=Decimal("500.00"),
+        required=False,
+        allow_null=True,
     )
     declared_value_eur_cents = serializers.IntegerField(
         min_value=0,
@@ -165,6 +177,24 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
         default="",
     )
     fragile = serializers.BooleanField(required=False, default=False)
+    #: The required photograph of the item, staged by
+    #: `POST /api/parcels/media` and consumed here. Required since Phase 8F-B:
+    #: a traveller agrees to carry a physical object, and "documents" plus a
+    #: weight is not a description of one. Enforcement lives on the server, so
+    #: a stale or hostile client cannot post without it.
+    #:
+    #: The queryset is deliberately every staged item photo rather than only
+    #: this caller's: narrowing it here would answer an unowned id with
+    #: "invalid pk", which tells an attacker nothing but also tells an honest
+    #: sender nothing. Ownership is checked in `validate` with its own message.
+    item_photo_media_id = serializers.PrimaryKeyRelatedField(
+        source="item_photo_media",
+        queryset=ParcelMedia.objects.filter(
+            purpose=ParcelMedia.Purpose.ITEM_PHOTO
+        ),
+        required=True,
+        allow_null=False,
+    )
     target_traveler_id = serializers.PrimaryKeyRelatedField(
         source="target_traveler",
         queryset=get_user_model().objects.all(),
@@ -254,6 +284,8 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
                 {"deadline_at": "Deadline must be in the future."}
             )
 
+        # Empty is always acceptable. A partial set is not: the volume the
+        # marketplace prices and reserves capacity against needs three sides.
         dimensions = [
             attrs.get(name) for name in ("length_cm", "width_cm", "height_cm")
         ]
@@ -261,7 +293,34 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
             value is None for value in dimensions
         ):
             raise serializers.ValidationError(
-                {"dimensions": "Length, width, and height must be supplied together."}
+                {
+                    "dimensions": (
+                        "Enter length, width and height together, or leave all "
+                        "three empty."
+                    )
+                }
+            )
+
+        # The staged photo must be this sender's, and must not already belong
+        # to a request. Both checks are the server's, not the client's: the
+        # id is a plain integer on the wire and guessing one is cheap.
+        photo = attrs["item_photo_media"]
+        if photo.uploaded_by_id != request.user.pk:
+            raise serializers.ValidationError(
+                {
+                    "item_photo_media_id": (
+                        "This item photo was not uploaded by the authenticated sender."
+                    )
+                }
+            )
+        if photo.parcel_id is not None:
+            raise serializers.ValidationError(
+                {
+                    "item_photo_media_id": (
+                        "This item photo already belongs to another request. "
+                        "Upload the photo again."
+                    )
+                }
             )
 
         declaration_fields = (
@@ -305,6 +364,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
     origin = AirportSerializer(read_only=True)
     destination = AirportSerializer(read_only=True)
     media = ParcelMediaSerializer(many=True, read_only=True)
+    item_photo_media_id = serializers.SerializerMethodField()
 
     base_amount_dzd = serializers.SerializerMethodField()
     product_url = serializers.SerializerMethodField()
@@ -350,6 +410,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "deadline_at",
             "status",
             "media",
+            "item_photo_media_id",
             "base_amount_dzd",
             "schema_version",
             "pickup_location",
@@ -380,6 +441,20 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_item_photo_media_id(self, obj: ParcelRequest) -> int | None:
+        """The primary item photo, named rather than left to be searched for.
+
+        `media` already carries every row with its purpose, but a client that
+        has to scan a list to find the one image the request is *about* will
+        eventually scan it wrong. Oldest first, matching `Meta.ordering`, so
+        the answer is stable across requests.
+        """
+
+        for media in obj.media.all():
+            if media.purpose == ParcelMedia.Purpose.ITEM_PHOTO:
+                return media.pk
+        return None
 
     def _delivery(self, obj: ParcelRequest) -> DeliveryRequest | None:
         if obj.kind != ParcelRequest.Kind.DELIVERY:

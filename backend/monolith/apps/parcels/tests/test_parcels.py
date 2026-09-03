@@ -1,5 +1,6 @@
 from datetime import timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
@@ -146,6 +147,24 @@ def _delivery_v1_payload(pickup: Location, delivery: Location, **overrides) -> d
     return base
 
 
+def _staged_item_photo(user: User) -> ParcelMedia:
+    """One uploaded-but-unclaimed item photo, ready for a create call.
+
+    Every V1 request needs one (Phase 8F-B), and a staged row is single-use,
+    so this mints a fresh one per payload rather than sharing a fixture.
+    """
+
+    return ParcelMedia.objects.create(
+        parcel=None,
+        uploaded_by=user,
+        purpose=ParcelMedia.Purpose.ITEM_PHOTO,
+        bucket="shiptrip-parcel-test",
+        object_key=f"parcels/staged/{user.pk}/{uuid4().hex}.jpg",
+        content_type="image/jpeg",
+        bytes=1024,
+    )
+
+
 def _create_v1_delivery(
     sender: User,
     pickup: Location,
@@ -274,6 +293,7 @@ class DeliveryV1CreateTests(APITestCase):
         payload.update(
             pickup_place_id=self.pickup_place.pk,
             delivery_place_id=self.delivery_place.pk,
+            item_photo_media_id=_staged_item_photo(self.sender).pk,
         )
         payload.update(overrides)
         return payload
@@ -385,13 +405,23 @@ class DeliveryV1CreateTests(APITestCase):
         assert DeliveryRequest.objects.count() == 0
 
     def test_rejects_incomplete_dimensions_and_invalid_window(self):
+        """A partial set is refused; the message names the group, not a side.
+
+        Three identical "this field is required" errors on `length_cm`,
+        `width_cm` and `height_cm` are what the device QA saw as an
+        unexplained bounce back to the parcel step, because the form had no
+        input bound to those keys. One `dimensions` error is the whole story
+        and lands where the user is looking.
+        """
+
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
             self._canonical_payload(width_cm=None),
             format="json",
         )
         assert response.status_code == 400
-        assert "width_cm" in response.data
+        assert "dimensions" in response.data
+        assert DeliveryRequest.objects.count() == 0
 
         now = timezone.now()
         response = self.client.post(

@@ -6398,6 +6398,150 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Get started'**
   String get onboardingGetStartedShort;
+
+  /// No description provided for @requestItemPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo of the item'**
+  String get requestItemPhoto;
+
+  /// No description provided for @requestItemPhotoHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a clear photo of what you\'re sending. Travellers decide from this.'**
+  String get requestItemPhotoHelp;
+
+  /// No description provided for @requestItemPhotoChoose.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a photo'**
+  String get requestItemPhotoChoose;
+
+  /// No description provided for @requestItemPhotoFromGallery.
+  ///
+  /// In en, this message translates to:
+  /// **'From gallery'**
+  String get requestItemPhotoFromGallery;
+
+  /// No description provided for @requestItemPhotoTakePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Take a photo'**
+  String get requestItemPhotoTakePhoto;
+
+  /// No description provided for @requestItemPhotoReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get requestItemPhotoReplace;
+
+  /// No description provided for @requestItemPhotoRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo'**
+  String get requestItemPhotoRemove;
+
+  /// No description provided for @requestItemPhotoUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading your photo…'**
+  String get requestItemPhotoUploading;
+
+  /// No description provided for @requestItemPhotoReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo added'**
+  String get requestItemPhotoReady;
+
+  /// No description provided for @requestItemPhotoRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A photo of the item is required.'**
+  String get requestItemPhotoRequired;
+
+  /// No description provided for @requestItemPhotoFormatRule.
+  ///
+  /// In en, this message translates to:
+  /// **'JPEG, PNG or WebP, up to 10 MB.'**
+  String get requestItemPhotoFormatRule;
+
+  /// No description provided for @requestItemPhotoTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'That image is too large. Choose one under 10 MB.'**
+  String get requestItemPhotoTooLarge;
+
+  /// No description provided for @requestItemPhotoTypeNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'That file type isn\'t accepted. Use a JPEG, PNG or WebP image.'**
+  String get requestItemPhotoTypeNotAllowed;
+
+  /// No description provided for @requestItemPhotoUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The photo didn\'t upload. It\'s still selected — try again.'**
+  String get requestItemPhotoUploadFailed;
+
+  /// No description provided for @requestItemPhotoStorageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo storage is unavailable right now. Try again in a moment.'**
+  String get requestItemPhotoStorageUnavailable;
+
+  /// No description provided for @requestItemPhotoExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'That photo is no longer available. Add it again.'**
+  String get requestItemPhotoExpired;
+
+  /// No description provided for @requestItemPhotoPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Only travellers who can see this request can see the photo.'**
+  String get requestItemPhotoPrivacy;
+
+  /// No description provided for @fieldOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get fieldOptional;
+
+  /// No description provided for @requestDimensionsOptionalHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Leave empty if you haven\'t measured it — or enter all three.'**
+  String get requestDimensionsOptionalHelp;
+
+  /// No description provided for @requestDimensionsPartialFix.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter length, width and height together, or clear all three.'**
+  String get requestDimensionsPartialFix;
+
+  /// No description provided for @formFixBeforeContinuing.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the highlighted field before continuing.'**
+  String get formFixBeforeContinuing;
+
+  /// Shown when a step cannot be left because fields are invalid.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Fix 1 field before continuing.} other{Fix {count} fields before continuing.}}'**
+  String formFixCountBeforeContinuing(int count);
+
+  /// No description provided for @formServerRefusedOnStep.
+  ///
+  /// In en, this message translates to:
+  /// **'The server refused this request. The problem is on this step, marked below.'**
+  String get formServerRefusedOnStep;
+
+  /// No description provided for @formStepLockedUntilValid.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish this step first.'**
+  String get formStepLockedUntilValid;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

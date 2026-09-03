@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict JI7Jinus7qJSd5VKlO4cn05pAsq3lynVFJo6RntDxct7w15dm77Zeww0YuOJL5e
+\restrict OfbYiyzpJAAHFW2khq01dFt9WdKEZ4UdLEf0GuNObmuEunarfeYHPVjPtboKBC7
 
--- Dumped from database version 16.13
+-- Dumped from database version 16.2
 -- Dumped by pg_dump version 16.13
 
 SET statement_timeout = 0;
@@ -1883,8 +1883,12 @@ CREATE TABLE public.parcels_media (
     content_type character varying(64) NOT NULL,
     bytes integer NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    parcel_id bigint NOT NULL,
-    CONSTRAINT parcels_media_bytes_check CHECK ((bytes >= 0))
+    parcel_id bigint,
+    idempotency_key character varying(64) NOT NULL,
+    purpose character varying(16) NOT NULL,
+    uploaded_by_id bigint,
+    CONSTRAINT parcels_media_bytes_check CHECK ((bytes >= 0)),
+    CONSTRAINT parcels_media_owned CHECK (((parcel_id IS NOT NULL) OR (uploaded_by_id IS NOT NULL)))
 );
 
 
@@ -6039,6 +6043,41 @@ CREATE INDEX parcels_media_parcel_id_4618cd58 ON public.parcels_media USING btre
 
 
 --
+-- Name: parcels_media_purpose_404f54aa; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX parcels_media_purpose_404f54aa ON public.parcels_media USING btree (purpose);
+
+
+--
+-- Name: parcels_media_purpose_404f54aa_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX parcels_media_purpose_404f54aa_like ON public.parcels_media USING btree (purpose varchar_pattern_ops);
+
+
+--
+-- Name: parcels_media_staged_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX parcels_media_staged_idx ON public.parcels_media USING btree (uploaded_by_id, parcel_id);
+
+
+--
+-- Name: parcels_media_unique_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX parcels_media_unique_idempotency ON public.parcels_media USING btree (uploaded_by_id, idempotency_key) WHERE (NOT ((idempotency_key)::text = ''::text));
+
+
+--
+-- Name: parcels_media_uploaded_by_id_213d0269; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX parcels_media_uploaded_by_id_213d0269 ON public.parcels_media USING btree (uploaded_by_id);
+
+
+--
 -- Name: parcels_request_destination_id_3759c9ba; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7620,6 +7659,14 @@ ALTER TABLE ONLY public.parcels_media
 
 
 --
+-- Name: parcels_media parcels_media_uploaded_by_id_213d0269_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.parcels_media
+    ADD CONSTRAINT parcels_media_uploaded_by_id_213d0269_fk_accounts_user_id FOREIGN KEY (uploaded_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: parcels_product parcels_product_parcelrequest_ptr_id_cd16db97_fk_parcels_r; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7959,5 +8006,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict JI7Jinus7qJSd5VKlO4cn05pAsq3lynVFJo6RntDxct7w15dm77Zeww0YuOJL5e
+\unrestrict OfbYiyzpJAAHFW2khq01dFt9WdKEZ4UdLEf0GuNObmuEunarfeYHPVjPtboKBC7
 

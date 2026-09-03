@@ -265,7 +265,18 @@ class Phase2PricingTests(TestCase):
         assert payload["recommended_economics"]["platform_fee_minor"] == 238
         assert payload["recommended_economics"]["sender_total_minor"] == 1_188
 
-    def test_quote_rejects_a_request_without_complete_dimensions(self):
+    def test_a_request_without_dimensions_is_priced_on_its_weight(self):
+        """Dimensions are optional from Phase 8F-B, so pricing must cope.
+
+        Refusing to quote would have been the worse failure: compatibility and
+        the posting deposit both go through this function, so an unmeasured
+        parcel would have been posted, then found undiscoverable and
+        unmatchable — a dead request rather than an honest price. Absent
+        dimensions mean no volumetric weight, which is the ordinary freight
+        treatment of an unmeasured consignment and gives the same number a
+        small dense box of the same weight would.
+        """
+
         arrival = self.now + timedelta(days=1)
         delivery_request = _request(
             sender=self.sender,
@@ -275,18 +286,48 @@ class Phase2PricingTests(TestCase):
             ready_end=self.now + timedelta(days=1),
             deadline=arrival + timedelta(days=7),
         )
-        # New writes reject missing dimensions at the model boundary. Retain
-        # the pricing guard for historical/corrupt rows that bypassed it.
         DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
+            actual_weight_kg=Decimal("2.00"),
             length_cm=None,
             width_cm=None,
             height_cm=None,
         )
         delivery_request.refresh_from_db()
 
+        quote = calculate_pricing_quote(
+            delivery_request=delivery_request,
+            matched_distance_meters=100_000,
+            matched_distance_method="test",
+            added_distance_meters=0,
+            estimated_arrival_at=arrival,
+            policy=self.policy,
+        )
+
+        assert quote.volumetric_weight_kg == Decimal("0.000")
+        assert quote.chargeable_weight_kg == Decimal("2.000")
+        assert quote.actual_weight_kg == Decimal("2.00")
+        assert quote.minimum_reward_eur_cents > 0
+
+    def test_weight_is_still_required_for_a_quote(self):
+        """The one physical fact pricing cannot do without."""
+
+        arrival = self.now + timedelta(days=1)
+        delivery_request = _request(
+            sender=self.sender,
+            pickup=self.pickup,
+            delivery=self.delivery,
+            ready_start=self.now,
+            ready_end=self.now + timedelta(days=1),
+            deadline=arrival + timedelta(days=7),
+        )
+        DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
+            actual_weight_kg=None
+        )
+        delivery_request.refresh_from_db()
+
         with self.assertRaisesMessage(
             PricingError,
-            "The delivery request has no complete dimensions.",
+            "The delivery request has no actual weight.",
         ):
             calculate_pricing_quote(
                 delivery_request=delivery_request,

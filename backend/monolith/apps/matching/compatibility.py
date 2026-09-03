@@ -567,11 +567,12 @@ def evaluate_compatibility(
         delivery_request.customs_responsibilities_understood,
     )
     check("item_safety_eligible", all(safety_fields))
+    # Dimensions are optional from Phase 8F-B and are therefore no longer a
+    # pricing input a request can be missing: `calculate_pricing_quote` reads
+    # an absent set as zero volumetric weight. Weight and deadline remain
+    # required — without either there is no quote at all.
     pricing_inputs = (
         delivery_request.actual_weight_kg,
-        delivery_request.length_cm,
-        delivery_request.width_cm,
-        delivery_request.height_cm,
         delivery_request.deadline_at,
     )
     check("pricing_inputs_complete", all(value is not None for value in pricing_inputs))

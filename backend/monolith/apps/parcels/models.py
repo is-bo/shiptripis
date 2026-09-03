@@ -437,9 +437,22 @@ class DeliveryRequest(ParcelRequest):
         for field in ("deadline_at", "title", "description", "category"):
             if not getattr(self, field):
                 errors[field] = "This field is required for V1 delivery requests."
-        for field in ("length_cm", "width_cm", "height_cm"):
-            if getattr(self, field) is None:
-                errors[field] = "This field is required for V1 delivery requests."
+        # Dimensions are OPTIONAL in V1 (Phase 8F-B). A sender who does not
+        # know the box's measurements must still be able to post; weight is
+        # the required physical fact. What is *not* optional is coherence:
+        # the pricing and capacity story reads all three or none, and the
+        # `parcels_delivery_dimensions` check constraint says the same in the
+        # database, so a partial set is refused here with one message rather
+        # than three identical ones.
+        dimensions = [
+            getattr(self, field) for field in ("length_cm", "width_cm", "height_cm")
+        ]
+        if any(value is not None for value in dimensions) and any(
+            value is None for value in dimensions
+        ):
+            errors["dimensions"] = (
+                "Length, width and height must be supplied together, or all left empty."
+            )
         if (
             self.ready_window_end is not None
             and self.deadline_at is not None
@@ -485,11 +498,52 @@ class ParcelMedia(models.Model):
 
     `object_key` references an object in MinIO/S3 — Django never stores
     binary bytes (ARCHITECTURE.md §9, §11).
+
+    ``parcel`` is nullable because a V1 item photo is uploaded *before* the
+    request it belongs to exists. Phase 8F-B makes one photo of the actual
+    item a condition of posting, and the alternative orderings are both worse:
+    creating the request first leaves a live, discoverable request with no
+    photo whenever the upload then fails, and folding the image into the
+    create call would make the strict JSON contract multipart. So the sender
+    stages the photo, gets an id, and the create call consumes it inside the
+    same transaction that writes the request.
+
+    A staged row therefore has ``parcel IS NULL`` and an ``uploaded_by``; an
+    attached row has both. ``idempotency_key`` identifies the *file*, so a
+    phone that retries a timed-out upload re-attaches to the row the first
+    attempt may already have written instead of leaving a second copy behind.
     """
 
+    class Purpose(models.TextChoices):
+        #: The required photograph of the item being sent. Marketplace
+        #: evidence of what a traveller is agreeing to carry — emphatically
+        #: not identity evidence, and never stored in the KYC bucket.
+        ITEM_PHOTO = "item_photo", "Item photo"
+        #: Anything the sender adds beyond the required one.
+        ATTACHMENT = "attachment", "Attachment"
+
     parcel = models.ForeignKey(
-        ParcelRequest, on_delete=models.CASCADE, related_name="media"
+        ParcelRequest,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="media",
     )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="parcel_media",
+        help_text="Who uploaded it. Required while the row is still unattached.",
+    )
+    purpose = models.CharField(
+        max_length=16,
+        choices=Purpose.choices,
+        default=Purpose.ITEM_PHOTO,
+        db_index=True,
+    )
+    idempotency_key = models.CharField(max_length=64, blank=True, default="")
     bucket = models.CharField(max_length=64)
     object_key = models.CharField(max_length=255)
     content_type = models.CharField(max_length=64, default="image/jpeg")
@@ -501,13 +555,41 @@ class ParcelMedia(models.Model):
         ordering = ["created_at"]
         indexes = [
             models.Index(fields=["parcel", "created_at"], name="parcels_media_idx"),
+            models.Index(
+                fields=["uploaded_by", "parcel"],
+                name="parcels_media_staged_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["bucket", "object_key"],
                 name="parcels_media_unique_object",
             ),
+            #: One retry of one upload is one row. Scoped to the uploader so
+            #: two devices cannot collide on a guessed key.
+            models.UniqueConstraint(
+                fields=["uploaded_by", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="parcels_media_unique_idempotency",
+            ),
+            #: A row belongs to somebody: either to a request, or — while it
+            #: is still staged — to the sender who uploaded it. Legacy rows
+            #: satisfy this through `parcel`.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(parcel__isnull=False)
+                    | models.Q(uploaded_by__isnull=False)
+                ),
+                name="parcels_media_owned",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"parcel#{self.parcel_id} {self.object_key}"
+        owner = f"parcel#{self.parcel_id}" if self.parcel_id else "staged"
+        return f"{owner} {self.object_key}"
+
+    @property
+    def is_staged(self) -> bool:
+        """Uploaded, but not yet consumed by a request."""
+
+        return self.parcel_id is None

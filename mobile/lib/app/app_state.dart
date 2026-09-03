@@ -44,6 +44,21 @@ final requestDetailProvider = FutureProvider.autoDispose
       return repo.byId(id);
     });
 
+/// Which photo, on which request.
+typedef ParcelPhotoRef = ({int requestId, int mediaId});
+
+/// A short-lived signed URL for one parcel photo.
+///
+/// The bucket is private and its object keys never leave the server, so this
+/// is the only route to the bytes. `autoDispose` matters more than usual: the
+/// URL expires in minutes, so a provider that outlived its screen would hand
+/// the next viewer a link that has already stopped working.
+final parcelPhotoUrlProvider = FutureProvider.autoDispose
+    .family<String, ParcelPhotoRef>((ref, photo) async {
+      final repo = ref.watch(requestRepositoryProvider);
+      return repo.photoUrl(requestId: photo.requestId, mediaId: photo.mediaId);
+    });
+
 final postingDepositProvider = FutureProvider.autoDispose
     .family<PostingDepositState, int>((ref, requestId) async {
       final repo = ref.watch(paymentRepositoryProvider);

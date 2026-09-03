@@ -407,11 +407,22 @@ A sender request should contain:
 - title
 - description
 - category
-- actual weight
-- length/width/height
+- actual weight — **required**
+- length/width/height — **optional**, all three together or none. An empty set
+  is accepted and prices on actual weight alone (volumetric weight is zero); a
+  partial set is refused with a single `dimensions` error. Empty dimensions
+  must never prevent posting, and must never make a posted request
+  undiscoverable or unmatchable.
 - declared value
-- photos
-- handling notes
+- photos — **at least one photograph of the actual item is required**. It is
+  marketplace evidence of the shipment, not identity evidence: it lives in the
+  private media bucket Django's own credential owns, never in the KYC bucket,
+  and is served only through a short-lived signed URL to the sender, to staff,
+  to the addressee of a targeted request, or to any authenticated user once the
+  request has been published. The photo is uploaded *before* the request is
+  created and consumed by the create call in the same transaction, so no failed
+  upload can leave a live request with no image.
+- handling notes — optional
 - fragile flag if supported
 
 ### Safety/customs

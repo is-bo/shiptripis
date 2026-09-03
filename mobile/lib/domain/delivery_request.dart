@@ -38,22 +38,42 @@ enum RequestStatus {
 
 enum ItemCategory { documents, smallBox, electronics, clothing, other, unknown }
 
+/// What a stored parcel image is for.
+///
+/// The required photograph of the item is not interchangeable with anything
+/// a sender adds afterwards, so the distinction is carried on the wire rather
+/// than inferred from position in a list.
+enum ParcelMediaPurpose { itemPhoto, attachment, unknown }
+
 class ParcelMedia {
   const ParcelMedia({
     required this.id,
     required this.contentType,
     required this.bytes,
+    this.purpose = ParcelMediaPurpose.itemPhoto,
   });
 
   factory ParcelMedia.fromJson(Map<String, dynamic> json) => ParcelMedia(
     id: readInt(json['id']) ?? 0,
     contentType: readText(json['content_type']),
     bytes: readInt(json['bytes']) ?? 0,
+    purpose: switch (readText(json['purpose'])) {
+      'item_photo' => ParcelMediaPurpose.itemPhoto,
+      'attachment' => ParcelMediaPurpose.attachment,
+      // An older build's response carried no purpose at all. Treating that as
+      // `unknown` rather than guessing keeps a legacy row out of the
+      // "this is the item" slot instead of promoting it there by accident.
+      '' => ParcelMediaPurpose.unknown,
+      _ => ParcelMediaPurpose.unknown,
+    },
   );
 
   final int id;
   final String contentType;
   final int bytes;
+  final ParcelMediaPurpose purpose;
+
+  bool get isItemPhoto => purpose == ParcelMediaPurpose.itemPhoto;
 }
 
 class DeliveryRequest {
@@ -69,6 +89,7 @@ class DeliveryRequest {
     required this.fragile,
     required this.media,
     required this.acknowledgements,
+    this.itemPhotoMediaId,
     this.targetTravelerId,
     this.pickupLocation,
     this.deliveryLocation,
@@ -126,6 +147,7 @@ class DeliveryRequest {
           json['media'],
         ).map(ParcelMedia.fromJson).toList(growable: false),
         acknowledgements: SafetyAcknowledgements.fromJson(json),
+        itemPhotoMediaId: readInt(json['item_photo_media_id']),
         createdAt: readDate(json['created_at']),
         updatedAt: readDate(json['updated_at']),
       );
@@ -167,6 +189,12 @@ class DeliveryRequest {
   final ItemCategory category;
   final bool fragile;
   final List<ParcelMedia> media;
+
+  /// The required photograph of the item, named by the server rather than
+  /// searched for in [media]. Null only on a legacy row posted before the
+  /// rule existed.
+  final int? itemPhotoMediaId;
+
   final SafetyAcknowledgements acknowledgements;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -175,6 +203,7 @@ class DeliveryRequest {
   bool get isCanonical =>
       schemaVersion >= 3 && pickupPlace != null && deliveryPlace != null;
   bool get isTargeted => targetTravelerId != null;
+  bool get hasItemPhoto => itemPhotoMediaId != null;
   bool get hasDimensions =>
       lengthCm != null && widthCm != null && heightCm != null;
 
