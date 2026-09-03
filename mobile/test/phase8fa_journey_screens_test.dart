@@ -9,6 +9,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/session/session.dart';
@@ -441,6 +442,82 @@ void main() {
         find.textContaining(l.journeyEditSavedProofReset(1)),
         findsWidgets,
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('the edit screen in Arabic', () {
+    testWidgets('reads right to left with IATA codes still left to right', (
+      tester,
+    ) async {
+      final backend = FakeBackend()
+        ..on('GET', '/api/journeys/7', FakeResponse(200, journeyFixture()));
+      final container = await _signedIn(tester, backend);
+
+      await pumpRouted(
+        tester,
+        const JourneyEditScreen(journeyId: 7),
+        container: container,
+        locale: const Locale('ar'),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(Scaffold).first);
+      expect(Directionality.of(context), TextDirection.rtl);
+
+      final l = L.of(context);
+      // The catalogue actually resolved, rather than falling back to English.
+      expect(l.journeyEditTitle, isNot('Edit journey'));
+      expect(l.routeStopsTitle, isNot('Your stops'));
+      expect(find.text(l.journeySaveChanges), findsWidgets);
+      // An airport code stays a code in any script.
+      expect(find.textContaining('ALG'), findsWidgets);
+    });
+
+    testWidgets('every stop control a screen reader announces is operable', (
+      tester,
+    ) async {
+      final backend = FakeBackend()
+        ..on('GET', '/api/journeys/7', FakeResponse(200, journeyFixture()));
+      final container = await _signedIn(tester, backend);
+      final handle = tester.ensureSemantics();
+
+      await pumpRouted(
+        tester,
+        const JourneyEditScreen(journeyId: 7),
+        container: container,
+      );
+      await tester.pumpAndSettle();
+
+      final l = await _catalogue(tester);
+      // A stop row announces itself as a button; it has to carry the tap
+      // action too, or TalkBack announces a control it cannot activate.
+      for (final label in [l.routeAddStopHere, l.routeRemoveStop]) {
+        final finder = find.bySemanticsLabel(label);
+        if (finder.evaluate().isEmpty) continue;
+        final node = tester.getSemantics(finder.first);
+        expect(
+          node.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+          reason: '"$label" is announced but carries no tap action',
+        );
+      }
+
+      // The stop row announces its role, its place and its context as one
+      // node. It must carry the tap action too: `excludeSemantics` around an
+      // InkWell produces a button TalkBack can read and cannot press, which
+      // is the exact defect Phase 8E went through the app to remove.
+      final stopRow = find.bySemanticsLabel(RegExp('^${l.journeyFrom}, Jijel'));
+      expect(stopRow, findsOneWidget);
+      final data = tester.getSemantics(stopRow).getSemanticsData();
+      expect(data.hasFlag(SemanticsFlag.isButton), isTrue);
+      expect(
+        data.hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: 'the stop row is announced but cannot be activated',
+      );
+
+      handle.dispose();
     });
   });
 }

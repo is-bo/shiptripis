@@ -232,6 +232,11 @@ class _StopBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
+                  // The label goes on the Semantics node and so does the tap
+                  // action: `excludeSemantics` discards the InkWell's action
+                  // on the way up, which produces a row TalkBack announces as
+                  // a button and cannot activate. Same shape as the location
+                  // picker's rows.
                   child: Semantics(
                     button: true,
                     label: [
@@ -240,33 +245,35 @@ class _StopBlock extends StatelessWidget {
                       if (stop.airport != null)
                         placeSemanticLabel(context, stop.airport!),
                     ].join(', '),
-                    excludeSemantics: true,
-                    child: InkWell(
-                      onTap: enabled ? () => _change(context) : null,
-                      borderRadius: AppRadius.rSm,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppSpace.xs,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _roleLabel(l),
-                              style: text.labelSmall?.copyWith(
-                                color: c.textTertiary,
+                    onTap: enabled ? () => _change(context) : null,
+                    child: ExcludeSemantics(
+                      child: InkWell(
+                        onTap: enabled ? () => _change(context) : null,
+                        borderRadius: AppRadius.rSm,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: AppSpace.xs,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _roleLabel(l),
+                                style: text.labelSmall?.copyWith(
+                                  color: c.textTertiary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: AppSpace.xxs),
-                            Text(_stopTitle(stop), style: text.titleSmall),
-                            const SizedBox(height: AppSpace.xxs),
-                            Text(
-                              placeContext(context, stop.place),
-                              style: text.bodySmall?.copyWith(
-                                color: c.textSecondary,
+                              const SizedBox(height: AppSpace.xxs),
+                              Text(_stopTitle(stop), style: text.titleSmall),
+                              const SizedBox(height: AppSpace.xxs),
+                              Text(
+                                placeContext(context, stop.place),
+                                style: text.bodySmall?.copyWith(
+                                  color: c.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
