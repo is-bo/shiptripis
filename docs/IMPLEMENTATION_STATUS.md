@@ -2898,6 +2898,151 @@ partial unique index that excludes the empty string, so a client that sends no
 key keeps today's behaviour. No backfill, no table rewrite, no lock beyond the
 metadata change.
 
+#### Phase 8F-A release, deployment and artifact
+
+**Release** `v1.0.0-rc.3+fb49e60`, four commits:
+
+| SHA | What |
+| --- | --- |
+| `9dc9afa` | The phase: stop-based routing, journey editing, the mode rule, the proof repair, the unit fix |
+| `b8b952e` | Re-exported `contracts/sql/schema.sql` for the new column and index |
+| `8c4fde6` | Made the route editor's stop rows operable, not merely announced |
+| `fb49e60` | Dropped two unreachable bits of the editor — **the release SHA** |
+
+Two of those exist because a gate caught something real, which is the point of
+having them:
+
+- **Schema drift failed on `9dc9afa`**, correctly: the migration added
+  `trips_journey_leg_proof.idempotency_key` and its partial unique index, and
+  the committed SQL contract still described the database without them. The
+  regenerated contract's whole diff is those two objects.
+- **A new Arabic/TalkBack test failed on the first editor**, and it was not the
+  test's fault. The stop row wrapped an `InkWell` in
+  `Semantics(button: true, excludeSemantics: true, …)`, which discards the
+  child's tap action on the way up — a control a screen reader announces and
+  cannot press, the exact defect Phase 8E went through the app to remove. Fixed
+  the way the location picker's rows already do it: label *and* action on the
+  Semantics node, `ExcludeSemantics` underneath.
+- **Flutter CI failed on `8c4fde6`** where the local run passed: CI runs a
+  newer Flutter in which `SemanticsData.hasFlag` is deprecated, and it analyses
+  with `--fatal-infos`. The tap-action assertion is the one that matters and is
+  what the existing activation tests check, so the flag assertion went.
+
+**Local gates before the push.** Django 1159 passed / 34 skipped on PostgreSQL
+16 (`--ds=config.settings.dev`), `ruff check .` clean, `makemigrations --check`
+clean. Flutter 343 passed, `dart format` clean, `flutter analyze
+--fatal-infos` clean.
+
+**CI** run `33796400375` on `fb49e60`: **success**, all six jobs — Flutter,
+Django, Go build/vet/unit, Go integration (real Redis), Schema drift,
+Production config + static web.
+
+**Railway deployment** `5a967012-0ff2-4bf7-84c0-43d1b2a3a2bf`, project
+`shiptripis`, service `shiptrip`, production environment. `/readyz` 200 with
+`release: v1.0.0-rc.3+fb49e60` and `database`, `migrations`,
+`rate_limit_cache` all `ok`. Two variables changed and nothing else:
+`RELEASE_ID` and a new explicit `S3_BUCKET_PROOF=shiptrip-media-h6a-np-6v`.
+No payment rail was enabled, disabled or exercised, and no provider secret was
+read, printed or logged.
+
+##### The deployed proof upload, before and after
+
+Railway's own HTTP log is the whole story. Before, on `v1.0.0-rc.2+0a61cba`:
+
+```
+12:09:43 POST /api/journeys/1/legs/2/proof 500  455ms
+12:10:02 POST /api/journeys/1/legs/2/proof 500  411ms
+12:10:08 POST /api/journeys/1/legs/2/proof 500  279ms
+12:10:20 POST /api/journeys/1/legs/2/proof 500 1213ms
+```
+
+After, on `v1.0.0-rc.3+fb49e60`, with a synthetic traveller
+(`phase8fa-…@shiptrip-test.invalid`) and no payment of any kind:
+
+```
+19:44:45 POST /api/journeys                   400  20ms   ← DZ→FR drive refused
+19:44:45 POST /api/journeys                   201  48ms
+19:44:47 POST /api/journeys/4/legs/5/proof    201 1266ms  ← the finding, fixed
+19:44:47 POST /api/journeys/4/legs/5/proof    200   12ms  ← retry, same key
+19:44:48 POST /api/journeys/4/legs/5/proof    415   10ms  ← PDF refused
+```
+
+Verified against the deployment, end to end:
+
+- The Algeria → France **DRIVE** leg is refused with
+  `journey_leg_mode_unavailable` and `required_mode: FLIGHT`.
+- The proof lands at
+  `shiptrip-media-h6a-np-6v/journeys/4/legs/5/proofs/l1fEu3tare9YW5Vf3VF_bg.png`
+  — the bucket Django's own credential owns.
+- **Read back with Django's deployed credential**: 513 bytes, `image/png`,
+  byte-identical to what was uploaded. That is precisely the operation the
+  admin console's evidence redirect performs, so the proof is servable for
+  review. (The console *page* was not opened: that needs an authenticated
+  admin session, which is an owner action.)
+- A retry with the same idempotency key returns **200 and the same proof id**;
+  the database holds one row, not two.
+- `PATCH /api/journeys/4` with only the capacity changed: `proofs_reset_for_
+  review: 0`. The same PATCH changing the flight number and dates:
+  `proofs_reset_for_review: 1`, and the proof's own metadata records
+  `flight_leg_materially_changed`, `['flight_number', 'depart_at',
+  'arrive_at']`, `previous_status: pending`.
+- `GET /api/journeys/4` serves the owner `editable: true`,
+  `edit_blocked_code: null`.
+
+`manage.py check_object_storage` run against the deployed credentials reports
+`proof`/`parcel`/`dispute` (all `shiptrip-media-h6a-np-6v`) **writable and
+readable**, and `kyc` (`shiptrip-kyc-i7wgelkvyjp9`) **403** — see the blockers
+below.
+
+##### Android profile artifact
+
+- **Workflow** run `33798036038` on `fb49e60`, `build_type=profile`,
+  `apk_architecture=arm64`,
+  `api_base_url=https://shiptrip-production.up.railway.app`.
+- **Artifact** `shiptrip-v1.0.0-rc.3-fb49e60-profile-arm64`, APK
+  `shiptrip-v1.0.0-rc.3-fb49e60-profile-arm64.apk`, **33,792,232 bytes
+  (32.23 MiB)**, SHA-256
+  `e5afba162869c6781992b19b74a6d31f1ccf578265ce6fe24fbb3b7373b4c462`
+  — recomputed locally, matching the runner's `SHA256SUMS.txt`.
+- **Proved to be profile, not debug or release**, from the artifact itself:
+  AOT `lib/arm64-v8a/libapp.so` present; `libvmservice_snapshot.so` present,
+  which only a profile build ships; `kernel_blob.bin`, `isolate_snapshot_data`
+  and `libVkLayer_khronos_validation.so` all absent.
+- **ARM64 targeting held**: `lib/arm64-v8a/` carries 25.52 MiB of real code,
+  while `armeabi-v7a` and `x86_64` carry only a 0.05 / 0.10 MiB JNI shim each
+  — the same pattern as 8E-A, and the same 32.23 MiB total.
+- **Configuration**: `https://shiptrip-production.up.railway.app` is inside the
+  Dart AOT snapshot; the `10.0.2.2` development default does not appear. An
+  eleven-pattern secret scan over every entry in the APK (Stripe secret /
+  restricted / publishable / webhook keys, Chargily keys, Tigris storage ids
+  and secrets, AWS key ids, PEM private-key blocks, Postgres DSNs, SMTP
+  password markers) found nothing.
+- **Same signer caveat as 8E-A.** This is an auto-generated debug key on a new
+  runner, so it will not update an installed 8E-A APK in place. Uninstall the
+  previous build first; Android refuses a same-`applicationId` update from a
+  different signer with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+##### Findings that remain open
+
+- **MAJOR, and out of this phase's scope — KYC admin evidence cannot be
+  viewed.** The same credential mismatch that broke flight proof still applies
+  to KYC: `admin_panel.console_views.kyc_evidence` presigns against
+  `settings.S3_BUCKET_KYC`, and Django's key is denied on that bucket. Proved
+  directly — `check_object_storage` reports `kyc … head_bucket failed: 403`,
+  and a direct probe returns `AccessDenied` for Django's key and success for
+  the Go service's. The reviewer therefore gets a broken evidence link, not the
+  image. Phase 8F-A was explicitly scoped away from KYC admin evidence, so this
+  was **not** fixed here; it is a one-line bucket/credential decision for
+  8F-B, and the new management command is the tool for confirming it.
+- **MINOR** — the two synthetic verification travellers, their draft journeys
+  (ids 3 and 4) and two proof objects remain in the private environment as
+  evidence. They are drafts, so no sender can see them.
+- **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
+  files, still deliberately untaken in a release phase. `ruff check` is clean.
+- Unchanged from 8E-A: no signed Android release until the four
+  `ANDROID_KEYSTORE_*` Actions secrets exist; provider mode remains an owner
+  reading from the admin console.
+
 ## External dependencies/blockers
 
 - Stripe credentials (secret key + webhook signing secret) and payout/transfer
