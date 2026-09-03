@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict Ez5Oyrs8yn9wF6noEOzeV7xGo5n51oAq0CVUoSQa0e9nBhfglpoQbTxAb18J9ww
+\restrict JI7Jinus7qJSd5VKlO4cn05pAsq3lynVFJo6RntDxct7w15dm77Zeww0YuOJL5e
 
--- Dumped from database version 16.2
+-- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
 
 SET statement_timeout = 0;
@@ -2268,6 +2268,7 @@ CREATE TABLE public.trips_journey_leg_proof (
     updated_at timestamp with time zone NOT NULL,
     leg_id bigint NOT NULL,
     reviewer_id bigint,
+    idempotency_key character varying(64) NOT NULL,
     CONSTRAINT journey_proof_review_consistent CHECK ((((rejection_reason = ''::text) AND (reviewed_at IS NULL) AND (reviewer_id IS NULL) AND ((status)::text = 'pending'::text)) OR ((rejection_reason = ''::text) AND (reviewed_at IS NOT NULL) AND (reviewer_id IS NOT NULL) AND ((status)::text = 'approved'::text)) OR ((reviewed_at IS NOT NULL) AND (reviewer_id IS NOT NULL) AND ((status)::text = 'rejected'::text) AND (NOT (rejection_reason = ''::text))))),
     CONSTRAINT trips_journey_leg_proof_bytes_check CHECK ((bytes >= 0))
 );
@@ -5345,6 +5346,13 @@ CREATE INDEX journey_proof_review_idx ON public.trips_journey_leg_proof USING bt
 
 
 --
+-- Name: journey_proof_unique_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX journey_proof_unique_idempotency_key ON public.trips_journey_leg_proof USING btree (leg_id, idempotency_key) WHERE (NOT ((idempotency_key)::text = ''::text));
+
+
+--
 -- Name: journey_status_published_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7951,5 +7959,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Ez5Oyrs8yn9wF6noEOzeV7xGo5n51oAq0CVUoSQa0e9nBhfglpoQbTxAb18J9ww
+\unrestrict JI7Jinus7qJSd5VKlO4cn05pAsq3lynVFJo6RntDxct7w15dm77Zeww0YuOJL5e
 
