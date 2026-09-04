@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import base64
 import fnmatch
+import importlib.util
 import json
 import os
 import runpy
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -81,6 +86,126 @@ def boot_production(snippet: str, **overrides: str) -> subprocess.CompletedProce
         timeout=60,
         check=False,
     )
+
+
+def load_combined_launcher():
+    """Load `backend/railway/start.py`'s definitions without running it.
+
+    The launcher is a script, not an importable package module, and everything
+    below the definitions is guarded by `__main__`. Executing it by path keeps
+    these assertions on the real deployed file rather than on a copy.
+    """
+
+    name = "shiptrip_combined_launcher"
+    spec = importlib.util.spec_from_file_location(
+        name, BACKEND / "railway" / "start.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    # `@dataclass` resolves string annotations through `sys.modules`, so the
+    # module has to be registered before it executes.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(name, None)
+    return module
+
+
+SERVICE_ACCOUNT_FIXTURE = {
+    "type": "service_account",
+    "project_id": "shiptrip-test",
+    "private_key_id": "0" * 40,
+    "private_key": "not-a-real-private-key",
+    "client_email": "firebase-adminsdk@shiptrip-test.iam.gserviceaccount.com",
+}
+
+
+class FirebaseAdminCredentialInstallTests(SimpleTestCase):
+    """The Railway secret store holds a string; the worker wants a file.
+
+    These cover the seam that turns one into the other, because a mistake here
+    either leaks a private key into a child process's environment or silently
+    arms push against the wrong Firebase project.
+    """
+
+    def setUp(self):
+        self.launcher = load_combined_launcher()
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        self.path = self.directory / "firebase-admin.json"
+
+    def encoded(self, document=None):
+        payload = json.dumps(document or SERVICE_ACCOUNT_FIXTURE).encode("utf-8")
+        return base64.b64encode(payload).decode("ascii")
+
+    def test_absent_variable_leaves_push_configuration_untouched(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.launcher.install_fcm_credentials()
+            assert "FCM_CREDENTIALS_PATH" not in os.environ
+
+    def test_credential_lands_privately_and_the_payload_leaves_the_environment(self):
+        environment = {
+            "FCM_CREDENTIALS_JSON_BASE64": self.encoded(),
+            "FCM_CREDENTIALS_PATH": str(self.path),
+            "FCM_PROJECT_ID": "shiptrip-test",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            self.launcher.install_fcm_credentials()
+            # The base64 payload must not survive into any `child_env()` copy.
+            assert "FCM_CREDENTIALS_JSON_BASE64" not in os.environ
+            assert os.environ["FCM_CREDENTIALS_PATH"] == str(self.path)
+            assert self.launcher.child_env().get("FCM_CREDENTIALS_JSON_BASE64") is None
+        assert json.loads(self.path.read_text(encoding="utf-8")) == (
+            SERVICE_ACCOUNT_FIXTURE
+        )
+        if os.name == "posix":
+            assert stat.S_IMODE(self.path.stat().st_mode) == 0o600
+
+    def test_default_path_is_used_when_the_deployment_names_none(self):
+        environment = {
+            "FCM_CREDENTIALS_JSON_BASE64": self.encoded(),
+            "FCM_CREDENTIALS_PATH": "",
+        }
+        written = self.directory / "default" / "firebase-admin.json"
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(
+                self.launcher, "FCM_CREDENTIALS_DEFAULT_PATH", str(written)
+            ):
+                self.launcher.install_fcm_credentials()
+            assert os.environ["FCM_CREDENTIALS_PATH"] == str(written)
+        assert written.exists()
+
+    def test_a_credential_for_another_firebase_project_is_refused(self):
+        environment = {
+            "FCM_CREDENTIALS_JSON_BASE64": self.encoded(),
+            "FCM_CREDENTIALS_PATH": str(self.path),
+            "FCM_PROJECT_ID": "some-other-project",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with self.assertRaises(RuntimeError):
+                self.launcher.install_fcm_credentials()
+        assert not self.path.exists()
+
+    def test_malformed_credentials_fail_without_echoing_the_payload(self):
+        secret = "s3cr3t-private-key-material"
+        cases = {
+            "not base64": base64.b64encode(secret.encode("utf-8")).decode("ascii")[:-1]
+            + "!",
+            "not json": base64.b64encode(secret.encode("utf-8")).decode("ascii"),
+            "wrong type": self.encoded({"type": "authorized_user", "secret": secret}),
+            "no project": self.encoded({"type": "service_account", "secret": secret}),
+        }
+        for label, encoded in cases.items():
+            with self.subTest(case=label):
+                environment = {
+                    "FCM_CREDENTIALS_JSON_BASE64": encoded,
+                    "FCM_CREDENTIALS_PATH": str(self.path),
+                }
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    with self.assertRaises(RuntimeError) as caught:
+                        self.launcher.install_fcm_credentials()
+                assert secret not in str(caught.exception)
+                assert not self.path.exists()
 
 
 class ProductionEntrypointTests(SimpleTestCase):

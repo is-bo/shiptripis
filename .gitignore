@@ -48,3 +48,10 @@ __pycache__/
 # can run on a workstation without Docker. CI uses a real server.
 backend/monolith/config/settings/test_pg.py
 build/phase8fa-apk/
+
+# Firebase Admin service-account credentials. The runtime receives this
+# base64-encoded through the platform secret store and materialises it inside
+# the container; a copy must never reach the repository or a mobile build.
+*firebase-adminsdk*.json
+firebase-admin.json
+**/firebase-admin.json

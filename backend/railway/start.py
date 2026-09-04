@@ -8,7 +8,10 @@ control, so it separately requires Redis shared by every application replica.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import ipaddress
+import json
 import os
 import signal
 import socket
@@ -90,6 +93,85 @@ def terminate_children() -> None:
 def request_stop(_signum: int, _frame: object) -> None:
     global STOP_REQUESTED
     STOP_REQUESTED = True
+
+
+FCM_CREDENTIALS_ENV = "FCM_CREDENTIALS_JSON_BASE64"
+FCM_CREDENTIALS_DEFAULT_PATH = "/tmp/shiptrip/firebase-admin.json"
+
+
+def install_fcm_credentials() -> None:
+    """Materialise the Firebase Admin service account as a private file.
+
+    Railway has no secret-file primitive: the platform secret store holds
+    strings, and the Go notification worker's `FCM_CREDENTIALS_PATH` contract
+    wants a real JSON file. So the credential travels as base64 in the secret
+    store and is written here, once, before any child process is spawned.
+
+    Three properties matter:
+
+    * **It never reaches the image or the repository.** The file is created at
+      boot inside the container's own writable tree with owner-only
+      permissions, so it exists exactly as long as the container does.
+    * **Children see the path, never the payload.** The base64 variable is
+      removed from this process's environment after the write, so every
+      `child_env()` copy below carries `FCM_CREDENTIALS_PATH` alone.
+    * **A malformed credential fails loudly but quietly.** Errors name the
+      variable and the failure kind and never echo decoded bytes, so a bad
+      secret cannot leak itself through a crash log.
+
+    Absent variable is not an error: `FCM_ENABLED=false` is the safe default
+    state, and `config.LoadFCM` already refuses `FCM_ENABLED=true` without a
+    credentials path.
+    """
+
+    encoded = os.environ.pop(FCM_CREDENTIALS_ENV, "").strip()
+    if not encoded:
+        return
+
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RuntimeError(f"{FCM_CREDENTIALS_ENV} is not valid base64") from exc
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{FCM_CREDENTIALS_ENV} does not decode to JSON") from exc
+    if not isinstance(parsed, dict) or parsed.get("type") != "service_account":
+        raise RuntimeError(
+            f"{FCM_CREDENTIALS_ENV} must hold a service_account credential"
+        )
+    credential_project = str(parsed.get("project_id") or "")
+    if not credential_project:
+        raise RuntimeError(f"{FCM_CREDENTIALS_ENV} has no project_id")
+    # A credential for the wrong Firebase project is the failure that would
+    # otherwise be discovered as silently undelivered push, so refuse it here.
+    configured_project = os.environ.get("FCM_PROJECT_ID", "").strip()
+    if configured_project and configured_project != credential_project:
+        raise RuntimeError(
+            "FCM_PROJECT_ID does not match the service account's project"
+        )
+
+    path = os.environ.get("FCM_CREDENTIALS_PATH", "").strip()
+    if not path:
+        path = FCM_CREDENTIALS_DEFAULT_PATH
+    directory = os.path.dirname(path) or "/"
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(directory, 0o700)
+    except OSError:
+        # A pre-existing mount we do not own is acceptable; the file mode below
+        # is the control that matters.
+        pass
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(raw)
+    os.chmod(path, 0o600)
+    os.environ["FCM_CREDENTIALS_PATH"] = path
+    print(
+        f"installed Firebase Admin credential for project {credential_project} "
+        f"at {path}",
+        flush=True,
+    )
 
 
 def kyc_env() -> dict[str, str]:
@@ -206,6 +288,7 @@ def run() -> int:
     # processes start. The loopback Redis below remains intentionally local for
     # the constrained combined topology; it must never back a cross-replica
     # storage-abuse budget.
+    install_fcm_credentials()
     kyc_process_env = kyc_env()
     base_env = child_env(
         REDIS_URL="redis://127.0.0.1:6379/0",

@@ -105,6 +105,12 @@ Keep `FCM_ENABLED=false` until all of the following are true:
 1. The mobile Firebase project/app IDs and backend project ID match.
 2. A Firebase Admin service-account JSON is privately mounted at
    `FCM_CREDENTIALS_PATH`; it is not in source control or the app bundle.
+   On the combined Railway topology the credential is supplied base64-encoded
+   as `FCM_CREDENTIALS_JSON_BASE64` and `backend/railway/start.py` writes it to
+   `FCM_CREDENTIALS_PATH` (default `/tmp/shiptrip/firebase-admin.json`, mode
+   `0600`) before any child starts, then removes the encoded value from the
+   environment so no worker inherits the payload. A credential whose
+   `project_id` disagrees with `FCM_PROJECT_ID` refuses the boot.
 3. `FCM_PROJECT_ID`, `FCM_STREAM`, `FCM_RESULTS_STREAM`, consumer groups, and
    stable consumer names are configured.
 4. A test installation has registered a real token.
