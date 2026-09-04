@@ -117,28 +117,42 @@ def _credential_for(profile: str) -> _Credential:
     return _kyc_credential() if profile == KYC_CREDENTIAL else _generic_credential()
 
 
-@lru_cache(maxsize=8)
-def _client_for(credential: _Credential):
+#: A health probe answers a page an operator is looking at. It must fail fast
+#: and give up: an unreachable store is the thing being reported, and taking a
+#: minute of retries to report it would make the console unusable in exactly
+#: the incident it exists for. Uploads keep the library defaults, because a
+#: slow large PUT is not a fault.
+_PROBE_TIMEOUT_SECONDS = 4
+
+
+@lru_cache(maxsize=16)
+def _client_for(credential: _Credential, *, probe: bool = False):
     """One boto3 client per distinct identity.
 
     Cached on the credential rather than on the storage class, so four logical
     classes sharing one key share one client and one connection pool.
     """
 
+    config = Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "path" if credential.use_path_style else "virtual"},
+        **(
+            {
+                "connect_timeout": _PROBE_TIMEOUT_SECONDS,
+                "read_timeout": _PROBE_TIMEOUT_SECONDS,
+                "retries": {"max_attempts": 1},
+            }
+            if probe
+            else {}
+        ),
+    )
     return boto3.client(
         "s3",
         endpoint_url=credential.endpoint_url,
         region_name=credential.region,
         aws_access_key_id=credential.access_key,
         aws_secret_access_key=credential.secret_key,
-        config=Config(
-            signature_version="s3v4",
-            s3={
-                "addressing_style": (
-                    "path" if credential.use_path_style else "virtual"
-                )
-            },
-        ),
+        config=config,
     )
 
 
@@ -155,6 +169,12 @@ class ObjectStore:
     @property
     def client(self):
         return _client_for(self._credential)
+
+    @property
+    def probe_client(self):
+        """The same identity, with timeouts short enough to answer a page."""
+
+        return _client_for(self._credential, probe=True)
 
     @property
     def uses_dedicated_credential(self) -> bool:
@@ -221,7 +241,7 @@ class ObjectStore:
         if not self.bucket or not key:
             return False
         try:
-            self.client.head_object(Bucket=self.bucket, Key=key)
+            self.probe_client.head_object(Bucket=self.bucket, Key=key)
         except (ClientError, BotoCoreError, ValueError):
             return False
         return True
@@ -235,7 +255,9 @@ class ObjectStore:
 
         if not self.bucket:
             return "no bucket configured"
-        client = self.client
+        # `--read-only` is the health path and must fail fast; a write probe is
+        # a deliberate operator command and keeps the ordinary timeouts.
+        client = self.probe_client if read_only else self.client
         try:
             client.head_bucket(Bucket=self.bucket)
         except Exception as exc:  # noqa: BLE001 — the message is the report

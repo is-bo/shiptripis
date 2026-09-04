@@ -16,6 +16,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/domain/payment.dart';
+import 'package:shiptrip/features/guest/guest_pay_screen.dart';
 import 'package:shiptrip/features/requests/checkout_section.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
@@ -426,6 +427,42 @@ void main() {
         expect(find.text('Chargily'), findsOneWidget);
       });
     }
+  });
+
+  group('the guest payer', () {
+    // Chargily reports supports_guest_payment = false, so the server filters
+    // it out of the guest list. The rail that remains must still state what it
+    // will charge: the hero above shows the canonical obligation, and on a
+    // foreign-currency rail those are not the same number.
+    FakeBackend guestBackend(List<Map<String, dynamic>> providers) =>
+        FakeBackend()..on(
+          'GET',
+          '/api/payments/guest/opaque',
+          FakeResponse(200, {
+            'amount_eur_cents': 3750,
+            'currency': 'EUR',
+            'description': 'Payment for a ShipTrip delivery',
+            'expires_at': '2026-12-01T00:00:00Z',
+            'providers': providers,
+          }),
+        );
+
+    testWidgets('is offered Stripe, in euros, with its charge stated', (
+      tester,
+    ) async {
+      await pumpRouted(
+        tester,
+        const GuestPayScreen(token: 'opaque'),
+        container: containerFor(guestBackend([_stripeRow])),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stripe'), findsOneWidget);
+      // The rail's own charge, beside its name.
+      expect(find.text('€37.50'), findsWidgets);
+      // And the dinar rail is simply not there to be chosen.
+      expect(find.text('Chargily'), findsNothing);
+    });
   });
 
   group('accessibility', () {

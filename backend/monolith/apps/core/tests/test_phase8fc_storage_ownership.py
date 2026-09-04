@@ -68,6 +68,16 @@ class StorageOwnershipTests(SimpleTestCase):
         assert storage_for("parcel").uses_dedicated_credential is False
 
     @override_settings(**DEPLOYED)
+    def test_a_probe_client_fails_fast_rather_than_hanging_a_page(self):
+        # An unreachable store is the thing being reported. Spending a minute
+        # of retries to report it would make the console useless in exactly the
+        # incident it exists for.
+        probe = storage_for("kyc").probe_client
+        assert probe is not storage_for("kyc").client
+        assert probe.meta.config.connect_timeout <= 10
+        assert probe.meta.config.retries["max_attempts"] == 1
+
+    @override_settings(**DEPLOYED)
     def test_stores_sharing_one_credential_share_one_client(self):
         # Four logical names over one bucket should not mean four connection
         # pools.
@@ -137,13 +147,13 @@ class ReachabilityIsSeparateFromSigningTests(SimpleTestCase):
             "HeadObject",
         )
         store = storage_for("kyc")
-        with mock.patch.object(store.client, "head_object", side_effect=denied):
+        with mock.patch.object(store.probe_client, "head_object", side_effect=denied):
             assert store.readable("front.jpg") is False
 
     @override_settings(**DEPLOYED)
     def test_readable_is_true_when_the_store_answers(self):
         store = storage_for("kyc")
-        with mock.patch.object(store.client, "head_object", return_value={}):
+        with mock.patch.object(store.probe_client, "head_object", return_value={}):
             assert store.readable("front.jpg") is True
 
     @override_settings(**DEPLOYED)
@@ -156,7 +166,7 @@ class ReachabilityIsSeparateFromSigningTests(SimpleTestCase):
             "HeadBucket",
         )
         store = storage_for("kyc")
-        with mock.patch.object(store.client, "head_bucket", side_effect=denied):
+        with mock.patch.object(store.probe_client, "head_bucket", side_effect=denied):
             problem = store.probe(read_only=True)
 
         assert problem is not None

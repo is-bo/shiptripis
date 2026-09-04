@@ -75,13 +75,13 @@ from .models import (
 from .policy import Phase3Policy, phase3_policy
 from .providers import (
     CheckoutRequest,
-    ProviderEvent,
-    available_providers,
     ProviderError,
+    ProviderEvent,
     ProviderNotConfigured,
     ProviderUnavailable,
     RefundNotSupported,
     RefundRequest,
+    available_providers,
     get_gateway,
     resolve_gateway_for_checkout,
 )
@@ -909,7 +909,11 @@ def _settlement_preview(
         # Showing it as tappable and failing at the tap is the behaviour this
         # phase exists to remove.
         preview["available"] = False
-        preview["unavailable_reason"] = exc.provider_code or exc.code
+        # Only when nothing else was already wrong: a rail that is switched off
+        # *and* below its floor should still say it is switched off, which is
+        # the fact an operator acts on.
+        if item.available:
+            preview["unavailable_reason"] = exc.provider_code or exc.code
         return preview
     preview.update(
         {
