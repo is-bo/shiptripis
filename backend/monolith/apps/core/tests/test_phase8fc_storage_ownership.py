@@ -74,8 +74,12 @@ class StorageOwnershipTests(SimpleTestCase):
         # incident it exists for.
         probe = storage_for("kyc").probe_client
         assert probe is not storage_for("kyc").client
-        assert probe.meta.config.connect_timeout <= 10
-        assert probe.meta.config.retries["max_attempts"] == 1
+        assert probe.meta.config.connect_timeout <= 5
+        assert probe.meta.config.read_timeout <= 5
+        # botocore normalises `max_attempts` into a total; what matters is that
+        # it is bounded and small, so the worst case stays in single-digit
+        # seconds rather than the library's default minute-plus of backoff.
+        assert probe.meta.config.retries["total_max_attempts"] <= 2
 
     @override_settings(**DEPLOYED)
     def test_stores_sharing_one_credential_share_one_client(self):

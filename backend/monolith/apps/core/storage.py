@@ -120,8 +120,9 @@ def _credential_for(profile: str) -> _Credential:
 #: A health probe answers a page an operator is looking at. It must fail fast
 #: and give up: an unreachable store is the thing being reported, and taking a
 #: minute of retries to report it would make the console unusable in exactly
-#: the incident it exists for. Uploads keep the library defaults, because a
-#: slow large PUT is not a fault.
+#: the incident it exists for. With one retry that bounds a probe at roughly
+#: eight seconds. Uploads keep the library defaults, because a slow large PUT
+#: is not a fault.
 _PROBE_TIMEOUT_SECONDS = 4
 
 
