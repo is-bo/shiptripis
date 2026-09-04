@@ -169,11 +169,19 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
         )
         self.client.force_login(self.owner)
 
-    def test_kyc_detail_has_evidence_action_and_reject_requires_reason(self):
+    @patch("apps.admin_panel.console_views.storage_for")
+    def test_kyc_detail_has_evidence_action_and_reject_requires_reason(
+        self, storage_for
+    ):
+        # The reachable case, stated explicitly since Phase 8F-C: with a store
+        # that answers, the reviewer gets the evidence. The unreachable case is
+        # its own test, because the two used to be indistinguishable.
+        storage_for.return_value = _reachable_store()
         response = self.dispatch(f"/admin/verification/kyc/{self.submission.pk}/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        self.assertIn("View evidence", body)
+        self.assertIn("View evidence, full size", body)
+        self.assertNotIn("Evidence is temporarily unavailable", body)
         self.assertIn("Approve", body)
         self.assertIn("Reject", body)
 

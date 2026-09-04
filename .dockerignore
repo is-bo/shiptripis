@@ -15,3 +15,12 @@ tools
 **/build
 **/.dart_tool
 backend/.env
+
+# Host-built virtualenvs. backend/monolith/.dockerignore already excludes
+# these, but that file only applies when the build context is that directory,
+# and railway.json builds from the repo root, so it never does. Left in, they
+# put ~400 MB and roughly 25k Windows-built files into the upload for an image
+# that installs its own Linux dependencies from requirements.txt and could not
+# use them anyway.
+**/.venv
+**/venv

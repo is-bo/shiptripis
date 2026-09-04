@@ -228,13 +228,12 @@ class ProviderOptionsCarryAmountsTests(TestCase):
         assert "settlement_amount_minor" not in rows["stripe"]
 
     def test_a_dinar_total_under_the_provider_floor_is_unavailable_not_broken(self):
-        policy = phase3_policy()
+        # An *otherwise usable* rail that cannot take this particular amount.
+        # The floor is the only thing wrong with it, so the floor is what it
+        # reports; a rail that is also switched off says that instead.
+        policy = _policy(stripe_enabled=True, chargily_enabled=True)
         policy = replace(
-            policy,
-            providers=replace(
-                policy.providers, stripe_enabled=True, chargily_enabled=True
-            ),
-            chargily=replace(policy.chargily, min_amount_dzd=10_000_000),
+            policy, chargily=replace(policy.chargily, min_amount_dzd=10_000_000)
         )
 
         rows = {
