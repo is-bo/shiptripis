@@ -3337,22 +3337,284 @@ of batching them.
   active request. The `item_photo` purpose and the create-time consumption are
   what a future editor will have to respect.
 
+## Phase 8F-C — KYC admin evidence, and the payment rails (2026-09-04)
+
+Three device-QA findings. Two of them turned out to share a shape: a fact that
+was true on the server, invisible in the thing an operator or a payer was
+actually looking at, and therefore impossible to act on.
+
+### 1. KYC evidence: a broken image, by construction
+
+Phase 8F-A established the root cause and was scoped away from fixing it. The
+reason nobody caught it earlier is the interesting part.
+
+`admin_panel.console_views.kyc_evidence` presigned `settings.S3_BUCKET_KYC`
+with Django's generic `S3_*` credential. On the deployed environment that
+bucket belongs to the **Go KYC service's** key, and Django's key is refused on
+it.
+
+**Presigning does not fail.** `generate_presigned_url` is a local HMAC over the
+request it describes; it never contacts the object store, and it will happily
+sign a request for a bucket the credential has no grant on. The URL that came
+back was well-formed. The denial happened later, in the reviewer's browser, as
+an image that did not load — which looks exactly like a submission with no
+document attached. There was no error anywhere to find: `readyz` was green, the
+settings validation was green, the console said storage was configured.
+
+#### Proved against the deployed buckets
+
+A synthetic passport submission was uploaded through the real public path
+(`POST /api/kyc/submit`, `submission_id 3`, HTTP 201), then the object was
+fetched two ways — the same presign-and-GET the console performs:
+
+| Signed with | Result |
+|---|---|
+| Django's `S3_*` | **HTTP 403 AccessDenied**, 325 bytes of XML — what a browser renders as a broken image |
+| The KYC service's `KYC_S3_*` | **HTTP 200, `image/png`, 7,868 bytes**, SHA-256 identical to the bytes uploaded |
+
+`ListObjectsV2` on the same bucket answers 403 for the first key and 200 for the
+second. No key, key fragment or signed URL was printed, logged or committed at
+any point.
+
+#### The repair
+
+Storage is addressed by **logical class** rather than by bucket name, and each
+class names both its bucket and the credential profile that owns it:
+
+| Class | Bucket setting | Credential |
+|---|---|---|
+| `media` / `parcel` | `S3_BUCKET_PARCEL` | `S3_*` — Django's own |
+| `proof` | `S3_BUCKET_PROOF` | `S3_*` |
+| `dispute` | `S3_BUCKET_DISPUTE` | `S3_*` |
+| `kyc` | `S3_BUCKET_KYC` | `KYC_S3_*` |
+
+`KYC_S3_*` is **not a new secret**. `backend/railway/start.py` already maps
+`KYC_S3_ENDPOINT_URL/REGION/ACCESS_KEY/SECRET_KEY/USE_PATH_STYLE` onto the KYC
+child process's own `S3_*`; Django now reads the same pair from the same
+environment. Where a deployment does not set them — local, compose, CI — the
+KYC class falls back to the generic credential, which is correct there because
+one key owns every bucket.
+
+The KYC bucket stays private. No object key, bucket name or permanent URL
+reaches any surface, `view_kyc`/`view_evidence` are unchanged, and every open is
+still audited.
+
+`S3_BUCKET_DISPUTE` also stopped defaulting to `S3_BUCKET_KYC`. That default was
+latent rather than live — the deployment sets the variable — but it was one
+unset variable away from reproducing the same denial on a dispute.
+
+#### Reachability is now a separate question from signing
+
+The review screen `HEAD`s each object with the owning credential **before** it
+renders anything, turning one indistinguishable symptom into two sentences:
+
+- *No evidence file was attached to this submission* — nothing was submitted.
+- *Evidence is temporarily unavailable* — something was submitted and the store
+  could not be reached, with a request reference for engineering.
+
+Neither names a bucket, an object key, an access key or a provider error; those
+go to the log under the same reference. Verified by rendering the console from
+the preview database, whose object store is deliberately a closed port: the KYC
+screen shows the notice and two *Try again* cards instead of broken images, and
+Approve/Reject remain fully functional.
+
+The same check runs on the flight-proof page, and a historical proof resolves
+through the bucket its own row recorded rather than through today's default.
+
+#### Health that can see a KYC failure
+
+`manage.py check_object_storage` and **System & operations** now probe each
+storage class with the credential that owns it and report per class. One
+combined verdict was worse than none: the media bucket answering was allowed to
+read as "storage is fine" while KYC evidence had been unreadable throughout.
+Probes use a fail-fast client (4s, bounded attempts) behind a 60-second cache,
+so an unreachable store is reported promptly rather than hanging the page
+reporting it.
+
+### 2. "Stripe is showing an option to pay in DZD"
+
+The server was never capable of that. `_resolve_amounts` takes its currency from
+`gateway.payment_currency` and nowhere else, `CheckoutCreateSerializer` refuses a
+request that so much as names `currency`, and each adapter refuses the wrong
+currency at its own door. There is no code path to a Stripe dinar charge.
+
+What the owner saw was a *screen*, and the screen was genuinely misleading.
+Rendered exactly as shipped:
+
+```
+How would you like to pay?
+  ( ) Card       Visa, Mastercard and others, in euros
+  ( ) Chargily   Algerian cards, charged in dinars
+  [ Pay €37.50 ]
+```
+
+One question, two rows, **no figure on either row**, and a single button naming
+a euro amount underneath both. Currency therefore reads as a property of the
+screen rather than of the rail: the first row is "the card way", the second is
+"the dinar way", and the button is what you pay either way. Worse, selecting
+Chargily left the button reading **Pay €37.50** for a rail that debits dinars.
+
+The server's fault was one of omission. It published which currency each rail
+settles in and never what each rail would charge, so the client had nothing
+truthful to put on the row.
+
+#### The repair
+
+Every payable surface — order detail, posting deposit, deal balance, guest link
+— now serves a rail list where each row carries:
+
+| Field | |
+|---|---|
+| `settlement_currency` | what this rail settles in |
+| `settlement_amount_minor` + `_exponent` | what this rail will charge |
+| `canonical_amount_eur_cents` | the one EUR obligation behind it |
+| `eur_dzd_rate`, `rate_is_indicative` | dinar rails only; today's rate, not a binding one |
+| `unavailable_reason` | machine code, never a sentence |
+
+One `settlement_amounts()` computes both the preview and the amount the provider
+is actually charged, so the figure shown and the figure taken cannot drift.
+
+The screen now reads:
+
+```
+How would you like to pay?
+  (•) Stripe                                    €3.00
+      Visa, Mastercard and other cards
+  ( ) Chargily                                  840 DA
+      Algerian cards — CIB and Edahabia
+      Equivalent to €3.00 · €1 = 280.000000 DA
+      The rate is locked when you start the payment.
+  [ Pay €3.00 with Stripe ]
+```
+
+Rails are named as providers rather than as payment types — two rows called
+"Card" and "Chargily" invite exactly the misreading that happened. Each row
+carries its own charge in its own currency. The button names the rail *and* the
+amount that rail will take. There is no currency control, because there is no
+currency to choose.
+
+A rail that cannot take *this particular* amount — a dinar total under
+Chargily's floor — comes back unavailable with `amount_below_provider_minimum`
+rather than being offered and failing at the tap.
+
+**Two bugs were caught in this work by its own tests and fixed.** The chooser
+initially rendered the standalone rail catalogue, which by design carries no
+amounts, so on a device the tiles would have shown no figures at all — the
+original defect, reintroduced one layer up. The order's rows now win, and the
+fake catalogue endpoint in the tests strips the amount fields exactly as the
+server does, so the same mistake fails the suite. Separately, a rail selected
+before a failed checkout could stay selected after the list refreshed without
+it; selection is now resolved against the rails usable at render time.
+
+### 3. Chargily's "not your fault, try again in a moment" was a 401
+
+Captured against the live deployment before any repair:
+
+```
+POST /api/payments/orders/<ref>/checkout  {"provider":"chargily"}
+→ HTTP 503  {"code":"provider_error","detail":"Unauthenticated."}
+```
+
+*Unauthenticated.* is Chargily's own word. The deployed configuration was:
+
+| | |
+|---|---|
+| `CHARGILY_SECRET_KEY` | `test_sk_…` → **test** |
+| `CHARGILY_API_BASE` | `https://pay.chargily.net/api/v2` → **live** |
+
+A test key presented to the live API. Chargily rejected it, the adapter raised
+the catch-all `ProviderError`, the view returned `provider_error`, and Flutter
+had no case for that code — so the payer got the generic snackbar for a
+configuration fault that no retry could fix.
+
+Both halves are closed:
+
+- A `401`/`403` from **either** provider raises `ProviderNotConfigured`, not a
+  transient error. The HTTP status, the derived credential mode and the API-base
+  environment are logged; the key is not.
+- A definite 4xx rejection raises `ProviderCheckoutRejected`
+  (`provider_checkout_failed`), so "we could not start this payment" is
+  distinguishable from "try again".
+- `configuration_problem()` refuses the checkout **before** the request is made
+  whenever a rail's credentials and API base disagree about which environment
+  they name.
+
+#### A rail whose environment is unknown does not transact
+
+The owner had enabled Chargily while its mode read *Credential environment could
+not be identified*. `is_configured()` was true, so `resolve_gateway_for_checkout`
+allowed it, and the console called it **Enabled / Ready for new checkouts** —
+the deployed `/api/payments/providers` duly answered `"chargily": {"available":
+true}`.
+
+That state is now distinct and refused. `availability()` reports
+`provider_configuration_invalid`, the console reads **Enabled, but unavailable**
+(deliberately not *Disabled*, which would send an operator to a switch that is
+not the problem), and the app shows the rail greyed as **Not ready yet** —
+listed rather than silently removed, and not tappable.
+
+`get_gateway()` deliberately does **not** enforce this. Webhooks, reconciliation
+and refunds for money that already exists have to keep working while an operator
+repairs a setting; refusing those would strand real payments rather than prevent
+a bad checkout.
+
+#### The configuration repair
+
+The key's mode was positively identifiable from its documented prefix, so the
+API base was the half that was wrong. `CHARGILY_API_BASE` on Railway was
+corrected to `https://pay.chargily.net/test/api/v2`. **The secret key was not
+rotated, not replaced and not read** — only its `test_sk_` prefix was
+classified, which is what `credential_mode()` has always done.
+
+### 4. The FX snapshot, observed on the deployment
+
+The failed pre-repair Chargily attempt is itself the evidence. Against a €3.00
+posting deposit at the active rate of 280 DZD/EUR (business settings version 7):
+
+```
+attempt 4  chargily  failed  DZD  840   ← 300 cents × 280/100, frozen on the attempt
+attempt 5  stripe    expired EUR  300   ← canonical, unchanged
+```
+
+The canonical obligation stayed 300 EUR cents throughout; the dinar figure is a
+settlement representation frozen onto its own attempt. A later change to the
+admin rate moves the *preview* a new screen would show and does not move an
+attempt that already exists — asserted directly in
+`test_phase8fc_provider_currency.py`.
+
+### 5. Stripe mode and webhook, observed on the deployment
+
+- **Mode: TEST**, and not from reading a key. A real checkout created on the
+  deployment returned a session id beginning `cs_test_`, and the hosted page is
+  a Stripe test-mode page. `credential_mode()` independently derives `test` from
+  the `sk_test_` prefix.
+- **The webhook endpoint is configured and working.** Railway's HTTP log shows
+  `POST /api/payments/webhooks/stripe 200 82ms`, and the corresponding attempt
+  moved to `expired` with `failure_code: expired`. Signature verification passed
+  and the event was applied — a real, verified provider event on the deployment,
+  not a fixture.
+
 ## External dependencies/blockers
 
-- **MAJOR, open for Phase 8F-C — KYC admin evidence cannot be viewed.**
-  `admin_panel.console_views.kyc_evidence` presigns `settings.S3_BUCKET_KYC`
-  with Django's credential, which has no grant on that bucket, so a reviewer
-  gets a broken link rather than the image. `manage.py check_object_storage`
-  reports `kyc … head_bucket failed: 403`. Phases 8F-A and 8F-B were both
-  scoped away from it; it is a bucket/credential decision for 8F-C.
-
-- Stripe credentials (secret key + webhook signing secret) and payout/transfer
-  capability approval; until configured, Stripe is reported unavailable and
-  every Stripe checkout is refused
-- Chargily merchant account and API secret key, plus a real
-  `chargily.eur_dzd_rate_micros` — the seeded rate is an explicit placeholder
-- `PAYMENTS_PUBLIC_BASE_URL` on the deployment (production refuses to boot
-  without it) and `run_finance_worker` added to the process topology
+- **Resolved in Phase 8F-C, recorded here because the entries above it were
+  stale.** The owner has since configured both rails on the private
+  deployment, and 8F-C verified each fact rather than assuming it:
+  - **Stripe** — secret key and webhook signing secret are present and the key
+    is **TEST** (`sk_test_`, corroborated by a live checkout returning a
+    `cs_test_` session). The webhook endpoint is configured and reaching the
+    deployment: Railway's HTTP log shows `POST
+    /api/payments/webhooks/stripe 200`, and the referenced attempt moved state,
+    so signature verification passes and events are applied.
+  - **Chargily** — merchant key present and **TEST**, confirmed by Chargily
+    itself (`GET /test/api/v2/balance` → 200, `"livemode": false`). The active
+    `chargily.eur_dzd_rate_micros` is a real owner-set 280 DZD/EUR at business
+    settings version 7, not the seeded placeholder.
+  - `PAYMENTS_PUBLIC_BASE_URL` is set, and `run_finance_worker` has been in the
+    process topology since the combined launcher (`backend/railway/start.py`
+    spawns `finance-jobs`).
+- **Stripe payout/transfer capability approval** remains outstanding; until the
+  connected account reports transfers and payouts live, every traveller payout
+  falls to the audited manual queue. No country heuristic releases money.
 - Sender.net account credentials, verified sending domain, SPF/DKIM/DMARC DNS,
   support/from addresses, and final public/deep-link origin; the generic SMTP
   adapter and durable message contracts exist, but these external settings are

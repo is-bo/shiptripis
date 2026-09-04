@@ -226,22 +226,9 @@ class PaymentOrderDetailView(APIView):
             order = _owned_order(request, reference)
         except NotAuthorized as exc:
             return _finance_error_response(exc)
-        payload = PaymentOrderSerializer(order).data
-        try:
-            policy = phase3_policy()
-        except (NoActiveBusinessSettings, InvalidPaymentPolicy):
-            return Response(payload)
-        if order.outstanding_eur_cents > 0:
-            # Each rail carries the amount *it* would charge, in its own
-            # settlement currency, beside the one canonical EUR obligation.
-            payload["providers"] = provider_options(
-                policy, amount_eur_cents=order.outstanding_eur_cents
-            )
-            if policy.providers.chargily_enabled:
-                payload["chargily_quote"] = chargily_display(
-                    amount_eur_cents=order.outstanding_eur_cents, policy=policy
-                )
-        return Response(payload)
+        return Response(
+            _with_payment_options(PaymentOrderSerializer(order).data, order)
+        )
 
 
 class PaymentCheckoutView(APIView):
