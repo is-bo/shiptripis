@@ -39,6 +39,7 @@ from .base import (
     CheckoutRequest,
     CheckoutResult,
     PayoutCapability,
+    ProviderCheckoutRejected,
     ProviderError,
     ProviderEvent,
     ProviderNotConfigured,
@@ -200,6 +201,20 @@ class StripeGateway:
             return MODE_LIVE
         return MODE_UNKNOWN
 
+    def configuration_problem(self) -> str:
+        """Why this Stripe configuration must not take a new checkout.
+
+        Symmetric with Chargily on purpose. A key whose prefix this code does
+        not recognise cannot be reported as test, and "we could not tell whether
+        this is real money" is not a state to open a checkout in.
+        """
+
+        if not self.secret_key:
+            return ""  # Not configured at all — a different, earlier answer.
+        if self.credential_mode() == MODE_UNKNOWN:
+            return "stripe_credential_unidentified"
+        return ""
+
     def _require_configured(self) -> None:
         if not self.secret_key:
             raise ProviderNotConfigured("STRIPE_SECRET_KEY is not configured.")
@@ -251,9 +266,21 @@ class StripeGateway:
             )
         if response.status_code == 429:
             raise ProviderUnavailable("Stripe rate limited the request.", provider_code="429")
+        error = body.get("error", {}) if isinstance(body, dict) else {}
+        if response.status_code in (401, 403):
+            # Stripe refused this deployment's key. That is a configuration
+            # fact, not a transient one; "try again in a moment" would be false.
+            logger.error(
+                "stripe auth rejected status=%s credential_mode=%s",
+                response.status_code,
+                self.credential_mode(),
+            )
+            raise ProviderNotConfigured(
+                "Stripe rejected this deployment's API credentials.",
+                provider_code=str(response.status_code),
+            )
         if response.status_code >= 400:
-            error = body.get("error", {}) if isinstance(body, dict) else {}
-            raise ProviderError(
+            raise ProviderCheckoutRejected(
                 error.get("message", "Stripe rejected the request."),
                 provider_code=error.get("code", str(response.status_code)),
             )

@@ -585,13 +585,56 @@
   "offerEmptyBody": "When someone makes an offer, it shows up here.",
   "paymentTitle": "Payment",
   "paymentChooseProvider": "How would you like to pay?",
-  "paymentProviderStripe": "Card",
-  "paymentProviderStripeSubtitle": "Visa, Mastercard and others, in euros",
+  "paymentProviderStripe": "Stripe",
+  "paymentProviderStripeSubtitle": "Visa, Mastercard and other cards",
   "paymentProviderChargily": "Chargily",
-  "paymentProviderChargilySubtitle": "Algerian cards, charged in dinars",
+  "paymentProviderChargilySubtitle": "Algerian cards — CIB and Edahabia",
   "paymentProviderUnavailable": "Unavailable right now",
   "paymentProviderNotConfigured": "Not available yet",
   "paymentProviderDisabled": "Temporarily switched off",
+  "paymentProviderConfigurationInvalid": "Not ready yet",
+  "paymentProviderAmountTooSmall": "Below this method's minimum",
+  "paymentCheckoutFailedTitle": "We could not start this payment",
+  "paymentCheckoutFailedBody": "The payment provider refused to open a checkout. Nothing has been charged. Try the other method, or come back shortly.",
+  "paymentRailEquivalent": "Equivalent to {amount}",
+  "@paymentRailEquivalent": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "paymentRailRate": "€1 = {rate} DA",
+  "@paymentRailRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "paymentRailRateLocked": "The rate is locked when you start the payment. The delivery price stays in euros.",
+  "paymentPayWith": "Pay {amount} with {provider}",
+  "@paymentPayWith": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "a11yPaymentRailCharge": "{provider}, charges {amount}",
+  "@a11yPaymentRailCharge": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "paymentNoProvidersTitle": "No payment method available",
   "paymentNoProvidersBody": "Payment is temporarily unavailable. Nothing has been charged and your delivery is unaffected.",
   "paymentPayAction": "Pay {amount}",
@@ -958,31 +1001,59 @@
   "locationSearchStart": "Type a locality, municipality, commune, or airport",
   "placeTierWilaya": "{name} Wilaya",
   "@placeTierWilaya": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierDepartment": "{name} department",
   "@placeTierDepartment": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierRegion": "{name} region",
   "@placeTierRegion": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierProvince": "{name} province",
   "@placeTierProvince": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierAutonomousCommunity": "{name} autonomous community",
   "@placeTierAutonomousCommunity": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierState": "{name} state",
   "@placeTierState": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "placeTierDistrict": "{name} district",
   "@placeTierDistrict": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "locationTypeAirport": "Airport",
   "locationTypeLocality": "Locality",
@@ -1010,15 +1081,27 @@
   "locationCurrentSelection": "Currently selected",
   "locationSearchNoMatch": "Nothing here matches “{query}”. Check the spelling, or try the nearest larger town.",
   "@locationSearchNoMatch": {
-    "placeholders": {"query": {"type": "String"}}
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
   },
   "locationSearchNoMatchAirports": "No airport here matches “{query}”. Try the city name, or the three-letter code.",
   "@locationSearchNoMatchAirports": {
-    "placeholders": {"query": {"type": "String"}}
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
   },
   "locationPreferredExplainer": "Travellers are matched on {place}. A preferred point only says where you would rather meet inside it.",
   "@locationPreferredExplainer": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "locationPreferredFlexibleHint": "No exact point needed",
   "locationAddPreferredPoint": "Add a preferred point",
@@ -1030,11 +1113,19 @@
   "locationPointInside": "Point inside",
   "locationDropPinHelpIn": "Move the map until the crosshair sits where you mean inside {place}, then confirm.",
   "@locationDropPinHelpIn": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "locationNoCentre": "We have no centre on file for {place}, so the map starts wide. Move it to the right area before you confirm.",
   "@locationNoCentre": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "mapAttribution": "Map data {attribution}",
   "@mapAttribution": {
@@ -1059,11 +1150,19 @@
   "locationChoosePreferredPoint": "Choose on map",
   "locationFlexibleWithin": "Flexible within {place}",
   "@locationFlexibleWithin": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "locationPreferredValidation": "The map provider will verify that this point belongs to {place}.",
   "@locationPreferredValidation": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "mapZoomIn": "Zoom in",
   "mapZoomOut": "Zoom out",

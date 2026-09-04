@@ -2640,13 +2640,13 @@ abstract class L {
   /// No description provided for @paymentProviderStripe.
   ///
   /// In en, this message translates to:
-  /// **'Card'**
+  /// **'Stripe'**
   String get paymentProviderStripe;
 
   /// No description provided for @paymentProviderStripeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Visa, Mastercard and others, in euros'**
+  /// **'Visa, Mastercard and other cards'**
   String get paymentProviderStripeSubtitle;
 
   /// No description provided for @paymentProviderChargily.
@@ -2658,7 +2658,7 @@ abstract class L {
   /// No description provided for @paymentProviderChargilySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Algerian cards, charged in dinars'**
+  /// **'Algerian cards — CIB and Edahabia'**
   String get paymentProviderChargilySubtitle;
 
   /// No description provided for @paymentProviderUnavailable.
@@ -2678,6 +2678,60 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Temporarily switched off'**
   String get paymentProviderDisabled;
+
+  /// No description provided for @paymentProviderConfigurationInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Not ready yet'**
+  String get paymentProviderConfigurationInvalid;
+
+  /// No description provided for @paymentProviderAmountTooSmall.
+  ///
+  /// In en, this message translates to:
+  /// **'Below this method\'s minimum'**
+  String get paymentProviderAmountTooSmall;
+
+  /// No description provided for @paymentCheckoutFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We could not start this payment'**
+  String get paymentCheckoutFailedTitle;
+
+  /// No description provided for @paymentCheckoutFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The payment provider refused to open a checkout. Nothing has been charged. Try the other method, or come back shortly.'**
+  String get paymentCheckoutFailedBody;
+
+  /// No description provided for @paymentRailEquivalent.
+  ///
+  /// In en, this message translates to:
+  /// **'Equivalent to {amount}'**
+  String paymentRailEquivalent(String amount);
+
+  /// No description provided for @paymentRailRate.
+  ///
+  /// In en, this message translates to:
+  /// **'€1 = {rate} DA'**
+  String paymentRailRate(String rate);
+
+  /// No description provided for @paymentRailRateLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'The rate is locked when you start the payment. The delivery price stays in euros.'**
+  String get paymentRailRateLocked;
+
+  /// No description provided for @paymentPayWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay {amount} with {provider}'**
+  String paymentPayWith(String amount, String provider);
+
+  /// No description provided for @a11yPaymentRailCharge.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider}, charges {amount}'**
+  String a11yPaymentRailCharge(String provider, String amount);
 
   /// No description provided for @paymentNoProvidersTitle.
   ///

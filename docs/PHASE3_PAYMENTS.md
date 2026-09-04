@@ -182,8 +182,60 @@ unique index rather than discounting twice.
 ## 5. Providers
 
 Availability is **server-authoritative**. A provider is offered only when the
-versioned policy enables it, the deployment holds its credentials, and it is
+versioned policy enables it, the deployment holds its credentials, those
+credentials describe an environment the server can identify, and the rail is
 accepting new checkouts. A button in the client is not a capability.
+
+### The rail decides the settlement currency
+
+**Stripe settles EUR. Chargily settles DZD. Neither is a payer's choice and
+neither is a client's input.** `settlement_amounts()` takes its currency from
+`gateway.payment_currency` and from nothing else; `CheckoutCreateSerializer`
+refuses a request that so much as names `currency`, `payment_currency`,
+`amount_eur_cents` or `fx_rate` with `client_supplied_amount_rejected`. Each
+adapter also refuses the wrong currency at its own door
+(`unsupported_currency`), so a Stripe-in-dinars charge has no path to exist at
+any layer.
+
+The client is therefore given the answer rather than the ingredients. Every
+surface that can start a checkout serves a `providers` list in which each row
+carries:
+
+| Field | Meaning |
+|---|---|
+| `available` | The single gate a "pay with this" control may be enabled from |
+| `payment_currency` / `settlement_currency` | What this rail settles in |
+| `settlement_amount_minor` + `_exponent` | What this rail will actually charge |
+| `canonical_amount_eur_cents` | The one EUR obligation it stands for |
+| `eur_dzd_rate` + `rate_is_indicative` | Dinar rails only; today's rate, not a binding one |
+| `unavailable_reason` | Machine code — never a sentence |
+
+`rate_is_indicative` matters: the rate that binds is snapshotted onto the
+`PaymentAttempt` when the checkout is created, and a later admin change does not
+move an attempt that already exists.
+
+A rail that cannot take *this particular* amount — a dinar total under
+Chargily's floor — comes back `available: false` with
+`amount_below_provider_minimum`, rather than being offered and failing at the
+tap.
+
+`credential_mode` stays out of the payer-facing contract and appears only in
+`as_operator_dict()`, which the admin console and deep health read.
+
+### Configuration that exists but must not be used
+
+`ProviderNotConfigured` means the deployment has no credentials.
+`ProviderConfigurationInvalid` (`provider_configuration_invalid`) means it has
+credentials that describe an environment nobody can identify — and the two
+deserve different answers, because the second is a rail somebody has already
+switched on.
+
+`configuration_problem()` reports it, `availability()` turns it into
+`available: false`, and `resolve_gateway_for_checkout()` raises before any
+provider call. `get_gateway()` deliberately does **not** enforce it: webhooks,
+reconciliation and refunds for money that already exists have to keep working
+while an operator repairs the setting, or refusing one bad checkout would strand
+real payments.
 
 ### Stripe
 
@@ -237,6 +289,26 @@ leaving the platform with no actor and no reference is untraceable.
 `chargily.new_checkouts_enabled` stops *new* checkouts while webhooks,
 reconciliation, refunds and history keep working — that is the switch an
 operator reaches for during an incident.
+
+**Chargily states its environment twice, and the two must agree.**
+
+| Mode | Key prefix | `CHARGILY_API_BASE` |
+|---|---|---|
+| Test | `test_sk_` | `https://pay.chargily.net/test/api/v2` |
+| Live | `live_sk_` | `https://pay.chargily.net/api/v2` |
+
+Any other pairing — including an unrecognised prefix — is `unknown`, and
+`unknown` is a stop condition, not a cautious "probably test". Phase 8F-C found
+exactly this on the deployed environment: a `test_sk_` key presented to the live
+base. Chargily answered `401`, and because the adapter raised the catch-all
+`ProviderError`, the payer saw a generic "try again in a moment" for a
+configuration fault no retry could fix.
+
+Both halves of that are now closed. `configuration_problem()` refuses the
+checkout before the request is made, and a `401`/`403` from either provider
+raises `ProviderNotConfigured` rather than a transient error — with the HTTP
+status, the derived mode and the API-base environment logged, and the key
+logged nowhere.
 
 ### Mock
 

@@ -114,7 +114,7 @@ void main() {
       expect(find.textContaining('payment receipt'), findsOneWidget);
 
       await tester.enterText(find.byType(TextFormField), 'not-an-email');
-      await tester.tap(find.text('Card'));
+      await tester.tap(find.text('Stripe'));
       await tester.pump();
       await tester.enterText(find.byType(TextFormField), 'not-an-email');
       await tester.tap(find.text('Pay €42.00'));

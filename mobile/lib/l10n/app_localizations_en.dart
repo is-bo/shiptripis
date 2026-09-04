@@ -1428,18 +1428,18 @@ class LEn extends L {
   String get paymentChooseProvider => 'How would you like to pay?';
 
   @override
-  String get paymentProviderStripe => 'Card';
+  String get paymentProviderStripe => 'Stripe';
 
   @override
   String get paymentProviderStripeSubtitle =>
-      'Visa, Mastercard and others, in euros';
+      'Visa, Mastercard and other cards';
 
   @override
   String get paymentProviderChargily => 'Chargily';
 
   @override
   String get paymentProviderChargilySubtitle =>
-      'Algerian cards, charged in dinars';
+      'Algerian cards — CIB and Edahabia';
 
   @override
   String get paymentProviderUnavailable => 'Unavailable right now';
@@ -1449,6 +1449,43 @@ class LEn extends L {
 
   @override
   String get paymentProviderDisabled => 'Temporarily switched off';
+
+  @override
+  String get paymentProviderConfigurationInvalid => 'Not ready yet';
+
+  @override
+  String get paymentProviderAmountTooSmall => 'Below this method\'s minimum';
+
+  @override
+  String get paymentCheckoutFailedTitle => 'We could not start this payment';
+
+  @override
+  String get paymentCheckoutFailedBody =>
+      'The payment provider refused to open a checkout. Nothing has been charged. Try the other method, or come back shortly.';
+
+  @override
+  String paymentRailEquivalent(String amount) {
+    return 'Equivalent to $amount';
+  }
+
+  @override
+  String paymentRailRate(String rate) {
+    return '€1 = $rate DA';
+  }
+
+  @override
+  String get paymentRailRateLocked =>
+      'The rate is locked when you start the payment. The delivery price stays in euros.';
+
+  @override
+  String paymentPayWith(String amount, String provider) {
+    return 'Pay $amount with $provider';
+  }
+
+  @override
+  String a11yPaymentRailCharge(String provider, String amount) {
+    return '$provider, charges $amount';
+  }
 
   @override
   String get paymentNoProvidersTitle => 'No payment method available';

@@ -69,6 +69,10 @@ CHARGILY_API_BASE=https://pay.chargily.net/test/api/v2   # test only
 
 The current adapter uses a secret API key; it has no source-consumed public-key variable. Its supported events are `checkout.paid`, `checkout.failed`, `checkout.canceled`/`checkout.cancelled`, and `checkout.expired`.
 
+**The key and the base URL must name the same environment.** `test_sk_` pairs only with `https://pay.chargily.net/test/api/v2`, and `live_sk_` only with `https://pay.chargily.net/api/v2`. Setting one without the other is the single most likely activation mistake — it is two variables, and only one of them is a secret, so they get changed at different times by different people.
+
+A deployment that mixes them is reported as *Credential environment could not be identified*, is refused for new checkouts with `provider_configuration_invalid`, and shows in the app as **Not ready yet**. Repairing it means correcting whichever half is wrong; never rotate or replace the secret key to resolve a mismatch, because the key is usually the half that was right.
+
 Activation sequence:
 
 1. Configure the exact test webhook URL. Verify the provider sends the `signature` HMAC header over the raw body.

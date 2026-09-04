@@ -423,13 +423,22 @@
   "offerEmptyBody": "عندما يقدم أحدهم عرضًا، سيظهر هنا.",
   "paymentTitle": "الدفع",
   "paymentChooseProvider": "كيف تريد الدفع؟",
-  "paymentProviderStripe": "بطاقة",
-  "paymentProviderStripeSubtitle": "فيزا وماستركارد وغيرها، باليورو",
+  "paymentProviderStripe": "Stripe",
+  "paymentProviderStripeSubtitle": "فيزا وماستركارد وبطاقات أخرى",
   "paymentProviderChargily": "Chargily",
-  "paymentProviderChargilySubtitle": "البطاقات الجزائرية، بالدينار الجزائري",
+  "paymentProviderChargilySubtitle": "البطاقات الجزائرية — CIB وذهبية",
   "paymentProviderUnavailable": "غير متاح حاليًا",
   "paymentProviderNotConfigured": "غير متاح بعد",
   "paymentProviderDisabled": "معطّل مؤقتًا",
+  "paymentProviderConfigurationInvalid": "غير جاهز بعد",
+  "paymentProviderAmountTooSmall": "أقل من الحد الأدنى لطريقة الدفع هذه",
+  "paymentCheckoutFailedTitle": "تعذّر بدء هذه الدفعة",
+  "paymentCheckoutFailedBody": "رفض مزوّد الدفع فتح صفحة الدفع. لم يتم خصم أي مبلغ. جرّب الطريقة الأخرى أو عد بعد قليل.",
+  "paymentRailEquivalent": "ما يعادل {amount}",
+  "paymentRailRate": "1 يورو = {rate} دج",
+  "paymentRailRateLocked": "يُثبَّت سعر الصرف عند بدء الدفع. يبقى سعر التوصيل باليورو.",
+  "paymentPayWith": "ادفع {amount} عبر {provider}",
+  "a11yPaymentRailCharge": "{provider}، يخصم {amount}",
   "paymentNoProvidersTitle": "لا توجد وسيلة دفع متاحة",
   "paymentNoProvidersBody": "الدفع غير متاح مؤقتًا. لم يتم خصم أي مبلغ ولم يتأثر توصيلك.",
   "paymentPayAction": "ادفع {amount}",
@@ -721,11 +730,19 @@
   "locationChoosePreferredPoint": "اختر على الخريطة",
   "locationFlexibleWithin": "مرن داخل {place}",
   "@locationFlexibleWithin": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "locationPreferredValidation": "سيتحقق مزود الخرائط من أن هذه النقطة تقع ضمن {place}.",
   "@locationPreferredValidation": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "mapZoomIn": "تكبير",
   "mapZoomOut": "تصغير",

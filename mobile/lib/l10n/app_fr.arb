@@ -423,13 +423,22 @@
   "offerEmptyBody": "Lorsqu’une offre est faite, elle apparaît ici.",
   "paymentTitle": "Paiement",
   "paymentChooseProvider": "Comment souhaitez-vous payer ?",
-  "paymentProviderStripe": "Carte",
-  "paymentProviderStripeSubtitle": "Visa, Mastercard et autres, en euros",
+  "paymentProviderStripe": "Stripe",
+  "paymentProviderStripeSubtitle": "Visa, Mastercard et autres cartes",
   "paymentProviderChargily": "Chargily",
-  "paymentProviderChargilySubtitle": "Cartes algériennes, débitées en dinars",
+  "paymentProviderChargilySubtitle": "Cartes algériennes — CIB et Edahabia",
   "paymentProviderUnavailable": "Indisponible pour le moment",
   "paymentProviderNotConfigured": "Pas encore disponible",
   "paymentProviderDisabled": "Temporairement désactivé",
+  "paymentProviderConfigurationInvalid": "Pas encore prêt",
+  "paymentProviderAmountTooSmall": "Inférieur au minimum de ce moyen de paiement",
+  "paymentCheckoutFailedTitle": "Impossible de démarrer ce paiement",
+  "paymentCheckoutFailedBody": "Le prestataire de paiement a refusé d'ouvrir la page de paiement. Rien n'a été débité. Essayez l'autre moyen, ou revenez dans un instant.",
+  "paymentRailEquivalent": "Équivaut à {amount}",
+  "paymentRailRate": "1 € = {rate} DA",
+  "paymentRailRateLocked": "Le taux est fixé au moment où vous démarrez le paiement. Le prix de la livraison reste en euros.",
+  "paymentPayWith": "Payer {amount} avec {provider}",
+  "a11yPaymentRailCharge": "{provider}, débite {amount}",
   "paymentNoProvidersTitle": "Aucun moyen de paiement disponible",
   "paymentNoProvidersBody": "Le paiement est temporairement indisponible. Rien n’a été débité et votre livraison n’est pas affectée.",
   "paymentPayAction": "Payer {amount}",
@@ -721,11 +730,19 @@
   "locationChoosePreferredPoint": "Choisir sur la carte",
   "locationFlexibleWithin": "Flexible dans {place}",
   "@locationFlexibleWithin": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "locationPreferredValidation": "Le fournisseur cartographique vérifiera que ce point appartient à {place}.",
   "@locationPreferredValidation": {
-    "placeholders": {"place": {"type": "String"}}
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
   },
   "mapZoomIn": "Zoomer",
   "mapZoomOut": "Dézoomer",

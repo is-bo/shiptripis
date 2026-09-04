@@ -41,6 +41,7 @@ from .base import (
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
+    ProviderCheckoutRejected,
     ProviderError,
     ProviderEvent,
     ProviderNotConfigured,
@@ -170,7 +171,6 @@ class ChargilyGateway:
         key = self.secret_key
         if not key:
             return MODE_NOT_CONFIGURED
-        base = self.api_base.rstrip("/")
         by_key = (
             MODE_TEST
             if key.startswith("test_sk_")
@@ -178,16 +178,30 @@ class ChargilyGateway:
             if key.startswith("live_sk_")
             else MODE_UNKNOWN
         )
-        by_base = (
-            MODE_TEST
-            if base == TEST_API_BASE.rstrip("/")
-            else MODE_LIVE
-            if base == LIVE_API_BASE.rstrip("/")
-            else MODE_UNKNOWN
-        )
+        by_base = self._api_base_environment()
         if by_key == MODE_UNKNOWN or by_base == MODE_UNKNOWN:
             return MODE_UNKNOWN
         return by_key if by_key == by_base else MODE_UNKNOWN
+
+    def configuration_problem(self) -> str:
+        """Why this Chargily configuration must not take a new checkout.
+
+        Chargily states its environment twice — in the key prefix and in the API
+        base — and a deployment that mixes them is not "probably test". A test
+        key against the live base is rejected by Chargily with a 401 the payer
+        sees as a generic failure; a live key against the test base would create
+        checkouts nobody can settle. Neither is a state to transact in, and
+        neither can be resolved by guessing which half was intended.
+
+        This is the exact condition that was live on the deployed environment:
+        `test_sk_` against `https://pay.chargily.net/api/v2`.
+        """
+
+        if not self.secret_key:
+            return ""  # Not configured at all — a different, earlier answer.
+        if self.credential_mode() == MODE_UNKNOWN:
+            return "chargily_environment_unidentified"
+        return ""
 
     def _require_configured(self) -> None:
         if not self.secret_key:
@@ -228,12 +242,59 @@ class ChargilyGateway:
             raise ProviderUnavailable(
                 "Chargily rate limited the request.", provider_code="429"
             )
+        if response.status_code in (401, 403):
+            # The key this deployment holds was refused. On Chargily the
+            # overwhelmingly likely cause is an environment mismatch — a
+            # `test_sk_` key presented to the live API base, or the reverse —
+            # which `configuration_problem()` refuses in advance. Anything that
+            # still reaches here is a credential problem, not a transient one,
+            # and telling the payer to try again would be a lie.
+            #
+            # Everything logged is non-secret: the HTTP status, the derived
+            # mode, and which environment the base URL points at. The key and
+            # the response body are not logged.
+            logger.error(
+                "chargily auth rejected status=%s credential_mode=%s api_base_mode=%s",
+                response.status_code,
+                self.credential_mode(),
+                self._api_base_environment(),
+            )
+            raise ProviderNotConfigured(
+                "Chargily rejected this deployment's API credentials.",
+                provider_code=str(response.status_code),
+            )
         if response.status_code >= 400:
+            provider_code = ""
+            if isinstance(body, dict):
+                provider_code = str(body.get("code") or "")
+            logger.warning(
+                "chargily rejected %s %s status=%s provider_code=%s",
+                method,
+                path,
+                response.status_code,
+                provider_code or "-",
+            )
+            # The provider's own message can name amounts, accounts and
+            # merchant configuration. It stays in the exception for the log and
+            # never reaches a payer, who is told the checkout could not be
+            # created.
             message = "Chargily rejected the request."
             if isinstance(body, dict):
                 message = str(body.get("message") or message)
-            raise ProviderError(message, provider_code=str(response.status_code))
+            raise ProviderCheckoutRejected(
+                message, provider_code=provider_code or str(response.status_code)
+            )
         return body if isinstance(body, dict) else {}
+
+    def _api_base_environment(self) -> str:
+        """Which environment the configured base URL points at. Not a secret."""
+
+        base = self.api_base.rstrip("/")
+        if base == TEST_API_BASE.rstrip("/"):
+            return MODE_TEST
+        if base == LIVE_API_BASE.rstrip("/"):
+            return MODE_LIVE
+        return MODE_UNKNOWN
 
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult:
         if request.currency.upper() != "DZD":

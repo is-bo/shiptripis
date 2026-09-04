@@ -1428,17 +1428,17 @@ class LAr extends L {
   String get paymentChooseProvider => 'كيف تريد الدفع؟';
 
   @override
-  String get paymentProviderStripe => 'بطاقة';
+  String get paymentProviderStripe => 'Stripe';
 
   @override
-  String get paymentProviderStripeSubtitle => 'فيزا وماستركارد وغيرها، باليورو';
+  String get paymentProviderStripeSubtitle => 'فيزا وماستركارد وبطاقات أخرى';
 
   @override
   String get paymentProviderChargily => 'Chargily';
 
   @override
   String get paymentProviderChargilySubtitle =>
-      'البطاقات الجزائرية، بالدينار الجزائري';
+      'البطاقات الجزائرية — CIB وذهبية';
 
   @override
   String get paymentProviderUnavailable => 'غير متاح حاليًا';
@@ -1448,6 +1448,44 @@ class LAr extends L {
 
   @override
   String get paymentProviderDisabled => 'معطّل مؤقتًا';
+
+  @override
+  String get paymentProviderConfigurationInvalid => 'غير جاهز بعد';
+
+  @override
+  String get paymentProviderAmountTooSmall =>
+      'أقل من الحد الأدنى لطريقة الدفع هذه';
+
+  @override
+  String get paymentCheckoutFailedTitle => 'تعذّر بدء هذه الدفعة';
+
+  @override
+  String get paymentCheckoutFailedBody =>
+      'رفض مزوّد الدفع فتح صفحة الدفع. لم يتم خصم أي مبلغ. جرّب الطريقة الأخرى أو عد بعد قليل.';
+
+  @override
+  String paymentRailEquivalent(String amount) {
+    return 'ما يعادل $amount';
+  }
+
+  @override
+  String paymentRailRate(String rate) {
+    return '1 يورو = $rate دج';
+  }
+
+  @override
+  String get paymentRailRateLocked =>
+      'يُثبَّت سعر الصرف عند بدء الدفع. يبقى سعر التوصيل باليورو.';
+
+  @override
+  String paymentPayWith(String amount, String provider) {
+    return 'ادفع $amount عبر $provider';
+  }
+
+  @override
+  String a11yPaymentRailCharge(String provider, String amount) {
+    return '$provider، يخصم $amount';
+  }
 
   @override
   String get paymentNoProvidersTitle => 'لا توجد وسيلة دفع متاحة';

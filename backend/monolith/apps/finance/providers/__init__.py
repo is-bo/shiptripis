@@ -32,6 +32,8 @@ from .base import (
     CheckoutResult,
     PaymentGateway,
     PayoutCapability,
+    ProviderCheckoutRejected,
+    ProviderConfigurationInvalid,
     ProviderError,
     ProviderEvent,
     ProviderNotConfigured,
@@ -58,11 +60,15 @@ __all__ = [
     "PaymentGateway",
     "PayoutCapability",
     "ProviderAvailability",
+    "ProviderCheckoutRejected",
+    "ProviderConfigurationInvalid",
+    "ProviderDisabled",
     "ProviderError",
     "ProviderEvent",
     "ProviderNotConfigured",
     "ProviderSignatureError",
     "ProviderUnavailable",
+    "NewCheckoutsDisabled",
     "RefundNotSupported",
     "RefundRequest",
     "RefundResult",
@@ -92,6 +98,10 @@ class ProviderAvailability:
     enabled: bool
     configured: bool
     accepts_new_checkouts: bool
+    #: The currency this rail settles in, decided by the rail. Stripe is EUR,
+    #: Chargily is DZD. It is never a payer's choice and never a client's
+    #: input: `_resolve_amounts` reads it from the gateway, and the checkout
+    #: contract refuses a request that states a currency at all.
     payment_currency: str
     supports_guest_payment: bool
     unavailable_reason: str = ""
@@ -100,11 +110,29 @@ class ProviderAvailability:
     #: this is a third: a rail can be configured for live money and disabled,
     #: and an operator has to be able to see all three at once.
     credential_mode: str = MODE_NOT_CONFIGURED
+    #: Empty when the configuration is coherent; otherwise the machine code for
+    #: why credentials that exist still must not open a checkout.
+    configuration_problem: str = ""
+
+    @property
+    def configuration_valid(self) -> bool:
+        return not self.configuration_problem
+
+    @property
+    def available(self) -> bool:
+        """The single gate a "pay with this" control may be enabled from."""
+
+        return (
+            self.enabled
+            and self.configured
+            and self.configuration_valid
+            and self.accepts_new_checkouts
+        )
 
     def as_dict(self) -> dict:
         return {
             "provider": self.provider,
-            "available": self.enabled and self.configured and self.accepts_new_checkouts,
+            "available": self.available,
             "payment_currency": self.payment_currency,
             "supports_guest_payment": self.supports_guest_payment,
             "unavailable_reason": self.unavailable_reason,
@@ -121,6 +149,8 @@ class ProviderAvailability:
             **self.as_dict(),
             "enabled": self.enabled,
             "configured": self.configured,
+            "configuration_valid": self.configuration_valid,
+            "configuration_problem": self.configuration_problem,
             "accepts_new_checkouts": self.accepts_new_checkouts,
             "credential_mode": self.credential_mode,
         }
@@ -178,6 +208,7 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
     payment_currency = ""
     supports_guest = False
     credential_mode = MODE_NOT_CONFIGURED
+    problem = ""
     reason = ""
     try:
         gateway = _build(provider)
@@ -185,6 +216,7 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
         payment_currency = gateway.payment_currency
         supports_guest = gateway.supports_guest_payment
         credential_mode = gateway.credential_mode()
+        problem = gateway.configuration_problem() if configured else ""
     except ProviderNotConfigured as exc:
         reason = exc.code
     accepts_new = _accepts_new_checkouts(policy, provider)
@@ -193,6 +225,11 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
             reason = "disabled_by_policy"
         elif not configured:
             reason = "provider_not_configured"
+        elif problem:
+            # An enabled, credentialled rail whose environment cannot be
+            # identified reports *that*, not "disabled". An operator who turned
+            # it on needs to see the difference between a switch and a fault.
+            reason = "provider_configuration_invalid"
         elif not accepts_new:
             reason = "new_checkouts_disabled"
     return ProviderAvailability(
@@ -204,6 +241,7 @@ def availability(policy: Phase3Policy, provider: str) -> ProviderAvailability:
         supports_guest_payment=supports_guest,
         unavailable_reason=reason,
         credential_mode=credential_mode,
+        configuration_problem=problem,
     )
 
 
@@ -245,6 +283,15 @@ def resolve_gateway_for_checkout(
     gateway = _build(provider)
     if not gateway.is_configured():
         raise ProviderNotConfigured(f"{provider} credentials are not configured.")
+    # Credentials that exist but describe an environment nobody can identify
+    # stop here, before any money moves. This is deliberately *not* enforced in
+    # `get_gateway`: webhooks, reconciliation and refunds for payments that
+    # already exist must keep working while an operator repairs the setting.
+    if problem := gateway.configuration_problem():
+        raise ProviderConfigurationInvalid(
+            f"{provider} configuration is incomplete or inconsistent.",
+            provider_code=problem,
+        )
     if guest and not gateway.supports_guest_payment:
         raise ProviderDisabled(f"{provider} cannot take a third-party payment.")
     return gateway

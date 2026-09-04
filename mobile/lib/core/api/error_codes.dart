@@ -178,6 +178,20 @@ class ApiErrorCode {
   static const providerNewCheckoutsDisabled = ApiErrorCode(
     'provider_new_checkouts_disabled',
   );
+
+  /// Credentials exist but describe an environment the server will not
+  /// transact in — a rail switched on before its configuration agreed with
+  /// itself. Distinct from "not configured": the fix is an operator's, not the
+  /// payer's, and no amount of retrying changes it.
+  static const providerConfigurationInvalid = ApiErrorCode(
+    'provider_configuration_invalid',
+  );
+
+  /// The provider understood the request and refused to open a checkout.
+  /// Definite, so the copy must not promise that trying again will work.
+  static const providerCheckoutFailed = ApiErrorCode(
+    'provider_checkout_failed',
+  );
   static const clientSuppliedAmountRejected = ApiErrorCode(
     'client_supplied_amount_rejected',
   );
@@ -349,6 +363,7 @@ class ApiErrorCode {
     'provider_disabled',
     'provider_not_configured',
     'provider_new_checkouts_disabled',
+    'provider_configuration_invalid',
   };
 
   bool get isProviderUnavailable => _providerCodes.contains(raw);

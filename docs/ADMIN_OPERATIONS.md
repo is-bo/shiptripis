@@ -39,10 +39,36 @@ audited through the existing review service.
 
 Image evidence is also previewed directly in the review screen through the
 same authorized endpoint. PDFs and original-size images open in a separate
-tab. Storage failures show a safe error and request reference; they never
-weaken the private bucket policy. General Support pages do not expose KYC
-documents or private dispute statements. Historical rejected flight proofs do
-not override a valid approval, but every flight leg must have an approval.
+tab. General Support pages do not expose KYC documents or private dispute
+statements. Historical rejected flight proofs do not override a valid
+approval, but every flight leg must have an approval.
+
+### Evidence stores are not all owned by the same key
+
+KYC documents live in their own private bucket, and that bucket belongs to the
+**Go KYC service's** credential — not to Django's. Everything else Django
+writes (parcel item photos, flight proof, dispute evidence) lives in the private
+media bucket Django's own key owns. Django reads the KYC bucket through the
+`KYC_S3_*` credential the deployment already supplies to the KYC process; it is
+not a new secret, and the KYC bucket stays private.
+
+This mattered more than it sounds, because getting it wrong was invisible.
+Producing a signed evidence URL is *local signing* — it never contacts the
+store, so it succeeds with a credential that has no grant on the bucket. Django
+was signing KYC objects with its own key, the URL was well-formed, and the
+reviewer's browser was then refused. The console showed a broken image, which
+looks exactly like a submission with no document attached.
+
+So the review screen now **checks that the object can actually be fetched**
+before it renders anything, and says which of the two situations it is in:
+
+- *No evidence file was attached to this submission* — nothing was submitted.
+- *Evidence is temporarily unavailable* — something was submitted and the
+  document store could not be reached. The submission is intact, and a request
+  reference is shown for engineering.
+
+Neither message names a bucket, an object key, an access key or a provider
+error; those stay in the logs with the same request reference.
 
 ## Disputes and finance
 
@@ -82,9 +108,18 @@ webhook secrets and SMTP passwords never render.
 ## System and audit expectations
 
 **System & operations** reports database and Redis probes, routing readiness,
-KYC limiter mode, durable background jobs, email outbox, finance worker signals
-and release metadata. Failed work is surfaced with a safe status; stored errors
-remain in logs/records for investigation. **Audit log** reads as WHO / WHAT /
+KYC limiter mode, private object storage, durable background jobs, email
+outbox, finance worker signals and release metadata. Failed work is surfaced
+with a safe status; stored errors remain in logs/records for investigation.
+
+**Evidence stores** are listed one per line — parcel media, flight proof,
+dispute evidence and identity evidence — and each is probed with the credential
+that actually owns it. One combined verdict would be worse than none: the media
+bucket answering says nothing about the KYC bucket, and for weeks it was
+allowed to. A row reads *Reachable* only when that store's own key got an
+answer from that store. The row names the environment prefix supplying the key
+(`S3_*` or `KYC_S3_*`) and never any part of the key itself. Verdicts are cached
+for a minute so polling this page cannot amplify into object-store traffic. **Audit log** reads as WHO / WHAT /
 WHICH OBJECT / WHEN and includes KYC, proof, dispute, finance, staff and
 settings actions without logging secrets or full sensitive evidence.
 
@@ -98,6 +133,20 @@ or copy a secret to answer it. A configured rail reading *Credential
 environment could not be identified* means the key is not a shape this code
 recognises, or Chargily's key and API base disagree; treat that as a stop
 condition rather than as test.
+
+Since Phase 8F-C the console does more than describe that state — the server
+refuses it. A rail whose environment cannot be identified reads **Enabled, but
+unavailable**, and `resolve_gateway_for_checkout` raises
+`provider_configuration_invalid` before any provider call, so no money moves
+through an environment nobody can name. The wording is deliberate: *Disabled*
+would send an operator to the business-settings switch, and the switch is not
+the problem. Webhooks, reconciliation and refunds for payments that already
+exist keep working throughout, because refusing those would strand real money
+rather than prevent a bad checkout.
+
+The payer sees the same fact in the app: the rail is listed, greyed, and
+labelled *Not ready yet* — not silently removed, which reads as a bug, and not
+tappable, which reads as a lie.
 
 **Geography catalogue** reports the reviewed manifest digest this database was
 built from, when it was applied, and by which release, above the per-country

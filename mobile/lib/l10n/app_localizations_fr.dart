@@ -1438,18 +1438,18 @@ class LFr extends L {
   String get paymentChooseProvider => 'Comment souhaitez-vous payer ?';
 
   @override
-  String get paymentProviderStripe => 'Carte';
+  String get paymentProviderStripe => 'Stripe';
 
   @override
   String get paymentProviderStripeSubtitle =>
-      'Visa, Mastercard et autres, en euros';
+      'Visa, Mastercard et autres cartes';
 
   @override
   String get paymentProviderChargily => 'Chargily';
 
   @override
   String get paymentProviderChargilySubtitle =>
-      'Cartes algériennes, débitées en dinars';
+      'Cartes algériennes — CIB et Edahabia';
 
   @override
   String get paymentProviderUnavailable => 'Indisponible pour le moment';
@@ -1459,6 +1459,44 @@ class LFr extends L {
 
   @override
   String get paymentProviderDisabled => 'Temporairement désactivé';
+
+  @override
+  String get paymentProviderConfigurationInvalid => 'Pas encore prêt';
+
+  @override
+  String get paymentProviderAmountTooSmall =>
+      'Inférieur au minimum de ce moyen de paiement';
+
+  @override
+  String get paymentCheckoutFailedTitle => 'Impossible de démarrer ce paiement';
+
+  @override
+  String get paymentCheckoutFailedBody =>
+      'Le prestataire de paiement a refusé d\'ouvrir la page de paiement. Rien n\'a été débité. Essayez l\'autre moyen, ou revenez dans un instant.';
+
+  @override
+  String paymentRailEquivalent(String amount) {
+    return 'Équivaut à $amount';
+  }
+
+  @override
+  String paymentRailRate(String rate) {
+    return '1 € = $rate DA';
+  }
+
+  @override
+  String get paymentRailRateLocked =>
+      'Le taux est fixé au moment où vous démarrez le paiement. Le prix de la livraison reste en euros.';
+
+  @override
+  String paymentPayWith(String amount, String provider) {
+    return 'Payer $amount avec $provider';
+  }
+
+  @override
+  String a11yPaymentRailCharge(String provider, String amount) {
+    return '$provider, débite $amount';
+  }
 
   @override
   String get paymentNoProvidersTitle => 'Aucun moyen de paiement disponible';

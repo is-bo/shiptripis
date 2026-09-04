@@ -71,6 +71,11 @@ class MockGateway:
     def is_configured(self) -> bool:
         return bool(getattr(settings, "PAYMENTS_ALLOW_MOCK_PROVIDER", False))
 
+    def configuration_problem(self) -> str:
+        """Nothing to misconfigure: there is no external environment."""
+
+        return ""
+
     @classmethod
     def mark(cls, session_id: str, outcome: str) -> None:
         cls._outcomes[session_id] = outcome

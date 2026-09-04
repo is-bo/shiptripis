@@ -68,6 +68,7 @@ from .services import (
     create_guest_link,
     ensure_posting_deposit_order,
     guest_payment_view,
+    provider_options,
     quote_posting_deposit,
     request_refund,
     resolve_guest_link,
@@ -121,6 +122,31 @@ def _finance_error_response(exc: Exception) -> Response:
     return Response(payload, status=status_code)
 
 
+def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
+    """Attach the rail list, with per-rail amounts, to a payable order.
+
+    Every surface that can start a checkout serves the same shape, because the
+    payment section is the same widget on all of them and the amount it shows
+    must come from the server that will charge it — not from the client pairing
+    a rail with a currency of its own choosing.
+    """
+
+    if order.outstanding_eur_cents <= 0:
+        return payload
+    try:
+        policy = phase3_policy()
+    except (NoActiveBusinessSettings, InvalidPaymentPolicy):
+        return payload
+    payload["providers"] = provider_options(
+        policy, amount_eur_cents=order.outstanding_eur_cents
+    )
+    if policy.providers.chargily_enabled:
+        payload["chargily_quote"] = chargily_display(
+            amount_eur_cents=order.outstanding_eur_cents, policy=policy
+        )
+    return payload
+
+
 def _order_queryset():
     return PaymentOrder.objects.select_related("deal", "delivery_request").prefetch_related(
         Prefetch("attempts", queryset=PaymentAttempt.objects.order_by("-created_at")),
@@ -157,7 +183,10 @@ class PaymentProvidersView(APIView):
         payload = {
             "timing_mode": policy.timing_mode,
             "canonical_currency": "EUR",
-            "providers": [row.as_dict() for row in rows],
+            # No obligation in hand here, so the rows carry settlement currency
+            # and readiness but no amount. The order endpoints below add the
+            # amount each rail would charge for that specific obligation.
+            "providers": provider_options(policy),
         }
         chargily = next(
             (row for row in rows if row.provider == "chargily"), None
@@ -203,9 +232,11 @@ class PaymentOrderDetailView(APIView):
         except (NoActiveBusinessSettings, InvalidPaymentPolicy):
             return Response(payload)
         if order.outstanding_eur_cents > 0:
-            payload["providers"] = [
-                row.as_dict() for row in available_providers(policy)
-            ]
+            # Each rail carries the amount *it* would charge, in its own
+            # settlement currency, beside the one canonical EUR obligation.
+            payload["providers"] = provider_options(
+                policy, amount_eur_cents=order.outstanding_eur_cents
+            )
             if policy.providers.chargily_enabled:
                 payload["chargily_quote"] = chargily_display(
                     amount_eur_cents=order.outstanding_eur_cents, policy=policy
@@ -388,7 +419,9 @@ class PostingDepositView(APIView):
             .first()
         )
         if order is not None:
-            payload["order"] = PaymentOrderSummarySerializer(order).data
+            payload["order"] = _with_payment_options(
+                PaymentOrderSummarySerializer(order).data, order
+            )
             return Response(payload)
         if not policy.deposit_required:
             return Response(payload)
@@ -418,7 +451,8 @@ class PostingDepositView(APIView):
         except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return _finance_error_response(exc)
         return Response(
-            PaymentOrderSummarySerializer(order).data, status=http.HTTP_201_CREATED
+            _with_payment_options(PaymentOrderSummarySerializer(order).data, order),
+            status=http.HTTP_201_CREATED,
         )
 
 
@@ -468,7 +502,9 @@ class DealPaymentView(APIView):
             }
             return Response(payload)
 
-        payload["order"] = PaymentOrderSerializer(order).data
+        payload["order"] = _with_payment_options(
+            PaymentOrderSerializer(order).data, order
+        )
         return Response(payload)
 
 

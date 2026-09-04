@@ -55,6 +55,7 @@ from .money import (
     CURRENCY_EXPONENTS,
     clamp,
     convert_eur_cents,
+    format_minor,
     format_rate,
     percentage_of,
     require_positive_cents,
@@ -75,6 +76,7 @@ from .policy import Phase3Policy, phase3_policy
 from .providers import (
     CheckoutRequest,
     ProviderEvent,
+    available_providers,
     ProviderError,
     ProviderNotConfigured,
     ProviderUnavailable,
@@ -787,30 +789,32 @@ def _funding_provider(order: PaymentOrder) -> str:
 # --- checkout ----------------------------------------------------------------
 
 
-def _resolve_amounts(
+def settlement_amounts(
     *,
-    order: PaymentOrder,
-    gateway,
+    payment_currency: str,
+    amount_eur_cents: int,
     policy: Phase3Policy,
 ) -> dict:
-    """Decide what this attempt collects, in canonical and provider units.
+    """What one rail would collect for a canonical EUR obligation.
 
-    The canonical figure is the order's outstanding EUR. Any conversion is done
-    here from the versioned admin rate and then frozen onto the attempt: the
-    provider is told an amount, never a rate, and the rate that was used is
-    reproducible from the attempt row alone forever after.
+    **The settlement currency is the rail's, not the payer's.** It arrives here
+    from `gateway.payment_currency` and nowhere else; the checkout contract
+    refuses a request that so much as names a currency. There is therefore no
+    Stripe-in-dinars and no Chargily-in-euros to construct, from a client or
+    from an admin screen.
+
+    Shared by `_resolve_amounts` — which freezes the result onto an attempt —
+    and by the availability preview the payment screen renders. One function so
+    the figure a payer is shown and the figure a provider is charged cannot
+    drift apart.
     """
 
-    outstanding = order.outstanding_eur_cents
-    if outstanding <= 0:
-        raise NothingOutstanding("This order has nothing left to collect.")
-
-    payment_currency = gateway.payment_currency.upper()
+    payment_currency = payment_currency.upper()
     if payment_currency == "EUR":
         return {
-            "amount_eur_cents": outstanding,
+            "amount_eur_cents": amount_eur_cents,
             "payment_currency": "EUR",
-            "provider_amount_minor": outstanding,
+            "provider_amount_minor": amount_eur_cents,
             "provider_amount_exponent": CURRENCY_EXPONENTS["EUR"],
             "fx_rate_micros": None,
             "fx_source": "",
@@ -824,7 +828,7 @@ def _resolve_amounts(
         )
     rate_micros = policy.chargily.eur_dzd_rate_micros
     provider_amount = convert_eur_cents(
-        outstanding, to_currency="DZD", rate_micros=rate_micros
+        amount_eur_cents, to_currency="DZD", rate_micros=rate_micros
     )
     if provider_amount < policy.chargily.min_amount_dzd:
         raise ProviderError(
@@ -832,7 +836,7 @@ def _resolve_amounts(
             provider_code="amount_below_provider_minimum",
         )
     return {
-        "amount_eur_cents": outstanding,
+        "amount_eur_cents": amount_eur_cents,
         "payment_currency": "DZD",
         "provider_amount_minor": provider_amount,
         "provider_amount_exponent": CURRENCY_EXPONENTS["DZD"],
@@ -843,6 +847,119 @@ def _resolve_amounts(
         ),
         "fx_settings_version": policy.settings_version,
     }
+
+
+def provider_options(
+    policy: Phase3Policy,
+    *,
+    amount_eur_cents: int | None = None,
+    guest_only: bool = False,
+) -> list[dict]:
+    """The payer-facing rail list, with what each rail would actually charge.
+
+    One list, one authority. The client picks a rail from this and renders the
+    figures in it; it does not know that Stripe means euros, does not convert
+    anything, and has no currency of its own to offer. That is the whole repair
+    for a screen that read as "choose a payment method, then choose a currency"
+    — a combination like Stripe-in-dinars was never orderable, and now it is not
+    presentable either.
+
+    `amount_eur_cents` is optional because the standalone providers endpoint has
+    no obligation in hand. With it, each row carries a settlement preview.
+
+    The preview is **indicative**. A Chargily row shows today's admin rate; the
+    rate that binds is snapshotted onto the PaymentAttempt when the checkout is
+    created, and changing the admin setting afterwards does not move it.
+    """
+
+    rows: list[dict] = []
+    for item in available_providers(policy, guest_only=guest_only):
+        row = item.as_dict()
+        if amount_eur_cents is not None and amount_eur_cents > 0:
+            row.update(
+                _settlement_preview(
+                    item=item, amount_eur_cents=amount_eur_cents, policy=policy
+                )
+            )
+        rows.append(row)
+    return rows
+
+
+def _settlement_preview(
+    *, item, amount_eur_cents: int, policy: Phase3Policy
+) -> dict:
+    """One rail's charge for one obligation, or why it cannot take it."""
+
+    preview: dict = {
+        "canonical_currency": "EUR",
+        "canonical_amount_eur_cents": amount_eur_cents,
+        "settlement_currency": item.payment_currency,
+    }
+    if not item.payment_currency:
+        return preview
+    try:
+        amounts = settlement_amounts(
+            payment_currency=item.payment_currency,
+            amount_eur_cents=amount_eur_cents,
+            policy=policy,
+        )
+    except ProviderError as exc:
+        # A rail that cannot take *this* amount — a dinar total under
+        # Chargily's floor — is unavailable for this obligation specifically.
+        # Showing it as tappable and failing at the tap is the behaviour this
+        # phase exists to remove.
+        preview["available"] = False
+        preview["unavailable_reason"] = exc.provider_code or exc.code
+        return preview
+    preview.update(
+        {
+            "settlement_amount_minor": amounts["provider_amount_minor"],
+            "settlement_amount_exponent": amounts["provider_amount_exponent"],
+            "settlement_amount": format_minor(
+                amounts["provider_amount_minor"],
+                exponent=amounts["provider_amount_exponent"],
+            ),
+        }
+    )
+    if amounts["fx_rate_micros"]:
+        preview.update(
+            {
+                "fx_rate_micros": amounts["fx_rate_micros"],
+                "eur_dzd_rate": format_rate(amounts["fx_rate_micros"]),
+                "rate_settings_version": policy.settings_version.version,
+                # The rate on this row is today's. The binding one is frozen
+                # onto the attempt at checkout creation.
+                "rate_is_indicative": True,
+            }
+        )
+    return preview
+
+
+def _resolve_amounts(
+    *,
+    order: PaymentOrder,
+    gateway,
+    policy: Phase3Policy,
+) -> dict:
+    """Decide what this attempt collects, in canonical and provider units.
+
+    The canonical figure is the order's outstanding EUR. Any conversion is done
+    from the versioned admin rate and then frozen onto the attempt: the provider
+    is told an amount, never a rate, and the rate that was used is reproducible
+    from the attempt row alone forever after.
+
+    The currency comes from `gateway.payment_currency` — the rail decides what
+    it settles in. No caller passes one, and none may.
+    """
+
+    outstanding = order.outstanding_eur_cents
+    if outstanding <= 0:
+        raise NothingOutstanding("This order has nothing left to collect.")
+    return settlement_amounts(
+        payment_currency=gateway.payment_currency,
+        amount_eur_cents=outstanding,
+        policy=policy,
+    )
 
 
 def start_checkout(
@@ -2437,21 +2554,19 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         "currency": "EUR",
         "description": _checkout_description(order),
         "expires_at": link.expires_at.isoformat(),
+        # Guest rails carry the same settlement preview as the signed-in
+        # screen. Chargily reports `supports_guest_payment = False`, so it is
+        # filtered out here rather than offered and refused at the tap.
         "providers": [
-            row.as_dict()
-            for row in _guest_providers(policy)
+            row
+            for row in provider_options(
+                policy,
+                amount_eur_cents=order.outstanding_eur_cents,
+                guest_only=True,
+            )
+            if row["available"]
         ],
     }
-
-
-def _guest_providers(policy: Phase3Policy):
-    from .providers import available_providers
-
-    return [
-        row
-        for row in available_providers(policy, guest_only=True)
-        if row.enabled and row.configured and row.accepts_new_checkouts
-    ]
 
 
 # --- payouts -----------------------------------------------------------------

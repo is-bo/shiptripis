@@ -300,6 +300,7 @@ class _ProviderTile extends StatelessWidget {
     final l = L.of(context);
     final c = context.colors;
 
+    final locale = Localizations.localeOf(context);
     final (label, subtitle, icon) = switch (option.provider) {
       PaymentProviderId.chargily => (
         l.paymentProviderChargily,
@@ -312,11 +313,17 @@ class _ProviderTile extends StatelessWidget {
         Icons.credit_card_rounded,
       ),
     };
+    // The rail's own charge, in the rail's own currency. The hero above shows
+    // the canonical euro obligation; these are not always the same number, and
+    // a payer about to enter a card needs to see the one that will be debited.
+    final charge = option.settlementAmount;
 
     return Semantics(
       button: true,
       selected: selected,
-      label: label,
+      label: charge == null
+          ? label
+          : l.a11yPaymentRailCharge(label, charge.format(locale)),
       hint: selected ? l.a11ySelected : l.a11yNotSelected,
       onTap: onTap,
       child: ExcludeSemantics(
@@ -331,7 +338,26 @@ class _ProviderTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: Theme.of(context).textTheme.titleSmall),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        if (charge != null) ...[
+                          const SizedBox(width: AppSpace.sm),
+                          MoneyText(
+                            charge,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: AppSpace.xxs),
                     Text(
                       subtitle,

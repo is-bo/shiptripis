@@ -288,6 +288,21 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         body: l.paymentProviderPickAnother,
         tone: StatusTone.waiting,
       ),
+      // Credentials exist and the server will not transact against them. The
+      // payer can do nothing about it, so the copy must not imply they can:
+      // this is not "try again", it is "use the other method".
+      ApiErrorCode.providerConfigurationInvalid => _CheckoutNotice(
+        title: l.paymentProviderConfigurationInvalid,
+        body: l.paymentProviderPickAnother,
+        tone: StatusTone.waiting,
+      ),
+      // A definite refusal from the provider. Distinct from "unavailable",
+      // which invites a retry that would fail the same way.
+      ApiErrorCode.providerCheckoutFailed => _CheckoutNotice(
+        title: l.paymentCheckoutFailedTitle,
+        body: l.paymentCheckoutFailedBody,
+        tone: StatusTone.bad,
+      ),
       ApiErrorCode.providerUnavailable => _CheckoutNotice(
         title: l.paymentProviderUnavailable,
         body: l.paymentNoProvidersBody,
@@ -433,19 +448,30 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
       );
     }
 
+    final locale = Localizations.localeOf(context);
     final selected =
         _selected ??
         options
             .firstWhere((p) => p.available, orElse: () => options.first)
             .provider;
+    final chosen = options.firstWhere(
+      (p) => p.provider == selected,
+      orElse: () => options.first,
+    );
 
+    // What *this* rail will take, in the currency it settles in. Never the
+    // order's euro figure dressed up as the selected rail's charge: a "Pay
+    // €37.50" button under a rail that debits dinars is exactly the confusion
+    // this screen is being repaired for.
+    final railCharge = chosen.settlementAmount;
+
+    // The euro obligation next to a dinar charge, from the server's frozen
+    // quote. Absent on a euro rail, where the two numbers are the same one.
     final quote = order?.chargilyQuote;
     final showsConversion =
-        selected == PaymentProviderId.chargily &&
+        chosen.chargesForeignCurrency &&
         quote?.canonicalAmount != null &&
         quote?.paymentAmount != null;
-
-    final due = order?.outstanding ?? order?.amount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -483,9 +509,16 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
 
         const SizedBox(height: AppSpace.sm),
         AppButton(
-          label: due == null
+          // The rail is named on the button, and so is the amount that rail
+          // will actually charge. There is no currency for the payer to pick:
+          // Stripe settles in euros and Chargily in dinars, the server decides
+          // both, and the pairing is not the client's to invent.
+          label: railCharge == null
               ? l.actionContinue
-              : l.paymentPayAction(due.format(Localizations.localeOf(context))),
+              : l.paymentPayWith(
+                  railCharge.format(locale),
+                  _providerName(l, chosen.provider),
+                ),
           icon: Icons.lock_rounded,
           isLoading: _busyProvider != null,
           semanticHint: l.paymentOpeningProvider,
@@ -525,6 +558,24 @@ class _CheckoutNotice {
   );
 }
 
+/// The display name of a rail.
+///
+/// Providers are named, not described by payment type. Two rows reading "Card"
+/// and "Chargily" invite exactly one misreading — that the first is a method
+/// and the second a currency — and that misreading is what put a dinar figure
+/// on a screen whose selected rail settles in euros.
+String _providerName(L l, PaymentProviderId provider) => switch (provider) {
+  PaymentProviderId.stripe => l.paymentProviderStripe,
+  PaymentProviderId.chargily => l.paymentProviderChargily,
+  PaymentProviderId.mock || PaymentProviderId.unknown => l.stateUnexpectedTitle,
+};
+
+/// One payment rail, showing what that rail will charge.
+///
+/// The amount is the point. A rail with no figure of its own reads as a way of
+/// paying one screen-level price, so a payer has no way to see that choosing
+/// the other row changes the currency leaving their account. Every figure here
+/// is the server's; nothing on this tile is derived, converted or rounded.
 class _ProviderTile extends StatelessWidget {
   const _ProviderTile({
     required this.option,
@@ -544,14 +595,11 @@ class _ProviderTile extends StatelessWidget {
     final l = L.of(context);
     final c = context.colors;
     final text = Theme.of(context).textTheme;
+    final locale = Localizations.localeOf(context);
     final enabled = onSelect != null;
 
-    final name = switch (option.provider) {
-      PaymentProviderId.stripe => l.paymentProviderStripe,
-      PaymentProviderId.chargily => l.paymentProviderChargily,
-      PaymentProviderId.mock ||
-      PaymentProviderId.unknown => l.stateUnexpectedTitle,
-    };
+    final name = _providerName(l, option.provider);
+    final charge = enabled ? option.settlementAmount : null;
 
     final subtitle = enabled
         ? switch (option.provider) {
@@ -562,36 +610,71 @@ class _ProviderTile extends StatelessWidget {
           }
         : _reasonCopy(l, option.unavailableReason);
 
+    // A dinar rail states the euro obligation it stands for and the rate that
+    // produced it. A euro rail says nothing extra: its charge and the
+    // obligation are one number, and repeating it would imply they might not
+    // be.
+    final rate = option.eurDzdRate;
+    final equivalence = <String>[
+      if (option.showsCanonicalEquivalent)
+        l.paymentRailEquivalent(option.canonicalAmount!.format(locale)),
+      if (rate != null && rate.isNotEmpty) l.paymentRailRate(rate),
+    ].join(' · ');
+
     return Semantics(
       button: true,
       enabled: enabled,
       selected: isSelected,
-      label: name,
-      hint: subtitle,
+      label: charge == null
+          ? name
+          : l.a11yPaymentRailCharge(name, charge.format(locale)),
+      hint: equivalence.isEmpty ? subtitle : '$subtitle. $equivalence',
       onTap: enabled ? onSelect : null,
       child: ExcludeSemantics(
         child: AppCard(
           onTap: onSelect,
           accent: isSelected && enabled ? StatusTone.progress : null,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                option.provider == PaymentProviderId.chargily
-                    ? Icons.account_balance_rounded
-                    : Icons.credit_card_rounded,
-                size: 22,
-                color: enabled ? c.textSecondary : c.textTertiary,
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  option.provider == PaymentProviderId.chargily
+                      ? Icons.account_balance_rounded
+                      : Icons.credit_card_rounded,
+                  size: 22,
+                  color: enabled ? c.textSecondary : c.textTertiary,
+                ),
               ),
               const SizedBox(width: AppSpace.lg),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: text.titleSmall?.copyWith(
-                        color: enabled ? c.textPrimary : c.textTertiary,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: text.titleSmall?.copyWith(
+                              color: enabled ? c.textPrimary : c.textTertiary,
+                            ),
+                          ),
+                        ),
+                        if (charge != null) ...[
+                          const SizedBox(width: AppSpace.sm),
+                          MoneyText(
+                            charge,
+                            style: text.titleSmall?.copyWith(
+                              color: c.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: AppSpace.xxs),
                     Text(
@@ -600,20 +683,40 @@ class _ProviderTile extends StatelessWidget {
                         color: enabled ? c.textSecondary : c.textTertiary,
                       ),
                     ),
+                    if (enabled && equivalence.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xxs),
+                      Text(
+                        equivalence,
+                        style: text.bodySmall?.copyWith(color: c.textTertiary),
+                      ),
+                    ],
+                    if (enabled && option.rateIsIndicative) ...[
+                      const SizedBox(height: AppSpace.xxs),
+                      Text(
+                        l.paymentRailRateLocked,
+                        style: text.labelSmall?.copyWith(color: c.textTertiary),
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(width: AppSpace.md),
-              if (!enabled)
-                Icon(Icons.block_rounded, size: 19, color: c.textTertiary)
-              else
-                Icon(
-                  isSelected
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 21,
-                  color: isSelected ? c.brand : c.hairlineStrong,
-                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: enabled
+                    ? Icon(
+                        isSelected
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 21,
+                        color: isSelected ? c.brand : c.hairlineStrong,
+                      )
+                    : Icon(
+                        Icons.block_rounded,
+                        size: 19,
+                        color: c.textTertiary,
+                      ),
+              ),
             ],
           ),
         ),
@@ -627,6 +730,11 @@ class _ProviderTile extends StatelessWidget {
     'provider_not_configured' => l.paymentProviderNotConfigured,
     'disabled_by_policy' => l.paymentProviderDisabled,
     'new_checkouts_disabled' => l.paymentProviderNewCheckoutsDisabled,
+    // A rail the operator switched on whose configuration the server will not
+    // transact against. Deliberately not "switched off": nobody switched it
+    // off, and saying so would send anyone chasing it to the wrong control.
+    'provider_configuration_invalid' => l.paymentProviderConfigurationInvalid,
+    'amount_below_provider_minimum' => l.paymentProviderAmountTooSmall,
     _ => l.paymentProviderUnavailable,
   };
 }

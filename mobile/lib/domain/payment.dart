@@ -97,7 +97,15 @@ enum PayoutStatus {
 
 enum PayoutMethod { undecided, stripeTransfer, manual, unknown }
 
-/// One payment rail and whether it can be used right now.
+/// One payment rail: whether it can be used, and what it would charge.
+///
+/// **The rail decides its settlement currency, and the server decides the
+/// amount.** There is no currency choice in this client and no conversion in
+/// it either. A row arrives saying "Stripe, EUR, €37.50" or "Chargily, DZD,
+/// 5,625 DA against a canonical €37.50" and is rendered as it stands. That is
+/// the whole reason [settlementAmount] exists: a single "Pay €37.50" button
+/// sitting under a rail that charges dinars is how the screen came to read as
+/// "pick a provider, then pick a currency".
 class ProviderOption {
   const ProviderOption({
     required this.provider,
@@ -105,34 +113,88 @@ class ProviderOption {
     required this.paymentCurrency,
     required this.supportsGuestPayment,
     required this.unavailableReason,
+    this.settlementAmount,
+    this.settlementAmountLabel,
+    this.canonicalAmount,
+    this.eurDzdRate,
+    this.rateSettingsVersion,
+    this.rateIsIndicative = false,
   });
 
-  factory ProviderOption.fromJson(Map<String, dynamic> json) => ProviderOption(
-    provider: readEnum(
-      json['provider'],
-      PaymentProviderId.values,
-      fallback: PaymentProviderId.unknown,
-    ),
-    available: readBool(json['available']),
-    paymentCurrency: readText(json['payment_currency']),
-    supportsGuestPayment: readBool(json['supports_guest_payment']),
-    unavailableReason: readText(json['unavailable_reason']),
-  );
+  factory ProviderOption.fromJson(Map<String, dynamic> json) {
+    // `settlement_currency` is the newer name for the same server fact; older
+    // payloads carry only `payment_currency`. Neither is ever a client choice.
+    final currency = readText(json['settlement_currency']).isEmpty
+        ? readText(json['payment_currency'])
+        : readText(json['settlement_currency']);
+    return ProviderOption(
+      provider: readEnum(
+        json['provider'],
+        PaymentProviderId.values,
+        fallback: PaymentProviderId.unknown,
+      ),
+      available: readBool(json['available']),
+      paymentCurrency: currency,
+      supportsGuestPayment: readBool(json['supports_guest_payment']),
+      unavailableReason: readText(json['unavailable_reason']),
+      settlementAmount: Money.minorOrNull(
+        json['settlement_amount_minor'],
+        currency: currency.isEmpty ? 'EUR' : currency,
+        exponent: readInt(json['settlement_amount_exponent']),
+      ),
+      settlementAmountLabel: readString(json['settlement_amount']),
+      canonicalAmount: Money.eurCentsOrNull(json['canonical_amount_eur_cents']),
+      eurDzdRate: readString(json['eur_dzd_rate']),
+      rateSettingsVersion: readInt(json['rate_settings_version']),
+      rateIsIndicative: readBool(json['rate_is_indicative']),
+    );
+  }
 
   final PaymentProviderId provider;
 
-  /// The combined enabled + configured + accepting-checkouts gate. **The only
-  /// field a "pay with X" button may be enabled from.**
+  /// The combined enabled + configured + configuration-valid + accepting-
+  /// checkouts gate. **The only field a "pay with X" button may be enabled
+  /// from.**
   final bool available;
 
+  /// The currency this rail settles in. A property of the rail, never of the
+  /// payer: EUR for Stripe, DZD for Chargily.
   final String paymentCurrency;
+
   final bool supportsGuestPayment;
 
   /// `disabled_by_policy`, `provider_not_configured`,
-  /// `new_checkouts_disabled`, or empty.
+  /// `provider_configuration_invalid`, `new_checkouts_disabled`,
+  /// `amount_below_provider_minimum`, or empty.
   final String unavailableReason;
 
+  /// What this rail will take, in its own currency. Server-computed. Absent on
+  /// the standalone providers endpoint, which has no obligation in hand.
+  final Money? settlementAmount;
+
+  /// The server's own decimal-string rendering of [settlementAmount].
+  final String? settlementAmountLabel;
+
+  /// The canonical EUR obligation the settlement amount stands for. Equal to
+  /// [settlementAmount] on a euro rail, which is exactly why the euro rail
+  /// shows no equivalence line.
+  final Money? canonicalAmount;
+
+  /// Pre-formatted `150.000000`. Non-null only on a dinar rail.
+  final String? eurDzdRate;
+
+  final int? rateSettingsVersion;
+
+  /// True when the rate shown is today's rather than a frozen one. The binding
+  /// rate is snapshotted onto the attempt when the checkout is created.
+  final bool rateIsIndicative;
+
   bool get chargesForeignCurrency => paymentCurrency.toUpperCase() != 'EUR';
+
+  /// Whether an equivalence line adds anything. It does not on a euro rail,
+  /// where the settlement amount and the obligation are the same number.
+  bool get showsCanonicalEquivalent =>
+      chargesForeignCurrency && canonicalAmount != null;
 }
 
 /// `GET /api/payments/providers`.
