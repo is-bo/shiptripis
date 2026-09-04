@@ -1,6 +1,6 @@
 # ShipTrip V1 Implementation Status
 
-Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / FCM ACTIVATION AND HARDWARE QA PENDING**
+Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -3977,3 +3977,60 @@ so the required race gate remains in Linux CI. Flutter format and
 issues. Schema SQL was regenerated from a fresh migrated PostgreSQL database;
 sqlc generation remains an intentional no-op because all query directories are
 empty.
+
+## Phase 8F-D — Firebase and Railway activation (infrastructure only)
+
+**Status:** server-side push is live in Railway production. Physical-device
+receipt remains unproven and is a Phase 8F-E step.
+
+**There is no separate Railway notification service, and there should not be
+one.** Railway `shiptripis` / `production` holds exactly two services,
+`shiptrip` and `Postgres`. The root `railway.json` selects the combined
+`backend/railway/Dockerfile`, whose launcher already runs `cmd/notification`
+as a child alongside Django, gRPC, the durable workers, chat, KYC, email and
+Caddy, on that container's loopback Redis. A split-out notification service
+would have no shared Redis to consume `notif:fcm` from, so activation was
+configuration on the existing service rather than new infrastructure.
+
+- **Credential transport.** Railway has no secret-file primitive, so
+  `backend/railway/start.py` now decodes `FCM_CREDENTIALS_JSON_BASE64` from the
+  platform secret store into `FCM_CREDENTIALS_PATH`
+  (`/tmp/shiptrip/firebase-admin.json`, mode `0600`) before the first child is
+  spawned, then removes the encoded value from the environment so no child
+  inherits the payload. A credential whose `project_id` disagrees with
+  `FCM_PROJECT_ID` refuses the boot rather than arming push against the wrong
+  Firebase project. The JSON is not in Git, the image, or any mobile build, and
+  `.gitignore` now refuses Admin-shaped filenames as a second line of defence.
+- **Firebase validation.** The Admin service account authenticates to
+  `shiptrip-7c28f` and FCM v1 `messages:send` accepted the request and rejected
+  only a deliberately invalid token, so the API is enabled and authorized.
+  Firebase reports one Android app, `1:196052669620:android:1567a4b5dc3e40509fb3e1`,
+  package `com.shiptrip.shiptrip` — matching `mobile/android/app/build.gradle.kts`
+  and the backend project ID.
+- **Mobile wiring is unchanged by design.** `ShipTripFirebaseOptions` builds
+  `FirebaseOptions` from Dart defines and no `com.google.gms` Gradle plugin is
+  applied, so `google-services.json` is not required and was deliberately not
+  added. The four public client identifiers are now repository Actions
+  Variables (`FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`,
+  `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_ANDROID_APP_ID`), which
+  `android-release.yml` already reads and already refuses as a partial tuple.
+- **Release.** `5af7285` on green CI, deployed as `020f6bf6` (release
+  `v1.0.0-rc.6+c767ca8` env) and then `ba2d8aec` carrying
+  `RELEASE_ID=v1.0.0-rc.7+5af7285` and `FCM_ENABLED=true`.
+  `notifications.0005_notificationpreference_pushdevice` applied on the first
+  of the two. `/healthz` and `/readyz` report the new release with database,
+  migrations and rate-limit cache `ok`; the geography catalogue is at the
+  shipped digest.
+- **Worker.** The launcher logged the credential install for project
+  `shiptrip-7c28f`, and the Go worker logged `fcm firebase sender ready`,
+  `fcm consumer enabled` and `fcm consumer started` on stream `notif:fcm`,
+  group `notif-fcm-workers`, consumer `notif-fcm-1`. Firebase Admin
+  initialisation is therefore proven against the real credential.
+
+**Not proven, and deliberately not attempted.** `PushDevice` was created by
+this deployment's migration, so no real device token exists and no
+Django → stream → Firebase end-to-end test was run. The heartbeat key
+`fcm:worker:active` lives in the container's loopback Redis, so confirming it
+needs the authenticated `/api/admin/health/deep` read; the worker start is
+evidence that the heartbeat loop is running, not a substitute for that read.
+No APK or AAB was built and Phase 8F-E was not started.
