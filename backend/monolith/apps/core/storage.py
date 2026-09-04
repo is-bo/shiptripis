@@ -38,7 +38,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 #: Credential profiles, by the environment prefix that supplies them. The name
 #: is reported to operators so a storage failure says *which key* was refused,
@@ -396,6 +396,18 @@ def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
 
     Browser-supplied content types are untrusted. Pillow parses only the
     header/structure here; the pixel limit also rejects decompression bombs.
+
+    **Every decoder failure is a `False`, not an exception.** This used to
+    enumerate the exception types Pillow was expected to raise, and missed one:
+    a structurally corrupt PNG makes `verify()` raise `SyntaxError` — a builtin,
+    not an image error — which escaped as an unhandled exception and turned a
+    truncated upload into an HTTP 500 on every path that accepts an image. A
+    photo cut short by a flaky mobile connection is an ordinary thing, and the
+    honest answer to it is "that is not a valid image", not a server error.
+
+    Enumerating what a decoder may throw on hostile input is a losing game, and
+    the question this function answers is a yes/no about untrusted bytes. So
+    anything at all from the decoder means no.
     """
     format_to_ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
     try:
@@ -404,6 +416,6 @@ def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
                 return False
             actual_ext = format_to_ext.get(image.format or "")
             image.verify()
-    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError):
+    except Exception:  # noqa: BLE001 - see the docstring; any failure is "no"
         return False
     return actual_ext == expected_ext
