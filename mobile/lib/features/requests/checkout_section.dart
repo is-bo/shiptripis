@@ -469,15 +469,18 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     }
 
     final locale = Localizations.localeOf(context);
-    final selected =
-        _selected ??
-        options
-            .firstWhere((p) => p.available, orElse: () => options.first)
-            .provider;
-    final chosen = options.firstWhere(
-      (p) => p.provider == selected,
-      orElse: () => options.first,
+    // Selection is resolved against the rails that are usable *now*. A rail
+    // chosen a moment ago can have become unavailable — a failed checkout
+    // re-reads the list — and keeping that stale choice would put an amount on
+    // the button for a rail the server has already refused, then fail at the
+    // tap. There is at least one usable rail here: the empty state above
+    // returns before this point when there is not.
+    final usable = options.where((p) => p.available).toList(growable: false);
+    final chosen = usable.firstWhere(
+      (p) => p.provider == _selected,
+      orElse: () => usable.first,
     );
+    final selected = chosen.provider;
 
     // What *this* rail will take, in the currency it settles in. Never the
     // order's euro figure dressed up as the selected rail's charge: a "Pay

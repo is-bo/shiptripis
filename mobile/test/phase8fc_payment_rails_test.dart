@@ -253,6 +253,34 @@ void main() {
   });
 
   group('the pay button belongs to the selected rail', () {
+    testWidgets('a selection the server has since refused does not stick', (
+      tester,
+    ) async {
+      // A rail chosen a moment ago can become unavailable — a failed checkout
+      // re-reads the list. Keeping that choice would put an amount on the
+      // button for a rail the server has already refused.
+      final broken = railRow(
+        provider: 'chargily',
+        currency: 'DZD',
+        available: false,
+        unavailableReason: 'provider_configuration_invalid',
+        settlementMinor: 5625,
+        settlementExponent: 0,
+        supportsGuest: false,
+      );
+      await pumpCheckout(
+        tester,
+        backend: backendWith([_stripeRow, broken]),
+        order: orderFixture(providers: [_stripeRow, broken]),
+      );
+
+      await tester.tap(find.text('Chargily'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('with Chargily'), findsNothing);
+      expect(find.text('Pay €37.50 with Stripe'), findsOneWidget);
+    });
+
     testWidgets('Stripe selected pays euros, and says which rail', (
       tester,
     ) async {

@@ -345,6 +345,27 @@ This Claude owns these.
 
 Django **never stores binary bytes**. All photos/docs reference `MediaObject(bucket, object_key)`.
 
+**Buckets are not all owned by the same credential.** `apps.core.storage`
+addresses object storage by *logical class*, and each class names both its
+bucket and the key that owns it:
+
+| Class | Bucket setting | Credential |
+|---|---|---|
+| `media` / `parcel` | `S3_BUCKET_PARCEL` | `S3_*` — Django's own |
+| `proof` | `S3_BUCKET_PROOF` | `S3_*` |
+| `dispute` | `S3_BUCKET_DISPUTE` | `S3_*` |
+| `kyc` | `S3_BUCKET_KYC` | `KYC_S3_*` — the Go KYC service's |
+
+Identity evidence lives in its own bucket so its access policy can be tightened
+independently of marketplace media, and on the deployed environment only the
+KYC service's key is granted there. This is easy to get wrong invisibly:
+`generate_presigned_url` is a local HMAC that never contacts the store, so it
+signs a perfectly well-formed URL with a credential that has no grant — and the
+denial only appears later, in the browser, as a file that will not load. Use
+`storage_for(<class>)`, and `ObjectStore.readable(key)` when a page is about to
+embed or link an object; a signed URL is not evidence that the object can be
+fetched. `manage.py check_object_storage` probes each class with its own key.
+
 ---
 
 ## 12. Go services (`services/`)
