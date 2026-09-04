@@ -304,6 +304,23 @@ class StripeGateway:
             "line_items[0][price_data][unit_amount]": request.amount_minor,
             "line_items[0][price_data][product_data][name]": request.description,
             "payment_intent_data[description]": request.description,
+            # Adaptive Pricing off, explicitly, on every session.
+            #
+            # It is a Stripe *Dashboard* setting, and with it on Stripe's hosted
+            # page offers the payer a "Choose currency" control — on this
+            # corridor, DZD beside the EUR price — converted at Stripe's own
+            # rate with a 2-4% fee it charges the customer. Settlement stays
+            # EUR, so no ledger or canonical amount is at risk. What is at risk
+            # is the product rule: DZD is a Chargily/manual settlement
+            # representation at a rate this server controls and snapshots onto
+            # the attempt, and a Stripe-set rate is none of those things. It
+            # also puts two very different dinar prices for one obligation in
+            # front of the same sender.
+            #
+            # Asserted per session rather than left to the Dashboard, because a
+            # product invariant should not depend on a toggle in someone
+            # else's console.
+            "adaptive_pricing[enabled]": "false",
         }
         if request.customer_email:
             data["customer_email"] = request.customer_email

@@ -130,6 +130,67 @@ class SettlementCurrencyIsTheRailsTests(TestCase):
             gateway.create_checkout(request)
         assert caught.exception.provider_code == "unsupported_currency"
 
+    def test_stripe_sessions_switch_off_adaptive_pricing(self):
+        """The literal cause of "Stripe is showing an option to pay in DZD".
+
+        Adaptive Pricing is a Stripe *Dashboard* setting. With it on, Stripe's
+        hosted page shows the payer a "Choose currency" control — on this
+        corridor, DZD beside the EUR price — converted at Stripe's own rate
+        with a 2-4% fee Stripe charges the customer. Settlement stays EUR, so
+        nothing in the ledger moves; what moves is the product rule, because
+        DZD is supposed to be a settlement representation at a rate this server
+        controls and snapshots onto the attempt.
+
+        Asserted per session rather than left to the Dashboard: a product
+        invariant should not depend on a toggle in someone else's console.
+        """
+
+        captured = {}
+
+        class _Response:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {
+                    "id": "cs_test_adaptive",
+                    "url": "https://checkout.stripe.invalid/cs_test_adaptive",
+                    "status": "open",
+                }
+
+        def _capture(method, url, **kwargs):
+            captured["data"] = kwargs.get("data", "")
+            return _Response()
+
+        session = mock.Mock()
+        session.request.side_effect = _capture
+        gateway = StripeGateway(
+            secret_key="sk_test_x", webhook_secret="whsec_x", session=session
+        )
+        from apps.finance.providers import CheckoutRequest
+
+        gateway.create_checkout(
+            CheckoutRequest(
+                reference="r",
+                amount_minor=300,
+                currency="EUR",
+                amount_exponent=2,
+                idempotency_key="k",
+                success_url="https://x.invalid/s",
+                failure_url="https://x.invalid/f",
+                webhook_url="https://x.invalid/w",
+                description="ShipTrip posting deposit",
+            )
+        )
+
+        body = captured["data"]
+        assert "adaptive_pricing" in body
+        assert "enabled" in body
+        # Form-encoded, so the pair arrives as adaptive_pricing[enabled]=false.
+        assert "false" in body
+        # And the price itself is still stated in euros.
+        assert "currency" in body and "eur" in body
+
     def test_chargily_refuses_a_euro_charge_outright(self):
         from apps.finance.providers import CheckoutRequest
 
