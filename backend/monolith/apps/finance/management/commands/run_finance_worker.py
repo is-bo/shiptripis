@@ -14,6 +14,7 @@ from django.core.management.base import BaseCommand
 
 from apps.finance.jobs import requeue_stuck_jobs, run_due_jobs
 from apps.notifications.outbox import dispatch_due_messages
+from apps.notifications.push import consume_fcm_results
 
 
 class Command(BaseCommand):
@@ -51,10 +52,12 @@ class Command(BaseCommand):
                 # never hung -- and the one message it protects goes to a
                 # recipient with no account and no way to ask again.
                 dispatched = dispatch_due_messages(limit=options["limit"])
-                if report.claimed or dispatched:
+                push_results = consume_fcm_results(limit=options["limit"])
+                if report.claimed or dispatched or push_results:
                     self.stdout.write(
                         f"claimed={report.claimed} succeeded={report.succeeded} "
-                        f"failed={report.failed} messages={dispatched}"
+                        f"failed={report.failed} messages={dispatched} "
+                        f"push_results={push_results}"
                     )
             except Exception as exc:  # noqa: BLE001 - the loop must survive
                 self.stderr.write(f"finance worker iteration failed: {exc!r}")

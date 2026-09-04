@@ -7,12 +7,8 @@
 /// produced from the channel and the payload, not scraped from a server
 /// sentence — which is also what makes the inbox translatable.
 ///
-/// A known gap, recorded honestly rather than papered over: handover, dispute
-/// and rating state changes currently publish **no** inbox rows. Those domains
-/// reach the user by email and by the app re-reading state on resume. The
-/// bell is therefore not a complete activity feed today, and the Deliveries
-/// tab — not the bell — remains the place a user finds out that a delivery
-/// needs them.
+/// Push and WebSocket delivery mirror this same row; neither is a second
+/// notification database.
 library;
 
 import 'json.dart';
@@ -31,6 +27,18 @@ enum NotificationChannel {
   paymentRefunded,
   paymentFailed,
   chatMessage,
+  tripCreated,
+  tripUpdated,
+  tripCancelled,
+  handoverConfirmed,
+  deliveryCodeAvailable,
+  deliveryConfirmed,
+  kycStatusChanged,
+  flightProofStatusChanged,
+  dealCancelled,
+  disputeOpened,
+  disputeResolved,
+  payoutStatusChanged,
   unknown;
 
   static NotificationChannel parse(String raw) => switch (raw) {
@@ -46,6 +54,18 @@ enum NotificationChannel {
     'payment.refunded' => paymentRefunded,
     'payment.failed' => paymentFailed,
     'chat.message.new' => chatMessage,
+    'trip.created' => tripCreated,
+    'trip.updated' => tripUpdated,
+    'trip.cancelled' => tripCancelled,
+    'handover.confirmed' => handoverConfirmed,
+    'handover.delivery_code_available' => deliveryCodeAvailable,
+    'handover.delivery_confirmed' => deliveryConfirmed,
+    'kyc.status_changed' => kycStatusChanged,
+    'flight_proof.status_changed' => flightProofStatusChanged,
+    'deal.cancelled' => dealCancelled,
+    'dispute.opened' => disputeOpened,
+    'dispute.resolved' => disputeResolved,
+    'payout.status_changed' => payoutStatusChanged,
     _ => unknown,
   };
 }
@@ -77,6 +97,20 @@ class OpenChat extends NotificationDestination {
 
 class OpenPayments extends NotificationDestination {
   const OpenPayments();
+}
+
+class OpenJourney extends NotificationDestination {
+  const OpenJourney(this.journeyId);
+  final int journeyId;
+}
+
+class OpenDispute extends NotificationDestination {
+  const OpenDispute(this.disputeId);
+  final int disputeId;
+}
+
+class OpenKyc extends NotificationDestination {
+  const OpenKyc();
 }
 
 class AppNotification {
@@ -126,6 +160,9 @@ class AppNotification {
   int? get dealId => readInt(payload['deal_id']);
   int? get parcelId => readInt(payload['parcel_id']);
   int? get offerId => readInt(payload['offer_id']);
+  int? get journeyId =>
+      readInt(payload['journey_id']) ?? readInt(payload['trip_id']);
+  int? get disputeId => readInt(payload['dispute_id']);
 
   /// Resolved from the channel and the payload ids only.
   ///
@@ -156,11 +193,33 @@ class AppNotification {
       _ => const OpenPayments(),
     },
     NotificationChannel.paymentRefunded => const OpenPayments(),
+    NotificationChannel.payoutStatusChanged => const OpenPayments(),
     NotificationChannel.parcelCreated ||
     NotificationChannel.parcelCancelled => switch (parcelId) {
       final int id => OpenRequest(id),
       _ => null,
     },
+    NotificationChannel.tripCreated ||
+    NotificationChannel.tripUpdated ||
+    NotificationChannel.tripCancelled ||
+    NotificationChannel.flightProofStatusChanged => switch (journeyId) {
+      final int id => OpenJourney(id),
+      _ => null,
+    },
+    NotificationChannel.handoverConfirmed ||
+    NotificationChannel.deliveryCodeAvailable ||
+    NotificationChannel.deliveryConfirmed ||
+    NotificationChannel.dealCancelled => switch (dealId) {
+      final int id => OpenDeal(id),
+      _ => null,
+    },
+    NotificationChannel.disputeOpened ||
+    NotificationChannel.disputeResolved => switch ((disputeId, dealId)) {
+      (final int id, _) => OpenDispute(id),
+      (_, final int id) => OpenDeal(id),
+      _ => null,
+    },
+    NotificationChannel.kycStatusChanged => const OpenKyc(),
     NotificationChannel.unknown => null,
   };
 }

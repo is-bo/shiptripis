@@ -252,6 +252,25 @@ PROTECTION_ENDING_REMINDER_SECONDS = env.int(
 # --- Redis ---
 REDIS_URL = env.str("REDIS_URL", default="redis://redis:6379/0")
 
+# --- Firebase Cloud Messaging ----------------------------------------------
+# Django resolves recipients and writes localized payloads to Redis; the Go
+# notification service owns Firebase Admin HTTP. Credentials never enter a
+# Django response or a mobile build. Push remains dark unless explicitly
+# enabled with complete server configuration.
+FCM_ENABLED = env.bool("FCM_ENABLED", default=False)
+FCM_PROJECT_ID = env.str("FCM_PROJECT_ID", default="")
+FCM_CREDENTIALS_PATH = env.str("FCM_CREDENTIALS_PATH", default="")
+FCM_STREAM = env.str("FCM_STREAM", default="notif:fcm")
+FCM_RESULTS_STREAM = env.str("FCM_RESULTS_STREAM", default="notif:fcm:results")
+FCM_CONSUMER_GROUP = env.str("FCM_CONSUMER_GROUP", default="notif-fcm-workers")
+FCM_CONSUMER_NAME = env.str("FCM_CONSUMER_NAME", default="notif-fcm-1")
+FCM_RESULTS_CONSUMER_GROUP = env.str(
+    "FCM_RESULTS_CONSUMER_GROUP", default="notif-fcm-results-django"
+)
+FCM_RESULTS_CONSUMER_NAME = env.str(
+    "FCM_RESULTS_CONSUMER_NAME", default="notif-fcm-results-django-1"
+)
+
 # --- Route/location provider -------------------------------------------------
 # The domain depends only on apps.routing.providers.RouteProvider. Production
 # deliberately has no synthetic fallback provider: missing configuration is

@@ -3,7 +3,7 @@
 Centralized so Django publishers and Go consumers share one vocabulary.
 Format: `<domain>.<event>` — lowercased dotted, no colons (colons are
 reserved for Redis key namespaces like `presence:<uid>` and
-`delivered:<event_id>`).
+`delivered:<event_id>:<user_id>`).
 """
 
 from __future__ import annotations
@@ -35,9 +35,18 @@ PAYMENT_FAILED = "payment.failed"
 # verification (handover)
 HANDOVER_CONFIRMED = "handover.confirmed"
 HANDOVER_CODE_ISSUED = "handover.code_issued"
+HANDOVER_DELIVERY_CODE_AVAILABLE = "handover.delivery_code_available"
+HANDOVER_DELIVERY_CONFIRMED = "handover.delivery_confirmed"
 
 # kyc (Go owns the API, Django reflects status updates)
 KYC_STATUS_CHANGED = "kyc.status_changed"
+FLIGHT_PROOF_STATUS_CHANGED = "flight_proof.status_changed"
+
+# funded-delivery lifecycle
+DEAL_CANCELLED = "deal.cancelled"
+DISPUTE_OPENED = "dispute.opened"
+DISPUTE_RESOLVED = "dispute.resolved"
+PAYOUT_STATUS_CHANGED = "payout.status_changed"
 
 # chat (Django owns persistence; Go chat-service relays this to live sockets)
 CHAT_MESSAGE_NEW = "chat.message.new"

@@ -383,6 +383,14 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
             "reason": submission.rejection_reason,
         },
     )
+    from apps.core.channels import KYC_STATUS_CHANGED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        KYC_STATUS_CHANGED,
+        {"submission_id": submission.pk, "status": submission.status},
+        targets=[submission.user_id],
+    )
     return submission
 
 
@@ -445,5 +453,17 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
             "reason": proof.rejection_reason,
             "journey_reference": f"J-{proof.leg.journey_id}",
         },
+    )
+    from apps.core.channels import FLIGHT_PROOF_STATUS_CHANGED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        FLIGHT_PROOF_STATUS_CHANGED,
+        {
+            "proof_id": proof.pk,
+            "journey_id": proof.leg.journey_id,
+            "status": proof.status,
+        },
+        targets=[traveler.pk],
     )
     return proof

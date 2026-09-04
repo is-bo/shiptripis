@@ -58,14 +58,16 @@ type stubReceipts struct {
 	mu       sync.Mutex
 	called   atomic.Int32
 	eventIDs []string
+	userIDs  []int64
 	err      error
 }
 
-func (s *stubReceipts) MarkDelivered(_ context.Context, eventID string) error {
+func (s *stubReceipts) MarkDelivered(_ context.Context, eventID string, userID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.called.Add(1)
 	s.eventIDs = append(s.eventIDs, eventID)
+	s.userIDs = append(s.userIDs, userID)
 	return s.err
 }
 
@@ -204,6 +206,9 @@ func TestDispatch_RoutesRawPayloadToTargets(t *testing.T) {
 	if ids := receipts.eventIDsCopy(); len(ids) != 1 || ids[0] != "evt-1" {
 		t.Errorf("marked %v, want [evt-1]", ids)
 	}
+	if len(receipts.userIDs) != 1 || receipts.userIDs[0] != 42 {
+		t.Errorf("marked users %v, want [42]", receipts.userIDs)
+	}
 }
 
 func TestDispatch_FansToEveryTargetSkippingZero(t *testing.T) {
@@ -228,8 +233,8 @@ func TestDispatch_FansToEveryTargetSkippingZero(t *testing.T) {
 	if !seen[1] || !seen[2] || seen[0] {
 		t.Errorf("targeted %v, want {1,2} and not 0", seen)
 	}
-	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 1 }) {
-		t.Errorf("MarkDelivered called %d times, want 1", receipts.called.Load())
+	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 2 }) {
+		t.Errorf("MarkDelivered called %d times, want 2 (one per online recipient)", receipts.called.Load())
 	}
 }
 
@@ -308,7 +313,7 @@ func TestScheduleReceipt_DropsWhenPoolSaturated(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		d.scheduleReceipt("evt-saturated", 1) // must return immediately (drop)
+		d.scheduleReceipt("evt-saturated", 42, 1) // must return immediately (drop)
 		close(done)
 	}()
 	select {
@@ -412,7 +417,7 @@ func TestDBReceiptStore_SetEXRetrySucceedsSecondTry(t *testing.T) {
 	ex := &recordingExecer{}
 	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: m.g}
 
-	if err := s.MarkDelivered(context.Background(), "evt-retry"); err != nil {
+	if err := s.MarkDelivered(context.Background(), "evt-retry", 42); err != nil {
 		t.Fatalf("MarkDelivered returned %v, want nil", err)
 	}
 	if got := exp.attempts.Load(); got != 2 {
@@ -440,7 +445,7 @@ func TestDBReceiptStore_SetEXBothAttemptsFailButUpdateStillRuns(t *testing.T) {
 	// MarkDelivered returns the UPDATE result, not the SetEX failure — a
 	// missing delivered key risks a duplicate FCM but the receipt row is
 	// still authoritative, so we proceed to the UPDATE and return its error.
-	if err := s.MarkDelivered(context.Background(), "evt-both-fail"); err != nil {
+	if err := s.MarkDelivered(context.Background(), "evt-both-fail", 42); err != nil {
 		t.Fatalf("MarkDelivered returned %v, want nil (UPDATE succeeded)", err)
 	}
 	if got := exp.attempts.Load(); got != 2 {
@@ -466,7 +471,7 @@ func TestDBReceiptStore_CtxCancelledDuringRetryBackoffSkipsUpdate(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled → the retry backoff select takes ctx.Done()
 
-	if err := s.MarkDelivered(ctx, "evt-cancel"); !errors.Is(err, context.Canceled) {
+	if err := s.MarkDelivered(ctx, "evt-cancel", 42); !errors.Is(err, context.Canceled) {
 		t.Fatalf("MarkDelivered err = %v, want context.Canceled", err)
 	}
 	if got := exp.attempts.Load(); got != 1 {

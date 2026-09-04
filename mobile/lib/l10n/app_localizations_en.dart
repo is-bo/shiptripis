@@ -3767,4 +3767,56 @@ class LEn extends L {
 
   @override
   String get formStepLockedUntilValid => 'Finish this step first.';
+
+  @override
+  String get pushPermissionHeading => 'On this phone';
+
+  @override
+  String get pushPermissionBody =>
+      'Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.';
+
+  @override
+  String get pushPermissionEnabled => 'Notifications are enabled.';
+
+  @override
+  String get pushPermissionDenied =>
+      'Notifications are off at system level. You can enable them in Settings.';
+
+  @override
+  String get pushPermissionUnavailable =>
+      'Push is not configured in this build. In-app notifications still work.';
+
+  @override
+  String get pushEnableAction => 'Enable notifications';
+
+  @override
+  String get pushOpenSettingsAction => 'Open notification settings';
+
+  @override
+  String get pushEssentialTitle => 'Essential updates';
+
+  @override
+  String get pushEssentialBody =>
+      'Payment, delivery, dispute, verification and account-security updates stay on.';
+
+  @override
+  String get pushMessagesTitle => 'Messages';
+
+  @override
+  String get pushMessagesBody => 'New chat activity.';
+
+  @override
+  String get pushMarketplaceTitle => 'Marketplace activity';
+
+  @override
+  String get pushMarketplaceBody => 'Offers, matches, journeys and requests.';
+
+  @override
+  String get notificationJourney => 'Journey update';
+
+  @override
+  String get notificationAccount => 'Verification update';
+
+  @override
+  String get notificationDispute => 'Dispute update';
 }

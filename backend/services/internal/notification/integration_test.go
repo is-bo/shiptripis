@@ -7,8 +7,8 @@
 // twice (once over WebSocket, once over FCM). That guarantee spans two
 // components which only meet through Redis:
 //
-//	dispatcher (pub/sub -> WS send -> SET delivered:<event_id>)
-//	consumer   (XReadGroup -> wait grace -> EXISTS delivered:<event_id>)
+//	dispatcher (pub/sub -> WS send -> SET delivered:<event_id>:<user_id>)
+//	consumer   (XReadGroup -> wait grace -> EXISTS delivered:<event_id>:<user_id>)
 //
 // Neither half can prove it alone. dispatcher_test.go stubs the receipt
 // store, so it never writes the key the consumer reads; fcm_firebase_test.go
@@ -95,7 +95,7 @@ func itRedis(t *testing.T) (*redisbus.Client, *redis.Client) {
 // itEventID namespaces an event id per test *and* per run.
 //
 // This is load-bearing, not cosmetic. The consumer skips an event whose
-// `delivered:<event_id>` key exists, and that key lives for DeliveredTTL
+// a per-user delivered key exists, and that key lives for DeliveredTTL
 // (60s). A fixed id would make the second run of a test within a minute
 // skip the push it is asserting on — a test that passes for the wrong
 // reason, or hangs. itCleanupKeys removes the markers too.
@@ -111,7 +111,7 @@ func itStream(t *testing.T, raw *redis.Client) string {
 	stream := fmt.Sprintf("test:notif:fcm:%s", t.Name())
 	del := func() {
 		ctx := context.Background()
-		raw.Del(ctx, stream)
+		raw.Del(ctx, stream, stream+":results")
 		if keys, err := raw.Keys(ctx, "delivered:it-"+t.Name()+"-*").Result(); err == nil && len(keys) > 0 {
 			raw.Del(ctx, keys...)
 		}
@@ -266,7 +266,7 @@ func itDial(t *testing.T, srv *httptest.Server, userID int64) *websocket.Conn {
 }
 
 // itReceipts stands in for Postgres while performing the half of the receipt
-// that G1 actually depends on: writing delivered:<event_id> to Redis. That
+// that G1 actually depends on: writing a per-user delivered key to Redis. That
 // key is what the FCM consumer reads to suppress a duplicate push, so it is
 // written for real here; the core_published_event UPDATE is recorded only.
 type itReceipts struct {
@@ -275,8 +275,8 @@ type itReceipts struct {
 	rdb *redisbus.Client
 }
 
-func (r *itReceipts) MarkDelivered(ctx context.Context, eventID string) error {
-	if err := r.rdb.SetEX(ctx, "delivered:"+eventID, "1", DeliveredTTL); err != nil {
+func (r *itReceipts) MarkDelivered(ctx context.Context, eventID string, userID int64) error {
+	if err := r.rdb.SetEX(ctx, fmt.Sprintf("delivered:%s:%d", eventID, userID), "1", DeliveredTTL); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -366,14 +366,17 @@ type itSender struct {
 	fail bool
 }
 
-func (s *itSender) Send(_ context.Context, p FCMPayload) error {
+func (s *itSender) Send(_ context.Context, p FCMPayload) (SendResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.fail {
-		return fmt.Errorf("simulated fcm outage for %s", p.EventID)
+		return SendResult{}, fmt.Errorf("simulated fcm outage for %s", p.EventID)
 	}
 	s.sent = append(s.sent, p)
-	return nil
+	return SendResult{
+		SuccessfulDeviceIDs:         append([]int64(nil), p.DeviceIDs...),
+		SuccessfulTokenFingerprints: append([]string(nil), p.TokenFingerprints...),
+	}, nil
 }
 
 func (s *itSender) setFail(v bool) {
@@ -425,10 +428,11 @@ func itRunConsumer(t *testing.T, c *Consumer, withSweep bool) func() {
 // depends on the grace window still has room to write the marker inside it.
 func itNewConsumer(rdb *redisbus.Client, stream string, sender FCMSender) *Consumer {
 	c := NewConsumer(rdb, ConsumerConfig{
-		Stream:        stream,
-		ConsumerGroup: "it-workers",
-		ConsumerName:  "it-1",
-		Sender:        sender,
+		Stream:         stream,
+		ConsumerGroup:  "it-workers",
+		ConsumerName:   "it-1",
+		FeedbackStream: stream + ":results",
+		Sender:         sender,
 	}, discardLogger())
 	c.deliverGrace = 300 * time.Millisecond
 	return c
@@ -442,14 +446,28 @@ func itFCMEntry(t *testing.T, eventID string, userID int64, tokens []string) map
 		EventID: eventID,
 		UserID:  userID,
 		Tokens:  tokens,
-		Title:   "New offer",
-		Body:    "A traveler made you an offer",
-		Data:    map[string]string{"match_id": "77"},
+		TokenFingerprints: func() []string {
+			fingerprints := make([]string, len(tokens))
+			for i := range tokens {
+				fingerprints[i] = fmt.Sprintf("fingerprint-%d", i+1)
+			}
+			return fingerprints
+		}(),
+		DeviceIDs: func() []int64 {
+			ids := make([]int64, len(tokens))
+			for i := range tokens {
+				ids[i] = int64(i + 1)
+			}
+			return ids
+		}(),
+		Title: "New offer",
+		Body:  "A traveler made you an offer",
+		Data:  map[string]string{"match_id": "77"},
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	return map[string]any{"event_id": eventID, "payload": string(payload)}
+	return map[string]any{"event_id": eventID, "user_id": userID, "payload": string(payload)}
 }
 
 // ── tests ────────────────────────────────────────────────────────────────────
@@ -458,7 +476,7 @@ func itFCMEntry(t *testing.T, eventID string, userID int64, tokens []string) map
 // the reason this file exists.
 //
 // The full loop runs for real: Django-shaped publish -> dispatcher -> live WS
-// socket -> delivered:<event_id> in Redis, while the FCM consumer independently
+// socket -> per-user delivered key in Redis, while the FCM consumer independently
 // reads the same event from the stream, waits out its grace period, sees the
 // marker and declines to push. If this breaks, every notification to an online
 // user arrives twice.
@@ -520,7 +538,7 @@ func TestG1WSDeliverySuppressesFCMPush(t *testing.T) {
 }
 
 // TestG1FCMPushesWhenNoWSSocket is the other half of the guarantee: when the
-// user has no live socket, nothing writes delivered:<event_id> and the push
+// user has no live socket, nothing writes a per-user delivered key and the push
 // MUST happen. A test that only asserted suppression would pass against a
 // consumer that never pushes at all.
 func TestG1FCMPushesWhenNoWSSocket(t *testing.T) {

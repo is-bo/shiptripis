@@ -105,10 +105,14 @@ class AuthRepository {
     final refresh = await _tokens.readRefresh();
     if (refresh != null) {
       try {
-        await _api.postVoid('/api/auth/sign-out', body: {'refresh': refresh});
-      } on ApiException {
-        // Already expired, already blacklisted, or unreachable. None of these
-        // should prevent the local session from ending.
+        final installationId = await _tokens.readOrCreateInstallationId();
+        await _api.postVoid(
+          '/api/auth/sign-out',
+          body: {'refresh': refresh, 'installation_id': installationId},
+        );
+      } on Object {
+        // Push cleanup is best-effort. An expired session, unreachable API,
+        // or unavailable keystore must not prevent local sign-out.
       }
     }
     await _tokens.clear();

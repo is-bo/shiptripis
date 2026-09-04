@@ -17,7 +17,7 @@ from django.contrib import admin
 
 from apps.core.admin_display import TONE_MUTE, flag, status
 
-from .models import Notification, OutboundMessage
+from .models import Notification, NotificationPreference, OutboundMessage, PushDevice
 
 
 @admin.register(Notification)
@@ -28,6 +28,80 @@ class NotificationAdmin(admin.ModelAdmin):
     readonly_fields = ("recipient", "channel", "event_id", "payload", "created_at")
     list_select_related = ("recipient",)
     ordering = ("-created_at",)
+
+
+@admin.register(PushDevice)
+class PushDeviceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "platform",
+        "active",
+        "fingerprint_short",
+        "app_version",
+        "last_seen_at",
+        "last_success_at",
+        "last_failure_at",
+    )
+    list_filter = ("platform", "active", "provider")
+    search_fields = (
+        "user__email",
+        "installation_id",
+        "token_fingerprint",
+    )
+    readonly_fields = (
+        "user",
+        "provider",
+        "platform",
+        "installation_id",
+        "token_fingerprint",
+        "app_version",
+        "active",
+        "last_seen_at",
+        "last_success_at",
+        "last_failure_at",
+        "created_at",
+        "updated_at",
+    )
+    exclude = ("token",)
+    list_select_related = ("user",)
+    ordering = ("-updated_at",)
+
+    @admin.display(description="Token fingerprint", ordering="token_fingerprint")
+    def fingerprint_short(self, obj):
+        return obj.token_fingerprint[:12]
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
+@admin.register(NotificationPreference)
+class NotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ("user", "messages_enabled", "marketplace_enabled", "updated_at")
+    search_fields = ("user__email",)
+    readonly_fields = (
+        "user",
+        "messages_enabled",
+        "marketplace_enabled",
+        "created_at",
+        "updated_at",
+    )
+    list_select_related = ("user",)
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None):  # noqa: ARG002
+        return False
 
 
 @admin.register(OutboundMessage)

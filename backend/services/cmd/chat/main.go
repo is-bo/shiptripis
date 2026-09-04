@@ -6,7 +6,7 @@
 //   - Holds Flutter client WS sockets keyed by user_id; routes generically
 //     by the canonical targets:[uid,...] field every publish_after_commit
 //     envelope carries (same path as the notification service).
-//   - Writes `delivered:<event_id>` 60s + updates `core_published_event`
+//   - Writes `delivered:<event_id>:<user_id>` 60s + updates `core_published_event`
 //     so the G6b detection-only outbox sees the receipt.
 //
 // Not implemented in V1 (deferred until schema):

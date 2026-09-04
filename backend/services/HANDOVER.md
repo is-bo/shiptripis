@@ -1,6 +1,6 @@
 # Go services — handover
 
-Last updated: 2026-05-30. You are **Claude B** (Go side). Pair with Claude A
+Last updated: 2026-09-04. You are **Claude B** (Go side). Pair with Claude A
 (Django + Flutter). Before touching anything, read `../../CLAUDE.md` end to
 end (especially §0a open notes, §2 guardrails G1–G6b, §3 pool budget) and
 `../../ARCHITECTURE.md` §3–§7. This file is the Go-specific quickstart on top
@@ -31,7 +31,7 @@ backend/services/
 ├── cmd/                # service entrypoints (main.go = wiring only)
 │   ├── chat/           # ✅ WS relay for chat.message.new
 │   ├── kyc/            # ✅ multipart upload + S3 + real gRPC client
-│   └── notification/   # ✅ WS hub + 16-channel pub/sub + FCM (gated)
+│   └── notification/   # ✅ WS hub + 24-channel pub/sub + real FCM (gated)
 ├── internal/           # service-private code (one pkg per service)
 │   ├── chat/           # hub, dispatcher (+test), handler  — stateless relay
 │   ├── kyc/            # handler, client iface, grpc_client, kycpb/ (stubs)
@@ -53,11 +53,11 @@ backend/services/
 
 ## What's live (current, not the 2026-05-15 version)
 
-### `cmd/notification` — done, all 16 channels
+### `cmd/notification` — done, all 24 channels
 
 - WS upgrade → registers `*wsproto.Conn` in the per-pod `Hub` keyed by
   `user_id` (from the JWT bearer).
-- Subscribes to **all 16 Django channels** (`dispatcher.go:subscribeChannels`,
+- Subscribes to **all 24 Django channels** (`dispatcher.go:subscribeChannels`,
   mirrors `monolith/apps/core/channels.py`). Routing is **generic**: every
   envelope carries `targets:[uid,...]` (attached by
   `redis_bus.publish_after_commit`); `dispatch` unmarshals only
@@ -65,14 +65,14 @@ backend/services/
   target's local sockets. Payload semantics (match_id, offer_id, code) are
   mobile's concern — Go never parses them. Per-channel structs were deleted;
   do not reintroduce them.
-- G1 + G6b receipt path: writes `delivered:<event_id>` (60s TTL) + back-fills
+- G1 + G6b receipt path: writes `delivered:<event_id>:<user_id>` (60s TTL) + back-fills
   `core_published_event.delivered_at`, through a bounded receipt pool.
 - **Bounded dispatch worker pool** (`dispatchSem`, cap 128) feeds
   **bounded receipt pool** (`receiptSem`, cap 64). Both drop-on-saturation
   with `event_id` logged + metrics counters. `Run` drains
   `dispatchWG` *before* `receiptWG` (a late dispatch can still enqueue a
   receipt) — see the `defer` ordering, don't swap it.
-- **SetEX retry**: one 100 ms retry on the `delivered:<event_id>` write before
+- **SetEX retry**: one 100 ms retry on the `delivered:<event_id>:<user_id>` write before
   giving up (a Redis blip in the FCM 2 s grace window would otherwise cause a
   duplicate push). Metered `*_delivered_setex_failures_total` / `_final_total`.
 - Presence (`presence:<user_id>`, 15 s TTL) refreshed by a 5 s ticker per
@@ -80,11 +80,14 @@ backend/services/
   refresh on upgrade **retries once** after 50 ms; failure is metered but does
   **not** fail the upgrade (FCM fallback covers the gap; aborting would make a
   transient Redis issue more user-visible than the duplicate it prevents).
-- **FCM consumer scaffolded, gated behind `FCM_ENABLED` (default false).**
-  `LogOnlySender` stub; `FCMSender` is the prod swap point. Consumer flow
-  (`XReadGroup` → 2 s wait → check `delivered:<event_id>` → send/skip → `XAck`)
-  + `XAUTOCLAIM` sweeper are wired and shutdown-drained. Blocked on Islam's
-  `fcm_token` schema + a Django publisher to the `notif:fcm` stream.
+- **FCM consumer is real and gated behind `FCM_ENABLED` (default false).**
+  Django writes localized, per-user multicast entries to `notif:fcm`; the
+  Firebase Admin sender runs `XREADGROUP` → 2 s grace → per-user delivered-key
+  check → multicast send/skip → feedback → `XACK`. `XAUTOCLAIM` recovers stale
+  pending entries. Permanent invalid-token results go through the bounded
+  `notif:fcm:results` stream for Django-owned device cleanup; transient total
+  failures remain pending for retry. A 45 s TTL worker heartbeat backs admin
+  health instead of inferring liveness from configuration.
 
 ### `cmd/chat` — done, stateless relay
 
@@ -103,9 +106,9 @@ backend/services/
   (with `dbReceiptStore` as the production impl) so unit tests inject stubs (no
   Postgres/Redis needed). **This is the pattern to copy** — notification now has
   the same seams.
-- No presence loop (notification owns `presence:<uid>`). A user with a chat WS
-  but no notification WS gets a duplicate FCM for chat events — accepted V1
-  tradeoff.
+- No presence loop (notification owns `presence:<uid>`). Chat FCM still passes
+  through the same durable fallback; the Flutter client suppresses foreground
+  OS presentation and reconciles the authoritative chat/inbox state.
 - Tests cover targets routing, multi-target fan-out (with uid 0 skipped),
   no-local-sockets skip, bad-payload/empty-targets drop, receipt-error logging,
   unknown-channel dispatch.
@@ -291,13 +294,13 @@ consistent.
     `XAUTOCLAIM` retry after a send failure. This is the guarantee that an
     SMTP blip doesn't lose someone's OTP, and it only exists in real Redis.
   - `internal/chat/integration_test.go` — real pub/sub → JWT-authenticated WS
-    upgrade → `Hub` fan-out, plus the `delivered:<event_id>` marker that
+    upgrade → `Hub` fan-out, plus the per-user delivered marker that
     suppresses the duplicate FCM push, and the no-leak-to-untargeted-user
     rule. `dispatcher_test.go` already covers the routing *logic* with stubs;
     this covers the wiring the stubs replace.
   - `internal/notification/integration_test.go` (added 2026-07-31) — the full
     G1 anti-duplicate-push loop, which spans two components that only meet
-    through Redis: the dispatcher writes `delivered:<event_id>` after a WS
+    through Redis: the dispatcher writes `delivered:<event_id>:<user_id>` after a WS
     send, and the FCM consumer reads it after its grace period. Neither half
     can prove the guarantee alone (`dispatcher_test.go` stubs the receipt
     store so it never writes the key; `fcm_firebase_test.go` stubs the
@@ -316,7 +319,7 @@ consistent.
   - **Unique event ids per run.** The email consumer dedupes on
     `email:sent:<event_id>`, so a hardcoded id makes the *second* run a
     correct no-op skip and the test hangs waiting for a send. Same applies to
-    `delivered:<event_id>` (60s TTL) in the notification tests. Use a
+    `delivered:<event_id>:<user_id>` (60s TTL) in the notification tests. Use a
     per-run-unique id and clean the keys in `t.Cleanup`.
   - **Wait for the subscriber before publishing.** Redis pub/sub has no
     backlog; publishing before `SUBSCRIBE` lands drops the message silently.
@@ -466,10 +469,9 @@ message in MailHog; kill+restart email-service mid-flow to prove durability.
 
 | # | Item | Why we're blocked |
 |---|---|---|
-| 1 | `fcm_token` schema + Django publisher to `notif:fcm` | notification FCM fallback ships dark until then. **Real `FCMSender` is now wired** (`internal/notification/fcm_firebase.go`, firebase-admin v4) — just flip `FCM_ENABLED=true` + set `FCM_PROJECT_ID`/`FCM_CREDENTIALS_PATH` once the publisher + tokens land |
-| 2 | `email:send` stream publisher + `EmailVerificationCode` model + SMTP settings | email-service ships dark until then. Full spec above. Flip `EMAIL_ENABLED=true` + `EMAIL_SMTP_*` once it lands — no Go change needed |
-| 3 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
-| 4 | mTLS **server branch** (`runkycgrpc.py`) + cert pipeline (mkcert / cert-manager) | Go **client** side of mtls is done + tested (2026-06-08). What remains: the Django server's `grpc.ssl_server_credentials(require_client_auth=True)` branch (still a `raise SystemExit` stub) + a way to issue the shared-CA certs (cert-manager / mkcert). Shared scope — coordinate, get explicit approval. Until both land, keep `GRPC_AUTH_MODE=bearer` in dev. |
+| 1 | `email:send` stream publisher + `EmailVerificationCode` model + SMTP settings | email-service ships dark until then. Full spec above. Flip `EMAIL_ENABLED=true` + `EMAIL_SMTP_*` once it lands — no Go change needed |
+| 2 | `chat_message` / `chat_thread` schema | chat is a stateless relay today; persistence + history endpoints (sqlc dirs reserved but empty) wait on this |
+| 3 | mTLS **server branch** (`runkycgrpc.py`) + cert pipeline (mkcert / cert-manager) | Go **client** side of mtls is done + tested (2026-06-08). What remains: the Django server's `grpc.ssl_server_credentials(require_client_auth=True)` branch (still a `raise SystemExit` stub) + a way to issue the shared-CA certs (cert-manager / mkcert). Shared scope — coordinate, get explicit approval. Until both land, keep `GRPC_AUTH_MODE=bearer` in dev. |
 
 When any lands, **update this table** and the §0a handoff in `../../CLAUDE.md`
 in the same commit as the Go work that consumes it.

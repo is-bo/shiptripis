@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_deliveries">Delivery updates</string>
+    <string name="notification_channel_account">Account and verification</string>
+    <string name="notification_channel_payments">Payments and payouts</string>
+</resources>

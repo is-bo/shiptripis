@@ -6596,6 +6596,102 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Finish this step first.'**
   String get formStepLockedUntilValid;
+
+  /// No description provided for @pushPermissionHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get pushPermissionHeading;
+
+  /// No description provided for @pushPermissionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.'**
+  String get pushPermissionBody;
+
+  /// No description provided for @pushPermissionEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are enabled.'**
+  String get pushPermissionEnabled;
+
+  /// No description provided for @pushPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off at system level. You can enable them in Settings.'**
+  String get pushPermissionDenied;
+
+  /// No description provided for @pushPermissionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Push is not configured in this build. In-app notifications still work.'**
+  String get pushPermissionUnavailable;
+
+  /// No description provided for @pushEnableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable notifications'**
+  String get pushEnableAction;
+
+  /// No description provided for @pushOpenSettingsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open notification settings'**
+  String get pushOpenSettingsAction;
+
+  /// No description provided for @pushEssentialTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Essential updates'**
+  String get pushEssentialTitle;
+
+  /// No description provided for @pushEssentialBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment, delivery, dispute, verification and account-security updates stay on.'**
+  String get pushEssentialBody;
+
+  /// No description provided for @pushMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get pushMessagesTitle;
+
+  /// No description provided for @pushMessagesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'New chat activity.'**
+  String get pushMessagesBody;
+
+  /// No description provided for @pushMarketplaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Marketplace activity'**
+  String get pushMarketplaceTitle;
+
+  /// No description provided for @pushMarketplaceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Offers, matches, journeys and requests.'**
+  String get pushMarketplaceBody;
+
+  /// No description provided for @notificationJourney.
+  ///
+  /// In en, this message translates to:
+  /// **'Journey update'**
+  String get notificationJourney;
+
+  /// No description provided for @notificationAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification update'**
+  String get notificationAccount;
+
+  /// No description provided for @notificationDispute.
+  ///
+  /// In en, this message translates to:
+  /// **'Dispute update'**
+  String get notificationDispute;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

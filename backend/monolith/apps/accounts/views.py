@@ -1,3 +1,6 @@
+import logging
+from uuid import UUID
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,6 +13,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import enqueue_secret_message
+from apps.notifications.push import unregister_push_device
 
 from .google import GoogleAuthError, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
@@ -23,6 +27,8 @@ from .serializers import (
     SignUpSerializer,
     VerifyEmailSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _tokens_for_user(user: User) -> dict[str, str]:
@@ -89,6 +95,22 @@ class SignOutView(APIView):
                 {"detail": "Invalid or expired refresh token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        installation_id = request.data.get("installation_id")
+        if installation_id:
+            try:
+                unregister_push_device(
+                    user=request.user,
+                    installation_id=UUID(str(installation_id)),
+                )
+            except (TypeError, ValueError):
+                # Device cleanup metadata is best-effort and must never trap a
+                # user in an account or weaken refresh-token validation.
+                pass
+            except Exception:
+                logger.warning(
+                    "push device cleanup failed during logout user_id=%s",
+                    request.user.pk,
+                )
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 

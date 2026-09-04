@@ -126,6 +126,11 @@ Use unique controlled accounts/data and clean them only through approved product
 - [ ] Posting deposit and Deal payment: mark `requires activation` for real Stripe/Chargily; local/test provider only outside production.
 - [ ] Funded Deal reveals exact locations only to parties.
 - [ ] Chat send/history/notification pagination and WebSocket degradation/recovery.
+- [ ] Push health reports configured plus a fresh worker heartbeat; FCM stream
+      lag/pending is bounded and no token or credential appears in logs.
+- [ ] Controlled push proves inbox row -> stream -> Firebase acceptance; record
+      physical receipt separately. Keep `FCM_ENABLED=false` if the matching
+      mobile project IDs, private mounted Admin credential, or test token is absent.
 - [ ] Pickup code: only sender reveals, traveler submits, rate/attempt lockout works.
 - [ ] Delivery code: unavailable for 30 minutes, traveler never retrieves it, recipient email requires activation, valid submission confirms delivery.
 - [ ] Protection opens for 48 hours; payout remains blocked.

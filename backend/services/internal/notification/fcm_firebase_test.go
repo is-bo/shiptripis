@@ -1,8 +1,10 @@
 package notification
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,17 +71,24 @@ func (f *fakeMulticaster) SendEachForMulticast(_ context.Context, m *messaging.M
 }
 
 func newTestSender(fake *fakeMulticaster) *firebaseSender {
-	return &firebaseSender{client: fake, log: discardLogger()}
+	return &firebaseSender{
+		client:           fake,
+		log:              discardLogger(),
+		isPermanentToken: func(error) bool { return false },
+	}
 }
 
 func samplePayload() FCMPayload {
 	return FCMPayload{
-		EventID: "evt-1",
-		UserID:  42,
-		Tokens:  []string{"tokA", "tokB"},
-		Title:   "hi",
-		Body:    "there",
-		Data:    map[string]string{"route": "/chat/7"},
+		EventID:           "evt-1",
+		UserID:            42,
+		Tokens:            []string{"tokA", "tokB"},
+		DeviceIDs:         []int64{101, 102},
+		TokenFingerprints: []string{"fpA", "fpB"},
+		Title:             "hi",
+		Body:              "there",
+		AndroidChannelID:  "messages",
+		Data:              map[string]string{"route": "/chat/7"},
 	}
 }
 
@@ -91,7 +100,7 @@ func TestFirebaseSenderSend(t *testing.T) {
 		s := newTestSender(fake)
 		p := samplePayload()
 		p.Tokens = nil
-		if err := s.Send(ctx, p); err != nil {
+		if _, err := s.Send(ctx, p); err != nil {
 			t.Fatalf("Send = %v, want nil", err)
 		}
 		if fake.called != 0 {
@@ -109,8 +118,15 @@ func TestFirebaseSenderSend(t *testing.T) {
 			},
 		}}
 		s := newTestSender(fake)
-		if err := s.Send(ctx, samplePayload()); err != nil {
+		result, err := s.Send(ctx, samplePayload())
+		if err != nil {
 			t.Fatalf("Send = %v, want nil", err)
+		}
+		if len(result.SuccessfulDeviceIDs) != 2 {
+			t.Fatalf("successful devices = %v, want [101 102]", result.SuccessfulDeviceIDs)
+		}
+		if len(result.SuccessfulTokenFingerprints) != 2 || result.SuccessfulTokenFingerprints[0] != "fpA" {
+			t.Fatalf("successful fingerprints = %v, want [fpA fpB]", result.SuccessfulTokenFingerprints)
 		}
 		if fake.called != 1 {
 			t.Fatalf("multicast called %d times, want 1", fake.called)
@@ -125,9 +141,12 @@ func TestFirebaseSenderSend(t *testing.T) {
 		if fake.gotMsg.Data["route"] != "/chat/7" {
 			t.Fatalf("data = %+v, want route '/chat/7'", fake.gotMsg.Data)
 		}
+		if fake.gotMsg.Android == nil || fake.gotMsg.Android.Notification.ChannelID != "messages" {
+			t.Fatalf("android config = %+v, want messages channel", fake.gotMsg.Android)
+		}
 	})
 
-	t.Run("partial failure returns nil (no full-batch resend)", func(t *testing.T) {
+	t.Run("partial transient failure returns only its retry index", func(t *testing.T) {
 		fake := &fakeMulticaster{resp: &messaging.BatchResponse{
 			SuccessCount: 1,
 			FailureCount: 1,
@@ -137,8 +156,12 @@ func TestFirebaseSenderSend(t *testing.T) {
 			},
 		}}
 		s := newTestSender(fake)
-		if err := s.Send(ctx, samplePayload()); err != nil {
+		result, err := s.Send(ctx, samplePayload())
+		if err != nil {
 			t.Fatalf("Send = %v, want nil on partial failure", err)
+		}
+		if len(result.RetryTokenIndexes) != 1 || result.RetryTokenIndexes[0] != 1 {
+			t.Fatalf("retry indexes = %v, want [1]", result.RetryTokenIndexes)
 		}
 	})
 
@@ -152,9 +175,9 @@ func TestFirebaseSenderSend(t *testing.T) {
 			},
 		}}
 		s := newTestSender(fake)
-		err := s.Send(ctx, samplePayload())
-		if err == nil || !strings.Contains(err.Error(), "all 2 tokens failed") {
-			t.Fatalf("err = %v, want 'all 2 tokens failed'", err)
+		_, err := s.Send(ctx, samplePayload())
+		if err == nil || !strings.Contains(err.Error(), "all 2 tokens failed transiently") {
+			t.Fatalf("err = %v, want transient all-failed error", err)
 		}
 		if !strings.Contains(err.Error(), "evt-1") {
 			t.Fatalf("err = %v, want event id in message", err)
@@ -164,7 +187,7 @@ func TestFirebaseSenderSend(t *testing.T) {
 	t.Run("transport error returns error and surfaces event id", func(t *testing.T) {
 		fake := &fakeMulticaster{err: errors.New("network down")}
 		s := newTestSender(fake)
-		err := s.Send(ctx, samplePayload())
+		_, err := s.Send(ctx, samplePayload())
 		if err == nil || !strings.Contains(err.Error(), "multicast send") {
 			t.Fatalf("err = %v, want 'multicast send'", err)
 		}
@@ -175,6 +198,69 @@ func TestFirebaseSenderSend(t *testing.T) {
 			t.Fatalf("err = %v, want event id in message", err)
 		}
 	})
+
+	t.Run("permanently invalid tokens are reported and not retried", func(t *testing.T) {
+		permanent := errors.New("unregistered")
+		fake := &fakeMulticaster{resp: &messaging.BatchResponse{
+			SuccessCount: 0,
+			FailureCount: 2,
+			Responses: []*messaging.SendResponse{
+				{Success: false, Error: permanent},
+				{Success: false, Error: permanent},
+			},
+		}}
+		s := newTestSender(fake)
+		s.isPermanentToken = func(err error) bool { return errors.Is(err, permanent) }
+		result, err := s.Send(ctx, samplePayload())
+		if err != nil {
+			t.Fatalf("Send = %v, want nil for permanent failures", err)
+		}
+		if len(result.InvalidDeviceIDs) != 2 || result.InvalidDeviceIDs[0] != 101 || result.InvalidDeviceIDs[1] != 102 {
+			t.Fatalf("invalid devices = %v, want [101 102]", result.InvalidDeviceIDs)
+		}
+		if len(result.InvalidTokenFingerprints) != 2 || result.InvalidTokenFingerprints[1] != "fpB" {
+			t.Fatalf("invalid fingerprints = %v, want [fpA fpB]", result.InvalidTokenFingerprints)
+		}
+	})
+
+	t.Run("per-token failures never log registration tokens", func(t *testing.T) {
+		var logs bytes.Buffer
+		fake := &fakeMulticaster{resp: &messaging.BatchResponse{
+			SuccessCount: 1,
+			FailureCount: 1,
+			Responses: []*messaging.SendResponse{
+				{Success: true, MessageID: "m1"},
+				{Success: false, Error: errors.New("token boom")},
+			},
+		}}
+		s := newTestSender(fake)
+		s.log = slog.New(slog.NewTextHandler(&logs, nil))
+		if _, err := s.Send(ctx, samplePayload()); err != nil {
+			t.Fatalf("Send = %v, want nil", err)
+		}
+		if strings.Contains(logs.String(), "tokA") || strings.Contains(logs.String(), "tokB") {
+			t.Fatalf("logs exposed an FCM registration token: %s", logs.String())
+		}
+	})
+}
+
+func TestTransientRetryPayload(t *testing.T) {
+	payload, err := transientRetryPayload(samplePayload(), []int{1})
+	if err != nil {
+		t.Fatalf("transientRetryPayload = %v", err)
+	}
+	if len(payload.Tokens) != 1 || payload.Tokens[0] != "tokB" {
+		t.Fatalf("retry tokens = %v, want [tokB]", payload.Tokens)
+	}
+	if len(payload.DeviceIDs) != 1 || payload.DeviceIDs[0] != 102 {
+		t.Fatalf("retry device ids = %v, want [102]", payload.DeviceIDs)
+	}
+	if len(payload.TokenFingerprints) != 1 || payload.TokenFingerprints[0] != "fpB" {
+		t.Fatalf("retry fingerprints = %v, want [fpB]", payload.TokenFingerprints)
+	}
+	if _, err := transientRetryPayload(samplePayload(), []int{2}); err == nil {
+		t.Fatal("out-of-range retry index should fail")
+	}
 }
 
 // firebaseSender must satisfy the FCMSender swap point.

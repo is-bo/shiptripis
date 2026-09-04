@@ -1,6 +1,6 @@
 # ShipTrip V1 Implementation Status
 
-Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / NOT DEPLOYED — batched with the remaining 8F phases**
+Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / FCM ACTIVATION AND HARDWARE QA PENDING**
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -3927,3 +3927,53 @@ Production config + static web.
 - Railway PostGIS template/environment and migration rehearsal for scaled spatial search
 
 Agents should update this file as work progresses, but it must not become a replacement for the actual specification.
+
+## Phase 8F-D — real phone push notifications
+
+**Status:** implemented and regression-green; intentionally inactive until the
+owner supplies matching Firebase mobile/Admin configuration and completes the
+single consolidated Android build and physical-device check.
+
+- The existing Django event → Redis pub/sub → Go notification WebSocket path
+  remains authoritative. Eligible events are additionally projected after
+  commit to the existing `notif:fcm` stream with the same event ID. The Go
+  worker keeps its two-second WebSocket receipt grace period, `XREADGROUP`,
+  `XAUTOCLAIM`, bounded retries, Firebase Admin multicast, and durable Django
+  feedback path.
+- `PushDevice` models a random app installation, supports multiple devices per
+  account, enforces unique token fingerprints, rotates/rebinds tokens in place,
+  disables the current installation on best-effort logout, cascades on account
+  deletion, and has a 180-day pruning command. Raw tokens are absent from API
+  responses, admin display, audit text, and logs. Delivery feedback includes
+  the token fingerprint so a delayed invalid result cannot disable a rotated
+  token.
+- Authenticated device upsert/unregister and server-side message/marketplace
+  preference APIs are live in code. Essential lifecycle/security pushes have
+  no misleading opt-out. Display/data are localized from the authoritative
+  EN/FR/AR communication language and exclude codes, exact private locations,
+  KYC/dispute evidence, provider IDs, payment secrets, and message content.
+- Flutter initializes Firebase only from a complete public client tuple,
+  handles token refresh, login/logout reconciliation, foreground/background/
+  terminated delivery and protected taps, and keeps the Django inbox/unread
+  count authoritative. Permission is requested contextually from Profile →
+  Notifications. Android has four normal-importance channels: Messages,
+  Deliveries, Account, and Payments. The iOS-shaped code exists, but APNs,
+  Xcode capabilities, signing, and hardware verification remain owner gates.
+- Admin health distinguishes disabled, incomplete, configured, heartbeat-ready,
+  and degraded/backlogged states without exposing credentials. Railway remains
+  safely at `FCM_ENABLED=false`: no Admin credential/project configuration or
+  physical test token was available, so no deploy or Firebase E2E was attempted.
+- The future manual Android workflow accepts the four public Firebase client
+  values from repository Actions Variables and fails on a partial tuple. It was
+  edited but not triggered; no APK or AAB was built.
+
+**Verification:** focused Django push/core checks **30 passed**; full PostgreSQL
+16 regression **1263 passed / 34 skipped** (previous baseline 1248/34); Ruff,
+migration drift, and Django system check clean. Go `go test ./...` and `go vet
+./...` pass; the Windows host cannot run `-race` because CGO has no compiler,
+so the required race gate remains in Linux CI. Flutter format and
+`flutter analyze --fatal-infos` are clean and the full suite is **407 passed**
+(previous baseline 399). The notification settings UI detector reported no
+issues. Schema SQL was regenerated from a fresh migrated PostgreSQL database;
+sqlc generation remains an intentional no-op because all query directories are
+empty.

@@ -16,7 +16,7 @@ import (
 	"shiptrip/pkg/wsproto"
 )
 
-// DeliveredTTL is the lifetime of the delivered:<event_id> marker that
+// DeliveredTTL is the lifetime of the delivered:<event_id>:<user_id> marker that
 // the WS-owning pod writes once a chat message has been queued to a
 // socket. The FCM consumer reads this to decide whether to skip the push
 // fallback. 60s per CLAUDE.md §2 G1 — matches notification's value so a
@@ -75,7 +75,7 @@ type router interface {
 // delivery receipt. Production callers pass a real receiptStore backed
 // by Redis + Postgres; tests pass a recorder.
 type receiptStore interface {
-	MarkDelivered(ctx context.Context, eventID string) error
+	MarkDelivered(ctx context.Context, eventID string, userID int64) error
 }
 
 // Dispatcher consumes Redis pub/sub events, fans them to local WS
@@ -224,7 +224,11 @@ func (d *Dispatcher) dispatchChatMessageNew(channel string, raw []byte) {
 		if uid == 0 {
 			continue
 		}
-		sockets += d.hub.Send(uid, wsEnv)
+		userSockets := d.hub.Send(uid, wsEnv)
+		sockets += userSockets
+		if userSockets > 0 {
+			d.scheduleReceipt(env.EventID, uid, userSockets)
+		}
 	}
 	if sockets == 0 {
 		d.log.Debug("chat.message.new: no local recipient",
@@ -234,14 +238,13 @@ func (d *Dispatcher) dispatchChatMessageNew(channel string, raw []byte) {
 		return
 	}
 
-	d.scheduleReceipt(env.EventID, sockets)
 }
 
 // scheduleReceipt fires markDelivered through the bounded worker pool.
 // Dropping the receipt on a full pool is preferable to growing goroutines
 // without bound — G6b will flag the event next sweep and the WS fan-out
 // has already happened.
-func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
+func (d *Dispatcher) scheduleReceipt(eventID string, userID int64, sockets int) {
 	select {
 	case d.receiptSem <- struct{}{}:
 	default:
@@ -249,30 +252,30 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 			d.metrics.Counter("receipt_drops_total", 1)
 		}
 		d.log.Warn("chat dispatcher: receipt pool saturated; dropping",
-			"event_id", eventID, "sockets", sockets,
+			"event_id", eventID, "user_id", userID, "sockets", sockets,
 			"capacity", receiptConcurrency)
 		return
 	}
 	d.receiptWG.Go(func() {
 		defer func() { <-d.receiptSem }()
-		d.markDelivered(eventID, sockets)
+		d.markDelivered(eventID, userID, sockets)
 	})
 }
 
-func (d *Dispatcher) markDelivered(eventID string, sockets int) {
+func (d *Dispatcher) markDelivered(eventID string, userID int64, sockets int) {
 	ctx, cancel := context.WithTimeout(context.Background(), markDeliveredTimeout)
 	defer cancel()
-	if err := d.receipts.MarkDelivered(ctx, eventID); err != nil {
-		d.log.Warn("chat: mark delivered failed", "event_id", eventID, "err", err)
+	if err := d.receipts.MarkDelivered(ctx, eventID, userID); err != nil {
+		d.log.Warn("chat: mark delivered failed", "event_id", eventID, "user_id", userID, "err", err)
 		return
 	}
 	if d.metrics != nil {
 		d.metrics.Counter("events_delivered_total", 1)
 	}
-	d.log.Debug("chat.message.new delivered", "event_id", eventID, "sockets", sockets)
+	d.log.Debug("chat.message.new delivered", "event_id", eventID, "user_id", userID, "sockets", sockets)
 }
 
-// dbReceiptStore is the production receiptStore: SET delivered:<id> EX
+// dbReceiptStore is the production receiptStore: SET delivered:<id>:<user_id> EX
 // 60 + UPDATE core_published_event. Mirrors notification's path so the
 // G6b sweep treats either service's delivery identically.
 //
@@ -314,14 +317,14 @@ func newDBReceiptStore(rdb *redisbus.Client, pool *pgxpool.Pool, log *slog.Logge
 	return &dbReceiptStore{rdb: rdb, exec: poolExecer{pool: pool}, log: log, metrics: m}
 }
 
-func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) error {
-	key := "delivered:" + eventID
+func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string, userID int64) error {
+	key := fmt.Sprintf("delivered:%s:%d", eventID, userID)
 	if err := s.rdb.SetEX(ctx, key, "1", DeliveredTTL); err != nil {
 		if s.metrics != nil {
 			s.metrics.Counter("delivered_setex_failures_total", 1)
 		}
 		s.log.Warn("delivered key set failed (retrying)",
-			"event_id", eventID, "err", err)
+			"event_id", eventID, "user_id", userID, "err", err)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -332,7 +335,7 @@ func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) erro
 				s.metrics.Counter("delivered_setex_failures_final_total", 1)
 			}
 			s.log.Error("delivered key set failed after retry; FCM may duplicate",
-				"event_id", eventID, "err", err)
+				"event_id", eventID, "user_id", userID, "err", err)
 		}
 	}
 	err := s.exec.exec(ctx, eventID)

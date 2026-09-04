@@ -1096,5 +1096,21 @@
   "formFixBeforeContinuing": "صحّح الحقل المحدّد قبل المتابعة.",
   "formFixCountBeforeContinuing": "{count, plural, =1{صحّح حقلاً واحداً قبل المتابعة.} other{صحّح {count} حقول قبل المتابعة.}}",
   "formServerRefusedOnStep": "رفض الخادم هذا الطلب. المشكلة في هذه الخطوة، وهي موضّحة أدناه.",
-  "formStepLockedUntilValid": "أكمل هذه الخطوة أولاً."
+  "formStepLockedUntilValid": "أكمل هذه الخطوة أولاً.",
+  "pushPermissionHeading": "على هذا الهاتف",
+  "pushPermissionBody": "احصل على تحديثات في وقتها حول العروض والمدفوعات والتسليم والرسائل والتحقق. لا يطلب ShipTrip الإذن إلا عندما تختار التفعيل.",
+  "pushPermissionEnabled": "الإشعارات مفعّلة.",
+  "pushPermissionDenied": "الإشعارات متوقفة على مستوى النظام. يمكنك تفعيلها من الإعدادات.",
+  "pushPermissionUnavailable": "الإشعارات الفورية غير مضبوطة في هذا الإصدار. تظل إشعارات التطبيق متاحة.",
+  "pushEnableAction": "تفعيل الإشعارات",
+  "pushOpenSettingsAction": "فتح إعدادات الإشعارات",
+  "pushEssentialTitle": "التحديثات الأساسية",
+  "pushEssentialBody": "تبقى تحديثات الدفع والتسليم والنزاعات والتحقق وأمان الحساب مفعّلة.",
+  "pushMessagesTitle": "الرسائل",
+  "pushMessagesBody": "نشاط جديد في المحادثات.",
+  "pushMarketplaceTitle": "نشاط السوق",
+  "pushMarketplaceBody": "العروض والمطابقات والرحلات والطلبات.",
+  "notificationJourney": "تحديث الرحلة",
+  "notificationAccount": "تحديث التحقق",
+  "notificationDispute": "تحديث النزاع"
 }

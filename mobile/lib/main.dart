@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'app/app.dart';
 import 'core/format/locale_formats.dart';
+import 'core/push/push_messaging.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,5 +29,15 @@ Future<void> main() async {
   // first DateFormat call, so it is awaited rather than fired and forgotten.
   await LocaleFormats.ensureInitialized();
 
-  runApp(const ProviderScope(child: ShipTripApp()));
+  final pushMessaging = await FirebasePushMessaging.initialize();
+  if (pushMessaging.available) {
+    FirebaseMessaging.onBackgroundMessage(shipTripFirebaseBackgroundHandler);
+  }
+
+  runApp(
+    ProviderScope(
+      overrides: [pushMessagingProvider.overrideWithValue(pushMessaging)],
+      child: const ShipTripApp(),
+    ),
+  );
 }

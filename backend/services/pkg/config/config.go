@@ -346,15 +346,13 @@ func LoadKYCGRPC() (KYCGRPC, error) {
 // ── FCM (push fallback) ──────────────────────────────────────────────────────
 
 // FCM holds the notif-service push-fallback settings. CLAUDE.md §G1 path:
-// stream → wait 2s → check delivered:<event_id> → send via FCM if absent.
-//
-// Disabled by default — V1 ships without the schema (no fcm_token column
-// on accounts_user) and without the Django publisher writing to the
-// stream. The consumer is built ahead so flipping FCM_ENABLED=true once
-// both sides land is a one-knob change, not a feature build.
+// stream → wait 2s → check delivered:<event_id>:<user_id> → send via FCM
+// if absent. Disabled by default; activation additionally requires valid
+// Firebase Admin credentials and matching mobile client configuration.
 type FCM struct {
 	Enabled         bool
 	Stream          string
+	ResultsStream   string
 	ConsumerGroup   string
 	ConsumerName    string
 	ProjectID       string // Firebase project — required when Enabled.
@@ -370,6 +368,7 @@ func LoadFCM() (FCM, error) {
 	var b errBuilder
 	enabled := optBool(&b, "FCM_ENABLED", false)
 	stream := optString("FCM_STREAM", "notif:fcm")
+	resultsStream := optString("FCM_RESULTS_STREAM", "notif:fcm:results")
 	group := optString("FCM_CONSUMER_GROUP", "notif-fcm-workers")
 	// The consumer name disambiguates pods inside the group. HOSTNAME is
 	// set by K3s to the pod name; fall back to a literal so dev still works.
@@ -391,6 +390,7 @@ func LoadFCM() (FCM, error) {
 	return FCM{
 		Enabled:         enabled,
 		Stream:          stream,
+		ResultsStream:   resultsStream,
 		ConsumerGroup:   group,
 		ConsumerName:    name,
 		ProjectID:       project,

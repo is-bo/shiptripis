@@ -6,10 +6,14 @@
 - mark_delivered is idempotent
 """
 
-from unittest.mock import patch
+from datetime import timedelta
+from io import StringIO
+from unittest.mock import MagicMock, patch
 
+from django.core.management import call_command
 from django.db import transaction
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
 from apps.core import redis_bus
 from apps.core.models import PublishedEvent
@@ -199,3 +203,29 @@ class MarkDeliveredTests(TestCase):
 
     def test_unknown_event_id_returns_false(self):
         assert redis_bus.mark_delivered("not-a-real-id") is False
+
+
+class SweepDeliveredTests(TestCase):
+    @patch.object(redis_bus, "get_client")
+    def test_sweep_recovers_a_per_user_delivery_receipt(self, get_client):
+        event = PublishedEvent.objects.create(
+            channel="offer.created",
+            event_id="event-per-user-receipt",
+            payload_hash="x" * 64,
+        )
+        PublishedEvent.objects.filter(pk=event.pk).update(
+            published_at=timezone.now() - timedelta(minutes=10)
+        )
+        client = MagicMock()
+        client.exists.return_value = 0
+        client.scan_iter.return_value = iter(
+            ["delivered:event-per-user-receipt:42"]
+        )
+        get_client.return_value = client
+
+        output = StringIO()
+        call_command("sweep_published_events", stdout=output)
+
+        event.refresh_from_db()
+        assert event.delivered_at is not None
+        assert "recovered=1" in output.getvalue()

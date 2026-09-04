@@ -80,6 +80,10 @@ jobs:
           INPUT_BUILD_TYPE: ${{ inputs.build_type }}
           INPUT_APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
           INPUT_RELEASE_ID: ${{ inputs.release_id }}
+          INPUT_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          INPUT_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          INPUT_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          INPUT_FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
         run: |
           python - <<'PY'
           import os
@@ -120,6 +124,20 @@ jobs:
           ):
               raise SystemExit(
                   "api_base_url must be a credential-free HTTPS origin"
+              )
+
+          firebase_values = {
+              "FIREBASE_API_KEY": os.environ.get("INPUT_FIREBASE_API_KEY", "").strip(),
+              "FIREBASE_PROJECT_ID": os.environ.get("INPUT_FIREBASE_PROJECT_ID", "").strip(),
+              "FIREBASE_MESSAGING_SENDER_ID": os.environ.get("INPUT_FIREBASE_MESSAGING_SENDER_ID", "").strip(),
+              "FIREBASE_ANDROID_APP_ID": os.environ.get("INPUT_FIREBASE_ANDROID_APP_ID", "").strip(),
+          }
+          configured = [name for name, value in firebase_values.items() if value]
+          if configured and len(configured) != len(firebase_values):
+              missing = sorted(set(firebase_values) - set(configured))
+              raise SystemExit(
+                  "Firebase client configuration must be all-or-none; missing "
+                  + ", ".join(missing)
               )
 
           pubspec = Path("pubspec.yaml").read_text(encoding="utf-8")
@@ -173,6 +191,10 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
         run: |
           for name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
@@ -184,8 +206,14 @@ jobs:
           if [ "$APK_ARCHITECTURE" = "arm64" ]; then
             apk_target+=(--target-platform android-arm64)
           fi
-          flutter build apk --release "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
-          flutter build appbundle --release "--dart-define=API_BASE_URL=$API_BASE_URL"
+          firebase_args=(
+            "--dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY"
+            "--dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            "--dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID"
+            "--dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID"
+          )
+          flutter build apk --release "${apk_target[@]}" "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
+          flutter build appbundle --release "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
 
       # PRIVATE PROFILE ARM64 — a device-performance artifact, never a
       # distributable one. Profile is Flutter's measurement mode: Dart is
@@ -201,24 +229,44 @@ jobs:
         env:
           API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
           APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
         run: |
           apk_target=()
           if [ "$APK_ARCHITECTURE" = "arm64" ]; then
             apk_target+=(--target-platform android-arm64)
           fi
-          flutter build apk --profile "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
+          firebase_args=(
+            "--dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY"
+            "--dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            "--dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID"
+            "--dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID"
+          )
+          flutter build apk --profile "${apk_target[@]}" "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
 
       - name: Build debug fallback APK
         if: inputs.build_type == 'debug'
         env:
           API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
           APK_ARCHITECTURE: ${{ inputs.apk_architecture }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
         run: |
           apk_target=()
           if [ "$APK_ARCHITECTURE" = "arm64" ]; then
             apk_target+=(--target-platform android-arm64)
           fi
-          flutter build apk --debug "${apk_target[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
+          firebase_args=(
+            "--dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY"
+            "--dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            "--dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID"
+            "--dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID"
+          )
+          flutter build apk --debug "${apk_target[@]}" "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
 
       - name: Verify signatures and stage artifacts
         env:

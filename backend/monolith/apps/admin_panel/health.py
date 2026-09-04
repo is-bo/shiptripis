@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.core.storage import storage_for
 from apps.finance.models import PaymentProviderEvent, ScheduledJob
 from apps.finance.providers import ChargilyGateway, StripeGateway
-from apps.notifications.models import OutboundMessage
+from apps.notifications.models import OutboundMessage, PushDevice
 
 from .permissions import CanViewOperationalIncidents
 
@@ -88,6 +88,13 @@ class AdminDeepHealthView(APIView):
             checks["database"] = "failed"
 
         client = None
+        push_health: dict[str, object] = {
+            "enabled": bool(settings.FCM_ENABLED),
+            "configuration_complete": bool(
+                settings.FCM_PROJECT_ID and settings.FCM_CREDENTIALS_PATH
+            ),
+            "active_devices": PushDevice.objects.filter(active=True).count(),
+        }
         try:
             settings.REDIS_URL  # noqa: B018 - settings access is the check
             client = redis.Redis.from_url(
@@ -95,8 +102,43 @@ class AdminDeepHealthView(APIView):
             )
             client.ping()
             checks["redis"] = "ok"
+            if not settings.FCM_ENABLED:
+                push_health["status"] = "disabled"
+                push_health["worker_healthy"] = None
+            elif not push_health["configuration_complete"]:
+                push_health["status"] = "configuration_incomplete"
+                push_health["worker_healthy"] = False
+            else:
+                worker_healthy = bool(client.exists("fcm:worker:active"))
+                push_health["worker_healthy"] = worker_healthy
+                push_health["status"] = "ready" if worker_healthy else "degraded"
+                push_health["stream_length"] = int(client.xlen(settings.FCM_STREAM))
+                try:
+                    group = next(
+                        (
+                            row
+                            for row in client.xinfo_groups(settings.FCM_STREAM)
+                            if row.get("name") == settings.FCM_CONSUMER_GROUP
+                        ),
+                        None,
+                    )
+                    push_health["stream_pending"] = (
+                        int(group.get("pending", 0)) if group else None
+                    )
+                    push_health["stream_lag"] = (
+                        int(group["lag"])
+                        if group and group.get("lag") is not None
+                        else None
+                    )
+                except redis.RedisError:
+                    push_health["stream_pending"] = None
+                    push_health["stream_lag"] = None
         except Exception:
             checks["redis"] = "degraded"
+            push_health["status"] = (
+                "disabled" if not settings.FCM_ENABLED else "degraded"
+            )
+            push_health["worker_healthy"] = None
         finally:
             if client is not None:
                 client.close()
@@ -133,6 +175,7 @@ class AdminDeepHealthView(APIView):
                 status=OutboundMessage.Status.FAILED
             ).count(),
         }
+        checks["push"] = push_health
         # Credential *shape*, never a credential. `credential_mode` says which
         # rail a key points at ("test" / "live" / "unknown"), so a pre-launch
         # operator can confirm that nothing is armed against real money without

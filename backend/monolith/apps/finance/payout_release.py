@@ -275,16 +275,23 @@ def _notify_payout_status(
 
     deal = aggregate.deal
     email = getattr(deal.traveler, "email", "")
-    if not email:
-        return
-    enqueue_message(
-        kind=OutboundMessage.Kind.PAYOUT_STATUS,
-        key=f"payout_status:{payout.pk}:{payout.status}",
-        to_email=email,
-        recipient_user_id=deal.traveler_id,
-        deal_id=deal.pk,
-        context={
-            "deal_reference": f"ST-{deal.pk}",
-            "payout_status": payout.status,
-        },
+    if email:
+        enqueue_message(
+            kind=OutboundMessage.Kind.PAYOUT_STATUS,
+            key=f"payout_status:{payout.pk}:{payout.status}",
+            to_email=email,
+            recipient_user_id=deal.traveler_id,
+            deal_id=deal.pk,
+            context={
+                "deal_reference": f"ST-{deal.pk}",
+                "payout_status": payout.status,
+            },
+        )
+    from apps.core.channels import PAYOUT_STATUS_CHANGED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        PAYOUT_STATUS_CHANGED,
+        {"deal_id": deal.pk, "status": payout.status},
+        targets=[deal.traveler_id],
     )

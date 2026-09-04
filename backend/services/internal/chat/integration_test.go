@@ -6,7 +6,7 @@
 // This reproduces, as an automated regression test, the manual end-to-end
 // verification done on 2026-07-27: a Django-shaped `chat.message.new`
 // publish reaches the targeted user's live socket, is not delivered to a
-// user who was not targeted, and writes the `delivered:<event_id>` marker
+// user who was not targeted, and writes the per-user delivered marker
 // that suppresses the duplicate FCM push (CLAUDE.md G1).
 //
 // Run with a throwaway Redis:
@@ -140,13 +140,13 @@ type itReceipts struct {
 }
 
 // MarkDelivered mirrors the production receipt: write the Redis
-// delivered:<event_id> marker (the half that gates the FCM fallback) and
+// delivered:<event_id>:<user_id> marker (the half that gates FCM fallback) and
 // record the call in place of the Postgres UPDATE.
-func (r *itReceipts) MarkDelivered(ctx context.Context, eventID string) error {
+func (r *itReceipts) MarkDelivered(ctx context.Context, eventID string, userID int64) error {
 	if r.fail != nil {
 		return r.fail
 	}
-	if err := r.rdb.SetEX(ctx, "delivered:"+eventID, "1", DeliveredTTL); err != nil {
+	if err := r.rdb.SetEX(ctx, fmt.Sprintf("delivered:%s:%d", eventID, userID), "1", DeliveredTTL); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -242,7 +242,7 @@ func readEnvelope(t *testing.T, ws *websocket.Conn, timeout time.Duration) (wspr
 // TestChatRelayDeliversToTargetedSocket is the end-to-end path: Django
 // publishes, the dispatcher fans out over the real Hub, and the targeted
 // user's real WebSocket receives the payload intact. It also asserts the
-// delivered:<event_id> marker, which is what stops a duplicate FCM push.
+// per-user delivered marker, which is what stops a duplicate FCM push.
 func TestChatRelayDeliversToTargetedSocket(t *testing.T) {
 	rdb, raw := itRedis(t)
 	hub := NewHub()
@@ -300,12 +300,12 @@ func TestChatRelayDeliversToTargetedSocket(t *testing.T) {
 	waitUntil(t, "the delivered marker to be written", func() bool {
 		return receipts.seen(eventID)
 	})
-	exists, err := rdb.Exists(context.Background(), "delivered:"+eventID)
+	exists, err := rdb.Exists(context.Background(), fmt.Sprintf("delivered:%s:%d", eventID, targetID))
 	if err != nil {
 		t.Fatalf("exists: %v", err)
 	}
 	if !exists {
-		t.Fatal("delivered:<event_id> was not set; FCM would send a duplicate push")
+		t.Fatal("per-user delivered marker was not set; FCM would send a duplicate push")
 	}
 }
 

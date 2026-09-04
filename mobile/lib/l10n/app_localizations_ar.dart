@@ -3785,4 +3785,56 @@ class LAr extends L {
 
   @override
   String get formStepLockedUntilValid => 'أكمل هذه الخطوة أولاً.';
+
+  @override
+  String get pushPermissionHeading => 'على هذا الهاتف';
+
+  @override
+  String get pushPermissionBody =>
+      'احصل على تحديثات في وقتها حول العروض والمدفوعات والتسليم والرسائل والتحقق. لا يطلب ShipTrip الإذن إلا عندما تختار التفعيل.';
+
+  @override
+  String get pushPermissionEnabled => 'الإشعارات مفعّلة.';
+
+  @override
+  String get pushPermissionDenied =>
+      'الإشعارات متوقفة على مستوى النظام. يمكنك تفعيلها من الإعدادات.';
+
+  @override
+  String get pushPermissionUnavailable =>
+      'الإشعارات الفورية غير مضبوطة في هذا الإصدار. تظل إشعارات التطبيق متاحة.';
+
+  @override
+  String get pushEnableAction => 'تفعيل الإشعارات';
+
+  @override
+  String get pushOpenSettingsAction => 'فتح إعدادات الإشعارات';
+
+  @override
+  String get pushEssentialTitle => 'التحديثات الأساسية';
+
+  @override
+  String get pushEssentialBody =>
+      'تبقى تحديثات الدفع والتسليم والنزاعات والتحقق وأمان الحساب مفعّلة.';
+
+  @override
+  String get pushMessagesTitle => 'الرسائل';
+
+  @override
+  String get pushMessagesBody => 'نشاط جديد في المحادثات.';
+
+  @override
+  String get pushMarketplaceTitle => 'نشاط السوق';
+
+  @override
+  String get pushMarketplaceBody => 'العروض والمطابقات والرحلات والطلبات.';
+
+  @override
+  String get notificationJourney => 'تحديث الرحلة';
+
+  @override
+  String get notificationAccount => 'تحديث التحقق';
+
+  @override
+  String get notificationDispute => 'تحديث النزاع';
 }

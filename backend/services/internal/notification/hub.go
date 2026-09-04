@@ -1,12 +1,13 @@
 // Package notification implements the WS fan-out + presence + delivery-receipt
 // loop described in CLAUDE.md §2 G1.
 //
-// The dispatcher subscribes to all 16 Django channels (see
+// The dispatcher subscribes to Django's non-chat notification channels (see
 // dispatcher.subscribeChannels, mirroring monolith/apps/core/channels.py)
 // and routes generically: every envelope carries targets:[uid,...] from
 // redis_bus.publish_after_commit, and the raw payload is fanned to each
 // target's local sockets. FCM push fallback is implemented in fcm.go and
-// gated behind FCM_ENABLED until the fcm_token schema + Django publisher land.
+// remains operationally gated behind FCM_ENABLED until production Firebase
+// configuration is complete.
 package notification
 
 import (

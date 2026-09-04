@@ -64,6 +64,7 @@ import '../features/onboarding/benefits_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/profile/appearance_screen.dart';
 import '../features/profile/language_screen.dart';
+import '../features/profile/notification_settings_screen.dart';
 import '../features/profile/payouts_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/ratings_screen.dart';
@@ -125,6 +126,7 @@ abstract final class Routes {
   static const guestPay = 'guest-pay';
 
   static const profileLanguage = 'profile-language';
+  static const profileNotifications = 'profile-notifications';
   static const profileAppearance = 'profile-appearance';
   static const profileRatings = 'profile-ratings';
   static const profilePayouts = 'profile-payouts';
@@ -140,6 +142,12 @@ const _publicPrefixes = <String>['/onboarding', '/auth', '/guest/pay'];
 
 bool _isPublic(String location) =>
     _publicPrefixes.any((prefix) => location.startsWith(prefix));
+
+bool _isSafePostLoginLocation(String? location) =>
+    location != null &&
+    location.startsWith('/') &&
+    !location.startsWith('//') &&
+    !_isPublic(location);
 
 final routerProvider = Provider<GoRouter>((ref) {
   // go_router needs a Listenable, Riverpod speaks in providers. One notifier,
@@ -179,6 +187,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (location == '/splash' ||
           location.startsWith('/onboarding') ||
           location.startsWith('/auth')) {
+        final next = state.uri.queryParameters['next'];
+        if (_isSafePostLoginLocation(next)) return next;
         return '/home';
       }
       return null;
@@ -484,6 +494,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: Routes.profileLanguage,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LanguageScreen(),
+      ),
+      GoRoute(
+        path: '/profile/notifications',
+        name: Routes.profileNotifications,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: '/profile/appearance',

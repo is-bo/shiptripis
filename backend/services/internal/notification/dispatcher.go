@@ -16,7 +16,7 @@ import (
 	"shiptrip/pkg/wsproto"
 )
 
-// DeliveredTTL is the lifetime of the delivered:<event_id> marker that
+// DeliveredTTL is the lifetime of the delivered:<event_id>:<user_id> marker that
 // the WS-owning pod writes once a message has actually been queued to a
 // socket. The FCM consumer reads this to decide whether to skip the
 // push fallback. 60s per CLAUDE.md §2 G1.
@@ -43,7 +43,7 @@ const receiptConcurrency = 64
 // goroutines without bound.
 const dispatchConcurrency = 128
 
-// setEXRetryDelay is the gap before retrying a failed delivered:<event_id>
+// setEXRetryDelay is the gap before retrying a failed delivered receipt
 // write. One brief retry is enough to ride a Redis blip without letting
 // the FCM consumer see a stale EXISTS=0 and push a duplicate.
 const setEXRetryDelay = 100 * time.Millisecond
@@ -74,11 +74,20 @@ var subscribeChannels = []string{
 	// payments
 	"payment.captured",
 	"payment.refunded",
+	"payment.failed",
 	// verification
 	"handover.confirmed",
 	"handover.code_issued",
+	"handover.delivery_code_available",
+	"handover.delivery_confirmed",
 	// kyc
 	"kyc.status_changed",
+	"flight_proof.status_changed",
+	// funded delivery lifecycle
+	"deal.cancelled",
+	"dispute.opened",
+	"dispute.resolved",
+	"payout.status_changed",
 }
 
 // targetsEnvelope is the shared shape every Django publish carries.
@@ -100,7 +109,7 @@ type router interface {
 // delivery receipt. Production callers pass *dbReceiptStore (Redis +
 // Postgres); tests pass a recorder.
 type receiptStore interface {
-	MarkDelivered(ctx context.Context, eventID string) error
+	MarkDelivered(ctx context.Context, eventID string, userID int64) error
 }
 
 // Dispatcher consumes Redis pub/sub events, fans them to local WS
@@ -232,7 +241,11 @@ func (d *Dispatcher) dispatch(msg redisbus.Message) {
 		if uid == 0 {
 			continue
 		}
-		sockets += d.hub.Send(uid, wsEnv)
+		userSockets := d.hub.Send(uid, wsEnv)
+		sockets += userSockets
+		if userSockets > 0 {
+			d.scheduleReceipt(env.EventID, uid, userSockets)
+		}
 	}
 	if sockets == 0 {
 		// All targets are on other pods or offline. Either another pod
@@ -245,14 +258,13 @@ func (d *Dispatcher) dispatch(msg redisbus.Message) {
 		return
 	}
 
-	d.scheduleReceipt(env.EventID, sockets)
 }
 
 // scheduleReceipt fires markDelivered through the bounded worker pool.
 // Dropping the receipt on a full pool is preferable to growing goroutines
 // without bound — the G6b audit sweep will flag the event next run, and
 // pub/sub fan-out has already happened.
-func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
+func (d *Dispatcher) scheduleReceipt(eventID string, userID int64, sockets int) {
 	select {
 	case d.receiptSem <- struct{}{}:
 	default:
@@ -260,13 +272,13 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 			d.metrics.Counter("receipt_drops_total", 1)
 		}
 		d.log.Warn("dispatcher: receipt pool saturated; dropping",
-			"event_id", eventID, "sockets", sockets,
+			"event_id", eventID, "user_id", userID, "sockets", sockets,
 			"capacity", receiptConcurrency)
 		return
 	}
 	d.receiptWG.Go(func() {
 		defer func() { <-d.receiptSem }()
-		d.markDelivered(eventID, sockets)
+		d.markDelivered(eventID, userID, sockets)
 	})
 }
 
@@ -274,21 +286,23 @@ func (d *Dispatcher) scheduleReceipt(eventID string, sockets int) {
 // bounded context so a slow Redis or Postgres can't stall the pub/sub loop
 // and a shutdown can't abort an in-flight receipt — the G6b sweep would
 // otherwise flag an event that was actually delivered.
-func (d *Dispatcher) markDelivered(eventID string, sockets int) {
+func (d *Dispatcher) markDelivered(eventID string, userID int64, sockets int) {
 	ctx, cancel := context.WithTimeout(context.Background(), markDeliveredTimeout)
 	defer cancel()
-	if err := d.receipts.MarkDelivered(ctx, eventID); err != nil {
-		d.log.Warn("published_event update failed", "event_id", eventID, "err", err)
+	if err := d.receipts.MarkDelivered(ctx, eventID, userID); err != nil {
+		d.log.Warn("published_event update failed", "event_id", eventID, "user_id", userID, "err", err)
 		return
 	}
 	if d.metrics != nil {
 		d.metrics.Counter("events_delivered_total", 1)
 	}
-	d.log.Debug("event delivered", "event_id", eventID, "sockets", sockets)
+	d.log.Debug("event delivered", "event_id", eventID, "user_id", userID, "sockets", sockets)
 }
 
 // dbReceiptStore is the production receiptStore. Performs the G1 two-step:
-//  1. SET delivered:<event_id> 1 EX 60 — signals the FCM consumer to skip.
+//  1. SET delivered:<event_id>:<user_id> 1 EX 60 — signals the FCM consumer
+//     to skip only that recipient. One online party must not suppress an
+//     offline party targeted by the same business event.
 //  2. UPDATE core_published_event SET delivered_at = now() WHERE event_id = $1
 //     AND delivered_at IS NULL — closes the G6b detection-only audit row.
 //
@@ -338,18 +352,18 @@ func newDBReceiptStore(rdb *redisbus.Client, pool *pgxpool.Pool, log *slog.Logge
 	return &dbReceiptStore{rdb: rdb, exec: poolExecer{pool: pool}, log: log, metrics: m}
 }
 
-func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) error {
+func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string, userID int64) error {
 	// One retry on SetEX failure. The FCM consumer reads EXISTS
-	// delivered:<event_id> after a 2s grace period; if our key is missing
+	// delivered:<event_id>:<user_id> after a 2s grace period; if our key is missing
 	// it will push a duplicate. A brief retry rides the typical Redis blip
 	// without delaying the receipt update.
-	key := "delivered:" + eventID
+	key := fmt.Sprintf("delivered:%s:%d", eventID, userID)
 	if err := s.rdb.SetEX(ctx, key, "1", DeliveredTTL); err != nil {
 		if s.metrics != nil {
 			s.metrics.Counter("delivered_setex_failures_total", 1)
 		}
 		s.log.Warn("delivered key set failed (retrying)",
-			"event_id", eventID, "err", err)
+			"event_id", eventID, "user_id", userID, "err", err)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -360,7 +374,7 @@ func (s *dbReceiptStore) MarkDelivered(ctx context.Context, eventID string) erro
 				s.metrics.Counter("delivered_setex_failures_final_total", 1)
 			}
 			s.log.Error("delivered key set failed after retry; FCM may duplicate",
-				"event_id", eventID, "err", err)
+				"event_id", eventID, "user_id", userID, "err", err)
 		}
 	}
 

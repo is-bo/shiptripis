@@ -2,8 +2,8 @@
 
 For every `PublishedEvent` row where `delivered_at IS NULL` AND
 `published_at < now - 5 minutes`, check whether the Go side wrote
-`delivered:<event_id>` to Redis. If yes, mark delivered. If not,
-log + emit Sentry warning — that's an event we lost.
+at least one `delivered:<event_id>:<user_id>` receipt to Redis. If yes, mark
+delivered. If not, log + emit Sentry warning — that's an event we lost.
 
 V1 is detection-only: we do NOT re-publish. Full transactional outbox
 is V2.
@@ -48,7 +48,14 @@ class Command(BaseCommand):
         missing = 0
         for ev in qs.iterator():
             total += 1
-            if client.exists(f"delivered:{ev.event_id}"):
+            legacy_key = f"delivered:{ev.event_id}"
+            has_receipt = bool(client.exists(legacy_key))
+            if not has_receipt:
+                has_receipt = next(
+                    client.scan_iter(match=f"{legacy_key}:*", count=10),
+                    None,
+                ) is not None
+            if has_receipt:
                 redis_bus.mark_delivered(ev.event_id)
                 recovered += 1
             else:

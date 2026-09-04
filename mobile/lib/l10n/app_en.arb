@@ -1950,5 +1950,21 @@
     }
   },
   "formServerRefusedOnStep": "The server refused this request. The problem is on this step, marked below.",
-  "formStepLockedUntilValid": "Finish this step first."
+  "formStepLockedUntilValid": "Finish this step first.",
+  "pushPermissionHeading": "On this phone",
+  "pushPermissionBody": "Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.",
+  "pushPermissionEnabled": "Notifications are enabled.",
+  "pushPermissionDenied": "Notifications are off at system level. You can enable them in Settings.",
+  "pushPermissionUnavailable": "Push is not configured in this build. In-app notifications still work.",
+  "pushEnableAction": "Enable notifications",
+  "pushOpenSettingsAction": "Open notification settings",
+  "pushEssentialTitle": "Essential updates",
+  "pushEssentialBody": "Payment, delivery, dispute, verification and account-security updates stay on.",
+  "pushMessagesTitle": "Messages",
+  "pushMessagesBody": "New chat activity.",
+  "pushMarketplaceTitle": "Marketplace activity",
+  "pushMarketplaceBody": "Offers, matches, journeys and requests.",
+  "notificationJourney": "Journey update",
+  "notificationAccount": "Verification update",
+  "notificationDispute": "Dispute update"
 }

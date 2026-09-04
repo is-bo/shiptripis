@@ -5,11 +5,7 @@
 /// message string is ever parsed to decide where a tap goes, which is also
 /// what lets the whole inbox be translated.
 ///
-/// One honesty note the UI has to carry: handover, dispute and rating changes
-/// do not currently publish inbox rows at all. The bell is therefore not a
-/// complete activity feed, and this screen must not be the place a user is
-/// expected to discover that a delivery needs them — Deliveries is. Nothing
-/// here pretends otherwise.
+/// Push and WebSocket delivery both reconcile back to this authoritative list.
 library;
 
 import 'package:flutter/material.dart';
@@ -136,6 +132,18 @@ class NotificationsScreen extends ConsumerWidget {
         context.openRequest(requestId);
       case OpenPayments():
         context.pushNamed(Routes.profilePayouts);
+      case OpenJourney(:final journeyId):
+        context.pushNamed(
+          Routes.journeyDetail,
+          pathParameters: {'id': '$journeyId'},
+        );
+      case OpenDispute(:final disputeId):
+        context.pushNamed(
+          Routes.disputeDetail,
+          pathParameters: {'id': '$disputeId'},
+        );
+      case OpenKyc():
+        context.pushNamed(Routes.kyc);
     }
   }
 
@@ -265,6 +273,10 @@ class _Row extends StatelessWidget {
         l.notificationPayment,
         Icons.credit_card_rounded,
       ),
+      NotificationChannel.payoutStatusChanged => (
+        l.notificationPayment,
+        Icons.account_balance_wallet_outlined,
+      ),
       NotificationChannel.chatMessage => (
         l.notificationChat,
         Icons.forum_rounded,
@@ -278,6 +290,29 @@ class _Row extends StatelessWidget {
       NotificationChannel.matchCompleted => (
         l.notificationDelivery,
         Icons.local_shipping_rounded,
+      ),
+      NotificationChannel.handoverConfirmed ||
+      NotificationChannel.deliveryCodeAvailable ||
+      NotificationChannel.deliveryConfirmed ||
+      NotificationChannel.dealCancelled => (
+        l.notificationDelivery,
+        Icons.local_shipping_rounded,
+      ),
+      NotificationChannel.tripCreated ||
+      NotificationChannel.tripUpdated ||
+      NotificationChannel.tripCancelled => (
+        l.notificationJourney,
+        Icons.flight_takeoff_rounded,
+      ),
+      NotificationChannel.kycStatusChanged ||
+      NotificationChannel.flightProofStatusChanged => (
+        l.notificationAccount,
+        Icons.verified_user_outlined,
+      ),
+      NotificationChannel.disputeOpened ||
+      NotificationChannel.disputeResolved => (
+        l.notificationDispute,
+        Icons.gavel_outlined,
       ),
       NotificationChannel.unknown => (
         l.notificationOther,

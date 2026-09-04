@@ -1,23 +1,18 @@
 // Command notification is the Go-side WebSocket fan-out + presence service.
 //
 // Scope:
-//   - Subscribes to all 16 Django pub/sub channels (see
-//     notification.subscribeChannels, mirroring apps/core/channels.py).
+//   - Subscribes to Django notification pub/sub channels (chat has its own
+//     relay; see notification.subscribeChannels and apps/core/channels.py).
 //   - Holds Flutter client WS sockets; routes each envelope generically by
 //     its targets:[uid,...] field to every target's local sockets (CLAUDE.md G1).
-//   - Writes `delivered:<event_id>` 60s + updates `core_published_event`
+//   - Writes `delivered:<event_id>:<user_id>` for 60s and updates `core_published_event`
 //     so the G6b detection-only outbox sees the receipt.
 //   - Refreshes `presence:<user_id>` 15s TTL while the socket is live.
 //
-// FCM push fallback is implemented but gated by FCM_ENABLED (default
-// false). When Claude A adds the `fcm_token` column and the Django
-// publisher writes to the `notif:fcm` stream, flipping FCM_ENABLED=true
-// + supplying FCM_PROJECT_ID and FCM_CREDENTIALS_PATH activates the
-// consumer + XAUTOCLAIM sweeper. The actual FCM HTTP call is currently
-// stubbed via notification.LogOnlySender — swap for the firebase admin
-// SDK once the publisher lands. The consumer flow (XReadGroup → 2s wait
-// → check delivered:<event_id> → send/skip → XAck) can be exercised end-
-// to-end in dev with the stub.
+// FCM push fallback is implemented and gated by FCM_ENABLED (default false).
+// With valid project/credential configuration it uses Firebase Admin behind
+// an XREADGROUP/XAUTOCLAIM worker. The consumer waits two seconds, checks the
+// recipient-specific WebSocket receipt, then sends or suppresses and XACKs.
 //
 // Listens on NOTIF_HTTP_ADDR (default :8082, matches Caddy's
 // notification-service:8082 upstream in backend/gateway/Caddyfile). The
@@ -191,10 +186,11 @@ func run() error {
 			return err
 		}
 		fcm := notification.NewConsumer(rdb, notification.ConsumerConfig{
-			Stream:        fcmCfg.Stream,
-			ConsumerGroup: fcmCfg.ConsumerGroup,
-			ConsumerName:  fcmCfg.ConsumerName,
-			Sender:        sender,
+			Stream:         fcmCfg.Stream,
+			ConsumerGroup:  fcmCfg.ConsumerGroup,
+			ConsumerName:   fcmCfg.ConsumerName,
+			FeedbackStream: fcmCfg.ResultsStream,
+			Sender:         sender,
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()

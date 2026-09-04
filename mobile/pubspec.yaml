@@ -56,6 +56,9 @@ dependencies:
   country_flags: ^4.1.2
 
   cupertino_icons: ^1.0.8
+  firebase_core: ^4.14.0
+  firebase_messaging: ^16.6.0
+  app_settings: ^9.0.0
 
 dev_dependencies:
   flutter_test:

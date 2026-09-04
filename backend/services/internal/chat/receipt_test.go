@@ -61,7 +61,7 @@ func TestDBReceiptStore_SetEXRetrySucceedsSecondTry(t *testing.T) {
 	ex := &recordingExecer{}
 	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: metrics.Register(svc)}
 
-	if err := s.MarkDelivered(context.Background(), "evt-retry"); err != nil {
+	if err := s.MarkDelivered(context.Background(), "evt-retry", 42); err != nil {
 		t.Fatalf("MarkDelivered = %v, want nil", err)
 	}
 	if got := exp.attempts.Load(); got != 2 {
@@ -84,7 +84,7 @@ func TestDBReceiptStore_BothAttemptsFailUpdateStillRuns(t *testing.T) {
 	ex := &recordingExecer{}
 	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: metrics.Register(svc)}
 
-	if err := s.MarkDelivered(context.Background(), "evt-both-fail"); err != nil {
+	if err := s.MarkDelivered(context.Background(), "evt-both-fail", 42); err != nil {
 		t.Fatalf("MarkDelivered = %v, want nil (UPDATE succeeded)", err)
 	}
 	if got := readCounter(svc, "delivered_setex_failures_final_total"); got != 1 {
@@ -104,7 +104,7 @@ func TestDBReceiptStore_CtxCancelledDuringRetrySkipsUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if err := s.MarkDelivered(ctx, "evt-cancel"); !errors.Is(err, context.Canceled) {
+	if err := s.MarkDelivered(ctx, "evt-cancel", 42); !errors.Is(err, context.Canceled) {
 		t.Fatalf("MarkDelivered err = %v, want context.Canceled", err)
 	}
 	if got := exp.attempts.Load(); got != 1 {
@@ -121,7 +121,7 @@ func TestDBReceiptStore_UpdateErrorIsMeteredAndReturned(t *testing.T) {
 	ex := &recordingExecer{err: errors.New("postgres exploded")} // UPDATE fails
 	s := &dbReceiptStore{rdb: exp, exec: ex, log: discardLogger(), metrics: metrics.Register(svc)}
 
-	if err := s.MarkDelivered(context.Background(), "evt-upd-fail"); err == nil {
+	if err := s.MarkDelivered(context.Background(), "evt-upd-fail", 42); err == nil {
 		t.Fatal("MarkDelivered = nil, want UPDATE error propagated")
 	}
 	if got := readCounter(svc, "receipt_update_failures_total"); got != 1 {

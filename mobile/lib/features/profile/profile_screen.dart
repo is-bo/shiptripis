@@ -87,6 +87,11 @@ class ProfileScreen extends ConsumerWidget {
 
             SectionHeader(title: l.profileAccount),
             _Row(
+              icon: Icons.notifications_active_outlined,
+              label: l.profileNotificationSettings,
+              onTap: () => context.pushNamed(Routes.profileNotifications),
+            ),
+            _Row(
               icon: Icons.translate_rounded,
               label: l.profileLanguage,
               value: _localeLabel(context, ref),

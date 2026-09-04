@@ -421,6 +421,14 @@ def _notify_opened(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> Non
             deal_id=deal.pk,
             context=context,
         )
+    from apps.core.channels import DISPUTE_OPENED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        DISPUTE_OPENED,
+        {"deal_id": deal.pk, "dispute_id": dispute.pk},
+        targets=[deal.sender_id, deal.traveler_id],
+    )
 
 
 # --- the evidence bundle ------------------------------------------------------
@@ -1484,3 +1492,11 @@ def _notify_resolved(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> N
             deal_id=deal.pk,
             context=context,
         )
+    from apps.core.channels import DISPUTE_RESOLVED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        DISPUTE_RESOLVED,
+        {"deal_id": deal.pk, "dispute_id": dispute.pk},
+        targets=[deal.sender_id, deal.traveler_id],
+    )

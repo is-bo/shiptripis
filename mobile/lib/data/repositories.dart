@@ -37,6 +37,7 @@ import '../domain/location.dart';
 import '../domain/notification.dart';
 import '../domain/offer.dart';
 import '../domain/payment.dart';
+import '../domain/push.dart';
 import '../domain/rating.dart';
 
 // ---------------------------------------------------------------------------
@@ -1389,6 +1390,51 @@ class NotificationRepository {
   Future<void> markRead(int id) => _api.postVoid('/api/notifications/$id/read');
 }
 
+class PushRepository {
+  const PushRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<void> registerDevice({
+    required String token,
+    required String installationId,
+    required String platform,
+    required String appVersion,
+  }) async {
+    await _api.postObject(
+      '/api/notifications/devices',
+      body: {
+        'token': token,
+        'installation_id': installationId,
+        'platform': platform,
+        'app_version': appVersion,
+      },
+    );
+  }
+
+  Future<void> unregisterDevice(String installationId) => _api.postVoid(
+    '/api/notifications/devices/unregister',
+    body: {'installation_id': installationId},
+  );
+
+  Future<PushPreferences> preferences() async => PushPreferences.fromJson(
+    await _api.getObject('/api/notifications/preferences'),
+  );
+
+  Future<PushPreferences> updatePreferences({
+    bool? messagesEnabled,
+    bool? marketplaceEnabled,
+  }) async => PushPreferences.fromJson(
+    await _api.patchObject(
+      '/api/notifications/preferences',
+      body: {
+        'messages_enabled': ?messagesEnabled,
+        'marketplace_enabled': ?marketplaceEnabled,
+      },
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
@@ -1589,6 +1635,10 @@ final ratingRepositoryProvider = Provider<RatingRepository>(
 
 final notificationRepositoryProvider = Provider<NotificationRepository>(
   (ref) => NotificationRepository(ref.watch(apiClientProvider)),
+);
+
+final pushRepositoryProvider = Provider<PushRepository>(
+  (ref) => PushRepository(ref.watch(apiClientProvider)),
 );
 
 final chatRepositoryProvider = Provider<ChatRepository>(

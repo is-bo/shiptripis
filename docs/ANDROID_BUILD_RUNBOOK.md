@@ -25,6 +25,21 @@ signatures, removes the temporary keystore, and lets GitHub discard the runner.
 release build accepts only a credential-free HTTPS origin. The app contains no
 Stripe, Chargily, SMTP, object-storage, or backend secret.
 
+Phone push uses four public Firebase client identifiers. Before the final
+integration build, set these under **Settings → Secrets and variables →
+Actions → Variables**:
+
+- `FIREBASE_API_KEY`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_MESSAGING_SENDER_ID`
+- `FIREBASE_ANDROID_APP_ID`
+
+They must be supplied together and must describe the Android app whose package
+is `com.shiptrip.shiptrip`. They are not Firebase Admin credentials. If all
+four are absent, the workflow still builds but the app deliberately keeps push
+unavailable; a partial tuple fails validation. Never store the Firebase Admin
+service-account JSON in GitHub build variables or the mobile bundle.
+
 ## Build a signed pre-launch release
 
 1. Open the repository on GitHub.

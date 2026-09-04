@@ -1096,5 +1096,21 @@
   "formFixBeforeContinuing": "Corrigez le champ signalé avant de continuer.",
   "formFixCountBeforeContinuing": "{count, plural, =1{Corrigez 1 champ avant de continuer.} other{Corrigez {count} champs avant de continuer.}}",
   "formServerRefusedOnStep": "Le serveur a refusé cette demande. Le problème est à cette étape, signalé ci-dessous.",
-  "formStepLockedUntilValid": "Terminez d'abord cette étape."
+  "formStepLockedUntilValid": "Terminez d'abord cette étape.",
+  "pushPermissionHeading": "Sur ce téléphone",
+  "pushPermissionBody": "Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. ShipTrip ne demande l’autorisation que lorsque vous choisissez Activer.",
+  "pushPermissionEnabled": "Les notifications sont activées.",
+  "pushPermissionDenied": "Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.",
+  "pushPermissionUnavailable": "Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.",
+  "pushEnableAction": "Activer les notifications",
+  "pushOpenSettingsAction": "Ouvrir les réglages de notification",
+  "pushEssentialTitle": "Mises à jour essentielles",
+  "pushEssentialBody": "Les mises à jour de paiement, livraison, litige, vérification et sécurité du compte restent activées.",
+  "pushMessagesTitle": "Messages",
+  "pushMessagesBody": "Nouvelle activité dans les discussions.",
+  "pushMarketplaceTitle": "Activité de la place de marché",
+  "pushMarketplaceBody": "Offres, correspondances, trajets et demandes.",
+  "notificationJourney": "Mise à jour du trajet",
+  "notificationAccount": "Mise à jour de la vérification",
+  "notificationDispute": "Mise à jour du litige"
 }

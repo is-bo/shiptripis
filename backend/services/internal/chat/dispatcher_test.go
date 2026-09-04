@@ -56,14 +56,16 @@ type stubReceipts struct {
 	mu       sync.Mutex
 	called   atomic.Int32
 	eventIDs []string
+	userIDs  []int64
 	err      error
 }
 
-func (s *stubReceipts) MarkDelivered(_ context.Context, eventID string) error {
+func (s *stubReceipts) MarkDelivered(_ context.Context, eventID string, userID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.called.Add(1)
 	s.eventIDs = append(s.eventIDs, eventID)
+	s.userIDs = append(s.userIDs, userID)
 	return s.err
 }
 
@@ -166,8 +168,8 @@ func TestDispatchChatMessageNew_FansToEveryTarget(t *testing.T) {
 	if !seen[42] || !seen[99] || seen[0] {
 		t.Errorf("Send targeted %v, want {42,99} and not 0", seen)
 	}
-	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 1 }) {
-		t.Errorf("receipts.MarkDelivered called %d times, want 1", receipts.called.Load())
+	if !eventuallyTrue(t, func() bool { return receipts.called.Load() == 2 }) {
+		t.Errorf("receipts.MarkDelivered called %d times, want 2", receipts.called.Load())
 	}
 }
 

@@ -447,6 +447,14 @@ def _notify_cancelled(
             deal_id=deal.pk,
             context=context,
         )
+    from apps.core.channels import DEAL_CANCELLED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        DEAL_CANCELLED,
+        {"deal_id": deal.pk},
+        targets=[deal.sender_id, deal.traveler_id],
+    )
 
 
 # --- no-show ------------------------------------------------------------------

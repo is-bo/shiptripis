@@ -18,25 +18,27 @@ import (
 //  1. XReadGroup pulls a message off the durable stream Django writes to
 //     (default `notif:fcm`).
 //  2. Wait `DeliverGracePeriod` so the WS-owning pod has a chance to
-//     write `delivered:<event_id>` if the user has a live socket.
-//  3. EXISTS delivered:<event_id> — if set, the user got the WS push and
+//     write `delivered:<event_id>:<user_id>` if the user has a live socket.
+//  3. Check that per-recipient key — if set, the user got the WS push and
 //     FCM would be a duplicate. XAck and move on.
-//  4. Otherwise, Send via FCM (currently stubbed — see FCMSender). On
+//  4. Otherwise, send via the configured Firebase Admin client. On
 //     success, XAck. On failure, leave in the PEL so the sweeper retries.
 //
 // A separate `Sweep` goroutine runs XAUTOCLAIM every `SweepInterval` to
 // reclaim PEL entries idle longer than `SweepMinIdle` — covers the case
 // where a pod crashed after XReadGroup but before XAck.
 type Consumer struct {
-	rdb           *redisbus.Client
-	sender        FCMSender
-	stream        string
-	group         string
-	name          string
-	log           *slog.Logger
-	deliverGrace  time.Duration
-	sweepMinIdle  time.Duration
-	sweepInterval time.Duration
+	rdb            *redisbus.Client
+	sender         FCMSender
+	stream         string
+	group          string
+	name           string
+	log            *slog.Logger
+	deliverGrace   time.Duration
+	sweepMinIdle   time.Duration
+	sweepInterval  time.Duration
+	feedbackStream string
+	heartbeatKey   string
 
 	// sem bounds concurrent handle() goroutines so a slow FCM endpoint
 	// can't grow goroutines without limit. wg tracks them so Run/Sweep
@@ -49,12 +51,12 @@ type Consumer struct {
 // ConsumerConfig wires the runtime knobs. Defaults match CLAUDE.md G1
 // guidance; override only with a reason.
 type ConsumerConfig struct {
-	Stream        string
-	ConsumerGroup string
-	ConsumerName  string
+	Stream         string
+	ConsumerGroup  string
+	ConsumerName   string
+	FeedbackStream string
 	// Sender is the actual FCM HTTP backend. Pass nil to install the
-	// LogOnlySender stub — useful while Django + fcm_token are still
-	// landing. The consumer never panics on nil.
+	// LogOnlySender stub for local stream-flow tests.
 	Sender FCMSender
 }
 
@@ -104,21 +106,26 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 	if cfg.ConsumerName == "" {
 		cfg.ConsumerName = "notif-fcm-1"
 	}
+	if cfg.FeedbackStream == "" {
+		cfg.FeedbackStream = "notif:fcm:results"
+	}
 	sender := cfg.Sender
 	if sender == nil {
 		sender = LogOnlySender{Log: log}
 	}
 	return &Consumer{
-		rdb:           rdb,
-		sender:        sender,
-		stream:        cfg.Stream,
-		group:         cfg.ConsumerGroup,
-		name:          cfg.ConsumerName,
-		log:           log,
-		deliverGrace:  DeliverGracePeriod,
-		sweepMinIdle:  SweepMinIdle,
-		sweepInterval: SweepInterval,
-		sem:           make(chan struct{}, handleConcurrency),
+		rdb:            rdb,
+		sender:         sender,
+		stream:         cfg.Stream,
+		group:          cfg.ConsumerGroup,
+		name:           cfg.ConsumerName,
+		log:            log,
+		deliverGrace:   DeliverGracePeriod,
+		sweepMinIdle:   SweepMinIdle,
+		sweepInterval:  SweepInterval,
+		feedbackStream: cfg.FeedbackStream,
+		heartbeatKey:   "fcm:worker:" + cfg.ConsumerName,
+		sem:            make(chan struct{}, handleConcurrency),
 	}
 }
 
@@ -133,6 +140,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	c.log.Info("fcm consumer started",
 		"stream", c.stream, "group", c.group, "consumer", c.name)
 	defer c.wg.Wait()
+	c.heartbeat(ctx)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -160,6 +168,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 			continue
 		}
+		c.heartbeat(ctx)
 		for _, m := range msgs {
 			if !c.dispatchHandle(ctx, m) {
 				return nil
@@ -274,7 +283,21 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	sendCtx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	delivered, err := c.rdb.Exists(sendCtx, "delivered:"+eventID)
+	payload, err := decodePayload(m.Values)
+	if err != nil {
+		c.log.Warn("fcm: bad payload; acking to drop",
+			"event_id", eventID, "id", m.ID, "err", err)
+		c.ack(m.ID)
+		return
+	}
+	if payload.EventID != eventID {
+		c.log.Warn("fcm: payload event id mismatch; acking to drop",
+			"event_id", eventID, "id", m.ID)
+		c.ack(m.ID)
+		return
+	}
+
+	delivered, err := c.rdb.Exists(sendCtx, fmt.Sprintf("delivered:%s:%d", eventID, payload.UserID))
 	if err != nil {
 		c.log.Warn("fcm: delivered check failed", "event_id", eventID, "err", err)
 		// Don't ack — sweeper will reclaim and retry.
@@ -286,20 +309,75 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		return
 	}
 
-	payload, err := decodePayload(m.Values)
-	if err != nil {
-		c.log.Warn("fcm: bad payload; acking to drop",
-			"event_id", eventID, "id", m.ID, "err", err)
-		c.ack(m.ID)
-		return
+	result, err := c.sender.Send(sendCtx, payload)
+	if err == nil && len(result.RetryTokenIndexes) > 0 {
+		retryPayload, retryErr := transientRetryPayload(payload, result.RetryTokenIndexes)
+		if retryErr != nil {
+			c.log.Warn("fcm: invalid partial-retry result; leaving original in PEL",
+				"event_id", eventID, "err", retryErr)
+			return
+		}
+		raw, retryErr := json.Marshal(retryPayload)
+		if retryErr != nil {
+			c.log.Warn("fcm: partial-retry encode failed; leaving original in PEL",
+				"event_id", eventID, "err", retryErr)
+			return
+		}
+		if _, retryErr = c.rdb.XAddCapped(sendCtx, c.stream, feedbackStreamMaxLen, map[string]any{
+			"event_id": eventID,
+			"user_id":  payload.UserID,
+			"payload":  string(raw),
+		}); retryErr != nil {
+			c.log.Warn("fcm: partial-retry enqueue failed; leaving original in PEL",
+				"event_id", eventID, "err", retryErr)
+			return
+		}
 	}
-
-	if err := c.sender.Send(sendCtx, payload); err != nil {
+	if len(result.SuccessfulDeviceIDs) > 0 || len(result.InvalidDeviceIDs) > 0 {
+		c.publishFeedback(sendCtx, payload.EventID, result)
+	}
+	if err != nil {
 		c.log.Warn("fcm send failed; leaving in PEL for sweep",
 			"event_id", eventID, "err", err)
 		return
 	}
 	c.ack(m.ID)
+}
+
+const feedbackStreamMaxLen = int64(10_000)
+
+func (c *Consumer) publishFeedback(ctx context.Context, eventID string, result SendResult) {
+	payload, err := json.Marshal(map[string]any{
+		"event_id":                      eventID,
+		"successful_device_ids":         result.SuccessfulDeviceIDs,
+		"successful_token_fingerprints": result.SuccessfulTokenFingerprints,
+		"invalid_device_ids":            result.InvalidDeviceIDs,
+		"invalid_token_fingerprints":    result.InvalidTokenFingerprints,
+	})
+	if err != nil {
+		c.log.Warn("fcm: feedback encode failed", "event_id", eventID, "err", err)
+		return
+	}
+	if _, err := c.rdb.XAddCapped(ctx, c.feedbackStream, feedbackStreamMaxLen, map[string]any{
+		"event_id": eventID,
+		"payload":  string(payload),
+	}); err != nil {
+		// A sent push must not be retried merely because cleanup telemetry
+		// could not be queued; that would duplicate the user-visible message.
+		c.log.Warn("fcm: feedback publish failed", "event_id", eventID, "err", err)
+	}
+}
+
+const heartbeatTTL = 45 * time.Second
+
+func (c *Consumer) heartbeat(ctx context.Context) {
+	if err := c.rdb.SetEX(ctx, c.heartbeatKey, "1", heartbeatTTL); err != nil {
+		c.log.Debug("fcm: heartbeat failed", "err", err)
+		return
+	}
+	if err := c.rdb.SetEX(ctx, "fcm:worker:active", "1", heartbeatTTL); err != nil {
+		c.log.Debug("fcm: heartbeat failed", "err", err)
+	}
 }
 
 // ack detaches from the caller's ctx so a cancelled parent (graceful
@@ -316,14 +394,18 @@ func (c *Consumer) ack(id string) {
 // FCMPayload is the wire shape Django writes onto the stream. Mirrors
 // what the Django publisher will produce — kept here as the contract
 // since the Go side reads it. Tokens are pre-resolved by Django from
-// accounts_user.fcm_token at publish time so the consumer doesn't need
+// PushDevice rows at publication time so the consumer doesn't need
 // a database lookup on the hot path.
 type FCMPayload struct {
-	EventID string   `json:"event_id"`
-	UserID  int64    `json:"user_id"`
-	Tokens  []string `json:"tokens"`
-	Title   string   `json:"title"`
-	Body    string   `json:"body"`
+	EventID           string   `json:"event_id"`
+	UserID            int64    `json:"user_id"`
+	Tokens            []string `json:"tokens"`
+	DeviceIDs         []int64  `json:"device_ids"`
+	TokenFingerprints []string `json:"token_fingerprints"`
+	Title             string   `json:"title"`
+	Body              string   `json:"body"`
+	AndroidChannelID  string   `json:"android_channel_id,omitempty"`
+	CollapseKey       string   `json:"collapse_key,omitempty"`
 	// Data is the FCM `data` payload — opaque key/value pairs the app
 	// uses for in-app routing (e.g. open the right chat thread).
 	Data map[string]string `json:"data,omitempty"`
@@ -344,6 +426,18 @@ func decodePayload(values map[string]any) (FCMPayload, error) {
 	if len(p.Tokens) == 0 {
 		return FCMPayload{}, errors.New("no tokens")
 	}
+	if p.UserID <= 0 {
+		return FCMPayload{}, errors.New("invalid user_id")
+	}
+	if len(p.DeviceIDs) != len(p.Tokens) {
+		return FCMPayload{}, errors.New("device_ids must align with tokens")
+	}
+	if len(p.TokenFingerprints) != len(p.Tokens) {
+		return FCMPayload{}, errors.New("token_fingerprints must align with tokens")
+	}
+	if len(p.Tokens) > 500 {
+		return FCMPayload{}, errors.New("token batch exceeds FCM multicast limit")
+	}
 	return p, nil
 }
 
@@ -359,24 +453,49 @@ func stringField(values map[string]any, key string) string {
 	return s
 }
 
-// FCMSender is the swap point for the real FCM HTTP client. Exported
-// so cmd/notification can inject a concrete implementation once Django
-// + fcm_token land. The most likely production wiring is
-// firebase.google.com/go/v4, but it pulls a large dep tree and we don't
-// want to commit until the publisher exists.
+// FCMSender is the seam between stream orchestration and Firebase Admin.
 type FCMSender interface {
-	Send(ctx context.Context, p FCMPayload) error
+	Send(ctx context.Context, p FCMPayload) (SendResult, error)
 }
 
-// LogOnlySender is the dev / pre-launch stub. Logs the event and
-// returns nil so the consumer flow can be exercised end-to-end without
-// a Firebase project. Swap for a real client by passing a different
-// `Sender` to NewConsumer once Django writes to the stream.
+type SendResult struct {
+	SuccessfulDeviceIDs         []int64
+	SuccessfulTokenFingerprints []string
+	InvalidDeviceIDs            []int64
+	InvalidTokenFingerprints    []string
+	RetryTokenIndexes           []int
+}
+
+func transientRetryPayload(p FCMPayload, indexes []int) (FCMPayload, error) {
+	retry := p
+	retry.Tokens = make([]string, 0, len(indexes))
+	retry.DeviceIDs = make([]int64, 0, len(indexes))
+	retry.TokenFingerprints = make([]string, 0, len(indexes))
+	seen := make(map[int]struct{}, len(indexes))
+	for _, index := range indexes {
+		if index < 0 || index >= len(p.Tokens) || index >= len(p.DeviceIDs) {
+			return FCMPayload{}, fmt.Errorf("retry token index %d out of range", index)
+		}
+		if _, duplicate := seen[index]; duplicate {
+			return FCMPayload{}, fmt.Errorf("duplicate retry token index %d", index)
+		}
+		seen[index] = struct{}{}
+		retry.Tokens = append(retry.Tokens, p.Tokens[index])
+		retry.DeviceIDs = append(retry.DeviceIDs, p.DeviceIDs[index])
+		retry.TokenFingerprints = append(retry.TokenFingerprints, p.TokenFingerprints[index])
+	}
+	if len(retry.Tokens) == 0 {
+		return FCMPayload{}, errors.New("empty partial retry")
+	}
+	return retry, nil
+}
+
+// LogOnlySender is a development/test sender for stream-flow exercises.
 type LogOnlySender struct {
 	Log *slog.Logger
 }
 
-func (s LogOnlySender) Send(_ context.Context, p FCMPayload) error {
+func (s LogOnlySender) Send(_ context.Context, p FCMPayload) (SendResult, error) {
 	log := s.Log
 	if log == nil {
 		log = slog.Default()
@@ -387,5 +506,8 @@ func (s LogOnlySender) Send(_ context.Context, p FCMPayload) error {
 		"tokens", len(p.Tokens),
 		"title", p.Title,
 	)
-	return nil
+	return SendResult{
+		SuccessfulDeviceIDs:         append([]int64(nil), p.DeviceIDs...),
+		SuccessfulTokenFingerprints: append([]string(nil), p.TokenFingerprints...),
+	}, nil
 }

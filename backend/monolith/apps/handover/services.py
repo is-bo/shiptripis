@@ -389,6 +389,14 @@ def _arm_recipient_notification(
             deal_id=deal.pk,
             context={"deal_reference": f"ST-{deal.pk}"},
         )
+    from apps.core.channels import HANDOVER_DELIVERY_CODE_AVAILABLE
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        HANDOVER_DELIVERY_CODE_AVAILABLE,
+        {"deal_id": deal.pk},
+        targets=[deal.sender_id],
+    )
 
 
 # --- revealing ----------------------------------------------------------------
@@ -957,22 +965,29 @@ def _notify_pickup_confirmed(aggregate: LockedLifecycleAggregate) -> None:
 
     deal = aggregate.deal
     sender_email = getattr(deal.sender, "email", "")
-    if not sender_email:
-        return
-    enqueue_message(
-        kind=OutboundMessage.Kind.PICKUP_CONFIRMED,
-        key=f"pickup_confirmed:{deal.pk}",
-        to_email=sender_email,
-        recipient_user_id=deal.sender_id,
-        deal_id=deal.pk,
-        context={
-            "deal_reference": f"ST-{deal.pk}",
-            "buffer_minutes": max(
-                1,
-                lifecycle.lifecycle_value(deal, "delivery_code_buffer_seconds", 1_800)
-                // 60,
-            ),
-        },
+    if sender_email:
+        enqueue_message(
+            kind=OutboundMessage.Kind.PICKUP_CONFIRMED,
+            key=f"pickup_confirmed:{deal.pk}",
+            to_email=sender_email,
+            recipient_user_id=deal.sender_id,
+            deal_id=deal.pk,
+            context={
+                "deal_reference": f"ST-{deal.pk}",
+                "buffer_minutes": max(
+                    1,
+                    lifecycle.lifecycle_value(deal, "delivery_code_buffer_seconds", 1_800)
+                    // 60,
+                ),
+            },
+        )
+    from apps.core.channels import MATCH_IN_TRANSIT
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        MATCH_IN_TRANSIT,
+        {"deal_id": deal.pk},
+        targets=[deal.sender_id],
     )
 
 
@@ -1039,6 +1054,14 @@ def _notify_delivery_confirmed(aggregate: LockedLifecycleAggregate) -> None:
                 ),
             },
         )
+    from apps.core.channels import HANDOVER_DELIVERY_CONFIRMED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        HANDOVER_DELIVERY_CONFIRMED,
+        {"deal_id": deal.pk},
+        targets=[deal.sender_id, deal.traveler_id],
+    )
 
 
 # --- read model ---------------------------------------------------------------

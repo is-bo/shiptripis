@@ -102,8 +102,8 @@ void main() {
 
     test('nothing writes a handover code to storage', () {
       final storageWriters = _grepLib(RegExp(r'\.write\(\s*key:'));
-      // Token storage is the only place anything is persisted at all, and it
-      // stores tokens, a role and a locale — never code material.
+      // Session/push storage is the only place anything is persisted at all,
+      // and it never stores handover code material.
       for (final file in storageWriters) {
         expect(
           file,
@@ -112,7 +112,7 @@ void main() {
         );
       }
 
-      // And the keys it writes are exactly the four it is allowed to hold.
+      // And the keys it writes are exactly the six it is allowed to hold.
       final store = File(
         'lib/core/session/token_store.dart',
       ).readAsStringSync();
@@ -121,10 +121,18 @@ void main() {
       ).allMatches(store).map((m) => m.group(1)).toSet();
       expect(
         written,
-        {'_kAccess', '_kRefresh', '_kRoleContext', '_kLocale'},
+        {
+          '_kAccess',
+          '_kRefresh',
+          '_kRoleContext',
+          '_kLocale',
+          '_kInstallationId',
+          '_kPendingPushToken',
+        },
         reason:
-            'token storage may hold tokens, a role and a locale — '
-            'never code material, a guest token or recipient details',
+            'secure storage may hold session/push tokens, a random install '
+            'ID, a role and a locale — never code material, a guest token '
+            'or recipient details',
       );
     });
 

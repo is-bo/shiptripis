@@ -3799,4 +3799,57 @@ class LFr extends L {
 
   @override
   String get formStepLockedUntilValid => 'Terminez d\'abord cette étape.';
+
+  @override
+  String get pushPermissionHeading => 'Sur ce téléphone';
+
+  @override
+  String get pushPermissionBody =>
+      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. ShipTrip ne demande l’autorisation que lorsque vous choisissez Activer.';
+
+  @override
+  String get pushPermissionEnabled => 'Les notifications sont activées.';
+
+  @override
+  String get pushPermissionDenied =>
+      'Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.';
+
+  @override
+  String get pushPermissionUnavailable =>
+      'Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.';
+
+  @override
+  String get pushEnableAction => 'Activer les notifications';
+
+  @override
+  String get pushOpenSettingsAction => 'Ouvrir les réglages de notification';
+
+  @override
+  String get pushEssentialTitle => 'Mises à jour essentielles';
+
+  @override
+  String get pushEssentialBody =>
+      'Les mises à jour de paiement, livraison, litige, vérification et sécurité du compte restent activées.';
+
+  @override
+  String get pushMessagesTitle => 'Messages';
+
+  @override
+  String get pushMessagesBody => 'Nouvelle activité dans les discussions.';
+
+  @override
+  String get pushMarketplaceTitle => 'Activité de la place de marché';
+
+  @override
+  String get pushMarketplaceBody =>
+      'Offres, correspondances, trajets et demandes.';
+
+  @override
+  String get notificationJourney => 'Mise à jour du trajet';
+
+  @override
+  String get notificationAccount => 'Mise à jour de la vérification';
+
+  @override
+  String get notificationDispute => 'Mise à jour du litige';
 }

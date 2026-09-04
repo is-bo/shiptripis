@@ -1098,6 +1098,37 @@ Critical emails:
 - payout status
 - cancellation/security
 
+### Phone push notifications
+
+The in-app Notification row remains authoritative; WebSocket and Firebase are
+delivery channels for the same stable event ID. Django publishes eligible
+localized EN/FR/AR multicast work to a durable Redis stream after the business
+commit. The Go notification service waits briefly, suppresses only the
+recipient already reached over WebSocket, then sends through Firebase and
+retries transient failures. Permanent invalid tokens are returned through a
+durable cleanup stream to Django.
+
+Use a multi-device installation model. One user may have multiple active
+devices, one token may belong to only one user, token rotation updates an
+installation in place, logout disables that installation best-effort, account
+deletion cascades it, and stale installations can be pruned. Registration is
+authenticated and raw tokens never appear in broad serializers, audit text,
+admin display, or logs.
+
+Preferences have three product categories: essential lifecycle/security
+updates (always available), messages, and marketplace activity. Android uses
+four normal platform channels: Messages, Deliveries, Account, and Payments.
+Ask for OS permission contextually from Profile, never on the first frame.
+Foreground push reconciles the inbox without showing a duplicate OS banner.
+
+Push display/data must never contain pickup or delivery codes, exact private
+locations, KYC evidence, dispute evidence, payment secrets/provider IDs, or
+chat message content. Taps use allowlisted entity IDs, pass signed-out users
+through login, and never replace server authorization. Firebase Admin
+credentials are server-only; incomplete Firebase configuration leaves push
+safely disabled. See `docs/PUSH_NOTIFICATIONS_RUNBOOK.md` for the event matrix
+and activation gates.
+
 ---
 
 ## 26. Admin

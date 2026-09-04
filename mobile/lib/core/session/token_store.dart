@@ -16,6 +16,8 @@
 /// of a traveler's phone.
 library;
 
+import 'dart:math';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class TokenStore {
@@ -38,6 +40,8 @@ class TokenStore {
   static const _kRefresh = 'auth.refresh';
   static const _kRoleContext = 'app.role_context';
   static const _kLocale = 'app.locale';
+  static const _kInstallationId = 'push.installation_id';
+  static const _kPendingPushToken = 'push.pending_token';
 
   /// Keys written by the retired build. Removed on every start.
   static const _legacyKeys = <String>['handover.codes', 'app.role'];
@@ -65,6 +69,33 @@ class TokenStore {
   Future<void> writeLocale(String? tag) => tag == null
       ? _storage.delete(key: _kLocale)
       : _storage.write(key: _kLocale, value: tag);
+
+  /// Random per-installation UUID. It is deliberately retained across logout
+  /// and is not a hardware, advertising, or vendor identifier.
+  Future<String> readOrCreateInstallationId() async {
+    final existing = await _storage.read(key: _kInstallationId);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final generated =
+        '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+        '${hex.substring(20)}';
+    await _storage.write(key: _kInstallationId, value: generated);
+    return generated;
+  }
+
+  Future<String?> readPendingPushToken() =>
+      _storage.read(key: _kPendingPushToken);
+
+  Future<void> writePendingPushToken(String? token) => token == null
+      ? _storage.delete(key: _kPendingPushToken)
+      : _storage.write(key: _kPendingPushToken, value: token);
 
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.

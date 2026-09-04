@@ -28,8 +28,9 @@ type multicaster interface {
 // holds a pooled HTTP/2 connection to FCM, so a single instance serves the
 // whole handleConcurrency fan-out.
 type firebaseSender struct {
-	client multicaster
-	log    *slog.Logger
+	client           multicaster
+	log              *slog.Logger
+	isPermanentToken func(error) bool
 }
 
 // NewFirebaseSender builds a real FCMSender from a service-account JSON
@@ -66,7 +67,13 @@ func NewFirebaseSender(ctx context.Context, projectID, credentialsPath string, l
 	}
 
 	log.Info("fcm firebase sender ready", "project_id", projectID)
-	return &firebaseSender{client: client, log: log}, nil
+	return &firebaseSender{
+		client: client,
+		log:    log,
+		isPermanentToken: func(err error) bool {
+			return messaging.IsUnregistered(err) || messaging.IsInvalidArgument(err)
+		},
+	}, nil
 }
 
 // Send delivers p to every token in p.Tokens via a single multicast call.
@@ -74,21 +81,19 @@ func NewFirebaseSender(ctx context.Context, projectID, credentialsPath string, l
 // Semantics, in order of intent:
 //   - Empty token list: nothing to do (decodePayload already rejects this,
 //     but the guard keeps Send total).
-//   - Partial failure: if some tokens succeed and others fail, Send returns
-//     nil. Re-sending the whole batch on a partial failure would duplicate
-//     the push to the tokens that already received it — worse than dropping
-//     the few that failed (the periodic FCM flow tolerates an occasional
-//     miss; a duplicate is user-visible). Failed tokens are logged.
-//   - Unregistered / invalid tokens: logged at WARN with the token index so
-//     a future Django token-pruning job has a signal. We can't prune here —
-//     token storage is Django's (accounts_user.fcm_token, §Part B); the Go
-//     side never writes that table.
-//   - Total failure (every token failed, or the API call itself errored):
-//     returns an error so the consumer leaves the entry in the PEL and the
-//     sweeper retries (fcm.go handle()).
-func (s *firebaseSender) Send(ctx context.Context, p FCMPayload) error {
+//   - Partial transient failure: returns token indexes for the consumer to
+//     enqueue as a smaller retry batch. Successful tokens are never included
+//     in that retry, avoiding a deterministic duplicate.
+//   - Unregistered / invalid tokens: returned as Django-owned PushDevice row
+//     IDs so the consumer can publish cleanup feedback without exposing a
+//     registration token.
+//   - Total transient failure (or the API call itself errored): returns an
+//     error so the consumer leaves the entry in the PEL for the sweeper.
+//   - Total permanent failure: returns cleanup IDs without an error, so an
+//     invalid token cannot poison the queue forever.
+func (s *firebaseSender) Send(ctx context.Context, p FCMPayload) (SendResult, error) {
 	if len(p.Tokens) == 0 {
-		return nil
+		return SendResult{}, nil
 	}
 
 	msg := &messaging.MulticastMessage{
@@ -98,23 +103,28 @@ func (s *firebaseSender) Send(ctx context.Context, p FCMPayload) error {
 			Title: p.Title,
 			Body:  p.Body,
 		},
+		Android: &messaging.AndroidConfig{
+			Priority:    "normal",
+			CollapseKey: p.CollapseKey,
+			Notification: &messaging.AndroidNotification{
+				ChannelID: p.AndroidChannelID,
+			},
+		},
 	}
 
 	resp, err := s.client.SendEachForMulticast(ctx, msg)
 	if err != nil {
 		// Transport / auth / quota error — nothing was sent. Surface it so
 		// the entry stays in the PEL for the sweeper.
-		return fmt.Errorf("fcm: multicast send (event %s): %w", p.EventID, err)
+		return SendResult{}, fmt.Errorf("fcm: multicast send (event %s): %w", p.EventID, err)
 	}
 
-	if resp.FailureCount > 0 {
-		s.reportFailures(p, resp)
-	}
+	result, transientFailures := s.classifyResults(p, resp)
 
 	// Every token failed — treat as a send failure so the sweeper retries.
 	// A transient FCM hiccup that fails all tokens should not be acked away.
-	if resp.SuccessCount == 0 {
-		return fmt.Errorf("fcm: all %d tokens failed (event %s)", resp.FailureCount, p.EventID)
+	if resp.SuccessCount == 0 && transientFailures > 0 {
+		return result, fmt.Errorf("fcm: all %d tokens failed transiently (event %s)", transientFailures, p.EventID)
 	}
 
 	s.log.Debug("fcm sent",
@@ -123,24 +133,43 @@ func (s *firebaseSender) Send(ctx context.Context, p FCMPayload) error {
 		"success", resp.SuccessCount,
 		"failure", resp.FailureCount,
 	)
-	return nil
+	return result, nil
 }
 
-// reportFailures logs each per-token failure. Unregistered/invalid tokens
-// are flagged distinctly so a Django pruning job can act on them; other
-// failures (transient, rate-limited) are informational.
-func (s *firebaseSender) reportFailures(p FCMPayload, resp *messaging.BatchResponse) {
+// classifyResults converts FCM's token-indexed response back into Django-owned
+// device row IDs. Registration tokens never enter logs or the cleanup stream.
+func (s *firebaseSender) classifyResults(p FCMPayload, resp *messaging.BatchResponse) (SendResult, int) {
+	result := SendResult{}
+	transientFailures := 0
+	classifier := s.isPermanentToken
+	if classifier == nil {
+		classifier = func(err error) bool {
+			return messaging.IsUnregistered(err) || messaging.IsInvalidArgument(err)
+		}
+	}
 	for i, r := range resp.Responses {
-		if r.Success || r.Error == nil {
+		if i >= len(p.DeviceIDs) {
+			break
+		}
+		if r.Success {
+			result.SuccessfulDeviceIDs = append(result.SuccessfulDeviceIDs, p.DeviceIDs[i])
+			result.SuccessfulTokenFingerprints = append(result.SuccessfulTokenFingerprints, p.TokenFingerprints[i])
 			continue
 		}
-		stale := messaging.IsUnregistered(r.Error) || messaging.IsInvalidArgument(r.Error)
+		permanent := r.Error != nil && classifier(r.Error)
+		if permanent {
+			result.InvalidDeviceIDs = append(result.InvalidDeviceIDs, p.DeviceIDs[i])
+			result.InvalidTokenFingerprints = append(result.InvalidTokenFingerprints, p.TokenFingerprints[i])
+		} else {
+			transientFailures++
+			result.RetryTokenIndexes = append(result.RetryTokenIndexes, i)
+		}
 		s.log.Warn("fcm token failed",
 			"event_id", p.EventID,
 			"user_id", p.UserID,
-			"token_index", i,
-			"stale", stale,
-			"err", r.Error,
+			"device_id", p.DeviceIDs[i],
+			"permanent", permanent,
 		)
 	}
+	return result, transientFailures
 }

@@ -7,12 +7,12 @@ CLAUDE.md G6 — Redis publish ALWAYS after commit:
 
 CLAUDE.md G6b — Detection-only outbox (V1):
     Every successful publish also INSERTs a `PublishedEvent` row. A daily
-    cron compares undelivered rows against Redis `delivered:<event_id>`
-    keys and alerts on mismatches.
+    cron compares undelivered rows against Redis delivery receipts and alerts
+    on mismatches.
 
 The Go side (chat / notif services) consumes these channels via Redis
-pub/sub and writes `SET delivered:<event_id> 1 EX 60` on receipt; the
-notif worker then marks `PublishedEvent.delivered_at`.
+pub/sub and writes `SET delivered:<event_id>:<user_id> 1 EX 60` on receipt;
+the notif worker then marks `PublishedEvent.delivered_at`.
 """
 
 from __future__ import annotations
@@ -62,9 +62,8 @@ def publish_after_commit(
 ) -> str:
     """Schedule a Redis publish + audit-row write to fire on commit.
 
-    `targets` lists user ids the Go notification dispatcher should fan
-    out to over WS. If omitted the dispatcher falls back to legacy
-    sender_id/traveler_id/recipient_id keys in the payload.
+    `targets` lists user ids the Go notification dispatcher should fan out to
+    over WS. An omitted list intentionally targets nobody.
 
     Returns the `event_id` (UUID4 hex).
     """
@@ -74,10 +73,13 @@ def publish_after_commit(
         raise TypeError("payload must be a dict")
 
     event_id = uuid.uuid4().hex
+    target_ids = list(
+        dict.fromkeys(int(uid) for uid in (targets or []) if int(uid) > 0)
+    )
     enriched: dict[str, Any] = {
         "event_id": event_id,
         "ts": timezone.now().isoformat(),
-        "targets": list(targets) if targets else [],
+        "targets": target_ids,
         **payload,
     }
     serialized = json.dumps(enriched, separators=(",", ":"))
@@ -102,7 +104,7 @@ def publish_after_commit(
         # fan-out via Go is a same-event mirror, not a replacement. We
         # deliberately swallow errors here so a notification-write failure
         # does NOT stop the live Redis publish below.
-        if targets:
+        if target_ids:
             try:
                 from apps.notifications.models import (  # noqa: WPS433 (late import)
                     Notification,
@@ -116,13 +118,33 @@ def publish_after_commit(
                             event_id=event_id,
                             payload=enriched,
                         )
-                        for uid in targets
+                        for uid in target_ids
                     ],
                     ignore_conflicts=True,  # (recipient, event_id) is unique
                 )
             except Exception:
                 logger.exception(
                     "redis_bus: failed to persist inbox rows for %s/%s",
+                    channel,
+                    event_id,
+                )
+            try:
+                from apps.notifications.push import (  # noqa: WPS433 (late import)
+                    enqueue_fcm_for_event,
+                )
+
+                enqueue_fcm_for_event(
+                    channel=channel,
+                    event_id=event_id,
+                    payload=enriched,
+                    targets=target_ids,
+                )
+            except Exception:
+                # Push is a secondary delivery channel. Redis/FCM readiness
+                # must never retroactively fail the committed business action,
+                # and payload/token material must never enter this log line.
+                logger.exception(
+                    "redis_bus: failed to enqueue push for %s/%s",
                     channel,
                     event_id,
                 )
@@ -221,7 +243,7 @@ def mark_delivered(event_id: str) -> bool:
     """Mark a `PublishedEvent` as delivered. Idempotent.
 
     Called by the Go notif worker (or a Django observer) when it sees the
-    downstream `delivered:<event_id>` Redis key. Returns True if a row
+    downstream `delivered:<event_id>:<user_id>` Redis key. Returns True if a row
     was updated, False if no matching row exists.
     """
     updated = (

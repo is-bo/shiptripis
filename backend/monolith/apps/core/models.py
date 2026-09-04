@@ -3,7 +3,7 @@
 `PublishedEvent` is the V1 detection-only outbox audit (CLAUDE.md G6b):
 every Redis publish writes a row here. A daily Django cron compares
 `delivered_at IS NULL AND published_at < now - 5min` against Redis
-`delivered:<event_id>` keys and alerts on mismatches.
+`delivered:<event_id>:<user_id>` keys and alerts on mismatches.
 
 Full transactional outbox is V2. We don't auto-recover — but we detect.
 """

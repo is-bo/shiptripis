@@ -7,9 +7,17 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Notification
-from .serializers import NotificationSerializer
+from .models import Notification, NotificationPreference
+from .push import register_push_device, unregister_push_device
+from .serializers import (
+    NotificationPreferenceSerializer,
+    NotificationSerializer,
+    PushDeviceRegistrationSerializer,
+    PushDeviceSerializer,
+    PushDeviceUnregisterSerializer,
+)
 
 
 class _Pagination(PageNumberPagination):
@@ -72,3 +80,50 @@ def unread_count(request: Request) -> Response:
         recipient=request.user, read_at__isnull=True
     ).count()
     return Response({"unread": n})
+
+
+class PushDeviceRegistrationView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        serializer = PushDeviceRegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        device = register_push_device(user=request.user, **serializer.validated_data)
+        return Response(PushDeviceSerializer(device).data, status=status.HTTP_200_OK)
+
+
+class PushDeviceUnregisterView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        serializer = PushDeviceUnregisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        unregister_push_device(
+            user=request.user,
+            installation_id=serializer.validated_data["installation_id"],
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class NotificationPreferenceView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def _preference(self, request: Request) -> NotificationPreference:
+        preference, _ = NotificationPreference.objects.get_or_create(user=request.user)
+        return preference
+
+    def get(self, request: Request) -> Response:
+        return Response(
+            NotificationPreferenceSerializer(self._preference(request)).data
+        )
+
+    def patch(self, request: Request) -> Response:
+        preference = self._preference(request)
+        serializer = NotificationPreferenceSerializer(
+            preference,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
