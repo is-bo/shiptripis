@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import (
     DecimalField,
@@ -47,6 +46,7 @@ from apps.core.storage import (
     image_bytes_match_extension,
     make_key,
     put_object,
+    storage_for,
 )
 from apps.deals.models import DealLegAllocation
 from apps.kyc.models import KycSubmission
@@ -688,7 +688,10 @@ class JourneyLegProofCreateView(APIView):
                     status=status.HTTP_200_OK,
                 )
 
-        bucket = settings.S3_BUCKET_PROOF
+        # The private media bucket Django's own credential owns. Not the
+        # KYC bucket: that belongs to the Go KYC service's key, which is how
+        # every deployed proof upload came to 500 before Phase 8F-A.
+        bucket = storage_for("proof").require_bucket()
         key = make_key(f"journeys/{journey_pk}/legs/{leg_pk}/proofs", ext)
         try:
             put_object(

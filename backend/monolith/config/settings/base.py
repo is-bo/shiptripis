@@ -296,6 +296,23 @@ S3_ACCESS_KEY = env.str("S3_ACCESS_KEY")
 S3_SECRET_KEY = env.str("S3_SECRET_KEY")
 S3_USE_PATH_STYLE = env.bool("S3_USE_PATH_STYLE", default=bool(S3_ENDPOINT_URL))
 S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
+# The KYC bucket is not Django's. The Go KYC service writes it with its own
+# key, and on the deployed environment that key is the *only* one granted on
+# that bucket — Django's `S3_ACCESS_KEY` gets 403 AccessDenied. Presigning is a
+# local HMAC and never fails, so pointing Django's credential at this bucket
+# does not raise: it returns a URL the browser is then denied, which is exactly
+# how the admin console came to render a broken KYC image.
+#
+# These variables already exist in the deployment contract — `railway/start.py`
+# maps `KYC_S3_*` onto the KYC child process's own `S3_*` — so Django reads the
+# same pair rather than a new secret being minted. They fall back to the generic
+# credential, which is the correct behaviour for local/compose environments
+# where one key owns every bucket.
+KYC_S3_ENDPOINT_URL = env.str("KYC_S3_ENDPOINT_URL", default=S3_ENDPOINT_URL)
+KYC_S3_REGION = env.str("KYC_S3_REGION", default=S3_REGION)
+KYC_S3_ACCESS_KEY = env.str("KYC_S3_ACCESS_KEY", default="")
+KYC_S3_SECRET_KEY = env.str("KYC_S3_SECRET_KEY", default="")
+KYC_S3_USE_PATH_STYLE = env.bool("KYC_S3_USE_PATH_STYLE", default=S3_USE_PATH_STYLE)
 S3_BUCKET_PARCEL = env.str("S3_BUCKET_PARCEL", default="shiptrip-parcel")
 # Flight proof is journey evidence, not identity evidence, and Django writes
 # it with Django's own credential. Hosting it in the KYC bucket coupled it to
@@ -351,7 +368,11 @@ PAYMENTS_PUBLIC_BASE_URL = env.str("PAYMENTS_PUBLIC_BASE_URL", default="")
 # Production refuses to boot without it; development and tests derive a
 # deterministic fallback from SECRET_KEY (see apps.handover.codes).
 HANDOVER_CODE_SECRET = env.str("HANDOVER_CODE_SECRET", default="")
-S3_BUCKET_DISPUTE = env.str("S3_BUCKET_DISPUTE", default="shiptrip-dispute")
+# Dispute evidence is Django's own write, like parcel media and flight proof,
+# so it defaults to the private media bucket Django's credential owns. It must
+# never fall back to the KYC bucket: that is the Go service's, and a fallback
+# onto it would reproduce the 8F-A AccessDenied failure on a dispute instead.
+S3_BUCKET_DISPUTE = env.str("S3_BUCKET_DISPUTE", default=S3_BUCKET_PARCEL)
 #: Lifetime of a signed dispute-evidence download URL, in seconds.
 DISPUTE_EVIDENCE_URL_TTL_SECONDS = env.int(
     "DISPUTE_EVIDENCE_URL_TTL_SECONDS", default=300

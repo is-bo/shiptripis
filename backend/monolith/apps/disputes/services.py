@@ -55,7 +55,8 @@ from apps.core.storage import (
     image_bytes_match_extension,
     make_key,
     put_object,
-    s3_client,
+    storage_for,
+    store_for_bucket,
 )
 from apps.deals import lifecycle
 from apps.deals.models import Deal, DealEvent, DealTermsSnapshot
@@ -943,7 +944,9 @@ def _store_evidence_file(
             code="dispute_evidence_content_mismatch",
         )
 
-    bucket = getattr(settings, "S3_BUCKET_DISPUTE", settings.S3_BUCKET_KYC)
+    # Dispute evidence is Django's own private media, never the KYC bucket:
+    # that one belongs to the Go KYC service's credential.
+    bucket = storage_for("dispute").require_bucket()
     key = make_key(f"disputes/{dispute.pk}", ext)
     put_object(bucket=bucket, key=key, body=body, content_type=content_type)
     return _StoredFile(
@@ -1074,10 +1077,11 @@ def evidence_download_url(*, evidence_id: int, actor_id: int, is_staff: bool) ->
             "This evidence is a written statement and has no file.",
             code="dispute_evidence_not_a_file",
         )
-    return s3_client().generate_presigned_url(
-        "get_object",
-        Params={"Bucket": evidence.storage_bucket, "Key": evidence.storage_key},
-        ExpiresIn=int(
+    return store_for_bucket(
+        evidence.storage_bucket, default="dispute"
+    ).presigned_get(
+        evidence.storage_key,
+        expires_in=int(
             getattr(settings, "DISPUTE_EVIDENCE_URL_TTL_SECONDS", 300) or 300
         ),
     )

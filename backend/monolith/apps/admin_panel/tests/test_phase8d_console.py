@@ -9,7 +9,7 @@ surfaces.
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
@@ -33,6 +33,23 @@ from apps.kyc.models import KycSubmission
 from apps.locations.models import Country, GeographyCatalogueImport, Place
 from apps.notifications.models import OutboundMessage
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+
+
+def _reachable_store(*, readable: bool = True) -> Mock:
+    """A stand-in for one `apps.core.storage` class.
+
+    `readable` is the fact that matters and the one the deployed failure turned
+    on: presigning is local and always succeeds, so whether an object can be
+    fetched is a separate question that has to be asked separately.
+    """
+
+    store = Mock()
+    store.name = "kyc"
+    store.bucket = "private-evidence"
+    store.credential_source = "KYC_S3_*"
+    store.readable.return_value = readable
+    store.presigned_get.return_value = "https://private.example.test/signed"
+    return store
 
 User = get_user_model()
 
@@ -209,22 +226,22 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
             AdminAuditLog.objects.filter(action="kyc.approved", actor=trust).exists()
         )
 
-    @patch("apps.admin_panel.console_views.s3_client")
-    def test_private_kyc_evidence_is_signed_audited_and_authorized(self, storage):
-        storage.return_value.generate_presigned_url.return_value = (
-            "https://private.example.test/signed"
-        )
+    @patch("apps.admin_panel.console_views.storage_for")
+    def test_private_kyc_evidence_is_signed_audited_and_authorized(self, storage_for):
+        store = _reachable_store()
+        storage_for.return_value = store
         trust = self.staff_user(AdminRole.TRUST)
         path = f"/admin/verification/kyc/{self.submission.pk}/evidence/front/"
         response = self.dispatch(path, user=trust)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Cache-Control"], "no-store")
         self.assertEqual(response["Referrer-Policy"], "no-referrer")
+        # Phase 8F-C: the KYC bucket is not Django's own, so the evidence path
+        # must ask for the KYC storage class by name. Signing with the generic
+        # credential produces a URL that is well-formed and then denied.
+        self.assertEqual(storage_for.call_args.args[0], "kyc")
         self.assertEqual(
-            storage.return_value.generate_presigned_url.call_args.kwargs["Params"][
-                "Key"
-            ],
-            self.submission.front_image_key,
+            store.presigned_get.call_args.args[0], self.submission.front_image_key
         )
         self.assertTrue(
             AdminAuditLog.objects.filter(
@@ -235,13 +252,15 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
             self.dispatch(path, user=self.staff_user(AdminRole.SUPPORT)).status_code,
             403,
         )
-        self.assertEqual(storage.return_value.generate_presigned_url.call_count, 1)
+        self.assertEqual(store.presigned_get.call_count, 1)
 
-    @patch(
-        "apps.admin_panel.console_views.s3_client",
-        side_effect=RuntimeError("storage-secret-sentinel"),
-    )
-    def test_storage_failure_is_actionable_without_exposing_raw_error(self, storage):
+    @patch("apps.admin_panel.console_views.storage_for")
+    def test_storage_failure_is_actionable_without_exposing_raw_error(
+        self, storage_for
+    ):
+        store = _reachable_store()
+        store.presigned_get.side_effect = RuntimeError("storage-secret-sentinel")
+        storage_for.return_value = store
         response = self.dispatch(
             f"/admin/verification/kyc/{self.submission.pk}/evidence/front/"
         )
@@ -252,6 +271,58 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
         self.assertIn("Private evidence access could not be completed", body)
         self.assertIn("Reference:", body)
         self.assertNotIn("storage-secret-sentinel", body)
+
+    @patch("apps.admin_panel.console_views.storage_for")
+    def test_unreadable_evidence_says_so_instead_of_rendering_a_dead_image(
+        self, storage_for
+    ):
+        """Phase 8F-C: the failure the reviewer actually saw.
+
+        Django presigned the KYC bucket with a credential that has no grant on
+        it. Signing succeeded — it is local HMAC — so the page rendered an
+        `<img>` whose fetch was then refused, and the reviewer got a broken
+        image indistinguishable from a submission with no document at all.
+        """
+
+        store = _reachable_store(readable=False)
+        storage_for.return_value = store
+        trust = self.staff_user(AdminRole.TRUST)
+
+        body = self.dispatch(
+            f"/admin/verification/kyc/{self.submission.pk}/", user=trust
+        ).content.decode()
+
+        self.assertIn("Evidence is temporarily unavailable", body)
+        # Never a URL the browser is about to be denied.
+        self.assertEqual(store.presigned_get.call_count, 0)
+        # And none of the things a storage error would otherwise leak.
+        self.assertNotIn(self.submission.front_image_key, body)
+        self.assertNotIn("AccessDenied", body)
+        self.assertNotIn("shiptrip-kyc", body)
+
+        # Following the link is refused with the same sentence, not a 500.
+        response = self.dispatch(
+            f"/admin/verification/kyc/{self.submission.pk}/evidence/front/",
+            user=trust,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(store.presigned_get.call_count, 0)
+
+    def test_a_submission_with_no_document_is_not_a_storage_failure(self):
+        """"Nothing was submitted" and "we cannot fetch it" are different."""
+
+        self.submission.front_image_key = ""
+        self.submission.back_image_key = ""
+        self.submission.selfie_image_key = ""
+        self.submission.save()
+
+        body = self.dispatch(
+            f"/admin/verification/kyc/{self.submission.pk}/",
+            user=self.staff_user(AdminRole.TRUST),
+        ).content.decode()
+
+        self.assertIn("No evidence file was attached", body)
+        self.assertNotIn("Evidence is temporarily unavailable", body)
 
     def test_trust_can_open_flight_proof_queue_and_support_is_blocked(self):
         trust = User.objects.create_user(
@@ -294,13 +365,11 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
             leg=leg, bucket="private-proof", object_key=f"journeys/{leg.pk}/proof.jpg"
         )
 
-    @patch("apps.admin_panel.console_views.s3_client")
+    @patch("apps.admin_panel.console_views.store_for_bucket")
     def test_flight_proof_evidence_and_both_decisions_are_authorized_and_audited(
-        self, storage
+        self, store_for_bucket
     ):
-        storage.return_value.generate_presigned_url.return_value = (
-            "https://private.example.test/signed"
-        )
+        store_for_bucket.return_value = _reachable_store()
         trust = self.staff_user(AdminRole.TRUST)
         support = self.staff_user(AdminRole.SUPPORT)
         for decision in ("approved", "rejected"):

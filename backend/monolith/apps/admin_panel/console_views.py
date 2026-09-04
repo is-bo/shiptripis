@@ -41,7 +41,7 @@ from apps.core.business_settings import (
 )
 from apps.core.models import BusinessSettingsVersion
 from apps.core.policy_display import boost_packages, policy_rows
-from apps.core.storage import s3_client
+from apps.core.storage import store_for_bucket, storage_for
 from apps.deals.models import Deal, DealEvent
 from apps.disputes.models import Dispute, DisputeEvidence
 from apps.disputes.services import (
@@ -124,6 +124,7 @@ from .console_presenters import (
     status_cell,
     text_cell,
 )
+from .health import storage_health
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import AdminSettingsCreateSerializer
 from .permissions import (
@@ -315,6 +316,58 @@ def _search(queryset, request, fields: tuple[str, ...]):
     return queryset.filter(condition)
 
 
+#: What each private store holds, in the operator's own words. The label is the
+#: point: "kyc" is a bucket name, "Identity evidence" is what breaks when it is
+#: unreachable.
+_STORAGE_LABELS = {
+    "parcel": ("Parcel photos and private media", "Item photos senders upload."),
+    "proof": ("Flight proof", "Boarding passes and tickets awaiting review."),
+    "dispute": ("Dispute evidence", "Files parties attach to a dispute."),
+    "kyc": ("Identity evidence", "KYC documents and selfies awaiting review."),
+}
+
+
+def _storage_rows() -> list[dict]:
+    """Per-class object storage readiness, each probed with its own credential.
+
+    Separate rows rather than one verdict, because the failure this replaces
+    was precisely a single verdict: the media bucket answered, the console said
+    storage was fine, and KYC evidence had been unreadable for weeks. A bucket
+    name is not access and a presigned URL is not access — only a request is.
+    """
+
+    rows: list[dict] = []
+    health = storage_health()
+    classes = health.get("classes", {}) if isinstance(health, dict) else {}
+    for name in ("parcel", "proof", "dispute", "kyc"):
+        entry = classes.get(name) or {}
+        label, purpose = _STORAGE_LABELS[name]
+        credential = entry.get("credential", "")
+        if not entry.get("bucket_configured"):
+            state, tone, detail = (
+                "Not configured",
+                "bad",
+                f"{purpose} No bucket is configured, so nothing can be stored or reviewed.",
+            )
+        elif entry.get("reachable"):
+            state, tone, detail = (
+                "Reachable",
+                "ok",
+                f"{purpose} Answered with the {credential} credential.",
+            )
+        else:
+            state, tone, detail = (
+                "Unreachable",
+                "bad",
+                f"{purpose} The {credential} credential was refused or the store "
+                "did not answer; evidence will show as temporarily unavailable.",
+            )
+        rows.append(
+            {"name": label, "label": state, "tone": tone, "detail": detail}
+        )
+    return rows
+
+
 def _provider_rows() -> list[dict]:
     rows: list[dict] = []
     try:
@@ -322,8 +375,22 @@ def _provider_rows() -> list[dict]:
         for item in available_providers(policy):
             if item.provider not in (PaymentProvider.STRIPE, PaymentProvider.CHARGILY):
                 continue
-            if item.enabled and item.configured and item.accepts_new_checkouts:
+            if item.available:
                 label, tone, detail = "Enabled", "ok", "Ready for new checkouts."
+            elif item.enabled and item.configured and not item.configuration_valid:
+                # The state this phase exists to stop being invisible: the
+                # operator switched the rail on, the deployment holds a key, and
+                # the configuration still describes an environment nobody can
+                # identify. "Enabled" would be a lie and "Disabled" would send
+                # them to the wrong switch.
+                label, tone, detail = (
+                    "Enabled, but unavailable",
+                    "bad",
+                    "Enabled in business settings and refused for new checkouts: "
+                    "the deployment's credentials and API environment do not "
+                    "agree, so which environment this rail would transact in "
+                    "cannot be established.",
+                )
             elif item.enabled and not item.configured:
                 label, tone, detail = (
                     "Configuration incomplete",
@@ -775,15 +842,42 @@ def kyc_detail(request, pk: int):
             return redirect("admin_console:kyc-detail", pk=submission.pk)
     # Identity slots are always stored images, so each one gets a real preview
     # rather than a link an operator has to open before they can judge it.
-    evidence = [
-        {"slot": slot, "label": label, "previewable": True}
-        for slot, label, key in (
-            ("front", "Document front", submission.front_image_key),
-            ("back", "Document back", submission.back_image_key),
-            ("selfie", "Applicant selfie", submission.selfie_image_key),
+    #
+    # Reachability is checked here rather than left to the browser. A presigned
+    # URL is produced by local signing and is well-formed even when the
+    # credential has no grant on the bucket, so rendering one blind is how a
+    # storage failure turns into a broken image with no explanation. One HEAD
+    # per slot, and only for a reviewer who may see evidence at all.
+    may_view_evidence = has_admin_permission(request.user, "view_evidence")
+    store = storage_for("kyc")
+    evidence = []
+    evidence_unavailable = False
+    for slot, label, key in (
+        ("front", "Document front", submission.front_image_key),
+        ("back", "Document back", submission.back_image_key),
+        ("selfie", "Applicant selfie", submission.selfie_image_key),
+    ):
+        if not key:
+            continue
+        reachable = store.readable(key) if may_view_evidence else True
+        if not reachable:
+            evidence_unavailable = True
+            logger.error(
+                "admin_console.kyc_evidence_unreachable submission=%s slot=%s "
+                "store=%s request_id=%s",
+                submission.pk,
+                slot,
+                store.name,
+                getattr(request, "request_id", ""),
+            )
+        evidence.append(
+            {
+                "slot": slot,
+                "label": label,
+                "previewable": reachable,
+                "available": reachable,
+            }
         )
-        if key
-    ]
     return _render(
         request,
         "admin/console/verification_detail.html",
@@ -795,9 +889,11 @@ def kyc_detail(request, pk: int):
             "applicant": submission.user,
             "waiting_for": age_label(submission.created_at),
             "evidence": evidence,
+            "evidence_unavailable": evidence_unavailable,
+            "evidence_reference": getattr(request, "request_id", ""),
             "form": form,
             "may_review": has_admin_permission(request.user, "review_kyc"),
-            "may_view_evidence": has_admin_permission(request.user, "view_evidence"),
+            "may_view_evidence": may_view_evidence,
             "previous": submission.user.kyc_submissions.exclude(
                 pk=submission.pk
             ).order_by("-created_at")[:8],
@@ -805,20 +901,61 @@ def kyc_detail(request, pk: int):
     )
 
 
+def _evidence_unavailable(request, *, target, action: str):
+    """Say that stored evidence exists but cannot be served right now.
+
+    Deliberately not `_operation_error`: an operator needs to tell "nothing was
+    submitted" from "something was submitted and the object store is refusing
+    us", and neither answer may mention a bucket, a credential, an access key
+    or a provider error string. The request reference is what support and the
+    logs are correlated on.
+    """
+
+    reference = getattr(request, "request_id", "")
+    suffix = f" Reference: {reference}." if reference else ""
+    messages.error(
+        request,
+        "Evidence is temporarily unavailable. The submission is intact; the "
+        f"secure document store could not be reached.{suffix}",
+    )
+    return redirect(
+        "admin_console:kyc-detail"
+        if action.startswith("kyc.")
+        else "admin_console:proof-detail",
+        pk=target.pk,
+    )
+
+
 def _private_object_redirect(
-    request, *, bucket: str, key: str, target, action: str, metadata: dict
+    request, *, store, key: str, target, action: str, metadata: dict
 ):
-    if not bucket or not key:
+    """Hand an authorized reviewer a short-lived URL for one private object.
+
+    `store` is a logical `apps.core.storage` class, not a bucket name, because
+    the credential that may read a bucket is a property of the bucket and
+    getting that pairing wrong is invisible at signing time: presigning is a
+    local HMAC that succeeds with any key, and the denial only happens later in
+    the reviewer's browser. `readable()` is therefore checked *before* signing,
+    so a storage problem becomes a sentence rather than a broken image.
+    """
+
+    if not store.bucket or not key:
         raise Http404
+    if not store.readable(key):
+        logger.error(
+            "admin_console.evidence_unreachable store=%s action=%s request_id=%s",
+            store.name,
+            action,
+            getattr(request, "request_id", ""),
+        )
+        return _evidence_unavailable(request, target=target, action=action)
     try:
-        url = s3_client().generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": bucket,
-                "Key": key,
-                "ResponseContentDisposition": "inline",
-            },
-            ExpiresIn=int(getattr(settings, "DISPUTE_EVIDENCE_URL_TTL_SECONDS", 300)),
+        url = store.presigned_get(
+            key,
+            expires_in=int(
+                getattr(settings, "DISPUTE_EVIDENCE_URL_TTL_SECONDS", 300)
+            ),
+            content_disposition="inline",
         )
         record_admin_action(
             actor=request.user,
@@ -854,7 +991,7 @@ def kyc_evidence(request, pk: int, slot: str):
         raise Http404
     return _private_object_redirect(
         request,
-        bucket=settings.S3_BUCKET_KYC,
+        store=storage_for("kyc"),
         key=keys[slot],
         target=submission,
         action="kyc.evidence_viewed",
@@ -937,6 +1074,18 @@ def flight_proof_detail(request, pk: int):
             raise PermissionDenied("Flight-proof review permission is required.")
         if _handle_review(request, form, kind="proof", object_id=proof.pk):
             return redirect("admin_console:proof-detail", pk=proof.pk)
+    may_view_evidence = has_admin_permission(request.user, "view_evidence")
+    proof_available = (
+        store_for_bucket(proof.bucket, default="proof").readable(proof.object_key)
+        if may_view_evidence
+        else True
+    )
+    if may_view_evidence and not proof_available:
+        logger.error(
+            "admin_console.proof_evidence_unreachable proof=%s request_id=%s",
+            proof.pk,
+            getattr(request, "request_id", ""),
+        )
     return _render(
         request,
         "admin/console/verification_detail.html",
@@ -968,11 +1117,14 @@ def flight_proof_detail(request, pk: int):
                     "label": "Flight proof",
                     "previewable": proof.content_type
                     in ("image/jpeg", "image/png", "image/webp"),
+                    "available": proof_available,
                 },
             ),
+            "evidence_unavailable": not proof_available,
+            "evidence_reference": getattr(request, "request_id", ""),
             "form": form,
             "may_review": has_admin_permission(request.user, "review_flight_proofs"),
-            "may_view_evidence": has_admin_permission(request.user, "view_evidence"),
+            "may_view_evidence": may_view_evidence,
         },
     )
 
@@ -984,7 +1136,10 @@ def flight_proof_evidence(request, pk: int):
     proof = get_object_or_404(JourneyLegProof, pk=pk)
     return _private_object_redirect(
         request,
-        bucket=proof.bucket,
+        # The row records the bucket it was written to, so a proof stored
+        # before the 8F-A bucket move still resolves to the credential that can
+        # read it rather than to today's default.
+        store=store_for_bucket(proof.bucket, default="proof"),
         key=proof.object_key,
         target=proof,
         action="flight_proof.evidence_viewed",
@@ -2545,6 +2700,7 @@ def system_status(request):
             "kyc_limiter": limiter,
             "limiter_signal": limiter_signal,
             "routing_signal": routing_signal,
+            "storage": _storage_rows(),
             "providers": _provider_rows(),
             "routing": routing,
             "jobs": {

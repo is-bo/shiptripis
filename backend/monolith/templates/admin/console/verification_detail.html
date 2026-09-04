@@ -32,9 +32,22 @@
           {% if may_view_evidence %}<span class="st-chip st-info">Every open is audited</span>{% endif %}
         </div>
 
+        {% if may_view_evidence and evidence_unavailable %}
+          {% comment %}Stored evidence exists and the document store will not
+          serve it. Saying so beats rendering an authorized URL the browser is
+          about to be denied, which is indistinguishable from a missing file.
+          No bucket, key or provider error appears here by design.{% endcomment %}
+          <p class="st-alert st-alert-bad" role="status">
+            <strong>Evidence is temporarily unavailable.</strong>
+            The submission is intact; the secure document store could not be
+            reached. Try again shortly, and quote this reference to
+            engineering if it persists{% if evidence_reference %}: <code>{{ evidence_reference }}</code>{% endif %}.
+          </p>
+        {% endif %}
+
         {% if may_view_evidence and evidence %}
           <div class="st-evidence-previews">
-            {% for item in evidence %}{% if item.previewable %}
+            {% for item in evidence %}{% if item.previewable and item.available %}
               {% if kind == 'kyc' %}
                 <figure>
                   <a target="_blank" rel="noreferrer" href="{% url 'admin_console:kyc-evidence' record.pk item.slot %}">
@@ -62,13 +75,13 @@
             <p class="st-privacy-note">Your role can see that {{ evidence|length }} file{{ evidence|length|pluralize }} exist{{ evidence|length|pluralize:"s," }} but cannot open private evidence.</p>
           {% else %}
             <div class="st-evidence-grid">
-              {% for item in evidence %}{% if not item.previewable %}
+              {% for item in evidence %}{% if not item.previewable or not item.available %}
               <div class="st-evidence">
-                <div><strong>{{ item.label }}</strong><small>Cannot be shown inline</small></div>
+                <div><strong>{{ item.label }}</strong><small>{% if not item.available %}Temporarily unavailable{% else %}Cannot be shown inline{% endif %}</small></div>
                 {% if kind == 'kyc' %}
-                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:kyc-evidence' record.pk item.slot %}">View evidence</a>
+                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:kyc-evidence' record.pk item.slot %}">{% if item.available %}View evidence{% else %}Try again{% endif %}</a>
                 {% else %}
-                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:proof-evidence' record.pk %}">View evidence</a>
+                  <a class="button st-button-quiet" target="_blank" rel="noreferrer" href="{% url 'admin_console:proof-evidence' record.pk %}">{% if item.available %}View evidence{% else %}Try again{% endif %}</a>
                 {% endif %}
               </div>
               {% endif %}{% endfor %}

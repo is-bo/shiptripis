@@ -67,6 +67,20 @@
       <p class="st-muted">The obligation to send is durable. A failed row means delivery has not succeeded, not that the message was lost.</p>
     </section>
 
+    <section class="st-card" id="storage">
+      <p class="st-eyebrow">Private object storage</p>
+      <h2>Evidence stores</h2>
+      <ul class="st-reading-list">
+        {% for store in storage %}
+        <li>
+          <div><strong>{{ store.name }}</strong><small>{{ store.detail }}</small></div>
+          <span class="st-chip st-{{ store.tone }}">{{ store.label }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="st-muted">Each store is checked with the credential that owns it, because they are not all the same key. A configured bucket name proves nothing, and neither does a signed URL: signing happens locally and succeeds even where the key has no grant.</p>
+    </section>
+
     <section class="st-card" id="providers">
       <p class="st-eyebrow">Provider state</p>
       <h2>Business rails</h2>

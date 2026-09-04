@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import redis
 from django.conf import settings
 from django.db import connection
@@ -10,11 +12,65 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.storage import storage_for
 from apps.finance.models import PaymentProviderEvent, ScheduledJob
 from apps.finance.providers import ChargilyGateway, StripeGateway
 from apps.notifications.models import OutboundMessage
 
 from .permissions import CanViewOperationalIncidents
+
+#: Logical storage classes reported to operators, in reading order.
+STORAGE_CLASSES_REPORTED = ("parcel", "proof", "dispute", "kyc")
+
+#: How long a storage reachability verdict is reused. Health is polled; the
+#: object store is not. Long enough that polling costs nothing, short enough
+#: that an operator watching a repair sees it inside a minute.
+_STORAGE_PROBE_TTL_SECONDS = 60
+
+_storage_cache: dict[str, object] = {"at": 0.0, "value": None}
+
+
+def storage_health() -> dict:
+    """Per-class object storage readiness, probed with each owning credential.
+
+    Deliberately not a single verdict. The whole failure this replaces was one
+    bucket working and being read as all of them working.
+    """
+
+    now = time.monotonic()
+    cached = _storage_cache["value"]
+    if cached is not None and now - float(_storage_cache["at"]) < _STORAGE_PROBE_TTL_SECONDS:
+        return cached  # type: ignore[return-value]
+
+    report: dict[str, object] = {
+        "endpoint_configured": bool(settings.S3_ENDPOINT_URL),
+    }
+    classes: dict[str, dict] = {}
+    degraded: list[str] = []
+    for name in STORAGE_CLASSES_REPORTED:
+        store = storage_for(name)
+        entry: dict[str, object] = {
+            "bucket_configured": bool(store.bucket),
+            # The environment prefix supplying the key, never the key.
+            "credential": store.credential_source,
+            "dedicated_credential": store.uses_dedicated_credential,
+        }
+        if store.bucket:
+            problem = store.probe(read_only=True)
+            entry["reachable"] = problem is None
+            if problem is not None:
+                entry["problem"] = problem
+                degraded.append(name)
+        else:
+            entry["reachable"] = False
+            degraded.append(name)
+        classes[name] = entry
+    report["classes"] = classes
+    report["status"] = "ok" if not degraded else "degraded"
+    report["degraded"] = degraded
+    _storage_cache["at"] = now
+    _storage_cache["value"] = report
+    return report
 
 
 class AdminDeepHealthView(APIView):
@@ -88,13 +144,13 @@ class AdminDeepHealthView(APIView):
             "chargily_mode": ChargilyGateway().credential_mode(),
             "email_enabled": bool(settings.TRANSACTIONAL_EMAIL_ENABLED),
         }
-        checks["storage"] = {
-            "endpoint_configured": bool(settings.S3_ENDPOINT_URL),
-            "kyc_bucket_configured": bool(settings.S3_BUCKET_KYC),
-            "parcel_bucket_configured": bool(settings.S3_BUCKET_PARCEL),
-            "dispute_bucket_configured": bool(settings.S3_BUCKET_DISPUTE),
-            "proof_bucket_configured": bool(settings.S3_BUCKET_PROOF),
-        }
+        # Storage is reported per *logical class with its own credential*, not
+        # per bucket name. A configured name says nothing about access, and the
+        # KYC bucket is owned by a different key from everything else Django
+        # writes — so "the media bucket answered" must never be allowed to read
+        # as "KYC evidence is servable". Reachability is a real HEAD, cached so
+        # a health poll cannot turn into a request amplifier.
+        checks["storage"] = storage_health()
         response = Response(
             {"status": "ok", "release": settings.RELEASE_ID, "checks": checks}
         )

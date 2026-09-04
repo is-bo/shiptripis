@@ -41,6 +41,7 @@ from apps.core.storage import (
     make_key,
     put_object,
     s3_client,
+    storage_for,
 )
 
 from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
@@ -142,7 +143,7 @@ def _store_image(*, key_prefix: str, body: bytes, ext: str, content_type: str):
     and the two must not share a credential or a retention policy.
     """
 
-    bucket = settings.S3_BUCKET_PARCEL
+    bucket = storage_for("parcel").require_bucket()
     key = make_key(key_prefix, ext)
     try:
         put_object(bucket=bucket, key=key, body=body, content_type=content_type)
@@ -702,6 +703,10 @@ class ParcelMediaUrlView(APIView):
             )
         ttl = int(getattr(settings, "PARCEL_MEDIA_URL_TTL_SECONDS", 300) or 300)
         try:
+            # Parcel media lives in the bucket Django's own credential owns,
+            # so the generic client is the right one. The KYC bucket is the
+            # only store that needs a different key, and nothing here can
+            # reach it: item photos are written to `storage_for("parcel")`.
             url = s3_client().generate_presigned_url(
                 "get_object",
                 Params={
