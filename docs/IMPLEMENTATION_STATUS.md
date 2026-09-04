@@ -3269,6 +3269,57 @@ Dimensions needed no migration: the columns were already nullable and the
 `parcels_delivery_dimensions` check constraint already permitted an all-NULL
 set.
 
+### Verification
+
+**Local gates.** Django **1198 passed / 34 skipped** on PostgreSQL 16
+(`--ds=config.settings.test_pg`), `ruff check .` clean, `manage.py
+makemigrations --check` clean, `manage.py check` clean. Flutter **377 passed**,
+`dart format --set-exit-if-changed` clean, `flutter analyze --fatal-infos`
+clean.
+
+The SQL schema contract was re-exported with `pg_dump` 16.13 — the version CI
+installs and the one that produced the committed dump. The bundled pgserver
+client is 16.2 and predates the `\restrict` guard lines, so dumping with it
+would have deleted two lines the drift gate normalises rather than expects to
+find missing.
+
+**Commits**
+
+| SHA | What |
+|---|---|
+| `8eb692a` | Dimensions optional end to end, the validation rebuild, the required item photo |
+| `e37c622` | A client-refused photo is answered when it is refused, not at the next step |
+
+**CI** run `33818676341` on `8eb692a`: **success**, all six jobs — Flutter,
+Django, Go build/vet/unit, Go integration (real Redis), Schema drift,
+Production config + static web. Run `33818969261` on `e37c622`: **success**,
+the same six.
+
+**No deployment, and no artifact.** Railway stays on `v1.0.0-rc.3+fb49e60`;
+the migration is committed and tested but not applied to any hosted
+environment. No APK, AAB or Android workflow run was produced — the next
+artifact is built once the remaining 8F phases pass, which is the whole point
+of batching them.
+
+### Findings that remain open
+
+- **MAJOR, for 8F-C — KYC admin evidence.** Unchanged and untouched here; see
+  the blocker list below.
+- **MINOR — a commercial consequence of optional dimensions.** A sender who
+  omits them on a large, light parcel is priced on weight alone. That is the
+  intended reading of the rule and the traveller still sees the weight, the
+  description and now a photograph, but it is a real (small) exposure worth
+  revisiting if abuse appears.
+- **MINOR — `purge_staged_parcel_media` is not scheduled.** Uploaded-but-never-
+  posted photos accumulate until something runs it. Nothing depends on it: an
+  unclaimed row is inert and invisible to everyone but its uploader.
+- **MINOR — a staged photo cannot be read back.** `ParcelMediaUrlView` requires
+  the media to belong to a request, so a photo that has been uploaded but not
+  yet posted has no read route. The client renders the local file, so nothing
+  is missing today; a future "resume a draft" feature would need one.
+- **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
+  files, still deliberately untaken. `ruff check` is clean.
+
 ### Deliberately not done
 
 - **KYC admin evidence remains broken and remains open for 8F-C.** Django
