@@ -300,7 +300,7 @@ func TestChatRelayDeliversToTargetedSocket(t *testing.T) {
 	waitUntil(t, "the delivered marker to be written", func() bool {
 		return receipts.seen(eventID)
 	})
-	exists, err := rdb.Exists(context.Background(), fmt.Sprintf("delivered:%s:%d", eventID, targetID))
+	exists, err := rdb.Exists(context.Background(), fmt.Sprintf("delivered:%s:%d", eventID, recipient))
 	if err != nil {
 		t.Fatalf("exists: %v", err)
 	}
