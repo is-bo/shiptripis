@@ -31,6 +31,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+import uuid
 from copy import deepcopy
 
 from apps.core.business_settings import get_active_business_settings
@@ -523,6 +524,61 @@ class CheckoutContractRefusesAClientCurrencyTests(TestCase):
         charged = create.call_args.args[0]
         assert charged.currency == "EUR"
         assert charged.amount_minor == self.order.outstanding_eur_cents
+
+
+class HostedCheckoutReturnTests(TestCase):
+    """Where a provider sends the payer back after a hosted checkout.
+
+    `_checkout_urls` has always built this URL and nothing served it, so a
+    completed Stripe or Chargily checkout ended on a bare 404 — which for a
+    guest payer with no app is the entire end of the payment.
+    """
+
+    def test_the_return_page_is_public_and_states_no_outcome(self):
+        response = self.client.get(
+            f"/pay/{uuid.uuid4()}/return", {"result": "success"}
+        )
+
+        assert response.status_code == 200
+        body = response.content.decode()
+        # It must not announce an outcome it cannot know: only a
+        # signature-verified webhook moves money, and a redirect is a request
+        # the payer's own machine made.
+        assert "confirming your payment" in body
+        # No announcement of an outcome. "paid" appears only in "if you paid
+        # from the app", which is a description of what the reader did, not a
+        # claim about what the provider decided.
+        for claim in (
+            "Payment successful",
+            "Payment complete",
+            "successfully",
+            "Payment failed",
+            "was received",
+        ):
+            assert claim not in body
+
+    def test_it_answers_the_same_way_whatever_the_query_string_claims(self):
+        reference = uuid.uuid4()
+        success = self.client.get(f"/pay/{reference}/return", {"result": "success"})
+        failure = self.client.get(f"/pay/{reference}/return", {"result": "failure"})
+        forged = self.client.get(f"/pay/{reference}/return", {"result": "anything"})
+
+        assert success.content == failure.content == forged.content
+
+    def test_it_discloses_nothing_about_the_order(self):
+        scenario = build_scenario(prefix="p8fc-return")
+        scenario.accept()
+        order = scenario.balance_order()
+
+        body = self.client.get(
+            f"/pay/{order.public_reference}/return"
+        ).content.decode()
+
+        # No amount, no party, no status — the reference in the URL renders the
+        # page and deliberately teaches nothing.
+        assert str(order.amount_eur_cents) not in body
+        assert scenario.sender.email not in body
+        assert order.status not in body
 
 
 @override_settings(**STRIPE_TEST, **CHARGILY_TEST)

@@ -1,0 +1,110 @@
+{% comment %}
+Where a hosted provider sends the payer back.
+
+This page deliberately says the same thing whatever `?result=` claims, because
+the redirect is not evidence. Stripe and Chargily both bounce the browser back
+through a URL the payer's own machine follows, and the only thing that moves
+money in this system is a signature-verified webhook. A page that read the
+query string and announced "Payment successful" would be announcing something
+it does not know, on the one screen where being wrong is most expensive.
+
+It also carries no order, no amount and no party. The reference in the URL is
+enough to render this page and deliberately not enough to learn anything from
+it — a payer forwards this link without forwarding a receipt.
+
+Trilingual on one page because we do not know who is reading it: the app payer
+has a locale, the guest payer arrived from a shared link and does not.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ShipTrip — confirming your payment</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #faf7f2;
+      color: #1b1a18;
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      max-width: 32rem;
+      width: 100%;
+      background: #fff;
+      border: 1px solid #e7e1d8;
+      border-radius: 14px;
+      padding: 28px 26px;
+      box-shadow: 0 1px 2px rgba(27, 26, 24, .05);
+    }
+    .mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; border-radius: 10px;
+      background: #1b1a18; color: #faf7f2;
+      font-weight: 700; letter-spacing: .02em;
+    }
+    h1 { font-size: 1.25rem; margin: 18px 0 6px; }
+    p { margin: 0 0 14px; }
+    .lead { color: #46423c; }
+    .sep { height: 1px; background: #e7e1d8; margin: 20px 0 16px; border: 0; }
+    section + section { margin-top: 14px; }
+    section p { margin: 0; color: #46423c; font-size: .95rem; }
+    section h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase;
+                 color: #8a8177; margin: 0 0 4px; font-weight: 600; }
+    [dir="rtl"] { text-align: right; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #16150f; color: #f2efe8; }
+      main { background: #1f1e17; border-color: #33302a; box-shadow: none; }
+      .mark { background: #f2efe8; color: #16150f; }
+      .lead, section p { color: #cbc5ba; }
+      .sep { background: #33302a; }
+      section h2 { color: #98908382; color: #9a9184; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="mark" aria-hidden="true">ST</span>
+    <h1>Thanks — we&rsquo;re confirming your payment</h1>
+    <p class="lead">
+      ShipTrip confirms every payment with the payment provider before marking
+      it as received, so this page cannot tell you the outcome yet. It usually
+      takes a few seconds.
+    </p>
+    <p class="lead">
+      You can close this tab. If you paid from the ShipTrip app, go back to it
+      and the delivery will update on its own. If you paid a link someone
+      shared with you, they will see the result on their side.
+    </p>
+
+    <hr class="sep">
+
+    <section lang="fr">
+      <h2>Français</h2>
+      <p>
+        Merci. ShipTrip confirme chaque paiement auprès du prestataire avant de
+        l&rsquo;enregistrer, donc cette page ne peut pas encore vous en donner
+        le résultat. Vous pouvez fermer cet onglet&nbsp;: l&rsquo;application se
+        met à jour toute seule, et si vous avez payé un lien partagé, la
+        personne qui vous l&rsquo;a envoyé verra le résultat de son côté.
+      </p>
+    </section>
+
+    <section lang="ar" dir="rtl">
+      <h2>العربية</h2>
+      <p>
+        شكرًا لك. تؤكّد ShipTrip كل عملية دفع مع مزوّد الدفع قبل تسجيلها، لذلك
+        لا يمكن لهذه الصفحة أن تخبرك بالنتيجة بعد. يمكنك إغلاق هذه النافذة؛
+        سيتحدّث التطبيق تلقائيًا، وإن كنت قد دفعت عبر رابط شاركه معك شخص ما،
+        فسيرى هو النتيجة من جهته.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

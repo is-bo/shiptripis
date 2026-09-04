@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import include, path
+from django.views.generic import TemplateView
 
 from apps.core.health import healthz, readyz
 
@@ -19,6 +20,19 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz", healthz),
     path("readyz", readyz),
+    # Where Stripe and Chargily send the payer back. `_checkout_urls` builds
+    # this from PAYMENTS_PUBLIC_BASE_URL, and nothing served it: a completed
+    # hosted checkout ended on a bare "Not Found", which for a guest payer with
+    # no app is the entire end of the payment.
+    #
+    # It answers the same way whatever `?result=` says, because the redirect is
+    # not evidence — only a signature-verified webhook moves money here. The
+    # reference is not read, so the page discloses nothing about the order.
+    path(
+        "pay/<uuid:reference>/return",
+        TemplateView.as_view(template_name="payments/return.html"),
+        name="payment-return",
+    ),
     path("api/", include("apps.accounts.urls")),
     # The Phase 6A least-privilege operations surface owns every /api/admin/*
     # route. Mount it before historical domain compatibility routes so a
