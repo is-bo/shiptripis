@@ -159,16 +159,44 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
       ),
       footer: view.hasValue && !_handedOff
           ? AppButton(
-              label: l.paymentPayAction(
-                view.value?.amount?.format(Localizations.localeOf(context)) ??
-                    '',
-              ),
+              // The amount the *selected rail* will take, in the currency it
+              // settles in — not the canonical obligation dressed up as this
+              // rail's charge. Today only Stripe takes a guest payment and the
+              // two are the same euro figure; stating the rail's own amount is
+              // what keeps that a coincidence rather than an assumption.
+              label: _payLabel(context, l, view.value, _selected),
               isLoading: _busy,
               onPressed: _selected == null ? null : _pay,
             )
           : null,
     );
   }
+}
+
+/// "Pay X with Y" for the chosen rail; "Pay X" before one is chosen.
+///
+/// X is the amount that rail will actually take, in the currency it settles
+/// in. Today only Stripe accepts a guest payment and that happens to equal the
+/// canonical euro obligation — stating the rail's own figure is what keeps
+/// that a coincidence rather than an assumption the next rail would break.
+String _payLabel(
+  BuildContext context,
+  L l,
+  GuestPaymentView? view,
+  PaymentProviderId? selected,
+) {
+  final locale = Localizations.localeOf(context);
+  final canonical = view?.amount?.format(locale) ?? '';
+  if (view == null || selected == null) return l.paymentPayAction(canonical);
+  final rail = view.providers.where((p) => p.provider == selected).firstOrNull;
+  final charge = rail?.settlementAmount;
+  if (rail == null || charge == null) return l.paymentPayAction(canonical);
+  return l.paymentPayWith(
+    charge.format(locale),
+    selected == PaymentProviderId.chargily
+        ? l.paymentProviderChargily
+        : l.paymentProviderStripe,
+  );
 }
 
 class _PayForm extends StatelessWidget {
