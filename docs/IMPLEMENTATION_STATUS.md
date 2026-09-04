@@ -3594,6 +3594,305 @@ attempt that already exists — asserted directly in
   and the event was applied — a real, verified provider event on the deployment,
   not a fixture.
 
+### Three more defects, found by verifying rather than by reading
+
+All three were found on the deployment, doing the verification this phase
+called for, and none would have been found any other way.
+
+#### A corrupt image was a 500, on every endpoint that takes one
+
+Staging an item photo returned `HTTP 500` with Django's default error page. The
+file was a PNG with a valid signature and header and a corrupt `IDAT` chunk —
+the shape a photo cut short by a flaky mobile upload arrives in.
+
+`image_bytes_match_extension` enumerated the exception types Pillow was expected
+to raise and missed one: a structurally broken PNG makes `verify()` raise
+**`SyntaxError`**, a builtin rather than an image error, so it was never going
+to appear in a list of image exceptions. It escaped as an unhandled exception.
+
+Every image endpoint shares that validator — parcel item photo, parcel media,
+flight proof, dispute evidence — so all four answered a bad upload with a server
+error. Any decoder failure is now `False`: the question the function answers is
+a yes/no about untrusted bytes, and enumerating what a decoder may throw on
+hostile input is a losing game.
+
+Before, on `v1.0.0-rc.4+b587d6f`: `POST /api/parcels/media` → **500**, HTML.
+After, on `v1.0.0-rc.5+4742701`: **415**
+`{"code":"parcel_photo_media_type_unsupported","detail":"File content is not a
+valid image of the declared type."}`
+
+#### "Stripe is showing an option to pay in DZD" is Stripe's own page
+
+Opening the deployed Stripe checkout settled it. Stripe's hosted page rendered:
+
+```
+Choose currency
+  [ DZD 482.45 ]   [ €3.00 ]
+  1 EUR = 160.8167 DZD (includes 4% conversion fee)
+```
+
+That is **Adaptive Pricing**, a setting on the Stripe account, not anything
+ShipTrip renders. Stripe picks the presentment currency from the payer's
+location, sets the rate itself, and adds a 2–4% conversion fee charged to the
+customer.
+
+Settlement stays in the integration currency, so the Checkout Session, the
+PaymentIntent, the webhook, the attempt and the ledger were all still EUR and
+all still correct. Nothing about the money was wrong. What was wrong is the
+product rule: DZD is meant to exist only as a Chargily or manual settlement
+representation, at a rate this server controls and snapshots onto the attempt so
+it can be reproduced during a dispute. A Stripe-set rate carrying Stripe's own
+customer fee is none of those things — and it put two very different dinar
+prices for one €3.00 obligation in front of the same sender: 482 DA on Stripe
+against 840 DA on Chargily at the admin rate.
+
+Every session now sends `adaptive_pricing[enabled]=false`, asserted per session
+rather than left to the Dashboard toggle, because a product invariant should not
+depend on a switch in someone else's console. After the fix the same checkout
+renders `ShipTrip posting deposit / €3.00` with no currency control at all.
+
+This is worth separating from the Flutter work. The client repair was still
+needed and still correct — the rails genuinely carried no amounts, and the
+button genuinely promised euros for a dinar rail. But the *literal* thing the
+owner saw was one layer further out than any ShipTrip code.
+
+#### The page a provider returns the payer to did not exist
+
+Completing the test payment: the checkout succeeded, the webhook landed, the
+order settled — and the browser landed on a bare Django **"Not Found"**.
+`_checkout_urls` has always built
+`<PAYMENTS_PUBLIC_BASE_URL>/pay/<reference>/return` for success and failure on
+both rails, and nothing has ever served it.
+
+In the app that is untidy rather than broken: the payer switches back and the
+checkout section polls the order, which is the design. For a guest paying a
+shared link with no app, it is the entire end of the payment.
+
+There is now a page there. It answers the same way whatever `?result=` claims,
+because the redirect is a request the payer's own machine made and the only
+thing that moves money here is a signature-verified webhook — announcing
+"Payment successful" would be announcing something the page does not know, on
+the screen where being wrong costs most. It reads the reference only to route,
+so it discloses no amount, no party and no status. English, French and Arabic on
+one page, because a guest arriving from a shared link has no locale we know.
+
+### Phase 8F-C release, deployment and verification
+
+**Release** `v1.0.0-rc.5+4742701`, then `v1.0.0-rc.6+c767ca8` for the
+return page.
+
+Two deployments rather than one, because the second and third defects above
+were found *by* the first deployment. That is the intended shape of a
+verification phase: the E2E is not a formality after the work, it is part of
+the work.
+
+#### Railway
+
+| | |
+|---|---|
+| Project / service | `shiptripis` / `shiptrip`, production |
+| Deployment 1 | `5e17b0b1-ebec-4c79-b784-0291aecb8963` — `v1.0.0-rc.4+b587d6f` |
+| Deployment 2 | `d5005f2d-39f9-4e45-92b4-0a5c2954b949` — `v1.0.0-rc.5+4742701` |
+| Migrations | `parcels.0009_phase8fb_staged_parcel_media` applied (the 8F-B one; 8F-C adds none) |
+| `/readyz` | 200, `database` / `migrations` / `rate_limit_cache` all `ok` |
+
+Variables changed, and nothing else: `RELEASE_ID`, and
+`CHARGILY_API_BASE` corrected from the live base to
+`https://pay.chargily.net/test/api/v2`. No secret was read, rotated, printed or
+committed.
+
+The repo-root `.dockerignore` gained `**/.venv` and `**/venv`. `railway.json`
+builds from the repo root, so `backend/monolith/.dockerignore` never applied and
+the upload was carrying ~400 MB and roughly 25k host-built Windows files into an
+image that installs its own Linux dependencies.
+
+#### KYC evidence, against the deployed bucket
+
+A synthetic passport submission uploaded through the real public path —
+`POST /api/kyc/submit`, **HTTP 201**, `submission_id 3` — then the stored object
+fetched two ways. This is exactly the presign-and-GET the admin console does:
+
+| Signed with | Result |
+|---|---|
+| Django's `S3_*` | **403 AccessDenied**, 325 bytes of XML — what a browser renders as a broken image |
+| The KYC service's `KYC_S3_*` | **200, `image/png`, 7,868 bytes**, SHA-256 identical to the bytes uploaded |
+
+`ListObjectsV2` on the same bucket answers 403 for the first credential and 200
+for the second. That is the MAJOR closed, on the deployment's own storage.
+
+**Still an owner action:** opening the console page itself needs an
+authenticated staff session, which this work has no way to obtain. What the
+owner should see at **Verification → KYC review → a pending submission** is the
+document and the selfie rendered inline, each with *View evidence, full size*,
+and **Approve** / **Reject** working. If the store is ever unreachable they
+should see *Evidence is temporarily unavailable* with a request reference —
+never a broken image, and never a bucket name or a provider error.
+
+#### The payment rails, on the deployed release
+
+`GET /api/parcels/<id>/posting-deposit` for a €3.00 obligation:
+
+```
+stripe    available  EUR  settlement 300 (exp 2)   canonical 300 EUR cents
+chargily  available  DZD  settlement 840 (exp 0)   canonical 300 EUR cents
+                          eur_dzd_rate 280, settings version 7,
+                          rate_is_indicative true
+mock      unavailable      provider_not_configured
+```
+
+One canonical obligation, two rails, each stating what it will charge in the
+currency it settles in. That is the whole client repair, served by the server.
+
+#### Stripe, end to end in test mode
+
+| Step | Result |
+|---|---|
+| Mode | **TEST** — `sk_test_` prefix, and the session came back `cs_test_…` |
+| Checkout | 201, €3.00 EUR, `fx_rate_micros` null |
+| Hosted page | `ShipTrip posting deposit / €3.00`, no currency control (after the Adaptive Pricing fix) |
+| Payment | Stripe's published test card in Sandbox. **No real money exists in test mode.** |
+| Webhook | `POST /api/payments/webhooks/stripe 200 137ms` |
+| Order | `paid`, paid 300, outstanding **0**, `paid_at 14:06:53` |
+| Attempt | `succeeded`, EUR 300, `succeeded_at 14:06:53` — same instant as the webhook |
+| Downstream | delivery request `awaiting_deposit` → **`open`**, item photo attached |
+| After settlement | the rail list disappears — nothing outstanding, nothing offered |
+
+#### Chargily, end to end in test mode
+
+| Step | Result |
+|---|---|
+| Mode | **TEST**, and confirmed by Chargily itself: `GET /test/api/v2/balance` → 200, `"livemode": false` |
+| Before the repair | `POST …/checkout` → **503** `{"code":"provider_error","detail":"Unauthenticated."}` |
+| Cause, isolated | the same key answers **401** on the live base and **200** on the test base |
+| Checkout | 201, canonical 300 EUR cents, settlement **840 DZD**, `fx_rate_micros 280000000` frozen on the attempt |
+| Hosted page | `pay.chargily.dz/test/…`, Test-mode badge, merchant "Shiptrip test", **840.00 دج**, CIB / Edahabia / Chargily App |
+| Failure path | the page's test-only **Fail** control — no payment instrument entered |
+| Webhook | `POST /api/payments/webhooks/chargily 200 127ms`, signature verified with the API-secret fallback (`CHARGILY_WEBHOOK_SECRET` is legitimately blank) |
+| Attempt | `failed`, `failure_code: failed`, DZD 840, rate 280 |
+| Order | still `pending`, outstanding 300 — a failed attempt moves no canonical money |
+| Payer's view | *عملية دفع فاشلة* (payment failed), with a return link to our `failure_url` |
+
+**No Chargily paid-path E2E.** Completing it needs CIB/Edahabia test card
+details, and entering payment instrument data is not something this work does.
+The `checkout.paid` branch is covered by the local suite; the deployed
+verification covers creation, the frozen snapshot, the real hosted page, the
+failure path and a real signature-verified webhook.
+
+#### One open attempt, and the supersede rule
+
+Opening the Chargily checkout while a Stripe attempt was live cancelled the
+Stripe one with `failure_code: superseded`, on the deployment. The
+one-open-attempt-per-order invariant, observed rather than asserted.
+
+#### Guest payer
+
+A guest link issued by the owner, then the anonymous surface read with **no
+Authorization header at all**: amount €3.00 EUR, description, expiry, and
+**only Stripe** — Chargily is filtered out because it reports
+`supports_guest_payment: false`. Stripe's row carries its own settlement
+preview. No counterparty information of any kind.
+
+#### Not reachable from here
+
+- **Refunds and the manual Chargily settlement** need a staff session. Covered
+  by the local suite; not exercised on the deployment.
+- **Duplicate-event idempotency on the deployment** needs a provider-side
+  resend. `apply_provider_event` inserts `(provider, provider_event_id)` first
+  and the local suite covers the duplicate and the redrive.
+- **The admin console page itself**, as above.
+
+### Files changed
+
+**Backend**
+
+| File | What |
+|---|---|
+| `apps/core/storage.py` | logical storage classes, per-class credentials, `readable`/`probe`, fail-fast probe client, corrupt-image fix |
+| `apps/core/management/commands/check_object_storage.py` | probes each class with its owning credential |
+| `apps/admin_panel/console_views.py` | KYC/proof evidence reachability, humanised unavailability, storage rows, provider readiness wording |
+| `apps/admin_panel/health.py` | per-class storage health, cached |
+| `apps/finance/providers/base.py` | `ProviderConfigurationInvalid`, `ProviderCheckoutRejected`, `configuration_problem` |
+| `apps/finance/providers/__init__.py` | `available` gate includes configuration validity; checkout refuses an unidentifiable environment |
+| `apps/finance/providers/chargily.py` | `configuration_problem`, 401/403 as configuration, definite 4xx as checkout-rejected |
+| `apps/finance/providers/stripe.py` | same error mapping, and `adaptive_pricing[enabled]=false` on every session |
+| `apps/finance/services.py` | `settlement_amounts`, `provider_options`, per-rail preview |
+| `apps/finance/views.py` | one helper serves every payable order's rails |
+| `apps/disputes/services.py`, `apps/parcels/views.py`, `apps/trips/views.py` | bucket chosen through `storage_for` |
+| `config/settings/base.py` | `KYC_S3_*`; `S3_BUCKET_DISPUTE` no longer defaults to the KYC bucket |
+| `config/urls.py`, `templates/payments/return.html` | the hosted-checkout return page |
+| `templates/admin/console/{system,verification_detail}.html` | evidence stores panel, evidence availability |
+
+**Mobile**
+
+| File | What |
+|---|---|
+| `domain/payment.dart` | `ProviderOption` carries settlement amount, canonical equivalent, rate |
+| `features/requests/checkout_section.dart` | per-rail amounts, rail-named pay button, order's rails win, selection resolved against usable rails |
+| `features/guest/guest_pay_screen.dart` | per-rail amount on the tile and the button |
+| `core/api/error_codes.dart` | `provider_configuration_invalid`, `provider_checkout_failed` |
+| `l10n/app_{en,fr,ar}.arb` | 12 new keys, all three locales |
+
+**Migrations:** none. The only migration deployed in this phase is 8F-B's
+`parcels.0009_phase8fb_staged_parcel_media`.
+
+### Verification
+
+**Local gates.** Django **1248 passed / 34 skipped** on PostgreSQL 16
+(`--ds=config.settings.test_pg`), `ruff check .` clean, `makemigrations
+--check` clean, `manage.py check` clean, production `check --deploy` clean.
+Flutter **399 passed**, `dart format --set-exit-if-changed` clean, `flutter
+analyze --fatal-infos` clean. Finance concurrency, locking, invariants and
+recovery run separately as well: **93 passed**, so the Phase 8D-F lock order
+is unchanged.
+
+**CI** run `33882334872` on `c767ca8`: **success**, all six jobs — Flutter,
+Django, Go build/vet/unit, Go integration (real Redis), Schema drift,
+Production config + static web.
+
+### Findings that remain open
+
+- **MAJOR, owner action — the Chargily FX rate is 280 DZD/EUR.** That is what
+  business settings version 7 holds, and every Chargily charge is computed and
+  frozen from it. Stripe quotes the mid-market rate at about 161. A €3.00
+  obligation is therefore 840 DA on Chargily against roughly 482 DA of market
+  value. If 280 is a deliberate parallel-market rate, nothing here is broken
+  and this line is a note. If it was entered as a placeholder, every Chargily
+  payer is being overcharged by about 74% and it should be corrected before
+  anyone real pays. The code cannot tell the two apart, which is why it is
+  here rather than in a test.
+- **MAJOR, owner action — the admin KYC console page has not been opened.**
+  The underlying operation is proved (200, byte-identical, with the owning
+  credential) and the page is proved against the preview database, but opening
+  the real console needs an authenticated staff session this work has no way
+  to obtain. See the checklist above.
+- **MINOR — Stripe payout/transfer capability** is still unapproved, so every
+  traveller payout falls to the audited manual queue.
+- **MINOR — no Chargily paid-path E2E**, for the reason given above.
+- **MINOR — synthetic data on the private deployment.** Phase 8F-C left
+  several `phase8fc-…@shiptrip-test.invalid` accounts, one KYC submission, four
+  delivery requests and their payment orders, including one genuinely paid
+  €3.00 test-mode posting deposit. They are evidence; nothing real depends on
+  them.
+- **MINOR** — `ruff format` cleanliness across roughly thirty pre-existing
+  files, still deliberately untaken. `ruff check` is clean.
+
+### Deliberately not done
+
+- **No APK, no AAB, no Android workflow run.** The consolidated artifact comes
+  after 8F-D, which is the point of batching. **Note that the deployed backend
+  has moved twice since the last APK**: since 8F-B a delivery request requires
+  an item photo, so the `v1.0.0-rc.3+fb49e60` build on the owner's device can
+  no longer post one. That is expected in this private pre-launch environment;
+  wait for the consolidated build before more parcel testing on the device.
+- **No push notifications.** Phase 8F-D is not started.
+- **No transactional email work.** `EMAIL_ENABLED` is still false and no email
+  setting was touched.
+- **No change to the Phase 8D-F financial locking.** `financial_locks`, the
+  canonical lock order, the `NO KEY UPDATE` strategy and the refund and
+  reconciliation locking are untouched, and the concurrency regression is green.
+- **No live-money payment of any kind.** Both rails are TEST, verified from the
+  providers themselves, and every transaction in this phase was test-mode.
+
 ## External dependencies/blockers
 
 - **Resolved in Phase 8F-C, recorded here because the entries above it were
