@@ -104,6 +104,14 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     WidgetsBinding.instance.addObserver(this);
     _order = widget.order;
     if (_order?.status.isSettled ?? false) _phase = _Phase.settled;
+    if (_order == null) {
+      // A surface that hands over a reference before anyone has read the
+      // order behind it — a boost purchase. Read it once, so its rails arrive
+      // with the amount each one would charge instead of falling back to the
+      // amount-less catalogue. The payer of a boost is owed the same figure as
+      // the payer of a deposit.
+      unawaited(_readOrder());
+    }
   }
 
   @override

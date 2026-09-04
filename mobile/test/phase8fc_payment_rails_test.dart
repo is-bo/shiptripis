@@ -207,23 +207,31 @@ void main() {
   });
 
   group('the amounts come from the order, not the rail catalogue', () {
-    testWidgets('the standalone provider list alone shows no amounts', (
+    testWidgets('a surface with only a reference reads the order for them', (
       tester,
     ) async {
-      // No order in hand — a boost before its obligation has been read back.
-      // The rails are still offered, but nothing invents a figure for them.
-      await pumpCheckout(
-        tester,
-        backend: backendWith([_stripeRow, _chargilyRow]),
-      );
+      // A boost hands over a reference before anyone has read the obligation.
+      // Rather than fall back to the amount-less catalogue, the section reads
+      // the order once: the payer of a boost is owed the same figure as the
+      // payer of a deposit.
+      final backend = backendWith([_stripeRow, _chargilyRow])
+        ..on(
+          'GET',
+          '/api/payments/orders/ref-8fc',
+          FakeResponse(200, orderFixture()),
+        );
+
+      await pumpCheckout(tester, backend: backend);
+      await tester.pumpAndSettle();
 
       final text = visibleText(tester).join(' | ');
-      expect(find.text('Stripe'), findsOneWidget);
-      expect(text, isNot(contains('€37.50')));
-      expect(text, isNot(contains('5,625')));
-      // The button falls back to a plain continue rather than naming a price
-      // the server has not stated.
-      expect(find.text('Continue'), findsOneWidget);
+      expect(text, contains('€37.50'));
+      expect(text, contains('5,625'));
+      expect(
+        backend.to('GET', '/api/payments/orders/ref-8fc'),
+        isNotEmpty,
+        reason: 'the order must be read, not guessed at',
+      );
     });
 
     testWidgets('with an order in hand, its rows are what get rendered', (
