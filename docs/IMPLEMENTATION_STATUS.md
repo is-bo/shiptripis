@@ -4034,3 +4034,81 @@ Django → stream → Firebase end-to-end test was run. The heartbeat key
 needs the authenticated `/api/admin/health/deep` read; the worker start is
 evidence that the heartbeat loop is running, not a substitute for that read.
 No APK or AAB was built and Phase 8F-E was not started.
+
+## Phase 8F-E — final integration, consolidated deployment, one profile APK
+
+**Status:** integration audit complete, all gates green, and the consolidated
+8F-A/B/C/D + Firebase release deployed and built as one private profile APK.
+Physical-device push receipt is still unproven and remains the owner's step.
+
+### The audit found no integration defect in the device-QA fixes
+
+Each of the four preceding phases was re-read against current repository truth
+rather than against its own report, and the seams *between* them — which is
+where a consolidated release actually breaks — were checked directly.
+
+- **Journey.** `apps/trips/transport_rules.py` derives leg availability from
+  declared road networks, so `DZ`↔`FR` refuses DRIVE, `DZ`↔`DZ` allows it, and
+  `FR`/`ES`/`DE` stay one continental network; an undeclared country fails
+  closed. The rule is enforced in both the create serializer and
+  `_validate_leg_sequence`, so editing a route cannot bypass what creating one
+  refuses. Flight proof writes through `storage_for("proof")` — the Django-owned
+  generic credential, not the KYC one.
+- **Parcel.** Dimensions are optional but all-or-none, weight stays required,
+  and the item photo is required and re-authorized server-side: the staged
+  media must belong to the authenticated sender and must not already belong to
+  another request.
+- **KYC.** `kyc_evidence` needs both the `view_kyc` capability and the
+  `view_evidence` permission, records an admin action, and answers with a
+  short-lived presigned redirect under `Cache-Control: no-store` and
+  `Referrer-Policy: no-referrer`. The detail page sends the template a
+  previewable/available flag per slot and never an object key or URL.
+- **Payments.** Stripe stays EUR-only with `adaptive_pricing[enabled]=false`
+  asserted on every session; Chargily keeps the EUR canonical amount with a
+  frozen DZD settlement snapshot. Both remain TEST and no live-money
+  transaction was performed.
+- **Push.** The `_SAFE_DATA_FIELDS` allowlist, the `pushLocation` routing table
+  and `app/router.dart` agree: every destination a push can name
+  (`/chat/thread/:matchId`, `/disputes/:id`, `/deals/:id`, `/journeys/:id`,
+  `/requests/:id`, `/matches/:id`, `/kyc`, `/profile/payouts`,
+  `/notifications`) is a real route, and a tap while signed out goes to
+  sign-in with a `next` the router re-validates. `flight_proof.status_changed`
+  carries `journey_id`, so the 8F-A screen is reachable from the 8F-D push.
+  Logout unregisters the installation through `installation_id` on
+  `/api/auth/sign-out`, best-effort, without trapping an offline user.
+  Publication short-circuits when a target has no active device, so zero
+  `PushDevice` rows is a safe steady state rather than a stream of rejected
+  entries.
+
+### The one change made
+
+`android-release.yml` now says, in the run log, whether the Firebase client
+tuple is complete. All-four-absent is a legitimate state — push stays
+unavailable and the rest of the app works — and it was indistinguishable from
+a complete tuple everywhere else in the job, which is exactly how a push-dead
+APK gets handed to a tester as a push build. The line prints the public client
+identifiers (project, sender, Android app id, and the API key's prefix and
+length); the Admin service-account credential is never in this workflow.
+
+### Gates
+
+Full PostgreSQL 16 regression, Ruff, `makemigrations --check` and schema drift
+are green with no unintended migration; the matching and finance concurrency
+suites pass unweakened. Go `gofmt`/`go vet`/`go test` and the real-Redis
+integration tier pass, with `-race` covered in Linux CI because the Windows
+host has no CGO compiler. Flutter `dart format`, `flutter analyze
+--fatal-infos` and the full suite are clean.
+
+A local `gofmt -l` on this Windows workstation lists files because
+`core.autocrlf=true` gives the worktree CRLF endings; the repository stores LF
+and Linux CI's `gofmt` gate is clean. It is a checkout artefact, not a
+formatting debt.
+
+### Still not proven, and deliberately not faked
+
+Physical phone receipt cannot exist before the owner installs this APK, logs
+in and grants notification permission. Server-side readiness — Firebase Admin
+sender, FCM consumer, stream and consumer group — is proven from the container
+logs; the heartbeat key and per-class storage probe live behind the
+authenticated `/api/admin/health/deep` read, which needs an operator login this
+session does not hold.

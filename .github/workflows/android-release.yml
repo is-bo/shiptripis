@@ -139,6 +139,27 @@ jobs:
                   "Firebase client configuration must be all-or-none; missing "
                   + ", ".join(missing)
               )
+          # Say, in the run log, whether this artifact can do push at all.
+          # An all-absent tuple is a legitimate state (push stays unavailable
+          # and the rest of the app works), and it is indistinguishable from a
+          # complete one everywhere else in this job — which is how a
+          # push-dead QA build gets handed to a tester as a push build. These
+          # are the public Firebase *client* identifiers that ship inside every
+          # APK; the Admin service-account credential is never here.
+          if configured:
+              print(
+                  "Firebase client configuration: complete"
+                  f" (project {firebase_values['FIREBASE_PROJECT_ID']},"
+                  f" sender {firebase_values['FIREBASE_MESSAGING_SENDER_ID']},"
+                  f" android app {firebase_values['FIREBASE_ANDROID_APP_ID']},"
+                  f" api key {firebase_values['FIREBASE_API_KEY'][:6]}..."
+                  f"[{len(firebase_values['FIREBASE_API_KEY'])} chars])"
+              )
+          else:
+              print(
+                  "Firebase client configuration: absent - this build keeps "
+                  "push unavailable"
+              )
 
           pubspec = Path("pubspec.yaml").read_text(encoding="utf-8")
           version_match = re.search(r"(?m)^version:\s*([^+\s]+)(?:\+([^\s]+))?\s*$", pubspec)
