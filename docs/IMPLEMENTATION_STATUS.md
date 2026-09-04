@@ -4112,3 +4112,73 @@ sender, FCM consumer, stream and consumer group — is proven from the container
 logs; the heartbeat key and per-class storage probe live behind the
 authenticated `/api/admin/health/deep` read, which needs an operator login this
 session does not hold.
+
+### Release, deployment and artifact
+
+- **Final SHA** `3655cfced65a130b92076483d1c678d086b9663c`. CI run `33928418394`
+  green on all six required jobs: Django 1268 passed / 34 skipped, Flutter 407
+  passed, Go unit `-race`, Go integration on real Redis 286 passed / 0 skipped,
+  schema drift, production config + static web 37 passed. Locally the same
+  PostgreSQL suite reports **1268 passed / 34 skipped**, the matching and
+  finance concurrency files **57 passed**, Ruff and `makemigrations --check`
+  clean, Flutter 407 with `dart format` and `flutter analyze --fatal-infos`
+  clean, and Go `vet`/`test` clean.
+- **Release** `v1.0.0-rc.8+3655cfc`, deployed to Railway `shiptripis` /
+  `production` / `shiptrip` as **`97f63745-798d-4155-a070-399479fd11db`** on the
+  existing combined topology. No standalone notification service was created.
+  Migrations reported `No migrations to apply` — `notifications.0005` had
+  already landed on the previous deployment — and `/healthz` and `/readyz`
+  answer 200 with database, migrations and rate-limit cache `ok`. The launcher
+  logged the Admin credential install for `shiptrip-7c28f`, and the worker
+  logged `fcm firebase sender ready`, `fcm consumer enabled` and `fcm consumer
+  started`; `email consumer disabled (EMAIL_ENABLED=false)` is unchanged.
+- **Android** workflow run `33929410697` on the same SHA, `build_type=profile`,
+  `apk_architecture=arm64`,
+  `api_base_url=https://shiptrip-production.up.railway.app`. The release and
+  debug steps were skipped, so there is exactly one artifact and no AAB.
+- **Artifact** `shiptrip-v1.0.0-rc.8-3655cfc-profile-arm64`, APK
+  `shiptrip-v1.0.0-rc.8-3655cfc-profile-arm64.apk`, **35,783,603 bytes
+  (34.13 MiB)**, SHA-256
+  `384d43235a44e670e1800c58c9aeb870f34cd4523e426a08fc468d765d9652e3` —
+  recomputed locally and matching the runner's `SHA256SUMS.txt`.
+- **Proved profile, not debug or release, from the artifact itself**: AOT
+  `lib/arm64-v8a/libapp.so` and `libvmservice_snapshot.so` present;
+  `kernel_blob.bin` and `libVkLayer_khronos_validation.so` absent. ARM64
+  targeting held: 25.90 MiB of code under `arm64-v8a` against 0.10 / 0.06 MiB
+  JNI shims for `x86_64` / `armeabi-v7a`.
+- **Firebase reached the binary, not just the workflow.** The metadata step
+  logged `Firebase client configuration: complete`, and all four public client
+  identifiers — project `shiptrip-7c28f`, sender `196052669620`, Android app
+  `1:196052669620:android:1567a4b5dc3e40509fb3e1` and the API key — are present
+  inside the Dart AOT snapshot, alongside
+  `https://shiptrip-production.up.railway.app` and without the `10.0.2.2`
+  development default. The manifest carries `POST_NOTIFICATIONS`, the Firebase
+  messaging service/receiver stack and the default notification channel id,
+  under `applicationId` `com.shiptrip.shiptrip` — the package the Firebase
+  Android app is registered to. An eleven-pattern secret scan over every entry
+  in the APK found nothing.
+- **Signer, and why the old build must go first.** The APK is signed v2 only
+  with `CN=Android Debug, O=Android, C=US` — the runner's auto-generated debug
+  key — certificate SHA-256
+  `aca365b701c203c42de2afefbfded7fa9bceba5abdd247d58d550367d9cea2a9`. That is a
+  different certificate from every previous QA build, so Android refuses an
+  in-place update with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Uninstall the
+  previously installed ShipTrip QA build before installing this one. Signing
+  policy was not changed to avoid that.
+
+### Owner-verifiable items this session could not read
+
+`/api/admin/health/deep` and the console's **System & operations** page need an
+operator login. They are the supported reads for the FCM worker heartbeat
+(`fcm:worker:active`, a 45-second TTL key in the container's loopback Redis),
+the stream/consumer-group lag and pending counts, the active-device count, the
+per-class storage probe (parcel, proof, dispute, KYC, each with its own
+credential), and the Stripe/Chargily `credential_mode`. No synthetic QA records
+were removed, because reading or deleting production rows needs database access
+this session does not hold; the previously noted synthetic travelers and draft
+journeys remain, recorded as MINOR.
+
+**Physical phone receipt: pending owner installation.** No `PushDevice` row can
+exist until this APK is installed and a signed-in user grants notification
+permission, so no Django → stream → Firebase → handset test was run and none is
+claimed.
