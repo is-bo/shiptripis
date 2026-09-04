@@ -89,6 +89,23 @@ Map<String, dynamic> orderFixture({List<Map<String, dynamic>>? providers}) => {
   },
 };
 
+/// `GET /api/payments/providers` as the server really answers it: readiness
+/// and settlement currency, and **no amount**, because it has no obligation in
+/// hand. Stubbing amounts here would hide the bug where the screen renders this
+/// list instead of the order's.
+Map<String, dynamic> amountlessRow(Map<String, dynamic> row) => {
+  for (final entry in row.entries)
+    if (!const {
+      'settlement_amount_minor',
+      'settlement_amount_exponent',
+      'canonical_amount_eur_cents',
+      'eur_dzd_rate',
+      'rate_settings_version',
+      'rate_is_indicative',
+    }.contains(entry.key))
+      entry.key: entry.value,
+};
+
 FakeBackend backendWith(List<Map<String, dynamic>> providers) {
   final backend = FakeBackend();
   backend.on(
@@ -97,7 +114,7 @@ FakeBackend backendWith(List<Map<String, dynamic>> providers) {
     FakeResponse(200, {
       'timing_mode': 'posting_deposit',
       'canonical_currency': 'EUR',
-      'providers': providers,
+      'providers': providers.map(amountlessRow).toList(),
       'chargily_rate': {
         'eur_dzd_rate': '150.000000',
         'rate_settings_version': 3,
@@ -186,6 +203,44 @@ void main() {
       expect(text, isNot(contains('Equivalent to')));
       expect(text, isNot(contains('150.000000')));
       expect(text, isNot(contains('DA')));
+    });
+  });
+
+  group('the amounts come from the order, not the rail catalogue', () {
+    testWidgets('the standalone provider list alone shows no amounts', (
+      tester,
+    ) async {
+      // No order in hand — a boost before its obligation has been read back.
+      // The rails are still offered, but nothing invents a figure for them.
+      await pumpCheckout(
+        tester,
+        backend: backendWith([_stripeRow, _chargilyRow]),
+      );
+
+      final text = visibleText(tester).join(' | ');
+      expect(find.text('Stripe'), findsOneWidget);
+      expect(text, isNot(contains('€37.50')));
+      expect(text, isNot(contains('5,625')));
+      // The button falls back to a plain continue rather than naming a price
+      // the server has not stated.
+      expect(find.text('Continue'), findsOneWidget);
+    });
+
+    testWidgets('with an order in hand, its rows are what get rendered', (
+      tester,
+    ) async {
+      // The regression this guards: the widget used to render the amount-less
+      // catalogue even when the order carried per-rail figures, which put the
+      // rails back to being distinguishable only by a subtitle.
+      await pumpCheckout(
+        tester,
+        backend: backendWith([_stripeRow, _chargilyRow]),
+        order: orderFixture(),
+      );
+
+      final text = visibleText(tester).join(' | ');
+      expect(text, contains('€37.50'));
+      expect(text, contains('5,625'));
     });
   });
 

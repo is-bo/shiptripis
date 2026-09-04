@@ -421,10 +421,22 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   ) {
     final l = L.of(context);
 
+    // **The order's own rail list wins.** `GET /api/payments/providers` has no
+    // obligation in hand, so its rows carry a settlement currency and no
+    // amount; the order's rows carry what each rail would charge for *this*
+    // obligation. Rendering the amount-less list would put the rails back to
+    // being indistinguishable except by a subtitle, which is the whole defect
+    // this screen is being repaired for. The standalone list remains the
+    // fallback for a surface that has no order yet — a boost, before its
+    // obligation has been read back.
+    final source = (order?.providers.isNotEmpty ?? false)
+        ? order!.providers
+        : view.providers;
+
     // `mock` is already stripped by the model; `unknown` is a rail this build
     // does not know how to name, and an unnamed payment button is not one we
     // are willing to show.
-    final options = view.providers
+    final options = source
         .where((p) => p.provider != PaymentProviderId.unknown)
         .toList(growable: false);
 
