@@ -4265,3 +4265,37 @@ the reviewed manifest/digest gates pass. Flutter format and
 Journey/DeliveryRequest integration run is **86 passed**, and the full Flutter
 suite is **422 passed**. No deployment or APK/AAB build was performed. Phases
 8F-F3, F4, F5 and F6 were not started.
+
+## Phase 8F-F3 — role-aware offer and Deal money perspective
+
+Phase 8F-F3 is implemented. Every changed offer, counter-offer, Deal card,
+Deal detail and payment surface now derives its money perspective from the
+authenticated account ID and the server-provided Sender and Traveler party
+IDs. The selected dashboard role, route history and locally inferred
+ownership do not participate. A dual-role account therefore receives the
+perspective of its actual party in that Match or Deal.
+
+Sender surfaces remain payer-oriented: the negotiated Traveler reward,
+ShipTrip fee and authoritative Sender total lead to “You pay”. Traveler
+surfaces are earnings-oriented: offers and counters lead with “You receive”;
+accepted Deals show the base reward, authoritative Boost bonus and
+authoritative total received; and the payment projection is a read-only
+earnings status with no checkout control. Offer-history labels and acceptance
+confirmation are also party-aware. Action visibility remains exclusively
+server-owned through `allowed_actions`.
+
+The Flutter domain layer selects between the existing server amounts without
+performing fee, total or Boost arithmetic. No backend contract, migration,
+schema dump or Go/sqlc regeneration was needed: Match and Deal payloads already
+provide party IDs, offer reward/fee/Sender total fields, Deal Boost splits and
+role-projected actions. Sender-first negotiation remains unchanged; V1 has no
+Traveler-initiated offer path, only Traveler counter-offers.
+
+English, French and Arabic strings cover the new payer/earnings vocabulary,
+including Arabic RTL. Local gates are green: PostgreSQL 16 focused
+offer/matching/locking, Deal reservation and Boost economics **70 passed**;
+Flutter focused role/Boost/localization/guest/layout regressions **105 passed**;
+`dart format` and `flutter analyze --fatal-infos` are clean; the UI quality
+detector reports no findings; and the full Flutter suite is **433 passed**. No
+deployment or APK/AAB build was performed. Phases 8F-F4, F5 and F6 were not
+started.

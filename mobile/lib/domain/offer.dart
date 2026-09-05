@@ -17,6 +17,7 @@ import '../core/money/money.dart';
 import 'discovery.dart';
 import 'json.dart';
 import 'location.dart';
+import 'money_perspective.dart';
 
 enum OfferStatus {
   pending,
@@ -204,6 +205,15 @@ class Offer {
       status.isOpen && awaitingUserId != null && awaitingUserId == userId;
 
   bool wasProposedBy(int userId) => proposerId == userId;
+
+  /// The primary amount for one party, selected from two server fields.
+  ///
+  /// The negotiated reward and the sender total describe the same offer from
+  /// different economic sides. This method chooses; it never calculates.
+  Money? amountFor(MoneyPerspective perspective) => switch (perspective) {
+    MoneyPerspective.sender => senderTotal,
+    MoneyPerspective.traveler => travelerReward,
+  };
 }
 
 enum MatchStatus {
@@ -342,6 +352,13 @@ class Match {
       viewerId == senderId ? travelerName : senderName;
 
   bool isSender(int viewerId) => viewerId == senderId;
+
+  MoneyPerspective? moneyPerspectiveFor(int viewerId) =>
+      MoneyPerspective.resolve(
+        viewerId: viewerId,
+        senderId: senderId,
+        travelerId: travelerId,
+      );
 
   /// True when this viewer is the one holding up the negotiation.
   bool awaitsViewer(int viewerId) => latestOffer?.isAwaiting(viewerId) ?? false;

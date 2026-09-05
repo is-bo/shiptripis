@@ -33,6 +33,7 @@ import '../../design/components/status.dart';
 import '../../design/identity.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
+import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
 import '../../design/typography.dart';
 import 'formatters.dart';
@@ -83,7 +84,8 @@ class DeliveryCard extends StatelessWidget {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
 
-    final isSender = deal.isSender(viewerId);
+    final perspective = deal.moneyPerspectiveFor(viewerId);
+    final isSender = perspective == MoneyPerspective.sender;
     final status = dealStatusCopy(
       context,
       deal.status,
@@ -93,10 +95,10 @@ class DeliveryCard extends StatelessWidget {
     // Same deal, two true sentences. A sender's number is what leaves their
     // account; a traveller's is what arrives in theirs. Showing either party
     // the other's figure is a small lie that compounds.
-    final Money? amount = isSender
-        ? deal.terms?.senderTotal
-        : deal.terms?.travelerReward;
-    final amountLabel = isSender ? l.moneyYouPay : l.moneyYourReward;
+    final Money? amount = perspective == null
+        ? null
+        : deal.terms?.totalFor(perspective);
+    final amountLabel = isSender ? l.moneyYouPay : l.moneyYouReceive;
 
     return BoardingCard(
       onTap: onTap,
@@ -156,7 +158,17 @@ class DeliveryCard extends StatelessWidget {
                 const Spacer(),
               if (amount != null) ...[
                 const SizedBox(width: AppSpace.md),
-                MoneyText(amount, semanticPrefix: amountLabel, size: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      amountLabel,
+                      style: text.bodySmall?.copyWith(color: c.textSecondary),
+                    ),
+                    const SizedBox(height: AppSpace.xxs),
+                    MoneyText(amount, semanticPrefix: amountLabel, size: 16),
+                  ],
+                ),
               ],
             ],
           ),

@@ -729,6 +729,24 @@ abstract class L {
   /// **'You pay'**
   String get moneyYouPay;
 
+  /// No description provided for @moneyYouReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'You receive'**
+  String get moneyYouReceive;
+
+  /// No description provided for @moneyYourEarnings.
+  ///
+  /// In en, this message translates to:
+  /// **'Your earnings'**
+  String get moneyYourEarnings;
+
+  /// No description provided for @moneyTotalYouReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Total you receive'**
+  String get moneyTotalYouReceive;
+
   /// No description provided for @moneyTravelerReceives.
   ///
   /// In en, this message translates to:
@@ -2517,6 +2535,12 @@ abstract class L {
   /// **'Send offer'**
   String get offerSend;
 
+  /// No description provided for @offerSendCounter.
+  ///
+  /// In en, this message translates to:
+  /// **'Send counter-offer'**
+  String get offerSendCounter;
+
   /// No description provided for @offerCounter.
   ///
   /// In en, this message translates to:
@@ -2636,6 +2660,72 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Once you accept, you\'ll be asked to pay so the delivery can start.'**
   String get offerAcceptSenderBody;
+
+  /// No description provided for @offerAcceptSenderConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay {amount} for this delivery?'**
+  String offerAcceptSenderConfirmTitle(String amount);
+
+  /// No description provided for @offerAcceptTravelerConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive {amount} for this delivery?'**
+  String offerAcceptTravelerConfirmTitle(String amount);
+
+  /// No description provided for @offerCounterTravelerExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how much you receive for this delivery. The sender can accept, decline, or counter again.'**
+  String get offerCounterTravelerExplainer;
+
+  /// No description provided for @offerYourOfferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your offer'**
+  String get offerYourOfferTitle;
+
+  /// No description provided for @offerTravelerCounterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveller\'s counter-offer'**
+  String get offerTravelerCounterTitle;
+
+  /// No description provided for @offerYourCounterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your counter-offer'**
+  String get offerYourCounterTitle;
+
+  /// No description provided for @offerSenderOfferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender\'s offer'**
+  String get offerSenderOfferTitle;
+
+  /// No description provided for @offerYouWouldPay.
+  ///
+  /// In en, this message translates to:
+  /// **'You would pay {amount}'**
+  String offerYouWouldPay(String amount);
+
+  /// No description provided for @offerTravelerAsks.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveller asks {amount}'**
+  String offerTravelerAsks(String amount);
+
+  /// No description provided for @offerYouWouldReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'You would receive {amount}'**
+  String offerYouWouldReceive(String amount);
+
+  /// No description provided for @offerSenderOffers.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender offers {amount}'**
+  String offerSenderOffers(String amount);
 
   /// No description provided for @offerBelowMinimum.
   ///
@@ -5864,6 +5954,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Exact addresses appear once the delivery is paid for.'**
   String get dealLocationsHiddenUntilFunded;
+
+  /// No description provided for @dealTravelerAwaitingPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the sender to pay.'**
+  String get dealTravelerAwaitingPayment;
+
+  /// No description provided for @dealTravelerPaymentFunded.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender\'s payment is confirmed and protected.'**
+  String get dealTravelerPaymentFunded;
 
   /// No description provided for @ratingBlindNote.
   ///

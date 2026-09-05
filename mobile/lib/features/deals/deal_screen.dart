@@ -39,6 +39,7 @@ import '../../design/components/timeline.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
+import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 
@@ -80,12 +81,14 @@ class DealScreen extends ConsumerWidget {
           ),
           data: (data) {
             if (account == null) return const SkeletonDetail();
-            final isSender = data.isSender(account.id);
+            final perspective = data.moneyPerspectiveFor(account.id);
+            if (perspective == null) return const SizedBox.shrink();
+            final isSender = perspective.isSender;
 
             return ListView(
               padding: AppScrollPadding.page(context),
               children: [
-                _StatusHeader(deal: data, isSender: isSender),
+                _StatusHeader(deal: data, perspective: perspective),
                 const SizedBox(height: AppSpace.xl),
 
                 _Urgent(deal: data, isSender: isSender),
@@ -96,7 +99,7 @@ class DealScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpace.xl),
 
-                _MoneySection(deal: data, isSender: isSender),
+                _MoneySection(deal: data, perspective: perspective),
                 const SizedBox(height: AppSpace.xl),
 
                 _RecipientSection(deal: data, isSender: isSender),
@@ -245,18 +248,17 @@ class DealScreen extends ConsumerWidget {
 }
 
 class _StatusHeader extends StatelessWidget {
-  const _StatusHeader({required this.deal, required this.isSender});
+  const _StatusHeader({required this.deal, required this.perspective});
 
   final Deal deal;
-  final bool isSender;
+  final MoneyPerspective perspective;
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final isSender = perspective.isSender;
     final copy = dealStatusCopy(context, deal.status, viewerIsSender: isSender);
-    final amount = isSender
-        ? deal.terms?.senderTotal
-        : deal.terms?.travelerReward;
+    final amount = deal.terms?.totalFor(perspective);
 
     return AppCard(
       accent: copy.tone,
@@ -268,7 +270,7 @@ class _StatusHeader extends StatelessWidget {
             const SizedBox(height: AppSpace.lg),
             MoneyHero(
               amount: amount,
-              label: isSender ? l.moneyYouPay : l.moneyYourReward,
+              label: isSender ? l.moneyYouPay : l.moneyYouReceive,
             ),
           ],
         ],
@@ -328,14 +330,15 @@ class _Urgent extends StatelessWidget {
 }
 
 class _MoneySection extends StatelessWidget {
-  const _MoneySection({required this.deal, required this.isSender});
+  const _MoneySection({required this.deal, required this.perspective});
 
   final Deal deal;
-  final bool isSender;
+  final MoneyPerspective perspective;
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final isSender = perspective.isSender;
     final terms = deal.terms;
     if (terms == null) return const SizedBox.shrink();
 
@@ -360,7 +363,9 @@ class _MoneySection extends StatelessWidget {
               ),
             if (terms.travelerTotal != null)
               MoneyLine.total(
-                label: isSender ? l.moneyTravelerReceives : l.moneyYourReward,
+                label: isSender
+                    ? l.moneyTravelerReceives
+                    : l.moneyTotalYouReceive,
                 amount: terms.travelerTotal!,
               ),
             if (isSender && terms.platformFee != null)

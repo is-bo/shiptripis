@@ -476,13 +476,26 @@ class _MatchRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (offer?.travelerReward != null) ...[
+                if (offer?.senderTotal != null) ...[
                   const SizedBox(height: AppSpace.xs),
-                  MoneyText(
-                    offer!.travelerReward!,
-                    semanticPrefix: l.moneyTravelerReceives,
-                    size: 14,
-                    color: c.textSecondary,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l.moneyYouPay,
+                          style: text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.md),
+                      MoneyText(
+                        offer!.senderTotal!,
+                        semanticPrefix: l.moneyYouPay,
+                        size: 14,
+                        color: c.textSecondary,
+                      ),
+                    ],
                   ),
                 ],
               ],

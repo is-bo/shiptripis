@@ -134,6 +134,9 @@
   "staleDealClosed": "This delivery is closed.",
   "staleOfferExpired": "This offer is no longer available.",
   "moneyYouPay": "You pay",
+  "moneyYouReceive": "You receive",
+  "moneyYourEarnings": "Your earnings",
+  "moneyTotalYouReceive": "Total you receive",
   "moneyTravelerReceives": "Traveller receives",
   "moneyPlatformFee": "ShipTrip fee",
   "moneyMinimumReward": "Minimum reward",
@@ -537,6 +540,7 @@
   "offerRewardLabel": "Traveller's reward",
   "offerUseRecommended": "Use suggested",
   "offerSend": "Send offer",
+  "offerSendCounter": "Send counter-offer",
   "offerCounter": "Counter",
   "offerAccept": "Accept",
   "offerDecline": "Decline",
@@ -578,6 +582,59 @@
   },
   "offerAcceptTravelerBody": "Space on your journey is reserved as soon as you accept. The sender then has to pay.",
   "offerAcceptSenderBody": "Once you accept, you'll be asked to pay so the delivery can start.",
+  "offerAcceptSenderConfirmTitle": "Pay {amount} for this delivery?",
+  "@offerAcceptSenderConfirmTitle": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerAcceptTravelerConfirmTitle": "Receive {amount} for this delivery?",
+  "@offerAcceptTravelerConfirmTitle": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerCounterTravelerExplainer": "Choose how much you receive for this delivery. The sender can accept, decline, or counter again.",
+  "offerYourOfferTitle": "Your offer",
+  "offerTravelerCounterTitle": "Traveller's counter-offer",
+  "offerYourCounterTitle": "Your counter-offer",
+  "offerSenderOfferTitle": "Sender's offer",
+  "offerYouWouldPay": "You would pay {amount}",
+  "@offerYouWouldPay": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerTravelerAsks": "Traveller asks {amount}",
+  "@offerTravelerAsks": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerYouWouldReceive": "You would receive {amount}",
+  "@offerYouWouldReceive": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerSenderOffers": "Sender offers {amount}",
+  "@offerSenderOffers": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "offerBelowMinimum": "Offer at least {amount}",
   "@offerBelowMinimum": {
     "placeholders": {
@@ -1572,6 +1629,8 @@
     }
   },
   "dealLocationsHiddenUntilFunded": "Exact addresses appear once the delivery is paid for.",
+  "dealTravelerAwaitingPayment": "Waiting for the sender to pay.",
+  "dealTravelerPaymentFunded": "The sender's payment is confirmed and protected.",
   "ratingBlindNote": "Neither of you sees the other's rating until you've both left one, or the window closes.",
   "ratingSubmittedTitle": "Rating saved",
   "pickupTitle": "Pickup",

@@ -33,6 +33,7 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/payment.dart';
+import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 import '../requests/checkout_section.dart';
@@ -69,12 +70,22 @@ class DealPaymentScreen extends ConsumerWidget {
       );
     }
 
-    final isTraveler = !deal.isSender(account.id);
+    final perspective = deal.moneyPerspectiveFor(account.id);
+    if (perspective == null) {
+      return AppScaffold(
+        topBar: AppTopBar(title: l.paymentTitle, showBack: true),
+        body: const SizedBox.shrink(),
+      );
+    }
+    final isTraveler = perspective == MoneyPerspective.traveler;
     final key = (dealId: dealId, isTraveler: isTraveler);
     final payment = ref.watch(_dealPaymentProvider(key));
 
     return AppScaffold(
-      topBar: AppTopBar(title: l.paymentTitle, showBack: true),
+      topBar: AppTopBar(
+        title: isTraveler ? l.moneyYourEarnings : l.paymentTitle,
+        showBack: true,
+      ),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(_dealPaymentProvider(key)),
         child: AsyncView<DealPaymentState>(
@@ -122,7 +133,9 @@ class _Summary extends StatelessWidget {
     // The traveller is told what they earn; the sender what they owe. Same
     // deal, two true sentences.
     final hero = isTraveler ? state.travelerTotal : order?.outstanding;
-    final heroLabel = isTraveler ? l.moneyYourReward : l.moneyRemainingToPay;
+    final heroLabel = isTraveler
+        ? l.moneyTotalYouReceive
+        : l.moneyRemainingToPay;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,8 +233,8 @@ class _TravelerView extends StatelessWidget {
           const SizedBox(height: AppSpace.md),
           Text(
             order.status.isSettled
-                ? l.dealStatusFunded
-                : l.dealStatusPaymentRequired,
+                ? l.dealTravelerPaymentFunded
+                : l.dealTravelerAwaitingPayment,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: context.colors.textSecondary,
             ),

@@ -350,6 +350,15 @@ class LFr extends L {
   String get moneyYouPay => 'Vous payez';
 
   @override
+  String get moneyYouReceive => 'Vous recevez';
+
+  @override
+  String get moneyYourEarnings => 'Vos gains';
+
+  @override
+  String get moneyTotalYouReceive => 'Total que vous recevez';
+
+  @override
   String get moneyTravelerReceives => 'Le voyageur reçoit';
 
   @override
@@ -1368,6 +1377,9 @@ class LFr extends L {
   String get offerSend => 'Envoyer l’offre';
 
   @override
+  String get offerSendCounter => 'Envoyer la contre-offre';
+
+  @override
   String get offerCounter => 'Contre-offre';
 
   @override
@@ -1435,6 +1447,52 @@ class LFr extends L {
   @override
   String get offerAcceptSenderBody =>
       'Une fois que vous acceptez, il vous sera demandé de payer pour que la livraison démarre.';
+
+  @override
+  String offerAcceptSenderConfirmTitle(String amount) {
+    return 'Payer $amount pour cette livraison ?';
+  }
+
+  @override
+  String offerAcceptTravelerConfirmTitle(String amount) {
+    return 'Recevoir $amount pour cette livraison ?';
+  }
+
+  @override
+  String get offerCounterTravelerExplainer =>
+      'Choisissez le montant que vous recevrez pour cette livraison. L’expéditeur peut accepter, refuser ou faire une nouvelle contre-offre.';
+
+  @override
+  String get offerYourOfferTitle => 'Votre offre';
+
+  @override
+  String get offerTravelerCounterTitle => 'Contre-offre du voyageur';
+
+  @override
+  String get offerYourCounterTitle => 'Votre contre-offre';
+
+  @override
+  String get offerSenderOfferTitle => 'Offre de l’expéditeur';
+
+  @override
+  String offerYouWouldPay(String amount) {
+    return 'Vous paieriez $amount';
+  }
+
+  @override
+  String offerTravelerAsks(String amount) {
+    return 'Le voyageur demande $amount';
+  }
+
+  @override
+  String offerYouWouldReceive(String amount) {
+    return 'Vous recevriez $amount';
+  }
+
+  @override
+  String offerSenderOffers(String amount) {
+    return 'L’expéditeur propose $amount';
+  }
 
   @override
   String offerBelowMinimum(String amount) {
@@ -3364,6 +3422,14 @@ class LFr extends L {
   @override
   String get dealLocationsHiddenUntilFunded =>
       'Les adresses exactes apparaissent une fois la livraison payée.';
+
+  @override
+  String get dealTravelerAwaitingPayment =>
+      'En attente du paiement de l’expéditeur.';
+
+  @override
+  String get dealTravelerPaymentFunded =>
+      'Le paiement de l’expéditeur est confirmé et protégé.';
 
   @override
   String get ratingBlindNote =>

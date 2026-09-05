@@ -37,6 +37,7 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/offer.dart';
+import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
@@ -68,19 +69,24 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
     }
   }
 
-  Future<void> _accept(Offer offer, Money? amount) async {
+  Future<void> _accept(Offer offer) async {
     final l = L.of(context);
     final locale = Localizations.localeOf(context);
     final account = ref.read(accountProvider);
     final match = ref.read(matchDetailProvider(widget.matchId)).value;
     if (account == null || match == null) return;
 
-    final isSender = match.isSender(account.id);
+    final perspective = match.moneyPerspectiveFor(account.id);
+    if (perspective == null) return;
+    final amount = offer.amountFor(perspective);
+    final isSender = perspective.isSender;
     final confirmed = await confirmAction(
       context,
       title: amount == null
           ? l.offerAccept
-          : l.offerAcceptConfirmTitle(amount.format(locale)),
+          : isSender
+          ? l.offerAcceptSenderConfirmTitle(amount.format(locale))
+          : l.offerAcceptTravelerConfirmTitle(amount.format(locale)),
       body: isSender ? l.offerAcceptSenderBody : l.offerAcceptTravelerBody,
       confirmLabel: l.offerAccept,
     );
@@ -133,9 +139,18 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
   }
 
   Future<void> _counter(Offer offer) async {
+    final account = ref.read(accountProvider);
+    final match = ref.read(matchDetailProvider(widget.matchId)).value;
+    if (account == null || match == null) return;
+    final perspective = match.moneyPerspectiveFor(account.id);
+    if (perspective == null) return;
+
     final cents = await showAppSheet<int>(
       context,
-      builder: (sheetContext) => _CounterSheet(current: offer.travelerReward),
+      builder: (sheetContext) => _CounterSheet(
+        current: offer.travelerReward,
+        perspective: perspective,
+      ),
     );
     if (cents == null || !mounted) return;
 
@@ -167,7 +182,8 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
         ),
         data: (data) {
           if (account == null) return const SkeletonDetail();
-          final isSender = data.isSender(account.id);
+          final perspective = data.moneyPerspectiveFor(account.id);
+          if (perspective == null) return const SizedBox.shrink();
           final current = data.latestOffer;
 
           return RefreshIndicator(
@@ -193,12 +209,16 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
                   _CurrentOffer(
                     offer: current,
                     viewerId: account.id,
-                    isSender: isSender,
+                    perspective: perspective,
                   ),
                   const SizedBox(height: AppSpace.xl),
                 ],
 
-                _History(matchId: widget.matchId, offers: offers),
+                _History(
+                  matchId: widget.matchId,
+                  offers: offers,
+                  perspective: perspective,
+                ),
               ],
             ),
           );
@@ -282,20 +302,30 @@ class _CurrentOffer extends StatelessWidget {
   const _CurrentOffer({
     required this.offer,
     required this.viewerId,
-    required this.isSender,
+    required this.perspective,
   });
 
   final Offer offer;
   final int viewerId;
-  final bool isSender;
+  final MoneyPerspective perspective;
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final locale = Localizations.localeOf(context);
     final reward = offer.travelerReward;
     final fee = offer.platformFee;
     final total = offer.senderTotal;
+    final isSender = perspective.isSender;
+
+    final mine = offer.wasProposedBy(viewerId);
+    final heading = mine && offer.parentOfferId != null
+        ? l.offerYourCounterTitle
+        : switch ((perspective, mine)) {
+            (MoneyPerspective.sender, true) => l.offerYourOfferTitle,
+            (MoneyPerspective.sender, false) => l.offerTravelerCounterTitle,
+            (MoneyPerspective.traveler, true) => l.offerYourCounterTitle,
+            (MoneyPerspective.traveler, false) => l.offerSenderOfferTitle,
+          };
 
     final awaitingLabel = switch (offer.awaitingParty) {
       OfferParty.sender =>
@@ -314,9 +344,7 @@ class _CurrentOffer extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                offer.wasProposedBy(viewerId)
-                    ? l.offerYouProposed(reward?.format(locale) ?? '')
-                    : l.offerTheyProposed(reward?.format(locale) ?? ''),
+                heading,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
@@ -334,19 +362,25 @@ class _CurrentOffer extends StatelessWidget {
         ),
         const SizedBox(height: AppSpace.lg),
 
-        // Every figure is a server field. Nothing here is summed in Dart —
-        // `Money` has no operators, which is what makes that structural.
-        MoneyBreakdown(
-          title: l.moneyBreakdownTitle,
-          explainer: l.moneyRewardNotReduced,
-          lines: [
-            if (reward != null)
-              MoneyLine(label: l.moneyTravelerReceives, amount: reward),
-            if (fee != null) MoneyLine(label: l.moneyPlatformFee, amount: fee),
-            if (total != null)
-              MoneyLine.total(label: l.moneyYouPay, amount: total),
-          ],
-        ),
+        // Every figure is a server field. The sender gets the payment build-up;
+        // the traveller gets the one amount they earn and no checkout framing.
+        if (isSender)
+          MoneyBreakdown(
+            title: l.moneyBreakdownTitle,
+            explainer: l.moneyRewardNotReduced,
+            lines: [
+              if (reward != null)
+                MoneyLine(label: l.moneyTravelerReceives, amount: reward),
+              if (fee != null)
+                MoneyLine(label: l.moneyPlatformFee, amount: fee),
+              if (total != null)
+                MoneyLine.total(label: l.moneyYouPay, amount: total),
+            ],
+          )
+        else if (reward != null)
+          AppCard(
+            child: MoneyHero(amount: reward, label: l.moneyYouReceive),
+          ),
 
         if (offer.note.isNotEmpty) ...[
           const SizedBox(height: AppSpace.lg),
@@ -363,10 +397,15 @@ class _CurrentOffer extends StatelessWidget {
 }
 
 class _History extends ConsumerWidget {
-  const _History({required this.matchId, required this.offers});
+  const _History({
+    required this.matchId,
+    required this.offers,
+    required this.perspective,
+  });
 
   final int matchId;
   final AsyncValue<List<Offer>> offers;
+  final MoneyPerspective perspective;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -403,13 +442,13 @@ class _History extends ConsumerWidget {
                     const SizedBox(width: AppSpace.md),
                     Expanded(
                       child: Text(
-                        offer.wasProposedBy(account.id)
-                            ? l.offerYouProposed(
-                                offer.travelerReward?.format(locale) ?? '',
-                              )
-                            : l.offerTheyProposed(
-                                offer.travelerReward?.format(locale) ?? '',
-                              ),
+                        _historyLabel(
+                          l,
+                          offer,
+                          perspective: perspective,
+                          viewerId: account.id,
+                          locale: locale,
+                        ),
                         style: Theme.of(
                           context,
                         ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
@@ -429,6 +468,33 @@ class _History extends ConsumerWidget {
       },
     );
   }
+
+  static String _historyLabel(
+    L l,
+    Offer offer, {
+    required MoneyPerspective perspective,
+    required int viewerId,
+    required Locale locale,
+  }) {
+    final mine = offer.wasProposedBy(viewerId);
+    if (perspective.isSender) {
+      final amount = mine ? offer.senderTotal : offer.travelerReward;
+      if (amount == null) {
+        return mine ? l.offerYourOfferTitle : l.offerTravelerCounterTitle;
+      }
+      return mine
+          ? l.offerYouWouldPay(amount.format(locale))
+          : l.offerTravelerAsks(amount.format(locale));
+    }
+
+    final amount = offer.travelerReward;
+    if (amount == null) {
+      return mine ? l.offerYourCounterTitle : l.offerSenderOfferTitle;
+    }
+    return mine
+        ? l.offerYouWouldReceive(amount.format(locale))
+        : l.offerSenderOffers(amount.format(locale));
+  }
 }
 
 /// The action bar.
@@ -447,7 +513,7 @@ class _Actions extends ConsumerWidget {
 
   final int matchId;
   final bool busy;
-  final Future<void> Function(Offer, Money?) onAccept;
+  final Future<void> Function(Offer) onAccept;
   final Future<void> Function(Offer) onCounter;
   final Future<void> Function(Offer) onDecline;
   final Future<void> Function(Offer) onWithdraw;
@@ -465,7 +531,7 @@ class _Actions extends ConsumerWidget {
           AppButton(
             label: l.offerAccept,
             isLoading: busy,
-            onPressed: () => onAccept(offer, offer.travelerReward),
+            onPressed: () => onAccept(offer),
           ),
         if (offer.canCounter) ...[
           if (offer.canAccept) const SizedBox(height: AppSpace.sm),
@@ -500,8 +566,9 @@ class _Actions extends ConsumerWidget {
 /// the server's to enforce, and it says so with `reward_below_minimum` and the
 /// real floor if this one is too low.
 class _CounterSheet extends StatefulWidget {
-  const _CounterSheet({this.current});
+  const _CounterSheet({required this.perspective, this.current});
 
+  final MoneyPerspective perspective;
   final Money? current;
 
   @override
@@ -535,10 +602,14 @@ class _CounterSheetState extends State<_CounterSheet> {
     final l = L.of(context);
     return AppSheet(
       title: l.offerCounter,
-      subtitle: l.offerProposeExplainer,
-      footer: AppButton(label: l.offerSend, onPressed: _submit),
+      subtitle: widget.perspective.isTraveler
+          ? l.offerCounterTravelerExplainer
+          : l.offerProposeExplainer,
+      footer: AppButton(label: l.offerSendCounter, onPressed: _submit),
       child: AppAmountField(
-        label: l.offerRewardLabel,
+        label: widget.perspective.isTraveler
+            ? l.moneyYouReceive
+            : l.offerRewardLabel,
         controller: _amount,
         errorText: _error,
         onChanged: (_) {

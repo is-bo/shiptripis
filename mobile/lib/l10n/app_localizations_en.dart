@@ -349,6 +349,15 @@ class LEn extends L {
   String get moneyYouPay => 'You pay';
 
   @override
+  String get moneyYouReceive => 'You receive';
+
+  @override
+  String get moneyYourEarnings => 'Your earnings';
+
+  @override
+  String get moneyTotalYouReceive => 'Total you receive';
+
+  @override
   String get moneyTravelerReceives => 'Traveller receives';
 
   @override
@@ -1358,6 +1367,9 @@ class LEn extends L {
   String get offerSend => 'Send offer';
 
   @override
+  String get offerSendCounter => 'Send counter-offer';
+
+  @override
   String get offerCounter => 'Counter';
 
   @override
@@ -1425,6 +1437,52 @@ class LEn extends L {
   @override
   String get offerAcceptSenderBody =>
       'Once you accept, you\'ll be asked to pay so the delivery can start.';
+
+  @override
+  String offerAcceptSenderConfirmTitle(String amount) {
+    return 'Pay $amount for this delivery?';
+  }
+
+  @override
+  String offerAcceptTravelerConfirmTitle(String amount) {
+    return 'Receive $amount for this delivery?';
+  }
+
+  @override
+  String get offerCounterTravelerExplainer =>
+      'Choose how much you receive for this delivery. The sender can accept, decline, or counter again.';
+
+  @override
+  String get offerYourOfferTitle => 'Your offer';
+
+  @override
+  String get offerTravelerCounterTitle => 'Traveller\'s counter-offer';
+
+  @override
+  String get offerYourCounterTitle => 'Your counter-offer';
+
+  @override
+  String get offerSenderOfferTitle => 'Sender\'s offer';
+
+  @override
+  String offerYouWouldPay(String amount) {
+    return 'You would pay $amount';
+  }
+
+  @override
+  String offerTravelerAsks(String amount) {
+    return 'Traveller asks $amount';
+  }
+
+  @override
+  String offerYouWouldReceive(String amount) {
+    return 'You would receive $amount';
+  }
+
+  @override
+  String offerSenderOffers(String amount) {
+    return 'Sender offers $amount';
+  }
 
   @override
   String offerBelowMinimum(String amount) {
@@ -3338,6 +3396,13 @@ class LEn extends L {
   @override
   String get dealLocationsHiddenUntilFunded =>
       'Exact addresses appear once the delivery is paid for.';
+
+  @override
+  String get dealTravelerAwaitingPayment => 'Waiting for the sender to pay.';
+
+  @override
+  String get dealTravelerPaymentFunded =>
+      'The sender\'s payment is confirmed and protected.';
 
   @override
   String get ratingBlindNote =>

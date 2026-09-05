@@ -18,6 +18,7 @@ import 'communication_language.dart';
 import 'dispute.dart';
 import 'handover.dart';
 import 'json.dart';
+import 'money_perspective.dart';
 import 'payment.dart';
 import 'rating.dart';
 
@@ -164,6 +165,13 @@ class DealTerms {
   final int? businessSettingsVersion;
   final String? pricingVersion;
   final bool isLegacy;
+
+  /// The final amount this party sees, using only server-published totals.
+  /// Historical rows without Boost totals fall back to their original terms.
+  Money? totalFor(MoneyPerspective perspective) => switch (perspective) {
+    MoneyPerspective.sender => senderTotalWithBoost ?? senderTotal,
+    MoneyPerspective.traveler => travelerTotal ?? travelerReward,
+  };
 }
 
 enum LegAllocationStatus {
@@ -498,6 +506,13 @@ class Deal {
   bool get isFunded => fundedAt != null;
 
   bool isSender(int viewerId) => viewerId == senderId;
+
+  MoneyPerspective? moneyPerspectiveFor(int viewerId) =>
+      MoneyPerspective.resolve(
+        viewerId: viewerId,
+        senderId: senderId,
+        travelerId: travelerId,
+      );
 
   int counterpartyId(int viewerId) =>
       viewerId == senderId ? travelerId : senderId;

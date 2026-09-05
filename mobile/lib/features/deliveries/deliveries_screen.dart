@@ -24,6 +24,7 @@ import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
+import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -235,6 +236,8 @@ class _NegotiationRow extends StatelessWidget {
 
     final awaitsMe = match.awaitsViewer(viewerId);
     final offer = match.latestOffer;
+    final perspective = match.moneyPerspectiveFor(viewerId);
+    final amount = perspective == null ? null : offer?.amountFor(perspective);
 
     return AppCard(
       onTap: () => context.openNegotiation(match.id),
@@ -268,11 +271,25 @@ class _NegotiationRow extends StatelessWidget {
                 ),
             ],
           ),
-          if (offer?.travelerReward != null) ...[
+          if (amount != null && perspective != null) ...[
             const SizedBox(height: AppSpace.sm),
-            Text(
-              match.isSender(viewerId) ? l.moneyYouPay : l.moneyYourReward,
-              style: text.bodySmall?.copyWith(color: c.textSecondary),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    perspective.isSender ? l.moneyYouPay : l.moneyYouReceive,
+                    style: text.bodySmall?.copyWith(color: c.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: AppSpace.md),
+                MoneyText(
+                  amount,
+                  semanticPrefix: perspective.isSender
+                      ? l.moneyYouPay
+                      : l.moneyYouReceive,
+                  size: 14,
+                ),
+              ],
             ),
           ],
         ],

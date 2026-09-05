@@ -343,6 +343,15 @@ class LAr extends L {
   String get moneyYouPay => 'المبلغ الذي تدفعه';
 
   @override
+  String get moneyYouReceive => 'تحصل على';
+
+  @override
+  String get moneyYourEarnings => 'أرباحك';
+
+  @override
+  String get moneyTotalYouReceive => 'إجمالي ما تحصل عليه';
+
+  @override
   String get moneyTravelerReceives => 'يحصل المسافر على';
 
   @override
@@ -1358,6 +1367,9 @@ class LAr extends L {
   String get offerSend => 'إرسال العرض';
 
   @override
+  String get offerSendCounter => 'إرسال العرض المضاد';
+
+  @override
   String get offerCounter => 'عرض مضاد';
 
   @override
@@ -1425,6 +1437,52 @@ class LAr extends L {
   @override
   String get offerAcceptSenderBody =>
       'بمجرد موافقتك، سيُطلب منك الدفع لبدء التوصيل.';
+
+  @override
+  String offerAcceptSenderConfirmTitle(String amount) {
+    return 'هل تدفع $amount مقابل هذا التوصيل؟';
+  }
+
+  @override
+  String offerAcceptTravelerConfirmTitle(String amount) {
+    return 'هل تحصل على $amount مقابل هذا التوصيل؟';
+  }
+
+  @override
+  String get offerCounterTravelerExplainer =>
+      'اختر المبلغ الذي ستحصل عليه مقابل هذا التوصيل. يمكن للمُرسِل القبول أو الرفض أو تقديم عرض مضاد آخر.';
+
+  @override
+  String get offerYourOfferTitle => 'عرضك';
+
+  @override
+  String get offerTravelerCounterTitle => 'العرض المضاد للمسافر';
+
+  @override
+  String get offerYourCounterTitle => 'عرضك المضاد';
+
+  @override
+  String get offerSenderOfferTitle => 'عرض المُرسِل';
+
+  @override
+  String offerYouWouldPay(String amount) {
+    return 'ستدفع $amount';
+  }
+
+  @override
+  String offerTravelerAsks(String amount) {
+    return 'يطلب المسافر $amount';
+  }
+
+  @override
+  String offerYouWouldReceive(String amount) {
+    return 'ستحصل على $amount';
+  }
+
+  @override
+  String offerSenderOffers(String amount) {
+    return 'يعرض المُرسِل $amount';
+  }
 
   @override
   String offerBelowMinimum(String amount) {
@@ -3357,6 +3415,12 @@ class LAr extends L {
   @override
   String get dealLocationsHiddenUntilFunded =>
       'تظهر العناوين الدقيقة بمجرد دفع ثمن التوصيل.';
+
+  @override
+  String get dealTravelerAwaitingPayment => 'بانتظار دفع المُرسِل.';
+
+  @override
+  String get dealTravelerPaymentFunded => 'تم تأكيد دفعة المُرسِل وهي محمية.';
 
   @override
   String get ratingBlindNote =>

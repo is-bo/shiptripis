@@ -121,7 +121,7 @@ class _PayoutCard extends StatelessWidget {
                 Expanded(
                   child: MoneyText(
                     amount,
-                    semanticPrefix: l.moneyYourReward,
+                    semanticPrefix: l.moneyYourEarnings,
                     size: 20,
                   ),
                 )
