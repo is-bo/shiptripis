@@ -42,7 +42,9 @@ The seeded shape is::
     "boost": {
       "enabled": true,
       "max_active_per_request": 3,
-      "packages": [{"code", "label", "duration_seconds", "price_eur_cents",
+      "minimum_amount_eur_cents": 500,
+      "traveler_share_bps": 7500,
+      "packages": [{"code", "label", "duration_seconds",
                     "ranking_weight"}, ...]
     }
 
@@ -152,7 +154,6 @@ class BoostPackage:
     code: str
     label: str
     duration_seconds: int
-    price_eur_cents: int
     ranking_weight: int
 
     def snapshot(self) -> dict:
@@ -160,7 +161,6 @@ class BoostPackage:
             "code": self.code,
             "label": self.label,
             "duration_seconds": self.duration_seconds,
-            "price_eur_cents": self.price_eur_cents,
             "ranking_weight": self.ranking_weight,
         }
 
@@ -169,6 +169,8 @@ class BoostPackage:
 class BoostPolicy:
     enabled: bool
     max_active_per_request: int
+    minimum_amount_eur_cents: int
+    traveler_share_bps: int
     packages: tuple[BoostPackage, ...]
 
     def package(self, code: str) -> BoostPackage:
@@ -360,12 +362,6 @@ class Phase4Policy:
                         minimum=3_600,
                         maximum=90 * 24 * 3_600,
                     ),
-                    price_eur_cents=_int(
-                        entry.get("price_eur_cents"),
-                        f"boost.packages[{index}].price_eur_cents",
-                        minimum=1,
-                        maximum=100_000,
-                    ),
                     ranking_weight=_int(
                         entry.get("ranking_weight"),
                         f"boost.packages[{index}].ranking_weight",
@@ -381,6 +377,20 @@ class Phase4Policy:
                 "boost.max_active_per_request",
                 minimum=1,
                 maximum=20,
+            ),
+            minimum_amount_eur_cents=_int(
+                boost.get("minimum_amount_eur_cents"),
+                "boost.minimum_amount_eur_cents",
+                minimum=500,
+            ),
+            # Economic boosts must always give the Traveler the majority and
+            # must leave a configured remainder for ShipTrip. The split is in
+            # basis points so canonical money never passes through a float.
+            traveler_share_bps=_int(
+                boost.get("traveler_share_bps"),
+                "boost.traveler_share_bps",
+                minimum=5_001,
+                maximum=9_999,
             ),
             packages=tuple(packages),
         )

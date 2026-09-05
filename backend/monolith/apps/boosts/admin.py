@@ -7,8 +7,9 @@ expiry job. An operator who could edit these rows by hand could grant a paid
 ranking weight nobody bought, or strand money by marking a refunded purchase
 active.
 
-`Ranking effect` is shown because it is the only thing a boost does. It is the
-computed answer -- active status, and an expiry still in the future -- rather
+`Ranking effect` is shown as one half of the product; the immutable Traveler
+bonus and platform revenue columns show the other. Ranking is the computed
+answer -- active status, and an expiry still in the future -- rather
 than the stored status, so a boost whose expiry job has not run yet is visible
 as what it actually is.
 """
@@ -33,7 +34,9 @@ class BoostPurchaseAdmin(admin.ModelAdmin):
         "package_code",
         "status_chip",
         "ranking_effect_display",
-        "price_display",
+        "amount_display",
+        "traveler_bonus_display",
+        "platform_revenue_display",
         "ranking_weight",
         "activated_at",
         "expires_at",
@@ -58,7 +61,12 @@ class BoostPurchaseAdmin(admin.ModelAdmin):
         "package_code",
         "package_snapshot",
         "duration_seconds",
-        "price_eur_cents",
+        "amount_eur_cents",
+        "economics_version",
+        "traveler_share_bps",
+        "traveler_boost_eur_cents",
+        "platform_boost_eur_cents",
+        "deal",
         "ranking_weight",
         "business_settings_version",
         "status",
@@ -82,7 +90,9 @@ class BoostPurchaseAdmin(admin.ModelAdmin):
         return False
 
     status_chip = status("status", "Status")
-    price_display = money("price_eur_cents", "Price")
+    amount_display = money("amount_eur_cents", "Sender paid")
+    traveler_bonus_display = money("traveler_boost_eur_cents", "Traveler bonus")
+    platform_revenue_display = money("platform_boost_eur_cents", "Platform revenue")
 
     @admin.display(boolean=True, description="Ranking effect")
     def ranking_effect_display(self, obj: BoostPurchase) -> bool:

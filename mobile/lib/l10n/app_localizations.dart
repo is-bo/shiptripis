@@ -1407,6 +1407,36 @@ abstract class L {
   /// **'If nobody takes it, or you cancel before accepting an offer, you get it back in full.'**
   String get depositRefundNote;
 
+  /// No description provided for @depositGuidanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit guidance'**
+  String get depositGuidanceTitle;
+
+  /// No description provided for @depositSuggestedTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip suggested total'**
+  String get depositSuggestedTotal;
+
+  /// No description provided for @depositRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended deposit'**
+  String get depositRecommended;
+
+  /// No description provided for @depositMinimumAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum deposit'**
+  String get depositMinimumAllowed;
+
+  /// No description provided for @depositGuidanceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.'**
+  String get depositGuidanceNote;
+
   /// No description provided for @depositPayAction.
   ///
   /// In en, this message translates to:
@@ -3759,6 +3789,72 @@ abstract class L {
   /// **'Choose a boost'**
   String get boostChoosePackage;
 
+  /// No description provided for @boostAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost amount'**
+  String get boostAmountLabel;
+
+  /// No description provided for @boostAmountHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum {amount}. You can choose any higher amount.'**
+  String boostAmountHelper(String amount);
+
+  /// No description provided for @boostPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review before paying'**
+  String get boostPreviewTitle;
+
+  /// No description provided for @boostSenderPays.
+  ///
+  /// In en, this message translates to:
+  /// **'You pay'**
+  String get boostSenderPays;
+
+  /// No description provided for @boostTravelerGets.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveler gets if delivered'**
+  String get boostTravelerGets;
+
+  /// No description provided for @boostPlatformKeeps.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip keeps'**
+  String get boostPlatformKeeps;
+
+  /// No description provided for @boostEarningsCondition.
+  ///
+  /// In en, this message translates to:
+  /// **'The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.'**
+  String get boostEarningsCondition;
+
+  /// No description provided for @boostReviewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Review boost'**
+  String get boostReviewAction;
+
+  /// No description provided for @boostConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue to payment'**
+  String get boostConfirmAction;
+
+  /// No description provided for @boostAmountBelowMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter at least the minimum boost amount.'**
+  String get boostAmountBelowMinimum;
+
+  /// No description provided for @boostPreviewStale.
+  ///
+  /// In en, this message translates to:
+  /// **'The boost split changed. Review the updated amounts before continuing.'**
+  String get boostPreviewStale;
+
   /// No description provided for @boostDuration.
   ///
   /// In en, this message translates to:
@@ -5612,6 +5708,24 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Refunded'**
   String get boostStatusRefunded;
+
+  /// No description provided for @moneyBaseReward.
+  ///
+  /// In en, this message translates to:
+  /// **'Base delivery reward'**
+  String get moneyBaseReward;
+
+  /// No description provided for @moneyBoostBonus.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost bonus'**
+  String get moneyBoostBonus;
+
+  /// No description provided for @moneyPlatformBoostRevenue.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip boost share'**
+  String get moneyPlatformBoostRevenue;
 
   /// No description provided for @validationReadyWindowOrder.
   ///

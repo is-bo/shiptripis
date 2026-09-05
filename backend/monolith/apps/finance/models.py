@@ -221,8 +221,7 @@ class PaymentOrder(models.Model):
             # database-level guard behind "no free or double-funded Deal".
             models.CheckConstraint(
                 condition=Q(
-                    amount_eur_cents__gte=F("credited_eur_cents")
-                    + F("paid_eur_cents")
+                    amount_eur_cents__gte=F("credited_eur_cents") + F("paid_eur_cents")
                 ),
                 name="fin_order_no_overcollection",
             ),
@@ -336,9 +335,7 @@ class PaymentAttempt(models.Model):
         help_text="Provider-reported guest payer email. Never a ShipTrip identity.",
     )
 
-    amount_eur_cents = models.PositiveBigIntegerField(
-        validators=[MinValueValidator(1)]
-    )
+    amount_eur_cents = models.PositiveBigIntegerField(validators=[MinValueValidator(1)])
     payment_currency = models.CharField(max_length=3)
     provider_amount_minor = models.PositiveBigIntegerField()
     provider_amount_exponent = models.PositiveSmallIntegerField(
@@ -425,9 +422,7 @@ class PaymentAttempt(models.Model):
             # never have two live checkouts racing to fund the same obligation.
             models.UniqueConstraint(
                 fields=["order"],
-                condition=Q(
-                    status__in=["created", "checkout_pending", "processing"]
-                ),
+                condition=Q(status__in=["created", "checkout_pending", "processing"]),
                 name="fin_attempt_one_open_per_order",
             ),
             models.CheckConstraint(
@@ -573,9 +568,7 @@ class PaymentRefund(models.Model):
     attempt = models.ForeignKey(
         PaymentAttempt, on_delete=models.PROTECT, related_name="refunds"
     )
-    amount_eur_cents = models.PositiveBigIntegerField(
-        validators=[MinValueValidator(1)]
-    )
+    amount_eur_cents = models.PositiveBigIntegerField(validators=[MinValueValidator(1)])
     provider = models.CharField(max_length=16, choices=PaymentProvider.choices)
     provider_refund_id = models.CharField(max_length=255, blank=True, default="")
     idempotency_key = models.CharField(max_length=128, unique=True)
@@ -637,10 +630,7 @@ class PaymentRefund(models.Model):
             # under what reference. Provider-settled refunds carry the provider
             # refund id instead.
             models.CheckConstraint(
-                condition=(
-                    Q(settled_by__isnull=True)
-                    | ~Q(settlement_reference="")
-                ),
+                condition=(Q(settled_by__isnull=True) | ~Q(settlement_reference="")),
                 name="fin_refund_manual_requires_reference",
             ),
         ]
@@ -738,6 +728,8 @@ class LedgerTransaction(models.Model):
         CUSTOMER_PAYMENT = "customer_payment", "Customer payment"
         DEPOSIT_CREDIT = "deposit_credit", "Posting-deposit credit"
         DEAL_FUNDING = "deal_funding", "Deal funding"
+        BOOST_BINDING = "boost_binding", "Boost funds binding"
+        BOOST_ALLOCATION = "boost_allocation", "Boost allocation"
         REFUND = "refund", "Refund"
         PAYOUT = "payout", "Payout"
         CORRECTION = "correction", "Correction / reversal"
@@ -1008,8 +1000,12 @@ class Payout(models.Model):
             ("settle_payout", "Can record that a traveler has actually been paid"),
         ]
         indexes = [
-            models.Index(fields=["traveler", "-created_at"], name="fin_payout_trav_idx"),
-            models.Index(fields=["status", "scheduled_for"], name="fin_payout_queue_idx"),
+            models.Index(
+                fields=["traveler", "-created_at"], name="fin_payout_trav_idx"
+            ),
+            models.Index(
+                fields=["status", "scheduled_for"], name="fin_payout_queue_idx"
+            ),
             models.Index(fields=["method", "status"], name="fin_payout_method_idx"),
         ]
         constraints = [

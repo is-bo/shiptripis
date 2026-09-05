@@ -37,6 +37,9 @@ class DealTermsSnapshotSerializer(serializers.ModelSerializer):
         source="business_settings_version.version", read_only=True, allow_null=True
     )
     policy_snapshot = serializers.SerializerMethodField()
+    traveler_total_minor = serializers.IntegerField(read_only=True)
+    platform_total_minor = serializers.IntegerField(read_only=True)
+    sender_total_with_boost_minor = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = DealTermsSnapshot
@@ -46,6 +49,12 @@ class DealTermsSnapshotSerializer(serializers.ModelSerializer):
             "commission_rate_bps",
             "platform_fee_minor",
             "sender_total_minor",
+            "boost_amount_minor",
+            "boost_traveler_bonus_minor",
+            "boost_platform_fee_minor",
+            "traveler_total_minor",
+            "platform_total_minor",
+            "sender_total_with_boost_minor",
             "business_settings_version",
             "pricing_version",
             "policy_snapshot",
@@ -309,7 +318,11 @@ class DealRecipientWriteSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=120, trim_whitespace=True)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(
-        max_length=32, required=False, allow_blank=True, default="", trim_whitespace=True
+        max_length=32,
+        required=False,
+        allow_blank=True,
+        default="",
+        trim_whitespace=True,
     )
     delivery_note = serializers.CharField(
         max_length=1_000, required=False, allow_blank=True, default=""

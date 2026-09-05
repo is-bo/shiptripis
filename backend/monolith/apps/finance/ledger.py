@@ -112,9 +112,11 @@ def post(
     except IntegrityError:
         # Replay. The savepoint above isolates the conflict so the caller's
         # surrounding transaction stays usable.
-        existing = LedgerTransaction.objects.filter(key=key).values_list(
-            "id", flat=True
-        ).first()
+        existing = (
+            LedgerTransaction.objects.filter(key=key)
+            .values_list("id", flat=True)
+            .first()
+        )
         return PostResult(transaction_id=existing, created=False)
     return PostResult(transaction_id=ledger_transaction.pk, created=True)
 
@@ -278,6 +280,102 @@ def record_deal_funding(
         key=f"deal_funding:deal:{deal_id}",
         kind=LedgerTransaction.Kind.DEAL_FUNDING,
         note=f"Deal #{deal_id} funded",
+        legs=legs,
+    )
+
+
+def record_boost_binding(
+    *,
+    deal_id: int,
+    order_id: int,
+    purchase_id: int,
+    amount_eur_cents: int,
+) -> PostResult:
+    """Attribute pre-Deal boost cash to the Deal without recognizing earnings.
+
+    The original capture has neither leg tagged to a Deal because no Deal
+    existed then. Reclassify both the provider asset and held-funds liability,
+    keeping the unassigned and Deal subledgers independently balanced.
+    """
+
+    return post(
+        key=f"boost_binding:purchase:{purchase_id}",
+        kind=LedgerTransaction.Kind.BOOST_BINDING,
+        note=f"Boost purchase #{purchase_id} bound to deal #{deal_id}",
+        legs=[
+            Leg(
+                account=LedgerAccount.DEAL_FUNDS,
+                amount_eur_cents=amount_eur_cents,
+                order_id=order_id,
+                note="Unassigned boost funds discharged on Deal binding",
+            ),
+            Leg(
+                account=LedgerAccount.PROVIDER_CLEARING,
+                amount_eur_cents=-amount_eur_cents,
+                order_id=order_id,
+                note="Unassigned boost clearing discharged on Deal binding",
+            ),
+            Leg(
+                account=LedgerAccount.PROVIDER_CLEARING,
+                amount_eur_cents=amount_eur_cents,
+                order_id=order_id,
+                deal_id=deal_id,
+                note="Boost clearing attributed to Deal",
+            ),
+            Leg(
+                account=LedgerAccount.DEAL_FUNDS,
+                amount_eur_cents=-amount_eur_cents,
+                order_id=order_id,
+                deal_id=deal_id,
+                note="Boost funds attributed to Deal",
+            ),
+        ],
+    )
+
+
+def record_boost_allocation(
+    *,
+    deal_id: int,
+    order_id: int,
+    purchase_id: int,
+    traveler_id: int,
+    traveler_boost_eur_cents: int,
+    platform_boost_eur_cents: int,
+) -> PostResult:
+    """Recognise one paid boost's delivery bonus and platform revenue."""
+
+    total = traveler_boost_eur_cents + platform_boost_eur_cents
+    legs = [
+        Leg(
+            account=LedgerAccount.DEAL_FUNDS,
+            amount_eur_cents=total,
+            order_id=order_id,
+            deal_id=deal_id,
+            note="Paid boost allocated to delivery economics",
+        ),
+        Leg(
+            account=LedgerAccount.TRAVELER_PAYABLE,
+            amount_eur_cents=-traveler_boost_eur_cents,
+            user_id=traveler_id,
+            order_id=order_id,
+            deal_id=deal_id,
+            note="Traveler boost bonus recognised",
+        ),
+    ]
+    if platform_boost_eur_cents:
+        legs.append(
+            Leg(
+                account=LedgerAccount.PLATFORM_COMMISSION,
+                amount_eur_cents=-platform_boost_eur_cents,
+                order_id=order_id,
+                deal_id=deal_id,
+                note="Platform boost revenue recognised",
+            )
+        )
+    return post(
+        key=f"boost_allocation:purchase:{purchase_id}",
+        kind=LedgerTransaction.Kind.BOOST_ALLOCATION,
+        note=f"Boost purchase #{purchase_id} allocated to deal #{deal_id}",
         legs=legs,
     )
 

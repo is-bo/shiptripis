@@ -105,7 +105,8 @@ numbered-route motif the app uses.
   deliver against the recipient's code → payout after the protection period.
 
 Every step is real V1 behaviour. The sender proposes first; boost is described
-as changing ranking only.
+as improving compatible-request visibility and committing most of its value to
+the eventual Traveler when the delivery earns.
 
 ---
 

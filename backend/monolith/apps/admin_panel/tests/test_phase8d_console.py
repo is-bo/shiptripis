@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.admin_panel.console_forms import (
+    BoostEconomicsSettingsForm,
     FxSettingsForm,
     ManualPayoutForm,
     PricingSettingsForm,
@@ -50,6 +51,7 @@ def _reachable_store(*, readable: bool = True) -> Mock:
     store.readable.return_value = readable
     store.presigned_get.return_value = "https://private.example.test/signed"
     return store
+
 
 User = get_user_model()
 
@@ -317,7 +319,7 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
         self.assertEqual(store.presigned_get.call_count, 0)
 
     def test_a_submission_with_no_document_is_not_a_storage_failure(self):
-        """"Nothing was submitted" and "we cannot fetch it" are different."""
+        """ "Nothing was submitted" and "we cannot fetch it" are different."""
 
         self.submission.front_image_key = ""
         self.submission.back_image_key = ""
@@ -494,6 +496,8 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         self.assertIn("ShipTrip commission", body)
         self.assertIn("DZD for €1", body)
         self.assertIn("Payout protection window", body)
+        self.assertIn("Traveler receives", body)
+        self.assertIn("Minimum Sender amount", body)
         for secret_name in ("STRIPE_SECRET_KEY", "CHARGILY_API_KEY", "SMTP_PASSWORD"):
             self.assertNotIn(secret_name, body)
 
@@ -522,6 +526,34 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         )
         self.assertTrue(fx.is_valid())
         self.assertEqual(fx.rate_micros(), 145_250_000)
+
+        minority = BoostEconomicsSettingsForm(
+            data={
+                "traveler_share_percent": "50.00",
+                "reason": "invalid minority",
+                "confirm": "on",
+            }
+        )
+        self.assertFalse(minority.is_valid())
+
+    def test_boost_share_update_is_majority_versioned_and_audited(self):
+        previous = BusinessSettingsVersion.objects.get(status="active")
+        response = self.dispatch(
+            "/admin/settings/",
+            "post",
+            {
+                "action": "boost_economics",
+                "traveler_share_percent": "82.35",
+                "reason": "New Traveler incentive",
+                "confirm": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        active = BusinessSettingsVersion.objects.get(status="active")
+        self.assertNotEqual(active.pk, previous.pk)
+        self.assertEqual(active.policy["boost"]["traveler_share_bps"], 8_235)
+        audit = AdminAuditLog.objects.get(action="settings.version_created")
+        self.assertEqual(audit.after["boost.traveler_share_bps"], 8_235)
 
     def test_manual_payout_respects_currency_units_and_rejects_fractional_dinars(self):
         data = {
@@ -857,4 +889,3 @@ class GeographyConsoleTests(ConsoleHttpMixin, TestCase):
         assert "b4aad209f4ae7ecb" in body
         assert "v1.0.0-rc.2+abcdef1" in body
         assert "No catalogue import is recorded" not in body
-

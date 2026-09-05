@@ -21,6 +21,7 @@ refunded in full.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import timedelta
 
 from django.test import TestCase
@@ -35,11 +36,27 @@ from apps.boosts.services import (
     activate_paid_boost,
     expire_boost,
     list_packages,
-    purchase_boost,
+    preview_boost,
+    purchase_boost as purchase_boost_service,
 )
+from apps.core.business_settings import (
+    activate_business_settings,
+    get_active_business_settings,
+)
+from apps.core.models import BusinessSettingsVersion
 from apps.core.phase4_policy import phase4_policy
+from apps.deals.cancellation import cancel_funded_deal
 from apps.deals.tests.phase4_factories import enable_mock_rail
-from apps.finance.models import PaymentOrder, PaymentRefund, ScheduledJob
+from apps.finance import ledger
+from apps.finance.models import (
+    LedgerAccount,
+    LedgerTransaction,
+    PaymentOrder,
+    PaymentRefund,
+    Payout,
+    ScheduledJob,
+)
+from apps.finance.settlement import assert_deal_reconciles, read_deal_money
 from apps.finance.tests.factories import (
     build_scenario,
     deliver_mock_webhook,
@@ -60,18 +77,29 @@ def client_for(user) -> APIClient:
     return client
 
 
+def purchase_boost(**kwargs):
+    """Tests that are not about pricing buy the policy minimum."""
+
+    policy = phase4_policy()
+    return purchase_boost_service(
+        **kwargs,
+        amount_eur_cents=policy.boost.minimum_amount_eur_cents,
+        preview_settings_version=policy.settings_version.version,
+    )
+
+
 # --- catalogue ----------------------------------------------------------------
 
 
 class BoostCatalogueTests(TestCase):
-    def test_list_packages_returns_server_priced_packages(self):
+    def test_list_packages_returns_visibility_packages(self):
         packages = list_packages()
         policy = phase4_policy()
         assert len(packages) == len(policy.boost.packages)
 
         for package in packages:
             assert package["currency"] == "EUR"
-            assert package["price_eur_cents"] > 0
+            assert "price_eur_cents" not in package
             assert package["duration_seconds"] > 0
             assert package["ranking_weight"] > 0
 
@@ -80,11 +108,42 @@ class BoostCatalogueTests(TestCase):
         assert "boost_72h" in codes
         assert "boost_7d" in codes
 
+    def test_preview_enforces_only_the_minimum_and_rounds_in_integer_cents(self):
+        policy = phase4_policy()
+        with self.assertRaises(BoostError) as caught:
+            preview_boost(package_code="boost_24h", amount_eur_cents=499)
+        assert caught.exception.code == "boost_amount_below_minimum"
+
+        preview = preview_boost(
+            package_code="boost_24h", amount_eur_cents=10_000_000_001
+        )
+        assert preview["amount_eur_cents"] == 10_000_000_001
+        expected_traveler = (10_000_000_001 * policy.boost.traveler_share_bps) // 10_000
+        assert preview["traveler_boost_eur_cents"] == expected_traveler
+        assert preview["platform_boost_eur_cents"] == 10_000_000_001 - expected_traveler
+        assert preview["rounding_rule"] == "traveler_floor_platform_remainder"
+
 
 # --- purchase -----------------------------------------------------------------
 
 
 class BoostPurchaseTests(TestCase):
+    def test_stale_preview_is_refused_before_creating_money(self):
+        scenario = build_scenario(prefix="bp0")
+        policy = phase4_policy()
+        with self.assertRaises(BoostError) as caught:
+            purchase_boost_service(
+                delivery_request_id=scenario.delivery_request.pk,
+                actor_id=scenario.sender.pk,
+                package_code="boost_24h",
+                amount_eur_cents=500,
+                preview_settings_version=policy.settings_version.version - 1,
+            )
+        assert caught.exception.code == "boost_preview_stale"
+        assert (
+            PaymentOrder.objects.filter(purpose=PaymentOrder.Purpose.BOOST).count() == 0
+        )
+
     def test_owner_purchasing_boost_creates_pending_obligation_and_leaves_ranking_untouched(
         self,
     ):
@@ -105,7 +164,9 @@ class BoostPurchaseTests(TestCase):
         order = purchase.payment_order
         assert order is not None
         assert order.purpose == PaymentOrder.Purpose.BOOST
-        assert order.amount_eur_cents == purchase.price_eur_cents == 199
+        assert order.amount_eur_cents == purchase.amount_eur_cents == 500
+        assert purchase.traveler_boost_eur_cents == 375
+        assert purchase.platform_boost_eur_cents == 125
         assert order.boost_reference == str(purchase.public_reference)
 
         req.refresh_from_db()
@@ -176,6 +237,54 @@ class BoostPurchaseTests(TestCase):
                 package_code="boost_24h",
             )
         assert caught.exception.code == "boost_limit_reached"
+
+    def test_amount_does_not_scale_ranking_weight(self):
+        scenario = build_scenario(prefix="bp6")
+        policy = phase4_policy()
+        low = purchase_boost_service(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+            amount_eur_cents=500,
+            preview_settings_version=policy.settings_version.version,
+        )
+        high = purchase_boost_service(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+            amount_eur_cents=50_000,
+            preview_settings_version=policy.settings_version.version,
+        )
+        assert low.ranking_weight == high.ranking_weight == 2
+
+    def test_new_settings_do_not_reprice_an_existing_purchase(self):
+        scenario = build_scenario(prefix="bp7")
+        purchase = purchase_boost(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+        )
+        committed_settings_id = purchase.business_settings_version_id
+
+        active = get_active_business_settings()
+        changed_policy = deepcopy(active.policy)
+        changed_policy["boost"]["traveler_share_bps"] = 8_235
+        changed = BusinessSettingsVersion.objects.create(
+            version=active.version + 1,
+            commission_rate_bps=active.commission_rate_bps,
+            pricing_version="v1-boost-economics-test",
+            policy=changed_policy,
+        )
+        activate_business_settings(changed)
+
+        updated_preview = preview_boost(package_code="boost_24h", amount_eur_cents=500)
+        purchase.refresh_from_db()
+        assert updated_preview["traveler_boost_eur_cents"] == 411
+        assert updated_preview["platform_boost_eur_cents"] == 89
+        assert purchase.business_settings_version_id == committed_settings_id
+        assert purchase.traveler_share_bps == 7_500
+        assert purchase.traveler_boost_eur_cents == 375
+        assert purchase.platform_boost_eur_cents == 125
 
 
 # --- activation ---------------------------------------------------------------
@@ -315,6 +424,103 @@ class BoostExpiryTests(TestCase):
         assert BoostPurchase.objects.filter(pk=purchase.pk).exists()
 
 
+class BoostDeliveryEconomicsTests(TestCase):
+    def test_paid_boost_is_bound_to_deal_and_added_to_traveler_payout(self):
+        enable_mock_rail()
+        scenario = build_scenario(prefix="bec1")
+        purchase = purchase_boost_service(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+            amount_eur_cents=777,
+            preview_settings_version=phase4_policy().settings_version.version,
+        )
+        pay_order_with_mock(self.client, purchase.payment_order)
+
+        deal = scenario.accept(reward_eur_cents=2_000)
+        purchase.refresh_from_db()
+        assert purchase.deal_id == deal.pk
+        assert purchase.payment_order.deal_id == deal.pk
+        assert deal.terms.boost_amount_minor == 777
+        assert deal.terms.boost_traveler_bonus_minor == 582
+        assert deal.terms.boost_platform_fee_minor == 195
+        assert deal.terms.traveler_total_minor == 2_582
+
+        pay_order_with_mock(self.client, scenario.balance_order())
+        payout = Payout.objects.get(deal=deal)
+        assert payout.amount_eur_cents == 2_582
+        allocation = LedgerTransaction.objects.get(
+            kind=LedgerTransaction.Kind.BOOST_ALLOCATION
+        )
+        binding = LedgerTransaction.objects.get(
+            kind=LedgerTransaction.Kind.BOOST_BINDING
+        )
+        assert binding.entries.count() == 4
+        assert allocation.entries.count() == 3
+        assert sum(entry.amount_eur_cents for entry in allocation.entries.all()) == 0
+        assert (
+            binding.entries.get(
+                account=LedgerAccount.DEAL_FUNDS,
+                deal__isnull=True,
+            ).amount_eur_cents
+            == 777
+        )
+        assert ledger.deal_balance(deal.pk, LedgerAccount.DEAL_FUNDS) == 0
+
+    def test_pre_funding_deal_cancellation_refunds_bound_boost(self):
+        from apps.deals.services import cancel_pending_deal
+
+        enable_mock_rail()
+        scenario = build_scenario(prefix="bec2")
+        purchase = purchase_boost(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+        )
+        pay_order_with_mock(self.client, purchase.payment_order)
+        deal = scenario.accept(reward_eur_cents=2_000)
+
+        cancel_pending_deal(deal_id=deal.pk, actor_id=scenario.sender.pk)
+        purchase.refresh_from_db()
+        assert purchase.status == BoostPurchase.Status.REFUNDED
+        assert purchase.disposition_reason == "deal_cancelled"
+        refund = PaymentRefund.objects.get(order=purchase.payment_order)
+        assert refund.amount_eur_cents == purchase.amount_eur_cents
+        assert read_deal_money(deal).boost_cash_eur_cents == 0
+        scenario.delivery_request.refresh_from_db()
+        assert scenario.delivery_request.ranking_boost_weight == 0
+        assert scenario.delivery_request.ranking_boost_expires_at is None
+
+    def test_funded_deal_cancellation_refunds_boost_and_balances_subledger(self):
+        enable_mock_rail()
+        scenario = build_scenario(prefix="bec3")
+        purchase = purchase_boost_service(
+            delivery_request_id=scenario.delivery_request.pk,
+            actor_id=scenario.sender.pk,
+            package_code="boost_24h",
+            amount_eur_cents=777,
+            preview_settings_version=phase4_policy().settings_version.version,
+        )
+        pay_order_with_mock(self.client, purchase.payment_order)
+        deal = scenario.accept(reward_eur_cents=2_000)
+        pay_order_with_mock(self.client, scenario.balance_order())
+        money = read_deal_money(deal)
+
+        quote = cancel_funded_deal(deal_id=deal.pk, actor_id=scenario.traveler.pk)
+
+        refunded = sum(
+            PaymentRefund.objects.filter(order__deal_id=deal.pk)
+            .exclude(status=PaymentRefund.Status.FAILED)
+            .values_list("amount_eur_cents", flat=True)
+        )
+        assert money.boost_cash_eur_cents == 777
+        assert quote.sender_refund_eur_cents == money.collected_eur_cents
+        assert refunded == money.collected_eur_cents
+        assert read_deal_money(deal).boost_cash_eur_cents == 0
+        assert assert_deal_reconciles(deal.pk)["net"] == 0
+        assert Payout.objects.get(deal=deal).status == Payout.Status.CANCELLED
+
+
 # --- paid but unusable --------------------------------------------------------
 
 
@@ -353,7 +559,7 @@ class BoostUnusableRefundTests(TestCase):
 
         # A real refund is created for the full amount.
         refund = PaymentRefund.objects.get(order=order)
-        assert refund.amount_eur_cents == order.amount_eur_cents == 199
+        assert refund.amount_eur_cents == order.amount_eur_cents == 500
         assert refund.reason == PaymentRefund.Reason.BOOST_UNUSABLE
 
         # Ranking columns were never written.
@@ -431,7 +637,9 @@ class BoostCompatibilityInvariantTests(TestCase):
         )
         assert ranked["boost"]["compatibility_override"] is False
         assert ranked["boost"]["active"] is True
-        assert ranked["boost"]["weight"] == scenario.delivery_request.ranking_boost_weight
+        assert (
+            ranked["boost"]["weight"] == scenario.delivery_request.ranking_boost_weight
+        )
         boost_points = min(
             policy.max_boost_points,
             scenario.delivery_request.ranking_boost_weight
@@ -454,17 +662,33 @@ class BoostApiTests(TestCase):
         # Unauthenticated catalogue read is rejected.
         assert anon.get(reverse("boosts-packages")).status_code == 401
 
-        # Authenticated catalogue read returns server-priced packages.
+        # Authenticated catalogue read returns visibility packages and economics.
         res = sender.get(reverse("boosts-packages"))
         assert res.status_code == 200, res.data
         assert res.data["enabled"] is True
         assert res.data["currency"] == "EUR"
+        assert res.data["minimum_amount_eur_cents"] == 500
+        assert res.data["traveler_share_bps"] > 5_000
         assert len(res.data["packages"]) > 0
+
+        preview = sender.post(
+            reverse("boosts-preview"),
+            {"package_code": "boost_24h", "amount_eur_cents": 777},
+            format="json",
+        )
+        assert preview.status_code == 200, preview.data
+        assert preview.data["traveler_boost_eur_cents"] == 582
+        assert preview.data["platform_boost_eur_cents"] == 195
+        purchase_body = {
+            "package_code": "boost_24h",
+            "amount_eur_cents": 777,
+            "preview_settings_version": preview.data["settings_version"],
+        }
 
         # Outsider purchase is forbidden.
         res = outsider.post(
             reverse("boosts-purchase", args=[scenario.delivery_request.pk]),
-            {"package_code": "boost_24h"},
+            purchase_body,
             format="json",
         )
         assert res.status_code in (403, 404)
@@ -472,24 +696,22 @@ class BoostApiTests(TestCase):
         # Owner purchase creates pending payment obligation.
         res = sender.post(
             reverse("boosts-purchase", args=[scenario.delivery_request.pk]),
-            {"package_code": "boost_24h"},
+            purchase_body,
             format="json",
         )
         assert res.status_code == 201, res.data
         assert res.data["status"] == "pending_payment"
         assert res.data["payment_order_reference"] is not None
-        assert res.data["price_eur_cents"] == 199
+        assert res.data["amount_eur_cents"] == 777
+        assert res.data["traveler_boost_eur_cents"] == 582
+        assert res.data["platform_boost_eur_cents"] == 195
 
         # Outsider cannot read request boost state.
-        res = outsider.get(
-            reverse("boosts-list", args=[scenario.delivery_request.pk])
-        )
+        res = outsider.get(reverse("boosts-list", args=[scenario.delivery_request.pk]))
         assert res.status_code in (403, 404)
 
         # Owner can read request boost state.
-        res = sender.get(
-            reverse("boosts-list", args=[scenario.delivery_request.pk])
-        )
+        res = sender.get(reverse("boosts-list", args=[scenario.delivery_request.pk]))
         assert res.status_code == 200, res.data
         assert res.data["is_owner"] is True
         assert res.data["affects_compatibility"] is False

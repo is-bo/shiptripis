@@ -62,7 +62,9 @@ pickup code → deliver against the recipient's code → wait for payout → rat
    the sender and unsent to the recipient during that window.
 7. **Payout waits 48 hours after delivery confirmation**, and any dispute
    freezes it.
-8. **Boost changes ranking only.** It can never create compatibility.
+8. **Boost improves visibility and funds delivery economics.** Most of the
+   sender-chosen amount becomes a snapshotted Traveler bonus; the configured
+   remainder is ShipTrip revenue. It can never create compatibility.
 9. **Kaba / ProductRequest is not part of V1.**
 10. **The backend is authoritative for every amount, deadline, permission and
     state transition.** The client renders; it does not decide.

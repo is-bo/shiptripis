@@ -2,10 +2,10 @@
 
 Two rules shape everything here.
 
-**The client names a package; it never names a price.** The purchase serializer
-accepts one field, `package_code`. Duration, price and ranking weight come from
-the active settings revision and are snapshotted onto the purchase, so a posted
-amount has nowhere to land even if one were sent.
+**The client proposes an amount; the server prices the economics.** A preview
+returns the authoritative Traveler/platform split and settings version. The
+purchase must echo that version, while the server validates the €5 minimum and
+recomputes every cent.
 
 **A purchase answer is a payment answer.** `BoostPurchaseSerializer` carries the
 linked `PaymentOrder`'s public reference and the amount still outstanding,
@@ -19,6 +19,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from .models import BoostPurchase
+from .services import MAX_EUR_CENTS
 
 
 class BoostPackageSerializer(serializers.Serializer):
@@ -27,7 +28,6 @@ class BoostPackageSerializer(serializers.Serializer):
     code = serializers.CharField(read_only=True)
     label = serializers.CharField(read_only=True)
     duration_seconds = serializers.IntegerField(read_only=True)
-    price_eur_cents = serializers.IntegerField(read_only=True)
     ranking_weight = serializers.IntegerField(read_only=True)
     currency = serializers.CharField(read_only=True)
 
@@ -41,6 +41,13 @@ class BoostPurchaseCreateSerializer(serializers.Serializer):
     """
 
     package_code = serializers.CharField(max_length=32, trim_whitespace=True)
+    amount_eur_cents = serializers.IntegerField(min_value=1, max_value=MAX_EUR_CENTS)
+    preview_settings_version = serializers.IntegerField(min_value=1)
+
+
+class BoostPreviewSerializer(serializers.Serializer):
+    package_code = serializers.CharField(max_length=32, trim_whitespace=True)
+    amount_eur_cents = serializers.IntegerField(min_value=1, max_value=MAX_EUR_CENTS)
 
 
 class BoostPurchaseSerializer(serializers.ModelSerializer):
@@ -66,9 +73,13 @@ class BoostPurchaseSerializer(serializers.ModelSerializer):
             "package_snapshot",
             "status",
             "duration_seconds",
-            "price_eur_cents",
+            "amount_eur_cents",
             "currency",
             "ranking_weight",
+            "economics_version",
+            "traveler_share_bps",
+            "traveler_boost_eur_cents",
+            "platform_boost_eur_cents",
             "activated_at",
             "expires_at",
             "disposition_reason",

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from django.urls import path
 
-from .views import BoostPackageListView, RequestBoostView
+from .views import BoostPackageListView, BoostPreviewView, RequestBoostView
 
 urlpatterns = [
     path(
@@ -21,6 +21,7 @@ urlpatterns = [
         BoostPackageListView.as_view(),
         name="boosts-packages",
     ),
+    path("boosts/preview", BoostPreviewView.as_view(), name="boosts-preview"),
     path(
         "parcels/<int:pk>/boosts",
         RequestBoostView.as_view(),

@@ -104,7 +104,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     if (order != null) {
       return order.status.isSettled
           ? _paid(context, l)
-          : _outstanding(context, l, order);
+          : _outstanding(context, l, order, state.quote);
     }
 
     if (!state.depositRequired) return _notRequired(context, l);
@@ -133,7 +133,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   );
 
   Widget _quoted(BuildContext context, L l, DepositQuote quote) {
-    final amount = quote.amount;
+    final suggestedTotal = quote.estimatedSenderTotal;
 
     // The policy can put a floor or a cap on the figure. Saying so quietly is
     // the difference between "that seems arbitrary" and "that is the rule".
@@ -146,15 +146,20 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     return ListView(
       padding: AppScrollPadding.page(context),
       children: [
-        if (amount != null) ...[
+        if (suggestedTotal != null) ...[
           MoneyHero(
-            amount: amount,
-            label: l.depositAmount,
-            caption: clampNote,
-            tone: StatusTone.action,
+            amount: suggestedTotal,
+            label: l.depositSuggestedTotal,
+            tone: StatusTone.neutral,
           ),
           const SizedBox(height: AppSpace.xl),
         ],
+        _DepositGuidance(
+          quote: quote,
+          showSuggestedTotal: suggestedTotal == null,
+          recommendationNote: clampNote,
+        ),
+        const SizedBox(height: AppSpace.lg),
         Text(l.depositExplainer, style: Theme.of(context).textTheme.bodyLarge),
         const SizedBox(height: AppSpace.lg),
         InfoNotice(
@@ -175,31 +180,50 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
-  Widget _outstanding(BuildContext context, L l, PaymentOrder order) =>
-      ListView(
-        padding: AppScrollPadding.page(context),
-        children: [
-          if (order.outstanding != null) ...[
-            MoneyHero(
-              amount: order.outstanding!,
-              label: l.depositAmount,
-              tone: StatusTone.action,
-            ),
-            const SizedBox(height: AppSpace.lg),
-          ],
-          InfoNotice(
-            message: l.depositCreditedNote,
-            tone: StatusTone.good,
-            icon: Icons.savings_outlined,
-          ),
-          const SizedBox(height: AppSpace.xl),
-          CheckoutSection(
-            orderReference: order.publicReference,
-            order: order,
-            onSettled: _onSettled,
-          ),
-        ],
-      );
+  Widget _outstanding(
+    BuildContext context,
+    L l,
+    PaymentOrder order,
+    DepositQuote? quote,
+  ) => ListView(
+    padding: AppScrollPadding.page(context),
+    children: [
+      if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
+        MoneyHero(
+          amount: suggestedTotal,
+          label: l.depositSuggestedTotal,
+          tone: StatusTone.neutral,
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ],
+      if (quote != null) ...[
+        _DepositGuidance(
+          quote: quote,
+          showSuggestedTotal: quote.estimatedSenderTotal == null,
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ],
+      if (order.outstanding != null) ...[
+        MoneyHero(
+          amount: order.outstanding!,
+          label: l.depositAmount,
+          tone: StatusTone.action,
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ],
+      InfoNotice(
+        message: l.depositCreditedNote,
+        tone: StatusTone.good,
+        icon: Icons.savings_outlined,
+      ),
+      const SizedBox(height: AppSpace.xl),
+      CheckoutSection(
+        orderReference: order.publicReference,
+        order: order,
+        onSettled: _onSettled,
+      ),
+    ],
+  );
 
   Widget _paid(BuildContext context, L l) => ListView(
     padding: AppScrollPadding.pageWithFooter(context),
@@ -221,4 +245,69 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       ),
     ],
   );
+}
+
+class _DepositGuidance extends StatelessWidget {
+  const _DepositGuidance({
+    required this.quote,
+    this.showSuggestedTotal = true,
+    this.recommendationNote,
+  });
+
+  final DepositQuote quote;
+  final bool showSuggestedTotal;
+  final String? recommendationNote;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    return Semantics(
+      container: true,
+      label: l.depositGuidanceTitle,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(title: l.depositGuidanceTitle),
+            if (showSuggestedTotal && quote.estimatedSenderTotal != null)
+              DetailRow(
+                label: l.depositSuggestedTotal,
+                value: Text(quote.estimatedSenderTotal!.format(locale)),
+              ),
+            if (quote.amount != null)
+              DetailRow(
+                label: l.depositRecommended,
+                value: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(quote.amount!.format(locale)),
+                    if (recommendationNote != null)
+                      Text(
+                        recommendationNote!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textSecondary,
+                        ),
+                        textAlign: TextAlign.end,
+                      ),
+                  ],
+                ),
+              ),
+            if (quote.minimum != null)
+              DetailRow(
+                label: l.depositMinimumAllowed,
+                value: Text(quote.minimum!.format(locale)),
+              ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              l.depositGuidanceNote,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

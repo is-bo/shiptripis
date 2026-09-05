@@ -67,6 +67,7 @@ from .services import (
     chargily_display,
     create_guest_link,
     ensure_posting_deposit_order,
+    posting_deposit_quote_from_order,
     guest_payment_view,
     provider_options,
     quote_posting_deposit,
@@ -148,7 +149,9 @@ def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
 
 
 def _order_queryset():
-    return PaymentOrder.objects.select_related("deal", "delivery_request").prefetch_related(
+    return PaymentOrder.objects.select_related(
+        "deal", "delivery_request"
+    ).prefetch_related(
         Prefetch("attempts", queryset=PaymentAttempt.objects.order_by("-created_at")),
         Prefetch("refunds", queryset=PaymentRefund.objects.order_by("-created_at")),
     )
@@ -188,14 +191,12 @@ class PaymentProvidersView(APIView):
             # amount each rail would charge for that specific obligation.
             "providers": provider_options(policy),
         }
-        chargily = next(
-            (row for row in rows if row.provider == "chargily"), None
-        )
+        chargily = next((row for row in rows if row.provider == "chargily"), None)
         if chargily is not None and chargily.enabled:
             payload["chargily_rate"] = {
-                "eur_dzd_rate": chargily_display(
-                    amount_eur_cents=100, policy=policy
-                )["eur_dzd_rate"],
+                "eur_dzd_rate": chargily_display(amount_eur_cents=100, policy=policy)[
+                    "eur_dzd_rate"
+                ],
                 "rate_settings_version": policy.settings_version.version,
             }
         return Response(payload)
@@ -213,9 +214,7 @@ class PaymentOrderListView(APIView):
             queryset = queryset.filter(purpose=purpose)
         if order_status := request.query_params.get("status"):
             queryset = queryset.filter(status=order_status)
-        return Response(
-            PaymentOrderSummarySerializer(queryset[:100], many=True).data
-        )
+        return Response(PaymentOrderSummarySerializer(queryset[:100], many=True).data)
 
 
 class PaymentOrderDetailView(APIView):
@@ -250,7 +249,12 @@ class PaymentCheckoutView(APIView):
                 provider=serializer.validated_data["provider"],
                 actor_id=request.user.id,
             )
-        except (FinanceError, ProviderError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+        except (
+            FinanceError,
+            ProviderError,
+            NoActiveBusinessSettings,
+            InvalidPaymentPolicy,
+        ) as exc:
             return _finance_error_response(exc)
         return Response(
             PaymentAttemptSerializer(session.attempt).data,
@@ -351,7 +355,12 @@ class GuestCheckoutView(APIView):
                 guest_link=link,
                 guest_email=serializer.validated_data["email"],
             )
-        except (FinanceError, ProviderError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
+        except (
+            FinanceError,
+            ProviderError,
+            NoActiveBusinessSettings,
+            InvalidPaymentPolicy,
+        ) as exc:
             return _finance_error_response(exc)
         attempt = session.attempt
         # A guest sees the URL they must visit and the amount they will be
@@ -409,6 +418,10 @@ class PostingDepositView(APIView):
             payload["order"] = _with_payment_options(
                 PaymentOrderSummarySerializer(order).data, order
             )
+            try:
+                payload["quote"] = posting_deposit_quote_from_order(order).as_dict()
+            except FinanceError as exc:
+                return _finance_error_response(exc)
             return Response(payload)
         if not policy.deposit_required:
             return Response(payload)
@@ -452,10 +465,11 @@ class DealPaymentView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request, pk: int) -> Response:
-        deal = get_object_or_404(
-            Deal.objects.select_related("terms"), pk=pk
-        )
-        if request.user.id not in (deal.sender_id, deal.traveler_id) and not request.user.is_staff:
+        deal = get_object_or_404(Deal.objects.select_related("terms"), pk=pk)
+        if (
+            request.user.id not in (deal.sender_id, deal.traveler_id)
+            and not request.user.is_staff
+        ):
             return _finance_error_response(
                 NotAuthorized("Only a party may see this deal's payment state.")
             )
@@ -475,6 +489,18 @@ class DealPaymentView(APIView):
                 int(terms.traveler_reward_minor) if terms else None
             ),
             "platform_fee_eur_cents": int(terms.platform_fee_minor) if terms else None,
+            "boost_amount_eur_cents": int(terms.boost_amount_minor) if terms else None,
+            "traveler_boost_bonus_eur_cents": (
+                int(terms.boost_traveler_bonus_minor) if terms else None
+            ),
+            "platform_boost_revenue_eur_cents": (
+                int(terms.boost_platform_fee_minor) if terms else None
+            ),
+            "traveler_total_eur_cents": terms.traveler_total_minor if terms else None,
+            "platform_total_eur_cents": terms.platform_total_minor if terms else None,
+            "sender_total_with_boost_eur_cents": (
+                terms.sender_total_with_boost_minor if terms else None
+            ),
         }
         if order is None:
             payload["order"] = None

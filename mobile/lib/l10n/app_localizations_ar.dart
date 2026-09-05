@@ -700,6 +700,22 @@ class LAr extends L {
       'إذا لم يقبله أحد، أو ألغيت الطلب قبل قبول أي عرض، فسيُرد إليك بالكامل.';
 
   @override
+  String get depositGuidanceTitle => 'تفاصيل العربون';
+
+  @override
+  String get depositSuggestedTotal => 'الإجمالي المقترح من ShipTrip';
+
+  @override
+  String get depositRecommended => 'العربون الموصى به';
+
+  @override
+  String get depositMinimumAllowed => 'الحد الأدنى للعربون';
+
+  @override
+  String get depositGuidanceNote =>
+      'تحسب ShipTrip العربون من الإجمالي المقترح وتطبق الحدين الأدنى والأقصى الحاليين. يُحتسب هذا المبلغ من الدفعة النهائية وليس رسماً إضافياً.';
+
+  @override
   String get depositPayAction => 'ادفع العربون وانشر';
 
   @override
@@ -2071,6 +2087,43 @@ class LAr extends L {
   String get boostChoosePackage => 'اختر تعزيزًا';
 
   @override
+  String get boostAmountLabel => 'مبلغ التعزيز';
+
+  @override
+  String boostAmountHelper(String amount) {
+    return 'الحد الأدنى $amount. يمكنك اختيار أي مبلغ أكبر.';
+  }
+
+  @override
+  String get boostPreviewTitle => 'راجع قبل الدفع';
+
+  @override
+  String get boostSenderPays => 'أنت تدفع';
+
+  @override
+  String get boostTravelerGets => 'يحصل المسافر عند اكتمال التوصيل';
+
+  @override
+  String get boostPlatformKeeps => 'تحتفظ ShipTrip';
+
+  @override
+  String get boostEarningsCondition =>
+      'تصبح مكافأة المسافر جزءاً من أرباح الصفقة المحمية. إذا لم يصل التوصيل إلى استحقاق الربح، يُرد مبلغ التعزيز.';
+
+  @override
+  String get boostReviewAction => 'مراجعة التعزيز';
+
+  @override
+  String get boostConfirmAction => 'المتابعة إلى الدفع';
+
+  @override
+  String get boostAmountBelowMinimum => 'أدخل مبلغ التعزيز الأدنى على الأقل.';
+
+  @override
+  String get boostPreviewStale =>
+      'تغيّرت قسمة مبلغ التعزيز. راجع المبالغ المحدّثة قبل المتابعة.';
+
+  @override
   String boostDuration(int hours) {
     String _temp0 = intl.Intl.pluralLogic(
       hours,
@@ -3216,6 +3269,15 @@ class LAr extends L {
 
   @override
   String get boostStatusRefunded => 'تم الاسترجاع';
+
+  @override
+  String get moneyBaseReward => 'مكافأة التوصيل الأساسية';
+
+  @override
+  String get moneyBoostBonus => 'مكافأة التعزيز';
+
+  @override
+  String get moneyPlatformBoostRevenue => 'حصة ShipTrip من التعزيز';
 
   @override
   String get validationReadyWindowOrder =>

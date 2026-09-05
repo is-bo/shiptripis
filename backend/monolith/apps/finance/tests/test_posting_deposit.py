@@ -137,9 +137,31 @@ class DepositFormulaTests(DepositTestCase):
         inputs = order.terms_snapshot["posting_deposit_inputs"]
         assert inputs["raw_percentage_eur_cents"] > 0
         assert inputs["recommended_sender_total_eur_cents"] > 0
-        assert order.terms_snapshot["payments"]["posting_deposit"]["percent_bps"] == 1_000
+        assert (
+            order.terms_snapshot["payments"]["posting_deposit"]["percent_bps"] == 1_000
+        )
         assert order.business_settings_version_id is not None
         assert order.currency == "EUR"
+
+    def test_existing_order_api_keeps_the_full_frozen_guidance(self):
+        order = ensure_posting_deposit_order(
+            delivery_request=self.scenario.delivery_request,
+            policy=self.scenario.policy,
+        )
+        response = self.client_for(self.scenario.sender).get(
+            reverse("finance-posting-deposit", args=[self.scenario.delivery_request.pk])
+        )
+        assert response.status_code == 200, response.data
+        quote = response.data["quote"]
+        assert (
+            quote["estimated_sender_total_eur_cents"]
+            == order.terms_snapshot["posting_deposit_inputs"][
+                "recommended_sender_total_eur_cents"
+            ]
+        )
+        assert quote["amount_eur_cents"] == order.amount_eur_cents
+        assert quote["min_eur_cents"] == 300
+        assert quote["max_eur_cents"] == 700
 
     def test_creating_the_deposit_order_twice_prices_it_once(self):
         first = ensure_posting_deposit_order(
@@ -335,9 +357,12 @@ class DepositPublicationTests(DepositTestCase):
             ledger.account_balance(LedgerAccount.PROVIDER_CLEARING)
             == order.amount_eur_cents
         )
-        assert ledger.account_balance(
-            LedgerAccount.SENDER_DEPOSIT, user_id=self.scenario.sender.pk
-        ) == -order.amount_eur_cents
+        assert (
+            ledger.account_balance(
+                LedgerAccount.SENDER_DEPOSIT, user_id=self.scenario.sender.pk
+            )
+            == -order.amount_eur_cents
+        )
 
 
 class DepositCreditTests(DepositTestCase):
@@ -366,9 +391,8 @@ class DepositCreditTests(DepositTestCase):
             int(terms.sender_total_minor) - int(deposit.paid_eur_cents)
         )
         # The sender is never asked for total + deposit.
-        assert (
-            balance.outstanding_eur_cents + int(deposit.paid_eur_cents)
-            == int(terms.sender_total_minor)
+        assert balance.outstanding_eur_cents + int(deposit.paid_eur_cents) == int(
+            terms.sender_total_minor
         )
 
     def test_the_credit_links_the_exact_deposit_it_consumed(self):
@@ -385,8 +409,7 @@ class DepositCreditTests(DepositTestCase):
 
         # No money entered the platform: the deposit liability became deal funds.
         assert (
-            ledger.account_balance(LedgerAccount.PROVIDER_CLEARING)
-            == clearing_before
+            ledger.account_balance(LedgerAccount.PROVIDER_CLEARING) == clearing_before
         )
         assert (
             ledger.account_balance(
@@ -394,9 +417,9 @@ class DepositCreditTests(DepositTestCase):
             )
             == 0
         )
-        assert ledger.account_balance(
-            LedgerAccount.DEAL_FUNDS
-        ) == -int(deposit.paid_eur_cents)
+        assert ledger.account_balance(LedgerAccount.DEAL_FUNDS) == -int(
+            deposit.paid_eur_cents
+        )
 
     def test_an_unpaid_deposit_credits_nothing(self):
         ensure_posting_deposit_order(

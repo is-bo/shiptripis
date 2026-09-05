@@ -1,4 +1,4 @@
-/// Paid visibility.
+/// Paid visibility plus a protected delivery bonus.
 ///
 /// The copy on this screen is the product's honesty test. A boost moves a
 /// request **up a list of travellers who already match it**. It cannot widen
@@ -20,7 +20,7 @@ import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
-import '../../design/components/money.dart';
+import '../../design/components/forms.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -58,17 +58,55 @@ class BoostScreen extends ConsumerStatefulWidget {
 class _BoostScreenState extends ConsumerState<BoostScreen> {
   String? _selectedCode;
   bool _busy = false;
+  final _amount = TextEditingController(text: '5.00');
+  String? _amountError;
+  BoostPreview? _preview;
 
   /// Set once a purchase exists and the user is paying for it, so the screen
   /// switches from a catalogue to a checkout.
   String? _payingForReference;
 
-  Future<void> _buy(BoostPackage package) async {
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  Future<void> _review(BoostPackage package) async {
+    final cents = AppAmountField.centsOf(_amount);
+    if (cents == null || cents <= 0) {
+      setState(() => _amountError = L.of(context).validationMustBePositive);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _amountError = null;
+    });
+    try {
+      final preview = await ref
+          .read(boostRepositoryProvider)
+          .preview(packageCode: package.code, amountEurCents: cents);
+      if (!mounted) return;
+      setState(() => _preview = preview);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      _explain(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _buy(BoostPackage package, BoostPreview preview) async {
     setState(() => _busy = true);
     try {
       final purchase = await ref
           .read(boostRepositoryProvider)
-          .purchase(requestId: widget.requestId, packageCode: package.code);
+          .purchase(
+            requestId: widget.requestId,
+            packageCode: package.code,
+            amountEurCents: preview.amount.minorUnits,
+            previewSettingsVersion: preview.settingsVersion,
+          );
       if (!mounted) return;
       ref.invalidate(_boostStateProvider(widget.requestId));
       setState(() => _payingForReference = purchase.paymentOrderReference);
@@ -93,6 +131,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
       'boost_request_expired' => l.boostRequestExpiredBody,
       'boost_package_unknown' => l.boostPackageUnknownBody,
       'boost_request_not_eligible' => l.boostNotEligible,
+      'boost_amount_below_minimum' => l.boostAmountBelowMinimum,
+      'boost_preview_stale' => l.boostPreviewStale,
       _ => null,
     };
     AppSnack.failure(context, error, fallback: message);
@@ -178,9 +218,33 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                     _PackageCard(
                       package: package,
                       selected: package.code == _selectedCode,
-                      onTap: () => setState(() => _selectedCode = package.code),
+                      onTap: () => setState(() {
+                        _selectedCode = package.code;
+                        _preview = null;
+                      }),
                     ),
                     const SizedBox(height: AppSpace.md),
+                  ],
+                  const SizedBox(height: AppSpace.lg),
+                  AppAmountField(
+                    label: l.boostAmountLabel,
+                    controller: _amount,
+                    helper: l.boostAmountHelper(
+                      packages.minimumAmount.format(
+                        Localizations.localeOf(context),
+                      ),
+                    ),
+                    errorText: _amountError,
+                    onChanged: (_) => setState(() => _preview = null),
+                  ),
+                  if (_preview case final preview?) ...[
+                    const SizedBox(height: AppSpace.lg),
+                    _EconomicsPreview(
+                      preview: preview,
+                      package: packages.packages.firstWhere(
+                        (p) => p.code == _selectedCode,
+                      ),
+                    ),
                   ],
                 ],
 
@@ -202,13 +266,15 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                     .where((p) => p.code == _selectedCode)
                     .firstOrNull;
                 if (package == null) return const SizedBox.shrink();
-                final locale = Localizations.localeOf(context);
+                final preview = _preview;
                 return AppButton(
-                  label: package.price == null
-                      ? l.boostBuyAction
-                      : l.boostPurchase(package.price!.format(locale)),
+                  label: preview == null
+                      ? l.boostReviewAction
+                      : l.boostConfirmAction,
                   isLoading: _busy,
-                  onPressed: () => _buy(package),
+                  onPressed: () => preview == null
+                      ? _review(package)
+                      : _buy(package, preview),
                 );
               },
             ),
@@ -311,12 +377,6 @@ class _PackageCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(package.label, style: text.titleSmall)),
-                  if (package.price != null)
-                    MoneyText(
-                      package.price!,
-                      semanticPrefix: l.boostPriceLabel,
-                      size: 17,
-                    ),
                 ],
               ),
               const SizedBox(height: AppSpace.md),
@@ -341,6 +401,57 @@ class _PackageCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EconomicsPreview extends StatelessWidget {
+  const _EconomicsPreview({required this.preview, required this.package});
+
+  final BoostPreview preview;
+  final BoostPackage package;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    return Semantics(
+      container: true,
+      label: l.boostPreviewTitle,
+      child: AppCard(
+        accent: StatusTone.action,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(title: l.boostPreviewTitle),
+            DetailRow(
+              label: l.boostSenderPays,
+              value: Text(preview.amount.format(locale)),
+            ),
+            DetailRow(
+              label: l.boostTravelerGets,
+              value: Text(preview.travelerBonus.format(locale)),
+            ),
+            DetailRow(
+              label: l.boostPlatformKeeps,
+              value: Text(preview.platformRevenue.format(locale)),
+            ),
+            DetailRow(
+              label: l.boostDurationLabel,
+              value: Text(
+                formatBoostDuration(context, package.durationSeconds),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              l.boostEarningsCondition,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -416,9 +527,9 @@ class _Purchases extends StatelessWidget {
                         purchase.paymentOrderReference != null) ...[
                       const SizedBox(height: AppSpace.md),
                       AppButton(
-                        label: purchase.price == null
+                        label: purchase.amount == null
                             ? l.boostPayAction
-                            : l.boostPurchase(purchase.price!.format(locale)),
+                            : l.boostPurchase(purchase.amount!.format(locale)),
                         variant: AppButtonVariant.secondary,
                         expand: false,
                         onPressed: () => onPay(purchase.paymentOrderReference!),

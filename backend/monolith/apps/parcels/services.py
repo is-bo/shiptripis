@@ -96,14 +96,28 @@ def cancel_delivery_request(
     parcel.status = ParcelRequest.Status.CANCELLED
     parcel.save(update_fields=["status", "updated_at"])
 
-    deposit_orders = tuple(
+    locked_orders = tuple(
         PaymentOrder.objects.select_for_update(no_key=True)
-        .filter(
-            delivery_request_id=parcel.pk,
-            purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
-        )
+        .filter(delivery_request_id=parcel.pk)
         .exclude(status=PaymentOrder.Status.CANCELLED)
         .order_by("pk")
+    )
+    locked_orders_by_id = {order.pk: order for order in locked_orders}
+
+    from apps.boosts.services import unwind_boosts  # noqa: WPS433
+
+    unwind_boosts(
+        locked_purchases=graph.boost_purchases,
+        reason="sender_cancelled_request",
+        requested_by_id=actor_id,
+        locked_orders=locked_orders_by_id,
+        delivery_request=delivery,
+    )
+
+    deposit_orders = tuple(
+        order
+        for order in locked_orders
+        if order.purpose == PaymentOrder.Purpose.POSTING_DEPOSIT
     )
     for order in deposit_orders:
         if int(order.paid_eur_cents) > 0:

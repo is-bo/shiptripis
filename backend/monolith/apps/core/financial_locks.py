@@ -24,12 +24,10 @@ in this order::
     -> append-only ledger rows
     -> ScheduledJob
 
-A Deal's money can sit in two obligations -- its balance order, and the
-posting-deposit order whose cash was credited into that balance.
-`apps.finance.settlement` reaches both, and it takes the balance order first
-because that is the one refunds draw down; the deposit is touched only for the
-part of a refund that exceeds it. That is a single, consistent direction, and
-nothing else in the codebase locks two `PaymentOrder` rows at once.
+A Deal's money can sit in several obligations -- its balance order, the
+posting-deposit order whose cash was credited into that balance, and paid boost
+orders. Any transition that reaches more than one acquires the complete set in
+ascending id order before processing them in its domain-specific refund order.
 
 Provider-event and ScheduledJob claims are deliberately short transactions.
 They commit before acquiring any business or finance rows, so they are never a
@@ -69,7 +67,8 @@ to every service that locks one of these rows directly (`apps.finance`,
 
 **Phase 4 placement.** Everything Phase 4 adds sits between `Deal` and
 `PaymentOrder`, except `BoostPurchase`, which sits with the request graph it
-belongs to and never touches a Deal at all. That single decision is what keeps
+belongs to and is bound forward to a Deal only while that graph is held. That
+single decision is what keeps
 the new edges acyclic:
 
 * Handover confirmation locks Deal then codes, never codes then Deal. The
@@ -161,10 +160,10 @@ class LockedPaymentAggregate:
 def _lock_boost_purchases(request_id: int) -> tuple[object, ...]:
     """Boost rows for one request, ascending id.
 
-    Taken with the request graph rather than next to `PaymentOrder` because a
-    boost purchase never involves a Deal: locking it here means the boost flow
-    and every payment flow approach the shared `PaymentOrder` from the same
-    direction. The extra indexed query is the price of that guarantee.
+    Taken with the request graph rather than next to `PaymentOrder`. Locking it
+    here means purchase, Deal binding and every payment flow approach the
+    shared `PaymentOrder` from the same direction. The extra indexed query is
+    the price of that guarantee.
     """
 
     from apps.boosts.models import BoostPurchase
@@ -176,7 +175,9 @@ def _lock_boost_purchases(request_id: int) -> tuple[object, ...]:
     )
 
 
-def lock_request_graph(request_id: int, *, include_negotiation: bool) -> LockedRequestGraph:
+def lock_request_graph(
+    request_id: int, *, include_negotiation: bool
+) -> LockedRequestGraph:
     from apps.matching.models import Match, Offer
     from apps.parcels.models import DeliveryRequest
 

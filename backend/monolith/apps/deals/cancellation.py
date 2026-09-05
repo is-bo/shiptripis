@@ -180,7 +180,10 @@ def build_quote(
             cap = _int_policy(policy, "sender_late_compensation_cap_eur_cents", 1_500)
             # Ceiling division in integer cents. The traveler is never short-
             # changed by a rounding decision the sender caused.
-            raw = (int(money.traveler_reward_eur_cents) * bps + 9_999) // 10_000
+            # Cancellation compensation policy applies to the negotiated base
+            # reward. The sender-funded boost bonus is protected deal money,
+            # but it does not silently enlarge an unrelated penalty formula.
+            raw = (int(money.base_traveler_reward_eur_cents) * bps + 9_999) // 10_000
             compensation = min(raw, cap, money.collected_eur_cents)
 
     plan = plan_settlement(
@@ -228,7 +231,11 @@ def cancel_funded_deal(
     """
 
     from apps.finance.models import PaymentRefund
-    from apps.finance.settlement import apply_settlement, plan_settlement, read_deal_money
+    from apps.finance.settlement import (
+        apply_settlement,
+        plan_settlement,
+        read_deal_money,
+    )
 
     at = at or timezone.now()
     with transaction.atomic():
@@ -481,7 +488,11 @@ def record_no_show(
     """
 
     from apps.finance.models import PaymentRefund
-    from apps.finance.settlement import apply_settlement, plan_settlement, read_deal_money
+    from apps.finance.settlement import (
+        apply_settlement,
+        plan_settlement,
+        read_deal_money,
+    )
 
     if party not in (Deal.NoShowParty.SENDER, Deal.NoShowParty.TRAVELER):
         raise CancellationError(

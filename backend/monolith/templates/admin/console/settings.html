@@ -113,15 +113,26 @@
 
     <section class="st-card">
       <p class="st-eyebrow">Boosts</p>
-      <h2>Marketplace boost packages</h2>
+      <h2>Boost economics and visibility</h2>
+      <div class="st-band">
+        <div><span>Minimum Sender amount</span><strong>{{ boost_economics.minimum }}</strong></div>
+        <div class="is-lead"><span>Traveler receives</span><strong>{{ boost_economics.traveler_share }}</strong></div>
+        <div><span>ShipTrip keeps</span><strong>{{ boost_economics.platform_share }}</strong></div>
+      </div>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="boost_economics">
+        {{ boost_form.as_p }}
+        {% if may_manage %}<div class="st-split-actions"><button type="submit">Save a new boost split</button></div>{% endif %}
+      </form>
+      <h3>Visibility packages</h3>
       <table class="st-keyvalues">
-        <thead><tr><th scope="col">Package</th><th scope="col">Price</th><th scope="col">Duration</th></tr></thead>
+        <thead><tr><th scope="col">Package</th><th scope="col">Duration</th><th scope="col">Ranking weight</th></tr></thead>
         <tbody>
-          {% for package in boost_packages %}<tr><th scope="row">{{ package.label }}<br><code>{{ package.code }}</code></th><td>{{ package.price }}</td><td>{{ package.duration }}</td></tr>
+          {% for package in boost_packages %}<tr><th scope="row">{{ package.label }}<br><code>{{ package.code }}</code></th><td>{{ package.duration }}</td><td>{{ package.weight }}</td></tr>
           {% empty %}<tr><td colspan="3">No packages are configured.</td></tr>{% endfor %}
         </tbody>
       </table>
-      <p class="st-keyvalues-note">A boost raises visibility only. It can never override matching compatibility.</p>
+      <p class="st-keyvalues-note">Each boost raises visibility and adds a protected bonus to the Traveler if the request reaches an earned delivery. It never overrides matching compatibility.</p>
     </section>
   </div>
 

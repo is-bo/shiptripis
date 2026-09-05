@@ -1,4 +1,4 @@
-"""Paid sender boosts: purchase, activation, expiry and the ranking recompute.
+"""Paid sender boosts: economic preview, purchase, delivery binding and ranking.
 
 One rule outranks everything else in this module:
 
@@ -31,14 +31,15 @@ purchases and writes both, or clears both. Stacking three purchases therefore
 buys duration and redundancy, not an unbounded weight, and the pair can never
 drift out of the state `parcels_ranking_boost_pair` demands.
 
-The buyer keeps what they were quoted: package, duration, price, weight and the
-settings version are snapshotted onto the purchase, so a later revision may
-reprice or withdraw a package without touching a boost already sold.
+The buyer keeps what they were quoted: amount, Traveler/platform split,
+package, duration, weight and settings version are snapshotted. A later
+revision cannot rewrite a boost already sold.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from django.db import transaction
@@ -46,6 +47,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from apps.core.financial_locks import lock_request_graph
+from apps.core.models import BusinessSettingsVersion
 from apps.core.phase4_policy import (
     BoostPackage,
     InvalidPhase4Policy,
@@ -92,22 +94,92 @@ _SETTLED_STATUSES = (
     BoostPurchase.Status.UNUSABLE,
 )
 
+# PostgreSQL BIGINT storage ceiling. This is a representation guard, not a
+# product maximum: no business-policy cap is applied above the €5 minimum.
+MAX_EUR_CENTS = 9_223_372_036_854_775_807
+
 
 # --- packages -----------------------------------------------------------------
 
 
 def list_packages(*, policy: Phase4Policy | None = None) -> list[dict]:
-    """The purchasable packages, priced by the server.
-
-    Prices come from the active settings revision and are echoed back as
-    snapshots, never accepted from a client: the checkout amount is whatever
-    this list says it is at the moment of purchase.
-    """
+    """The purchasable visibility windows and current economic guardrails."""
 
     policy = policy or phase4_policy()
     return [
         {**package.snapshot(), "currency": "EUR"} for package in policy.boost.packages
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class BoostEconomics:
+    amount_eur_cents: int
+    traveler_share_bps: int
+    traveler_boost_eur_cents: int
+    platform_boost_eur_cents: int
+
+    def as_dict(self) -> dict:
+        return {
+            "amount_eur_cents": self.amount_eur_cents,
+            "traveler_share_bps": self.traveler_share_bps,
+            "traveler_boost_eur_cents": self.traveler_boost_eur_cents,
+            "platform_boost_eur_cents": self.platform_boost_eur_cents,
+            "rounding_rule": "traveler_floor_platform_remainder",
+        }
+
+
+def calculate_boost_economics(
+    *, amount_eur_cents: int, policy: Phase4Policy
+) -> BoostEconomics:
+    """Split integer cents; Traveler receives floor(amount × bps / 10,000)."""
+
+    amount = int(amount_eur_cents)
+    minimum = int(policy.boost.minimum_amount_eur_cents)
+    if amount < minimum:
+        raise BoostError(
+            "The boost amount is below the minimum.",
+            code="boost_amount_below_minimum",
+            minimum_amount_eur_cents=minimum,
+        )
+    if amount > MAX_EUR_CENTS:
+        raise BoostError(
+            "The boost amount cannot be represented in EUR cents.",
+            code="boost_amount_out_of_range",
+        )
+    share_bps = int(policy.boost.traveler_share_bps)
+    traveler = (amount * share_bps) // 10_000
+    return BoostEconomics(
+        amount_eur_cents=amount,
+        traveler_share_bps=share_bps,
+        traveler_boost_eur_cents=traveler,
+        platform_boost_eur_cents=amount - traveler,
+    )
+
+
+def preview_boost(*, package_code: str, amount_eur_cents: int) -> dict:
+    """Authoritative pre-commit preview of visibility and delivery economics."""
+
+    policy = phase4_policy()
+    if not policy.boost.enabled:
+        raise BoostError(
+            "Boosts are not available at the moment.", code="boost_disabled"
+        )
+    package = _package(policy, package_code)
+    economics = calculate_boost_economics(
+        amount_eur_cents=amount_eur_cents, policy=policy
+    )
+    return {
+        "currency": "EUR",
+        "settings_version": policy.settings_version.version,
+        "minimum_amount_eur_cents": policy.boost.minimum_amount_eur_cents,
+        "package": package.snapshot(),
+        "visibility": {
+            "duration_seconds": package.duration_seconds,
+            "ranking_weight": package.ranking_weight,
+            "affects_compatibility": False,
+        },
+        **economics.as_dict(),
+    }
 
 
 def _package(policy: Phase4Policy, code: str) -> BoostPackage:
@@ -134,7 +206,12 @@ def _package(policy: Phase4Policy, code: str) -> BoostPackage:
 
 
 def purchase_boost(
-    *, delivery_request_id: int, actor_id: int, package_code: str
+    *,
+    delivery_request_id: int,
+    actor_id: int,
+    package_code: str,
+    amount_eur_cents: int,
+    preview_settings_version: int,
 ) -> BoostPurchase:
     """Buy one package for one open request, creating the payment obligation.
 
@@ -154,8 +231,33 @@ def purchase_boost(
             "Boosts are not available at the moment.", code="boost_disabled"
         )
     package = _package(policy, package_code)
+    if int(preview_settings_version) != int(policy.settings_version.version):
+        raise BoostError(
+            "Boost settings changed. Review the updated split before paying.",
+            code="boost_preview_stale",
+            settings_version=policy.settings_version.version,
+        )
+    economics = calculate_boost_economics(
+        amount_eur_cents=amount_eur_cents, policy=policy
+    )
 
     with transaction.atomic():
+        locked_settings = BusinessSettingsVersion.objects.select_for_update(
+            no_key=True
+        ).get(pk=policy.settings_version.pk)
+        if locked_settings.status != BusinessSettingsVersion.Status.ACTIVE:
+            current_version = (
+                BusinessSettingsVersion.objects.filter(
+                    status=BusinessSettingsVersion.Status.ACTIVE
+                )
+                .values_list("version", flat=True)
+                .first()
+            )
+            raise BoostError(
+                "Boost settings changed. Review the updated split before paying.",
+                code="boost_preview_stale",
+                settings_version=current_version,
+            )
         try:
             graph = lock_request_graph(delivery_request_id, include_negotiation=False)
         except DeliveryRequest.DoesNotExist as exc:
@@ -205,25 +307,152 @@ def purchase_boost(
             package_code=package.code,
             package_snapshot=snapshot,
             duration_seconds=package.duration_seconds,
-            price_eur_cents=package.price_eur_cents,
+            amount_eur_cents=economics.amount_eur_cents,
             ranking_weight=package.ranking_weight,
+            economics_version=BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1,
+            traveler_share_bps=economics.traveler_share_bps,
+            traveler_boost_eur_cents=economics.traveler_boost_eur_cents,
+            platform_boost_eur_cents=economics.platform_boost_eur_cents,
             business_settings_version=policy.settings_version,
         )
         order = PaymentOrder.objects.create(
             owner_id=actor_id,
             purpose=PaymentOrder.Purpose.BOOST,
-            amount_eur_cents=package.price_eur_cents,
+            amount_eur_cents=economics.amount_eur_cents,
             delivery_request_id=request.pk,
             boost_reference=str(purchase.public_reference),
             business_settings_version=policy.settings_version,
             terms_snapshot={
                 "boost_package": snapshot,
+                "boost_economics": economics.as_dict(),
                 "business_settings_version": policy.settings_version.version,
             },
         )
         purchase.payment_order = order
         purchase.save(update_fields=["payment_order", "updated_at"])
     return purchase
+
+
+def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
+    """Freeze paid economic boosts into a Deal; caller holds request/boost rows.
+
+    Payment orders are acquired only after the Deal exists, preserving the
+    canonical request -> boost -> journey -> deal -> payment order lock order.
+    """
+
+    candidates = [
+        row
+        for row in locked_purchases
+        if row.deal_id is None
+        and row.economics_version == BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1
+        and row.status in (BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED)
+        and row.payment_order_id is not None
+    ]
+    order_ids = sorted(row.payment_order_id for row in candidates)
+    paid_order_ids = set(
+        PaymentOrder.objects.select_for_update(no_key=True)
+        .filter(pk__in=order_ids, status=PaymentOrder.Status.PAID)
+        .values_list("pk", flat=True)
+    )
+    bound = [row for row in candidates if row.payment_order_id in paid_order_ids]
+    for row in bound:
+        row.deal = deal
+        row.save(update_fields=["deal", "updated_at"])
+    if paid_order_ids:
+        PaymentOrder.objects.filter(pk__in=paid_order_ids).update(deal=deal)
+        from apps.finance import ledger  # noqa: WPS433
+
+        for row in bound:
+            ledger.record_boost_binding(
+                deal_id=deal.pk,
+                order_id=row.payment_order_id,
+                purchase_id=row.pk,
+                amount_eur_cents=int(row.amount_eur_cents),
+            )
+    return {
+        "purchase_ids": [row.pk for row in bound],
+        "amount_eur_cents": sum(int(row.amount_eur_cents) for row in bound),
+        "traveler_boost_eur_cents": sum(
+            int(row.traveler_boost_eur_cents) for row in bound
+        ),
+        "platform_boost_eur_cents": sum(
+            int(row.platform_boost_eur_cents) for row in bound
+        ),
+    }
+
+
+def unwind_boosts(
+    *,
+    locked_purchases,
+    reason: str,
+    requested_by_id: int | None = None,
+    locked_orders: dict[int, PaymentOrder] | None = None,
+    delivery_request=None,
+) -> int:
+    """Cancel unpaid boosts and refund paid boosts that cannot earn. Idempotent."""
+
+    from apps.finance.services import cancel_order
+
+    terminal_statuses = (
+        BoostPurchase.Status.REFUNDED,
+        BoostPurchase.Status.UNUSABLE,
+        BoostPurchase.Status.CANCELLED,
+    )
+    order_ids = sorted(
+        purchase.payment_order_id
+        for purchase in locked_purchases
+        if purchase.payment_order_id is not None
+        and purchase.status not in terminal_statuses
+    )
+    if locked_orders is None:
+        locked_orders = {
+            order.pk: order
+            for order in PaymentOrder.objects.select_for_update(no_key=True)
+            .filter(pk__in=order_ids)
+            .order_by("pk")
+        }
+    elif any(order_id not in locked_orders for order_id in order_ids):
+        raise ValueError("Every boost PaymentOrder must be locked before unwind.")
+
+    changed = 0
+    at = timezone.now()
+    for purchase in locked_purchases:
+        if purchase.status in terminal_statuses:
+            continue
+        if purchase.payment_order_id is None:
+            purchase.status = BoostPurchase.Status.CANCELLED
+            purchase.cancelled_at = at
+            purchase.disposition_reason = reason[:64]
+            purchase.save(
+                update_fields=[
+                    "status",
+                    "cancelled_at",
+                    "disposition_reason",
+                    "updated_at",
+                ]
+            )
+            changed += 1
+            continue
+        order = locked_orders.get(purchase.payment_order_id)
+        if order is not None and int(order.paid_eur_cents) > 0:
+            refund_order_in_full(
+                order_id=order.pk,
+                reason=PaymentRefund.Reason.BOOST_UNUSABLE,
+                requested_by_id=requested_by_id,
+            )
+            purchase.status = BoostPurchase.Status.REFUNDED
+        else:
+            purchase.status = BoostPurchase.Status.CANCELLED
+            purchase.cancelled_at = at
+        purchase.disposition_reason = reason[:64]
+        purchase.save(
+            update_fields=["status", "cancelled_at", "disposition_reason", "updated_at"]
+        )
+        cancel_order(order_id=purchase.payment_order_id, reason=reason[:64])
+        changed += 1
+    if changed and delivery_request is not None:
+        recompute_request_boost(delivery_request, at=at)
+    return changed
 
 
 # --- activation ---------------------------------------------------------------
@@ -259,9 +488,7 @@ def _refund_unusable(purchase: BoostPurchase, *, order_id: int, reason: str) -> 
         order_id,
         reason,
     )
-    refund_order_in_full(
-        order_id=order_id, reason=PaymentRefund.Reason.BOOST_UNUSABLE
-    )
+    refund_order_in_full(order_id=order_id, reason=PaymentRefund.Reason.BOOST_UNUSABLE)
     purchase.status = BoostPurchase.Status.REFUNDED
     purchase.save(update_fields=["status", "updated_at"])
 
@@ -289,9 +516,7 @@ def activate_paid_boost(*, order_id: int) -> bool:
         return False
 
     at = timezone.now()
-    request = DeliveryRequest.objects.filter(
-        pk=purchase.delivery_request_id
-    ).first()
+    request = DeliveryRequest.objects.filter(pk=purchase.delivery_request_id).first()
 
     if purchase.status == BoostPurchase.Status.CANCELLED:
         # Cancelled before the money landed. Activating it would sell something
@@ -307,9 +532,7 @@ def activate_paid_boost(*, order_id: int) -> bool:
     purchase.status = BoostPurchase.Status.ACTIVE
     purchase.activated_at = at
     purchase.expires_at = at + timedelta(seconds=int(purchase.duration_seconds))
-    purchase.save(
-        update_fields=["status", "activated_at", "expires_at", "updated_at"]
-    )
+    purchase.save(update_fields=["status", "activated_at", "expires_at", "updated_at"])
     recompute_request_boost(request, at=at)
     # The expiry is an obligation in the database, not a timer in a worker's
     # memory: stop every process for a week and the boost still retires.
@@ -403,9 +626,7 @@ def recompute_request_boost(
         # Cannot happen while `boosts_active_requires_window` holds, but the
         # pair constraint is absolute: an unpaired weight is dropped rather
         # than written.
-        logger.error(
-            "boosts.active_without_expiry request=%s", delivery_request.pk
-        )
+        logger.error("boosts.active_without_expiry request=%s", delivery_request.pk)
         weight = 0
 
     DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
@@ -428,7 +649,11 @@ def _projection(purchase: BoostPurchase, *, at: datetime) -> dict:
         "package_snapshot": dict(purchase.package_snapshot or {}),
         "status": purchase.status,
         "is_active": purchase.is_active(at=at),
-        "price_eur_cents": int(purchase.price_eur_cents),
+        "amount_eur_cents": int(purchase.amount_eur_cents),
+        "economics_version": purchase.economics_version,
+        "traveler_share_bps": int(purchase.traveler_share_bps),
+        "traveler_boost_eur_cents": int(purchase.traveler_boost_eur_cents),
+        "platform_boost_eur_cents": int(purchase.platform_boost_eur_cents),
         "currency": "EUR",
         "duration_seconds": int(purchase.duration_seconds),
         "ranking_weight": int(purchase.ranking_weight),

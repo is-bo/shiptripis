@@ -707,6 +707,22 @@ class LEn extends L {
       'If nobody takes it, or you cancel before accepting an offer, you get it back in full.';
 
   @override
+  String get depositGuidanceTitle => 'Deposit guidance';
+
+  @override
+  String get depositSuggestedTotal => 'ShipTrip suggested total';
+
+  @override
+  String get depositRecommended => 'Recommended deposit';
+
+  @override
+  String get depositMinimumAllowed => 'Minimum deposit';
+
+  @override
+  String get depositGuidanceNote =>
+      'ShipTrip calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.';
+
+  @override
   String get depositPayAction => 'Pay deposit and publish';
 
   @override
@@ -2075,6 +2091,44 @@ class LEn extends L {
   String get boostChoosePackage => 'Choose a boost';
 
   @override
+  String get boostAmountLabel => 'Boost amount';
+
+  @override
+  String boostAmountHelper(String amount) {
+    return 'Minimum $amount. You can choose any higher amount.';
+  }
+
+  @override
+  String get boostPreviewTitle => 'Review before paying';
+
+  @override
+  String get boostSenderPays => 'You pay';
+
+  @override
+  String get boostTravelerGets => 'Traveler gets if delivered';
+
+  @override
+  String get boostPlatformKeeps => 'ShipTrip keeps';
+
+  @override
+  String get boostEarningsCondition =>
+      'The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.';
+
+  @override
+  String get boostReviewAction => 'Review boost';
+
+  @override
+  String get boostConfirmAction => 'Continue to payment';
+
+  @override
+  String get boostAmountBelowMinimum =>
+      'Enter at least the minimum boost amount.';
+
+  @override
+  String get boostPreviewStale =>
+      'The boost split changed. Review the updated amounts before continuing.';
+
+  @override
   String boostDuration(int hours) {
     String _temp0 = intl.Intl.pluralLogic(
       hours,
@@ -3196,6 +3250,15 @@ class LEn extends L {
 
   @override
   String get boostStatusRefunded => 'Refunded';
+
+  @override
+  String get moneyBaseReward => 'Base delivery reward';
+
+  @override
+  String get moneyBoostBonus => 'Boost bonus';
+
+  @override
+  String get moneyPlatformBoostRevenue => 'ShipTrip boost share';
 
   @override
   String get validationReadyWindowOrder =>

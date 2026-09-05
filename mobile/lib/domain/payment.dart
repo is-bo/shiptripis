@@ -592,6 +592,12 @@ class DealPaymentState {
     this.senderTotal,
     this.travelerReward,
     this.platformFee,
+    this.boostAmount,
+    this.travelerBoostBonus,
+    this.platformBoostRevenue,
+    this.travelerTotal,
+    this.platformTotal,
+    this.senderTotalWithBoost,
     this.order,
   });
 
@@ -609,6 +615,18 @@ class DealPaymentState {
       senderTotal: Money.eurCentsOrNull(json['sender_total_eur_cents']),
       travelerReward: Money.eurCentsOrNull(json['traveler_reward_eur_cents']),
       platformFee: Money.eurCentsOrNull(json['platform_fee_eur_cents']),
+      boostAmount: Money.eurCentsOrNull(json['boost_amount_eur_cents']),
+      travelerBoostBonus: Money.eurCentsOrNull(
+        json['traveler_boost_bonus_eur_cents'],
+      ),
+      platformBoostRevenue: Money.eurCentsOrNull(
+        json['platform_boost_revenue_eur_cents'],
+      ),
+      travelerTotal: Money.eurCentsOrNull(json['traveler_total_eur_cents']),
+      platformTotal: Money.eurCentsOrNull(json['platform_total_eur_cents']),
+      senderTotalWithBoost: Money.eurCentsOrNull(
+        json['sender_total_with_boost_eur_cents'],
+      ),
       order: order == null
           ? null
           : PaymentOrder.fromJson(
@@ -626,6 +644,12 @@ class DealPaymentState {
   final Money? senderTotal;
   final Money? travelerReward;
   final Money? platformFee;
+  final Money? boostAmount;
+  final Money? travelerBoostBonus;
+  final Money? platformBoostRevenue;
+  final Money? travelerTotal;
+  final Money? platformTotal;
+  final Money? senderTotalWithBoost;
   final PaymentOrder? order;
   final bool viewerIsTraveler;
 

@@ -1523,16 +1523,32 @@ class BoostRepository {
     ),
   );
 
+  Future<BoostPreview> preview({
+    required String packageCode,
+    required int amountEurCents,
+  }) async => BoostPreview.fromJson(
+    await _api.postObject(
+      '/api/boosts/preview',
+      body: {'package_code': packageCode, 'amount_eur_cents': amountEurCents},
+    ),
+  );
+
   /// Creates the purchase and its payment order. It activates only once that
   /// order is confirmed paid — returning from a checkout page activates
   /// nothing.
   Future<BoostPurchase> purchase({
     required int requestId,
     required String packageCode,
+    required int amountEurCents,
+    required int previewSettingsVersion,
   }) async => BoostPurchase.fromJson(
     await _api.postObject(
       '/api/parcels/$requestId/boosts',
-      body: {'package_code': packageCode},
+      body: {
+        'package_code': packageCode,
+        'amount_eur_cents': amountEurCents,
+        'preview_settings_version': previewSettingsVersion,
+      },
     ),
   );
 }

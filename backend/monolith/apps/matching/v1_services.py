@@ -653,9 +653,7 @@ def counter_offer(
     ).get(pk=pending_offer.pk)
     match = current.match
     if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
-        raise ProductRequestRetired(
-            "ProductRequest/Kaba offer mutations are retired."
-        )
+        raise ProductRequestRetired("ProductRequest/Kaba offer mutations are retired.")
     if actor.id not in (match.sender_id, match.traveler_id):
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
@@ -673,9 +671,7 @@ def counter_offer(
         or match.start_leg_id is None
         or match.end_leg_id is None
     ):
-        raise MatchLegRangeMissing(
-            "The V1 match has no covered journey-leg range."
-        )
+        raise MatchLegRangeMissing("The V1 match has no covered journey-leg range.")
     request_row = DeliveryRequest.objects.select_related(
         "sender", "pickup_location", "delivery_location"
     ).get(pk=match.parcel_id)
@@ -718,9 +714,7 @@ def _counter_offer_locked(
         "match_id", "match__parcel_id", "match__parcel__kind"
     ).get(pk=pending_offer_id)
     if snapshot["match__parcel__kind"] == ParcelRequest.Kind.PRODUCT:
-        raise ProductRequestRetired(
-            "ProductRequest/Kaba offer mutations are retired."
-        )
+        raise ProductRequestRetired("ProductRequest/Kaba offer mutations are retired.")
     DeliveryRequest.objects.select_for_update(
         no_key=True, of=("self", "parcelrequest_ptr")
     ).get(pk=snapshot["match__parcel_id"])
@@ -747,9 +741,7 @@ def _counter_offer_locked(
         or match.start_leg_id is None
         or match.end_leg_id is None
     ):
-        raise MatchLegRangeMissing(
-            "The V1 match has no covered journey-leg range."
-        )
+        raise MatchLegRangeMissing("The V1 match has no covered journey-leg range.")
     journey = (
         Journey.objects.select_for_update(no_key=True)
         .select_related("traveler")
@@ -804,9 +796,7 @@ def accept_offer(*, pending_offer: Offer, actor: User) -> AcceptedDeal:
     ).get(pk=pending_offer.pk)
     match = current.match
     if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
-        raise ProductRequestRetired(
-            "ProductRequest/Kaba offer mutations are retired."
-        )
+        raise ProductRequestRetired("ProductRequest/Kaba offer mutations are retired.")
     if actor.id not in (match.sender_id, match.traveler_id):
         raise OfferAuthorizationError("Only a party may accept this offer.")
     if current.proposer_id == actor.id:
@@ -830,9 +820,7 @@ def accept_offer(*, pending_offer: Offer, actor: User) -> AcceptedDeal:
         or match.start_leg_id is None
         or match.end_leg_id is None
     ):
-        raise MatchLegRangeMissing(
-            "The V1 match has no covered journey-leg range."
-        )
+        raise MatchLegRangeMissing("The V1 match has no covered journey-leg range.")
     if (
         current.traveler_reward_minor is None
         or current.business_settings_version is None
@@ -875,9 +863,7 @@ def _accept_offer_locked(
         "match_id", "match__parcel_id", "match__parcel__kind"
     ).get(pk=pending_offer_id)
     if snapshot["match__parcel__kind"] == ParcelRequest.Kind.PRODUCT:
-        raise ProductRequestRetired(
-            "ProductRequest/Kaba offer mutations are retired."
-        )
+        raise ProductRequestRetired("ProductRequest/Kaba offer mutations are retired.")
     request_row = (
         DeliveryRequest.objects.select_for_update(
             no_key=True, of=("self", "parcelrequest_ptr")
@@ -923,14 +909,21 @@ def _accept_offer_locked(
         or match.start_leg_id is None
         or match.end_leg_id is None
     ):
-        raise MatchLegRangeMissing(
-            "The V1 match has no covered journey-leg range."
-        )
+        raise MatchLegRangeMissing("The V1 match has no covered journey-leg range.")
 
     if request_row.status != ParcelRequest.Status.OPEN:
         raise RequestAlreadyMatched(
             "The delivery request is already matched or closed."
         )
+    # Boosts sit after offers and before journey in the canonical financial
+    # lock graph. Paid economics are bound only after the Deal row exists.
+    from apps.boosts.models import BoostPurchase  # noqa: WPS433
+
+    request_boosts = tuple(
+        BoostPurchase.objects.select_for_update(no_key=True)
+        .filter(delivery_request_id=request_row.pk)
+        .order_by("pk")
+    )
     journey = (
         Journey.objects.select_for_update(no_key=True, of=("self",))
         .select_related("traveler")
@@ -1003,6 +996,12 @@ def _accept_offer_locked(
         traveler_id=match.traveler_id,
         status=Deal.Status.PAYMENT_REQUIRED,
     )
+    from apps.boosts.services import bind_paid_boosts_to_deal  # noqa: WPS433
+
+    boost_terms = bind_paid_boosts_to_deal(
+        locked_purchases=request_boosts,
+        deal=deal,
+    )
     DealTermsSnapshot.objects.create(
         deal=deal,
         currency=current.currency,
@@ -1010,9 +1009,15 @@ def _accept_offer_locked(
         commission_rate_bps=current.commission_rate_bps,
         platform_fee_minor=current.platform_fee_minor,
         sender_total_minor=current.sender_total_minor,
+        boost_amount_minor=boost_terms["amount_eur_cents"],
+        boost_traveler_bonus_minor=boost_terms["traveler_boost_eur_cents"],
+        boost_platform_fee_minor=boost_terms["platform_boost_eur_cents"],
         business_settings_version=current.business_settings_version,
         pricing_version=current.pricing_version,
-        policy_snapshot=current.terms_snapshot,
+        policy_snapshot={
+            **current.terms_snapshot,
+            "boost_economics": boost_terms,
+        },
         is_legacy=False,
     )
     now = timezone.now()

@@ -350,13 +350,31 @@ class _MoneySection extends StatelessWidget {
           lines: [
             if (terms.travelerReward != null)
               MoneyLine(
-                label: isSender ? l.moneyTravelerReceives : l.moneyYourReward,
+                label: l.moneyBaseReward,
                 amount: terms.travelerReward!,
+              ),
+            if (terms.boostTravelerBonus?.isPositive ?? false)
+              MoneyLine(
+                label: l.moneyBoostBonus,
+                amount: terms.boostTravelerBonus!,
+              ),
+            if (terms.travelerTotal != null)
+              MoneyLine.total(
+                label: isSender ? l.moneyTravelerReceives : l.moneyYourReward,
+                amount: terms.travelerTotal!,
               ),
             if (isSender && terms.platformFee != null)
               MoneyLine(label: l.moneyPlatformFee, amount: terms.platformFee!),
-            if (isSender && terms.senderTotal != null)
-              MoneyLine.total(label: l.moneyYouPay, amount: terms.senderTotal!),
+            if (isSender && (terms.boostPlatformFee?.isPositive ?? false))
+              MoneyLine(
+                label: l.moneyPlatformBoostRevenue,
+                amount: terms.boostPlatformFee!,
+              ),
+            if (isSender && terms.senderTotalWithBoost != null)
+              MoneyLine.total(
+                label: l.moneyYouPay,
+                amount: terms.senderTotalWithBoost!,
+              ),
           ],
         ),
       ],

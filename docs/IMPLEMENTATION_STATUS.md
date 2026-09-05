@@ -4182,3 +4182,47 @@ journeys remain, recorded as MINOR.
 exist until this APK is installed and a signed-in user grants notification
 permission, so no Django → stream → Firebase → handset test was run and none is
 claimed.
+
+## Phase 8F-F1 — Boost economics and delivery-deposit guidance
+
+Phase 8F-F1 is implemented. The former fixed-price, visibility-only Boost
+purchase is now a sender-selected EUR amount (minimum €5) with server-owned,
+versioned economics. The active default allocates 75% to the Traveler and 25%
+to ShipTrip; administrators may publish a new allocation from 50.01% through
+99.99% Traveler share with a reason and confirmation. Every purchase snapshots
+the settings version and split. Traveler allocation is rounded down to the
+minor unit and ShipTrip receives the exact remainder.
+
+Boost remains subordinate to compatibility: package weight affects ordering
+only after a candidate has passed the normal match filters, and paying more
+does not multiply that weight. The preview and purchase endpoints both compute
+the exact Traveler bonus, ShipTrip revenue, duration and visibility server-side;
+purchase locks and revalidates the previewed settings revision. Acceptance
+binds eligible paid Boosts to the canonical Deal and snapshots their economics.
+Funding recognizes the Traveler bonus and ShipTrip Boost revenue in balanced,
+auditable ledger entries; payout is base reward plus Boost bonus. Cancellation,
+expiry and refund paths lock orders deterministically, unwind unbound Boosts,
+and preserve the snapshotted amounts for funded settlement and disputes.
+
+The existing delivery-deposit rule remains authoritative: 10% of the suggested
+sender total, clamped to €3–€7. The API reconstructs the frozen quote after an
+order exists. The app presents ShipTrip's suggested sender total first, then
+the recommended/minimum guidance and the deposit due. It does not invent a
+sender-selected deposit while the backend contract remains fixed-amount.
+
+New migrations are `core.0009_seed_boost_economics`,
+`boosts.0002_remove_boostpurchase_boosts_price_positive_and_more`,
+`deals.0007_dealtermssnapshot_boost_amount_minor_and_more`, and
+`finance.0007_alter_ledgertransaction_kind`. Django remains schema authority;
+the PostgreSQL contract dump was regenerated and a normalized repeat dump was
+identical. No Go or gRPC contract changed.
+
+Local release gates after the implementation: PostgreSQL 16 Django suite
+**1277 passed / 34 skipped**, including matching, finance concurrency and lock
+ordering; production-safety/static checks **37 passed**; Ruff,
+`makemigrations --check`, Django system check and schema drift clean; Go vet,
+test and build clean. Flutter format and analysis are clean, with the final
+full suite at **418 passed**.
+
+No deployment or APK/AAB build was performed. Phase 8F-F2 through 8F-F6 were
+not started.

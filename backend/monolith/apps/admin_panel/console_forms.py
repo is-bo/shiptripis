@@ -109,6 +109,35 @@ class StaffAccessForm(ConsoleForm):
     )
 
 
+class BoostEconomicsSettingsForm(ConsoleForm):
+    traveler_share_percent = forms.DecimalField(
+        min_value=Decimal("50.01"),
+        max_value=Decimal("99.99"),
+        max_digits=5,
+        decimal_places=2,
+        label="Traveler share of each boost (%)",
+        help_text=(
+            "Must remain a strict majority. ShipTrip keeps the remainder; "
+            "the €5 minimum is fixed by the product contract."
+        ),
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="Reason for change",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label="Create and activate a new settings version for future boosts."
+    )
+
+    def traveler_share_bps(self) -> int:
+        return decimal_to_scaled_integer(
+            self.cleaned_data["traveler_share_percent"],
+            100,
+            label="Traveler boost share",
+        )
+
+
 class PricingSettingsForm(ConsoleForm):
     commission_percent = forms.DecimalField(
         min_value=Decimal("0"),

@@ -20,12 +20,12 @@ administrators resolving the same dispute at the same moment serialize on the
 Dispute row lock, and a retry of the winner is a no-op rather than a second
 refund.
 
-**The posting deposit.** A funded Deal's money can sit in two obligations: the
-balance order, and the posting-deposit order whose cash was credited into it.
-Refunds are taken from the balance order first and only reach the deposit when
-the sender's share exceeds it. The deposit credit is then released in *exactly*
-the amount being refunded out of it -- not all of it -- because releasing more
-would leave a phantom deposit liability against a sender who is owed nothing.
+**Payment sources.** A funded Deal's money can sit in its balance order, the
+posting-deposit order whose cash was credited into it, and paid Boost orders.
+Refunds are taken from the balance first, then the deposit, then Boost orders.
+The deposit credit is released in *exactly* the amount refunded out of it --
+not all of it -- because releasing more would leave a phantom deposit liability
+against a sender who is owed nothing.
 """
 
 from __future__ import annotations
@@ -73,12 +73,15 @@ class DealMoney:
     deal_id: int
     balance_order_id: int | None
     deposit_order_id: int | None
+    boost_order_ids: tuple[int, ...]
     #: Cash captured and applied against the balance order, net of refunds.
     balance_cash_eur_cents: int
     #: Cash captured on the deposit order and credited into this balance.
     deposit_cash_eur_cents: int
+    boost_cash_eur_cents: int
     #: How much of the balance obligation the deposit currently discharges.
     credited_eur_cents: int
+    base_traveler_reward_eur_cents: int
     traveler_reward_eur_cents: int
     platform_fee_eur_cents: int
     sender_total_eur_cents: int
@@ -90,7 +93,11 @@ class DealMoney:
     def collected_eur_cents(self) -> int:
         """Everything the platform ever collected for this Deal, in EUR cents."""
 
-        return self.balance_cash_eur_cents + self.deposit_cash_eur_cents
+        return (
+            self.balance_cash_eur_cents
+            + self.deposit_cash_eur_cents
+            + self.boost_cash_eur_cents
+        )
 
     @property
     def settleable_eur_cents(self) -> int:
@@ -193,17 +200,25 @@ def read_deal_money(deal: Deal) -> DealMoney:
         .values_list("amount_eur_cents", flat=True)
         .first()
     )
+    boost_orders = list(
+        PaymentOrder.objects.filter(
+            deal_id=deal.pk, purpose=PaymentOrder.Purpose.BOOST
+        ).order_by("pk")
+    )
     return DealMoney(
         deal_id=deal.pk,
         paid_out_eur_cents=int(settled_payout or 0),
         balance_order_id=balance.pk if balance else None,
         deposit_order_id=deposit_id,
+        boost_order_ids=tuple(row.pk for row in boost_orders),
         balance_cash_eur_cents=_applied_cash(balance.pk) if balance else 0,
         deposit_cash_eur_cents=min(deposit_cash, credited) if deposit_id else 0,
+        boost_cash_eur_cents=sum(_applied_cash(row.pk) for row in boost_orders),
         credited_eur_cents=credited,
-        traveler_reward_eur_cents=int(terms.traveler_reward_minor),
-        platform_fee_eur_cents=int(terms.platform_fee_minor),
-        sender_total_eur_cents=int(terms.sender_total_minor),
+        base_traveler_reward_eur_cents=int(terms.traveler_reward_minor),
+        traveler_reward_eur_cents=terms.traveler_total_minor,
+        platform_fee_eur_cents=terms.platform_total_minor,
+        sender_total_eur_cents=terms.sender_total_with_boost_minor,
     )
 
 
@@ -345,6 +360,23 @@ def apply_settlement(
             code="deal_balance_order_missing",
         )
 
+    # A funded Deal may now hold cash in its balance, credited deposit and one
+    # or more boost orders. Acquire every PaymentOrder in canonical ascending
+    # id order before any helper re-locks an individual row, so settlement,
+    # cancellation and provider reconciliation cannot form a lock cycle.
+    order_ids = sorted(
+        {
+            money.balance_order_id,
+            *([money.deposit_order_id] if money.deposit_order_id is not None else []),
+            *money.boost_order_ids,
+        }
+    )
+    tuple(
+        PaymentOrder.objects.select_for_update(no_key=True)
+        .filter(pk__in=order_ids)
+        .order_by("pk")
+    )
+
     result.ledger_transaction_id = _post_reallocation(
         plan=plan, settlement_key=settlement_key, note=note
     )
@@ -389,8 +421,8 @@ def _post_reallocation(
     )
     # What the traveler should still be owed, as opposed to what they have
     # already been sent.
-    outstanding_traveler = (
-        plan.traveler_payout_eur_cents - int(money.paid_out_eur_cents)
+    outstanding_traveler = plan.traveler_payout_eur_cents - int(
+        money.paid_out_eur_cents
     )
     delta_traveler = recognised_traveler - outstanding_traveler
     delta_platform = recognised_platform - plan.platform_fee_eur_cents
@@ -444,7 +476,11 @@ def _post_reallocation(
 
 
 def _refund_sender_share(
-    *, plan: SettlementPlan, settlement_key: str, refund_reason: str, actor_id: int | None
+    *,
+    plan: SettlementPlan,
+    settlement_key: str,
+    refund_reason: str,
+    actor_id: int | None,
 ) -> list[int]:
     """Return the sender's share as cash, balance order first.
 
@@ -491,6 +527,19 @@ def _refund_sender_share(
                 actor_id=actor_id,
             )
             refund_ids.extend(ids)
+
+    for boost_order_id in money.boost_order_ids:
+        if outstanding_refund <= 0:
+            break
+        close_order_to_collection(order_id=boost_order_id, reason=refund_reason[:64])
+        outstanding_refund, ids = _refund_from_order(
+            order_id=boost_order_id,
+            amount=outstanding_refund,
+            settlement_key=settlement_key,
+            refund_reason=refund_reason,
+            actor_id=actor_id,
+        )
+        refund_ids.extend(ids)
 
     if outstanding_refund > 0:
         # Reachable only if captured cash disagrees with the terms snapshot,
@@ -599,7 +648,9 @@ def _release_deposit_credit_share(
         # it again would let the same cents be refunded twice.
         return amount
 
-    order = PaymentOrder.objects.select_for_update(no_key=True).get(pk=money.balance_order_id)
+    order = PaymentOrder.objects.select_for_update(no_key=True).get(
+        pk=money.balance_order_id
+    )
     order.credited_eur_cents = max(0, int(order.credited_eur_cents) - amount)
     fields = ["credited_eur_cents", "updated_at"]
     if order.credited_eur_cents == 0:
@@ -609,9 +660,7 @@ def _release_deposit_credit_share(
     return amount
 
 
-def _apply_payout_share(
-    *, plan: SettlementPlan, settlement_key: str, note: str
-) -> str:
+def _apply_payout_share(*, plan: SettlementPlan, settlement_key: str, note: str) -> str:
     """Set the traveler's payout to what the settlement says they are owed.
 
     A settlement is a decision, so it releases directly rather than waiting for
@@ -620,7 +669,11 @@ def _apply_payout_share(
     which the `fin_payout_amount_positive` constraint would refuse anyway.
     """
 
-    payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=plan.money.deal_id).first()
+    payout = (
+        Payout.objects.select_for_update(no_key=True)
+        .filter(deal_id=plan.money.deal_id)
+        .first()
+    )
     if payout is None:
         return "no_payout"
     if payout.status == Payout.Status.PAID:

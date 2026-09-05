@@ -26,7 +26,8 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.deals.models import Deal
-from apps.parcels.models import ParcelRequest
+from apps.core.financial_locks import lock_request_graph
+from apps.parcels.models import DeliveryRequest, ParcelRequest
 
 from .models import (
     PaymentAttempt,
@@ -75,11 +76,11 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
         raise JobFailed("deposit_expiry_refund needs an integer delivery_request_id.")
 
     with transaction.atomic():
-        request_row = (
-            ParcelRequest.objects.select_for_update(no_key=True).filter(pk=request_id).first()
-        )
-        if request_row is None:
+        try:
+            graph = lock_request_graph(request_id, include_negotiation=False)
+        except DeliveryRequest.DoesNotExist:
             return "request_missing"
+        request_row = graph.request.parcelrequest_ptr
         if request_row.status in (
             ParcelRequest.Status.MATCHED,
             ParcelRequest.Status.IN_TRANSIT,
@@ -98,14 +99,30 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             request_row.status = ParcelRequest.Status.EXPIRED
             request_row.save(update_fields=["status", "updated_at"])
 
-        order = (
+        locked_orders = tuple(
             PaymentOrder.objects.select_for_update(no_key=True)
-            .filter(
-                delivery_request_id=request_id,
-                purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
-            )
+            .filter(delivery_request_id=request_id)
             .exclude(status=PaymentOrder.Status.CANCELLED)
-            .first()
+            .order_by("pk")
+        )
+        locked_orders_by_id = {order.pk: order for order in locked_orders}
+
+        from apps.boosts.services import unwind_boosts
+
+        unwind_boosts(
+            locked_purchases=graph.boost_purchases,
+            reason="request_expired_unmatched",
+            locked_orders=locked_orders_by_id,
+            delivery_request=graph.request,
+        )
+
+        order = next(
+            (
+                row
+                for row in locked_orders
+                if row.purpose == PaymentOrder.Purpose.POSTING_DEPOSIT
+            ),
+            None,
         )
         if order is None:
             return "no_deposit_order"

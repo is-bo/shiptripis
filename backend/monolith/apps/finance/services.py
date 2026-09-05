@@ -524,6 +524,32 @@ def quote_posting_deposit(
     )
 
 
+def posting_deposit_quote_from_order(order: PaymentOrder) -> DepositQuote:
+    """Rebuild the guidance from the immutable order snapshot, not live policy."""
+
+    snapshot = dict(order.terms_snapshot or {})
+    deposit = snapshot.get("payments", {}).get("posting_deposit", {})
+    inputs = snapshot.get("posting_deposit_inputs", {})
+    try:
+        sender_total = int(inputs["recommended_sender_total_eur_cents"])
+        percent_bps = int(deposit["percent_bps"])
+        minimum = int(deposit["min_eur_cents"])
+        maximum = int(deposit["max_eur_cents"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RequestNotDepositable(
+            "This deposit order has no reproducible guidance snapshot."
+        ) from exc
+    return DepositQuote(
+        amount_eur_cents=int(order.amount_eur_cents),
+        percent_bps=percent_bps,
+        min_eur_cents=minimum,
+        max_eur_cents=maximum,
+        estimated_sender_total_eur_cents=sender_total,
+        clamped=str(inputs.get("clamped", "")),
+        inputs=dict(inputs),
+    )
+
+
 @transaction.atomic
 def ensure_posting_deposit_order(
     *,
@@ -679,9 +705,9 @@ def apply_posting_deposit_credit(*, order: PaymentOrder, deal: Deal) -> int:
     # `credited_into__isnull=True`: the reverse one-to-one lookup forces a LEFT
     # OUTER JOIN, and PostgreSQL refuses `FOR UPDATE` on the nullable side of an
     # outer join. The lock has to hold here, so the join has to go.
-    already_credited = PaymentOrder.objects.filter(
-        credit_source__isnull=False
-    ).values("credit_source_id")
+    already_credited = PaymentOrder.objects.filter(credit_source__isnull=False).values(
+        "credit_source_id"
+    )
     deposit = (
         PaymentOrder.objects.select_for_update(no_key=True)
         .filter(
@@ -747,10 +773,21 @@ def _fund_deal_if_covered(order: PaymentOrder) -> bool:
             traveler_reward_eur_cents=int(terms["traveler_reward_minor"]),
             platform_fee_eur_cents=int(terms["platform_fee_minor"]),
         )
+        from apps.boosts.models import BoostPurchase
+
+        for boost in BoostPurchase.objects.filter(deal_id=order.deal_id).order_by("pk"):
+            ledger.record_boost_allocation(
+                deal_id=order.deal_id,
+                order_id=boost.payment_order_id,
+                purchase_id=boost.pk,
+                traveler_id=result.traveler_id,
+                traveler_boost_eur_cents=int(boost.traveler_boost_eur_cents),
+                platform_boost_eur_cents=int(boost.platform_boost_eur_cents),
+            )
         ensure_payout_for_deal(
             deal_id=order.deal_id,
             traveler_id=result.traveler_id,
-            amount_eur_cents=int(terms["traveler_reward_minor"]),
+            amount_eur_cents=int(terms["traveler_total_minor"]),
             funding_provider=_funding_provider(order),
             query_provider_capability=False,
         )
@@ -885,9 +922,7 @@ def provider_options(
     return rows
 
 
-def _settlement_preview(
-    *, item, amount_eur_cents: int, policy: Phase3Policy
-) -> dict:
+def _settlement_preview(*, item, amount_eur_cents: int, policy: Phase3Policy) -> dict:
     """One rail's charge for one obligation, or why it cannot take it."""
 
     preview: dict = {
@@ -1036,9 +1071,7 @@ def start_checkout(
             # checkouts can never race to fund the same obligation.
             open_attempt.status = PaymentAttempt.Status.CANCELLED
             open_attempt.failure_code = "superseded"
-            open_attempt.save(
-                update_fields=["status", "failure_code", "updated_at"]
-            )
+            open_attempt.save(update_fields=["status", "failure_code", "updated_at"])
 
         attempt = PaymentAttempt.objects.create(
             order=order,
@@ -1095,7 +1128,9 @@ def start_checkout(
         result = gateway.create_checkout(checkout_request)
     except ProviderError as exc:
         with transaction.atomic():
-            failed = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt.pk)
+            failed = PaymentAttempt.objects.select_for_update(no_key=True).get(
+                pk=attempt.pk
+            )
             failed.status = PaymentAttempt.Status.FAILED
             failed.failure_code = exc.code
             failed.failure_message = str(exc)[:255]
@@ -1117,7 +1152,9 @@ def start_checkout(
         raise
 
     with transaction.atomic():
-        stored = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt.pk)
+        stored = PaymentAttempt.objects.select_for_update(no_key=True).get(
+            pk=attempt.pk
+        )
         if stored.status == PaymentAttempt.Status.CREATED:
             stored.provider_session_id = result.provider_session_id
             stored.checkout_url = result.checkout_url
@@ -1371,7 +1408,9 @@ def process_provider_event(*, event_id: int) -> str:
     """Apply one durable event at least once; every economic effect is idempotent."""
 
     with transaction.atomic():
-        record = PaymentProviderEvent.objects.select_for_update(no_key=True).get(pk=event_id)
+        record = PaymentProviderEvent.objects.select_for_update(no_key=True).get(
+            pk=event_id
+        )
         if record.processing_result in (
             PaymentProviderEvent.ProcessingResult.APPLIED,
             PaymentProviderEvent.ProcessingResult.IGNORED,
@@ -1659,9 +1698,8 @@ def reconcile_attempt(
     now = timezone.now()
     # Money that the obligation cannot absorb is recorded honestly and refunded,
     # never quietly dropped and never allowed to fund anything twice.
-    absorbable = (
-        order.cancelled_at is None
-        and order.outstanding_eur_cents >= int(attempt.amount_eur_cents)
+    absorbable = order.cancelled_at is None and order.outstanding_eur_cents >= int(
+        attempt.amount_eur_cents
     )
     attempt.status = PaymentAttempt.Status.SUCCEEDED
     attempt.succeeded_at = now
@@ -1783,8 +1821,8 @@ def request_refund(
 
     with transaction.atomic():
         order = _order_for_update(order_id)
-        attempt = (
-            PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
+        attempt = PaymentAttempt.objects.select_for_update(no_key=True).get(
+            pk=attempt_id
         )
         if attempt.order_id != order.pk:
             raise RefundNotPermitted("The attempt does not belong to this order.")
@@ -2414,9 +2452,7 @@ def _release_deposit_credit(order: PaymentOrder) -> int:
     )
     order.credit_source = None
     order.credited_eur_cents = 0
-    order.save(
-        update_fields=["credit_source", "credited_eur_cents", "updated_at"]
-    )
+    order.save(update_fields=["credit_source", "credited_eur_cents", "updated_at"])
     logger.info(
         "finance.deposit_credit_released order=%s deposit=%s cents=%s",
         order.pk,
@@ -2498,8 +2534,7 @@ def create_guest_link(
             created_by_id=actor_id,
             label=label[:80],
             communication_language=normalize_communication_language(
-                communication_language
-                or getattr(order.owner, "preferred_language", "")
+                communication_language or getattr(order.owner, "preferred_language", "")
             ),
             expires_at=timezone.now()
             + timedelta(seconds=policy.guest_link_ttl_seconds),
@@ -2794,16 +2829,18 @@ def schedule_job(
                 "updated_at",
             ]
         )
-    elif not created and job.status == ScheduledJob.Status.PENDING and job.run_at != run_at:
+    elif (
+        not created
+        and job.status == ScheduledJob.Status.PENDING
+        and job.run_at != run_at
+    ):
         # A rescheduled obligation (e.g. the deadline moved) keeps its identity.
         job.run_at = run_at
         job.save(update_fields=["run_at", "updated_at"])
     return job
 
 
-def chargily_display(
-    *, amount_eur_cents: int, policy: Phase3Policy
-) -> dict:
+def chargily_display(*, amount_eur_cents: int, policy: Phase3Policy) -> dict:
     """The Chargily figures a checkout screen must show, computed server-side.
 
     Canonical EUR, the DZD that will actually be charged, and the exact rate.

@@ -29,7 +29,11 @@ from django.utils import timezone
 
 
 class BoostPurchase(models.Model):
-    """One purchase of one admin-configured package for one delivery request."""
+    """One sender-funded visibility and delivery-earnings commitment."""
+
+    class EconomicsVersion(models.TextChoices):
+        LEGACY_VISIBILITY_ONLY = "visibility_only", "Legacy visibility only"
+        TRAVELER_SPLIT_V1 = "traveler_split_v1", "Traveler split V1"
 
     class Status(models.TextChoices):
         PENDING_PAYMENT = "pending_payment", "Pending payment"
@@ -62,15 +66,30 @@ class BoostPurchase(models.Model):
         on_delete=models.PROTECT,
         related_name="boost_purchase",
     )
+    deal = models.ForeignKey(
+        "deals.Deal",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="boost_purchases",
+        help_text="The Deal whose Traveler earns this boost allocation.",
+    )
 
     package_code = models.CharField(max_length=32, db_index=True)
-    #: The package exactly as it was priced at purchase. A later settings
-    #: revision may reprice or withdraw the package; this row keeps what the
-    #: buyer was actually quoted.
+    #: The visibility package exactly as committed. A later settings revision
+    #: may change or withdraw it; this row keeps what the buyer was promised.
     package_snapshot = models.JSONField(default=dict, blank=True)
     duration_seconds = models.PositiveIntegerField()
-    price_eur_cents = models.PositiveBigIntegerField()
+    amount_eur_cents = models.PositiveBigIntegerField()
     ranking_weight = models.PositiveSmallIntegerField()
+    economics_version = models.CharField(
+        max_length=24,
+        choices=EconomicsVersion.choices,
+        default=EconomicsVersion.TRAVELER_SPLIT_V1,
+    )
+    traveler_share_bps = models.PositiveSmallIntegerField(default=0)
+    traveler_boost_eur_cents = models.PositiveBigIntegerField(default=0)
+    platform_boost_eur_cents = models.PositiveBigIntegerField(default=0)
     business_settings_version = models.ForeignKey(
         "core.BusinessSettingsVersion",
         on_delete=models.PROTECT,
@@ -96,7 +115,7 @@ class BoostPurchase(models.Model):
         ordering = ["-created_at", "-id"]
         constraints = [
             models.CheckConstraint(
-                condition=Q(price_eur_cents__gt=0),
+                condition=Q(amount_eur_cents__gt=0),
                 name="boosts_price_positive",
             ),
             models.CheckConstraint(
@@ -116,6 +135,20 @@ class BoostPurchase(models.Model):
                     | (Q(activated_at__isnull=False) & Q(expires_at__isnull=False))
                 ),
                 name="boosts_active_requires_window",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(economics_version="visibility_only")
+                    | (
+                        Q(traveler_share_bps__gte=5_001)
+                        & Q(traveler_share_bps__lte=9_999)
+                        & Q(
+                            amount_eur_cents=models.F("traveler_boost_eur_cents")
+                            + models.F("platform_boost_eur_cents")
+                        )
+                    )
+                ),
+                name="boosts_economic_split_consistent",
             ),
         ]
         indexes = [

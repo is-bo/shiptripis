@@ -1,6 +1,7 @@
 """HTTP API for paid sender boosts.
 
-    GET  /api/boosts/packages         what may be bought, priced by the server
+    GET  /api/boosts/packages         visibility packages and guardrails
+    POST /api/boosts/preview          authoritative economic review
     POST /api/parcels/<id>/boosts     buy one, get back the payment obligation
     GET  /api/parcels/<id>/boosts     this request's boost history and effect
 
@@ -31,6 +32,7 @@ from apps.parcels.models import DeliveryRequest
 
 from .serializers import (
     BoostPackageSerializer,
+    BoostPreviewSerializer,
     BoostPurchaseCreateSerializer,
     BoostPurchaseSerializer,
 )
@@ -39,6 +41,7 @@ from .services import (
     NotAuthorized,
     boost_state,
     list_packages,
+    preview_boost,
     purchase_boost,
 )
 
@@ -107,9 +110,26 @@ class BoostPackageListView(APIView):
                 "max_active_per_request": policy.boost.max_active_per_request,
                 "currency": "EUR",
                 "settings_version": policy.settings_version.version,
+                "minimum_amount_eur_cents": policy.boost.minimum_amount_eur_cents,
+                "traveler_share_bps": policy.boost.traveler_share_bps,
                 "packages": BoostPackageSerializer(packages, many=True).data,
             }
         )
+
+
+class BoostPreviewView(APIView):
+    """Preview the immutable split before the sender commits to checkout."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        serializer = BoostPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            payload = preview_boost(**serializer.validated_data)
+        except MAPPED_FAILURES as exc:
+            return _error_response(exc)
+        return Response(payload)
 
 
 class RequestBoostView(APIView):
@@ -138,6 +158,10 @@ class RequestBoostView(APIView):
                 delivery_request_id=pk,
                 actor_id=request.user.id,
                 package_code=serializer.validated_data["package_code"],
+                amount_eur_cents=serializer.validated_data["amount_eur_cents"],
+                preview_settings_version=serializer.validated_data[
+                    "preview_settings_version"
+                ],
             )
         except MAPPED_FAILURES as exc:
             return _error_response(exc)
@@ -149,10 +173,7 @@ class RequestBoostView(APIView):
         """This request's boost history and its current ranking effect."""
 
         delivery_request = get_object_or_404(DeliveryRequest, pk=pk)
-        if (
-            delivery_request.sender_id != request.user.id
-            and not request.user.is_staff
-        ):
+        if delivery_request.sender_id != request.user.id and not request.user.is_staff:
             return _error_response(
                 NotAuthorized("Only the sender may see this request's boosts.")
             )

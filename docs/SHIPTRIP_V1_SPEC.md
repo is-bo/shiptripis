@@ -580,7 +580,9 @@ Use explainable factors:
 - request freshness
 - sender boost
 
-Boost affects ranking only and must be labeled.
+In discovery, Boost changes rank only among already-compatible candidates; it
+never changes hard compatibility. A paid boost also carries the delivery
+economics defined in section 23 and must be labeled with both effects.
 
 ### Geospatial DB
 
@@ -719,6 +721,9 @@ Deposit:
 - auto-refunded if request expires unmatched
 - fully refunded if sender cancels before accepted offer
 - remains represented in payment/refund ledger
+- is presented with the server-calculated suggested delivery total, the
+  recommended deposit and the minimum before payment; the client never
+  recomputes or silently chooses the amount
 
 ---
 
@@ -1040,9 +1045,25 @@ Only sender delivery requests can be boosted.
 
 Boost:
 
-- ranking only
-- clearly labeled
-- admin-configurable packages
+- raises an otherwise-compatible request in ranking, without changing ranking
+  math or any compatibility input
+- is a variable sender-funded EUR-cent amount with a €5 minimum and no product
+  maximum
+- allocates a configurable strict majority to the eventual Traveler and the
+  remainder to ShipTrip; the seeded split is 75% / 25%
+- uses integer arithmetic: Traveler receives
+  `floor(amount × traveler_share_bps / 10,000)` and ShipTrip receives the
+  exact-cent remainder
+- is previewed before checkout with sender amount, Traveler bonus, ShipTrip
+  revenue and visibility duration
+- adds its Traveler portion to protected Deal earnings and payout only when a
+  paid boost is bound to an accepted Deal
+- is refunded when the request or pre-funded Deal ends without reaching an
+  earning outcome; funded cancellation and dispute use the protected settlement
+  flow
+- keeps historical visibility-only purchases explicitly versioned rather than
+  retroactively reinterpreting them
+- has admin-configurable visibility packages and Traveler revenue share
 - separate payment order
 - cannot bypass route/capacity/KYC/safety/time eligibility
 
@@ -1502,7 +1523,7 @@ Reuse good foundations:
 - [ ] segment capacity safe
 - [ ] EUR min/recommended pricing
 - [ ] commission snapshots
-- [ ] ranking-only boost
+- [ ] compatibility-safe boost ranking plus protected delivery economics
 
 ## Payment
 - [ ] posting deposit

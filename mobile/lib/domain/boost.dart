@@ -1,10 +1,11 @@
 /// Paid visibility boosts.
 ///
-/// A boost changes **ranking only**. It cannot make an incompatible traveller
-/// compatible, and it cannot conjure a match. The server states this as a
-/// literal contract field — `affects_compatibility` is hard-coded false — and
-/// the client surfaces it as [BoostState.affectsCompatibility] so the copy on
-/// screen is backed by the API rather than by a promise in a comment.
+/// A boost changes ranking and commits most of its value to the eventual
+/// traveller. It cannot make an incompatible traveller compatible. The server
+/// states this as a literal contract field — `affects_compatibility` is
+/// hard-coded false — and the client surfaces it as
+/// [BoostState.affectsCompatibility] so the copy on screen is backed by the API
+/// rather than by a promise in a comment.
 ///
 /// Buying a boost creates a payment order and nothing else. Activation happens
 /// when that order is confirmed paid by a webhook. Returning from a checkout
@@ -37,14 +38,12 @@ class BoostPackage {
     required this.durationSeconds,
     required this.rankingWeight,
     required this.currency,
-    this.price,
   });
 
   factory BoostPackage.fromJson(Map<String, dynamic> json) => BoostPackage(
     code: readText(json['code']),
     label: readText(json['label']),
     durationSeconds: readInt(json['duration_seconds']) ?? 0,
-    price: Money.eurCentsOrNull(json['price_eur_cents']),
     rankingWeight: readInt(json['ranking_weight']) ?? 0,
     currency: readText(json['currency']).isEmpty
         ? 'EUR'
@@ -58,7 +57,6 @@ class BoostPackage {
   final String label;
 
   final int durationSeconds;
-  final Money? price;
 
   /// A ranking bonus applied after compatibility filtering.
   final int rankingWeight;
@@ -75,6 +73,8 @@ class BoostCatalogue {
     required this.maxActivePerRequest,
     required this.currency,
     required this.packages,
+    required this.minimumAmount,
+    required this.travelerShareBps,
     this.settingsVersion,
   });
 
@@ -85,6 +85,10 @@ class BoostCatalogue {
         ? 'EUR'
         : readText(json['currency']),
     settingsVersion: readInt(json['settings_version']),
+    minimumAmount:
+        Money.eurCentsOrNull(json['minimum_amount_eur_cents']) ??
+        Money.eurCents(500),
+    travelerShareBps: readInt(json['traveler_share_bps']) ?? 0,
     packages: readObjectList(
       json['packages'],
     ).map(BoostPackage.fromJson).toList(growable: false),
@@ -94,9 +98,44 @@ class BoostCatalogue {
   final int maxActivePerRequest;
   final String currency;
   final int? settingsVersion;
+  final Money minimumAmount;
+  final int travelerShareBps;
   final List<BoostPackage> packages;
 
   bool get isAvailable => enabled && packages.isNotEmpty;
+}
+
+class BoostPreview {
+  const BoostPreview({
+    required this.settingsVersion,
+    required this.amount,
+    required this.travelerBonus,
+    required this.platformRevenue,
+    required this.travelerShareBps,
+    required this.durationSeconds,
+    required this.rankingWeight,
+  });
+
+  factory BoostPreview.fromJson(Map<String, dynamic> json) {
+    final visibility = readObject(json['visibility']);
+    return BoostPreview(
+      settingsVersion: readInt(json['settings_version']) ?? 0,
+      amount: Money.eurCentsOrNull(json['amount_eur_cents'])!,
+      travelerBonus: Money.eurCentsOrNull(json['traveler_boost_eur_cents'])!,
+      platformRevenue: Money.eurCentsOrNull(json['platform_boost_eur_cents'])!,
+      travelerShareBps: readInt(json['traveler_share_bps']) ?? 0,
+      durationSeconds: readInt(visibility?['duration_seconds']) ?? 0,
+      rankingWeight: readInt(visibility?['ranking_weight']) ?? 0,
+    );
+  }
+
+  final int settingsVersion;
+  final Money amount;
+  final Money travelerBonus;
+  final Money platformRevenue;
+  final int travelerShareBps;
+  final int durationSeconds;
+  final int rankingWeight;
 }
 
 class BoostPurchase {
@@ -110,7 +149,9 @@ class BoostPurchase {
     required this.dispositionReason,
     this.deliveryRequestId,
     this.packageLabel,
-    this.price,
+    this.amount,
+    this.travelerBonus,
+    this.platformRevenue,
     this.activatedAt,
     this.expiresAt,
     this.cancelledAt,
@@ -133,7 +174,9 @@ class BoostPurchase {
         fallback: BoostStatus.unknown,
       ),
       durationSeconds: readInt(json['duration_seconds']) ?? 0,
-      price: Money.eurCentsOrNull(json['price_eur_cents']),
+      amount: Money.eurCentsOrNull(json['amount_eur_cents']),
+      travelerBonus: Money.eurCentsOrNull(json['traveler_boost_eur_cents']),
+      platformRevenue: Money.eurCentsOrNull(json['platform_boost_eur_cents']),
       currency: readText(json['currency']).isEmpty
           ? 'EUR'
           : readText(json['currency']),
@@ -157,7 +200,9 @@ class BoostPurchase {
   final String? packageLabel;
   final BoostStatus status;
   final int durationSeconds;
-  final Money? price;
+  final Money? amount;
+  final Money? travelerBonus;
+  final Money? platformRevenue;
   final String currency;
   final int rankingWeight;
   final DateTime? activatedAt;

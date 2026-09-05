@@ -81,6 +81,12 @@ class DealTerms {
     this.commissionRateBps,
     this.platformFee,
     this.senderTotal,
+    this.boostAmount,
+    this.boostTravelerBonus,
+    this.boostPlatformFee,
+    this.travelerTotal,
+    this.platformTotal,
+    this.senderTotalWithBoost,
     this.businessSettingsVersion,
     this.pricingVersion,
   });
@@ -106,6 +112,30 @@ class DealTerms {
         json['sender_total_minor'],
         currency: currency,
       ),
+      boostAmount: Money.minorOrNull(
+        json['boost_amount_minor'],
+        currency: currency,
+      ),
+      boostTravelerBonus: Money.minorOrNull(
+        json['boost_traveler_bonus_minor'],
+        currency: currency,
+      ),
+      boostPlatformFee: Money.minorOrNull(
+        json['boost_platform_fee_minor'],
+        currency: currency,
+      ),
+      travelerTotal: Money.minorOrNull(
+        json['traveler_total_minor'],
+        currency: currency,
+      ),
+      platformTotal: Money.minorOrNull(
+        json['platform_total_minor'],
+        currency: currency,
+      ),
+      senderTotalWithBoost: Money.minorOrNull(
+        json['sender_total_with_boost_minor'],
+        currency: currency,
+      ),
       businessSettingsVersion: readInt(json['business_settings_version']),
       pricingVersion: readString(json['pricing_version']),
       isLegacy: readBool(json['is_legacy']),
@@ -124,6 +154,12 @@ class DealTerms {
 
   /// What the sender pays. Frozen at acceptance.
   final Money? senderTotal;
+  final Money? boostAmount;
+  final Money? boostTravelerBonus;
+  final Money? boostPlatformFee;
+  final Money? travelerTotal;
+  final Money? platformTotal;
+  final Money? senderTotalWithBoost;
 
   final int? businessSettingsVersion;
   final String? pricingVersion;

@@ -711,6 +711,22 @@ class LFr extends L {
       'Si personne ne l’accepte, ou si vous annulez avant d’accepter une offre, il vous est intégralement remboursé.';
 
   @override
+  String get depositGuidanceTitle => 'Repères pour l’acompte';
+
+  @override
+  String get depositSuggestedTotal => 'Total suggéré par ShipTrip';
+
+  @override
+  String get depositRecommended => 'Acompte recommandé';
+
+  @override
+  String get depositMinimumAllowed => 'Acompte minimum';
+
+  @override
+  String get depositGuidanceNote =>
+      'ShipTrip calcule l’acompte à partir du total suggéré et applique le minimum et le maximum en vigueur. Il sera déduit du paiement final : ce n’est pas un supplément.';
+
+  @override
   String get depositPayAction => 'Payer l’acompte et publier';
 
   @override
@@ -2088,6 +2104,44 @@ class LFr extends L {
   String get boostChoosePackage => 'Choisissez une mise en avant';
 
   @override
+  String get boostAmountLabel => 'Montant de la mise en avant';
+
+  @override
+  String boostAmountHelper(String amount) {
+    return 'Minimum $amount. Vous pouvez choisir tout montant supérieur.';
+  }
+
+  @override
+  String get boostPreviewTitle => 'Vérifiez avant de payer';
+
+  @override
+  String get boostSenderPays => 'Vous payez';
+
+  @override
+  String get boostTravelerGets => 'Le voyageur reçoit si la livraison aboutit';
+
+  @override
+  String get boostPlatformKeeps => 'ShipTrip conserve';
+
+  @override
+  String get boostEarningsCondition =>
+      'Le bonus du voyageur fait partie des gains protégés du Deal. Si la livraison n’aboutit pas à un gain, le paiement de la mise en avant est remboursé.';
+
+  @override
+  String get boostReviewAction => 'Vérifier la mise en avant';
+
+  @override
+  String get boostConfirmAction => 'Continuer vers le paiement';
+
+  @override
+  String get boostAmountBelowMinimum =>
+      'Saisissez au moins le montant minimum de la mise en avant.';
+
+  @override
+  String get boostPreviewStale =>
+      'La répartition a changé. Vérifiez les nouveaux montants avant de continuer.';
+
+  @override
   String boostDuration(int hours) {
     String _temp0 = intl.Intl.pluralLogic(
       hours,
@@ -3221,6 +3275,16 @@ class LFr extends L {
 
   @override
   String get boostStatusRefunded => 'Remboursée';
+
+  @override
+  String get moneyBaseReward => 'Rémunération de base';
+
+  @override
+  String get moneyBoostBonus => 'Bonus de mise en avant';
+
+  @override
+  String get moneyPlatformBoostRevenue =>
+      'Part de ShipTrip sur la mise en avant';
 
   @override
   String get validationReadyWindowOrder =>

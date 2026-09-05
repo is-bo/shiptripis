@@ -90,6 +90,7 @@ from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 from apps.trips.services import has_current_kyc_approval
 
 from .console_forms import (
+    BoostEconomicsSettingsForm,
     DisputeResolutionForm,
     DisputeStatusForm,
     FxSettingsForm,
@@ -362,9 +363,7 @@ def _storage_rows() -> list[dict]:
                 f"{purpose} The {credential} credential was refused or the store "
                 "did not answer; evidence will show as temporarily unavailable.",
             )
-        rows.append(
-            {"name": label, "label": state, "tone": tone, "detail": detail}
-        )
+        rows.append({"name": label, "label": state, "tone": tone, "detail": detail})
     return rows
 
 
@@ -952,9 +951,7 @@ def _private_object_redirect(
     try:
         url = store.presigned_get(
             key,
-            expires_in=int(
-                getattr(settings, "DISPUTE_EVIDENCE_URL_TTL_SECONDS", 300)
-            ),
+            expires_in=int(getattr(settings, "DISPUTE_EVIDENCE_URL_TTL_SECONDS", 300)),
             content_disposition="inline",
         )
         record_admin_action(
@@ -2399,6 +2396,11 @@ def _settings_initial(active):
                 _dig(active.policy, "payments.chargily.eur_dzd_rate_micros")
             )
         },
+        "boost": {
+            "traveler_share_percent": percent_from_bps(
+                _dig(active.policy, "boost.traveler_share_bps")
+            ),
+        },
         "providers": {
             "stripe_enabled": _dig(active.policy, "payments.providers.stripe_enabled"),
             "chargily_enabled": _dig(
@@ -2421,6 +2423,11 @@ def business_settings(request):
         initial=initial["pricing"],
         auto_id="id_pricing_%s",
     )
+    boost_form = BoostEconomicsSettingsForm(
+        request.POST if action == "boost_economics" else None,
+        initial=initial["boost"],
+        auto_id="id_boost_%s",
+    )
     fx_form = FxSettingsForm(
         request.POST if action == "fx" else None,
         initial=initial["fx"],
@@ -2433,7 +2440,7 @@ def business_settings(request):
     )
     may_manage = has_admin_permission(request.user, "manage_settings")
     if not may_manage:
-        for form in (pricing_form, fx_form, provider_form):
+        for form in (pricing_form, boost_form, fx_form, provider_form):
             for field in form.fields.values():
                 field.disabled = True
     if request.method == "POST":
@@ -2469,6 +2476,20 @@ def business_settings(request):
                 )
                 messages.success(
                     request, "Pricing settings were saved as a new audited version."
+                )
+                return redirect("admin_console:settings")
+            if action == "boost_economics" and boost_form.is_valid():
+                _save_settings_revision(
+                    request,
+                    path_updates={
+                        "boost.traveler_share_bps": boost_form.traveler_share_bps()
+                    },
+                    commission_rate_bps=None,
+                    reason=boost_form.cleaned_data["reason"],
+                )
+                messages.success(
+                    request,
+                    "The boost revenue split was saved as a new audited version.",
                 )
                 return redirect("admin_console:settings")
             if action == "fx" and fx_form.is_valid():
@@ -2557,6 +2578,7 @@ def business_settings(request):
             "title": "Business settings",
             "active": active,
             "pricing_form": pricing_form,
+            "boost_form": boost_form,
             "fx_form": fx_form,
             "provider_form": provider_form,
             "may_manage": may_manage,
@@ -2571,6 +2593,23 @@ def business_settings(request):
                 if row.label in protection_labels
             ],
             "boost_packages": boost_packages(active.policy),
+            "boost_economics": {
+                "minimum": format_eur(
+                    _dig(active.policy, "boost.minimum_amount_eur_cents")
+                ),
+                "traveler_share": (
+                    f"{percent_from_bps(_dig(active.policy, 'boost.traveler_share_bps')):.2f}".rstrip(
+                        "0"
+                    ).rstrip(".")
+                    + "%"
+                ),
+                "platform_share": (
+                    f"{percent_from_bps(10_000 - _dig(active.policy, 'boost.traveler_share_bps')):.2f}".rstrip(
+                        "0"
+                    ).rstrip(".")
+                    + "%"
+                ),
+            },
             "providers": _provider_rows(),
             "example": example,
             "commission": commission,

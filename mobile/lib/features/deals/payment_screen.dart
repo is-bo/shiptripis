@@ -121,7 +121,7 @@ class _Summary extends StatelessWidget {
 
     // The traveller is told what they earn; the sender what they owe. Same
     // deal, two true sentences.
-    final hero = isTraveler ? state.travelerReward : order?.outstanding;
+    final hero = isTraveler ? state.travelerTotal : order?.outstanding;
     final heroLabel = isTraveler ? l.moneyYourReward : l.moneyRemainingToPay;
 
     return Column(
@@ -145,16 +145,34 @@ class _Summary extends StatelessWidget {
             lines: [
               if (state.travelerReward != null)
                 MoneyLine(
-                  label: l.moneyTravelerReceives,
+                  label: l.moneyBaseReward,
                   amount: state.travelerReward!,
+                ),
+              if (state.travelerBoostBonus?.isPositive ?? false)
+                MoneyLine(
+                  label: l.moneyBoostBonus,
+                  amount: state.travelerBoostBonus!,
+                ),
+              if (state.travelerTotal != null)
+                MoneyLine.total(
+                  label: l.moneyTravelerReceives,
+                  amount: state.travelerTotal!,
                 ),
               if (state.platformFee != null)
                 MoneyLine(
                   label: l.moneyPlatformFee,
                   amount: state.platformFee!,
                 ),
-              if (state.senderTotal != null)
-                MoneyLine(label: l.moneyTotal, amount: state.senderTotal!),
+              if (state.platformBoostRevenue?.isPositive ?? false)
+                MoneyLine(
+                  label: l.moneyPlatformBoostRevenue,
+                  amount: state.platformBoostRevenue!,
+                ),
+              if (state.senderTotalWithBoost != null)
+                MoneyLine(
+                  label: l.moneyTotal,
+                  amount: state.senderTotalWithBoost!,
+                ),
               if (order?.depositCredit != null &&
                   order!.depositCredit!.isPositive)
                 MoneyLine.credit(

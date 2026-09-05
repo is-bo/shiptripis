@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.db import transaction
-from django.db.models import Min
+from django.db.models import Min, Q
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
@@ -114,8 +114,30 @@ def release_pending_deal_reservation(
     from apps.finance.services import (  # noqa: WPS433 (deliberate late import)
         cancel_deal_balance_orders,
     )
+    from apps.finance.models import PaymentOrder  # noqa: WPS433
+
+    bound_boosts = [
+        row for row in aggregate.request_graph.boost_purchases if row.deal_id == deal.pk
+    ]
+    boost_order_ids = [
+        row.payment_order_id for row in bound_boosts if row.payment_order_id is not None
+    ]
+    locked_orders = tuple(
+        PaymentOrder.objects.select_for_update(no_key=True)
+        .filter(Q(deal_id=deal.pk) | Q(pk__in=boost_order_ids))
+        .order_by("pk")
+    )
+    locked_orders_by_id = {order.pk: order for order in locked_orders}
 
     cancel_deal_balance_orders(deal_id=deal.pk, reason=reason)
+    from apps.boosts.services import unwind_boosts  # noqa: WPS433
+
+    unwind_boosts(
+        locked_purchases=bound_boosts,
+        reason=reason,
+        locked_orders=locked_orders_by_id,
+        delivery_request=request_row,
+    )
     return ReservationReleaseResult(deal.pk, released, True)
 
 
@@ -216,6 +238,12 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
         "traveler_reward_minor": int(terms.traveler_reward_minor),
         "platform_fee_minor": int(terms.platform_fee_minor),
         "sender_total_minor": int(terms.sender_total_minor),
+        "boost_amount_minor": int(terms.boost_amount_minor),
+        "boost_traveler_bonus_minor": int(terms.boost_traveler_bonus_minor),
+        "boost_platform_fee_minor": int(terms.boost_platform_fee_minor),
+        "traveler_total_minor": terms.traveler_total_minor,
+        "platform_total_minor": terms.platform_total_minor,
+        "sender_total_with_boost_minor": terms.sender_total_with_boost_minor,
         "commission_rate_bps": int(terms.commission_rate_bps),
         "currency": terms.currency,
     }
@@ -250,11 +278,7 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
     # settings, so publishing a new revision tomorrow cannot move a deadline or
     # a price that these two parties have already agreed to.
     match = next(
-        (
-            row
-            for row in aggregate.request_graph.matches
-            if row.pk == deal.match_id
-        ),
+        (row for row in aggregate.request_graph.matches if row.pk == deal.match_id),
         None,
     )
     lifecycle.snapshot_on_funding(

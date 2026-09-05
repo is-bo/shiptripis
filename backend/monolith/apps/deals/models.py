@@ -194,7 +194,10 @@ class Deal(models.Model):
             models.CheckConstraint(
                 condition=(
                     Q(no_show_party="")
-                    | Q(no_show_recorded_at__isnull=False, no_show_recorded_by__isnull=False)
+                    | Q(
+                        no_show_recorded_at__isnull=False,
+                        no_show_recorded_by__isnull=False,
+                    )
                 ),
                 name="deals_no_show_requires_actor",
             ),
@@ -232,6 +235,9 @@ class DealTermsSnapshot(models.Model):
     commission_rate_bps = models.PositiveSmallIntegerField()
     platform_fee_minor = models.PositiveBigIntegerField()
     sender_total_minor = models.PositiveBigIntegerField()
+    boost_amount_minor = models.PositiveBigIntegerField(default=0)
+    boost_traveler_bonus_minor = models.PositiveBigIntegerField(default=0)
+    boost_platform_fee_minor = models.PositiveBigIntegerField(default=0)
     business_settings_version = models.ForeignKey(
         "core.BusinessSettingsVersion",
         on_delete=models.PROTECT,
@@ -257,6 +263,13 @@ class DealTermsSnapshot(models.Model):
                     + F("platform_fee_minor")
                 ),
                 name="deals_terms_total_sum",
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    boost_amount_minor=F("boost_traveler_bonus_minor")
+                    + F("boost_platform_fee_minor")
+                ),
+                name="deals_terms_boost_total_sum",
             ),
             models.CheckConstraint(
                 condition=(
@@ -286,6 +299,18 @@ class DealTermsSnapshot(models.Model):
             raise ValidationError("Deal terms snapshots are immutable.")
         self.full_clean()
         return super().save(*args, **kwargs)
+
+    @property
+    def traveler_total_minor(self) -> int:
+        return int(self.traveler_reward_minor) + int(self.boost_traveler_bonus_minor)
+
+    @property
+    def platform_total_minor(self) -> int:
+        return int(self.platform_fee_minor) + int(self.boost_platform_fee_minor)
+
+    @property
+    def sender_total_with_boost_minor(self) -> int:
+        return int(self.sender_total_minor) + int(self.boost_amount_minor)
 
 
 class DealEvent(models.Model):

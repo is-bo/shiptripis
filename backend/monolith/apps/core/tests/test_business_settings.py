@@ -25,8 +25,10 @@ class BusinessSettingsTests(TestCase):
     def test_seeded_revision_and_minor_unit_rounding(self):
         active = get_active_business_settings()
 
-        assert active.version == 5
-        assert active.pricing_version == "v1-lifecycle-1-prelaunch"
+        assert active.version == 6
+        assert active.pricing_version == "v1-boost-economics-1"
+        assert active.policy["boost"]["minimum_amount_eur_cents"] == 500
+        assert active.policy["boost"]["traveler_share_bps"] == 7_500
         assert active.canonical_currency == "EUR"
         assert active.policy["payments"]["providers"] == {
             "stripe_enabled": False,
@@ -44,7 +46,7 @@ class BusinessSettingsTests(TestCase):
     def test_activation_retires_previous_revision(self):
         previous = get_active_business_settings()
         second = BusinessSettingsVersion.objects.create(
-            version=6,
+            version=7,
             commission_rate_bps=1800,
             pricing_version="v1.1",
             policy={"experiment": "lower_fee"},
@@ -55,6 +57,24 @@ class BusinessSettingsTests(TestCase):
         assert activated.status == BusinessSettingsVersion.Status.ACTIVE
         assert get_active_business_settings().pk == second.pk
         assert BusinessSettingsVersion.objects.get(pk=previous.pk).status == (
+            BusinessSettingsVersion.Status.RETIRED
+        )
+
+    def test_boost_seed_reverse_never_clobbers_a_later_operator_revision(self):
+        economics = import_module("apps.core.migrations.0009_seed_boost_economics")
+        seeded = get_active_business_settings()
+        later = BusinessSettingsVersion.objects.create(
+            version=seeded.version + 1,
+            commission_rate_bps=seeded.commission_rate_bps,
+            pricing_version="operator-boost-adjustment",
+            policy=seeded.policy,
+        )
+        activate_business_settings(later)
+
+        economics.unseed_boost_economics(django_apps, None)
+
+        assert get_active_business_settings().pk == later.pk
+        assert BusinessSettingsVersion.objects.get(pk=seeded.pk).status == (
             BusinessSettingsVersion.Status.RETIRED
         )
 
@@ -70,6 +90,7 @@ class BusinessSettingsTests(TestCase):
         prelaunch = import_module(
             "apps.core.migrations.0008_seed_prelaunch_provider_settings"
         )
+        economics = import_module("apps.core.migrations.0009_seed_boost_economics")
         phase4 = import_module(
             "apps.core.migrations.0006_seed_phase4_business_settings"
         )
@@ -79,6 +100,7 @@ class BusinessSettingsTests(TestCase):
         )
 
         # Migrations unwind in order: pre-launch, Phase 4, then Phase 3.
+        economics.unseed_boost_economics(django_apps, None)
         prelaunch.unseed_prelaunch_provider_settings(django_apps, None)
         phase4.unseed_phase4_business_settings(django_apps, None)
         phase3.unseed_phase3_payment_settings(django_apps, None)
@@ -105,7 +127,8 @@ class BusinessSettingsTests(TestCase):
 
         phase4.seed_phase4_business_settings(django_apps, None)
         prelaunch.seed_prelaunch_provider_settings(django_apps, None)
-        assert get_active_business_settings().version == 5
+        economics.seed_boost_economics(django_apps, None)
+        assert get_active_business_settings().version == 7
 
     def test_phase3_seed_reverse_forward_roundtrip_is_non_destructive(self):
         """Rolling the payment revision back hands activation to Phase 2."""
@@ -113,11 +136,13 @@ class BusinessSettingsTests(TestCase):
         prelaunch = import_module(
             "apps.core.migrations.0008_seed_prelaunch_provider_settings"
         )
+        economics = import_module("apps.core.migrations.0009_seed_boost_economics")
         phase4 = import_module(
             "apps.core.migrations.0006_seed_phase4_business_settings"
         )
         phase3 = import_module("apps.core.migrations.0005_seed_phase3_payment_settings")
 
+        economics.unseed_boost_economics(django_apps, None)
         prelaunch.unseed_prelaunch_provider_settings(django_apps, None)
         phase4.unseed_phase4_business_settings(django_apps, None)
         phase3.unseed_phase3_payment_settings(django_apps, None)
@@ -138,7 +163,8 @@ class BusinessSettingsTests(TestCase):
 
         phase4.seed_phase4_business_settings(django_apps, None)
         prelaunch.seed_prelaunch_provider_settings(django_apps, None)
-        assert get_active_business_settings().version == 5
+        economics.seed_boost_economics(django_apps, None)
+        assert get_active_business_settings().version == 7
 
     def test_phase3_seed_rejects_a_conflicting_existing_version_three(self):
         phase3 = import_module("apps.core.migrations.0005_seed_phase3_payment_settings")
@@ -177,10 +203,12 @@ class BusinessSettingsTests(TestCase):
         prelaunch = import_module(
             "apps.core.migrations.0008_seed_prelaunch_provider_settings"
         )
+        economics = import_module("apps.core.migrations.0009_seed_boost_economics")
         phase4 = import_module(
             "apps.core.migrations.0006_seed_phase4_business_settings"
         )
 
+        economics.unseed_boost_economics(django_apps, None)
         prelaunch.unseed_prelaunch_provider_settings(django_apps, None)
         phase4.unseed_phase4_business_settings(django_apps, None)
 
@@ -193,8 +221,9 @@ class BusinessSettingsTests(TestCase):
 
         phase4.seed_phase4_business_settings(django_apps, None)
         prelaunch.seed_prelaunch_provider_settings(django_apps, None)
+        economics.seed_boost_economics(django_apps, None)
 
-        assert get_active_business_settings().version == 5
+        assert get_active_business_settings().version == 7
         assert BusinessSettingsVersion.objects.filter(status="active").count() == 1
 
     def test_phase4_seed_rejects_a_conflicting_existing_version_four(self):
@@ -215,7 +244,9 @@ class BusinessSettingsTests(TestCase):
         prelaunch = import_module(
             "apps.core.migrations.0008_seed_prelaunch_provider_settings"
         )
+        economics = import_module("apps.core.migrations.0009_seed_boost_economics")
 
+        economics.unseed_boost_economics(django_apps, None)
         prelaunch.unseed_prelaunch_provider_settings(django_apps, None)
         assert get_active_business_settings().version == 4
         assert BusinessSettingsVersion.objects.get(version=5).status == (
@@ -223,7 +254,8 @@ class BusinessSettingsTests(TestCase):
         )
 
         prelaunch.seed_prelaunch_provider_settings(django_apps, None)
-        assert get_active_business_settings().version == 5
+        economics.seed_boost_economics(django_apps, None)
+        assert get_active_business_settings().version == 7
         assert BusinessSettingsVersion.objects.filter(status="active").count() == 1
 
     def test_prelaunch_seed_rejects_a_conflicting_existing_version_five(self):

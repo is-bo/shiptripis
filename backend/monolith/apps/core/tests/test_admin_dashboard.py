@@ -232,10 +232,11 @@ class PolicyReadingTests(TestCase):
         assert mock_off.value == "Disabled"
         assert mock_off.tone == "mute"
 
-    def test_boost_packages_are_listed_with_prices_as_amounts(self):
+    def test_boost_packages_are_visibility_windows_not_fixed_prices(self):
         packages = boost_packages(self.revision.policy)
         assert packages, "The seeded revision configures boost packages."
-        assert all(package["price"].startswith("€") for package in packages)
+        assert all("price" not in package for package in packages)
+        assert all(package["duration"] for package in packages)
         assert boost_packages({}) == ()
         assert boost_packages(None) == ()
 

@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict OfbYiyzpJAAHFW2khq01dFt9WdKEZ4UdLEf0GuNObmuEunarfeYHPVjPtboKBC7
+\restrict qN25ZH1xjFMcbsd7XnIGNMNSDhMRlNVPct0siCvzuclksnvaUfl9oLq5y3IYdIg
 
--- Dumped from database version 16.2
+-- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
 
 SET statement_timeout = 0;
@@ -326,7 +326,7 @@ CREATE TABLE public.boosts_purchase (
     package_code character varying(32) NOT NULL,
     package_snapshot jsonb NOT NULL,
     duration_seconds integer NOT NULL,
-    price_eur_cents bigint NOT NULL,
+    amount_eur_cents bigint NOT NULL,
     ranking_weight smallint NOT NULL,
     status character varying(20) NOT NULL,
     activated_at timestamp with time zone,
@@ -339,12 +339,21 @@ CREATE TABLE public.boosts_purchase (
     buyer_id bigint NOT NULL,
     delivery_request_id bigint NOT NULL,
     payment_order_id bigint,
+    deal_id bigint,
+    economics_version character varying(24) NOT NULL,
+    platform_boost_eur_cents bigint NOT NULL,
+    traveler_boost_eur_cents bigint NOT NULL,
+    traveler_share_bps smallint NOT NULL,
     CONSTRAINT boosts_active_requires_window CHECK (((NOT ((status)::text = 'active'::text)) OR ((activated_at IS NOT NULL) AND (expires_at IS NOT NULL)))),
     CONSTRAINT boosts_duration_positive CHECK ((duration_seconds > 0)),
-    CONSTRAINT boosts_price_positive CHECK ((price_eur_cents > 0)),
+    CONSTRAINT boosts_economic_split_consistent CHECK ((((economics_version)::text = 'visibility_only'::text) OR ((traveler_share_bps >= 5001) AND (traveler_share_bps <= 9999) AND (amount_eur_cents = (traveler_boost_eur_cents + platform_boost_eur_cents))))),
+    CONSTRAINT boosts_price_positive CHECK ((amount_eur_cents > 0)),
     CONSTRAINT boosts_purchase_duration_seconds_check CHECK ((duration_seconds >= 0)),
-    CONSTRAINT boosts_purchase_price_eur_cents_check CHECK ((price_eur_cents >= 0)),
+    CONSTRAINT boosts_purchase_platform_boost_eur_cents_check CHECK ((platform_boost_eur_cents >= 0)),
+    CONSTRAINT boosts_purchase_price_eur_cents_check CHECK ((amount_eur_cents >= 0)),
     CONSTRAINT boosts_purchase_ranking_weight_check CHECK ((ranking_weight >= 0)),
+    CONSTRAINT boosts_purchase_traveler_boost_eur_cents_check CHECK ((traveler_boost_eur_cents >= 0)),
+    CONSTRAINT boosts_purchase_traveler_share_bps_check CHECK ((traveler_share_bps >= 0)),
     CONSTRAINT boosts_weight_positive CHECK ((ranking_weight > 0))
 );
 
@@ -611,8 +620,15 @@ CREATE TABLE public.deals_terms_snapshot (
     created_at timestamp with time zone NOT NULL,
     business_settings_version_id bigint,
     deal_id bigint NOT NULL,
+    boost_amount_minor bigint NOT NULL,
+    boost_platform_fee_minor bigint NOT NULL,
+    boost_traveler_bonus_minor bigint NOT NULL,
+    CONSTRAINT deals_terms_boost_total_sum CHECK ((boost_amount_minor = (boost_traveler_bonus_minor + boost_platform_fee_minor))),
     CONSTRAINT deals_terms_commission_bps CHECK ((commission_rate_bps <= 10000)),
     CONSTRAINT deals_terms_new_currency_eur CHECK ((is_legacy OR ((business_settings_version_id IS NOT NULL) AND ((currency)::text = 'EUR'::text)))),
+    CONSTRAINT deals_terms_snapshot_boost_amount_minor_check CHECK ((boost_amount_minor >= 0)),
+    CONSTRAINT deals_terms_snapshot_boost_platform_fee_minor_check CHECK ((boost_platform_fee_minor >= 0)),
+    CONSTRAINT deals_terms_snapshot_boost_traveler_bonus_minor_check CHECK ((boost_traveler_bonus_minor >= 0)),
     CONSTRAINT deals_terms_snapshot_commission_rate_bps_check CHECK ((commission_rate_bps >= 0)),
     CONSTRAINT deals_terms_snapshot_platform_fee_minor_check CHECK ((platform_fee_minor >= 0)),
     CONSTRAINT deals_terms_snapshot_sender_total_minor_check CHECK ((sender_total_minor >= 0)),
@@ -4068,6 +4084,13 @@ CREATE INDEX boosts_purchase_buyer_id_3911b29b ON public.boosts_purchase USING b
 
 
 --
+-- Name: boosts_purchase_deal_id_3980c6fb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX boosts_purchase_deal_id_3980c6fb ON public.boosts_purchase USING btree (deal_id);
+
+
+--
 -- Name: boosts_purchase_delivery_request_id_9e9304ad; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6974,6 +6997,14 @@ ALTER TABLE ONLY public.boosts_purchase
 
 
 --
+-- Name: boosts_purchase boosts_purchase_deal_id_3980c6fb_fk_deals_deal_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boosts_purchase
+    ADD CONSTRAINT boosts_purchase_deal_id_3980c6fb_fk_deals_deal_id FOREIGN KEY (deal_id) REFERENCES public.deals_deal(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: boosts_purchase boosts_purchase_delivery_request_id_9e9304ad_fk_parcels_d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8161,5 +8192,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict OfbYiyzpJAAHFW2khq01dFt9WdKEZ4UdLEf0GuNObmuEunarfeYHPVjPtboKBC7
+\unrestrict qN25ZH1xjFMcbsd7XnIGNMNSDhMRlNVPct0siCvzuclksnvaUfl9oLq5y3IYdIg
 

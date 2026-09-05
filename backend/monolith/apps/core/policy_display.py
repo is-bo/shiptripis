@@ -96,7 +96,9 @@ def _micros(value: Any) -> str:
     return f"{whole:,}.{remainder:06d} ({value:,} micros)"
 
 
-def policy_rows(policy: dict | None, *, commission_rate_bps: int | None) -> list[PolicyRow]:
+def policy_rows(
+    policy: dict | None, *, commission_rate_bps: int | None
+) -> list[PolicyRow]:
     """The knobs §12 of the operations brief names, in operator units."""
 
     policy = policy if isinstance(policy, dict) else {}
@@ -201,14 +203,16 @@ def policy_rows(policy: dict | None, *, commission_rate_bps: int | None) -> list
             "Mock rail (tests and local only)",
             mock_text,
             "payments.providers.mock_enabled",
-            "bad" if _dig(policy, "payments.providers.mock_enabled") is True else "mute",
+            "bad"
+            if _dig(policy, "payments.providers.mock_enabled") is True
+            else "mute",
         )
     )
     return rows
 
 
 def boost_packages(policy: dict | None) -> Sequence[dict]:
-    """Boost packages as label / duration / price, in operator units."""
+    """Boost visibility packages; amount is chosen separately by the sender."""
 
     policy = policy if isinstance(policy, dict) else {}
     packages = _dig(policy, "boost.packages")
@@ -223,7 +227,6 @@ def boost_packages(policy: dict | None) -> Sequence[dict]:
                 "code": package.get("code", "—"),
                 "label": package.get("label", "—"),
                 "duration": _duration(package.get("duration_seconds")),
-                "price": _money(package.get("price_eur_cents")),
                 "weight": package.get("ranking_weight", "—"),
             }
         )
