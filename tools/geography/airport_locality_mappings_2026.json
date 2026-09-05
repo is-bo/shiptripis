@@ -9,7 +9,14 @@
     "source": "shiptrip-airport-locality-review",
     "source_id": "ourairports:2050:served",
     "source_version": "2026-09-01",
-    "metadata": {"review_basis": "Houari Boumediene commercial Algiers context"}
+    "metadata": {"review_basis": "Houari Boumediene commercial Algiers context"},
+    "served_locality_aliases": [
+      {
+        "name": "Algiers",
+        "language": "en",
+        "review_basis": "OurAirports municipality and reviewed ALG commercial context"
+      }
+    ]
   },
   {
     "airport_source": "ourairports",

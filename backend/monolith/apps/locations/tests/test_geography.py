@@ -246,7 +246,10 @@ class GeographySearchApiTests(APITestCase):
         self.assertEqual({row["code"] for row in response.data}, {"DZ", "FR"})
 
     def test_search_is_paginated_and_disambiguated(self):
-        with self.assertNumQueries(3):
+        # Two bounded enrichment reads find the matching locality seeds and
+        # their explicit airport mappings; pagination and serialization remain
+        # the same three-query shape as before.
+        with self.assertNumQueries(5):
             response = APIClient().get(
                 reverse("geography-places"),
                 {"country": "DZ", "q": "jijel", "page_size": 1},
@@ -404,6 +407,8 @@ class GeographySearchApiTests(APITestCase):
     def test_search_rejects_empty_normalization_and_unbounded_parent_ids(self):
         punctuation = APIClient().get(reverse("geography-places"), {"q": "---’"})
         self.assertEqual(punctuation.status_code, 400)
+        too_long = APIClient().get(reverse("geography-places"), {"q": "a" * 256})
+        self.assertEqual(too_long.status_code, 400)
 
         for parent in ("²", "9" * 100):
             with self.subTest(parent=parent):

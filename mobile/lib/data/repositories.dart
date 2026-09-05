@@ -171,6 +171,7 @@ class GeographyRepository {
       },
       cancelToken: cancelToken,
     );
+    final seenIds = <int>{};
     return rows
         .whereType<Map>()
         .map((row) => CanonicalPlace.fromJson(Map<String, dynamic>.from(row)))
@@ -179,6 +180,7 @@ class GeographyRepository {
               place.type == CanonicalPlaceType.locality || place.isAirport,
         )
         .where((place) => place.availableForMatching)
+        .where((place) => seenIds.add(place.id))
         .toList(growable: false);
   }
 }

@@ -35,6 +35,9 @@ Map<String, dynamic> _place({
   String parentTier = '',
   String? iata,
   int matchingId = 1801,
+  String? searchRelation,
+  String? searchContext,
+  double? searchDistanceKm,
 }) => {
   'id': id,
   'country_code': country,
@@ -48,6 +51,11 @@ Map<String, dynamic> _place({
   'longitude': '5.766700',
   'matching_locality': {'id': matchingId, 'name': name},
   'available_for_matching': true,
+  'search_relation': searchRelation,
+  'search_context': searchContext == null
+      ? null
+      : {'id': matchingId, 'name': searchContext},
+  'search_distance_km': searchDistanceKm,
 };
 
 FakeBackend _backendWithPlaces(Object places) => FakeBackend()
@@ -167,6 +175,124 @@ void main() {
 
     // The server's matching locality is not the user's business.
     expect(find.textContaining('Paris,'), findsNothing);
+  });
+
+  testWidgets('a city-enriched airport explains why it was recommended', (
+    tester,
+  ) async {
+    final backend = _backendWithPlaces([
+      _place(name: 'Alger Centre'),
+      _place(
+        id: 2050,
+        type: 'airport',
+        name: 'Houari Boumediene Airport',
+        parent: 'Alger',
+        iata: 'ALG',
+        searchRelation: 'serves_place',
+        searchContext: 'Alger Centre',
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algeria', query: 'alger');
+
+    expect(find.text('Alger Centre'), findsOneWidget);
+    expect(find.text('Houari Boumediene Airport'), findsOneWidget);
+    expect(find.text('Serves Alger Centre'), findsOneWidget);
+    expect(find.text('ALG'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Houari Boumediene Airport, Airport, A L G, Serves Alger Centre',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a proximity fallback is labelled as nearby in Arabic RTL', (
+    tester,
+  ) async {
+    final backend = _backendWithPlaces([
+      _place(
+        id: 2050,
+        type: 'airport',
+        name: 'مطار هواري بومدين',
+        parent: '',
+        iata: 'ALG',
+        searchRelation: 'nearby',
+        searchContext: 'الجزائر الوسطى',
+        searchDistanceKm: 16.4,
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+      locale: const Locale('ar'),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'الجزائر', query: 'الجزائر');
+
+    expect(find.text('بالقرب من الجزائر الوسطى'), findsOneWidget);
+    expect(find.text('ALG'), findsOneWidget);
+    expect(
+      Directionality.of(
+        tester.element(find.byType(CanonicalPlacePickerScreen)),
+      ),
+      TextDirection.rtl,
+    );
+  });
+
+  testWidgets('a served-airport explanation is localized in French', (
+    tester,
+  ) async {
+    final backend = _backendWithPlaces([
+      _place(
+        id: 2050,
+        type: 'airport',
+        name: 'Aéroport Houari Boumédiène',
+        iata: 'ALG',
+        searchRelation: 'serves_place',
+        searchContext: 'Alger Centre',
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+      locale: const Locale('fr'),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algérie', query: 'alger');
+
+    expect(find.text('Dessert Alger Centre'), findsOneWidget);
+  });
+
+  testWidgets('duplicate API rows never become duplicate choices', (
+    tester,
+  ) async {
+    final airport = _place(
+      id: 2050,
+      type: 'airport',
+      name: 'Houari Boumediene Airport',
+      iata: 'ALG',
+      searchRelation: 'serves_place',
+      searchContext: 'Alger Centre',
+    );
+    final backend = _backendWithPlaces([airport, airport]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algeria', query: 'alger');
+
+    expect(find.byType(PlaceResultRow), findsOneWidget);
+    expect(find.text('Houari Boumediene Airport'), findsOneWidget);
   });
 
   testWidgets('a commune never renders as two copies of its own name', (

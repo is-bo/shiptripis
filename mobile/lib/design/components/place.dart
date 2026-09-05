@@ -98,9 +98,31 @@ String placeContext(BuildContext context, CanonicalPlace place) {
   return tiered;
 }
 
+/// Why an airport was recommended for this search. This is deliberately used
+/// only on result rows: after selection, the place goes back to showing its
+/// durable administrative context rather than a stale explanation of an old
+/// query.
+String placeSearchContext(BuildContext context, CanonicalPlace place) {
+  final relatedName = place.searchContextName?.trim() ?? '';
+  if (place.isAirport && relatedName.isNotEmpty) {
+    return switch (place.searchRelation) {
+      CanonicalPlaceSearchRelation.servesPlace =>
+        L.of(context).locationAirportServesPlace(relatedName),
+      CanonicalPlaceSearchRelation.nearby =>
+        L.of(context).locationAirportNearPlace(relatedName),
+      _ => placeContext(context, place),
+    };
+  }
+  return placeContext(context, place);
+}
+
 /// What a screen reader should hear for a whole row: the place, whether it is
 /// an airport, its code spelled as a code, and its context.
-String placeSemanticLabel(BuildContext context, CanonicalPlace place) {
+String placeSemanticLabel(
+  BuildContext context,
+  CanonicalPlace place, {
+  bool searchResult = false,
+}) {
   final l = L.of(context);
   final iata = place.iataCode;
   return [
@@ -108,7 +130,9 @@ String placeSemanticLabel(BuildContext context, CanonicalPlace place) {
     if (place.isAirport) l.locationTypeAirport,
     if (place.isAirport && iata != null && iata.isNotEmpty)
       iata.split('').join(' '),
-    placeContext(context, place),
+    searchResult
+        ? placeSearchContext(context, place)
+        : placeContext(context, place),
   ].where((part) => part.isNotEmpty).join(', ');
 }
 
@@ -308,7 +332,7 @@ class PlaceResultRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: placeSemanticLabel(context, place),
+      label: placeSemanticLabel(context, place, searchResult: true),
       onTap: onTap,
       child: ExcludeSemantics(
         child: AppCard(
@@ -346,7 +370,7 @@ class PlaceResultRow extends StatelessWidget {
                         ],
                         Flexible(
                           child: Text(
-                            placeContext(context, place),
+                            placeSearchContext(context, place),
                             style: text.bodySmall?.copyWith(
                               color: c.textSecondary,
                             ),

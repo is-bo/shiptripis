@@ -4263,6 +4263,18 @@ abstract class L {
   /// **'Airport'**
   String get locationTypeAirport;
 
+  /// No description provided for @locationAirportServesPlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Serves {place}'**
+  String locationAirportServesPlace(String place);
+
+  /// No description provided for @locationAirportNearPlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Near {place}'**
+  String locationAirportNearPlace(String place);
+
   /// No description provided for @locationTypeLocality.
   ///
   /// In en, this message translates to:

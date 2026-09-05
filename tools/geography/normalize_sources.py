@@ -1160,6 +1160,77 @@ def derive_airport_mappings(manifest: dict[str, Any]) -> None:
         )
 
 
+def add_reviewed_served_locality_aliases(manifest: dict[str, Any]) -> None:
+    """Project explicitly reviewed mapping aliases onto canonical localities.
+
+    This is deliberately opt-in data on a reviewed airport mapping.  Parsing an
+    airport display name or blindly treating every municipality hint as a city
+    alias would recreate the ambiguity the mapping catalogue exists to remove.
+    """
+
+    places = {
+        (row["source"], str(row["source_id"])): row for row in manifest["places"]
+    }
+    existing_source_ids = {
+        (row.get("source"), row.get("source_id"))
+        for row in manifest["alternate_names"]
+    }
+    existing_aliases = {
+        (
+            row.get("place_source", row.get("source")),
+            str(row.get("place_source_id", "")),
+            str(row.get("language") or "und").casefold(),
+            _name_key(str(row.get("name") or "")),
+        )
+        for row in manifest["alternate_names"]
+    }
+    for mapping in manifest["airport_mappings"]:
+        aliases = mapping.get("served_locality_aliases", [])
+        if not isinstance(aliases, list) or any(
+            not isinstance(alias, dict) for alias in aliases
+        ):
+            raise ValueError("served_locality_aliases must be a list of objects")
+        if aliases and mapping.get("relationship_type", "served") != "served":
+            raise ValueError("Only served airport mappings may define locality aliases")
+        locality_key = (
+            mapping.get("locality_source", mapping.get("source")),
+            str(mapping.get("locality_source_id", "")),
+        )
+        locality = places.get(locality_key)
+        if aliases and (locality is None or locality["place_type"] != "locality"):
+            raise ValueError("A served locality alias requires a valid locality mapping")
+        for index, alias in enumerate(aliases):
+            name = str(alias.get("name") or "").strip()
+            language = str(alias.get("language") or "und").casefold().strip()
+            if not name or not _name_key(name):
+                raise ValueError("A served locality alias requires a searchable name")
+            source = mapping.get("source", "shiptrip-airport-locality-review")
+            source_id = f"{mapping.get('source_id', '')}:locality-alias:{index}"
+            source_key = (source, source_id)
+            if source_key in existing_source_ids:
+                raise ValueError(f"Duplicate reviewed locality alias source {source_key}")
+            alias_key = (*locality_key, language, _name_key(name))
+            if alias_key in existing_aliases:
+                raise ValueError(f"Duplicate reviewed locality alias {alias_key}")
+            existing_source_ids.add(source_key)
+            existing_aliases.add(alias_key)
+            manifest["alternate_names"].append(
+                {
+                    "place_source": locality["source"],
+                    "place_source_id": locality["source_id"],
+                    "name": name,
+                    "language": language,
+                    "source": source,
+                    "source_id": source_id,
+                    "source_version": mapping.get("source_version", YEAR),
+                    "metadata": {
+                        "review_basis": str(alias.get("review_basis") or ""),
+                        "airport_mapping_source_id": mapping.get("source_id", ""),
+                    },
+                }
+            )
+
+
 def validate_manifest(manifest: dict[str, Any]) -> None:
     """Fail closed on the launch-country and identity invariants."""
 
@@ -1427,6 +1498,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
     derive_airport_mappings(manifest)
+    add_reviewed_served_locality_aliases(manifest)
     validate_manifest(manifest)
     return manifest
 

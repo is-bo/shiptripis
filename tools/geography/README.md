@@ -60,18 +60,36 @@ is a hard normalizer error, not an airport display-name guess. The output gate
 also requires the exact country counts (DZ 31, FR 49, ES 42, DE 39) and one
 primary `served` mapping for every airport.
 
-The verified manifest contains 56,134 places, 3,833 source-backed alternate
-names and 165 airport/locality relationships: 161 primary served mappings plus
+The verified manifest contains 56,134 places, 3,834 source-backed or explicitly
+reviewed alternate names and 165 airport/locality relationships: 161 primary
+served mappings plus
 four physical-context mappings. Thus all 161 active/selectable airports have a
 deterministic matching locality. CDG and ORY resolve to Paris; ALG resolves to
 the canonical Alger Centre commune under the reviewed commercial Algiers
 policy. The checked mapping is imported as data and can be revised without
 changing airport identity.
 
+Reviewed mapping rows may define `served_locality_aliases` when the mapping's
+source evidence establishes a commercial-city name that the locality source
+does not carry. The normalizer projects these as ordinary alternate-name rows
+with mapping provenance. ALG currently contributes the OurAirports/reviewed
+English `Algiers` alias to Alger Centre. This field is opt-in: airport display
+names and raw municipality hints are never parsed into aliases automatically.
+
 The runtime rule is intentionally small: a locality matches itself and an
 airport matches its single active primary served locality. Preferred exact
 `Location` coordinates are operational details only and never participate in
 that identity comparison. Nearby/radius compatibility is not implemented.
+
+Phase 8F-F2 reuses those imported `served` rows for search recommendations. A
+city query returns its direct canonical locality first and may add up to three
+airports whose active mapping serves it. If a matched locality has no served
+airport row but does have reviewed coordinates, the API may recommend an active
+selectable airport within 100 km; it computes Haversine distance against the
+bounded airport subset for the selected country. This fallback is not written
+back to the catalogue and never participates in matching. F2 adds only the
+reviewed ALG `Algiers` locality alias described above; airport identities,
+associations and matching mappings are unchanged.
 
 ## What ships in the release
 

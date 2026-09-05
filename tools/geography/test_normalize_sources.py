@@ -123,6 +123,41 @@ class AirportPolicyTests(unittest.TestCase):
 
         self.assertEqual([place["source_id"] for place in manifest["places"]], ["1"])
 
+    def test_reviewed_served_locality_alias_is_projected_without_name_parsing(self):
+        manifest = {
+            "places": [
+                {
+                    "source": "commune",
+                    "source_id": "1601",
+                    "place_type": "locality",
+                    "name": "Alger Centre",
+                }
+            ],
+            "alternate_names": [],
+            "airport_mappings": [
+                {
+                    "source": "reviewed-map",
+                    "source_id": "alg-served",
+                    "source_version": "2026",
+                    "locality_source": "commune",
+                    "locality_source_id": "1601",
+                    "relationship_type": "served",
+                    "served_locality_aliases": [
+                        {
+                            "name": "Algiers",
+                            "language": "en",
+                            "review_basis": "reviewed test",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        normalizer.add_reviewed_served_locality_aliases(manifest)
+
+        self.assertEqual(manifest["alternate_names"][0]["name"], "Algiers")
+        self.assertEqual(manifest["alternate_names"][0]["place_source_id"], "1601")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,7 +38,7 @@ from apps.locations.models import GeographyCatalogueImport, Place
 #: and that has to be a deliberate reviewed change with this constant updated in
 #: the same commit, not a quiet one that lands on a phone.
 REVIEWED_MANIFEST_SHA256 = (
-    "b4aad209f4ae7ecb264fc9ae4b5d9b4b61b7ff9d918ca470729db93d1abb7692"
+    "47bf4f761cd7db1063a76abcc975a0579077fb29b888607661efd35f71288cd2"
 )
 
 #: The Phase 8B/8C reviewed coverage, per `docs/GEOGRAPHY_CATALOGUE.md`.
@@ -80,7 +80,7 @@ class BundledManifestTests(TestCase):
 
         assert counted == REVIEWED_COUNTS
         assert len(self.manifest["places"]) == 56_134
-        assert len(self.manifest["alternate_names"]) == 3_833
+        assert len(self.manifest["alternate_names"]) == 3_834
         assert {row["code"] for row in self.manifest["countries"]} == {
             "DZ",
             "FR",

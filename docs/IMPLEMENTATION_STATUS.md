@@ -4224,5 +4224,44 @@ ordering; production-safety/static checks **37 passed**; Ruff,
 test and build clean. Flutter format and analysis are clean, with the final
 full suite at **418 passed**.
 
-No deployment or APK/AAB build was performed. Phase 8F-F2 through 8F-F6 were
-not started.
+No deployment or APK/AAB build was performed for Phase 8F-F1.
+
+## Phase 8F-F2 — nearby airport recommendations for location search
+
+Phase 8F-F2 is implemented locally. The shared geography endpoint previously
+matched only each result's own canonical/alternate text, so Jijel appeared to
+work because `Jijel Ferhat Abbas Airport` contains the query while `Houari
+Boumediene Airport` contains neither Alger nor Algiers. The existing explicit
+airport/locality mapping was already imported and used for matching identity,
+but it was not used for search discovery.
+
+`GET /api/geography/places` now ranks the best direct locality first, enriches
+airport-capable searches from active `SERVED` mappings, and uses a bounded
+100 km Haversine fallback only for matched localities with reviewed coordinates
+and no served association. Expansion is capped at eight equal-rank locality
+seeds and three airports. The fallback scans only active selectable airport
+rows (31–49 with the mobile country filter), not the 56k-place catalogue.
+Results include safe `search_relation`, `search_context` and optional distance
+metadata. The Flutter shared picker renders localized “Serves …” / “Near …”
+context while retaining its airport glyph, Airport label, LTR IATA badge,
+cancellation generation, RTL behavior and canonical selected ID; duplicate API
+rows are defensively collapsed by ID.
+
+The reviewed mapping schema now supports explicit `served_locality_aliases`;
+ALG contributes the source-backed/reviewed English `Algiers` name to Alger
+Centre. The manifest therefore moves from 3,833 to 3,834 alternate names with a
+new pinned digest, while airport identities and associations remain unchanged.
+There is no migration. Journey create/edit (including its
+airport-only flight correction) and DeliveryRequest origin/destination both
+already use this one picker/repository, so they receive the same behavior.
+Canonical-locality equality in matching is untouched; proximity is never
+stored or consulted by compatibility.
+
+Local release gates are green: PostgreSQL 16 Django **1285 passed / 34 skipped**
+(including matching and finance concurrency), Ruff, `makemigrations --check`
+and Django system check; the geography normalizer unit suite is **4 passed** and
+the reviewed manifest/digest gates pass. Flutter format and
+`flutter analyze --fatal-infos` are clean, the focused shared-picker plus
+Journey/DeliveryRequest integration run is **86 passed**, and the full Flutter
+suite is **422 passed**. No deployment or APK/AAB build was performed. Phases
+8F-F3, F4, F5 and F6 were not started.

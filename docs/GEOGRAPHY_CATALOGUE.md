@@ -74,7 +74,8 @@ The normalizer records these URLs and versions in the generated manifest:
   unscheduled military/private/general-aviation fields are excluded.
 
 The verified manifest contains 56,134 places: 55,973 locality/admin rows plus
-the 161 airports, and 3,833 source-backed alternate names. In exact terms it
+the 161 airports, and 3,834 source-backed or explicitly reviewed alternate
+names. In exact terms it
 contains DZ 69/1,541, FR 119/34,875, ES 71/8,132 and DE 417/10,749
 admin/locality records. Every airport has a canonical admin parent established
 through reviewed ISO-region crosswalks. Phase 8C produces 165 inspectable
@@ -97,7 +98,12 @@ idempotently. Existing rows are updated by source identity, so renames preserve
 internal IDs; additions are inserted; obsolete rows can be marked inactive
 with `--deactivate-missing` and an explicit source list. Every row records the
 source version. Bulk geography is not hard-coded in migrations. A reviewed
-airport mapping file can be supplied as `airport_mappings` when available.
+airport mapping file can be supplied as `airport_mappings` when available. An
+explicit served mapping may also carry reviewed `served_locality_aliases`; the
+normalizer projects those onto the mapped canonical locality with mapping
+provenance. This is used for the source-backed English `Algiers` name attached
+to the reviewed ALG commercial context and is never inferred by parsing an
+airport display name or blindly trusting every municipality hint.
 The source PDF parser dependency is isolated in
 `tools/geography/requirements.txt`; source files and generated bulk manifests
 are release artefacts, not migration payloads. Each input SHA-256 is written to
@@ -111,6 +117,20 @@ The API is intentionally bounded:
   filters. Results include parent context, stable/source IDs, airport labels,
   the backend-owned matching locality and availability for matching. Unmapped
   airports are excluded from selectable airport searches.
+- A query of at least two normalized characters also enriches airport-capable
+  searches from the best-matching locality cohort. Active explicit `SERVED`
+  mappings are used first. Only when a matched locality has no served-airport
+  mapping and has reviewed coordinates does search consider active selectable
+  airports within 100 km using server-side Haversine distance. At most eight
+  equal-rank locality seeds and three related airports are considered; with the
+  mobile country filter the fallback scans only that country's 31–49 airport
+  rows, never all 56k places.
+- Search order is exact canonical name, exact source-backed alias, the best
+  direct locality match, served airport, nearby airport, then broader canonical
+  and alias prefixes. One `Place` appears at most once. Search responses expose
+  `search_relation` (`direct_match`, `serves_place` or `nearby`), safe
+  `search_context`, and an optional one-decimal `search_distance_km`; clients do
+  not infer associations from airport strings.
 - Parent context carries the parent's own tier as `parent_admin_level`
   alongside `parent_name` (and inside `matching_locality` / `served_locality`),
   taken verbatim from the reviewed source — `wilaya`, `region`, `department`,
@@ -129,6 +149,11 @@ canonical/alternate-name prefix search; a one-character query uses exact
 indexed matching, while punctuation-only queries are rejected. Pagination
 caps results at 100 and `select_related`/`prefetch_related` avoids N+1
 serialization. This intentionally avoids a mandatory search extension.
+
+Airport enrichment is recommendation UX only. The related airport remains its
+own canonical `Place`, and `matching_locality` continues to come solely from
+the active primary served mapping. The 100 km fallback never creates a mapping,
+changes an identity, or makes two nearby localities compatible.
 
 ## V1 matching and privacy
 

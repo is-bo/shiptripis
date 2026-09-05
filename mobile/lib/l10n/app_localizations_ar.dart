@@ -2392,6 +2392,16 @@ class LAr extends L {
   String get locationTypeAirport => 'مطار';
 
   @override
+  String locationAirportServesPlace(String place) {
+    return 'يخدم $place';
+  }
+
+  @override
+  String locationAirportNearPlace(String place) {
+    return 'بالقرب من $place';
+  }
+
+  @override
   String get locationTypeLocality => 'بلدية';
 
   @override

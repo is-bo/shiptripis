@@ -32,6 +32,9 @@ class GeographyPlaceSerializer(serializers.ModelSerializer):
     served_locality = serializers.SerializerMethodField()
     matching_locality = serializers.SerializerMethodField()
     available_for_matching = serializers.SerializerMethodField()
+    search_relation = serializers.SerializerMethodField()
+    search_context = serializers.SerializerMethodField()
+    search_distance_km = serializers.SerializerMethodField()
 
     class Meta:
         model = Place
@@ -60,6 +63,9 @@ class GeographyPlaceSerializer(serializers.ModelSerializer):
             "served_locality",
             "matching_locality",
             "available_for_matching",
+            "search_relation",
+            "search_context",
+            "search_distance_km",
         )
         read_only_fields = fields
 
@@ -125,3 +131,34 @@ class GeographyPlaceSerializer(serializers.ModelSerializer):
             obj.place_type != Place.PlaceType.AIRPORT
             or self.get_served_locality(obj) is not None
         )
+
+    def _search_metadata(self, obj: Place) -> dict | None:
+        # A direct textual match always owns its presentation, even when the
+        # same airport was also discovered through a served/nearby expansion.
+        if getattr(obj, "_search_rank", None) in {0, 1}:
+            return {"relation": "direct_match", "context": None, "distance_km": None}
+        metadata = self.context.get("search_metadata", {}).get(obj.pk)
+        if metadata is not None:
+            return metadata
+        if getattr(obj, "_search_rank", None) is not None:
+            return {"relation": "direct_match", "context": None, "distance_km": None}
+        return None
+
+    def get_search_relation(self, obj: Place) -> str | None:
+        metadata = self._search_metadata(obj)
+        return metadata["relation"] if metadata else None
+
+    def get_search_context(self, obj: Place) -> dict | None:
+        metadata = self._search_metadata(obj)
+        context = metadata.get("context") if metadata else None
+        if context is None:
+            return None
+        return {
+            "id": context.id,
+            "name": context.name,
+            "display_label": context.display_label,
+        }
+
+    def get_search_distance_km(self, obj: Place) -> float | None:
+        metadata = self._search_metadata(obj)
+        return metadata.get("distance_km") if metadata else None

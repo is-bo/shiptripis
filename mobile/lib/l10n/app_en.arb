@@ -1073,6 +1073,22 @@
     }
   },
   "locationTypeAirport": "Airport",
+  "locationAirportServesPlace": "Serves {place}",
+  "@locationAirportServesPlace": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "locationAirportNearPlace": "Near {place}",
+  "@locationAirportNearPlace": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
   "locationTypeLocality": "Locality",
   "locationUseMap": "Choose on map",
   "locationConfirmPoint": "Use this point",

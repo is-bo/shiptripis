@@ -21,12 +21,16 @@ void main() {
       'latitude': '49.009700',
       'longitude': '2.547900',
       'matching_locality': {'id': 75056, 'name': 'Paris'},
+      'search_relation': 'serves_place',
+      'search_context': {'id': 75056, 'name': 'Paris'},
     });
 
     expect(place.isAirport, isTrue);
     expect(place.iataCode, 'CDG');
     expect(place.matchingLocalityId, 75056);
     expect(place.matchingLocalityName, 'Paris');
+    expect(place.searchRelation, CanonicalPlaceSearchRelation.servesPlace);
+    expect(place.searchContextName, 'Paris');
   });
 
   test('Sender draft can stay flexible or include scoped preferred points', () {

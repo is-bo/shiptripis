@@ -695,6 +695,8 @@
   "placeTierState": "ولاية {name}",
   "placeTierDistrict": "دائرة {name}",
   "locationTypeAirport": "مطار",
+  "locationAirportServesPlace": "يخدم {place}",
+  "locationAirportNearPlace": "بالقرب من {place}",
   "locationTypeLocality": "بلدية",
   "locationUseMap": "اختر من الخريطة",
   "locationConfirmPoint": "استخدم هذه النقطة",

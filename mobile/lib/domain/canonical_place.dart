@@ -2,6 +2,8 @@ import 'json.dart';
 
 enum CanonicalPlaceType { locality, airport, adminRegion, unknown }
 
+enum CanonicalPlaceSearchRelation { directMatch, servesPlace, nearby, unknown }
+
 /// Stable geography-catalogue identity.  Names are presentation only; the
 /// server resolves [matchingLocalityId] and compatibility never compares text.
 class CanonicalPlace {
@@ -19,10 +21,14 @@ class CanonicalPlace {
     this.latitude,
     this.longitude,
     this.availableForMatching = true,
+    this.searchRelation = CanonicalPlaceSearchRelation.unknown,
+    this.searchContextName,
+    this.searchDistanceKm,
   });
 
   factory CanonicalPlace.fromJson(Map<String, dynamic> json) {
     final matching = readObject(json['matching_locality']);
+    final searchContext = readObject(json['search_context']);
     return CanonicalPlace(
       id: readInt(json['id']) ?? 0,
       countryCode: readText(json['country_code']),
@@ -45,6 +51,13 @@ class CanonicalPlace {
       latitude: readDouble(json['latitude']),
       longitude: readDouble(json['longitude']),
       availableForMatching: json['available_for_matching'] != false,
+      searchRelation: readEnum(
+        json['search_relation'],
+        CanonicalPlaceSearchRelation.values,
+        fallback: CanonicalPlaceSearchRelation.unknown,
+      ),
+      searchContextName: readString(searchContext?['name']),
+      searchDistanceKm: readDouble(json['search_distance_km']),
     );
   }
 
@@ -66,6 +79,12 @@ class CanonicalPlace {
   final double? latitude;
   final double? longitude;
   final bool availableForMatching;
+
+  /// Why this airport appeared for the current search. Presentation only:
+  /// selection and matching continue to use [id] and [matchingLocalityId].
+  final CanonicalPlaceSearchRelation searchRelation;
+  final String? searchContextName;
+  final double? searchDistanceKm;
 
   bool get isAirport => type == CanonicalPlaceType.airport;
 

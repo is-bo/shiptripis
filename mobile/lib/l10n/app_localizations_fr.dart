@@ -2402,6 +2402,16 @@ class LFr extends L {
   String get locationTypeAirport => 'Aéroport';
 
   @override
+  String locationAirportServesPlace(String place) {
+    return 'Dessert $place';
+  }
+
+  @override
+  String locationAirportNearPlace(String place) {
+    return 'Près de $place';
+  }
+
+  @override
   String get locationTypeLocality => 'Localité';
 
   @override

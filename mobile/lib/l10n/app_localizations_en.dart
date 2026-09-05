@@ -2387,6 +2387,16 @@ class LEn extends L {
   String get locationTypeAirport => 'Airport';
 
   @override
+  String locationAirportServesPlace(String place) {
+    return 'Serves $place';
+  }
+
+  @override
+  String locationAirportNearPlace(String place) {
+    return 'Near $place';
+  }
+
+  @override
   String get locationTypeLocality => 'Locality';
 
   @override

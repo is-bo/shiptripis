@@ -695,6 +695,8 @@
   "placeTierState": "{name} (Land)",
   "placeTierDistrict": "{name} (district)",
   "locationTypeAirport": "Aéroport",
+  "locationAirportServesPlace": "Dessert {place}",
+  "locationAirportNearPlace": "Près de {place}",
   "locationTypeLocality": "Localité",
   "locationUseMap": "Choisir sur la carte",
   "locationConfirmPoint": "Utiliser ce point",
