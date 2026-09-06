@@ -1,7 +1,7 @@
 # ShipTrip V1 Implementation Status
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
-Latest repair phase: Phase 8F-F4 real-time chat and live state **IMPLEMENTED / DEVICE QA PENDING**; F1/F2/F3 remain included.
+Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -4381,3 +4381,144 @@ deployment was required. Flutter formatting and `flutter analyze --fatal-infos`
 are clean, the focused F5/F4 regression run is **27 passed**, the complete
 Flutter suite is **495 passed**, and the UI quality detector reports no
 findings. F6 remains outside this phase.
+
+## Phase 8F-F6 — final consolidation, production deployment and one profile APK
+
+**Status:** F1–F5 validated as one release candidate, one integration regression
+found and fixed, `v1.0.0-rc.9+b3bad99` deployed to production, and exactly one
+private profile ARM64 APK built. Physical phone push receipt remains the
+owner's step and is not claimed here.
+
+### The audit found one real integration defect
+
+Each phase was re-read against current repository truth, and the seams between
+them checked directly. F1 (11 checks), F2 (4), F3 (4), F4 (9) and F5 (14) all
+hold at HEAD. One defect was genuine and is fixed in `b3bad99`.
+
+- **Offer pushes opened the wrong screen.** F4 began publishing
+  `offer.created` / `offer.updated` through `match_resources`, which carries
+  `journey_id` beside `match_id` so the traveler's journey can be invalidated
+  live. Both channels are in `_PUSH_SPECS` and `journey_id` is an allowlisted
+  FCM data field, so the identifier reached `pushLocation`, whose generic
+  ladder answers `journey_id` before `match_id`. A sender tapping "New offer"
+  landed on the traveler's journey — which `apps/trips/views.py` serves only
+  while ACTIVE and past its verification gates, so the tap frequently ended on
+  an error screen. `pushLocation` now routes `offer.*` to its match explicitly,
+  beside the existing `chat.message.new` case; `offer.accepted` is left to the
+  `deal_id` branch above it, because once a Deal exists the Deal is
+  authoritative. The payload is unchanged — `journey_id` is doing real work for
+  live invalidation and was not the bug. The regression test uses the real
+  production payload rather than the previous partial fixture.
+
+### Reported, deliberately not changed in F6
+
+- **MAJOR — proximity airports from another canonical city.** The documented
+  100 km fallback offers any selectable airport near the matched city: a
+  "Jijel" search returns QSF (Ain Arnat, which serves Setif) labelled only
+  "Near Jijel", and `search_distance_km` is serialized but never rendered.
+  Choosing it silently sets the matching locality to Setif. This is the
+  documented F2 rule (`docs/GEOGRAPHY_CATALOGUE.md`), so correcting it is a
+  product and UX change and belongs to a later phase, not to a consolidation
+  release.
+- **Catalogue truth correction.** GJL does not serve Jijel (it serves Taher,
+  14.1 km) and ORN does not serve Oran (Es Senia, 3.0 km); both appear only as
+  proximity hints, which confer no compatibility. ALG, CZL, CDG/ORY, BCN, FRA
+  and HHN are genuine served links.
+- Six MINOR F5 observations (traveler dead-end between buffer close and code
+  release, a stale `handover/services.py` docstring, no unregister on OS
+  permission revocation, English-only OS channel names, no notification icon
+  drawable) and four MINOR F4 observations (`deal.updated` writing a bodyless
+  inbox row, chat send without an idempotency key, socket teardown on
+  transient `inactive`, no mid-life socket-drop test) are recorded for Codex.
+
+### Rollback constraint introduced by this release
+
+`boosts.0002` renames `price_eur_cents` to `amount_eur_cents`. Once applied, an
+application-only rollback to `v1.0.0-rc.8+3655cfc` breaks every
+`BoostPurchase` query, so recovery from this release is a forward fix under
+rule 3 of `ROLLBACK_RUNBOOK.md`, not an image rollback. The other four
+migrations are additive or self-reversing.
+
+### Gates
+
+CI run `34059675676` on `b3bad99` is green on all six required jobs: Django
+**1300 passed / 34 skipped**, Flutter **496 passed** with `dart format` and
+`flutter analyze --fatal-infos` clean, Go unit `-race`, Go integration on real
+Redis **287 passed / 0 skipped**, schema drift, and production config + static
+web **37 passed**. Locally the same PostgreSQL suite reports **1300 passed / 34
+skipped**, the focused F1–F5 tier **205 passed**, the matching and finance
+concurrency files **189 passed / 24 skipped** unweakened, Ruff and
+`makemigrations --check` clean.
+
+A first local concurrency run reported 31 failures. The cause was two pytest
+processes sharing one embedded cluster — `database "shiptrip_test" is being
+accessed by other users` — not the code; run serially the tier is clean. As in
+8F-E, local `gofmt -l` lists files only because `core.autocrlf` gives this
+Windows worktree CRLF endings; the repository stores LF and Linux CI is clean.
+
+### Release, deployment and artifact
+
+- **Final SHA** `b3bad9959ba6bad0a2b4c737d782442d46e9bc93`.
+- **Release** `v1.0.0-rc.9+b3bad99`, deployed to Railway `shiptripis` /
+  `production` / `shiptrip` as **`e47adbe9-0b54-4d11-a602-a644c2620a9b`** on the
+  existing combined topology. No service was created and no managed Redis was
+  added. Exactly the five predicted migrations applied in dependency order —
+  `finance.0007`, `core.0009`, `boosts.0002`, `chat.0002` (the concurrent
+  keyset index) and `deals.0007`. `/healthz` and `/readyz` answer 200 with
+  database, migrations and rate-limit cache `ok`; EN/FR/AR routes answer 200
+  with CSP, HSTS, `X-Frame-Options: DENY` and nosniff present.
+- **Workers.** The launcher installed the Admin credential for
+  `shiptrip-7c28f`, and the worker logged `fcm firebase sender ready`, `fcm
+  consumer enabled` and `fcm consumer started`. Chat, KYC, gRPC, the
+  reservation releaser and the finance worker all started;
+  `email consumer disabled (EMAIL_ENABLED=false)` is unchanged. Payment
+  configuration was read only: Stripe TEST/EUR with
+  `adaptive_pricing[enabled]=false`, Chargily TEST against the test API base
+  with DZD settlement. No live-money transaction was performed.
+- **Android** workflow run `34060573670` on the same SHA, `build_type=profile`,
+  `apk_architecture=arm64`,
+  `api_base_url=https://shiptrip-production.up.railway.app`. The release and
+  debug steps were skipped, so there is exactly one artifact and no AAB.
+- **Artifact** `shiptrip-v1.0.0-rc.9-b3bad99-profile-arm64`, APK
+  `shiptrip-v1.0.0-rc.9-b3bad99-profile-arm64.apk`, **36,062,547 bytes
+  (34.39 MiB)**, SHA-256
+  `420617486c3bda6d9faf8d99dd19bc3f81aebb4dad4a9611ecaafdd4e992a490` —
+  recomputed locally and matching the runner's `SHA256SUMS.txt`.
+- **Proved profile from the artifact itself**: AOT `lib/arm64-v8a/libapp.so`
+  and `libvmservice_snapshot.so` present, `kernel_blob.bin` and
+  `libVkLayer_khronos_validation.so` absent. ARM64 targeting held: 26.15 MiB
+  under `arm64-v8a` against 0.10 / 0.06 MiB JNI shims for `x86_64` /
+  `armeabi-v7a`.
+- **Build inputs reached the binary.** The metadata step logged `Firebase
+  client configuration: complete`, and all four public client identifiers plus
+  `https://shiptrip-production.up.railway.app` are present in the Dart AOT
+  snapshot, with no `10.0.2.2` development default. The manifest carries
+  `POST_NOTIFICATIONS`, the Firebase messaging service/receiver/background
+  stack, `com.google.firebase.MESSAGING_EVENT` and the `deliveries` default
+  channel under `com.shiptrip.shiptrip`. A thirteen-pattern secret scan over
+  all 477 entries matched no credential; the only hits were long hex runs in
+  `classes.dex` and `libflutter.so`, which are cryptographic constant and byte
+  lookup tables.
+- **Signer, and why the old build must go first.** Signed v2 only with
+  `CN=Android Debug, O=Android` — the runner's auto-generated debug key —
+  certificate SHA-256
+  `dec4b5419daad79c73996f633c7bba458f520164d1520246cdf3647648188065`. That
+  differs from the 8F-E build's `aca365b7...`, so Android refuses an in-place
+  update with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Uninstall the previously
+  installed ShipTrip QA build before installing this one. Signing policy was
+  not changed to avoid that.
+
+### Owner-verifiable items this session could not read
+
+`/api/admin/health/deep` answers 401 without an operator login, so the FCM
+worker heartbeat (`fcm:worker:active`), stream lag and pending counts, the
+active-device count, the per-class storage probe (parcel, proof, dispute, KYC)
+and the Stripe/Chargily `credential_mode` were not read. The worker start lines
+prove Firebase Admin initialisation against the real credential; they are not a
+substitute for those reads, and no storage probe result is claimed.
+
+**Physical phone push receipt: pending owner QA.** No `PushDevice` row can
+exist until this APK is installed and a signed-in user grants notification
+permission, so no Django to stream to Firebase to handset test was run and none
+is claimed. This remains a private pre-launch candidate; public launch gates are
+unchanged.
