@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
@@ -9,9 +11,16 @@ import 'firebase_options.dart';
 enum PushPermission {
   unavailable,
   notDetermined,
-  denied,
+  deniedRequestable,
+  settingsRequired,
   authorized,
   provisional,
+}
+
+enum PushAvailability {
+  available,
+  configurationIncomplete,
+  initializationFailed,
 }
 
 class PushMessage {
@@ -28,6 +37,7 @@ class PushMessage {
 
 abstract interface class PushMessaging {
   bool get available;
+  PushAvailability get availability;
   Stream<String> get tokenRefresh;
   Stream<PushMessage> get foregroundMessages;
   Stream<PushMessage> get openedMessages;
@@ -38,7 +48,12 @@ abstract interface class PushMessaging {
 }
 
 class DisabledPushMessaging implements PushMessaging {
-  const DisabledPushMessaging();
+  const DisabledPushMessaging({
+    this.availability = PushAvailability.configurationIncomplete,
+  });
+
+  @override
+  final PushAvailability availability;
 
   @override
   bool get available => false;
@@ -66,7 +81,11 @@ class FirebasePushMessaging implements PushMessaging {
 
   static Future<PushMessaging> initialize() async {
     final options = ShipTripFirebaseOptions.current;
-    if (options == null) return const DisabledPushMessaging();
+    if (options == null) {
+      return const DisabledPushMessaging(
+        availability: PushAvailability.configurationIncomplete,
+      );
+    }
     try {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp(options: options);
@@ -80,13 +99,18 @@ class FirebasePushMessaging implements PushMessaging {
         sound: false,
       );
       return FirebasePushMessaging(messaging);
-    } on FirebaseException {
-      return const DisabledPushMessaging();
+    } on Object {
+      return const DisabledPushMessaging(
+        availability: PushAvailability.initializationFailed,
+      );
     }
   }
 
   @override
   bool get available => true;
+
+  @override
+  PushAvailability get availability => PushAvailability.available;
 
   @override
   Stream<PushMessage> get foregroundMessages =>
@@ -114,24 +138,63 @@ class FirebasePushMessaging implements PushMessaging {
   );
 
   @override
-  Future<PushPermission> requestPermission() async => _permission(
-    (await _messaging.requestPermission(
+  Future<PushPermission> requestPermission() async {
+    final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
-    )).authorizationStatus,
-  );
+    );
+    return _permission(settings.authorizationStatus);
+  }
 
-  static PushPermission _permission(AuthorizationStatus status) =>
-      switch (status) {
-        AuthorizationStatus.authorized => PushPermission.authorized,
-        AuthorizationStatus.provisional => PushPermission.provisional,
-        AuthorizationStatus.denied ||
-        AuthorizationStatus.deniedPermanently => PushPermission.denied,
-        AuthorizationStatus.notDetermined => PushPermission.notDetermined,
-      };
+  static Future<PushPermission> _permission(AuthorizationStatus status) async {
+    var androidRuntimePermissionSupported = false;
+    if (status == AuthorizationStatus.denied &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      androidRuntimePermissionSupported =
+          await _androidRuntimePermissionSupported();
+    }
+    return classifyPushPermission(
+      status,
+      platform: defaultTargetPlatform,
+      androidRuntimePermissionSupported: androidRuntimePermissionSupported,
+    );
+  }
 }
+
+const _notificationPermissionChannel = MethodChannel(
+  'com.shiptrip.shiptrip/notification_permission',
+);
+
+Future<bool> _androidRuntimePermissionSupported() async {
+  try {
+    return await _notificationPermissionChannel.invokeMethod<bool>(
+          'runtimePermissionSupported',
+        ) ??
+        false;
+  } on PlatformException {
+    return false;
+  } on MissingPluginException {
+    return false;
+  }
+}
+
+@visibleForTesting
+PushPermission classifyPushPermission(
+  AuthorizationStatus status, {
+  required TargetPlatform platform,
+  required bool androidRuntimePermissionSupported,
+}) => switch (status) {
+  AuthorizationStatus.authorized => PushPermission.authorized,
+  AuthorizationStatus.provisional => PushPermission.provisional,
+  AuthorizationStatus.notDetermined => PushPermission.notDetermined,
+  AuthorizationStatus.deniedPermanently => PushPermission.settingsRequired,
+  AuthorizationStatus.denied =>
+    platform == TargetPlatform.android && androidRuntimePermissionSupported
+        ? PushPermission.deniedRequestable
+        : PushPermission.settingsRequired,
+};
 
 final pushMessagingProvider = Provider<PushMessaging>(
   (_) => const DisabledPushMessaging(),

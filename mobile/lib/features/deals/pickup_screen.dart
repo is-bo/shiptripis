@@ -504,7 +504,11 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
   List<Widget> _confirmed(Deal deal, {required bool isSender}) {
     final l = L.of(context);
     final locale = Localizations.localeOf(context);
-    final at = deal.handover?.pickupConfirmedAt ?? deal.pickupConfirmedAt;
+    final handover = deal.handover;
+    final at = handover?.pickupConfirmedAt ?? deal.pickupConfirmedAt;
+    final availableAt =
+        handover?.deliveryCodeAvailableAt ?? deal.deliveryCodeAvailableAt;
+    final waiting = handover?.inDeliveryCodeBuffer ?? false;
 
     return [
       AppCard(
@@ -540,13 +544,25 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
       const SizedBox(height: AppSpace.xl),
 
       SectionHeader(title: l.pickupNextTitle),
-      InfoNotice(
-        message: isSender
-            ? l.pickupConfirmedSenderNext
-            : l.pickupConfirmedTravelerNext,
-        tone: StatusTone.progress,
-        icon: Icons.schedule_rounded,
-      ),
+      if (waiting)
+        LockedCodePanel(
+          title: l.deliverySafetyWaitingTitle,
+          body: isSender
+              ? l.deliverySafetyWaitingSenderBody
+              : l.deliverySafetyWaitingTravelerBody,
+          availableAt: availableAt,
+          onAvailable: availableAt == null
+              ? null
+              : () => ref.invalidate(dealDetailProvider(deal.id)),
+        )
+      else
+        InfoNotice(
+          message: isSender
+              ? l.pickupConfirmedSenderNext
+              : l.pickupConfirmedTravelerNext,
+          tone: StatusTone.progress,
+          icon: Icons.schedule_rounded,
+        ),
       const SizedBox(height: AppSpace.lg),
 
       AppButton(

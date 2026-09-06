@@ -33,6 +33,7 @@ class NotificationSettingsScreen extends ConsumerStatefulWidget {
 class _NotificationSettingsScreenState
     extends ConsumerState<NotificationSettingsScreen> {
   bool _saving = false;
+  bool _requesting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +49,14 @@ class _NotificationSettingsScreenState
           SectionHeader(title: l.pushPermissionHeading),
           _permissionNotice(context, runtime),
           const SizedBox(height: AppSpace.xl),
+          SectionHeader(title: l.pushPreferencesHeading),
+          Text(
+            l.pushPreferencesBody,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
           preferences.when(
             loading: () => const SkeletonDetail(),
             error: (error, _) => InlineFailure(
@@ -90,36 +99,120 @@ class _NotificationSettingsScreenState
     final l = L.of(context);
     if (!runtime.available) {
       return InfoNotice(
-        message: l.pushPermissionUnavailable,
+        message:
+            runtime.availability == PushAvailability.configurationIncomplete
+            ? l.pushPermissionUnavailable
+            : l.pushPermissionInitializationFailed,
         icon: Icons.notifications_off_outlined,
       );
     }
     return switch (runtime.permission) {
-      PushPermission.authorized || PushPermission.provisional => InfoNotice(
-        message: l.pushPermissionEnabled,
-        tone: StatusTone.good,
-        icon: Icons.notifications_active_outlined,
+      PushPermission.authorized ||
+      PushPermission.provisional => _grantedNotice(runtime),
+      PushPermission.deniedRequestable => _permissionAction(
+        message: l.pushPermissionDeniedRequestable,
+        label: l.pushEnableAction,
+        onPressed: _requestPermission,
       ),
-      PushPermission.denied => InfoNotice(
+      PushPermission.settingsRequired => _permissionAction(
         message: l.pushPermissionDenied,
-        tone: StatusTone.waiting,
-        icon: Icons.notifications_off_outlined,
-        actionLabel: l.pushOpenSettingsAction,
-        onAction: () =>
-            AppSettings.openAppSettings(type: AppSettingsType.notification),
+        label: l.pushOpenSettingsAction,
+        onPressed: _openSettings,
+        secondary: true,
       ),
-      PushPermission.notDetermined => InfoNotice(
+      PushPermission.notDetermined => _permissionAction(
         message: l.pushPermissionBody,
-        icon: Icons.notifications_none_rounded,
-        actionLabel: l.pushEnableAction,
-        onAction: () =>
-            ref.read(pushCoordinatorProvider.notifier).requestPermission(),
+        label: l.pushEnableAction,
+        onPressed: _requestPermission,
       ),
       PushPermission.unavailable => InfoNotice(
         message: l.pushPermissionBody,
         icon: Icons.notifications_none_rounded,
       ),
     };
+  }
+
+  Widget _permissionAction({
+    required String message,
+    required String label,
+    required VoidCallback onPressed,
+    bool secondary = false,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      InfoNotice(message: message, icon: Icons.notifications_none_rounded),
+      const SizedBox(height: AppSpace.md),
+      AppButton(
+        label: label,
+        icon: secondary ? Icons.settings_outlined : Icons.notifications_active,
+        variant: secondary
+            ? AppButtonVariant.secondary
+            : AppButtonVariant.primary,
+        isLoading: _requesting,
+        onPressed: _requesting ? null : onPressed,
+      ),
+    ],
+  );
+
+  Widget _grantedNotice(PushRuntimeState runtime) {
+    final l = L.of(context);
+    return switch (runtime.registration) {
+      PushRegistrationState.registered => InfoNotice(
+        message: l.pushPermissionEnabled,
+        tone: StatusTone.good,
+        icon: Icons.notifications_active_outlined,
+      ),
+      PushRegistrationState.failed => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InfoNotice(
+            message: l.pushRegistrationFailed,
+            tone: StatusTone.waiting,
+            icon: Icons.sync_problem_rounded,
+          ),
+          const SizedBox(height: AppSpace.md),
+          AppButton(
+            label: l.pushRetryRegistrationAction,
+            variant: AppButtonVariant.secondary,
+            icon: Icons.refresh_rounded,
+            onPressed: () =>
+                ref.read(pushCoordinatorProvider.notifier).retryRegistration(),
+          ),
+        ],
+      ),
+      PushRegistrationState.idle || PushRegistrationState.pending => InfoNotice(
+        message: l.pushRegistrationPending,
+        tone: StatusTone.progress,
+        icon: Icons.sync_rounded,
+      ),
+    };
+  }
+
+  Future<void> _requestPermission() async {
+    if (_requesting) return;
+    setState(() => _requesting = true);
+    try {
+      await ref.read(pushCoordinatorProvider.notifier).requestPermission();
+    } on Object catch (error) {
+      if (mounted) AppSnack.failure(context, error);
+    } finally {
+      if (mounted) setState(() => _requesting = false);
+    }
+  }
+
+  Future<void> _openSettings() async {
+    if (_requesting) return;
+    setState(() => _requesting = true);
+    try {
+      await AppSettings.openAppSettings(type: AppSettingsType.notification);
+      if (mounted) {
+        await ref.read(pushCoordinatorProvider.notifier).refreshPermission();
+      }
+    } on Object catch (error) {
+      if (mounted) AppSnack.failure(context, error);
+    } finally {
+      if (mounted) setState(() => _requesting = false);
+    }
   }
 
   Future<void> _update({

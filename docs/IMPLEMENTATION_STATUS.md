@@ -4352,3 +4352,32 @@ and corrected chat cursor/commit ordering and server-authorized code visibility.
 
 No APK/AAB build or deployment is part of F4. F5 notification-permission UX and
 safety-period wording, and F6, remain outside this phase.
+
+## Phase 8F-F5 — notification permission and post-pickup protection UX
+
+Phase 8F-F5 is implemented. Profile > Notifications now separates the
+operating-system permission from account-level notification preferences and
+requests permission only after the user's explicit action. Android runtime
+denials that remain requestable can retry the prompt; permanent denial, older
+Android notification blocking and iOS denial route to system settings. The
+screen refreshes after returning, keeps the app and in-app inbox usable when
+denied, preserves the non-optional essential category, and distinguishes
+incomplete Firebase configuration, initialization failure and device-token
+registration failure. Registration continues to use the existing authenticated
+installation API and can be retried without another permission prompt.
+
+The confusing post-pickup delivery CTA came from Deal timeline visibility
+being inferred from `picked_up` instead of the server's handover permissions.
+Deal, pickup and delivery screens now show the authoritative
+`delivery_code_available_at` safety wait with Sender/Traveler-specific EN, FR
+and AR copy. Countdown expiry and the existing live availability event only
+refetch; `can_reveal_delivery_code` and `can_submit_delivery_code` remain the
+sole action gates. Delivery confirmation shows the server's protection/payout
+window, and completed Deals retain no handover CTA. Delivery-code privacy,
+the 30-minute delay and the 48-hour payout hold are unchanged.
+
+No backend contract, migration, schema dump, Go/sqlc artifact, APK/AAB build or
+deployment was required. Flutter formatting and `flutter analyze --fatal-infos`
+are clean, the focused F5/F4 regression run is **27 passed**, the complete
+Flutter suite is **495 passed**, and the UI quality detector reports no
+findings. F6 remains outside this phase.

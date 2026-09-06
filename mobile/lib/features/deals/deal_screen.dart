@@ -93,6 +93,8 @@ class DealScreen extends ConsumerWidget {
 
                 _Urgent(deal: data, isSender: isSender),
 
+                _PostPickupWaiting(deal: data, isSender: isSender),
+
                 SectionHeader(title: l.timelineTitle),
                 LifecycleTimeline(
                   steps: _buildSteps(context, data, isSender: isSender),
@@ -148,6 +150,9 @@ class DealScreen extends ConsumerWidget {
     final pickedUp = deal.pickupConfirmedAt != null;
     final delivered = deal.deliveryConfirmedAt != null;
     final completed = deal.status == DealStatus.completed;
+    final deliveryActionAvailable =
+        (handover?.canSubmitDeliveryCode ?? false) ||
+        (handover?.canRevealDeliveryCode ?? false);
 
     return [
       LifecycleStep(
@@ -214,18 +219,18 @@ class DealScreen extends ConsumerWidget {
         label: l.dealStepDelivered,
         state: stateFor(
           done: delivered,
-          mine:
-              (handover?.canSubmitDeliveryCode ?? false) ||
-              (handover?.canRevealDeliveryCode ?? false),
-          reached: pickedUp,
+          mine: deliveryActionAvailable,
+          reached: pickedUp && !(handover?.inDeliveryCodeBuffer ?? false),
         ),
         timeLabel: at(deal.deliveryConfirmedAt),
         // The buffer is a real, explainable wait rather than a silence.
         detail: !delivered && (handover?.inDeliveryCodeBuffer ?? false)
             ? l.deliveryCodeLockedBody
             : null,
-        actionLabel: !delivered && pickedUp ? l.dealActionDelivery : null,
-        onAction: !delivered && pickedUp
+        actionLabel: !delivered && deliveryActionAvailable
+            ? l.dealActionDelivery
+            : null,
+        onAction: !delivered && deliveryActionAvailable
             ? () => context.openDelivery(deal.id)
             : null,
       ),
@@ -244,6 +249,40 @@ class DealScreen extends ConsumerWidget {
         timeLabel: at(deal.completedAt),
       ),
     ];
+  }
+}
+
+class _PostPickupWaiting extends ConsumerWidget {
+  const _PostPickupWaiting({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final handover = deal.handover;
+    if (deal.pickupConfirmedAt == null ||
+        deal.deliveryConfirmedAt != null ||
+        !(handover?.inDeliveryCodeBuffer ?? false)) {
+      return const SizedBox.shrink();
+    }
+
+    final l = L.of(context);
+    final availableAt =
+        handover?.deliveryCodeAvailableAt ?? deal.deliveryCodeAvailableAt;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: LockedCodePanel(
+        title: l.pickupConfirmedTitle,
+        body: isSender
+            ? l.deliverySafetyWaitingSenderBody
+            : l.deliverySafetyWaitingTravelerBody,
+        availableAt: availableAt,
+        onAvailable: availableAt == null
+            ? null
+            : () => ref.invalidate(dealDetailProvider(deal.id)),
+      ),
+    );
   }
 }
 

@@ -120,10 +120,22 @@ including unread counts and eligibility, without navigating away and back.
 ## Android, iOS, and client configuration
 
 Android has four normal-importance channels: Messages, Delivery updates,
-Account and verification, and Payments and payouts. Android 13 permission is
-requested only from Profile > Notifications after explanatory copy. A denial
-does not disable the app or in-app inbox, and that screen links to system
-notification settings.
+Account and verification, and Payments and payouts. The operating-system
+permission is requested only from the explicit action in Profile >
+Notifications; startup, sign-in and preference changes never display the
+prompt. Android 13 and newer may offer the prompt again after a requestable
+denial. A permanent denial, an older Android version whose notifications are
+disabled, or an iOS denial instead links to the app's system notification
+settings. Returning from settings refreshes the displayed permission state.
+A denial does not disable the app or its in-app inbox.
+
+The permission state and ShipTrip notification-type preferences are separate.
+Preferences control Messages and Marketplace delivery across the account;
+they cannot grant the OS permission, and essential lifecycle notifications
+remain enabled. After a grant, the client registers the Firebase token through
+`POST /api/notifications/devices`. The screen distinguishes an incomplete
+Firebase build, Firebase initialization failure and device-registration
+failure; only the last offers an in-app retry. Never log or render the token.
 
 The mobile build supplies public Firebase client identifiers with Dart
 defines: `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`,
@@ -136,6 +148,23 @@ The device model and Dart layer support iOS, but production iOS push is gated
 on the Firebase iOS app, APNs key, Xcode push/background capabilities, signing,
 and physical-device verification. Do not claim iOS verification before those
 steps pass.
+
+## Post-pickup protection state (Phase 8F-F5)
+
+After pickup, Deal, pickup and delivery surfaces render the server-provided
+`delivery_code_available_at` during the 30-minute safety period. They explain
+the wait in role-specific terms and show no delivery action until the server
+sets `can_reveal_delivery_code` for the Sender or
+`can_submit_delivery_code` for the Traveler. A countdown is explanatory only:
+at its boundary the client refetches, and a live
+`handover.delivery_code_available` event can trigger the same authoritative
+refetch earlier. The client never derives permission from local time.
+
+After delivery confirmation, the same surfaces show the server-provided
+`protection_ends_at` and payout/protection status without an obsolete delivery
+CTA. Completed Deals likewise expose no handover action. The Traveler never
+receives or renders the delivery code, and none of these timestamps weaken the
+existing code-privacy or payout-hold rules.
 
 ## Safe activation and operations
 

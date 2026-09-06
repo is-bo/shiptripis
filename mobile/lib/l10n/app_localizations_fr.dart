@@ -1812,7 +1812,7 @@ class LFr extends L {
   String get deliveryConfirmAction => 'Confirmer la livraison';
 
   @override
-  String get deliveryConfirmedTitle => 'Livré';
+  String get deliveryConfirmedTitle => 'Livraison confirmée';
 
   @override
   String get deliveryConfirmedTravelerBody =>
@@ -1928,7 +1928,7 @@ class LFr extends L {
 
   @override
   String get protectionExplainerBody =>
-      'Les fonds sont conservés en attendant la confirmation de la livraison et une période de 48 heures. Il ne s’agit pas d’un compte séquestre bancaire — c’est ShipTrip qui conserve le paiement jusqu’à ce que les deux parties soient satisfaites.';
+      'Les fonds sont conservés jusqu’à la confirmation de la livraison et pendant la période de protection de 48 heures. ShipTrip ne les débloque qu’à la fin de cette période si aucun litige n’est ouvert.';
 
   @override
   String get payoutTitle => 'Versement';
@@ -3446,11 +3446,22 @@ class LFr extends L {
 
   @override
   String get pickupConfirmedSenderNext =>
-      'Le code de livraison se débloque dans 30 minutes. Nous l’envoyons par e-mail à votre destinataire, et lui seul peut le transmettre au voyageur.';
+      'Le code de livraison est maintenant disponible pour votre destinataire. Lui seul peut le transmettre au voyageur.';
 
   @override
   String get pickupConfirmedTravelerNext =>
       'Transportez le colis jusqu’au destinataire. Il vous lira le code de livraison à la porte — vous ne le voyez jamais vous-même.';
+
+  @override
+  String get deliverySafetyWaitingTitle => 'Période de sécurité en cours';
+
+  @override
+  String get deliverySafetyWaitingSenderBody =>
+      'La remise est confirmée. La confirmation de livraison sera disponible après la période de sécurité ; ShipTrip enverra alors le code de livraison à votre destinataire.';
+
+  @override
+  String get deliverySafetyWaitingTravelerBody =>
+      'La remise est confirmée. Continuez jusqu’au destinataire. Après la période de sécurité, demandez-lui le code de livraison — ShipTrip ne vous l’affiche jamais.';
 
   @override
   String get pickupGoToDeliveryAction => 'Aller à la livraison';
@@ -3951,6 +3962,10 @@ class LFr extends L {
   String get pushPermissionEnabled => 'Les notifications sont activées.';
 
   @override
+  String get pushPermissionDeniedRequestable =>
+      'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.';
+
+  @override
   String get pushPermissionDenied =>
       'Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.';
 
@@ -3959,10 +3974,32 @@ class LFr extends L {
       'Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.';
 
   @override
+  String get pushPermissionInitializationFailed =>
+      'Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez ShipTrip pour réessayer.';
+
+  @override
   String get pushEnableAction => 'Activer les notifications';
 
   @override
   String get pushOpenSettingsAction => 'Ouvrir les réglages de notification';
+
+  @override
+  String get pushRegistrationPending =>
+      'L’autorisation système des notifications est active. ShipTrip termine la configuration sur ce téléphone.';
+
+  @override
+  String get pushRegistrationFailed =>
+      'L’autorisation système des notifications est active, mais ShipTrip n’a pas pu enregistrer ce téléphone. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get pushRetryRegistrationAction => 'Réessayer la configuration';
+
+  @override
+  String get pushPreferencesHeading => 'Types de notifications';
+
+  @override
+  String get pushPreferencesBody =>
+      'Ces choix contrôlent les messages et l’activité de la place de marché. Ils ne modifient pas l’autorisation système de ce téléphone, et les mises à jour essentielles de livraison et de compte restent disponibles.';
 
   @override
   String get pushEssentialTitle => 'Mises à jour essentielles';

@@ -1801,7 +1801,7 @@ class LEn extends L {
   String get deliveryConfirmAction => 'Confirm delivery';
 
   @override
-  String get deliveryConfirmedTitle => 'Delivered';
+  String get deliveryConfirmedTitle => 'Delivery confirmed';
 
   @override
   String get deliveryConfirmedTravelerBody =>
@@ -1917,7 +1917,7 @@ class LEn extends L {
 
   @override
   String get protectionExplainerBody =>
-      'Funds are held pending delivery confirmation and a 48-hour window. This isn\'t a bank escrow account — it\'s ShipTrip holding the payment until both sides are settled.';
+      'Funds are held pending delivery confirmation and the 48-hour protection period. ShipTrip releases them only after that period ends and no dispute is open.';
 
   @override
   String get payoutTitle => 'Payout';
@@ -3419,11 +3419,22 @@ class LEn extends L {
 
   @override
   String get pickupConfirmedSenderNext =>
-      'The delivery code unlocks 30 minutes from now. We email it to your recipient, and only they can pass it to the traveller.';
+      'The delivery code is now available to your recipient. Only they can pass it to the traveller.';
 
   @override
   String get pickupConfirmedTravelerNext =>
       'Carry the parcel to the recipient. They read you the delivery code at the door — you are never shown it yourself.';
+
+  @override
+  String get deliverySafetyWaitingTitle => 'Waiting for the safety period';
+
+  @override
+  String get deliverySafetyWaitingSenderBody =>
+      'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then ShipTrip emails the delivery code to your recipient.';
+
+  @override
+  String get deliverySafetyWaitingTravelerBody =>
+      'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — ShipTrip never shows it to you.';
 
   @override
   String get pickupGoToDeliveryAction => 'Go to delivery';
@@ -3917,6 +3928,10 @@ class LEn extends L {
   String get pushPermissionEnabled => 'Notifications are enabled.';
 
   @override
+  String get pushPermissionDeniedRequestable =>
+      'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.';
+
+  @override
   String get pushPermissionDenied =>
       'Notifications are off at system level. You can enable them in Settings.';
 
@@ -3925,10 +3940,32 @@ class LEn extends L {
       'Push is not configured in this build. In-app notifications still work.';
 
   @override
+  String get pushPermissionInitializationFailed =>
+      'Push could not start on this phone. Your in-app notifications still work; reopen ShipTrip to try again.';
+
+  @override
   String get pushEnableAction => 'Enable notifications';
 
   @override
   String get pushOpenSettingsAction => 'Open notification settings';
+
+  @override
+  String get pushRegistrationPending =>
+      'System notification permission is on. ShipTrip is finishing notification setup for this phone.';
+
+  @override
+  String get pushRegistrationFailed =>
+      'System notification permission is on, but ShipTrip could not finish registering this phone. Check your connection and try again.';
+
+  @override
+  String get pushRetryRegistrationAction => 'Retry notification setup';
+
+  @override
+  String get pushPreferencesHeading => 'Notification types';
+
+  @override
+  String get pushPreferencesBody =>
+      'These choices control messages and marketplace activity. They do not change this phone\'s system permission, and essential delivery and account updates stay available.';
 
   @override
   String get pushEssentialTitle => 'Essential updates';

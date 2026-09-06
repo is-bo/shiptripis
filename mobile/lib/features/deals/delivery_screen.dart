@@ -292,7 +292,9 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
   }) {
     final l = L.of(context);
     final handover = deal.handover;
-    final isConfirmed = handover?.isDeliveryConfirmed ?? false;
+    final isConfirmed =
+        (handover?.isDeliveryConfirmed ?? false) ||
+        deal.deliveryConfirmedAt != null;
 
     return [
       if (_blocking != null) ...[
@@ -396,6 +398,10 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
     final locale = Localizations.localeOf(context);
     final handover = deal.handover;
     final lockedUntil = _attempt?.lockedUntil;
+    final availableAt =
+        handover?.deliveryCodeAvailableAt ?? deal.deliveryCodeAvailableAt;
+    final waitingForSafetyPeriod =
+        !canSubmit && (handover?.inDeliveryCodeBuffer ?? false);
 
     return [
       AppInsetGroup(
@@ -403,12 +409,16 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l.deliveryTravelerTitle,
+              waitingForSafetyPeriod
+                  ? l.deliverySafetyWaitingTitle
+                  : l.deliveryTravelerTitle,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: AppSpace.sm),
             Text(
-              l.deliveryTravelerExplainer,
+              waitingForSafetyPeriod
+                  ? l.pickupConfirmedTravelerNext
+                  : l.deliveryTravelerExplainer,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: context.colors.textSecondary,
               ),
@@ -428,7 +438,15 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
           icon: Icons.shield_outlined,
         ),
 
-      if (!canSubmit) ...[
+      if (waitingForSafetyPeriod) ...[
+        const SizedBox(height: AppSpace.xl),
+        LockedCodePanel(
+          title: l.deliverySafetyWaitingTitle,
+          body: l.deliverySafetyWaitingTravelerBody,
+          availableAt: availableAt,
+          onAvailable: availableAt == null ? null : _refetch,
+        ),
+      ] else if (!canSubmit) ...[
         const SizedBox(height: AppSpace.xl),
         AppEmptyState(
           title: l.deliveryAwaitingTitle,

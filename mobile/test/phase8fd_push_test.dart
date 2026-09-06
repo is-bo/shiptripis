@@ -4,9 +4,15 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shiptrip/app/router.dart';
+import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
+import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/data/auth_repository.dart';
+import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/push.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
 
@@ -16,9 +22,19 @@ import 'support/fake_api.dart';
 class _PushTokenStore extends FakeTokenStore {
   _PushTokenStore();
 
+  String? _pendingPushToken;
+
   @override
   Future<String> readOrCreateInstallationId() async =>
       'ca7eedc0-1665-4bbd-bfae-45f841beb8d7';
+
+  @override
+  Future<String?> readPendingPushToken() async => _pendingPushToken;
+
+  @override
+  Future<void> writePendingPushToken(String? token) async {
+    _pendingPushToken = token;
+  }
 }
 
 class _FakePushCoordinator extends PushCoordinator {
@@ -34,11 +50,69 @@ class _FakePushCoordinator extends PushCoordinator {
   Future<PushPermission> requestPermission() async {
     requested = true;
     state = const PushRuntimeState(
-      available: true,
+      availability: PushAvailability.available,
       permission: PushPermission.authorized,
+      registration: PushRegistrationState.registered,
     );
     return PushPermission.authorized;
   }
+}
+
+class _FakePushMessaging implements PushMessaging {
+  _FakePushMessaging();
+
+  PushPermission currentPermission = PushPermission.notDetermined;
+  PushPermission requestResult = PushPermission.authorized;
+  String? currentToken = 'fcm-token-that-never-enters-the-ui';
+  int requests = 0;
+
+  @override
+  bool get available => true;
+
+  @override
+  PushAvailability get availability => PushAvailability.available;
+
+  @override
+  Stream<PushMessage> get foregroundMessages => const Stream.empty();
+
+  @override
+  Stream<PushMessage> get openedMessages => const Stream.empty();
+
+  @override
+  Stream<String> get tokenRefresh => const Stream.empty();
+
+  @override
+  Future<PushMessage?> initialMessage() async => null;
+
+  @override
+  Future<PushPermission> permission() async => currentPermission;
+
+  @override
+  Future<PushPermission> requestPermission() async {
+    requests++;
+    currentPermission = requestResult;
+    return requestResult;
+  }
+
+  @override
+  Future<String?> token() async => currentToken;
+}
+
+class _FixedSession extends SessionController {
+  @override
+  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+}
+
+class _NoopSocket extends NotificationSocket {
+  @override
+  Future<void> start({
+    required NotificationSocketToken accessToken,
+    required NotificationSocketEvent onEvent,
+    required NotificationSocketConnected onConnected,
+  }) async {}
+
+  @override
+  Future<void> stop() async {}
 }
 
 void main() {
@@ -98,6 +172,33 @@ void main() {
     expect(preferences.marketplaceEnabled, isTrue);
   });
 
+  test('Android permission states preserve retry and Settings semantics', () {
+    expect(
+      classifyPushPermission(
+        AuthorizationStatus.denied,
+        platform: TargetPlatform.android,
+        androidRuntimePermissionSupported: true,
+      ),
+      PushPermission.deniedRequestable,
+    );
+    expect(
+      classifyPushPermission(
+        AuthorizationStatus.denied,
+        platform: TargetPlatform.android,
+        androidRuntimePermissionSupported: false,
+      ),
+      PushPermission.settingsRequired,
+    );
+    expect(
+      classifyPushPermission(
+        AuthorizationStatus.deniedPermanently,
+        platform: TargetPlatform.android,
+        androidRuntimePermissionSupported: true,
+      ),
+      PushPermission.settingsRequired,
+    );
+  });
+
   test(
     'logout sends only the current installation and still works offline',
     () async {
@@ -130,7 +231,7 @@ void main() {
   ) async {
     final coordinator = _FakePushCoordinator(
       const PushRuntimeState(
-        available: true,
+        availability: PushAvailability.available,
         permission: PushPermission.notDetermined,
       ),
     );
@@ -161,11 +262,226 @@ void main() {
     expect(find.text('Notifications are enabled.'), findsOneWidget);
   });
 
+  testWidgets('retryable denial offers another explicit Android request', (
+    tester,
+  ) async {
+    final coordinator = _FakePushCoordinator(
+      const PushRuntimeState(
+        availability: PushAvailability.available,
+        permission: PushPermission.deniedRequestable,
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        pushCoordinatorProvider.overrideWith(() => coordinator),
+        pushPreferencesProvider.overrideWith(
+          (ref) async => const PushPreferences(
+            essentialEnabled: true,
+            messagesEnabled: false,
+            marketplaceEnabled: true,
+          ),
+        ),
+      ],
+    );
+
+    await pumpApp(
+      tester,
+      const NotificationSettingsScreen(),
+      container: container,
+    );
+    await tester.pumpAndSettle();
+    expect(coordinator.requested, isFalse);
+    expect(find.text('Enable notifications'), findsOneWidget);
+
+    await tester.tap(find.text('Enable notifications'));
+    await tester.pumpAndSettle();
+    expect(coordinator.requested, isTrue);
+  });
+
+  testWidgets('permanent denial requires Settings and keeps preferences', (
+    tester,
+  ) async {
+    final coordinator = _FakePushCoordinator(
+      const PushRuntimeState(
+        availability: PushAvailability.available,
+        permission: PushPermission.settingsRequired,
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        pushCoordinatorProvider.overrideWith(() => coordinator),
+        pushPreferencesProvider.overrideWith(
+          (ref) async => const PushPreferences(
+            essentialEnabled: true,
+            messagesEnabled: false,
+            marketplaceEnabled: true,
+          ),
+        ),
+      ],
+    );
+
+    await pumpApp(
+      tester,
+      const NotificationSettingsScreen(),
+      container: container,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open notification settings'), findsOneWidget);
+    expect(find.text('Enable notifications'), findsNothing);
+    expect(find.text('Notification types'), findsOneWidget);
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+    expect(switches[1].value, isFalse);
+    expect(switches[2].value, isTrue);
+  });
+
+  testWidgets('configuration and registration failures are distinct', (
+    tester,
+  ) async {
+    var state = const PushRuntimeState(
+      availability: PushAvailability.configurationIncomplete,
+    );
+    final coordinator = _FakePushCoordinator(state);
+    final container = ProviderContainer(
+      overrides: [
+        pushCoordinatorProvider.overrideWith(() => coordinator),
+        pushPreferencesProvider.overrideWith(
+          (ref) async => const PushPreferences(
+            essentialEnabled: true,
+            messagesEnabled: true,
+            marketplaceEnabled: true,
+          ),
+        ),
+      ],
+    );
+    await pumpApp(
+      tester,
+      const NotificationSettingsScreen(),
+      container: container,
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('not configured in this build'), findsOneWidget);
+
+    state = const PushRuntimeState(
+      availability: PushAvailability.available,
+      permission: PushPermission.authorized,
+      registration: PushRegistrationState.failed,
+    );
+    coordinator.state = state;
+    await tester.pumpAndSettle();
+    expect(find.text('Retry notification setup'), findsOneWidget);
+    expect(find.textContaining('could not finish registering'), findsOneWidget);
+  });
+
+  test(
+    'permission grant uses the existing secure device registration API',
+    () async {
+      final backend = FakeBackend()
+        ..on(
+          'POST',
+          '/api/notifications/devices',
+          const FakeResponse(201, {'id': 3, 'active': true}),
+        );
+      final tokens = _PushTokenStore();
+      final messaging = _FakePushMessaging();
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokens),
+          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+          sessionProvider.overrideWith(_FixedSession.new),
+          routerProvider.overrideWithValue(router),
+          notificationSocketProvider.overrideWithValue(_NoopSocket()),
+          pushMessagingProvider.overrideWithValue(messaging),
+        ],
+      );
+      addTearDown(() {
+        container.dispose();
+        router.dispose();
+      });
+
+      final coordinator = container.read(pushCoordinatorProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      expect(messaging.requests, 0);
+      await coordinator.requestPermission();
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+
+      expect(messaging.requests, 1);
+      expect(backend.to('POST', '/api/notifications/devices'), hasLength(1));
+      expect(backend.lastTo('POST', '/api/notifications/devices')?.body, {
+        'token': 'fcm-token-that-never-enters-the-ui',
+        'installation_id': 'ca7eedc0-1665-4bbd-bfae-45f841beb8d7',
+        'platform': 'android',
+        'app_version': '',
+      });
+    },
+  );
+
+  test(
+    'failed device registration can be retried without re-prompting',
+    () async {
+      var attempts = 0;
+      final backend = FakeBackend()
+        ..handle('POST', '/api/notifications/devices', (_) {
+          attempts++;
+          return attempts == 1
+              ? const FakeResponse(500, {'detail': 'temporary failure'})
+              : const FakeResponse(201, {'id': 3, 'active': true});
+        });
+      final tokens = _PushTokenStore();
+      final messaging = _FakePushMessaging();
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokens),
+          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+          sessionProvider.overrideWith(_FixedSession.new),
+          routerProvider.overrideWithValue(router),
+          notificationSocketProvider.overrideWithValue(_NoopSocket()),
+          pushMessagingProvider.overrideWithValue(messaging),
+        ],
+      );
+      addTearDown(() {
+        container.dispose();
+        router.dispose();
+      });
+
+      final coordinator = container.read(pushCoordinatorProvider.notifier);
+      await coordinator.requestPermission();
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.failed,
+      );
+      expect(messaging.requests, 1);
+
+      await coordinator.retryRegistration();
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+      expect(messaging.requests, 1);
+      expect(backend.to('POST', '/api/notifications/devices'), hasLength(2));
+    },
+  );
+
   testWidgets('Arabic preferences are RTL and essential remains fixed', (
     tester,
   ) async {
     final coordinator = _FakePushCoordinator(
-      const PushRuntimeState(available: false),
+      const PushRuntimeState(
+        availability: PushAvailability.configurationIncomplete,
+      ),
     );
     final container = ProviderContainer(
       overrides: [

@@ -3282,7 +3282,7 @@ abstract class L {
   /// No description provided for @deliveryConfirmedTitle.
   ///
   /// In en, this message translates to:
-  /// **'Delivered'**
+  /// **'Delivery confirmed'**
   String get deliveryConfirmedTitle;
 
   /// No description provided for @deliveryConfirmedTravelerBody.
@@ -3456,7 +3456,7 @@ abstract class L {
   /// No description provided for @protectionExplainerBody.
   ///
   /// In en, this message translates to:
-  /// **'Funds are held pending delivery confirmation and a 48-hour window. This isn\'t a bank escrow account — it\'s ShipTrip holding the payment until both sides are settled.'**
+  /// **'Funds are held pending delivery confirmation and the 48-hour protection period. ShipTrip releases them only after that period ends and no dispute is open.'**
   String get protectionExplainerBody;
 
   /// No description provided for @payoutTitle.
@@ -5994,7 +5994,7 @@ abstract class L {
   /// Sender copy after pickup is confirmed.
   ///
   /// In en, this message translates to:
-  /// **'The delivery code unlocks 30 minutes from now. We email it to your recipient, and only they can pass it to the traveller.'**
+  /// **'The delivery code is now available to your recipient. Only they can pass it to the traveller.'**
   String get pickupConfirmedSenderNext;
 
   /// Traveller copy after pickup is confirmed. States the invariant plainly.
@@ -6002,6 +6002,24 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Carry the parcel to the recipient. They read you the delivery code at the door — you are never shown it yourself.'**
   String get pickupConfirmedTravelerNext;
+
+  /// No description provided for @deliverySafetyWaitingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the safety period'**
+  String get deliverySafetyWaitingTitle;
+
+  /// No description provided for @deliverySafetyWaitingSenderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then ShipTrip emails the delivery code to your recipient.'**
+  String get deliverySafetyWaitingSenderBody;
+
+  /// No description provided for @deliverySafetyWaitingTravelerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — ShipTrip never shows it to you.'**
+  String get deliverySafetyWaitingTravelerBody;
 
   /// Action that moves from the pickup screen to the delivery screen.
   ///
@@ -6843,6 +6861,12 @@ abstract class L {
   /// **'Notifications are enabled.'**
   String get pushPermissionEnabled;
 
+  /// No description provided for @pushPermissionDeniedRequestable.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.'**
+  String get pushPermissionDeniedRequestable;
+
   /// No description provided for @pushPermissionDenied.
   ///
   /// In en, this message translates to:
@@ -6855,6 +6879,12 @@ abstract class L {
   /// **'Push is not configured in this build. In-app notifications still work.'**
   String get pushPermissionUnavailable;
 
+  /// No description provided for @pushPermissionInitializationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Push could not start on this phone. Your in-app notifications still work; reopen ShipTrip to try again.'**
+  String get pushPermissionInitializationFailed;
+
   /// No description provided for @pushEnableAction.
   ///
   /// In en, this message translates to:
@@ -6866,6 +6896,36 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Open notification settings'**
   String get pushOpenSettingsAction;
+
+  /// No description provided for @pushRegistrationPending.
+  ///
+  /// In en, this message translates to:
+  /// **'System notification permission is on. ShipTrip is finishing notification setup for this phone.'**
+  String get pushRegistrationPending;
+
+  /// No description provided for @pushRegistrationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'System notification permission is on, but ShipTrip could not finish registering this phone. Check your connection and try again.'**
+  String get pushRegistrationFailed;
+
+  /// No description provided for @pushRetryRegistrationAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry notification setup'**
+  String get pushRetryRegistrationAction;
+
+  /// No description provided for @pushPreferencesHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification types'**
+  String get pushPreferencesHeading;
+
+  /// No description provided for @pushPreferencesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'These choices control messages and marketplace activity. They do not change this phone\'s system permission, and essential delivery and account updates stay available.'**
+  String get pushPreferencesBody;
 
   /// No description provided for @pushEssentialTitle.
   ///

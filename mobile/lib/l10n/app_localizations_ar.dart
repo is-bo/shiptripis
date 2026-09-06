@@ -1798,7 +1798,7 @@ class LAr extends L {
   String get deliveryConfirmAction => 'تأكيد التوصيل';
 
   @override
-  String get deliveryConfirmedTitle => 'تم التوصيل';
+  String get deliveryConfirmedTitle => 'تم تأكيد التوصيل';
 
   @override
   String get deliveryConfirmedTravelerBody => 'شكرًا لك. جارٍ تجهيز دفعتك.';
@@ -1916,7 +1916,7 @@ class LAr extends L {
 
   @override
   String get protectionExplainerBody =>
-      'تُحتفظ الأموال ريثما يتم تأكيد التوصيل ولمدة 48 ساعة إضافية. هذا ليس حساب ضمان بنكي — بل ShipTrip من يحتفظ بالدفعة إلى أن يتم التسوية بين الطرفين.';
+      'تُحتفظ الأموال حتى تأكيد التوصيل وخلال فترة الحماية البالغة 48 ساعة. لا يحررها ShipTrip إلا بعد انتهاء هذه الفترة إذا لم يكن هناك نزاع مفتوح.';
 
   @override
   String get payoutTitle => 'الدفعة';
@@ -3437,11 +3437,22 @@ class LAr extends L {
 
   @override
   String get pickupConfirmedSenderNext =>
-      'يُفتح قفل رمز التوصيل بعد 30 دقيقة من الآن. سنرسله بالبريد الإلكتروني إلى المستلِم، وهو وحده من يمكنه تسليمه للمسافر.';
+      'أصبح رمز التوصيل متاحًا الآن للمستلِم، وهو وحده من يمكنه إعطاؤه للمسافر.';
 
   @override
   String get pickupConfirmedTravelerNext =>
       'احمل الطرد إلى المستلِم. سيقرأ لك رمز التوصيل عند الباب — لن يُعرض عليك هذا الرمز أبدًا.';
+
+  @override
+  String get deliverySafetyWaitingTitle => 'فترة الأمان قيد الانتظار';
+
+  @override
+  String get deliverySafetyWaitingSenderBody =>
+      'تم تأكيد الاستلام. يصبح تأكيد التوصيل متاحًا بعد فترة الأمان؛ وعندها يرسل ShipTrip رمز التوصيل إلى المستلِم عبر البريد الإلكتروني.';
+
+  @override
+  String get deliverySafetyWaitingTravelerBody =>
+      'تم تأكيد الاستلام. واصل الطريق إلى المستلِم. بعد فترة الأمان، اطلب منه رمز التوصيل — لن يعرضه ShipTrip لك مطلقًا.';
 
   @override
   String get pickupGoToDeliveryAction => 'الانتقال إلى التوصيل';
@@ -3933,6 +3944,10 @@ class LAr extends L {
   String get pushPermissionEnabled => 'الإشعارات مفعّلة.';
 
   @override
+  String get pushPermissionDeniedRequestable =>
+      'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى. يبقى صندوق الإشعارات داخل التطبيق متاحًا في كل الأحوال.';
+
+  @override
   String get pushPermissionDenied =>
       'الإشعارات متوقفة على مستوى النظام. يمكنك تفعيلها من الإعدادات.';
 
@@ -3941,10 +3956,32 @@ class LAr extends L {
       'الإشعارات الفورية غير مضبوطة في هذا الإصدار. تظل إشعارات التطبيق متاحة.';
 
   @override
+  String get pushPermissionInitializationFailed =>
+      'تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. تبقى إشعارات التطبيق متاحة؛ أعد فتح ShipTrip للمحاولة مرة أخرى.';
+
+  @override
   String get pushEnableAction => 'تفعيل الإشعارات';
 
   @override
   String get pushOpenSettingsAction => 'فتح إعدادات الإشعارات';
+
+  @override
+  String get pushRegistrationPending =>
+      'إذن إشعارات النظام مفعّل. يُكمل ShipTrip إعداد الإشعارات على هذا الهاتف.';
+
+  @override
+  String get pushRegistrationFailed =>
+      'إذن إشعارات النظام مفعّل، لكن تعذّر على ShipTrip تسجيل هذا الهاتف. تحقق من اتصالك وحاول مرة أخرى.';
+
+  @override
+  String get pushRetryRegistrationAction => 'إعادة محاولة إعداد الإشعارات';
+
+  @override
+  String get pushPreferencesHeading => 'أنواع الإشعارات';
+
+  @override
+  String get pushPreferencesBody =>
+      'تتحكم هذه الخيارات في الرسائل ونشاط السوق، ولا تغيّر إذن النظام على هذا الهاتف. تبقى تحديثات التوصيل والحساب الأساسية متاحة.';
 
   @override
   String get pushEssentialTitle => 'التحديثات الأساسية';

@@ -26,6 +26,12 @@ Map<String, dynamic> _travelerDeal({
   required bool pickedUp,
   String status = 'pickup_ready',
 }) {
+  final deliveryCodeAvailableAt = pickedUp
+      ? DateTime.now()
+            .add(const Duration(minutes: 24))
+            .toUtc()
+            .toIso8601String()
+      : null;
   final payload = dealFixture(
     id: 7,
     status: status,
@@ -33,6 +39,7 @@ Map<String, dynamic> _travelerDeal({
   );
   payload['sender_id'] = 99;
   payload['traveler_id'] = _viewerId;
+  payload['delivery_code_available_at'] = deliveryCodeAvailableAt;
   payload['handover'] = {
     'deal_status': status,
     'pickup_confirmed_at': pickedUp ? '2026-08-30T10:00:00Z' : null,
@@ -41,13 +48,17 @@ Map<String, dynamic> _travelerDeal({
       'status': pickedUp ? 'used' : 'active',
       'rotation': 1,
     },
-    'delivery': {'exists': false, 'status': 'unknown'},
+    'delivery_code_available_at': deliveryCodeAvailableAt,
+    'delivery': {
+      'exists': pickedUp,
+      'status': pickedUp ? 'buffered' : 'unknown',
+    },
     'can_reveal_pickup_code': false,
     'can_reveal_delivery_code': false,
     'traveler_can_view_delivery_code': false,
     'can_submit_pickup_code': !pickedUp,
     'can_submit_delivery_code': false,
-    'in_delivery_code_buffer': false,
+    'in_delivery_code_buffer': pickedUp,
   };
   return payload;
 }
@@ -246,6 +257,8 @@ void main() {
 
       expect(find.text(l.pickupConfirmedTitle), findsWidgets);
       expect(find.text(l.pickupConfirmedBody), findsOneWidget);
+      expect(find.text(l.deliverySafetyWaitingTravelerBody), findsOneWidget);
+      expect(find.text(l.deliveryConfirmAction), findsNothing);
       expect(backend.to('GET', '/api/deals/7').length, greaterThanOrEqualTo(2));
     },
   );

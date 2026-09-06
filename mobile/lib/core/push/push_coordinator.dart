@@ -14,22 +14,28 @@ import 'push_messaging.dart';
 @immutable
 class PushRuntimeState {
   const PushRuntimeState({
-    required this.available,
+    required this.availability,
     this.permission = PushPermission.unavailable,
-    this.syncFailed = false,
+    this.registration = PushRegistrationState.idle,
   });
 
-  final bool available;
+  final PushAvailability availability;
   final PushPermission permission;
-  final bool syncFailed;
+  final PushRegistrationState registration;
 
-  PushRuntimeState copyWith({PushPermission? permission, bool? syncFailed}) =>
-      PushRuntimeState(
-        available: available,
-        permission: permission ?? this.permission,
-        syncFailed: syncFailed ?? this.syncFailed,
-      );
+  bool get available => availability == PushAvailability.available;
+
+  PushRuntimeState copyWith({
+    PushPermission? permission,
+    PushRegistrationState? registration,
+  }) => PushRuntimeState(
+    availability: availability,
+    permission: permission ?? this.permission,
+    registration: registration ?? this.registration,
+  );
 }
+
+enum PushRegistrationState { idle, pending, registered, failed }
 
 final pushCoordinatorProvider =
     NotifierProvider<PushCoordinator, PushRuntimeState>(PushCoordinator.new);
@@ -80,7 +86,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     );
     ref.onDispose(removeAccountRefresh);
     unawaited(_restoreMessagingState());
-    return PushRuntimeState(available: _messaging.available);
+    return PushRuntimeState(availability: _messaging.availability);
   }
 
   @override
@@ -97,7 +103,14 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   Future<PushPermission> requestPermission() async {
     final permission = await _messaging.requestPermission();
-    state = state.copyWith(permission: permission);
+    state = state.copyWith(
+      permission: permission,
+      registration:
+          permission == PushPermission.authorized ||
+              permission == PushPermission.provisional
+          ? state.registration
+          : PushRegistrationState.idle,
+    );
     if (permission == PushPermission.authorized ||
         permission == PushPermission.provisional) {
       await _syncRegistration();
@@ -106,17 +119,37 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   }
 
   Future<void> refreshPermission() async {
-    state = state.copyWith(permission: await _messaging.permission());
+    final permission = await _messaging.permission();
+    state = state.copyWith(
+      permission: permission,
+      registration:
+          permission == PushPermission.authorized ||
+              permission == PushPermission.provisional
+          ? state.registration
+          : PushRegistrationState.idle,
+    );
+    if (permission == PushPermission.authorized ||
+        permission == PushPermission.provisional) {
+      await _syncRegistration();
+    }
   }
+
+  Future<void> retryRegistration() => _syncRegistration();
 
   Future<void> _restoreMessagingState() async {
     if (!_messaging.available) return;
-    state = state.copyWith(permission: await _messaging.permission());
+    final permission = await _messaging.permission();
+    state = state.copyWith(permission: permission);
+    if (permission == PushPermission.authorized ||
+        permission == PushPermission.provisional) {
+      await _syncRegistration();
+    }
     final initial = await _messaging.initialMessage();
     if (initial != null) _openMessage(initial);
   }
 
   void _sessionChanged(SessionState session) {
+    final previousAccountId = _accountId;
     final nextAccountId = switch (session) {
       SessionSignedIn(:final account) => account.id,
       _ => null,
@@ -132,9 +165,21 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     unawaited(_socket.stop());
     if (session is SessionSignedIn) {
       _startSocketsIfSignedIn();
-      unawaited(_syncRegistration(expectedGeneration: _sessionGeneration));
+      final generation = _sessionGeneration;
+      scheduleMicrotask(() {
+        if (generation != _sessionGeneration) return;
+        if (previousAccountId != null) {
+          state = state.copyWith(registration: PushRegistrationState.idle);
+        }
+        unawaited(_syncRegistration(expectedGeneration: generation));
+      });
       _openPendingIfReady();
     } else if (session is SessionSignedOut) {
+      scheduleMicrotask(() {
+        if (nextAccountId == _accountId) {
+          state = state.copyWith(registration: PushRegistrationState.idle);
+        }
+      });
       _openPendingIfReady();
     }
   }
@@ -183,12 +228,23 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     );
   }
 
-  Future<void> _syncRegistration({int? expectedGeneration}) async {
+  Future<void> _syncRegistration({
+    int? expectedGeneration,
+    bool force = false,
+  }) async {
     final generation = expectedGeneration ?? _sessionGeneration;
     if (!_messaging.available ||
+        (state.permission != PushPermission.authorized &&
+            state.permission != PushPermission.provisional) ||
         ref.read(sessionProvider) is! SessionSignedIn) {
       return;
     }
+    if (!force &&
+        (state.registration == PushRegistrationState.pending ||
+            state.registration == PushRegistrationState.registered)) {
+      return;
+    }
+    state = state.copyWith(registration: PushRegistrationState.pending);
     try {
       final store = ref.read(tokenStoreProvider);
       final current = await _messaging.token();
@@ -201,7 +257,10 @@ class PushCoordinator extends Notifier<PushRuntimeState>
           ref.read(sessionProvider) is! SessionSignedIn) {
         return;
       }
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        state = state.copyWith(registration: PushRegistrationState.failed);
+        return;
+      }
       final installationId = await store.readOrCreateInstallationId();
       if (generation != _sessionGeneration ||
           ref.read(sessionProvider) is! SessionSignedIn) {
@@ -226,12 +285,12 @@ class PushCoordinator extends Notifier<PushRuntimeState>
           ref.read(sessionProvider) is! SessionSignedIn) {
         return;
       }
-      state = state.copyWith(syncFailed: false);
+      state = state.copyWith(registration: PushRegistrationState.registered);
     } on Object {
       if (generation != _sessionGeneration) {
         return;
       }
-      state = state.copyWith(syncFailed: true);
+      state = state.copyWith(registration: PushRegistrationState.failed);
     }
   }
 
@@ -241,7 +300,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     await store.writePendingPushToken(token);
     if (generation == _sessionGeneration &&
         ref.read(sessionProvider) is SessionSignedIn) {
-      await _syncRegistration(expectedGeneration: generation);
+      await _syncRegistration(expectedGeneration: generation, force: true);
     }
   }
 

@@ -782,7 +782,7 @@
   "deliveryTravelerExplainer": "Ask the recipient for the code that was emailed to them.",
   "deliveryCodeLabel": "Delivery code",
   "deliveryConfirmAction": "Confirm delivery",
-  "deliveryConfirmedTitle": "Delivered",
+  "deliveryConfirmedTitle": "Delivery confirmed",
   "deliveryConfirmedTravelerBody": "Thank you. Your payout is being prepared.",
   "deliveryConfirmedSenderBody": "Your parcel arrived. Your payment stays protected for a little longer.",
   "deliverySenderTitle": "Delivery code",
@@ -860,7 +860,7 @@
   },
   "protectionEnded": "Protection window closed",
   "protectionExplainerTitle": "What this means",
-  "protectionExplainerBody": "Funds are held pending delivery confirmation and a 48-hour window. This isn't a bank escrow account — it's ShipTrip holding the payment until both sides are settled.",
+  "protectionExplainerBody": "Funds are held pending delivery confirmation and the 48-hour protection period. ShipTrip releases them only after that period ends and no dispute is open.",
   "payoutTitle": "Payout",
   "payoutStatusNotEligible": "Not yet",
   "payoutStatusEligible": "Ready",
@@ -1641,11 +1641,14 @@
   "@pickupNextTitle": {
     "description": "Section header shown once pickup is confirmed."
   },
-  "pickupConfirmedSenderNext": "The delivery code unlocks 30 minutes from now. We email it to your recipient, and only they can pass it to the traveller.",
+  "pickupConfirmedSenderNext": "The delivery code is now available to your recipient. Only they can pass it to the traveller.",
   "@pickupConfirmedSenderNext": {
     "description": "Sender copy after pickup is confirmed."
   },
   "pickupConfirmedTravelerNext": "Carry the parcel to the recipient. They read you the delivery code at the door — you are never shown it yourself.",
+  "deliverySafetyWaitingTitle": "Waiting for the safety period",
+  "deliverySafetyWaitingSenderBody": "Pickup is confirmed. Delivery confirmation becomes available after the safety period; then ShipTrip emails the delivery code to your recipient.",
+  "deliverySafetyWaitingTravelerBody": "Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — ShipTrip never shows it to you.",
   "@pickupConfirmedTravelerNext": {
     "description": "Traveller copy after pickup is confirmed. States the invariant plainly."
   },
@@ -2049,10 +2052,17 @@
   "pushPermissionHeading": "On this phone",
   "pushPermissionBody": "Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.",
   "pushPermissionEnabled": "Notifications are enabled.",
+  "pushPermissionDeniedRequestable": "Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.",
   "pushPermissionDenied": "Notifications are off at system level. You can enable them in Settings.",
   "pushPermissionUnavailable": "Push is not configured in this build. In-app notifications still work.",
+  "pushPermissionInitializationFailed": "Push could not start on this phone. Your in-app notifications still work; reopen ShipTrip to try again.",
   "pushEnableAction": "Enable notifications",
   "pushOpenSettingsAction": "Open notification settings",
+  "pushRegistrationPending": "System notification permission is on. ShipTrip is finishing notification setup for this phone.",
+  "pushRegistrationFailed": "System notification permission is on, but ShipTrip could not finish registering this phone. Check your connection and try again.",
+  "pushRetryRegistrationAction": "Retry notification setup",
+  "pushPreferencesHeading": "Notification types",
+  "pushPreferencesBody": "These choices control messages and marketplace activity. They do not change this phone's system permission, and essential delivery and account updates stay available.",
   "pushEssentialTitle": "Essential updates",
   "pushEssentialBody": "Payment, delivery, dispute, verification and account-security updates stay on.",
   "pushMessagesTitle": "Messages",
