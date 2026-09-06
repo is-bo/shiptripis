@@ -143,6 +143,33 @@ void main() {
       );
     });
 
+    test('an open negotiation opens the negotiation, not the journey', () {
+      // The real payload: `match_resources` puts `journey_id` on every V1
+      // offer event so the traveler's journey can be invalidated live. It is
+      // not the destination — tapping "New offer" as the sender must not open
+      // the traveler's journey, which the sender may not be able to read.
+      const offerPayload = {
+        'channel': 'offer.created',
+        'match_id': '31',
+        'parcel_id': '11',
+        'journey_id': '77',
+      };
+      expect(pushLocation(offerPayload), '/matches/31');
+      expect(
+        pushLocation({...offerPayload, 'channel': 'offer.updated'}),
+        '/matches/31',
+      );
+      // Once accepted there is a Deal, and the Deal stays authoritative.
+      expect(
+        pushLocation({
+          ...offerPayload,
+          'channel': 'offer.accepted',
+          'deal_id': '54',
+        }),
+        '/deals/54',
+      );
+    });
+
     test('account and payment events use safe fallback destinations', () {
       expect(pushLocation({'channel': 'kyc.status_changed'}), '/kyc');
       expect(

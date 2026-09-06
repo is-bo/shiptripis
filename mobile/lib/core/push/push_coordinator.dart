@@ -367,6 +367,15 @@ String? pushLocation(Map<String, String> data) {
   if (disputeId != null) return '/disputes/$disputeId';
   final dealId = positive('deal_id');
   if (dealId != null) return '/deals/$dealId';
+  // An open negotiation belongs on the negotiation screen. These payloads are
+  // built from `match_resources`, so they also carry the traveler's
+  // `journey_id` for live invalidation — which the generic ladder below would
+  // otherwise treat as the destination and send the sender to a journey they
+  // may not even be allowed to read. `offer.accepted` is deliberately not
+  // here: it has a `deal_id` and was already answered above.
+  if (channel.startsWith('offer.') && matchId != null) {
+    return '/matches/$matchId';
+  }
   final journeyId = positive('journey_id') ?? positive('trip_id');
   if (journeyId != null) return '/journeys/$journeyId';
   final requestId = positive('request_id') ?? positive('parcel_id');
