@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
+from apps.core.event_resources import match_resources
 from apps.core.financial_locks import lock_request_graph
 from apps.finance.models import PaymentOrder, PaymentRefund
 from apps.finance.services import cancel_order, refund_order_in_full
@@ -133,4 +134,10 @@ def cancel_delivery_request(
         {"parcel_id": parcel.pk, "sender_id": parcel.sender_id},
         targets=[parcel.sender_id],
     )
+    for match in pending_matches:
+        redis_bus.publish_after_commit(
+            channels.OFFER_UPDATED,
+            match_resources(match),
+            targets=[match.sender_id, match.traveler_id],
+        )
     return ParcelCancellationResult(parcel_id=parcel.pk)

@@ -16,7 +16,9 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderBase;
 
+import '../core/live/live_updates.dart';
 import '../core/session/session.dart';
 import '../data/repositories.dart';
 import '../domain/chat.dart';
@@ -27,21 +29,73 @@ import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/rating.dart';
 
+Future<T> _liveRead<T>(
+  Ref ref,
+  int? expectedAccountId,
+  LiveResource resource,
+  Future<T> Function() read,
+) async {
+  final unsubscribe = ref
+      .read(liveUpdatesProvider)
+      .register(resource, ref.invalidateSelf);
+  ref.onDispose(unsubscribe);
+  final result = await read();
+  if (ref.read(accountProvider)?.id != expectedAccountId) {
+    throw const _StaleSessionRead();
+  }
+  return result;
+}
+
+typedef _AccountArgument<T> = ({int? accountId, T argument});
+
+int? _watchAccountId(Ref ref) =>
+    ref.watch(accountProvider.select((account) => account?.id));
+
+AsyncValue<T> _projectLiveQuery<T>(Ref ref, ProviderBase<AsyncValue<T>> query) {
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(query));
+  return ref.watch(query);
+}
+
+class _StaleSessionRead implements Exception {
+  const _StaleSessionRead();
+}
+
 // ---------------------------------------------------------------------------
 // Sender-side
 // ---------------------------------------------------------------------------
 
-final myRequestsProvider = FutureProvider.autoDispose<List<DeliveryRequest>>((
-  ref,
-) async {
-  final repo = ref.watch(requestRepositoryProvider);
-  return repo.mine();
-});
-
-final requestDetailProvider = FutureProvider.autoDispose
-    .family<DeliveryRequest, int>((ref, id) async {
+final _myRequestsQuery = FutureProvider.autoDispose
+    .family<List<DeliveryRequest>, int?>((ref, accountId) async {
       final repo = ref.watch(requestRepositoryProvider);
-      return repo.byId(id);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.requests(),
+        repo.mine,
+      );
+    });
+final myRequestsProvider =
+    Provider.autoDispose<AsyncValue<List<DeliveryRequest>>>(
+      (ref) => _projectLiveQuery(ref, _myRequestsQuery(_watchAccountId(ref))),
+    );
+
+final _requestDetailQuery = FutureProvider.autoDispose
+    .family<DeliveryRequest, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(requestRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.request(key.argument),
+        () => repo.byId(key.argument),
+      );
+    });
+final requestDetailProvider = Provider.autoDispose
+    .family<AsyncValue<DeliveryRequest>, int>((ref, id) {
+      return _projectLiveQuery(
+        ref,
+        _requestDetailQuery((accountId: _watchAccountId(ref), argument: id)),
+      );
     });
 
 /// Which photo, on which request.
@@ -59,30 +113,58 @@ final parcelPhotoUrlProvider = FutureProvider.autoDispose
       return repo.photoUrl(requestId: photo.requestId, mediaId: photo.mediaId);
     });
 
-final postingDepositProvider = FutureProvider.autoDispose
-    .family<PostingDepositState, int>((ref, requestId) async {
+final _postingDepositQuery = FutureProvider.autoDispose
+    .family<PostingDepositState, _AccountArgument<int>>((ref, key) async {
       final repo = ref.watch(paymentRepositoryProvider);
-      return repo.postingDeposit(requestId);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.deposit(key.argument),
+        () => repo.postingDeposit(key.argument),
+      );
+    });
+final postingDepositProvider = Provider.autoDispose
+    .family<AsyncValue<PostingDepositState>, int>((ref, requestId) {
+      return _projectLiveQuery(
+        ref,
+        _postingDepositQuery((
+          accountId: _watchAccountId(ref),
+          argument: requestId,
+        )),
+      );
     });
 
 // ---------------------------------------------------------------------------
 // Traveller-side
 // ---------------------------------------------------------------------------
 
-final myJourneysProvider = FutureProvider.autoDispose<List<Journey>>((
-  ref,
-) async {
-  final repo = ref.watch(journeyRepositoryProvider);
-  return repo.mine();
-});
+final _myJourneysQuery = FutureProvider.autoDispose.family<List<Journey>, int?>(
+  (ref, accountId) async {
+    final repo = ref.watch(journeyRepositoryProvider);
+    return _liveRead(ref, accountId, const LiveResource.journeys(), repo.mine);
+  },
+);
+final myJourneysProvider = Provider.autoDispose<AsyncValue<List<Journey>>>(
+  (ref) => _projectLiveQuery(ref, _myJourneysQuery(_watchAccountId(ref))),
+);
 
-final journeyDetailProvider = FutureProvider.autoDispose.family<Journey, int>((
-  ref,
-  id,
-) async {
-  final repo = ref.watch(journeyRepositoryProvider);
-  return repo.byId(id);
-});
+final _journeyDetailQuery = FutureProvider.autoDispose
+    .family<Journey, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(journeyRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.journey(key.argument),
+        () => repo.byId(key.argument),
+      );
+    });
+final journeyDetailProvider = Provider.autoDispose
+    .family<AsyncValue<Journey>, int>((ref, id) {
+      return _projectLiveQuery(
+        ref,
+        _journeyDetailQuery((accountId: _watchAccountId(ref), argument: id)),
+      );
+    });
 
 /// The journeys a traveller can actually receive proposals on.
 final activeJourneysProvider = Provider.autoDispose<List<Journey>>((ref) {
@@ -94,64 +176,143 @@ final activeJourneysProvider = Provider.autoDispose<List<Journey>>((ref) {
 // Shared
 // ---------------------------------------------------------------------------
 
-final dealsProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return repo.list();
-});
-
-final completedDealsCountProvider = FutureProvider.autoDispose<int>((
+final _dealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
   ref,
+  accountId,
 ) async {
   final repo = ref.watch(dealRepositoryProvider);
-  return repo.count(status: DealStatus.completed);
+  return _liveRead(ref, accountId, const LiveResource.deals(), repo.list);
 });
+final dealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
+  (ref) => _projectLiveQuery(ref, _dealsQuery(_watchAccountId(ref))),
+);
 
-final dealDetailProvider = FutureProvider.autoDispose.family<Deal, int>((
+final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
+  ref,
+  accountId,
+) async {
+  final repo = ref.watch(dealRepositoryProvider);
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.deals(),
+    () => repo.count(status: DealStatus.completed),
+  );
+});
+final completedDealsCountProvider = Provider.autoDispose<AsyncValue<int>>(
+  (ref) =>
+      _projectLiveQuery(ref, _completedDealsCountQuery(_watchAccountId(ref))),
+);
+
+final _dealDetailQuery = FutureProvider.autoDispose
+    .family<Deal, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(dealRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.deal(key.argument),
+        () => repo.byId(key.argument),
+      );
+    });
+final dealDetailProvider = Provider.autoDispose.family<AsyncValue<Deal>, int>((
   ref,
   id,
-) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return repo.byId(id);
+) {
+  return _projectLiveQuery(
+    ref,
+    _dealDetailQuery((accountId: _watchAccountId(ref), argument: id)),
+  );
 });
 
-final matchesProvider = FutureProvider.autoDispose<List<Match>>((ref) async {
-  final repo = ref.watch(matchingRepositoryProvider);
-  return repo.matches();
-});
-
-final matchDetailProvider = FutureProvider.autoDispose.family<Match, int>((
+final _matchesQuery = FutureProvider.autoDispose.family<List<Match>, int?>((
   ref,
-  id,
+  accountId,
 ) async {
   final repo = ref.watch(matchingRepositoryProvider);
-  return repo.match(id);
+  return _liveRead(ref, accountId, const LiveResource.matches(), repo.matches);
 });
+final matchesProvider = Provider.autoDispose<AsyncValue<List<Match>>>(
+  (ref) => _projectLiveQuery(ref, _matchesQuery(_watchAccountId(ref))),
+);
 
-final matchOffersProvider = FutureProvider.autoDispose.family<List<Offer>, int>(
-  (ref, matchId) async {
-    final repo = ref.watch(matchingRepositoryProvider);
-    return repo.offers(matchId);
+final _matchDetailQuery = FutureProvider.autoDispose
+    .family<Match, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(matchingRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.match(key.argument),
+        () => repo.match(key.argument),
+      );
+    });
+final matchDetailProvider = Provider.autoDispose.family<AsyncValue<Match>, int>(
+  (ref, id) {
+    return _projectLiveQuery(
+      ref,
+      _matchDetailQuery((accountId: _watchAccountId(ref), argument: id)),
+    );
   },
 );
 
-final chatThreadsProvider = FutureProvider.autoDispose<List<ChatThread>>((
-  ref,
-) async {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.threads();
-});
+final _matchOffersQuery = FutureProvider.autoDispose
+    .family<List<Offer>, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(matchingRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.offers(key.argument),
+        () => repo.offers(key.argument),
+      );
+    });
+final matchOffersProvider = Provider.autoDispose
+    .family<AsyncValue<List<Offer>>, int>((ref, matchId) {
+      return _projectLiveQuery(
+        ref,
+        _matchOffersQuery((accountId: _watchAccountId(ref), argument: matchId)),
+      );
+    });
 
-final unreadNotificationsProvider = FutureProvider.autoDispose<int>((
+final _chatThreadsQuery = FutureProvider.autoDispose
+    .family<List<ChatThread>, int?>((ref, accountId) async {
+      final repo = ref.watch(chatRepositoryProvider);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.threads(),
+        repo.threads,
+      );
+    });
+final chatThreadsProvider = Provider.autoDispose<AsyncValue<List<ChatThread>>>(
+  (ref) => _projectLiveQuery(ref, _chatThreadsQuery(_watchAccountId(ref))),
+);
+
+final _unreadNotificationsQuery = FutureProvider.autoDispose.family<int, int?>((
   ref,
+  accountId,
 ) async {
   final repo = ref.watch(notificationRepositoryProvider);
-  return repo.unreadCount();
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.unread(),
+    repo.unreadCount,
+  );
 });
+final unreadNotificationsProvider = Provider.autoDispose<AsyncValue<int>>(
+  (ref) =>
+      _projectLiveQuery(ref, _unreadNotificationsQuery(_watchAccountId(ref))),
+);
 
-final payoutsProvider = FutureProvider.autoDispose<List<Payout>>((ref) async {
+final _payoutsQuery = FutureProvider.autoDispose.family<List<Payout>, int?>((
+  ref,
+  accountId,
+) async {
   final repo = ref.watch(paymentRepositoryProvider);
-  return repo.payouts();
+  return _liveRead(ref, accountId, const LiveResource.payouts(), repo.payouts);
 });
+final payoutsProvider = Provider.autoDispose<AsyncValue<List<Payout>>>(
+  (ref) => _projectLiveQuery(ref, _payoutsQuery(_watchAccountId(ref))),
+);
 
 final receivedRatingsProvider = FutureProvider.autoDispose<List<Rating>>((
   ref,
@@ -319,13 +480,10 @@ final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
 // Refresh on resume
 // ---------------------------------------------------------------------------
 
-/// Invalidates the volatile read model whenever the app comes back to the
-/// foreground.
+/// Refreshes the account when the app returns to the foreground.
 ///
-/// Mounted once, above the router. Deliberately blunt: the alternative is each
-/// screen remembering to re-fetch, which is the kind of thing that is right in
-/// eight places and wrong in the ninth — and the ninth is a delivery-code
-/// countdown.
+/// [PushCoordinator] separately reconciles the current route and mounted
+/// collections through [LiveUpdates], avoiding unrelated detail reads.
 class ResumeRefresher extends ConsumerStatefulWidget {
   const ResumeRefresher({required this.child, super.key});
 
@@ -378,7 +536,6 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
       return;
     }
 
-    refreshVolatileState(ref);
     unawaited(ref.read(sessionProvider.notifier).refreshAccount());
   }
 

@@ -44,6 +44,7 @@ from django.db import transaction
 from django.db.models import Count, Max, Min, Q
 from django.utils import timezone
 
+from apps.core.event_resources import deal_resources
 from apps.core.financial_locks import (
     LockedLifecycleAggregate,
     lock_deal_lifecycle,
@@ -426,7 +427,7 @@ def _notify_opened(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> Non
 
     publish_after_commit(
         DISPUTE_OPENED,
-        {"deal_id": deal.pk, "dispute_id": dispute.pk},
+        {**deal_resources(deal), "dispute_id": dispute.pk},
         targets=[deal.sender_id, deal.traveler_id],
     )
 
@@ -1497,6 +1498,6 @@ def _notify_resolved(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> N
 
     publish_after_commit(
         DISPUTE_RESOLVED,
-        {"deal_id": deal.pk, "dispute_id": dispute.pk},
+        {**deal_resources(deal), "dispute_id": dispute.pk},
         targets=[deal.sender_id, deal.traveler_id],
     )

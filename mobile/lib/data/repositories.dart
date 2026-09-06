@@ -1478,14 +1478,30 @@ class ChatRepository {
     required int matchId,
     int page = 1,
     int pageSize = 50,
+    bool latest = false,
+    int? afterId,
+    int? beforeId,
     CancelToken? cancelToken,
-  }) async => ChatMessagePage.fromJson(
-    await _api.getObject(
-      '/api/matches/$matchId/chat/messages',
-      query: {if (page > 1) 'page': page, 'page_size': pageSize},
-      cancelToken: cancelToken,
-    ),
-  );
+  }) async {
+    assert(
+      [latest, afterId != null, beforeId != null].where((v) => v).length <= 1,
+      'latest, afterId and beforeId are mutually exclusive',
+    );
+    return ChatMessagePage.fromJson(
+      await _api.getObject(
+        '/api/matches/$matchId/chat/messages',
+        query: {
+          if (page > 1 && !latest && afterId == null && beforeId == null)
+            'page': page,
+          'page_size': pageSize,
+          if (latest) 'latest': 1,
+          'after_id': ?afterId,
+          'before_id': ?beforeId,
+        },
+        cancelToken: cancelToken,
+      ),
+    );
+  }
 
   /// A `402` here is not a generic failure: it means the deal is unfunded and
   /// the sender can act on it. The reason travels in a `reason` field, which
@@ -1493,10 +1509,12 @@ class ChatRepository {
   Future<ChatMessage> send({
     required int matchId,
     required String body,
+    CancelToken? cancelToken,
   }) async => ChatMessage.fromJson(
     await _api.postObject(
       '/api/matches/$matchId/chat/messages',
       body: {'body': body},
+      cancelToken: cancelToken,
     ),
   );
 }

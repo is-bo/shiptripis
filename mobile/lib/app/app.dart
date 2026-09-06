@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../design/theme.dart';
 import '../l10n/app_localizations.dart';
 import '../core/push/push_coordinator.dart';
+import 'app_state.dart';
 import 'app_settings.dart';
 import 'router.dart';
 
@@ -55,7 +56,7 @@ class ShipTripApp extends ConsumerWidget {
               maxScaleFactor: 1.6,
             ),
           ),
-          child: child ?? const SizedBox.shrink(),
+          child: ResumeRefresher(child: child ?? const SizedBox.shrink()),
         );
       },
     );

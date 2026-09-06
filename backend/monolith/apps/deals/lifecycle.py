@@ -35,6 +35,8 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
+from apps.core import channels, redis_bus
+from apps.core.event_resources import deal_resources
 from apps.core.financial_locks import LockedLifecycleAggregate
 
 from .models import Deal, DealEvent, DealLegAllocation
@@ -481,6 +483,11 @@ def apply_completed(
         Deal.Status.COMPLETED,
         reason=reason,
         extra_fields=["completed_at"],
+    )
+    redis_bus.publish_after_commit(
+        channels.MATCH_COMPLETED,
+        deal_resources(deal),
+        targets=[deal.sender_id, deal.traveler_id],
     )
     return TransitionResult(deal.pk, deal.status, True)
 

@@ -322,14 +322,17 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
     final l = L.of(context);
     final handover = deal.handover;
 
-    // The buffer deadline, newest source first.
+    // A fresh server projection supersedes an earlier rejection's deadline.
     final availableAt =
-        _bufferUntil ??
         handover?.deliveryCodeAvailableAt ??
-        deal.deliveryCodeAvailableAt;
+        deal.deliveryCodeAvailableAt ??
+        _bufferUntil;
+    // The device countdown is presentation only. A skewed device clock must
+    // not hide availability that the server has now explicitly authorized.
     final inBuffer =
-        (handover?.inDeliveryCodeBuffer ?? false) ||
-        (availableAt != null && availableAt.isAfter(DateTime.now()));
+        !(handover?.canRevealDeliveryCode ?? false) &&
+        ((handover?.inDeliveryCodeBuffer ?? false) ||
+            (availableAt != null && availableAt.isAfter(DateTime.now())));
 
     final header = [
       AppInsetGroup(

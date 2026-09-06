@@ -34,6 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
+from apps.core.event_resources import deal_resources
 from apps.deals import lifecycle
 from apps.deals.models import Deal, DealEvent
 
@@ -292,6 +293,6 @@ def _notify_payout_status(
 
     publish_after_commit(
         PAYOUT_STATUS_CHANGED,
-        {"deal_id": deal.pk, "status": payout.status},
+        {**deal_resources(deal), "status": payout.status},
         targets=[deal.traveler_id],
     )

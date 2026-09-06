@@ -45,6 +45,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
+from apps.core.event_resources import deal_resources, payment_resources
 from apps.core.business_settings import calculate_offer_economics
 from apps.core.financial_locks import lock_payment_order_aggregate
 from apps.deals.models import Deal
@@ -1633,6 +1634,7 @@ def reconcile_attempt(
         _publish(
             channels.PAYMENT_FAILED,
             {
+                **payment_resources(order),
                 "order_reference": str(order.public_reference),
                 "attempt_id": attempt.pk,
                 "status": attempt.status,
@@ -1766,12 +1768,12 @@ def reconcile_attempt(
     _publish(
         channels.PAYMENT_CAPTURED,
         {
+            **payment_resources(order),
             "order_reference": str(order.public_reference),
             "attempt_id": attempt.pk,
             "purpose": order.purpose,
             "amount_eur_cents": int(attempt.amount_eur_cents),
             "currency": "EUR",
-            "deal_id": order.deal_id,
         },
         targets=[order.owner_id],
     )
@@ -2200,6 +2202,7 @@ def mark_refund_succeeded(
     _publish(
         channels.PAYMENT_REFUNDED,
         {
+            **payment_resources(order),
             "order_reference": str(order.public_reference),
             "refund_id": refund.pk,
             "amount_eur_cents": int(refund.amount_eur_cents),
@@ -2773,6 +2776,11 @@ def complete_manual_payout(
         deal_id=payout.deal_id,
         traveler_id=payout.traveler_id,
         amount_eur_cents=int(payout.amount_eur_cents),
+    )
+    _publish(
+        channels.PAYOUT_STATUS_CHANGED,
+        {**deal_resources(payout.deal), "status": payout.status},
+        targets=[payout.traveler_id],
     )
     logger.info(
         "finance.manual_payout_settled payout=%s actor=%s currency=%s",

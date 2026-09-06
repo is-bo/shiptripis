@@ -85,6 +85,7 @@ var subscribeChannels = []string{
 	"flight_proof.status_changed",
 	// funded delivery lifecycle
 	"deal.cancelled",
+	"deal.updated",
 	"dispute.opened",
 	"dispute.resolved",
 	"payout.status_changed",

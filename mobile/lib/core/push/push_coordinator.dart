@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../data/repositories.dart';
+import '../live/live_updates.dart';
 import '../session/session.dart';
 import 'notification_socket.dart';
 import 'push_messaging.dart';
@@ -34,19 +34,27 @@ class PushRuntimeState {
 final pushCoordinatorProvider =
     NotifierProvider<PushCoordinator, PushRuntimeState>(PushCoordinator.new);
 
+final notificationSocketProvider = Provider<NotificationSocket>(
+  (ref) => NotificationSocket(),
+);
+
 class PushCoordinator extends Notifier<PushRuntimeState>
     with WidgetsBindingObserver {
   late final PushMessaging _messaging;
-  final NotificationSocket _socket = NotificationSocket();
+  late final NotificationSocket _socket;
+  late final LiveUpdates _live;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
-  final Set<String> _seenEventIds = {};
   String? _pendingLocation;
   int? _pendingNotificationId;
+  int? _accountId;
+  int _sessionGeneration = 0;
   bool _resumed = true;
 
   @override
   PushRuntimeState build() {
     _messaging = ref.read(pushMessagingProvider);
+    _socket = ref.read(notificationSocketProvider);
+    _live = ref.read(liveUpdatesProvider);
     _resumed =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -64,8 +72,13 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       ..add(_messaging.foregroundMessages.listen(_foregroundMessage))
       ..add(_messaging.openedMessages.listen(_openMessage));
     ref.listen<SessionState>(sessionProvider, (_, next) {
-      unawaited(_sessionChanged(next));
+      _sessionChanged(next);
     }, fireImmediately: true);
+    final removeAccountRefresh = _live.register(
+      const LiveResource.account(),
+      () => unawaited(ref.read(sessionProvider.notifier).refreshAccount()),
+    );
+    ref.onDispose(removeAccountRefresh);
     unawaited(_restoreMessagingState());
     return PushRuntimeState(available: _messaging.available);
   }
@@ -75,10 +88,8 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     _resumed = state == AppLifecycleState.resumed;
     if (_resumed) {
       unawaited(refreshPermission());
-      unawaited(_sessionChanged(ref.read(sessionProvider)));
-      ref
-        ..invalidate(unreadNotificationsProvider)
-        ..invalidate(chatThreadsProvider);
+      _reconcileCurrentScope();
+      _startSocketsIfSignedIn();
     } else {
       unawaited(_socket.stop());
     }
@@ -105,23 +116,75 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     if (initial != null) _openMessage(initial);
   }
 
-  Future<void> _sessionChanged(SessionState session) async {
+  void _sessionChanged(SessionState session) {
+    final nextAccountId = switch (session) {
+      SessionSignedIn(:final account) => account.id,
+      _ => null,
+    };
+    if (nextAccountId == _accountId) {
+      if (session is! SessionRestoring) _openPendingIfReady();
+      return;
+    }
+
+    _accountId = nextAccountId;
+    _sessionGeneration++;
+    _live.bindAccount(nextAccountId);
+    unawaited(_socket.stop());
     if (session is SessionSignedIn) {
-      if (_resumed) {
-        await _socket.start(
-          accessToken: ref.read(tokenStoreProvider).readAccess,
-          onEvent: _socketEvent,
-        );
-      }
-      await _syncRegistration();
+      _startSocketsIfSignedIn();
+      unawaited(_syncRegistration(expectedGeneration: _sessionGeneration));
       _openPendingIfReady();
     } else if (session is SessionSignedOut) {
-      await _socket.stop();
       _openPendingIfReady();
     }
   }
 
-  Future<void> _syncRegistration() async {
+  void _startSocketsIfSignedIn() {
+    if (!_resumed || ref.read(sessionProvider) is! SessionSignedIn) return;
+    final generation = _sessionGeneration;
+    unawaited(
+      _socket.start(
+        accessToken: _socketAccessToken,
+        onEvent: (event, _) {
+          if (generation != _sessionGeneration) return;
+          _live.ingest(event, source: LiveEventSource.websocket);
+        },
+        onConnected: (_) {
+          if (generation != _sessionGeneration) return;
+          _reconcileCurrentScope();
+        },
+      ),
+    );
+  }
+
+  Future<String?> _socketAccessToken({required bool refresh}) async {
+    if (ref.read(sessionProvider) is! SessionSignedIn) return null;
+    if (refresh) {
+      try {
+        // A normal authenticated read enters the same 401/single-flight
+        // interceptor as every screen. It refreshes an expired access token
+        // and ends a terminally expired session instead of looping a rejected
+        // WS bearer forever.
+        await ref.read(authRepositoryProvider).me();
+      } on Object {
+        return null;
+      }
+      if (ref.read(sessionProvider) is! SessionSignedIn) return null;
+    }
+    return ref.read(tokenStoreProvider).readAccess();
+  }
+
+  void _reconcileCurrentScope() {
+    final router = ref.read(routerProvider);
+    _live.reconcileScope(
+      liveResourcesForLocation(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+      ),
+    );
+  }
+
+  Future<void> _syncRegistration({int? expectedGeneration}) async {
+    final generation = expectedGeneration ?? _sessionGeneration;
     if (!_messaging.available ||
         ref.read(sessionProvider) is! SessionSignedIn) {
       return;
@@ -129,66 +192,65 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     try {
       final store = ref.read(tokenStoreProvider);
       final current = await _messaging.token();
+      if (generation != _sessionGeneration ||
+          ref.read(sessionProvider) is! SessionSignedIn) {
+        return;
+      }
       final token = current ?? await store.readPendingPushToken();
+      if (generation != _sessionGeneration ||
+          ref.read(sessionProvider) is! SessionSignedIn) {
+        return;
+      }
       if (token == null || token.isEmpty) return;
+      final installationId = await store.readOrCreateInstallationId();
+      if (generation != _sessionGeneration ||
+          ref.read(sessionProvider) is! SessionSignedIn) {
+        return;
+      }
       await ref
           .read(pushRepositoryProvider)
           .registerDevice(
             token: token,
-            installationId: await store.readOrCreateInstallationId(),
+            installationId: installationId,
             platform: defaultTargetPlatform == TargetPlatform.iOS
                 ? 'ios'
                 : 'android',
             appVersion: '',
           );
+      if (generation != _sessionGeneration ||
+          ref.read(sessionProvider) is! SessionSignedIn) {
+        return;
+      }
       await store.writePendingPushToken(null);
+      if (generation != _sessionGeneration ||
+          ref.read(sessionProvider) is! SessionSignedIn) {
+        return;
+      }
       state = state.copyWith(syncFailed: false);
     } on Object {
+      if (generation != _sessionGeneration) {
+        return;
+      }
       state = state.copyWith(syncFailed: true);
     }
   }
 
   Future<void> _tokenRefreshed(String token) async {
+    final generation = _sessionGeneration;
     final store = ref.read(tokenStoreProvider);
     await store.writePendingPushToken(token);
-    if (ref.read(sessionProvider) is SessionSignedIn) {
-      await _syncRegistration();
+    if (generation == _sessionGeneration &&
+        ref.read(sessionProvider) is SessionSignedIn) {
+      await _syncRegistration(expectedGeneration: generation);
     }
   }
 
   void _foregroundMessage(PushMessage message) {
-    _reconcile(message.data);
-  }
-
-  void _socketEvent(Map<String, dynamic> event) {
-    final data = <String, String>{};
-    final eventId = event['event_id'];
-    final type = event['type'];
-    if (eventId is String) data['event_id'] = eventId;
-    if (type is String) data['channel'] = type;
-    final payload = event['payload'];
-    if (payload is Map) {
-      for (final entry in payload.entries) {
-        if (entry.value is String || entry.value is num) {
-          data['${entry.key}'] = '${entry.value}';
-        }
-      }
-    }
-    _reconcile(data);
-  }
-
-  void _reconcile(Map<String, String> data) {
-    final eventId = data['event_id'];
-    if (eventId != null && !_seenEventIds.add(eventId)) return;
-    if (_seenEventIds.length > 64) _seenEventIds.remove(_seenEventIds.first);
-    ref.invalidate(unreadNotificationsProvider);
-    if (data['channel'] == 'chat.message.new') {
-      ref.invalidate(chatThreadsProvider);
-    }
+    _live.ingest(message.data, source: LiveEventSource.firebase);
   }
 
   void _openMessage(PushMessage message) {
-    _reconcile(message.data);
+    _live.ingest(message.data, source: LiveEventSource.firebase);
     final location = pushLocation(message.data);
     if (location == null) return;
     _pendingLocation = location;

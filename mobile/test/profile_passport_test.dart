@@ -41,9 +41,11 @@ ProviderContainer _container({
   overrides: [
     tokenStoreProvider.overrideWithValue(FakeTokenStore()),
     accountProvider.overrideWithValue(account),
-    completedDealsCountProvider.overrideWith((ref) async => completedDeals),
+    completedDealsCountProvider.overrideWith(
+      (ref) => AsyncData(completedDeals),
+    ),
     receivedRatingsProvider.overrideWith((ref) async => ratings),
-    unreadNotificationsProvider.overrideWith((ref) async => 0),
+    unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
   ],
 );
 
@@ -61,8 +63,15 @@ void main() {
       );
     final container = containerFor(backend);
     addTearDown(container.dispose);
+    final subscription = container.listen(
+      completedDealsCountProvider,
+      (_, _) {},
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
 
-    expect(await container.read(completedDealsCountProvider.future), 47);
+    await _waitFor(() => container.read(completedDealsCountProvider).hasValue);
+    expect(container.read(completedDealsCountProvider).requireValue, 47);
   });
 
   testWidgets('populated passport uses current authoritative facts', (
@@ -118,4 +127,12 @@ void main() {
     expect(find.textContaining('With ShipTrip since'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
+
+Future<void> _waitFor(bool Function() condition) async {
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  throw StateError('Provider did not settle.');
 }

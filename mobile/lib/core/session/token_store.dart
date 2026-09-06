@@ -35,6 +35,18 @@ class TokenStore {
           );
 
   final FlutterSecureStorage _storage;
+  int _identityGeneration = 0;
+  Future<void> _credentialWriteTail = Future<void>.value();
+
+  /// Changes synchronously before any credential mutation awaits platform
+  /// storage. Token refresh uses it to reject a response started by an older
+  /// login, even when the next account signs in while that response is in
+  /// flight.
+  int get identityGeneration => _identityGeneration;
+
+  /// Invalidates requests and refreshes belonging to the current login while
+  /// retaining the bytes long enough for best-effort server sign-out.
+  int invalidateIdentity() => ++_identityGeneration;
 
   static const _kAccess = 'auth.access';
   static const _kRefresh = 'auth.refresh';
@@ -46,16 +58,56 @@ class TokenStore {
   /// Keys written by the retired build. Removed on every start.
   static const _legacyKeys = <String>['handover.codes', 'app.role'];
 
-  Future<void> save({required String access, required String refresh}) async {
-    await _storage.write(key: _kAccess, value: access);
-    await _storage.write(key: _kRefresh, value: refresh);
+  Future<void> save({required String access, required String refresh}) {
+    _identityGeneration++;
+    return _serializeCredentialWrite(() async {
+      await _storage.write(key: _kAccess, value: access);
+      await _storage.write(key: _kRefresh, value: refresh);
+    });
   }
 
-  Future<String?> readAccess() => _storage.read(key: _kAccess);
-  Future<String?> readRefresh() => _storage.read(key: _kRefresh);
+  Future<String?> readAccess() => _readCredential(_kAccess);
+  Future<String?> readRefresh() => _readCredential(_kRefresh);
 
-  Future<void> updateAccess(String access) =>
-      _storage.write(key: _kAccess, value: access);
+  Future<void> updateAccess(String access) {
+    return _serializeCredentialWrite(
+      () => _storage.write(key: _kAccess, value: access),
+    );
+  }
+
+  /// Commits a refresh only if the login that started it is still current.
+  Future<bool> saveRefreshedIfCurrent({
+    required int expectedIdentityGeneration,
+    required String expectedRefresh,
+    required String access,
+    String? refresh,
+  }) => _serializeCredentialWrite(() async {
+    if (_identityGeneration != expectedIdentityGeneration) return false;
+    final currentRefresh = await _storage.read(key: _kRefresh);
+    if (_identityGeneration != expectedIdentityGeneration ||
+        currentRefresh != expectedRefresh) {
+      return false;
+    }
+    await _storage.write(key: _kAccess, value: access);
+    if (_identityGeneration != expectedIdentityGeneration) return false;
+    if (refresh != null) {
+      await _storage.write(key: _kRefresh, value: refresh);
+      if (_identityGeneration != expectedIdentityGeneration) return false;
+    }
+    return true;
+  });
+
+  Future<bool> saveAuthenticationIfCurrent({
+    required int expectedIdentityGeneration,
+    required String access,
+    required String refresh,
+  }) => _serializeCredentialWrite(() async {
+    if (_identityGeneration != expectedIdentityGeneration) return false;
+    await _storage.write(key: _kAccess, value: access);
+    if (_identityGeneration != expectedIdentityGeneration) return false;
+    await _storage.write(key: _kRefresh, value: refresh);
+    return _identityGeneration == expectedIdentityGeneration;
+  });
 
   /// Which side of the marketplace a dual-role user last worked from. A
   /// preference, not a permission — the server's role is always authoritative
@@ -99,7 +151,20 @@ class TokenStore {
 
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.
-  Future<void> clear() async {
+  Future<void> clear() {
+    _identityGeneration++;
+    return _serializeCredentialWrite(_clearCredentials);
+  }
+
+  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) =>
+      _serializeCredentialWrite(() async {
+        if (_identityGeneration != expectedIdentityGeneration) return false;
+        final clearingGeneration = ++_identityGeneration;
+        await _clearCredentials();
+        return _identityGeneration == clearingGeneration;
+      });
+
+  Future<void> _clearCredentials() async {
     await _storage.delete(key: _kAccess);
     await _storage.delete(key: _kRefresh);
     await _storage.delete(key: _kRoleContext);
@@ -116,6 +181,24 @@ class TokenStore {
         // A keystore that refuses a delete for an absent key must not stop
         // the app from starting.
       }
+    }
+  }
+
+  Future<T> _serializeCredentialWrite<T>(Future<T> Function() operation) {
+    final result = _credentialWriteTail.then((_) => operation());
+    _credentialWriteTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  Future<String?> _readCredential(String key) async {
+    while (true) {
+      final pending = _credentialWriteTail;
+      await pending;
+      if (!identical(pending, _credentialWriteTail)) continue;
+      return _storage.read(key: key);
     }
   }
 }

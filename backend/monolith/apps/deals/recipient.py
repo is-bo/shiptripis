@@ -26,6 +26,8 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
+from apps.core import channels, redis_bus
+from apps.core.event_resources import deal_resources
 from apps.core.financial_locks import lock_deal_lifecycle
 from apps.core.languages import (
     DEFAULT_COMMUNICATION_LANGUAGE,
@@ -166,6 +168,11 @@ def set_recipient(
     # Re-read the aggregate's view of the recipient so the transition sees it.
     aggregate = lock_deal_lifecycle(deal_id)
     lifecycle.apply_pickup_ready(aggregate, actor_id=actor_id)
+    redis_bus.publish_after_commit(
+        channels.DEAL_UPDATED,
+        deal_resources(aggregate.deal),
+        targets=[deal.sender_id, deal.traveler_id],
+    )
     return RecipientResult(
         deal_id=deal_id,
         created=created,

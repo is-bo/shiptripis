@@ -129,6 +129,7 @@ class SessionController extends Notifier<SessionState> {
   /// device — but bounded, because a platform channel that never answers must
   /// not be able to hold the app on its splash screen indefinitely.
   static const _storageBudget = Duration(seconds: 5);
+  int _generation = 0;
 
   @override
   SessionState build() {
@@ -151,6 +152,7 @@ class SessionController extends Notifier<SessionState> {
   /// entering the app on a blacklisted refresh token means every screen fails
   /// at once. One `/api/me` up front is worth that.
   Future<void> restore() async {
+    final generation = ++_generation;
     final String? refresh;
     try {
       // Deletes handover-code plaintext left by the retired build, before
@@ -163,18 +165,21 @@ class SessionController extends Notifier<SessionState> {
       // platform with no secure storage at all. A store we cannot read is
       // indistinguishable from an empty one, and asking for a fresh sign-in
       // is a recoverable outcome; hanging on the splash forever is not.
-      state = const SessionSignedOut();
+      if (generation == _generation) state = const SessionSignedOut();
       return;
     }
 
+    if (generation != _generation) return;
     if (refresh == null) {
       state = const SessionSignedOut();
       return;
     }
 
     try {
-      state = SessionSignedIn(await _auth.me());
+      final account = await _auth.me();
+      if (generation == _generation) state = SessionSignedIn(account);
     } on ApiException catch (error) {
+      if (generation != _generation) return;
       // Offline at launch is not a signed-out user. Keeping the credentials
       // and surfacing the network state lets the app recover when
       // connectivity returns instead of demanding a password in a tunnel.
@@ -183,13 +188,21 @@ class SessionController extends Notifier<SessionState> {
         return;
       }
       await _tokens.clear();
-      state = const SessionSignedOut();
+      if (generation == _generation) state = const SessionSignedOut();
     }
   }
 
   Future<void> signIn({required String email, required String password}) async {
-    final account = await _auth.signIn(email: email, password: password);
+    final generation = ++_generation;
+    final identity = _tokens.invalidateIdentity();
+    final account = await _auth.signIn(
+      email: email,
+      password: password,
+      expectedIdentityGeneration: identity,
+    );
+    if (generation != _generation) return;
     await _adoptRoleContextFor(account);
+    if (generation != _generation) return;
     state = SessionSignedIn(account);
   }
 
@@ -201,6 +214,8 @@ class SessionController extends Notifier<SessionState> {
     String? wilaya,
     required CommunicationLanguage preferredLanguage,
   }) async {
+    final generation = ++_generation;
+    final identity = _tokens.invalidateIdentity();
     final account = await _auth.signUp(
       fullName: fullName,
       email: email,
@@ -208,8 +223,11 @@ class SessionController extends Notifier<SessionState> {
       phone: phone,
       wilaya: wilaya,
       preferredLanguage: preferredLanguage,
+      expectedIdentityGeneration: identity,
     );
+    if (generation != _generation) return;
     await _adoptRoleContextFor(account);
+    if (generation != _generation) return;
     state = SessionSignedIn(account);
   }
 
@@ -219,13 +237,18 @@ class SessionController extends Notifier<SessionState> {
     String? wilaya,
     CommunicationLanguage? preferredLanguage,
   }) async {
+    final generation = ++_generation;
+    final identity = _tokens.invalidateIdentity();
     final account = await _auth.signInWithGoogle(
       idToken: idToken,
       phone: phone,
       wilaya: wilaya,
       preferredLanguage: preferredLanguage,
+      expectedIdentityGeneration: identity,
     );
+    if (generation != _generation) return;
     await _adoptRoleContextFor(account);
+    if (generation != _generation) return;
     state = SessionSignedIn(account);
   }
 
@@ -238,8 +261,16 @@ class SessionController extends Notifier<SessionState> {
   /// to the profile the server returned — never to the value that was asked
   /// for.
   Future<void> updatePreferredLanguage(CommunicationLanguage language) async {
-    if (state is! SessionSignedIn) return;
-    state = SessionSignedIn(await _auth.updatePreferredLanguage(language));
+    final current = state;
+    if (current is! SessionSignedIn) return;
+    final generation = _generation;
+    final account = await _auth.updatePreferredLanguage(language);
+    if (generation == _generation &&
+        state is SessionSignedIn &&
+        (state as SessionSignedIn).account.id == current.account.id &&
+        account.id == current.account.id) {
+      state = SessionSignedIn(account);
+    }
   }
 
   /// Re-reads `/api/me`. Called after KYC submission, on resume, and whenever
@@ -249,9 +280,17 @@ class SessionController extends Notifier<SessionState> {
   /// already has, and dropping the user to a sign-in screen because one
   /// background poll timed out would be worse than a slightly stale badge.
   Future<void> refreshAccount() async {
-    if (state is! SessionSignedIn) return;
+    final current = state;
+    if (current is! SessionSignedIn) return;
+    final generation = _generation;
     try {
-      state = SessionSignedIn(await _auth.me());
+      final account = await _auth.me();
+      if (generation == _generation &&
+          state is SessionSignedIn &&
+          (state as SessionSignedIn).account.id == current.account.id &&
+          account.id == current.account.id) {
+        state = SessionSignedIn(account);
+      }
     } on ApiException {
       // Keep the previous account.
     }
@@ -260,6 +299,7 @@ class SessionController extends Notifier<SessionState> {
   Future<void> signOut() async {
     // Clear locally first. If the network call hangs, the user is still out —
     // a sign-out that can fail is not a sign-out.
+    _generation++;
     state = const SessionSignedOut();
     await _auth.signOut();
     _invalidateEverything();
@@ -268,6 +308,7 @@ class SessionController extends Notifier<SessionState> {
   /// Called by the API client when refresh has failed terminally.
   void handleSessionExpired() {
     if (state is SessionSignedOut) return;
+    _generation++;
     state = const SessionSignedOut(becauseExpired: true);
     _invalidateEverything();
   }

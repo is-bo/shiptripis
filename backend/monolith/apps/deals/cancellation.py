@@ -34,6 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
+from apps.core.event_resources import deal_resources
 from apps.matching.models import Match, MatchEvent
 from apps.parcels.models import ParcelRequest
 
@@ -459,7 +460,7 @@ def _notify_cancelled(
 
     publish_after_commit(
         DEAL_CANCELLED,
-        {"deal_id": deal.pk},
+        deal_resources(deal),
         targets=[deal.sender_id, deal.traveler_id],
     )
 

@@ -8,6 +8,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.core import channels, redis_bus
+from apps.core.event_resources import match_resources
 from apps.kyc.models import KycSubmission
 
 from apps.locations.models import AirportLocalityMapping, Place
@@ -343,6 +345,12 @@ def cancel_journey(*, journey: Journey, actor) -> JourneyCancellationResult:
                     for match in pending_matches
                 ]
             )
+            for match in pending_matches:
+                redis_bus.publish_after_commit(
+                    channels.OFFER_UPDATED,
+                    match_resources(match),
+                    targets=[match.sender_id, match.traveler_id],
+                )
 
     locked.refresh_from_db()
     return JourneyCancellationResult(

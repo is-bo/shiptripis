@@ -44,6 +44,8 @@ FLIGHT_PROOF_STATUS_CHANGED = "flight_proof.status_changed"
 
 # funded-delivery lifecycle
 DEAL_CANCELLED = "deal.cancelled"
+# Neutral in-app refresh; deliberately ineligible for FCM display.
+DEAL_UPDATED = "deal.updated"
 DISPUTE_OPENED = "dispute.opened"
 DISPUTE_RESOLVED = "dispute.resolved"
 PAYOUT_STATUS_CHANGED = "payout.status_changed"

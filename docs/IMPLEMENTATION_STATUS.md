@@ -1,6 +1,7 @@
 # ShipTrip V1 Implementation Status
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
+Latest repair phase: Phase 8F-F4 real-time chat and live state **IMPLEMENTED / DEVICE QA PENDING**; F1/F2/F3 remain included.
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
 server-authoritative and double-entry ledgered, every cross-domain transition
 follows one global lock order, the traveler can never read a delivery code, the
@@ -4299,3 +4300,55 @@ Flutter focused role/Boost/localization/guest/layout regressions **105 passed**;
 detector reports no findings; and the full Flutter suite is **433 passed**. No
 deployment or APK/AAB build was performed. Phases 8F-F4, F5 and F6 were not
 started.
+
+## Phase 8F-F4 — real-time chat and live application state
+
+Phase 8F-F4 implements a shared session-bound live refresh path using the
+existing Riverpod providers. Flutter now opens both Go WebSocket endpoints;
+safe entity IDs from WebSocket and foreground FCM events invalidate affected
+HTTP resources. Duplicate event IDs and bursts coalesce. Resume/reconnect
+reconciles the current route, mounted collections and unread count, with no
+global reload of unrelated details or chat histories.
+
+The chat defect combined an absent chat socket subscription, no live listener
+on the open conversation, and a send path that discarded the returned message
+before reloading the oldest history page. Chat now keeps an immediate pending
+bubble, merges the authoritative ACK by server ID, preserves failed sends for
+explicit retry and fetches missed messages with bounded ID cursors. Eligibility
+refreshes with lifecycle changes; older history and unread acknowledgements
+follow the same authoritative API. Account changes dispose chat state and stale
+session callbacks cannot revive an older account. Live HTTP queries use distinct
+account keys so neither loading nor error states retain a previous account's
+data, including direct provider values outside the shared loading widget.
+
+Lifecycle staleness also came from notifications only refreshing the inbox and
+chat list, an unmounted resume refresher, and missing publications in the V1
+negotiation and several delayed transition paths. Proposal/counter/accept,
+pending cancellation/expiry, pickup, delivery-code availability, delivery,
+completion, disputes and payouts now carry the affected resource identities.
+Competing negotiations receive only their own IDs. The neutral `deal.updated`
+event supplies in-app refreshes without a new OS push. Money, compatibility,
+code privacy, the 30-minute code delay and 48-hour payout hold remain governed
+by the existing backend services.
+
+Migration `chat.0002_chat_message_cursor_index` adds `(match_id, id)` for bounded
+history reads, concurrently on PostgreSQL. The schema contract was regenerated;
+the migration reverses/reapplies cleanly and the normalized repeat dump is
+identical. There are no SQL query files to generate into sqlc repositories and
+no gRPC interface change.
+
+Local backend validation: full PostgreSQL suite **1,300 passed, 34 skipped**
+(the existing retired legacy cases); focused live-publication and chat suite
+**29 passed**, including concurrent sends. Django checks, migration-state
+checks, Ruff, Go build, vet and default tests passed. Real Redis integration,
+Go race tests and generated-contract drift run in the required Linux CI gate.
+Flutter validation after the final runtime edit: **50 focused F4 tests passed**,
+**483 tests passed** in the full suite, formatting clean and
+`flutter analyze --fatal-infos` clean. Tests exercise mounted chat, pickup,
+Deal, negotiation, payment and dispute screens, resume/reconnect, and delayed
+account-switch, token-refresh, replay and logout races. Root review reworked
+the initial loading-widget-only account isolation into account-keyed caches
+and corrected chat cursor/commit ordering and server-authorized code visibility.
+
+No APK/AAB build or deployment is part of F4. F5 notification-permission UX and
+safety-period wording, and F6, remain outside this phase.

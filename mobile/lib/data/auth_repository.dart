@@ -21,11 +21,13 @@ class AuthRepository {
   Future<Account> signIn({
     required String email,
     required String password,
+    int? expectedIdentityGeneration,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/sign-in',
       body: {'email': email.trim(), 'password': password},
     ),
+    expectedIdentityGeneration: expectedIdentityGeneration,
   );
 
   /// [wilaya] is retained only for older clients that still send an Algerian
@@ -45,6 +47,7 @@ class AuthRepository {
     required String phone,
     String? wilaya,
     required CommunicationLanguage preferredLanguage,
+    int? expectedIdentityGeneration,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/sign-up',
@@ -57,6 +60,7 @@ class AuthRepository {
         'preferred_language': preferredLanguage.wire,
       },
     ),
+    expectedIdentityGeneration: expectedIdentityGeneration,
   );
 
   /// [preferredLanguage] is used only when Google creates a fresh account; the
@@ -67,6 +71,7 @@ class AuthRepository {
     String? phone,
     String? wilaya,
     CommunicationLanguage? preferredLanguage,
+    int? expectedIdentityGeneration,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/oauth/google',
@@ -78,6 +83,7 @@ class AuthRepository {
           'preferred_language': preferredLanguage.wire,
       },
     ),
+    expectedIdentityGeneration: expectedIdentityGeneration,
   );
 
   Future<Account> me() async =>
@@ -102,10 +108,13 @@ class AuthRepository {
   /// Local clearing happens regardless of the network result: a user who taps
   /// sign out on a train must actually be signed out on the device.
   Future<void> signOut() async {
+    final signOutIdentity = _tokens.invalidateIdentity();
     final refresh = await _tokens.readRefresh();
+    if (_tokens.identityGeneration != signOutIdentity) return;
     if (refresh != null) {
       try {
         final installationId = await _tokens.readOrCreateInstallationId();
+        if (_tokens.identityGeneration != signOutIdentity) return;
         await _api.postVoid(
           '/api/auth/sign-out',
           body: {'refresh': refresh, 'installation_id': installationId},
@@ -115,7 +124,7 @@ class AuthRepository {
         // or unavailable keystore must not prevent local sign-out.
       }
     }
-    await _tokens.clear();
+    await _tokens.clearIfIdentityCurrent(signOutIdentity);
   }
 
   /// The server answers 202 for every address, known or not, so the UI must
@@ -147,7 +156,10 @@ class AuthRepository {
         body: {'email': email.trim(), 'code': code.trim()},
       );
 
-  Future<Account> _authenticate(Json body) async {
+  Future<Account> _authenticate(
+    Json body, {
+    int? expectedIdentityGeneration,
+  }) async {
     final access = body['access'];
     final refresh = body['refresh'];
     final user = body['user'];
@@ -160,7 +172,15 @@ class AuthRepository {
       );
     }
 
-    await _tokens.save(access: access, refresh: refresh);
+    final identity = expectedIdentityGeneration ?? _tokens.invalidateIdentity();
+    final saved = await _tokens.saveAuthenticationIfCurrent(
+      expectedIdentityGeneration: identity,
+      access: access,
+      refresh: refresh,
+    );
+    if (!saved) {
+      throw StateError('The authenticated session changed.');
+    }
     return Account.fromJson(Map<String, dynamic>.from(user));
   }
 }

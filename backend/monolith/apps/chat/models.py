@@ -10,7 +10,7 @@ class ChatMessage(models.Model):
     `targets=[other_member_uid]`; the Go chat-service fans the same payload
     to the recipient's live WebSocket (it never writes this table itself).
 
-    The thread is implicit: `(match, ordered by created_at)`. There is no
+    The thread is implicit: `(match, ordered by id)`. There is no
     separate `chat_thread` table in V1 — a Match already scopes exactly the
     two parties allowed to talk, and chat is gated on a succeeded payment for
     the match's accepted offer (see the send view). If group/multi-thread
@@ -43,6 +43,7 @@ class ChatMessage(models.Model):
                 fields=("match", "created_at"),
                 name="chat_match_created_idx",
             ),
+            models.Index(fields=("match", "id"), name="chat_match_id_idx"),
         ]
 
     def __str__(self) -> str:

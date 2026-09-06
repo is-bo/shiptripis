@@ -33,6 +33,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
+from apps.core.event_resources import deal_resources
 from apps.core.phase4_policy import HandoverPolicy, phase4_policy
 from apps.deals import lifecycle
 from apps.deals.models import Deal, DealEvent
@@ -389,13 +390,20 @@ def _arm_recipient_notification(
             deal_id=deal.pk,
             context={"deal_reference": f"ST-{deal.pk}"},
         )
-    from apps.core.channels import HANDOVER_DELIVERY_CODE_AVAILABLE
+    from apps.core.channels import DEAL_UPDATED, HANDOVER_DELIVERY_CODE_AVAILABLE
     from apps.core.redis_bus import publish_after_commit
 
     publish_after_commit(
         HANDOVER_DELIVERY_CODE_AVAILABLE,
-        {"deal_id": deal.pk},
+        deal_resources(deal),
         targets=[deal.sender_id],
+    )
+    # The traveler may refresh their submission permissions, but must never
+    # receive the sender's "your code is available" push or the code itself.
+    publish_after_commit(
+        DEAL_UPDATED,
+        deal_resources(deal),
+        targets=[deal.traveler_id],
     )
 
 
@@ -986,8 +994,8 @@ def _notify_pickup_confirmed(aggregate: LockedLifecycleAggregate) -> None:
 
     publish_after_commit(
         MATCH_IN_TRANSIT,
-        {"deal_id": deal.pk},
-        targets=[deal.sender_id],
+        deal_resources(deal),
+        targets=[deal.sender_id, deal.traveler_id],
     )
 
 
@@ -1059,7 +1067,7 @@ def _notify_delivery_confirmed(aggregate: LockedLifecycleAggregate) -> None:
 
     publish_after_commit(
         HANDOVER_DELIVERY_CONFIRMED,
-        {"deal_id": deal.pk},
+        deal_resources(deal),
         targets=[deal.sender_id, deal.traveler_id],
     )
 

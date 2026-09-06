@@ -157,7 +157,9 @@ class FakeTokenStore extends TokenStore {
   String? _roleContext;
 
   @override
-  Future<void> save({required String access, required String refresh}) async {}
+  Future<void> save({required String access, required String refresh}) async {
+    invalidateIdentity();
+  }
 
   @override
   Future<String?> readAccess() async => 'access-token';
@@ -167,6 +169,23 @@ class FakeTokenStore extends TokenStore {
 
   @override
   Future<void> updateAccess(String access) async {}
+
+  @override
+  Future<bool> saveRefreshedIfCurrent({
+    required int expectedIdentityGeneration,
+    required String expectedRefresh,
+    required String access,
+    String? refresh,
+  }) async =>
+      identityGeneration == expectedIdentityGeneration &&
+      this.refresh == expectedRefresh;
+
+  @override
+  Future<bool> saveAuthenticationIfCurrent({
+    required int expectedIdentityGeneration,
+    required String access,
+    required String refresh,
+  }) async => identityGeneration == expectedIdentityGeneration;
 
   @override
   Future<String?> readRoleContext() async => _roleContext;
@@ -181,7 +200,16 @@ class FakeTokenStore extends TokenStore {
   Future<void> writeLocale(String? tag) async => _locale = tag;
 
   @override
-  Future<void> clear() async {}
+  Future<void> clear() async {
+    invalidateIdentity();
+  }
+
+  @override
+  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
+    if (identityGeneration != expectedIdentityGeneration) return false;
+    invalidateIdentity();
+    return true;
+  }
 
   @override
   Future<void> purgeLegacyArtifacts() async {}

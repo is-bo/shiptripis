@@ -78,6 +78,45 @@ inbox/chat state without a duplicate OS banner. Background and terminated-app
 taps use the same structured routing table. The authoritative unread count is
 always fetched from Django.
 
+## Live client state (Phase 8F-F4)
+
+While signed in and foregrounded, Flutter connects to both `/ws/notifications`
+and `/ws/chat`. WebSocket and foreground FCM events share one session-bound
+event-to-resource map. Events identify the affected Deal, Match, offer list,
+request, journey, payment, dispute, payout or conversation; mounted providers
+refetch their normal HTTP endpoints. Lifecycle and financial state remain
+server-authoritative. Rapid invalidations coalesce, and duplicate event IDs
+from both transports do not trigger the same resource twice.
+
+Chat inserts a pending bubble immediately, then replaces it with the message
+returned by the send endpoint. HTTP history and live reconciliation merge by
+server message ID. Initial history reads the latest 50 messages; reconnect
+fetches missed messages in pages of at most 200 using `after_id`, and scrolling
+back uses `before_id`. The HTTP cursor never advances solely from a send ACK.
+The history API retains legacy page reads and only marks returned incoming
+messages as read. An additive `(match_id, id)` index supports these reads.
+
+On foreground resume or socket reconnect, the client reconciles the current
+route, mounted collections and unread count. It does not fetch unrelated chat
+histories or every cached detail. Logout/account changes close sockets, discard
+queued events and pending chat state, and reject stale session callbacks.
+Account-keyed HTTP caches also prevent prior-account data from surviving into
+the next account's loading or error state.
+
+V1 proposal/counter/accept, pending cancellation/expiry, recipient setup,
+pickup, code availability, delivery, completion and payout settlement now
+publish refresh identities after the transaction commits. `deal.updated` is a
+neutral in-app/WS refresh for changes such as recipient setup or payment-grace
+expiry; it has no FCM display entry. A traveler's code-availability refresh uses
+this neutral event, while the sender keeps the existing code-ready event.
+No new event fields contain codes, private addresses, evidence, message text,
+payment credentials or provider identifiers.
+
+For regression QA, keep a conversation or Deal open on each party's device:
+send/receive, confirm pickup, reconnect after missing several messages, then
+background/resume and switch accounts. Check the visible state against HTTP,
+including unread counts and eligibility, without navigating away and back.
+
 ## Android, iOS, and client configuration
 
 Android has four normal-importance channels: Messages, Delivery updates,

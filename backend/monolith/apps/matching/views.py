@@ -43,6 +43,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
+from apps.core.event_resources import match_resources
 from apps.core.pricing import quote_delivery, quote_product
 from apps.parcels.models import ParcelRequest
 from apps.trips.models import Trip
@@ -510,7 +511,7 @@ class MatchCancelView(APIView):
             redis_bus.publish_after_commit(
                 channels.OFFER_UPDATED,
                 {
-                    "match_id": match.id,
+                    **match_resources(match),
                     "status": "cancelled",
                     "recipient_id": recipient,
                 },
@@ -800,7 +801,7 @@ class OfferDeclineView(APIView):
             redis_bus.publish_after_commit(
                 channels.OFFER_UPDATED,
                 {
-                    "match_id": match.id,
+                    **match_resources(match),
                     "offer_id": offer.id,
                     "status": "declined",
                     "recipient_id": offer.proposer_id,
@@ -916,7 +917,7 @@ class OfferWithdrawView(APIView):
             redis_bus.publish_after_commit(
                 channels.OFFER_UPDATED,
                 {
-                    "match_id": offer.match_id,
+                    **match_resources(match),
                     "offer_id": offer.id,
                     "status": "withdrawn",
                     "recipient_id": recipient,

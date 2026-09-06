@@ -4140,6 +4140,13 @@ CREATE INDEX chat_match_created_idx ON public.chat_message USING btree (match_id
 
 
 --
+-- Name: chat_match_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX chat_match_id_idx ON public.chat_message USING btree (match_id, id);
+
+
+--
 -- Name: chat_message_created_at_618078f0; Type: INDEX; Schema: public; Owner: -
 --
 

@@ -151,20 +151,39 @@ class ChatMessagePage {
     required this.count,
     required this.messages,
     required this.hasMore,
+    this.oldestId,
+    this.latestId,
+    this.next,
   });
 
-  factory ChatMessagePage.fromJson(Map<String, dynamic> json) =>
-      ChatMessagePage(
-        count: readInt(json['count']) ?? 0,
-        messages: readObjectList(
-          json['results'],
-        ).map(ChatMessage.fromJson).toList(growable: false),
-        hasMore: readString(json['next']) != null,
-      );
+  factory ChatMessagePage.fromJson(Map<String, dynamic> json) {
+    final messages = readObjectList(
+      json['results'],
+    ).map(ChatMessage.fromJson).toList(growable: false);
+    return ChatMessagePage(
+      count: readInt(json['count']) ?? messages.length,
+      messages: messages,
+      // `next` keeps older deployments readable. Cursor-aware deployments
+      // publish `has_more`, whose meaning follows the selected direction.
+      hasMore:
+          (json.containsKey('has_more') && readBool(json['has_more'])) ||
+          readString(json['next']) != null,
+      oldestId:
+          readInt(json['oldest_id']) ??
+          (messages.isEmpty ? null : messages.first.id),
+      latestId:
+          readInt(json['latest_id']) ??
+          (messages.isEmpty ? null : messages.last.id),
+      next: readString(json['next']),
+    );
+  }
 
   final int count;
   final List<ChatMessage> messages;
   final bool hasMore;
+  final int? oldestId;
+  final int? latestId;
+  final String? next;
 }
 
 /// A message the user wrote that has not been acknowledged by the server yet.
@@ -191,4 +210,7 @@ class PendingChatMessage {
     createdAt: createdAt,
     hasFailed: true,
   );
+
+  PendingChatMessage retrying() =>
+      PendingChatMessage(localId: localId, body: body, createdAt: createdAt);
 }

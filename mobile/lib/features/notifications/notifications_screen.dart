@@ -15,6 +15,8 @@ import 'package:go_router/go_router.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/live/live_updates.dart';
+import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
@@ -23,12 +25,29 @@ import '../../design/tokens.dart';
 import '../../domain/notification.dart';
 import '../../l10n/app_localizations.dart';
 
-final _notificationsProvider = FutureProvider.autoDispose<NotificationPage>((
-  ref,
-) async {
-  final repo = ref.watch(notificationRepositoryProvider);
-  return repo.page();
-});
+final _notificationsQuery = FutureProvider.autoDispose
+    .family<NotificationPage, int?>((ref, accountId) async {
+      final unsubscribe = ref
+          .read(liveUpdatesProvider)
+          .register(const LiveResource.notifications(), ref.invalidateSelf);
+      ref.onDispose(unsubscribe);
+      final repo = ref.watch(notificationRepositoryProvider);
+      final result = await repo.page();
+      if (ref.read(accountProvider)?.id != accountId) {
+        throw StateError('Discarded an inbox read from an older session.');
+      }
+      return result;
+    });
+final _notificationsProvider =
+    Provider.autoDispose<AsyncValue<NotificationPage>>((ref) {
+      final accountId = ref.watch(
+        accountProvider.select((account) => account?.id),
+      );
+      final query = _notificationsQuery(accountId);
+      // ignore: experimental_member_use
+      ref.onManualInvalidation(() => ref.invalidate(query));
+      return ref.watch(query);
+    });
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -294,6 +313,7 @@ class _Row extends StatelessWidget {
       NotificationChannel.handoverConfirmed ||
       NotificationChannel.deliveryCodeAvailable ||
       NotificationChannel.deliveryConfirmed ||
+      NotificationChannel.dealUpdated ||
       NotificationChannel.dealCancelled => (
         l.notificationDelivery,
         Icons.local_shipping_rounded,

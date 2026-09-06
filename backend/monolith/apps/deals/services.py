@@ -8,6 +8,7 @@ from django.db.models import Min, Q
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
+from apps.core.event_resources import deal_resources
 from apps.core.financial_locks import lock_deal_aggregate
 from apps.matching.models import Match
 from apps.parcels.models import ParcelRequest
@@ -137,6 +138,13 @@ def release_pending_deal_reservation(
         reason=reason,
         locked_orders=locked_orders_by_id,
         delivery_request=request_row,
+    )
+    redis_bus.publish_after_commit(
+        channels.DEAL_UPDATED
+        if reason == "payment_grace_expired"
+        else channels.DEAL_CANCELLED,
+        deal_resources(deal),
+        targets=[deal.sender_id, deal.traveler_id],
     )
     return ReservationReleaseResult(deal.pk, released, True)
 
@@ -316,7 +324,7 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
     redis_bus.publish_after_commit(
         channels.PAYMENT_CAPTURED,
         {
-            "deal_id": deal.pk,
+            **deal_resources(deal),
             "status": deal.status,
             "payment_order_id": order_id,
             "currency": terms_payload["currency"],

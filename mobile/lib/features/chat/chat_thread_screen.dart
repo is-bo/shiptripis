@@ -20,15 +20,15 @@
 /// is typing, so this route sits above the shell.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_state.dart';
 import '../../app/router.dart';
-import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
-import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -37,36 +37,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/chat.dart';
 import '../../l10n/app_localizations.dart';
-
-class _ChatThreadData {
-  const _ChatThreadData({required this.eligibility, required this.page});
-
-  final ChatEligibility eligibility;
-  final ChatMessagePage page;
-}
-
-final _threadDataProvider = FutureProvider.autoDispose
-    .family<_ChatThreadData, int>((ref, matchId) async {
-      final repo = ref.watch(chatRepositoryProvider);
-      final eligibility = await repo.eligibility(matchId: matchId);
-
-      if (!eligibility.canReadHistory) {
-        return _ChatThreadData(
-          eligibility: eligibility,
-          page: const ChatMessagePage(
-            count: 0,
-            messages: <ChatMessage>[],
-            hasMore: false,
-          ),
-        );
-      }
-
-      // Reading also marks the other party's messages read, server-side, so
-      // the unread badge has to be re-read afterwards.
-      final page = await repo.messages(matchId: matchId);
-      ref.invalidate(chatThreadsProvider);
-      return _ChatThreadData(eligibility: eligibility, page: page);
-    });
+import 'chat_thread_controller.dart';
 
 class ChatThreadScreen extends ConsumerStatefulWidget {
   const ChatThreadScreen({required this.matchId, this.dealId, super.key});
@@ -81,15 +52,13 @@ class ChatThreadScreen extends ConsumerStatefulWidget {
 class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final _composer = TextEditingController();
   final _scroll = ScrollController();
+  bool _loadingOlderFromScroll = false;
 
-  /// Messages the user has written that the server has not acknowledged.
-  /// Deliberately a separate list from [ChatMessage] so a pending bubble can
-  /// never be mistaken for a delivered one.
-  final _pending = <PendingChatMessage>[];
-
-  bool _sending = false;
-  ChatBlockReason _block = ChatBlockReason.ok;
-  int _localCounter = 0;
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_loadOlderAtTop);
+  }
 
   @override
   void dispose() {
@@ -107,65 +76,87 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
   Future<void> _send() async {
     final body = _composer.text.trim();
-    if (body.isEmpty || _sending) return;
+    final controller = ref.read(chatThreadControllerProvider(widget.matchId));
+    if (body.isEmpty || controller.isSending) return;
 
-    final local = PendingChatMessage(
-      localId: 'local-${_localCounter++}',
-      body: body,
-      createdAt: DateTime.now(),
-    );
-    setState(() {
-      _pending.add(local);
-      _composer.clear();
-      _sending = true;
-    });
-
-    try {
-      await ref
-          .read(chatRepositoryProvider)
-          .send(matchId: widget.matchId, body: body);
-      if (!mounted) return;
-      setState(() {
-        _pending.removeWhere((m) => m.localId == local.localId);
-        _block = ChatBlockReason.ok;
-      });
-      ref
-        ..invalidate(_threadDataProvider(widget.matchId))
-        ..invalidate(chatThreadsProvider);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        final index = _pending.indexWhere((m) => m.localId == local.localId);
-        if (index >= 0) _pending[index] = _pending[index].failed();
-        // The 402 body's `reason` lands in extras; anything else keeps the
-        // generic failure path.
-        if (error.statusCode == 402) {
-          _block = ChatBlockReason.parse(error.extras['reason']);
-        }
-      });
-      if (error.statusCode != 402) AppSnack.failure(context, error);
-    } finally {
-      if (mounted) setState(() => _sending = false);
+    final result = controller.send(body);
+    _composer.clear();
+    _scrollToBottom();
+    final error = await result;
+    if (!mounted || error == null) return;
+    if (controller.sendBlock != ChatBlockReason.paymentPending) {
+      AppSnack.failure(context, error);
     }
   }
 
-  void _retry(PendingChatMessage message) {
-    setState(() {
-      _pending.removeWhere((m) => m.localId == message.localId);
-      _composer.text = message.body;
+  Future<void> _retry(PendingChatMessage message) async {
+    final controller = ref.read(chatThreadControllerProvider(widget.matchId));
+    final error = await controller.retry(message);
+    if (!mounted || error == null) return;
+    if (controller.sendBlock != ChatBlockReason.paymentPending) {
+      AppSnack.failure(context, error);
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
     });
+  }
+
+  void _loadOlderAtTop() {
+    if (!_scroll.hasClients || _loadingOlderFromScroll) return;
+    final position = _scroll.position;
+    if (position.pixels < position.maxScrollExtent - 120) return;
+    final controller = ref.read(chatThreadControllerProvider(widget.matchId));
+    if (!controller.hasMoreOlder || controller.isLoadingOlder) return;
+
+    _loadingOlderFromScroll = true;
+    final oldPixels = position.pixels;
+    unawaited(
+      controller.loadOlder().whenComplete(() {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _loadingOlderFromScroll = false;
+          if (!mounted || !_scroll.hasClients) return;
+          final newMaximum = _scroll.position.maxScrollExtent;
+          _scroll.jumpTo(oldPixels.clamp(0, newMaximum));
+        });
+      }),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
+    ref.listen<int?>(accountProvider.select((value) => value?.id), (
+      previous,
+      next,
+    ) {
+      if (previous != next) _composer.clear();
+    });
     final threads = ref.watch(chatThreadsProvider);
     final thread = _threadFrom(threads.value ?? const <ChatThread>[]);
-    final state = ref.watch(_threadDataProvider(widget.matchId));
-    final eligibility = state.value?.eligibility;
+    final controller = ref.watch(chatThreadControllerProvider(widget.matchId));
+    ref.listen<int>(
+      chatThreadControllerProvider(
+        widget.matchId,
+      ).select((value) => value.latestMessageId),
+      (previous, next) {
+        if (next > (previous ?? 0) &&
+            (!_scroll.hasClients || _scroll.offset <= 80)) {
+          _scrollToBottom();
+        }
+      },
+    );
+    final eligibility = controller.eligibility;
     final canSend = eligibility?.eligible ?? false;
-    final blocked = !canSend || _block != ChatBlockReason.ok;
+    final blocked = !canSend || controller.sendBlock != ChatBlockReason.ok;
     final dealId = widget.dealId ?? thread?.dealId;
 
     return AppScaffold(
@@ -185,23 +176,33 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       body: Column(
         children: [
           Expanded(
-            child: AsyncView<_ChatThreadData>(
-              value: state,
-              onRetry: () =>
-                  ref.invalidate(_threadDataProvider(widget.matchId)),
-              loading: () => const Padding(
-                padding: EdgeInsets.all(AppSpace.gutter),
-                child: SkeletonLines(count: 6, spacing: AppSpace.xl),
-              ),
-              data: (data) {
-                if (!data.eligibility.canReadHistory) {
+            child: Builder(
+              builder: (context) {
+                if (controller.isInitialLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpace.gutter),
+                    child: SkeletonLines(count: 6, spacing: AppSpace.xl),
+                  );
+                }
+                if (controller.initialError case final error?) {
+                  return AppErrorState(
+                    error: error,
+                    onRetry: controller.reload,
+                  );
+                }
+                if (eligibility == null) {
+                  return const SizedBox.shrink();
+                }
+                if (!eligibility.canReadHistory) {
                   return _ChatUnavailableState(
-                    reason: data.eligibility.reason,
+                    reason: eligibility.reason,
                     dealId: dealId,
                   );
                 }
 
-                if (data.page.messages.isEmpty && _pending.isEmpty) {
+                final messages = controller.messages;
+                final pending = controller.pendingMessages;
+                if (messages.isEmpty && pending.isEmpty) {
                   return AppEmptyState(
                     title: l.chatThreadEmptyTitle,
                     body: l.chatThreadEmptyBody,
@@ -209,12 +210,9 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                   );
                 }
 
-                // Newest at the bottom, which is what a conversation is; the
-                // list is reversed so it opens at the latest message and grows
-                // upward without a scroll jump.
                 final items = <Object>[
-                  ..._pending.reversed,
-                  ...data.page.messages.reversed,
+                  ...pending.reversed,
+                  ...messages.reversed,
                 ];
 
                 return ListView.builder(
@@ -224,14 +222,21 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                     horizontal: AppSpace.gutter,
                     vertical: AppSpace.lg,
                   ),
-                  itemCount: items.length + 1,
+                  itemCount:
+                      items.length + 1 + (controller.isLoadingOlder ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == items.length) return const _CodeWarning();
+                    if (index > items.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(AppSpace.md),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
                     final item = items[index];
                     if (item is PendingChatMessage) {
                       return _PendingBubble(
                         message: item,
-                        onRetry: () => _retry(item),
+                        onRetry: controller.canSend ? () => _retry(item) : null,
                       );
                     }
                     final message = item as ChatMessage;
@@ -244,20 +249,24 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
               },
             ),
           ),
-          if (state.hasValue &&
-              state.requireValue.eligibility.canReadHistory &&
+          if (!controller.isInitialLoading &&
+              eligibility?.canReadHistory == true &&
               blocked)
             _BlockedNotice(
-              reason: _block == ChatBlockReason.ok
-                  ? state.requireValue.eligibility.reason
-                  : _block,
+              reason: controller.sendBlock == ChatBlockReason.ok
+                  ? eligibility!.reason
+                  : controller.sendBlock,
               dealId: dealId,
             ),
         ],
       ),
       footer: blocked
           ? null
-          : _Composer(controller: _composer, sending: _sending, onSend: _send),
+          : _Composer(
+              controller: _composer,
+              sending: controller.isSending,
+              onSend: _send,
+            ),
     );
   }
 }
@@ -467,7 +476,7 @@ class _PendingBubble extends StatelessWidget {
   const _PendingBubble({required this.message, required this.onRetry});
 
   final PendingChatMessage message;
-  final VoidCallback onRetry;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {

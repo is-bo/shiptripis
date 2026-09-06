@@ -26,6 +26,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/live/live_updates.dart';
+import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -45,12 +47,28 @@ import '../common/status_copy.dart';
 const _maxEvidenceBytes = 25 * 1024 * 1024;
 const _maxEvidenceItems = 20;
 
-final _disputeProvider = FutureProvider.autoDispose.family<Dispute, int>((
+final _disputeQuery = FutureProvider.autoDispose
+    .family<Dispute, ({int? accountId, int disputeId})>((ref, key) async {
+      final unsubscribe = ref
+          .read(liveUpdatesProvider)
+          .register(LiveResource.dispute(key.disputeId), ref.invalidateSelf);
+      ref.onDispose(unsubscribe);
+      final repo = ref.watch(disputeRepositoryProvider);
+      final result = await repo.byId(key.disputeId);
+      if (ref.read(accountProvider)?.id != key.accountId) {
+        throw StateError('Discarded a dispute read from an older session.');
+      }
+      return result;
+    });
+final _disputeProvider = Provider.autoDispose.family<AsyncValue<Dispute>, int>((
   ref,
-  id,
-) async {
-  final repo = ref.watch(disputeRepositoryProvider);
-  return repo.byId(id);
+  disputeId,
+) {
+  final accountId = ref.watch(accountProvider.select((account) => account?.id));
+  final query = _disputeQuery((accountId: accountId, disputeId: disputeId));
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(query));
+  return ref.watch(query);
 });
 
 class DisputeDetailScreen extends ConsumerStatefulWidget {

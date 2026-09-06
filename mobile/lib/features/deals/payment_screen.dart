@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_state.dart';
+import '../../core/live/live_updates.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -38,13 +39,37 @@ import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 import '../requests/checkout_section.dart';
 
-final _dealPaymentProvider = FutureProvider.autoDispose
-    .family<DealPaymentState, ({int dealId, bool isTraveler})>((
-      ref,
-      key,
-    ) async {
+typedef _DealPaymentKey = ({int dealId, bool isTraveler});
+typedef _AccountDealPaymentKey = ({int? accountId, _DealPaymentKey payment});
+
+final _dealPaymentQuery = FutureProvider.autoDispose
+    .family<DealPaymentState, _AccountDealPaymentKey>((ref, key) async {
+      final unsubscribe = ref
+          .read(liveUpdatesProvider)
+          .register(
+            LiveResource.payment(key.payment.dealId),
+            ref.invalidateSelf,
+          );
+      ref.onDispose(unsubscribe);
       final repo = ref.watch(paymentRepositoryProvider);
-      return repo.dealPayment(key.dealId, viewerIsTraveler: key.isTraveler);
+      final result = await repo.dealPayment(
+        key.payment.dealId,
+        viewerIsTraveler: key.payment.isTraveler,
+      );
+      if (ref.read(accountProvider)?.id != key.accountId) {
+        throw StateError('Discarded a payment read from an older session.');
+      }
+      return result;
+    });
+final _dealPaymentProvider = Provider.autoDispose
+    .family<AsyncValue<DealPaymentState>, _DealPaymentKey>((ref, payment) {
+      final accountId = ref.watch(
+        accountProvider.select((account) => account?.id),
+      );
+      final query = _dealPaymentQuery((accountId: accountId, payment: payment));
+      // ignore: experimental_member_use
+      ref.onManualInvalidation(() => ref.invalidate(query));
+      return ref.watch(query);
     });
 
 class DealPaymentScreen extends ConsumerWidget {

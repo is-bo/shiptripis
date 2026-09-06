@@ -10,6 +10,8 @@ from django.db.models import Min, Q, Sum
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core import channels, redis_bus
+from apps.core.event_resources import deal_resources, match_resources
 from apps.core.business_settings import calculate_offer_economics
 from apps.deals.models import Deal, DealEvent, DealLegAllocation, DealTermsSnapshot
 from apps.kyc.models import KycSubmission
@@ -638,6 +640,11 @@ def _create_sender_offer_locked(
             "end_leg_id": legs[-1].id,
         },
     )
+    redis_bus.publish_after_commit(
+        channels.OFFER_CREATED,
+        {**match_resources(match), "offer_id": offer.pk},
+        targets=[match.sender_id, match.traveler_id],
+    )
     return offer
 
 
@@ -786,6 +793,11 @@ def _counter_offer_locked(
             "economics_version": Offer.EconomicsVersion.V1_EUR,
             "currency": Offer.Currency.EUR,
         },
+    )
+    redis_bus.publish_after_commit(
+        channels.OFFER_UPDATED,
+        {**match_resources(match), "offer_id": child.pk},
+        targets=[match.sender_id, match.traveler_id],
     )
     return child
 
@@ -1119,5 +1131,22 @@ def _accept_offer_locked(
             match_id__in=competing_ids, status=Offer.Status.PENDING
         ).update(status=Offer.Status.EXPIRED, responded_at=now)
         Match.objects.filter(pk__in=competing_ids).update(status=Match.Status.EXPIRED)
+
+        # The losing traveler is entitled only to their own negotiation's
+        # identity, never the winning Deal or the other traveler's offer.
+        competing_id_set = set(competing_ids)
+        for competing in request_matches:
+            if competing.pk in competing_id_set:
+                redis_bus.publish_after_commit(
+                    channels.OFFER_UPDATED,
+                    match_resources(competing),
+                    targets=[competing.sender_id, competing.traveler_id],
+                )
+
+    redis_bus.publish_after_commit(
+        channels.OFFER_ACCEPTED,
+        {**deal_resources(deal), "offer_id": current.pk},
+        targets=[deal.sender_id, deal.traveler_id],
+    )
 
     return AcceptedDeal(deal=deal, created=True)

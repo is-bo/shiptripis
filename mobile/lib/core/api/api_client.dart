@@ -59,11 +59,13 @@ class ApiClient {
       // failure in `_send` instead.
       validateStatus: (s) => s != null && s < 500,
     );
-    _dio.interceptors.add(_AuthInterceptor(_dio, _tokens, onSessionExpired));
+    _auth = _AuthInterceptor(_dio, _tokens, onSessionExpired);
+    _dio.interceptors.add(_auth);
   }
 
   final Dio _dio;
   final TokenStore _tokens;
+  late final _AuthInterceptor _auth;
 
   /// Escape hatch for the two places that need the raw client: multipart
   /// uploads built elsewhere, and tests that install a mock adapter.
@@ -79,10 +81,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _send(
-      () => _dio.get<dynamic>(
+      (identity) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
+        options: _requestOptions(identity),
       ),
       // Only reads are retried. Replaying a POST could double-charge a card
       // or burn one of five handover-code attempts.
@@ -100,10 +103,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final data = await _send(
-      () => _dio.get<dynamic>(
+      (identity) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
+        options: _requestOptions(identity),
       ),
       retries: 2,
     );
@@ -126,11 +130,12 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _send(
-      () => _dio.post<dynamic>(
+      (identity) => _dio.post<dynamic>(
         path,
         data: body,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
+        options: _requestOptions(identity),
       ),
     ),
     path,
@@ -143,7 +148,12 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     await _send(
-      () => _dio.post<dynamic>(path, data: body, cancelToken: cancelToken),
+      (identity) => _dio.post<dynamic>(
+        path,
+        data: body,
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
     );
   }
 
@@ -153,7 +163,12 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _send(
-      () => _dio.patch<dynamic>(path, data: body, cancelToken: cancelToken),
+      (identity) => _dio.patch<dynamic>(
+        path,
+        data: body,
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
     ),
     path,
   );
@@ -164,13 +179,24 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _send(
-      () => _dio.put<dynamic>(path, data: body, cancelToken: cancelToken),
+      (identity) => _dio.put<dynamic>(
+        path,
+        data: body,
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
     ),
     path,
   );
 
   Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
-    await _send(() => _dio.delete<dynamic>(path, cancelToken: cancelToken));
+    await _send(
+      (identity) => _dio.delete<dynamic>(
+        path,
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
+    );
   }
 
   /// Multipart upload — parcel photos, dispute evidence, flight proof.
@@ -184,13 +210,14 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _send(
-      () => _dio.post<dynamic>(
+      (identity) => _dio.post<dynamic>(
         path,
         data: form,
         cancelToken: cancelToken,
         onSendProgress: onProgress,
         options: Options(
           contentType: 'multipart/form-data',
+          extra: {'st.identity_generation': identity},
           // An upload is bounded by bandwidth, not by server think-time.
           sendTimeout: const Duration(minutes: 5),
           receiveTimeout: const Duration(minutes: 2),
@@ -205,13 +232,20 @@ class ApiClient {
   // ---------------------------------------------------------------------------
 
   Future<dynamic> _send(
-    Future<Response<dynamic>> Function() call, {
+    Future<Response<dynamic>> Function(int identityGeneration) call, {
     int retries = 0,
   }) async {
+    final identityGeneration = _tokens.identityGeneration;
     var attempt = 0;
     while (true) {
       try {
-        final response = await call();
+        if (identityGeneration != _tokens.identityGeneration) {
+          throw _AuthInterceptor.sessionChanged();
+        }
+        final response = await call(identityGeneration);
+        if (identityGeneration != _tokens.identityGeneration) {
+          throw _AuthInterceptor.sessionChanged(response.requestOptions);
+        }
         final status = response.statusCode ?? 0;
         if (status >= 200 && status < 300) return response.data;
         throw ApiException.fromResponse(response);
@@ -234,6 +268,9 @@ class ApiClient {
             milliseconds: ceiling ~/ 2 + _random.nextInt(ceiling ~/ 2 + 1),
           ),
         );
+        if (identityGeneration != _tokens.identityGeneration) {
+          throw ApiException.from(_AuthInterceptor.sessionChanged());
+        }
         attempt++;
       }
     }
@@ -265,6 +302,9 @@ class ApiClient {
     return out.isEmpty ? null : out;
   }
 
+  Options _requestOptions(int identityGeneration) =>
+      Options(extra: {'st.identity_generation': identityGeneration});
+
   static final _random = Random();
 }
 
@@ -282,6 +322,7 @@ class _AuthInterceptor extends Interceptor {
   /// Shared across every 401 in flight, so a burst of parallel requests
   /// rotates the refresh token once instead of racing and blacklisting it.
   Future<String?>? _refreshInFlight;
+  int? _refreshGeneration;
 
   static const _authPaths = [
     '/api/auth/sign-in',
@@ -305,7 +346,18 @@ class _AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     if (!_isAuthEndpoint(options.path) && !_isGuestEndpoint(options.path)) {
+      final existingIdentity = options.extra['st.identity_generation'];
+      final identityGeneration = existingIdentity is int
+          ? existingIdentity
+          : _tokens.identityGeneration;
+      options.extra['st.identity_generation'] = identityGeneration;
+      if (identityGeneration != _tokens.identityGeneration) {
+        return handler.reject(sessionChanged(options));
+      }
       final access = await _tokens.readAccess();
+      if (identityGeneration != _tokens.identityGeneration) {
+        return handler.reject(sessionChanged(options));
+      }
       if (access != null) options.headers['Authorization'] = 'Bearer $access';
     }
     handler.next(options);
@@ -320,54 +372,121 @@ class _AuthInterceptor extends Interceptor {
     final shouldRefresh =
         response.statusCode == 401 &&
         !_isAuthEndpoint(request.path) &&
+        !request.path.contains('/api/auth/sign-out') &&
         !_isGuestEndpoint(request.path) &&
         request.extra['st.retried'] != true;
 
     if (!shouldRefresh) return handler.next(response);
 
-    // Another request may have refreshed while this 401 was in flight. If the
-    // stored token is already newer than the one we sent, just replay.
-    final current = await _tokens.readAccess();
-    if (current != null &&
-        request.headers['Authorization'] != 'Bearer $current') {
-      return handler.resolve(await _replay(request, current));
-    }
-
-    final refresh = await _tokens.readRefresh();
-    if (refresh == null) {
-      await _endSession();
+    final requestIdentity = request.extra['st.identity_generation'];
+    if (requestIdentity is! int ||
+        requestIdentity != _tokens.identityGeneration) {
+      // This response belongs to the account that was logged out while the
+      // request was in flight. Replaying it with the next account's bearer
+      // could perform the old user's action as the new user.
       return handler.next(response);
     }
 
-    final rotated = await _refreshOnce(refresh);
-    if (rotated != null) {
-      return handler.resolve(await _replay(request, rotated));
+    // Another request may have refreshed while this 401 was in flight. If the
+    // stored token is already newer than the one we sent, just replay.
+    final current = await _tokens.readAccess();
+    if (requestIdentity != _tokens.identityGeneration) {
+      return handler.next(response);
+    }
+    if (current != null &&
+        request.headers['Authorization'] != 'Bearer $current') {
+      return _resolveReplay(handler, request, current, requestIdentity);
+    }
+
+    final refresh = await _tokens.readRefresh();
+    if (requestIdentity != _tokens.identityGeneration) {
+      return handler.next(response);
+    }
+    if (refresh == null) {
+      await _endSession(expectedIdentityGeneration: requestIdentity);
+      return handler.next(response);
+    }
+
+    final rotated = await _refreshOnce(refresh, requestIdentity);
+    if (rotated != null && requestIdentity == _tokens.identityGeneration) {
+      return _resolveReplay(handler, request, rotated, requestIdentity);
     }
 
     // Do not wipe credentials that a newer sign-in wrote while this was in
     // flight.
-    if (await _tokens.readRefresh() == refresh) await _endSession();
+    if (_tokens.identityGeneration == requestIdentity &&
+        await _tokens.readRefresh() == refresh &&
+        _tokens.identityGeneration == requestIdentity) {
+      await _endSession(
+        expectedIdentityGeneration: requestIdentity,
+        expectedRefresh: refresh,
+      );
+    }
     handler.next(response);
   }
 
-  Future<Response<dynamic>> _replay(RequestOptions request, String access) {
+  Future<void> _resolveReplay(
+    ResponseInterceptorHandler handler,
+    RequestOptions request,
+    String access,
+    int identityGeneration,
+  ) async {
+    try {
+      handler.resolve(await _replay(request, access, identityGeneration));
+    } on DioException catch (error) {
+      handler.reject(error);
+    } catch (error, stackTrace) {
+      handler.reject(
+        DioException(
+          requestOptions: request,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<Response<dynamic>> _replay(
+    RequestOptions request,
+    String access,
+    int identityGeneration,
+  ) {
+    if (identityGeneration != _tokens.identityGeneration) {
+      return Future<Response<dynamic>>.error(sessionChanged(request));
+    }
     request.extra['st.retried'] = true;
+    request.extra['st.identity_generation'] = identityGeneration;
     request.headers['Authorization'] = 'Bearer $access';
     return _dio.fetch<dynamic>(request);
   }
 
-  Future<String?> _refreshOnce(String refresh) {
-    final active = _refreshInFlight;
-    if (active != null) return active;
+  static DioException sessionChanged([RequestOptions? request]) => DioException(
+    requestOptions: request ?? RequestOptions(),
+    type: DioExceptionType.cancel,
+    error: StateError('The authenticated session changed.'),
+  );
 
-    final future = _performRefresh(refresh);
+  Future<String?> _refreshOnce(String refresh, int identityGeneration) {
+    final active = _refreshInFlight;
+    if (active != null && _refreshGeneration == identityGeneration) {
+      return active;
+    }
+
+    final future = _performRefresh(refresh, identityGeneration);
     _refreshInFlight = future;
+    _refreshGeneration = identityGeneration;
     return future.whenComplete(() {
-      if (identical(_refreshInFlight, future)) _refreshInFlight = null;
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+        _refreshGeneration = null;
+      }
     });
   }
 
-  Future<String?> _performRefresh(String refresh) async {
+  Future<String?> _performRefresh(
+    String refresh,
+    int identityGeneration,
+  ) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/auth/refresh',
@@ -378,20 +497,32 @@ class _AuthInterceptor extends Interceptor {
       final access = response.data?['access'];
       if (access is! String) return null;
 
+      // A logout or another login happened while the network request was in
+      // flight. Never let this older refresh overwrite the new credentials.
       final rotated = response.data?['refresh'];
-      if (rotated is String) {
-        await _tokens.save(access: access, refresh: rotated);
-      } else {
-        await _tokens.updateAccess(access);
-      }
-      return access;
+      final saved = await _tokens.saveRefreshedIfCurrent(
+        expectedIdentityGeneration: identityGeneration,
+        expectedRefresh: refresh,
+        access: access,
+        refresh: rotated is String ? rotated : null,
+      );
+      return saved ? access : null;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> _endSession() async {
-    await _tokens.clear();
-    _onExpired?.call();
+  Future<void> _endSession({
+    required int expectedIdentityGeneration,
+    String? expectedRefresh,
+  }) async {
+    if (_tokens.identityGeneration != expectedIdentityGeneration) return;
+    if (expectedRefresh != null &&
+        await _tokens.readRefresh() != expectedRefresh) {
+      return;
+    }
+    if (await _tokens.clearIfIdentityCurrent(expectedIdentityGeneration)) {
+      _onExpired?.call();
+    }
   }
 }

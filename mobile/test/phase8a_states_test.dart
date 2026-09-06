@@ -19,14 +19,16 @@ import 'package:shiptrip/domain/chat.dart';
 import 'support/fake_api.dart';
 import 'support/harness.dart';
 
-ProviderContainer _chatContainer(Future<List<ChatThread>> Function() load) =>
-    ProviderContainer(
-      retry: (_, _) => null,
-      overrides: [
-        chatThreadsProvider.overrideWith((ref) => load()),
-        unreadNotificationsProvider.overrideWith((ref) async => 0),
-      ],
-    );
+ProviderContainer _chatContainer(Future<List<ChatThread>> Function() load) {
+  final source = FutureProvider.autoDispose<List<ChatThread>>((ref) => load());
+  return ProviderContainer(
+    retry: (_, _) => null,
+    overrides: [
+      chatThreadsProvider.overrideWith((ref) => ref.watch(source)),
+      unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
+    ],
+  );
+}
 
 void main() {
   group('Chat states', () {
@@ -61,12 +63,15 @@ void main() {
         retry: (_, _) => null,
         overrides: [
           chatThreadsProvider.overrideWith(
-            (ref) async => throw ApiException(
-              kind: ApiFailureKind.offline,
-              code: ApiErrorCode.unknown,
+            (ref) => AsyncError(
+              ApiException(
+                kind: ApiFailureKind.offline,
+                code: ApiErrorCode.unknown,
+              ),
+              StackTrace.current,
             ),
           ),
-          unreadNotificationsProvider.overrideWith((ref) async => 0),
+          unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
         ],
       );
       await pumpApp(tester, const ChatListScreen(), container: container);
@@ -84,14 +89,17 @@ void main() {
         retry: (_, _) => null,
         overrides: [
           chatThreadsProvider.overrideWith(
-            (ref) async => throw ApiException(
-              kind: ApiFailureKind.conflict,
-              code: ApiErrorCode.capacityExceeded,
-              statusCode: 409,
-              serverDetail: 'capacity_exceeded: internal reservation detail',
+            (ref) => AsyncError(
+              ApiException(
+                kind: ApiFailureKind.conflict,
+                code: ApiErrorCode.capacityExceeded,
+                statusCode: 409,
+                serverDetail: 'capacity_exceeded: internal reservation detail',
+              ),
+              StackTrace.current,
             ),
           ),
-          unreadNotificationsProvider.overrideWith((ref) async => 0),
+          unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
         ],
       );
       await pumpApp(tester, const ChatListScreen(), container: container);
@@ -110,6 +118,7 @@ void main() {
       tester,
     ) async {
       final backend = FakeBackend()
+        ..on('GET', '/api/me', FakeResponse(200, meFixture()))
         ..on(
           'GET',
           '/api/chat/threads',
@@ -144,6 +153,7 @@ void main() {
       tester,
     ) async {
       final backend = FakeBackend()
+        ..on('GET', '/api/me', FakeResponse(200, meFixture()))
         ..on(
           'GET',
           '/api/chat/threads',
