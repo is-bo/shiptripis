@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict qN25ZH1xjFMcbsd7XnIGNMNSDhMRlNVPct0siCvzuclksnvaUfl9oLq5y3IYdIg
+\restrict qpk1RlpenyWVNELpBuFyBa2VufMWw9njS1dCzfyqqKgoTK1dhz3RCIjIdm7JDql
 
--- Dumped from database version 16.13
--- Dumped by pg_dump version 16.13
+-- Dumped from database version 16.15
+-- Dumped by pg_dump version 16.15 (Ubuntu 16.15-1.pgdg24.04+2)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -987,8 +987,13 @@ CREATE TABLE public.finance_payment_attempt (
     guest_link_id bigint,
     payer_id bigint,
     order_id bigint NOT NULL,
+    operational_resolution character varying(16) NOT NULL,
+    operational_resolution_reason character varying(500) NOT NULL,
+    operational_resolved_at timestamp with time zone,
+    operational_resolved_by_id bigint,
     CONSTRAINT fin_attempt_amount_positive CHECK ((amount_eur_cents > 0)),
     CONSTRAINT fin_attempt_fx_required_for_conversion CHECK ((((fx_rate_micros IS NULL) AND ((payment_currency)::text = 'EUR'::text)) OR ((NOT ((payment_currency)::text = 'EUR'::text)) AND (fx_rate_micros IS NOT NULL)))),
+    CONSTRAINT fin_attempt_resolution_complete CHECK (((((operational_resolution)::text = ''::text) AND ((operational_resolution_reason)::text = ''::text) AND (operational_resolved_at IS NULL) AND (operational_resolved_by_id IS NULL)) OR ((NOT ((operational_resolution)::text = ''::text)) AND (operational_resolved_at IS NOT NULL) AND (NOT ((operational_resolution_reason)::text = ''::text))))),
     CONSTRAINT finance_payment_attempt_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
     CONSTRAINT finance_payment_attempt_fx_rate_micros_check CHECK ((fx_rate_micros >= 0)),
     CONSTRAINT finance_payment_attempt_provider_amount_exponent_check CHECK ((provider_amount_exponent >= 0)),
@@ -1223,6 +1228,13 @@ CREATE TABLE public.finance_scheduled_job (
     completed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    last_attempt_at timestamp with time zone,
+    last_error_code character varying(64) NOT NULL,
+    resolution character varying(16) NOT NULL,
+    resolution_reason character varying(500) NOT NULL,
+    resolved_at timestamp with time zone,
+    resolved_by_id bigint,
+    CONSTRAINT fin_job_resolution_complete CHECK (((((resolution)::text = ''::text) AND ((resolution_reason)::text = ''::text) AND (resolved_at IS NULL) AND (resolved_by_id IS NULL)) OR ((NOT ((resolution)::text = ''::text)) AND (resolved_at IS NOT NULL) AND (NOT ((resolution_reason)::text = ''::text)) AND ((status)::text = 'failed'::text)))),
     CONSTRAINT finance_scheduled_job_attempts_check CHECK ((attempts >= 0)),
     CONSTRAINT finance_scheduled_job_max_attempts_check CHECK ((max_attempts >= 0))
 );
@@ -4896,6 +4908,27 @@ CREATE INDEX finance_payment_attempt_guest_link_id_478fe6b2 ON public.finance_pa
 
 
 --
+-- Name: finance_payment_attempt_operational_resolution_ed46f60e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payment_attempt_operational_resolution_ed46f60e ON public.finance_payment_attempt USING btree (operational_resolution);
+
+
+--
+-- Name: finance_payment_attempt_operational_resolution_ed46f60e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payment_attempt_operational_resolution_ed46f60e_like ON public.finance_payment_attempt USING btree (operational_resolution varchar_pattern_ops);
+
+
+--
+-- Name: finance_payment_attempt_operational_resolved_by_id_40d78727; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payment_attempt_operational_resolved_by_id_40d78727 ON public.finance_payment_attempt USING btree (operational_resolved_by_id);
+
+
+--
 -- Name: finance_payment_attempt_order_id_e6c98179; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5110,6 +5143,27 @@ CREATE INDEX finance_scheduled_job_kind_e1cc9d62 ON public.finance_scheduled_job
 --
 
 CREATE INDEX finance_scheduled_job_kind_e1cc9d62_like ON public.finance_scheduled_job USING btree (kind varchar_pattern_ops);
+
+
+--
+-- Name: finance_scheduled_job_resolution_80ea6776; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_scheduled_job_resolution_80ea6776 ON public.finance_scheduled_job USING btree (resolution);
+
+
+--
+-- Name: finance_scheduled_job_resolution_80ea6776_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_scheduled_job_resolution_80ea6776_like ON public.finance_scheduled_job USING btree (resolution varchar_pattern_ops);
+
+
+--
+-- Name: finance_scheduled_job_resolved_by_id_45521f75; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_scheduled_job_resolved_by_id_45521f75 ON public.finance_scheduled_job USING btree (resolved_by_id);
 
 
 --
@@ -7356,6 +7410,14 @@ ALTER TABLE ONLY public.finance_payment_attempt
 
 
 --
+-- Name: finance_payment_attempt finance_payment_atte_operational_resolved_40d78727_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payment_attempt
+    ADD CONSTRAINT finance_payment_atte_operational_resolved_40d78727_fk_accounts_ FOREIGN KEY (operational_resolved_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: finance_payment_attempt finance_payment_atte_order_id_e6c98179_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7481,6 +7543,14 @@ ALTER TABLE ONLY public.finance_provider_event
 
 ALTER TABLE ONLY public.finance_provider_event
     ADD CONSTRAINT finance_provider_eve_order_id_973b1b4e_fk_finance_p FOREIGN KEY (order_id) REFERENCES public.finance_payment_order(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_scheduled_job finance_scheduled_jo_resolved_by_id_45521f75_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_scheduled_job
+    ADD CONSTRAINT finance_scheduled_jo_resolved_by_id_45521f75_fk_accounts_ FOREIGN KEY (resolved_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -8199,5 +8269,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qN25ZH1xjFMcbsd7XnIGNMNSDhMRlNVPct0siCvzuclksnvaUfl9oLq5y3IYdIg
+\unrestrict qpk1RlpenyWVNELpBuFyBa2VufMWw9njS1dCzfyqqKgoTK1dhz3RCIjIdm7JDql
 

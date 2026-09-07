@@ -421,15 +421,6 @@ jobs:
             -h localhost -U shiptrip -d shiptrip \
             > contracts/sql/schema.sql
 
-      # Temporary handoff for a Windows workstation without Docker/Postgres.
-      # Removed once this branch downloads and commits the generated contract.
-      - name: Upload generated schema for contract sync
-        uses: actions/upload-artifact@v4
-        with:
-          name: schema-contract-${{ github.sha }}
-          path: backend/contracts/sql/schema.sql
-          retention-days: 1
-
       # sqlc.yaml declares four packages (chat/notif/kyc/media) whose query
       # directories are all EMPTY, so `sqlc generate` exits 1 with "no queries
       # contained in paths" — meaning `task contract:generate`, and therefore
