@@ -14,15 +14,49 @@
  * card inside a card.
  *
  * Structure
- *   1  Tokens                     9  Money
- *   2  Django variable mapping   10  Routes
- *   3  Shell and navigation      11  Overview queues
- *   4  Page furniture            12  Evidence and cases
- *   5  Cards and grids           13  Health and providers
- *   6  Tables                    14  Forms
- *   7  Chips and tones           15  Django's own screens
- *   8  Lists, facts, timelines   16  Responsive, motion, print
+ *   0  Faces                      9  Money
+ *   1  Tokens                    10  Routes
+ *   2  Django variable mapping   11  Overview queues
+ *   3  Shell and navigation      12  Evidence and cases
+ *   4  Page furniture            13  Health and providers
+ *   5  Cards and grids           14  Forms
+ *   6  Tables                    15  Django's own screens
+ *   7  Chips and tones           16  Openable rows and cards
+ *   8  Lists, facts, timelines   17  Responsive, motion, print
  */
+
+/* ==========================================================================
+   0. Faces
+   ==========================================================================
+   The same two faces the app and the public site set, subset by
+   `tools/web/build_fonts.py` and served from this app's own static directory.
+   They are self-hosted for the same reason the site self-hosts them — a font
+   service is a third party on an authenticated page — and mirrored here rather
+   than borrowed from `/assets`, because that route belongs to Caddy and does
+   not exist under `runserver` or in the review dumps.
+   Fraunces carries the page titles. DM Sans carries everything that is read as
+   data, which is nearly all of it. There is no third file: the mono face is a
+   six-glyph subset built for one tile on the marketing site, and a provider
+   reference set in it would render half from the subset and half from the
+   system, so references keep the platform mono stack. */
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("fonts/fraunces.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2190-2199, U+2212;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  src: url("fonts/dmsans.woff2") format("woff2-variations");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2190-2199, U+2212;
+}
 
 /* ==========================================================================
    1. Tokens
@@ -67,6 +101,14 @@ html[data-theme="light"], :root {
   --st-info: #1b4270;      --st-info-bg: #e5eef9; --st-info-line: rgba(27, 66, 112, .26);
   --st-mute: #5b6874;      --st-mute-bg: #e8e4db; --st-mute-line: rgba(20, 35, 46, .16);
 
+  /* Controls. The primary button needs a ground that is clearly not the card
+     it sits on, and "the dark shell colour" only satisfies that in the light
+     theme; in the dark one it is darker than the card, and the button
+     disappears into it. So the button carries its own token per theme. */
+  --st-btn: #1d3441;
+  --st-btn-hover: #142430;
+  --st-btn-fg: #f7f4ee;
+
   /* Focus */
   --st-focus: #1c62c4;
 
@@ -90,19 +132,47 @@ html[data-theme="light"], :root {
   --st-7: 42px;
   --st-8: 60px;
 
-  /* Typography */
-  --st-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
-  --st-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Typography.
+     Two faces and one fallback stack. `--st-serif` is the display role and is
+     set on page titles and on the few marks that are read as identity — the
+     seal, an avatar initial, the headline of an empty queue — and nowhere
+     else. Everything an operator reads as data is DM Sans, because a serif
+     column of amounts at 13px is a worse column of amounts. */
+  --st-serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --st-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --st-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
-  --st-fs-h1: clamp(1.5rem, 1.22rem + .8vw, 1.95rem);
-  --st-fs-h2: 1rem;
-  --st-fs-h3: .875rem;
+  /* Size roles, largest to smallest:
+       h1       page title
+       h2       card / section title
+       h3       sub-head inside a card, health verdict
+       lead     the one number or amount a card exists to state
+       body     sentences, definition values, the identity line of a row
+       sm       table cells, form controls, secondary links
+       xs       metadata, helper text, timestamps, chips on a form
+       micro    column headers, field labels, references, ages
+       eyebrow  the uppercase kicker above a title */
+  --st-fs-h1: clamp(1.55rem, 1.26rem + .82vw, 2rem);
+  --st-fs-h2: 1.0625rem;
+  --st-fs-h3: .9375rem;
+  --st-fs-lead: 1.375rem;
   --st-fs-body: .875rem;
   --st-fs-sm: .8125rem;
   --st-fs-xs: .75rem;
   --st-fs-micro: .6875rem;
-  --st-fs-eyebrow: .625rem;
+  --st-fs-eyebrow: .6875rem;
+
+  /* Leading. Dense data wants `snug`; anything that is read as a sentence
+     wants `body`; a title wants `tight` so two lines still read as one thing. */
+  --st-lh-tight: 1.16;
+  --st-lh-snug: 1.35;
+  --st-lh-body: 1.55;
+
+  /* Tracking. Fraunces at title sizes needs to be pulled in; uppercase micro
+     labels need to be pushed apart, or they read as a smudge. */
+  --st-track-display: -.014em;
+  --st-track-label: .075em;
+  --st-track-eyebrow: .115em;
 
   /* Layout */
   --st-page: 1400px;
@@ -139,6 +209,10 @@ html[data-theme="light"], :root {
     --st-info: #a9c8e9;      --st-info-bg: #10233a; --st-info-line: rgba(169, 200, 233, .28);
     --st-mute: #adb9c3;      --st-mute-bg: #17262f; --st-mute-line: rgba(255, 255, 255, .16);
 
+    --st-btn: #2c4859;
+    --st-btn-hover: #395a6c;
+    --st-btn-fg: #f2f6f8;
+
     --st-focus: #8fb9f0;
     --st-shadow-1: 0 1px 2px rgba(0, 0, 0, .34);
     --st-shadow-2: 0 10px 28px -14px rgba(0, 0, 0, .7);
@@ -173,6 +247,10 @@ html[data-theme="dark"] {
   --st-bad: #f0aba1;       --st-bad-bg: #331411;  --st-bad-line: rgba(240, 171, 161, .36);
   --st-info: #a9c8e9;      --st-info-bg: #10233a; --st-info-line: rgba(169, 200, 233, .28);
   --st-mute: #adb9c3;      --st-mute-bg: #17262f; --st-mute-line: rgba(255, 255, 255, .16);
+
+  --st-btn: #2c4859;
+  --st-btn-hover: #395a6c;
+  --st-btn-fg: #f2f6f8;
 
   --st-focus: #8fb9f0;
   --st-shadow-1: 0 1px 2px rgba(0, 0, 0, .34);
@@ -226,9 +304,9 @@ html[data-theme="dark"] {
   --selected-bg: var(--st-surface-2);
   --selected-row: var(--st-wait-bg);
 
-  --button-fg: var(--st-ink-invert);
-  --button-bg: var(--st-shell-2);
-  --button-hover-bg: var(--st-shell);
+  --button-fg: var(--st-btn-fg);
+  --button-bg: var(--st-btn);
+  --button-hover-bg: var(--st-btn-hover);
   --default-button-bg: var(--st-ok);
   --default-button-hover-bg: var(--st-ok);
   --close-button-bg: var(--st-ink-3);
@@ -244,7 +322,6 @@ html[data-theme="dark"] {
 }
 
 html[data-theme="dark"] {
-  --button-fg: var(--st-ink);
   --primary-fg: var(--st-ink);
   --object-tools-fg: var(--st-ink);
   --default-button-bg: #14584a;
@@ -257,7 +334,6 @@ html[data-theme="dark"] {
 
 @media (prefers-color-scheme: dark) {
   html[data-theme="auto"] {
-    --button-fg: var(--st-ink);
     --primary-fg: var(--st-ink);
     --object-tools-fg: var(--st-ink);
     --default-button-bg: #14584a;
@@ -269,7 +345,16 @@ html[data-theme="dark"] {
   }
 }
 
-body { font-family: var(--st-sans); }
+/* DM Sans ships one variable weight axis and no italic; letting the browser
+   invent a bold or an oblique for it is how a console gets a smeared table
+   header. */
+body {
+  font-family: var(--st-sans);
+  font-synthesis-weight: none;
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+  -webkit-font-smoothing: antialiased;
+}
 
 /* ==========================================================================
    3. Shell and navigation
@@ -333,15 +418,22 @@ body #site-name { margin: 0 !important; font-weight: 400; }
   letter-spacing: -.005em;
 }
 
-body #user-tools {
+/* Django sets this strip in uppercase 300-weight 11px, which is the one place
+   the console still read as stock Django. It is a signed-in identity and three
+   links, not a label; sentence case is what it is. */
+body #user-tools, body #logout-form button {
   margin-left: auto;
   padding: 0;
   color: var(--st-shell-muted);
+  font-family: var(--st-sans);
   font-size: var(--st-fs-xs);
-  text-transform: none;
+  font-weight: 400;
   letter-spacing: 0;
+  text-transform: none;
 }
-#user-tools a { color: var(--st-shell-ink); }
+body #logout-form button { margin-left: 0; }
+#user-tools a, #logout-form button { color: var(--st-shell-ink); font-weight: 600; }
+#user-tools a:hover, #logout-form button:hover { color: #fff; }
 
 /* -- Row 1: sections ----------------------------------------------------- */
 
@@ -358,6 +450,10 @@ body .st-primary-nav {
   padding: 0 calc(var(--st-gutter) - 10px);
   overflow-x: auto;
   scrollbar-width: thin;
+  /* On the dark shell the platform scrollbar reads as a grey bar drawn under
+     the tabs. Tinting it to the shell makes the overflow legible without
+     making it furniture. */
+  scrollbar-color: rgba(255, 255, 255, .26) transparent;
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .10);
 }
 
@@ -396,6 +492,8 @@ body .st-primary-nav {
   gap: 0 var(--st-1);
   padding: 0 var(--st-gutter);
   background: var(--st-shell-2);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .26) transparent;
 }
 #header .st-nav-section {
   margin-right: var(--st-3);
@@ -463,8 +561,8 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   font-family: var(--st-serif);
   font-size: var(--st-fs-h1);
   font-weight: 600;
-  letter-spacing: -.012em;
-  line-height: 1.15;
+  letter-spacing: var(--st-track-display);
+  line-height: var(--st-lh-tight);
   overflow-wrap: anywhere;
 }
 .st-page-head > div > p {
@@ -472,6 +570,7 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   margin: 0;
   color: var(--st-ink-2);
   font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
 }
 .st-page-aside { display: flex; align-items: center; gap: var(--st-2); flex-wrap: wrap; }
 
@@ -486,12 +585,12 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
 }
 
 .st-eyebrow {
-  margin: 0 0 var(--st-1) !important;
+  margin: 0 0 var(--st-2) !important;
   color: var(--st-accent) !important;
   font-size: var(--st-fs-eyebrow) !important;
-  font-weight: 700;
-  letter-spacing: .13em;
-  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: var(--st-track-eyebrow);
+  line-height: 1.3;
   text-transform: uppercase;
 }
 
@@ -527,6 +626,7 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
 .st-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .st-grid-main { grid-template-columns: minmax(0, 1.7fr) minmax(300px, .75fr); }
 .st-grid > .st-card { margin-bottom: 0; }
+.st-span-2 { grid-column: 1 / -1; }
 
 .st-card {
   margin: 0 0 var(--st-4);
@@ -537,14 +637,15 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   box-shadow: var(--st-shadow-1);
 }
 .st-card > h2 {
-  margin: 0 0 var(--st-4);
+  margin: 0 0 var(--st-3);
   padding: 0;
   background: none;
   color: var(--st-ink);
   font-family: var(--st-sans);
   font-size: var(--st-fs-h2);
   font-weight: 650;
-  letter-spacing: -.005em;
+  letter-spacing: -.008em;
+  line-height: var(--st-lh-snug);
   text-transform: none;
 }
 .st-card h3 {
@@ -552,9 +653,11 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   color: var(--st-ink);
   font-size: var(--st-fs-h3);
   font-weight: 650;
+  letter-spacing: -.004em;
+  line-height: var(--st-lh-snug);
 }
 .st-card > .st-eyebrow + h2 { margin-top: 0; }
-.st-card > p { color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+.st-card > p { color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-body); }
 
 .st-card-head {
   display: flex;
@@ -673,13 +776,17 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
 .st-stat-grid > a:hover { border-color: var(--st-line-2); background: var(--st-surface-2); }
 .st-stat-grid strong {
   color: var(--st-ink);
-  font-size: 1.4rem;
+  font-size: var(--st-fs-lead);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
+  letter-spacing: -.01em;
   line-height: 1.1;
 }
-.st-stat-grid span { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
-.st-stat-grid-small { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); margin: 0; }
+.st-stat-grid span { color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: 1.35; }
+/* Three fixed columns rather than auto-fit: six counters then read as two
+   rows of three instead of five and a widow, and three counters fill one row
+   exactly. Both cards sit in the same grid and now agree with each other. */
+.st-stat-grid-small { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
 .st-stat-grid-small > div { padding: var(--st-3); border-color: transparent; background: var(--st-surface-2); }
 .st-stat-grid-small strong { font-size: 1.2rem; }
 
@@ -725,24 +832,25 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   min-width: 720px;
   border-collapse: collapse;
   font-size: var(--st-fs-sm);
+  line-height: var(--st-lh-snug);
 }
 .st-data-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: var(--st-3) var(--st-4);
+  padding: 11px var(--st-4);
   border-bottom: 1px solid var(--st-line-2);
-  background: var(--st-surface-2);
-  color: var(--st-ink-3);
+  background: var(--st-surface-3);
+  color: var(--st-ink-2);
   font-size: var(--st-fs-micro);
   font-weight: 700;
-  letter-spacing: .07em;
+  letter-spacing: var(--st-track-label);
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
 }
 .st-data-table td {
-  padding: var(--st-3) var(--st-4);
+  padding: 13px var(--st-4);
   border-bottom: 1px solid var(--st-line);
   color: var(--st-ink);
   vertical-align: top;
@@ -755,6 +863,7 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   margin-top: 3px;
   color: var(--st-ink-3);
   font-size: var(--st-fs-micro);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 .st-data-table a { color: var(--st-ink); font-weight: 600; text-decoration: none; }
@@ -774,6 +883,8 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
 .st-data-table td.is-numeric small { text-align: right; }
 /* A reference is quoted, not read. */
 .st-data-table .st-ref { font-family: var(--st-mono); font-size: var(--st-fs-micro); letter-spacing: -.01em; }
+/* One line, one set of digit widths, every row. */
+.st-time { display: inline-block; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .st-pagination {
   display: flex;
@@ -1488,10 +1599,11 @@ td .st-money, th .st-money { width: 100%; }
 .st-field { margin: 0 0 var(--st-4); }
 .st-form label, .st-field label {
   display: block;
-  margin-bottom: 5px;
-  color: var(--st-ink-2);
+  margin-bottom: 6px;
+  color: var(--st-ink);
   font-size: var(--st-fs-xs);
   font-weight: 650;
+  letter-spacing: .002em;
 }
 .st-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 .st-form select,
@@ -1500,8 +1612,10 @@ td .st-money, th .st-money { width: 100%; }
 .st-filters input, .st-filters select {
   display: block;
   box-sizing: border-box;
+  /* No `max-width` here: `border-box` already keeps the control inside its
+     container, and a blanket cap at 100% would out-specify the per-type
+     widths below and put a two-digit percentage in a 1300px box. */
   width: 100%;
-  max-width: 100%;
   height: auto;
   min-height: 36px;
   padding: 8px 10px;
@@ -1515,13 +1629,28 @@ td .st-money, th .st-money { width: 100%; }
 }
 .st-form textarea, .st-field textarea { min-height: 76px; resize: vertical; }
 .st-form select, .st-filters select { padding-right: 30px; }
+/* A field should be about as wide as the longest thing it can hold. A
+   percentage stretched across a 1300px card looks like a text area and reads
+   as one; the value it wants is two digits. Prose keeps a comfortable measure,
+   and only a free-text reason takes the full width, because it is the one
+   field where more room is genuinely more useful. */
+.st-form input[type="number"],
+.st-form input[type="date"],
+.st-form input[type="time"],
+.st-field input[type="number"] { max-width: 11rem; }
+.st-form input[type="text"],
+.st-form input[type="email"],
+.st-form input[type="search"],
+.st-form select { max-width: 32rem; }
 .st-form input:focus, .st-form select:focus, .st-form textarea:focus,
 .st-filters input:focus, .st-filters select:focus { border-color: var(--st-focus); }
 .st-form .helptext, .st-form small, .st-field small {
   display: block;
+  max-width: 68ch;
   margin-top: var(--st-1);
   color: var(--st-ink-3);
   font-size: var(--st-fs-xs);
+  line-height: 1.5;
 }
 .st-form ul.errorlist, .st-field ul.errorlist {
   margin: var(--st-1) 0 0;
@@ -1584,23 +1713,26 @@ a.button, input[type="submit"].st-button {
   padding: 9px 14px;
   border: 1px solid transparent;
   border-radius: var(--st-r-2);
-  background: var(--st-shell-2);
-  color: var(--st-ink-invert);
+  background: var(--st-btn);
+  color: var(--st-btn-fg);
   font-size: var(--st-fs-xs);
   font-weight: 650;
+  letter-spacing: .004em;
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
 }
-.st-filters button:hover, .st-form button:hover, .button:hover { background: var(--st-shell); color: #fff; }
-html[data-theme="dark"] .st-filters button,
-html[data-theme="dark"] .st-form button,
-html[data-theme="dark"] .button { color: var(--st-ink); }
-@media (prefers-color-scheme: dark) {
-  html[data-theme="auto"] .st-filters button,
-  html[data-theme="auto"] .st-form button,
-  html[data-theme="auto"] .button { color: var(--st-ink); }
-}
+.st-filters button:hover, .st-form button:hover,
+.st-inline-actions button:hover, .button:hover,
+a.button:hover { background: var(--st-btn-hover); color: var(--st-btn-fg); }
+
+/* Four levels, and no screen is allowed more than one of the first.
+     primary      .button / .st-form button  — the thing to press
+     quiet        .st-button-quiet           — reachable, deliberately second
+     confirming   .st-button-ok              — approve, on a review screen
+     destructive  .st-button-danger          — reject, dismiss, disable
+   A link-style control is a plain `<a>`; it is not a button and does not get a
+   box, because a box is what says "this commits something". */
 
 /* Quiet control: present, reachable, and clearly not the thing to press. */
 .st-button-quiet, a.button.st-button-quiet {
@@ -1610,6 +1742,30 @@ html[data-theme="dark"] .button { color: var(--st-ink); }
   font-weight: 600;
 }
 .st-button-quiet:hover, a.button.st-button-quiet:hover { background: var(--st-surface-2); color: var(--st-ink); }
+html[data-theme="dark"] .st-button-quiet,
+html[data-theme="dark"] a.button.st-button-quiet { color: var(--st-ink-2); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="auto"] .st-button-quiet,
+  html[data-theme="auto"] a.button.st-button-quiet { color: var(--st-ink-2); }
+}
+
+/* A pair of quiet controls that switch which slice of a queue is listed is not
+   a pair of actions: exactly one of them is already true, and it says so. */
+a.button.st-button-quiet.is-current,
+a.button.st-button-quiet.is-current:hover {
+  border-color: var(--st-line-2);
+  background: var(--st-surface-3);
+  color: var(--st-ink);
+  font-weight: 700;
+}
+a.button.st-button-quiet.is-current::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: var(--st-accent);
+}
 
 .st-button-ok { background: var(--approve-button-bg) !important; color: #fff !important; }
 .st-button-ok:hover { background: var(--approve-button-hover-bg) !important; }
@@ -1650,6 +1806,75 @@ button[disabled], .st-form button[disabled] {
    Reached only through the owner-only technical records escape hatch, but it
    still has to be legible when it is. */
 
+/* -- Sign-in ------------------------------------------------------------
+   The first screen anyone sees, and the one place the console still looked
+   like a framework's default. Django's own markup is kept; only the card, the
+   fields and the one button are brought up to the rest of the console. */
+
+body.login #container {
+  width: min(400px, calc(100% - var(--st-4) * 2));
+  margin: clamp(var(--st-6), 12vh, 120px) auto var(--st-8);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+  box-shadow: var(--st-shadow-2);
+  overflow: hidden;
+}
+body.login #header {
+  justify-content: center;
+  min-height: 0;
+  padding: var(--st-4) var(--st-5);
+}
+body.login #branding { display: flex; align-items: center; gap: var(--st-3); }
+body.login #content { padding: var(--st-6) var(--st-5) var(--st-5); }
+body.login .form-row { margin: 0 0 var(--st-4); padding: 0; border: 0; }
+body.login .form-row label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--st-ink);
+  font-size: var(--st-fs-xs);
+  font-weight: 650;
+}
+body.login .form-row input[type="text"],
+body.login .form-row input[type="password"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-canvas);
+  color: var(--st-ink);
+  font: inherit;
+  font-size: var(--st-fs-body);
+}
+body.login .form-row input:focus { border-color: var(--st-focus); }
+body.login .submit-row { margin: var(--st-5) 0 0; padding: 0; }
+body.login .submit-row input[type="submit"] {
+  width: 100%;
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--st-r-2);
+  background: var(--st-btn);
+  color: var(--st-btn-fg);
+  font-size: var(--st-fs-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+body.login .submit-row input[type="submit"]:hover { background: var(--st-btn-hover); }
+body.login .errornote {
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-bad-line);
+  border-left-width: 3px;
+  border-radius: var(--st-r-2);
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+  font-size: var(--st-fs-sm);
+  font-weight: 650;
+}
+
 .module { border: 1px solid var(--st-line); border-radius: var(--st-r-2); }
 .module caption, .module h2 { letter-spacing: .02em; }
 #content h1 { font-family: var(--st-serif); font-weight: 600; letter-spacing: -.01em; }
@@ -1675,7 +1900,128 @@ button[disabled], .st-form button[disabled] {
 ul.messagelist li { border-radius: var(--st-r-2); }
 
 /* ==========================================================================
-   16. Responsive, motion, print
+   16. Openable rows and cards
+   ==========================================================================
+   A queue row stands for exactly one record, and the operator's intent on
+   seeing it is to open it. Before this, only the applicant's name carried the
+   link, and the other nine tenths of the row were dead space that looked
+   identical to the live tenth — which is a discoverability bug, not a taste
+   one: it has to be found once and remembered forever.
+
+   The link itself is unchanged. `[data-row-primary]` is still a real anchor
+   with a real href, so Enter, middle-click, "open in new tab", the status bar
+   preview and every screen reader keep working exactly as they did. What is
+   added is a click surface over the rest of the row, delegated once in
+   `console.js`, plus the affordances below so the surface can be seen rather
+   than discovered. */
+
+[data-row-link] { cursor: pointer; }
+
+/* The trailing mark. It is the whole point: an operator scanning a queue must
+   be able to see that a row opens without hovering it first — so it is pinned
+   to the right edge and survives the horizontal scroll a dense table needs at
+   laptop widths. A mark that scrolls out of view is a mark that is not there
+   on exactly the screens where the table is hardest to read. */
+.st-row-go {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  width: 1px;
+  padding-left: var(--st-2) !important;
+  border-left: 1px solid var(--st-line);
+  background: var(--st-surface);
+  color: var(--st-ink-3);
+  text-align: right;
+  white-space: nowrap;
+}
+th.st-row-go { background: var(--st-surface-3); }
+tr[data-row-link]:hover td.st-row-go { background: var(--st-surface-2); }
+td.st-row-go::after {
+  content: "\203A";
+  display: inline-block;
+  font-size: 1.15rem;
+  line-height: 1;
+  opacity: .55;
+}
+
+tr[data-row-link]:hover .st-row-go::after { color: var(--st-accent); opacity: 1; }
+
+/* Hover names the destination by lifting the row's primary link rather than by
+   washing the whole row in colour. */
+tr[data-row-link]:hover td { background: var(--st-surface-2); }
+tr[data-row-link]:hover [data-row-primary] { color: var(--st-accent); text-decoration: underline; }
+
+/* Keyboard focus. Deliberately `:has([data-row-primary]:focus-visible)` and
+   not `:focus-within`: a row also holds a bulk-select checkbox and secondary
+   links, and lighting the whole row up when the checkbox is focused would
+   promise an Enter press that opens the record, which it does not.
+   `outline` on a `tr` is unreliable across engines; an inset shadow is not. */
+@supports selector(:has(*)) {
+  tr[data-row-link]:has([data-row-primary]:focus-visible) td {
+    background: var(--st-surface-2);
+    box-shadow: inset 0 2px 0 var(--st-focus), inset 0 -2px 0 var(--st-focus);
+  }
+  tr[data-row-link]:has([data-row-primary]:focus-visible) td:first-child { box-shadow: inset 2px 2px 0 var(--st-focus), inset 0 -2px 0 var(--st-focus); }
+  tr[data-row-link]:has([data-row-primary]:focus-visible) td:last-child { box-shadow: inset -2px 2px 0 var(--st-focus), inset 0 -2px 0 var(--st-focus); }
+  tr[data-row-link]:has([data-row-primary]:focus-visible) [data-row-primary] { color: var(--st-accent); text-decoration: underline; }
+  tr[data-row-link]:has([data-row-primary]:focus-visible) .st-row-go::after { color: var(--st-accent); opacity: 1; }
+  /* Only then; without `:has` the anchor keeps the ordinary ring it has
+     always had, so a browser that cannot draw the row box still shows focus. */
+  tr[data-row-link] [data-row-primary]:focus-visible { outline: none; }
+}
+
+/* A nested control keeps its own target, its own cursor and its own hit area,
+   and stops the row surface from claiming the click. */
+tr[data-row-link] a,
+tr[data-row-link] button,
+tr[data-row-link] input,
+tr[data-row-link] select,
+tr[data-row-link] textarea,
+tr[data-row-link] label,
+tr[data-row-link] summary { cursor: auto; }
+tr[data-row-link] a,
+tr[data-row-link] button,
+tr[data-row-link] summary,
+tr[data-row-link] input[type="checkbox"] { cursor: pointer; }
+/* The select column is a control column, not part of the open surface: give
+   the checkbox room so aiming at it is not aiming at the row. */
+tr[data-row-link] td:has(> input[type="checkbox"]) { padding-top: 12px; }
+tr[data-row-link] input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--st-accent); }
+
+/* Blocks outside a table that stand for one record — an identity panel, a
+   submission in a history list — follow the same contract with the same two
+   attributes, so there is one rule to learn and one place it is implemented. */
+.st-card[data-row-link],
+.st-identity[data-row-link] { border-radius: var(--st-r-2); }
+.st-card[data-row-link],
+.st-identity[data-row-link],
+.st-timeline li[data-row-link] { transition: background-color .12s ease, border-color .12s ease; }
+/* The timeline keeps its rule and its node: a rounded corner would clip the
+   left border the dots are hung on. */
+.st-timeline li[data-row-link] { padding-right: var(--st-3); }
+.st-card[data-row-link]:hover {
+  border-color: var(--st-line-2);
+  background: var(--st-surface-2);
+}
+/* These two sit inside a card already, so they lift rather than re-border. */
+.st-identity[data-row-link] { margin-inline: calc(var(--st-2) * -1); padding-inline: var(--st-2); }
+.st-identity[data-row-link]:hover,
+.st-timeline li[data-row-link]:hover { background: var(--st-surface-2); }
+.st-identity[data-row-link]:hover [data-row-primary],
+.st-timeline li[data-row-link]:hover [data-row-primary] { color: var(--st-accent); text-decoration: underline; }
+
+@supports selector(:has(*)) {
+  [data-row-link]:not(tr):has([data-row-primary]:focus-visible) {
+    background: var(--st-surface-2);
+    outline: 3px solid var(--st-focus);
+    outline-offset: 2px;
+  }
+  [data-row-link]:not(tr):has([data-row-primary]:focus-visible) [data-row-primary] { color: var(--st-accent); text-decoration: underline; }
+  [data-row-link]:not(tr) [data-row-primary]:focus-visible { outline: none; }
+}
+
+/* ==========================================================================
+   17. Responsive, motion, print
    ========================================================================== */
 
 a:focus-visible, button:focus-visible, input:focus-visible,

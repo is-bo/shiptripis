@@ -4365,6 +4365,12 @@ abstract class L {
   /// **'Near {place}'**
   String locationAirportNearPlace(String place);
 
+  /// Shown under an airport suggested only because it is close to the searched place. It must not read as an official served-city relationship, and it states the distance so the reader can judge it.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby airport · {distance} km'**
+  String locationAirportNearbyDistance(String distance);
+
   /// No description provided for @locationTypeLocality.
   ///
   /// In en, this message translates to:

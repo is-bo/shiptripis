@@ -12,7 +12,7 @@
       <h1>{{ title }}</h1>
       <p>{{ description }}</p>
     </div>
-    {% if actions %}<div class="st-page-actions">{% for action in actions %}<a class="button" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div>{% endif %}
+    {% if actions %}<div class="st-page-actions">{% for action in actions %}<a class="button{% if action.variant == 'quiet' %} st-button-quiet{% endif %}{% if action.current %} is-current{% endif %}" href="{{ action.url }}"{% if action.current %} aria-current="page"{% endif %}>{{ action.label }}</a>{% endfor %}</div>{% endif %}
   </header>
 
   <form method="get" class="st-filters" role="search">
@@ -41,11 +41,13 @@
             <tr>
               {% if bulk_action_url %}<th scope="col">Select</th>{% endif %}
               {% for column in columns %}<th scope="col"{% if column.numeric %} class="is-numeric"{% endif %}>{{ column.label|default:column }}</th>{% endfor %}
+              {% if has_row_links %}<th scope="col" class="st-row-go"><span class="st-visually-hidden">Open</span></th>{% endif %}
             </tr>
           </thead>
           <tbody>
           {% for row in rows %}
-            <tr>
+            {% comment %}`data-row-link` marks the surface; the anchor inside keeps the navigation. See `shiptrip/console.js`.{% endcomment %}
+            <tr{% if row.openable %} data-row-link{% endif %}>
               {% if bulk_action_url %}<td>{% if row.select_id %}<input type="checkbox" name="job_ids" value="{{ row.select_id }}" aria-label="Select job {{ row.select_id }}">{% else %}&mdash;{% endif %}</td>{% endif %}
               {% for cell in row.cells %}
                 <td{% if cell.kind == "money" or cell.kind == "money-lead" or cell.kind == "money-pair" %} class="is-numeric"{% endif %}>
@@ -56,24 +58,26 @@
                   {% elif cell.kind == "money-pair" %}
                     <span class="st-money-pair"><strong>{{ cell.primary }}</strong>{% if cell.secondary %}<small>{{ cell.secondary }}</small>{% endif %}</span>
                   {% else %}
-                    <span{% if cell.kind == "money" or cell.kind == "money-lead" %} class="st-money{% if cell.kind == 'money-lead' %} st-money-lead{% endif %}"{% elif cell.kind == "strong" %} class="st-cell-strong"{% elif cell.kind == "ref" %} class="st-ref"{% endif %}>
-                      {% if cell.href %}<a href="{{ cell.href }}">{{ cell.primary }}</a>{% else %}{{ cell.primary }}{% endif %}
+                    <span{% if cell.kind == "money" or cell.kind == "money-lead" %} class="st-money{% if cell.kind == 'money-lead' %} st-money-lead{% endif %}"{% elif cell.kind == "strong" %} class="st-cell-strong"{% elif cell.kind == "ref" %} class="st-ref"{% elif cell.kind == "time" %} class="st-time"{% endif %}>
+                      {% if cell.href %}<a href="{{ cell.href }}"{% if cell.aria_label %} aria-label="{{ cell.aria_label }}"{% endif %}{% if cell.is_primary %} data-row-primary{% endif %}>{{ cell.primary }}</a>{% else %}{{ cell.primary }}{% endif %}
                     </span>
                     {% if cell.secondary %}<small{% if cell.kind == "ref" %} class="st-ref"{% endif %}>{{ cell.secondary }}</small>{% endif %}
                   {% endif %}
                 </td>
               {% endfor %}
+              {% if has_row_links %}<td class="st-row-go" aria-hidden="true"></td>{% endif %}
             </tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
       {% if bulk_action_url %}
+      {% comment %}`as_field_group` emits a bare label and widget with no wrapper, so the spacing and the checkbox row are supplied here rather than by a rule that has nothing to hang on.{% endcomment %}
       <div class="st-card st-form">
         <p><strong>Act on selected terminal jobs</strong></p>
-        {{ bulk_form.action.as_field_group }}
-        {{ bulk_form.reason.as_field_group }}
-        {{ bulk_form.confirm.as_field_group }}
+        <div class="st-field">{{ bulk_form.action.as_field_group }}</div>
+        <div class="st-field">{{ bulk_form.reason.as_field_group }}</div>
+        <div class="st-check">{{ bulk_form.confirm.as_field_group }}</div>
         <button type="submit">Apply audited action</button>
       </div>
       {% endif %}

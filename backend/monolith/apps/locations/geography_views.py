@@ -22,6 +22,12 @@ from .models import AirportLocalityMapping, Country, Place, PlaceAlternateName
 AIRPORT_RECOMMENDATION_SEED_LIMIT = 8
 AIRPORT_RECOMMENDATION_LIMIT = 3
 NEARBY_AIRPORT_MAX_DISTANCE_KM = 100.0
+# A served airport is a fact about the catalogue; a nearby one is only a fact
+# about a map, so the two are not the same kind of suggestion and do not get the
+# same budget. One nearest airport answers "there is no airport in this town,
+# but there is one you can reach"; a list of three answers a question nobody
+# asked and reads as though ShipTrip believes all three serve the place.
+NEARBY_AIRPORT_FALLBACK_LIMIT = 1
 EARTH_MEAN_RADIUS_KM = 6_371.0088
 
 
@@ -159,7 +165,12 @@ def _airport_recommendations(
         and seed.latitude is not None
         and seed.longitude is not None
     ]
-    remaining = AIRPORT_RECOMMENDATION_LIMIT - len(served_ids)
+    # The fallback budget is capped for the whole response, not per seed: a
+    # broad prefix that matches four unmapped towns still yields one airport.
+    remaining = min(
+        AIRPORT_RECOMMENDATION_LIMIT - len(served_ids),
+        NEARBY_AIRPORT_FALLBACK_LIMIT,
+    )
     if not fallback_seeds or remaining <= 0:
         return seed_ids, served_ids, [], metadata
 
@@ -179,7 +190,11 @@ def _airport_recommendations(
         .distinct()
         .values("id", "country_id", "name", "latitude", "longitude")
     )
-    nearby_candidates: list[tuple[float, str, int, Place]] = []
+    # The sort key holds only comparable scalars. It used to end in the seed
+    # ``Place`` itself, which Python reaches for whenever distance, name and
+    # airport id all tie — two towns the same distance from one airport, which
+    # a catalogue can easily contain — and comparing two models raises.
+    nearby_candidates: list[tuple[float, str, int, int]] = []
     for airport in airport_query:
         for seed in fallback_seeds:
             if seed.country_id != airport["country_id"]:
@@ -192,11 +207,12 @@ def _airport_recommendations(
             )
             if distance <= NEARBY_AIRPORT_MAX_DISTANCE_KM:
                 nearby_candidates.append(
-                    (distance, airport["name"], airport["id"], seed)
+                    (distance, airport["name"], airport["id"], seed.id)
                 )
 
     nearby_ids: list[int] = []
-    for distance, _name, airport_id, seed in sorted(nearby_candidates):
+    for distance, _name, airport_id, seed_id in sorted(nearby_candidates):
+        seed = seed_by_id[seed_id]
         if airport_id in metadata:
             continue
         nearby_ids.append(airport_id)

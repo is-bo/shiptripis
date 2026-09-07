@@ -275,6 +275,20 @@ def _table(
         }
         for index, label in enumerate(columns)
     ]
+    # A row that stands for one record is clickable across its whole width.
+    # The declaration lives on the cell that already carries the link
+    # (`opens_row=True`), so a list cannot end up with a click surface that
+    # opens something other than the anchor an operator can see and tab to.
+    has_row_links = False
+    for row in rows:
+        primaries = [cell for cell in row["cells"] if cell.get("is_primary")]
+        if len(primaries) > 1:
+            raise ValueError(
+                f"{title}: a row declared {len(primaries)} primary cells; "
+                "exactly one cell may open the row."
+            )
+        row["openable"] = bool(primaries)
+        has_row_links = has_row_links or row["openable"]
     return _render(
         request,
         "admin/console/table.html",
@@ -284,6 +298,7 @@ def _table(
             "description": description,
             "columns": column_specs,
             "rows": rows,
+            "has_row_links": has_row_links,
             "page_obj": page_obj,
             "query_without_page": _query_without_page(request),
             "empty_title": empty_title,
@@ -683,6 +698,7 @@ def users(request):
                         user.full_name or "Name not provided",
                         user.email,
                         href=reverse("admin_console:user-detail", args=(user.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(user.get_role_display()),
@@ -784,6 +800,7 @@ def kyc_queue(request):
                         submission.user.full_name or submission.user.email,
                         submission.user.email,
                         href=reverse("admin_console:kyc-detail", args=(submission.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(submission.get_document_type_display()),
@@ -1047,6 +1064,7 @@ def flight_proof_queue(request):
                         leg.journey.traveler.full_name or leg.journey.traveler.email,
                         leg.journey.traveler.email,
                         href=reverse("admin_console:proof-detail", args=(proof.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     route_cell(_leg_route_nodes(leg)),
@@ -1289,6 +1307,7 @@ def journeys(request):
                         href=reverse(
                             "admin_console:journey-detail", args=(journey.pk,)
                         ),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(
@@ -1414,6 +1433,7 @@ def deals(request):
                         f"Deal {deal.pk}",
                         deal.created_at.strftime("%d %b %Y"),
                         href=reverse("admin_console:deal-detail", args=(deal.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(
@@ -1540,6 +1560,7 @@ def disputes(request):
                         href=reverse(
                             "admin_console:dispute-detail", args=(dispute.pk,)
                         ),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(
@@ -1816,7 +1837,13 @@ def payments(request):
                         or "—"
                     ),
                     datetime_cell(attempt.updated_at, relative=True),
-                    text_cell("Review", href=actions, kind="strong"),
+                    text_cell(
+                        "Review",
+                        href=actions,
+                        kind="strong",
+                        opens_row=True,
+                        aria_label=f"Review payment attempt {attempt.pk}",
+                    ),
                 )
             }
         )
@@ -1882,6 +1909,7 @@ def payment_detail(request, pk: int):
                 {
                     "label": "Resolve attention item",
                     "url": reverse("admin_console:payment-resolve", args=(attempt.pk,)),
+                    "variant": "quiet",
                 }
             )
     if (
@@ -1893,6 +1921,7 @@ def payment_detail(request, pk: int):
             {
                 "label": "Request refund",
                 "url": reverse("admin_console:refund-new", args=(attempt.pk,)),
+                "variant": "quiet",
             }
         )
     return _render(
@@ -2117,6 +2146,7 @@ def refunds(request):
                         f"Refund {refund.pk}",
                         str(refund.order.public_reference),
                         href=reverse("admin_console:refund-detail", args=(refund.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(refund.get_reason_display()),
@@ -2232,6 +2262,7 @@ def payouts(request):
                         payout.traveler.full_name or payout.traveler.email,
                         payout.traveler.email,
                         href=reverse("admin_console:payout-detail", args=(payout.pk,)),
+                        opens_row=True,
                         kind="strong",
                     ),
                     text_cell(f"Deal {payout.deal_id}"),
@@ -3042,7 +3073,9 @@ def background_jobs(request):
                     text_cell(
                         "Review",
                         href=reverse("admin_console:job-detail", args=(job.pk,)),
+                        opens_row=True,
                         kind="strong",
+                        aria_label=f"Review background job {job.pk}",
                     ),
                 ),
             }
@@ -3066,14 +3099,21 @@ def background_jobs(request):
         empty_title="No background jobs in this state",
         empty_text="No durable work matches the selected filter.",
         filter_choices=tuple(ScheduledJob.Status.choices),
+        # These switch which slice of the queue is listed; neither commits
+        # anything. Rendering both as primary buttons made the page look like
+        # it was asking for a decision it is not asking for.
         actions=(
             {
                 "label": "Actionable failures",
                 "url": f'{reverse("admin_console:jobs")}?attention=1',
+                "variant": "quiet",
+                "current": attention,
             },
             {
                 "label": "Resolved history",
                 "url": f'{reverse("admin_console:jobs")}?history=resolved',
+                "variant": "quiet",
+                "current": request.GET.get("history") == "resolved",
             },
         ),
         bulk_action_url=(
@@ -3190,7 +3230,13 @@ def background_job_detail(request, pk: int):
     )
     actions = []
     if related_url:
-        actions.append({"label": "View related object", "url": related_url})
+        actions.append(
+            {
+                "label": "View related object",
+                "url": related_url,
+                "variant": "quiet",
+            }
+        )
     if may_act:
         actions.extend(
             (
@@ -3198,9 +3244,12 @@ def background_job_detail(request, pk: int):
                     "label": "Retry now",
                     "url": reverse("admin_console:job-retry", args=(job.pk,)),
                 },
+                # Closing a failure without re-running it is the deliberate
+                # second choice, and reads as one.
                 {
                     "label": "Resolve or dismiss",
                     "url": reverse("admin_console:job-resolve", args=(job.pk,)),
+                    "variant": "quiet",
                 },
             )
         )

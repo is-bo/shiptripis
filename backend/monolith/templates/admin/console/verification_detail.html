@@ -97,10 +97,10 @@
         <p class="st-eyebrow">Context</p>
         <h2>{% if kind == 'kyc' %}Who this is{% else %}Which flight this is{% endif %}</h2>
 
-        <div class="st-identity">
+        <div class="st-identity" data-row-link>
           <span class="st-avatar" aria-hidden="true">{{ applicant.full_name|default:applicant.email|slice:":1"|upper }}</span>
           <div class="st-identity-body">
-            <strong><a href="{% url 'admin_console:user-detail' applicant.pk %}">{{ applicant.full_name|default:"Name not provided" }}</a></strong>
+            <strong><a href="{% url 'admin_console:user-detail' applicant.pk %}" data-row-primary>{{ applicant.full_name|default:"Name not provided" }}</a></strong>
             <span>{{ applicant.email }}</span>
           </div>
         </div>

@@ -67,8 +67,8 @@
       {% if kyc_submissions %}
         <ol class="st-timeline">
           {% for item in kyc_submissions %}
-          <li>
-            <strong>{% if perms.admin_panel.view_kyc %}<a href="{% url 'admin_console:kyc-detail' item.pk %}">{{ item.get_document_type_display }}</a>{% else %}Identity submission{% endif %}</strong>
+          <li{% if perms.admin_panel.view_kyc %} data-row-link{% endif %}>
+            <strong>{% if perms.admin_panel.view_kyc %}<a href="{% url 'admin_console:kyc-detail' item.pk %}" data-row-primary>{{ item.get_document_type_display }}</a>{% else %}Identity submission{% endif %}</strong>
             <span><span class="st-chip st-{{ item.status|status_tone }}">{{ item.get_status_display }}</span> &middot; {{ item.created_at|date:"d M Y" }}</span>
           </li>
           {% endfor %}

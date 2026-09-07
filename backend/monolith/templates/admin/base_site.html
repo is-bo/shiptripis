@@ -4,7 +4,15 @@
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('ShipTrip Admin') }}{% endblock %}
 
 {% block extrastyle %}{{ block.super }}
+  {% comment %}The two faces the console sets are the ones it always sets, on
+  every screen, above the fold. Preloading them removes the flash of Georgia
+  that `font-display: swap` otherwise buys.{% endcomment %}
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'shiptrip/fonts/dmsans.woff2' %}" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'shiptrip/fonts/fraunces.woff2' %}" crossorigin>
   <link rel="stylesheet" href="{% static 'shiptrip/admin.css' %}">
+  {% comment %}Whole-row activation. The rows carry real anchors, so this is
+  purely the pointer affordance and the page works without it.{% endcomment %}
+  <script src="{% static 'shiptrip/console.js' %}" defer></script>
 {% endblock %}
 
 {% block branding %}

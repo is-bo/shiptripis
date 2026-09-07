@@ -26,7 +26,7 @@
     <p class="st-eyebrow">Audited actions</p>
     <h2>Recovery controls</h2>
     <p>Each action has its own confirmation and records the operator and reason.</p>
-    <div class="st-page-actions">{% for action in actions %}<a class="button" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div>
+    <div class="st-page-actions">{% for action in actions %}<a class="button{% if action.variant == 'quiet' %} st-button-quiet{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div>
   </section>
   {% else %}
   <div class="st-readonly-note"><span>No action is available in this state, or your role cannot take it.</span></div>

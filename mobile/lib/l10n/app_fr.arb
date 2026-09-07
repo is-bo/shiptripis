@@ -712,6 +712,7 @@
   "locationTypeAirport": "Aéroport",
   "locationAirportServesPlace": "Dessert {place}",
   "locationAirportNearPlace": "Près de {place}",
+  "locationAirportNearbyDistance": "Aéroport à proximité · {distance} km",
   "locationTypeLocality": "Localité",
   "locationUseMap": "Choisir sur la carte",
   "locationConfirmPoint": "Utiliser ce point",

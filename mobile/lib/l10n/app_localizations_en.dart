@@ -2455,6 +2455,11 @@ class LEn extends L {
   }
 
   @override
+  String locationAirportNearbyDistance(String distance) {
+    return 'Nearby airport · $distance km';
+  }
+
+  @override
   String get locationTypeLocality => 'Locality';
 
   @override

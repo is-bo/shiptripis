@@ -2460,6 +2460,11 @@ class LAr extends L {
   }
 
   @override
+  String locationAirportNearbyDistance(String distance) {
+    return 'مطار قريب · $distance كم';
+  }
+
+  @override
   String get locationTypeLocality => 'بلدية';
 
   @override

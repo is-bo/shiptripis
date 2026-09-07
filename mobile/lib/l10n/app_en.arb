@@ -1146,6 +1146,15 @@
       }
     }
   },
+  "locationAirportNearbyDistance": "Nearby airport · {distance} km",
+  "@locationAirportNearbyDistance": {
+    "description": "Shown under an airport suggested only because it is close to the searched place. It must not read as an official served-city relationship, and it states the distance so the reader can judge it.",
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
   "locationTypeLocality": "Locality",
   "locationUseMap": "Choose on map",
   "locationConfirmPoint": "Use this point",

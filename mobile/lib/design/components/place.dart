@@ -108,12 +108,34 @@ String placeSearchContext(BuildContext context, CanonicalPlace place) {
     return switch (place.searchRelation) {
       CanonicalPlaceSearchRelation.servesPlace =>
         L.of(context).locationAirportServesPlace(relatedName),
-      CanonicalPlaceSearchRelation.nearby =>
-        L.of(context).locationAirportNearPlace(relatedName),
+      // Proximity is a fact about a map, not a commercial relationship, and
+      // the old wording ("Near Jijel") let it pass for one. Say what it is and
+      // give the distance, because 14 km and 96 km are different decisions.
+      CanonicalPlaceSearchRelation.nearby => _nearbyAirportContext(
+        context,
+        place,
+        relatedName,
+      ),
       _ => placeContext(context, place),
     };
   }
   return placeContext(context, place);
+}
+
+String _nearbyAirportContext(
+  BuildContext context,
+  CanonicalPlace place,
+  String relatedName,
+) {
+  final distance = place.searchDistanceKm;
+  if (distance == null || distance.isNaN || distance.isInfinite) {
+    return L.of(context).locationAirportNearPlace(relatedName);
+  }
+  // Whole kilometres: the tenth of a kilometre the server sends is precision
+  // the reader cannot use, and an airport 400 m away still reads "1 km"
+  // rather than "0 km".
+  final rounded = distance.round().clamp(1, 999);
+  return L.of(context).locationAirportNearbyDistance('$rounded');
 }
 
 /// What a screen reader should hear for a whole row: the place, whether it is

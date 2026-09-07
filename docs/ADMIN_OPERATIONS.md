@@ -164,7 +164,31 @@ The console is desktop-first. Navigation is one row of sections with a second
 band for the current section's destinations; the overview additionally lists
 every destination the signed-in role can open. Tables scroll horizontally
 inside their own card and cards/forms stack at narrower laptop and tablet
-widths. Status is always a word plus a mark, never colour alone, and the
+widths.
+
+## Opening a record
+
+Where a row stands for one record, the whole row opens it: click anywhere on it
+that is not another control. A row that opens something carries a chevron at
+its right edge, pinned there so it stays visible when a wide table scrolls
+sideways, and lifts under the pointer. This is deliberate — before Phase 8F-G2
+a KYC submission opened only from the applicant's name, and there was nothing
+to say so.
+
+The record's own name is still the link. Tab reaches it, Enter follows it,
+right-click offers the usual menu, and Ctrl/Cmd-click or middle-click opens it
+in a new tab, exactly as before. Nothing about opening a record depends on
+JavaScript; only the wider pointer target does.
+
+Controls inside a row keep their own behaviour. Clicking the bulk-select
+checkbox on Background jobs only ticks it, and clicking a job's related object
+opens that object rather than the job. Selecting text in a row does not
+navigate.
+
+The queues whose rows open are Users, KYC review, Flight proofs, Journeys,
+Deals, Disputes, Payments, Refunds, Payouts and Background jobs. Delivery
+requests, Ledger, Transactional email, Audit log and Staff have no per-record
+page, so their rows are deliberately inert rather than pretending otherwise. Status is always a word plus a mark, never colour alone, and the
 palette meets WCAG AA in both the light and dark themes. Empty queues explain that
 they are clear; action failures preserve a request reference and never claim a
 state change when the audited service refused the operation.

@@ -236,7 +236,10 @@ void main() {
     await tester.pumpAndSettle();
     await _selectAndSearch(tester, country: 'الجزائر', query: 'الجزائر');
 
-    expect(find.text('بالقرب من الجزائر الوسطى'), findsOneWidget);
+    // Proximity says it is proximity and states the distance; it must never
+    // borrow the wording of a served-city relationship.
+    expect(find.text('مطار قريب · 16 كم'), findsOneWidget);
+    expect(find.text('يخدم الجزائر الوسطى'), findsNothing);
     expect(find.text('ALG'), findsOneWidget);
     expect(
       Directionality.of(
@@ -244,6 +247,90 @@ void main() {
       ),
       TextDirection.rtl,
     );
+  });
+
+  testWidgets('a proximity fallback names the distance, not a served city', (
+    tester,
+  ) async {
+    final backend = _backendWithPlaces([
+      _place(
+        id: 2051,
+        type: 'airport',
+        name: 'Jijel Ferhat Abbas Airport',
+        parent: 'Jijel',
+        iata: 'GJL',
+        searchRelation: 'nearby',
+        searchContext: 'Jijel',
+        searchDistanceKm: 13.6,
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algeria', query: 'jijel');
+
+    expect(find.text('Jijel Ferhat Abbas Airport'), findsOneWidget);
+    expect(find.text('Nearby airport · 14 km'), findsOneWidget);
+    expect(find.text('Serves Jijel'), findsNothing);
+    expect(
+      find.bySemanticsLabel(
+        'Jijel Ferhat Abbas Airport, Airport, G J L, Nearby airport · 14 km',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a proximity fallback is localized in French', (tester) async {
+    final backend = _backendWithPlaces([
+      _place(
+        id: 2051,
+        type: 'airport',
+        name: 'Aéroport de Jijel Ferhat Abbas',
+        iata: 'GJL',
+        searchRelation: 'nearby',
+        searchContext: 'Jijel',
+        searchDistanceKm: 13.6,
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+      locale: const Locale('fr'),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algérie', query: 'jijel');
+
+    expect(find.text('Aéroport à proximité · 14 km'), findsOneWidget);
+    expect(find.text('Dessert Jijel'), findsNothing);
+  });
+
+  testWidgets('a proximity fallback under a kilometre never reads zero', (
+    tester,
+  ) async {
+    final backend = _backendWithPlaces([
+      _place(
+        id: 2052,
+        type: 'airport',
+        name: 'Close Field',
+        iata: 'CLF',
+        searchRelation: 'nearby',
+        searchContext: 'Somewhere',
+        searchDistanceKm: 0.4,
+      ),
+    ]);
+    await pumpApp(
+      tester,
+      const CanonicalPlacePickerScreen(),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await _selectAndSearch(tester, country: 'Algeria', query: 'somewhere');
+
+    expect(find.text('Nearby airport · 1 km'), findsOneWidget);
   });
 
   testWidgets('a served-airport explanation is localized in French', (

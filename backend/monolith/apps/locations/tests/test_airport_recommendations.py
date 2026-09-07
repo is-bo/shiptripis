@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 
 from django.core.management import call_command
@@ -222,3 +223,133 @@ class NearbyAirportSearchTests(APITestCase):
         )
         far_results = self._search("DZ", "Farville")
         self.assertEqual([row["name"] for row in far_results], ["Farville"])
+
+    def test_only_one_proximity_airport_is_ever_offered(self):
+        """Two airports inside the radius still yield a single suggestion.
+
+        Proximity is a hint that the town has no airport of its own, not a
+        second list of airports. A locality placed between Jijel and
+        Constantine has both inside 100 km; exactly the nearer one is offered,
+        and it is named as proximity rather than as a served relationship.
+        """
+
+        jijel_airport = Place.objects.get(iata_code="GJL")
+        constantine_airport = Place.objects.get(iata_code="CZL")
+        midpoint = Place.objects.create(
+            country_id="DZ",
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8fg2-test",
+            source_id="between-two-airports",
+            source_version="test",
+            name="Betweenville",
+            latitude=(jijel_airport.latitude + constantine_airport.latitude) / 2,
+            longitude=(jijel_airport.longitude + constantine_airport.longitude) / 2,
+        )
+
+        results = self._search("DZ", "Betweenville")
+        airports = [row for row in results if row["place_type"] == "airport"]
+
+        self.assertEqual(len(airports), 1)
+        self.assertEqual(airports[0]["search_relation"], "nearby")
+        self.assertEqual(airports[0]["search_context"]["name"], "Betweenville")
+        self.assertIsNotNone(airports[0]["search_distance_km"])
+        self.assertLessEqual(airports[0]["search_distance_km"], 100.0)
+        # Discovery only: the town's matching identity is still itself, and the
+        # airport it was shown next to is still a different canonical locality.
+        self.assertEqual(midpoint.resolve_matching_locality(), midpoint)
+        self.assertNotEqual(airports[0]["matching_locality"]["id"], midpoint.id)
+
+    def test_several_unmapped_seeds_still_share_one_proximity_suggestion(self):
+        """The cap is per response, not per matched town."""
+
+        alger_airport = Place.objects.get(iata_code="ALG")
+        for index in range(3):
+            Place.objects.create(
+                country_id="DZ",
+                place_type=Place.PlaceType.LOCALITY,
+                source="phase8fg2-test",
+                source_id=f"unmapped-{index}",
+                source_version="test",
+                name=f"Unmappedtown {index}",
+                latitude=alger_airport.latitude,
+                longitude=alger_airport.longitude,
+            )
+
+        results = self._search("DZ", "Unmappedtown")
+        airports = [row for row in results if row["place_type"] == "airport"]
+
+        self.assertEqual(len(airports), 1)
+        self.assertEqual(airports[0]["iata_code"], "ALG")
+        self.assertEqual(airports[0]["search_relation"], "nearby")
+
+    def test_a_served_mapping_is_never_downgraded_to_proximity(self):
+        """An explicit relationship wins, and no proximity row joins it."""
+
+        results = self._search("DZ", "Alger")
+        airports = [row for row in results if row["place_type"] == "airport"]
+
+        self.assertTrue(airports)
+        self.assertEqual(
+            {row["search_relation"] for row in airports}, {"serves_place"}
+        )
+        for row in airports:
+            self.assertIsNone(row["search_distance_km"])
+
+    def test_proximity_never_crosses_a_national_border(self):
+        """Zero kilometres away is still the wrong country.
+
+        The locality sits on the exact coordinates of a French airport. If
+        distance alone decided this, it would be the closest airport in the
+        catalogue by a wide margin.
+        """
+
+        paris_airport = Place.objects.get(iata_code="CDG")
+        Place.objects.create(
+            country_id="ES",
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8fg2-test",
+            source_id="border-case",
+            source_version="test",
+            name="Bordertown",
+            latitude=paris_airport.latitude,
+            longitude=paris_airport.longitude,
+        )
+
+        results = self._search("ES", "Bordertown")
+
+        self.assertEqual([row["name"] for row in results], ["Bordertown"])
+        self.assertNotIn("CDG", {row["iata_code"] for row in results})
+
+    def test_the_hundred_kilometre_cutoff_is_a_cutoff_not_a_preference(self):
+        """Just inside is offered; just outside is not offered at all."""
+
+        alger_airport = Place.objects.get(iata_code="ALG")
+        Place.objects.create(
+            country_id="DZ",
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8fg2-test",
+            source_id="inside-radius",
+            source_version="test",
+            name="Insidetown",
+            latitude=alger_airport.latitude + Decimal("0.450000"),
+            longitude=alger_airport.longitude,
+        )
+        Place.objects.create(
+            country_id="DZ",
+            place_type=Place.PlaceType.LOCALITY,
+            source="phase8fg2-test",
+            source_id="outside-radius",
+            source_version="test",
+            name="Outsidetown",
+            latitude=alger_airport.latitude + Decimal("1.100000"),
+            longitude=alger_airport.longitude,
+        )
+
+        inside = self._search("DZ", "Insidetown")
+        inside_airports = [row for row in inside if row["place_type"] == "airport"]
+        self.assertEqual(len(inside_airports), 1)
+        self.assertEqual(inside_airports[0]["iata_code"], "ALG")
+        self.assertLessEqual(inside_airports[0]["search_distance_km"], 100.0)
+
+        outside = self._search("DZ", "Outsidetown")
+        self.assertEqual([row["name"] for row in outside], ["Outsidetown"])

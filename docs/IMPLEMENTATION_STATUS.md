@@ -4594,3 +4594,162 @@ No financial or audit history was physically removed, and the pruning command
 was not executed. Stripe and Chargily remain in TEST mode; email remains
 intentionally disabled. No external payment/refund/payout call was made, no
 mobile code changed, no APK/AAB was built, and G2 visual polish was not started.
+
+## Phase 8F-G2 — admin visual polish, clickability and airport search refinement
+
+Starting SHA `18e8f4c809cf97c76e627322719bc0b9ab9b5f87`. Two bounded
+workstreams: the operations console's visual and interaction quality, and one
+correction to the F2 airport recommendation rule. No admin information
+architecture, navigation, filter, workflow, role or action changed.
+
+### The reported problem
+
+On the KYC queue the record opened only from the applicant's name. The rest of
+the row looked identical to that one word and did nothing, which took the owner
+time to discover. The same shape existed on nine other queues, and on Payments
+and Background jobs the only target was a small **Review** link at the far right
+of a wide row.
+
+### Whole-row and whole-card activation
+
+A list row now declares its record on the cell that already carries the link
+(`text_cell(..., opens_row=True)`). `_table` turns that into `data-row-link` on
+the `<tr>` and `data-row-primary` on the anchor, and refuses a row that declares
+two — an ambiguous click surface is worse than none. A single delegated listener
+in `shiptrip/console.js` activates the surface; there is no per-page script.
+
+The anchor is unchanged. It is still a real `<a href>`, so Tab and Enter, the
+context menu, middle-click, "open in new tab" and every screen reader work
+exactly as before, with or without JavaScript. Only the pointer surface is new.
+
+Nested controls keep their own behaviour: the bulk-select checkbox, secondary
+links such as a job's related object, buttons, selects and labels are all
+excluded, as is a click that ends a text selection. Ctrl/Cmd and middle click
+open a new tab; Shift and Alt are left to the browser.
+
+Openable: Users, KYC review, Flight proofs, Journeys, Deals, Disputes,
+Payments, Refunds, Payouts, Background jobs, the identity panel on
+journey/verification detail, and the KYC history on a person. Deliberately not
+openable: Delivery requests, Ledger, Transactional email, Audit log and Staff,
+because none has a detail page and a surface there would promise a page that
+does not exist.
+
+Affordances are a pinned trailing chevron column, a pointer cursor, a hover
+tint, and the row's primary link lifting to terracotta and underlining. The
+chevron column is `position: sticky` so it survives the horizontal scroll a
+dense table needs at laptop widths. Keyboard focus draws an inset ring around
+the whole row, scoped with `:has([data-row-primary]:focus-visible)` and guarded
+by `@supports` — focusing the bulk checkbox must not promise that Enter opens
+the record, and a browser without `:has` keeps the anchor's ordinary ring.
+Generic **Review** links carry an accessible name that also states the record.
+
+### Typography
+
+Before: a local-only serif stack (`Iowan Old Style` / `Palatino Linotype`, in
+practice Palatino or Georgia) for titles and the platform UI font for
+everything else, with sizes declared per rule.
+
+After: the product's own faces, self-hosted. **Fraunces** carries page titles
+and the few identity marks; **DM Sans** carries everything read as data.
+References keep the platform monospace stack, because the repository's
+JetBrains Mono subset holds only digits, capitals, space and a hyphen — a
+provider reference set in it would render half from the subset and half from
+the system. Both faces are the existing `tools/web/build_fonts.py` subsets,
+mirrored into the app's static directory by that same script; they are not
+borrowed from Caddy's `/assets` route, which does not exist under `runserver`
+or in the review dumps. Both are preloaded, and hashed static collection
+rewrites their `url()` references correctly.
+
+Size, leading and tracking are now declared once as roles — page title, section
+title, card title, lead value, body, table cell, metadata, micro label, eyebrow
+— rather than re-tuned per rule. Timestamps became their own cell kind: one
+line, tabular figures, so a column of times lines up instead of wrapping to
+`04 Sep 2026,` / `12:22`.
+
+### Tables, cards, forms, buttons, status, navigation
+
+Table headers sit on a stronger ground with more contrast; row height, cell
+padding and secondary-line leading were retuned. Money stays right-aligned
+under agreeing headers; references stay monospace; horizontal scrolling is
+retained and no column was hidden.
+
+Cards keep their restrained borders and single elevation step. The System
+page's five cards no longer leave one alone on the last row — Finance queues
+spans both columns — and the job/email counters became a fixed three-column
+grid so six counters read as two rows of three rather than five and a widow.
+
+Form controls are now sized to what they hold: a percentage is 11rem, not the
+full 1300px card width. Labels gained contrast and weight, help text gained a
+measure and leading, and the bulk-action confirmation renders as a proper
+checkbox row rather than a bare label followed by an orphaned box.
+
+Buttons have four levels — primary, quiet, confirming, destructive — and no
+screen has two primaries. Background jobs' **Actionable failures** and
+**Resolved history** are two view switches, so both are quiet and the current
+one is marked with `aria-current`; **Retry now** leads its detail page and
+**Resolve or dismiss** follows it. The primary button ground became a token per
+theme, because the shell colour used for it was darker than the card in dark
+mode and the button disappeared into it.
+
+Status treatment is unchanged in meaning: every state is still a word plus a
+mark, never colour alone. Navigation structure, sections and ordering are
+untouched; only its type, the signed-in strip (no longer uppercase 300-weight
+11px) and the overflow scrollbar tint changed. The sign-in screen, previously
+the one stock-Django surface, became a proper card with console fields and one
+full-width primary action.
+
+### Themes, responsiveness, verification
+
+Both themes were reviewed on every major screen. Contrast was measured
+programmatically over the rendered pages: 2,107 text nodes across 20 screens in
+light and 1,309 across 12 in dark, with no WCAG AA failure. Dark mode remains a
+warm ShipTrip interpretation rather than pure black. Desktop, 1024px and 860px
+were checked: cards stack, tables scroll inside their own card with the chevron
+still pinned, and the console remains desktop-first.
+
+`tools/preview/dump_console_pages.py` rendered all **41** screens; the row-link
+distribution in the dump matches the intended list exactly.
+
+### Airport search
+
+Rule before: direct match, then explicitly served airports, then up to three
+proximity airports within 100 km in the same country, labelled `Near {place}`.
+
+Rule after: direct match, then explicitly served airports, then **at most one**
+nearest airport within 100 km in the same country, and only for matched
+localities with no served association. The cap (`NEARBY_AIRPORT_FALLBACK_LIMIT`)
+applies to the whole response, not per seed, so a prefix matching four unmapped
+towns still yields one airport. Same-country filtering and the 100 km cutoff are
+unchanged; the query stays bounded to active selectable airports in the matched
+countries, with no new index and no migration.
+
+The label no longer borrows the wording of a commercial relationship. A served
+airport still reads `Serves Alger`; a proximity result reads
+`Nearby airport · 14 km` (`Aéroport à proximité · 14 km`, `مطار قريب · 14 كم`),
+rounded to whole kilometres with a floor of 1. `locationAirportNearPlace` is
+retained as the fallback when the server sends no distance.
+
+Fixing the cap surfaced a latent crash in the F2 sort key: candidates were
+sorted as `(distance, name, airport_id, Place)`, and two towns equidistant from
+one airport made Python compare two model instances and raise. The key now ends
+in the seed's id.
+
+Proximity remains search discovery only. `resolve_matching_locality`,
+`matching_locality`, `available_for_matching` and all marketplace compatibility
+are untouched, and a test asserts that a nearby airport does not become
+equivalent to the town it was shown beside.
+
+### Verification
+
+Focused suites on Python 3.12: admin panel, core and locations **232 passed**;
+the new `test_phase8fg2_console_rows.py` **12 passed**; geography **57 passed**.
+Flutter shared-picker and canonical-location contract **44 passed**, including
+three new proximity-label tests and the updated Arabic RTL one. Ruff clean,
+`flutter analyze --fatal-infos` clean, Django system check clean, and hashed
+`collectstatic` succeeds with the font URLs rewritten and gzip variants written.
+
+G1 behaviour is preserved: actionable versus retrying/deferred/resolved
+counters, safe Retry, Resolve, Dismiss, the history filters, bulk limits, audit,
+pruning behaviour and unapplied-payment recovery rules are unchanged and
+covered by tests. No payment semantics changed, email remains disabled, and no
+APK/AAB was built.

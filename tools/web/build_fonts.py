@@ -25,6 +25,15 @@ SRC = ROOT / "mobile" / "assets" / "fonts"
 OUT = ROOT / "web" / "assets" / "fonts"
 STAGE = ROOT / "build" / "fontwork"
 
+# The operations console sets the same display and UI faces, but it is served
+# by Django/WhiteNoise rather than by Caddy's `/assets` route, so it cannot
+# reference the site's copy: local preview and the review dumps run without
+# Caddy and would silently fall back to Georgia. The two faces the admin
+# actually sets are mirrored into its own static directory instead, and this
+# script is the single place that regenerates both.
+ADMIN_OUT = ROOT / "backend" / "monolith" / "apps" / "core" / "static" / "shiptrip" / "fonts"
+ADMIN_FACES = ("fraunces", "dmsans")
+
 # Latin plus the punctuation the three catalogues actually use: the arrows in
 # "EU <-> Algeria", the euro sign, the middot separators and the box-drawing
 # rule under the fee total.
@@ -86,6 +95,11 @@ def main() -> int:
         size = target.stat().st_size
         total += size
         print(f"{target.relative_to(ROOT)}  {size / 1024:.1f} KiB")
+        if stem in ADMIN_FACES:
+            ADMIN_OUT.mkdir(parents=True, exist_ok=True)
+            mirrored = ADMIN_OUT / target.name
+            mirrored.write_bytes(target.read_bytes())
+            print(f"{mirrored.relative_to(ROOT)}  mirrored for the admin console")
     print(f"total {total / 1024:.1f} KiB")
     return 0
 

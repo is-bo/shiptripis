@@ -195,12 +195,36 @@ def status_cell(value: str, label: str | None = None) -> dict:
     }
 
 
-def text_cell(primary, secondary: str = "", *, href: str = "", kind: str = "") -> dict:
+def text_cell(
+    primary,
+    secondary: str = "",
+    *,
+    href: str = "",
+    kind: str = "",
+    opens_row: bool = False,
+    aria_label: str = "",
+) -> dict:
+    """One cell.
+
+    ``opens_row`` marks this cell's link as the record the whole row stands
+    for. It is the only declaration a list has to make to become clickable
+    everywhere rather than on one word: the anchor stays exactly where it was
+    and keeps doing the navigating, and the row around it becomes a surface
+    that activates it. A row may declare at most one — a second one would make
+    "click the row" ambiguous, and ``_table`` refuses it.
+    """
+
     return {
         "primary": "—" if primary in (None, "") else str(primary),
         "secondary": secondary,
         "href": href,
         "kind": kind,
+        "is_primary": bool(opens_row and href),
+        # A visible "Review" is enough for an eye that has the row in front of
+        # it and useless to a screen reader reading links out of context, so a
+        # generic label names its record instead. The accessible name still
+        # begins with the visible word, which is what label-in-name asks for.
+        "aria_label": aria_label,
     }
 
 
@@ -214,13 +238,22 @@ def datetime_cell(value, *, relative: bool = False) -> dict:
     if value is None:
         return text_cell("—")
     stamp = timezone.localtime(value).strftime("%d %b %Y, %H:%M")
-    return text_cell(stamp, f"{age_label(value)} ago" if relative else "")
+    # `time` keeps the stamp on one line with tabular figures. A timestamp that
+    # wraps to "04 Sep 2026," / "12:22" costs a second look on every row, and a
+    # column of times that do not line up cannot be scanned for the odd one.
+    return text_cell(
+        stamp, f"{age_label(value)} ago" if relative else "", kind="time"
+    )
 
 
-def ref_cell(value, secondary: str = "", *, href: str = "") -> dict:
+def ref_cell(
+    value, secondary: str = "", *, href: str = "", opens_row: bool = False
+) -> dict:
     """An identifier that is quoted rather than read, set in the mono face."""
 
-    return text_cell(value or "—", secondary, href=href, kind="ref")
+    return text_cell(
+        value or "—", secondary, href=href, kind="ref", opens_row=opens_row
+    )
 
 
 def money_pair_cell(canonical_cents: int | None, provider_text: str = "") -> dict:

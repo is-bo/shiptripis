@@ -712,6 +712,7 @@
   "locationTypeAirport": "مطار",
   "locationAirportServesPlace": "يخدم {place}",
   "locationAirportNearPlace": "بالقرب من {place}",
+  "locationAirportNearbyDistance": "مطار قريب · {distance} كم",
   "locationTypeLocality": "بلدية",
   "locationUseMap": "اختر من الخريطة",
   "locationConfirmPoint": "استخدم هذه النقطة",

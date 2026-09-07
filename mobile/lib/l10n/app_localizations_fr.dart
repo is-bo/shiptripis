@@ -2470,6 +2470,11 @@ class LFr extends L {
   }
 
   @override
+  String locationAirportNearbyDistance(String distance) {
+    return 'Aéroport à proximité · $distance km';
+  }
+
+  @override
   String get locationTypeLocality => 'Localité';
 
   @override
