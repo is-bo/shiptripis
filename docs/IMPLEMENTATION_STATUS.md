@@ -4523,7 +4523,7 @@ permission, so no Django to stream to Firebase to handset test was run and none
 is claimed. This remains a private pre-launch candidate; public launch gates are
 unchanged.
 
-## Phase 8F-G1 — finance operations reliability (implementation in progress)
+## Phase 8F-G1 — finance operations reliability (complete)
 
 The authenticated production review on release `v1.0.0-rc.9+b3bad99` found
 **29** terminal `outbound_message` ScheduledJobs, not payment-dispatch jobs.
@@ -4567,10 +4567,30 @@ are read-only. A conservative ScheduledJob pruning command is dry-run by
 default, has a 90-day default/30-day floor, and limits execution to old
 succeeded or already-resolved rows.
 
-Local focused verification currently reports **85 passed**, with Ruff clean,
-Django checks clean, and `makemigrations --check --dry-run` reporting no changes.
-Full suites, PostgreSQL schema export/drift, CI, release SHA, deployment, and
-post-deploy live counts remain to be completed before this section is final.
-No provider was switched from TEST, no external payment/refund/payout call was
-made, no mobile code changed, no APK/AAB was built, and G2 visual polish was not
-started.
+Implementation SHA `8eb1fa1ed3c0facafc004ec7831f4f657545eec6` passed the
+required GitHub Actions run
+[`34130678932`](https://github.com/is-bo/shiptripis/actions/runs/34130678932):
+all six jobs succeeded, including Django's PostgreSQL suite (**1,313 passed, 34
+skipped**), Ruff, migration checks, production/static configuration, real-Redis
+Go integration, PostgreSQL schema drift, and Go build/vet/unit race checks. The
+local full SQLite-compatible suite completed with **1,265 passed, 81 skipped**
+and the single explicitly PostgreSQL-only test deselected. The focused G1/admin
+slice passed **85** tests and the final targeted follow-up passed **15**. The
+operations preview exporter rendered all **41** pages successfully.
+
+Production deployment `0f77ea87-79c7-472e-956b-c5d56452f55b` completed on
+release `v1.0.0-rc.10+8eb1fa1`; `finance.0008` applied successfully. `/healthz`
+returned HTTP 200/`ok`, and `/readyz` returned HTTP 200/`ready` with database,
+migrations, and rate-limit cache checks healthy. Authenticated post-deploy admin
+verification found **0** payments needing finance review and **0** background
+jobs needing attention. The system page reported **13 pending**, **6 retrying**,
+**1 deferred**, and **28 resolved-history** jobs. The resolved-history view
+contained the 28 retained synthetic disabled-email jobs, while the real
+delivery-code message remained pending at 0/12 transport attempts and its same
+job remained deferred at 12/12 without consuming another attempt. All **11**
+PaymentAttempt rows remained visible as history.
+
+No financial or audit history was physically removed, and the pruning command
+was not executed. Stripe and Chargily remain in TEST mode; email remains
+intentionally disabled. No external payment/refund/payout call was made, no
+mobile code changed, no APK/AAB was built, and G2 visual polish was not started.
