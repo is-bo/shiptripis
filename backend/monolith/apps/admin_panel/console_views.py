@@ -126,6 +126,7 @@ from .console_presenters import (
     journey_route_nodes,
     money_cell,
     money_pair_cell,
+    open_cell,
     parcel_summary,
     percent_from_bps,
     place_label,
@@ -266,15 +267,6 @@ def _table(
     # the alignment reads as an accident. The cell kind already says which
     # columns hold money, so nothing has to be declared twice.
     numeric_kinds = {"money", "money-lead", "money-pair"}
-    first = rows[0]["cells"] if rows else ()
-    column_specs = [
-        {
-            "label": label,
-            "numeric": index < len(first)
-            and first[index].get("kind", "") in numeric_kinds,
-        }
-        for index, label in enumerate(columns)
-    ]
     # A row that stands for one record is clickable across its whole width.
     # The declaration lives on the cell that already carries the link
     # (`opens_row=True`), so a list cannot end up with a click surface that
@@ -287,8 +279,28 @@ def _table(
                 f"{title}: a row declared {len(primaries)} primary cells; "
                 "exactly one cell may open the row."
             )
+        # An `open_cell` is a control, not data: it is lifted out of the row's
+        # columns and into the pinned affordance at the row's edge, so a wide
+        # table cannot scroll its own primary target off the screen.
+        opener = next(
+            (cell for cell in row["cells"] if cell.get("kind") == "open"), None
+        )
+        if opener is not None:
+            row["cells"] = tuple(
+                cell for cell in row["cells"] if cell is not opener
+            )
+        row["open"] = opener
         row["openable"] = bool(primaries)
         has_row_links = has_row_links or row["openable"]
+    first = rows[0]["cells"] if rows else ()
+    column_specs = [
+        {
+            "label": label,
+            "numeric": index < len(first)
+            and first[index].get("kind", "") in numeric_kinds,
+        }
+        for index, label in enumerate(columns)
+    ]
     return _render(
         request,
         "admin/console/table.html",
@@ -1837,11 +1849,9 @@ def payments(request):
                         or "—"
                     ),
                     datetime_cell(attempt.updated_at, relative=True),
-                    text_cell(
+                    open_cell(
                         "Review",
                         href=actions,
-                        kind="strong",
-                        opens_row=True,
                         aria_label=f"Review payment attempt {attempt.pk}",
                     ),
                 )
@@ -1860,7 +1870,6 @@ def payments(request):
             "State",
             "Provider reference",
             "Updated",
-            "Action",
         ),
         rows=rows,
         page_obj=page_obj,
@@ -3070,11 +3079,9 @@ def background_jobs(request):
                         relative=True,
                     ),
                     text_cell(category or "None"),
-                    text_cell(
+                    open_cell(
                         "Review",
                         href=reverse("admin_console:job-detail", args=(job.pk,)),
-                        opens_row=True,
-                        kind="strong",
                         aria_label=f"Review background job {job.pk}",
                     ),
                 ),
@@ -3092,7 +3099,6 @@ def background_jobs(request):
             "Last attempt",
             "Next attempt",
             "Error category",
-            "Action",
         ),
         rows=rows,
         page_obj=page_obj,

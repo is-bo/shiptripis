@@ -65,7 +65,8 @@
                   {% endif %}
                 </td>
               {% endfor %}
-              {% if has_row_links %}<td class="st-row-go" aria-hidden="true"></td>{% endif %}
+              {% comment %}Where the row's link lives in a column, this cell is only the mark and is hidden from a reader; where the link IS the mark, the cell holds it and must not be.{% endcomment %}
+              {% if has_row_links %}{% if row.open %}<td class="st-row-go"><a href="{{ row.open.href }}" aria-label="{{ row.open.aria_label }}" data-row-primary></a></td>{% else %}<td class="st-row-go" aria-hidden="true"></td>{% endif %}{% endif %}
             </tr>
           {% endfor %}
           </tbody>

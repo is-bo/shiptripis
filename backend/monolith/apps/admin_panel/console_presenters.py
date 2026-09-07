@@ -228,6 +228,31 @@ def text_cell(
     }
 
 
+def open_cell(label: str, *, href: str, aria_label: str = "") -> dict:
+    """The row's own record, as a control rather than as a column of data.
+
+    Some queues have no natural identity column to hang the link on — a payment
+    is identified by its provider, its order and its amount together, none of
+    which is "the payment". Those used to carry a trailing ``Action`` column
+    holding the word *Review*, which is a control wearing a column's clothes:
+    it costs real width in an already wide table, and once the table has to
+    scroll it is the first thing to leave the screen.
+
+    This is the same link with the column removed. ``_table`` lifts it out of
+    the row's cells and into the pinned open affordance at the row's edge, so
+    the target is always visible and there is one of it rather than two.
+    """
+
+    return {
+        "primary": label,
+        "kind": "open",
+        "href": href,
+        "secondary": "",
+        "aria_label": aria_label or label,
+        "is_primary": bool(href),
+    }
+
+
 def money_cell(cents: int | None, *, emphasis: bool = False) -> dict:
     return text_cell(format_eur(cents), kind="money-lead" if emphasis else "money")
 

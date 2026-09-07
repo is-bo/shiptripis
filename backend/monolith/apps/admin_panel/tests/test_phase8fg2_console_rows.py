@@ -172,9 +172,9 @@ class OpenableRowContractTests(ConsoleRowsMixin, TestCase):
     def test_the_open_affordance_is_announced_but_not_read_twice(self):
         """The chevron column is a mark for the eye and silent to a reader.
 
-        Its header carries the word; the per-row cell is `aria-hidden`, because
-        a screen reader that heard "Open" on every row would be hearing the
-        same link twice.
+        Its header carries the word. On a queue whose link lives in a column,
+        the per-row cell is `aria-hidden`, because a reader that heard "Open"
+        on every row would be hearing the same link twice.
         """
 
         html = self.html(reverse("admin_console:kyc-queue"))
@@ -328,20 +328,69 @@ class NestedControlTests(ConsoleRowsMixin, TestCase):
         for link in secondary:
             self.assertNotEqual(link["href"], row["primaries"][0]["href"])
 
-    def test_a_generic_review_link_still_names_its_record_to_a_reader(self):
-        """"Review" out of context names nothing; the accessible name does.
+    def test_the_pinned_link_names_its_record_to_a_reader(self):
+        """The mark is a chevron; the name must not be.
 
-        The visible word is kept as the first word of the accessible name, so
-        someone using voice control can still say "Review".
+        The link's visible label is a graphic, so its accessible name has to
+        carry the record. "Review" alone, read out of context in a list of
+        links, names nothing.
         """
 
         html = self.html(f'{reverse("admin_console:jobs")}?attention=1')
         primary = body_rows(html)[0]["primaries"][0]
 
-        self.assertEqual(primary["text"], "Review")
         self.assertEqual(
             primary["aria_label"], f"Review background job {self.job.pk}"
         )
+        self.assertEqual(
+            primary["href"],
+            reverse("admin_console:job-detail", args=(self.job.pk,)),
+        )
+
+    def test_the_row_target_is_pinned_rather_than_given_a_column(self):
+        """A control does not get a column of its own in a wide table.
+
+        Payments and Background jobs have no identity column to hang the link
+        on, so they used to carry a trailing `Action` column holding the word
+        "Review". On production that column, plus one-line timestamps, pushed
+        the payments table past the viewport — and the first thing to scroll
+        off the right edge was the row's own primary target, underneath the
+        pinned mark. The link now lives in the pinned cell: one target, always
+        visible, and one fewer column of width.
+        """
+
+        html = self.html(f'{reverse("admin_console:jobs")}?attention=1')
+
+        # The column is gone from the header...
+        self.assertNotIn('<th scope="col">Action</th>', html)
+        # ...and the link is in the pinned cell, still named after its record.
+        self.assertIn(
+            '<td class="st-row-go"><a href="'
+            f'{reverse("admin_console:job-detail", args=(self.job.pk,))}"'
+            f' aria-label="Review background job {self.job.pk}"'
+            " data-row-primary></a></td>",
+            html,
+        )
+        row = body_rows(html)[0]
+        self.assertTrue(row["openable"])
+        self.assertEqual(len(row["primaries"]), 1)
+
+    def test_every_data_column_survives_the_removal_of_the_control(self):
+        """Only the control was removed; no information was hidden."""
+
+        html = self.html(f'{reverse("admin_console:jobs")}?attention=1')
+        for column in (
+            "Work",
+            "Related object",
+            "Operational state",
+            "Attempts",
+            "Last attempt",
+            "Next attempt",
+            "Error category",
+        ):
+            with self.subTest(column=column):
+                self.assertIn(f'<th scope="col">{column}</th>', html)
+        self.assertNotIn('<th scope="col">Action</th>', html)
 
     def test_g1_recovery_controls_and_history_filters_are_unchanged(self):
         """Phase 8F-G1 semantics survive a visual pass.

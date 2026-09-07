@@ -4637,7 +4637,18 @@ does not exist.
 Affordances are a pinned trailing chevron column, a pointer cursor, a hover
 tint, and the row's primary link lifting to terracotta and underlining. The
 chevron column is `position: sticky` so it survives the horizontal scroll a
-dense table needs at laptop widths. Keyboard focus draws an inset ring around
+dense table needs at laptop widths.
+
+Payments and Background jobs have no identity column to hang a link on, and
+carried a trailing **Action** column holding the word *Review*. Post-deploy
+verification on production caught what that cost: with the chevron column and
+one-line timestamps added, the payments table passed the viewport, and the
+first thing to leave the screen was the row's own primary target — hidden
+underneath the pinned mark. Those two queues now put the link *in* the pinned
+cell (`open_cell`, lifted out of the row's columns by `_table`), which removes
+a redundant column, keeps the target permanently visible, and leaves every data
+column intact. The link's visible label is the chevron, so its accessible name
+carries the record. Keyboard focus draws an inset ring around
 the whole row, scoped with `:has([data-row-primary]:focus-visible)` and guarded
 by `@supports` — focusing the bulk checkbox must not promise that Enter opens
 the record, and a browser without `:has` keeps the anchor's ordinary ring.

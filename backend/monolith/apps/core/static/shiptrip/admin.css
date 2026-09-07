@@ -1936,12 +1936,22 @@ ul.messagelist li { border-radius: var(--st-r-2); }
 }
 th.st-row-go { background: var(--st-surface-3); }
 tr[data-row-link]:hover td.st-row-go { background: var(--st-surface-2); }
+/* The mark is drawn on the cell, so a row whose link lives elsewhere and one
+   whose link IS the mark look identical. */
 td.st-row-go::after {
   content: "\203A";
   display: inline-block;
   font-size: 1.15rem;
   line-height: 1;
   opacity: .55;
+}
+/* When the cell holds the anchor, the anchor is the whole cell: the chevron
+   drawn behind it stays the visible affordance and the accessible name stays
+   on the link. */
+td.st-row-go > a {
+  position: absolute;
+  inset: 0;
+  display: block;
 }
 
 tr[data-row-link]:hover .st-row-go::after { color: var(--st-accent); opacity: 1; }
