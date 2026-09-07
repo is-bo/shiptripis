@@ -33,18 +33,20 @@
     {% if query or current_status %}<a class="st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
   </form>
 
-  <section class="st-table-card" aria-label="{{ title }} results">
+  {% if bulk_action_url %}<form method="post" action="{{ bulk_action_url }}" class="st-table-card" aria-label="{{ title }} results">{% csrf_token %}{% else %}<section class="st-table-card" aria-label="{{ title }} results">{% endif %}
     {% if rows %}
       <div class="st-table-scroll">
         <table class="st-data-table">
           <thead>
             <tr>
+              {% if bulk_action_url %}<th scope="col">Select</th>{% endif %}
               {% for column in columns %}<th scope="col"{% if column.numeric %} class="is-numeric"{% endif %}>{{ column.label|default:column }}</th>{% endfor %}
             </tr>
           </thead>
           <tbody>
           {% for row in rows %}
             <tr>
+              {% if bulk_action_url %}<td>{% if row.select_id %}<input type="checkbox" name="job_ids" value="{{ row.select_id }}" aria-label="Select job {{ row.select_id }}">{% else %}&mdash;{% endif %}</td>{% endif %}
               {% for cell in row.cells %}
                 <td{% if cell.kind == "money" or cell.kind == "money-lead" or cell.kind == "money-pair" %} class="is-numeric"{% endif %}>
                   {% if cell.kind == "status" %}
@@ -66,6 +68,15 @@
           </tbody>
         </table>
       </div>
+      {% if bulk_action_url %}
+      <div class="st-card st-form">
+        <p><strong>Act on selected terminal jobs</strong></p>
+        {{ bulk_form.action.as_field_group }}
+        {{ bulk_form.reason.as_field_group }}
+        {{ bulk_form.confirm.as_field_group }}
+        <button type="submit">Apply audited action</button>
+      </div>
+      {% endif %}
       {% if page_obj.paginator.num_pages > 1 %}
         <nav class="st-pagination" aria-label="Pagination">
           <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &middot; {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}</span>
@@ -78,6 +89,6 @@
     {% else %}
       <div class="st-empty"><span aria-hidden="true">&#10003;</span><h2>{{ empty_title }}</h2><p>{{ empty_text }}</p></div>
     {% endif %}
-  </section>
+  {% if bulk_action_url %}</form>{% else %}</section>{% endif %}
 </main>
 {% endblock %}

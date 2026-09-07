@@ -29,12 +29,12 @@ from django.utils.html import format_html
 # Tones are named for what an operator should do about the row, not for a
 # colour, so a status can be re-toned without a rename. They resolve to the
 # ShipTrip semantic palette in `static/shiptrip/admin.css`.
-TONE_OK = "ok"          # terminal-good: paid, delivered, approved, completed
-TONE_WAIT = "wait"      # time is passing and nobody is blocked
+TONE_OK = "ok"  # terminal-good: paid, delivered, approved, completed
+TONE_WAIT = "wait"  # time is passing and nobody is blocked
 TONE_ATTENTION = "attn"  # a human has to do something
-TONE_BAD = "bad"        # failed, cancelled, refunded-against
-TONE_INFO = "info"      # neutral, informational
-TONE_MUTE = "mute"      # inert: draft, expired, historical
+TONE_BAD = "bad"  # failed, cancelled, refunded-against
+TONE_INFO = "info"  # neutral, informational
+TONE_MUTE = "mute"  # inert: draft, expired, historical
 
 #: Status values seen across the marketplace, mapped to the tone that says what
 #: an operator should do about a row in that state. Anything unlisted falls back
@@ -74,6 +74,7 @@ STATUS_TONES: dict[str, str] = {
     "needs_review": TONE_ATTENTION,
     "under_review": TONE_ATTENTION,
     "retrying": TONE_ATTENTION,
+    "deferred": TONE_WAIT,
     "unapplied": TONE_ATTENTION,
     "frozen": TONE_ATTENTION,
     "disputed": TONE_ATTENTION,
@@ -133,7 +134,15 @@ def humanize_object(value) -> str:
     if not text:
         return "System"
     tail = text.split(".")[-1]
-    for prefix in ("kyc", "admin", "payment", "journey", "dispute", "business", "outbound"):
+    for prefix in (
+        "kyc",
+        "admin",
+        "payment",
+        "journey",
+        "dispute",
+        "business",
+        "outbound",
+    ):
         if tail.startswith(prefix) and tail != prefix:
             tail = f"{prefix} {tail[len(prefix):]}"
             break
@@ -161,15 +170,22 @@ def money(field: str, label: str | None = None, *, emphasis: bool = False):
 
     css = "st-money st-money-lead" if emphasis else "st-money"
 
-    @admin.display(description=label or field.replace("_eur_cents", "").replace("_", " "), ordering=field)
+    @admin.display(
+        description=label or field.replace("_eur_cents", "").replace("_", " "),
+        ordering=field,
+    )
     def column(self, obj: Any) -> str:  # noqa: ANN001 - Django admin signature
-        return format_html('<span class="{}">{}</span>', css, format_eur(getattr(obj, field, None)))
+        return format_html(
+            '<span class="{}">{}</span>', css, format_eur(getattr(obj, field, None))
+        )
 
     column.__name__ = f"{field}_display"
     return column
 
 
-def money_of(getter: Callable[[Any], int | None], label: str, *, emphasis: bool = False):
+def money_of(
+    getter: Callable[[Any], int | None], label: str, *, emphasis: bool = False
+):
     """As `money`, for a derived amount that is not a stored column."""
 
     css = "st-money st-money-lead" if emphasis else "st-money"
@@ -185,7 +201,9 @@ def tone_for(value: object) -> str:
     return STATUS_TONES.get(str(value or "").strip().lower(), TONE_MUTE)
 
 
-def status(field: str, label: str | None = None, *, tones: dict[str, str] | None = None):
+def status(
+    field: str, label: str | None = None, *, tones: dict[str, str] | None = None
+):
     """A sortable list column that shows `field` as a toned status chip."""
 
     lookup = {**STATUS_TONES, **(tones or {})}
@@ -253,7 +271,9 @@ def basis_points(field: str, label: str):
         # Formatted before it reaches `format_html`: that helper escapes every
         # argument into a SafeString first, and a SafeString has no integer
         # format codes.
-        return format_html('<span class="st-money">{}%</span>', f"{whole:,}.{remainder:02d}")
+        return format_html(
+            '<span class="st-money">{}%</span>', f"{whole:,}.{remainder:02d}"
+        )
 
     column.__name__ = f"{field}_display"
     return column

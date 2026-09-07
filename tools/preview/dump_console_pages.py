@@ -18,7 +18,7 @@ from django.test import Client
 from apps.accounts.models import User
 from apps.deals.models import Deal
 from apps.disputes.models import Dispute
-from apps.finance.models import PaymentRefund, Payout
+from apps.finance.models import PaymentAttempt, PaymentRefund, Payout, ScheduledJob
 from apps.kyc.models import KycSubmission
 from apps.trips.models import Journey, JourneyLegProof
 
@@ -45,6 +45,8 @@ dispute_open = first(Dispute.objects.all(), status="under_review")
 dispute_done = first(Dispute.objects.all(), status="resolved")
 refund = first(PaymentRefund.objects.all())
 payout = first(Payout.objects.all(), status="eligible")
+payment = first(PaymentAttempt.objects.order_by("-is_unapplied", "id"))
+failed_job = first(ScheduledJob.objects.all(), status="failed")
 person = first(User.objects.all(), email="ok-traveler@example.com")
 
 pages = {
@@ -69,6 +71,9 @@ pages = {
     "dispute-resolved": f"/admin/disputes/{dispute_done}/",
     "payments": "/admin/finance/payments/",
     "payments-attention": "/admin/finance/payments/?attention=1",
+    "payment-detail": f"/admin/finance/payments/{payment}/",
+    "payment-reconcile": f"/admin/finance/payments/{payment}/reconcile/",
+    "payment-resolve": f"/admin/finance/payments/{payment}/resolve/",
     "refunds": "/admin/finance/refunds/",
     "refund-detail": f"/admin/finance/refunds/{refund}/",
     "payouts": "/admin/finance/payouts/",
@@ -78,6 +83,10 @@ pages = {
     "settings": "/admin/settings/",
     "system": "/admin/system/",
     "jobs": "/admin/system/jobs/",
+    "jobs-attention": "/admin/system/jobs/?attention=1",
+    "job-detail": f"/admin/system/jobs/{failed_job}/",
+    "job-retry": f"/admin/system/jobs/{failed_job}/retry/",
+    "job-resolve": f"/admin/system/jobs/{failed_job}/resolve/",
     "email": "/admin/system/email/",
     "geography": "/admin/system/geography/",
     "audit": "/admin/audit/",

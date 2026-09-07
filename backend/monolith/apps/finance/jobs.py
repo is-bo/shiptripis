@@ -41,14 +41,51 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-class JobFailed(RuntimeError):
-    """A handler could not complete; the job is retried with backoff."""
+class JobError(RuntimeError):
+    """A classified, safe-to-store job failure."""
+
+    code = "job_error"
+
+    def __init__(self, message: str, *, code: str | None = None):
+        super().__init__(message)
+        if code:
+            self.code = code
+
+
+class RetryableJobError(JobError):
+    """A transient failure that consumes the bounded retry budget."""
+
+    code = "retryable_failure"
+
+
+class PermanentJobError(JobError):
+    """A failure that another identical execution cannot fix."""
+
+    code = "permanent_failure"
+
+
+class JobDeferred(RetryableJobError):
+    """An expected wait that preserves both the obligation and retry budget."""
+
+    code = "deferred"
+
+    def __init__(
+        self, message: str, *, code: str | None = None, delay: timedelta | None = None
+    ):
+        super().__init__(message, code=code)
+        self.delay = delay or timedelta(hours=6)
+
+
+# Backwards-compatible name for callers/tests that imported the original
+# retryable exception.  New handlers should state their classification.
+JobFailed = RetryableJobError
 
 
 @dataclass(frozen=True, slots=True)
 class JobRunReport:
     claimed: int
     succeeded: int
+    deferred: int
     failed: int
     results: list[str]
 
@@ -73,7 +110,10 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
 
     request_id = payload.get("delivery_request_id")
     if not isinstance(request_id, int):
-        raise JobFailed("deposit_expiry_refund needs an integer delivery_request_id.")
+        raise PermanentJobError(
+            "deposit_expiry_refund needs an integer delivery_request_id.",
+            code="invalid_payload",
+        )
 
     with transaction.atomic():
         try:
@@ -94,7 +134,11 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             request_row.deadline_at is not None
             and request_row.deadline_at > timezone.now()
         ):
-            raise JobFailed("The request has not reached its deadline yet.")
+            raise JobDeferred(
+                "The request has not reached its deadline yet.",
+                code="request_deadline_open",
+                delay=request_row.deadline_at - timezone.now(),
+            )
         if request_row.status == ParcelRequest.Status.OPEN:
             request_row.status = ParcelRequest.Status.EXPIRED
             request_row.save(update_fields=["status", "updated_at"])
@@ -156,7 +200,9 @@ def handle_payment_grace_release(payload: dict) -> str:
 
     deal_id = payload.get("deal_id")
     if not isinstance(deal_id, int):
-        raise JobFailed("payment_grace_release needs an integer deal_id.")
+        raise PermanentJobError(
+            "payment_grace_release needs an integer deal_id.", code="invalid_payload"
+        )
     if not Deal.objects.filter(pk=deal_id).exists():
         return "deal_missing"
     result = release_pending_deal_reservation(
@@ -174,14 +220,20 @@ def handle_attempt_expiry(payload: dict) -> str:
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
-        raise JobFailed("attempt_expiry needs an integer attempt_id.")
+        raise PermanentJobError(
+            "attempt_expiry needs an integer attempt_id.", code="invalid_payload"
+        )
     attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
     if attempt is None:
         return "attempt_missing"
     if attempt.status not in PaymentAttempt.OPEN_STATUSES:
         return "attempt_already_terminal"
     if attempt.expires_at is not None and attempt.expires_at > timezone.now():
-        raise JobFailed("The attempt has not expired yet.")
+        raise JobDeferred(
+            "The attempt has not expired yet.",
+            code="attempt_not_expired",
+            delay=attempt.expires_at - timezone.now(),
+        )
     return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
 
 
@@ -193,12 +245,14 @@ def handle_provider_reconcile(payload: dict) -> str:
     feeds the answer through the same reconciliation path a webhook uses.
     """
 
-    from .providers import ProviderError, get_gateway
+    from .providers import ProviderError, ProviderUnavailable, get_gateway
     from .services import reconcile_attempt, recover_checkout_attempt
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
-        raise JobFailed("provider_reconcile needs an integer attempt_id.")
+        raise PermanentJobError(
+            "provider_reconcile needs an integer attempt_id.", code="invalid_payload"
+        )
     attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
     if attempt is None:
         return "attempt_missing"
@@ -208,24 +262,43 @@ def handle_provider_reconcile(payload: dict) -> str:
         if attempt.provider in {"mock", "stripe"}:
             try:
                 recover_checkout_attempt(attempt_id=attempt.pk)
+            except ProviderUnavailable as exc:
+                raise RetryableJobError(
+                    "Checkout recovery provider is temporarily unavailable.",
+                    code=exc.code,
+                ) from exc
             except ProviderError as exc:
-                raise JobFailed(f"checkout handle recovery failed: {exc.code}") from exc
+                raise PermanentJobError(
+                    "Checkout recovery was permanently refused.", code=exc.code
+                ) from exc
             attempt.refresh_from_db()
         if not attempt.provider_session_id:
             # Chargily does not expose a documented idempotent checkout-create
             # contract. Re-creating blindly could charge twice, so keep this
             # visible for operator reconciliation instead.
-            raise JobFailed("provider session is unknown; operator review required")
+            raise PermanentJobError(
+                "Provider session is unknown; operator review is required.",
+                code="provider_session_unknown",
+            )
     try:
         gateway = get_gateway(attempt.provider)
         snapshot = gateway.fetch_attempt(
             provider_session_id=attempt.provider_session_id,
             provider_payment_id=attempt.provider_payment_id,
         )
+    except ProviderUnavailable as exc:
+        raise RetryableJobError(
+            "Provider reconciliation is temporarily unavailable.", code=exc.code
+        ) from exc
     except ProviderError as exc:
-        raise JobFailed(f"provider reconciliation failed: {exc.code}") from exc
+        raise PermanentJobError(
+            "Provider reconciliation was permanently refused.", code=exc.code
+        ) from exc
     if snapshot.outcome == "ignored":
-        raise JobFailed("provider still reports the attempt as pending")
+        raise RetryableJobError(
+            "Provider still reports the attempt as pending.",
+            code="provider_pending",
+        )
     result = reconcile_attempt(
         attempt_id=attempt_id,
         outcome=snapshot.outcome,
@@ -234,7 +307,10 @@ def handle_provider_reconcile(payload: dict) -> str:
         provider_currency=snapshot.currency,
     )
     if snapshot.outcome == "processing":
-        raise JobFailed("provider reports processing; poll again")
+        raise RetryableJobError(
+            "Provider reports processing; poll again.",
+            code="provider_processing",
+        )
     return result
 
 
@@ -245,15 +321,18 @@ def handle_provider_event_process(payload: dict) -> str:
 
     event_id = payload.get("event_id")
     if not isinstance(event_id, int):
-        raise JobFailed("provider_event_process needs an integer event_id.")
+        raise PermanentJobError(
+            "provider_event_process needs an integer event_id.", code="invalid_payload"
+        )
     if not PaymentProviderEvent.objects.filter(pk=event_id).exists():
         return "event_missing"
     try:
         return process_provider_event(event_id=event_id)
     except Exception as exc:
         _mark_event_retryable(event_id, exc)
-        raise JobFailed(
-            f"provider event application failed: {type(exc).__name__}"
+        raise RetryableJobError(
+            "Provider event application failed.",
+            code=f"event_{type(exc).__name__}"[:64],
         ) from exc
 
 
@@ -264,19 +343,23 @@ def handle_refund_reconcile(payload: dict) -> str:
 
     refund_id = payload.get("refund_id")
     if not isinstance(refund_id, int):
-        raise JobFailed("refund_reconcile needs an integer refund_id.")
+        raise PermanentJobError(
+            "refund_reconcile needs an integer refund_id.", code="invalid_payload"
+        )
     refund = PaymentRefund.objects.filter(pk=refund_id).first()
     if refund is None:
         return "refund_missing"
     if refund.status == PaymentRefund.Status.SUCCEEDED:
         return "already_succeeded"
     result = _settle_refund_with_provider(refund_id=refund_id)
-    if result in {
-        "provider_unavailable",
-        "provider_pending",
-        "manual_action_required",
-    }:
-        raise JobFailed(f"refund remains unresolved: {result}")
+    if result in {"provider_unavailable", "provider_pending"}:
+        raise RetryableJobError(
+            "Refund remains unresolved.", code=f"refund_{result}"[:64]
+        )
+    if result == "manual_action_required":
+        # The refund row is now the explicit human obligation.  Exhausting a
+        # second generic queue adds noise without improving recovery.
+        return result
     return result
 
 
@@ -294,7 +377,9 @@ def handle_payout_release_check(payload: dict) -> str:
 
     payout_id = payload.get("payout_id")
     if not isinstance(payout_id, int):
-        raise JobFailed("payout_release_check needs an integer payout_id.")
+        raise PermanentJobError(
+            "payout_release_check needs an integer payout_id.", code="invalid_payload"
+        )
     payout = Payout.objects.filter(pk=payout_id).first()
     if payout is None:
         return "payout_missing"
@@ -314,7 +399,7 @@ def handle_payout_release_check(payload: dict) -> str:
         # discharged and retire the safety net before it could ever help, which
         # is the whole reason it exists. Retry instead, like every other
         # early-fire handler here.
-        raise JobFailed(f"payout is not releasable yet: {result}")
+        raise JobDeferred("Payout is not releasable yet.", code=f"payout_{result}"[:64])
     return result
 
 
@@ -335,7 +420,9 @@ def handle_delivery_code_release(payload: dict) -> str:
 
     deal_id = payload.get("deal_id")
     if not isinstance(deal_id, int):
-        raise JobFailed("delivery_code_release needs an integer deal_id.")
+        raise PermanentJobError(
+            "delivery_code_release needs an integer deal_id.", code="invalid_payload"
+        )
     if not Deal.objects.filter(pk=deal_id).exists():
         return "deal_missing"
     from apps.deals.lifecycle import DealLifecycleError
@@ -353,7 +440,11 @@ def handle_delivery_code_release(payload: dict) -> str:
         # `delivery_code_buffer_open` means this fired early. Retrying with
         # backoff is exactly right; the state check is the authority, not the
         # schedule.
-        raise JobFailed(f"delivery code release refused: {exc.code}") from exc
+        raise JobDeferred(
+            "Delivery code release buffer is still open.",
+            code=exc.code,
+            delay=timedelta(minutes=1),
+        ) from exc
 
 
 def handle_protection_expiry(payload: dict) -> str:
@@ -363,7 +454,9 @@ def handle_protection_expiry(payload: dict) -> str:
 
     deal_id = payload.get("deal_id")
     if not isinstance(deal_id, int):
-        raise JobFailed("protection_expiry needs an integer deal_id.")
+        raise PermanentJobError(
+            "protection_expiry needs an integer deal_id.", code="invalid_payload"
+        )
     if not Deal.objects.filter(pk=deal_id).exists():
         return "deal_missing"
     result = evaluate_payout_release(
@@ -372,7 +465,11 @@ def handle_protection_expiry(payload: dict) -> str:
     if result == "protection_open":
         # Fired early. Retry rather than record a decision that has not been
         # earned yet.
-        raise JobFailed("the protection window has not closed yet")
+        raise JobDeferred(
+            "The protection window has not closed yet.",
+            code="protection_open",
+            delay=timedelta(minutes=15),
+        )
     return result
 
 
@@ -383,7 +480,9 @@ def handle_rating_reveal(payload: dict) -> str:
 
     deal_id = payload.get("deal_id")
     if not isinstance(deal_id, int):
-        raise JobFailed("rating_reveal needs an integer deal_id.")
+        raise PermanentJobError(
+            "rating_reveal needs an integer deal_id.", code="invalid_payload"
+        )
     if not Deal.objects.filter(pk=deal_id).exists():
         return "deal_missing"
     result = reveal_ratings_for_deal(deal_id=deal_id)
@@ -391,7 +490,11 @@ def handle_rating_reveal(payload: dict) -> str:
         # Fired early. `revealed_at` is only an audit stamp -- visibility is
         # recomputed from the window frozen on each rating -- but retiring the
         # obligation would mean the stamp is never written at all.
-        raise JobFailed("the review window has not closed yet")
+        raise JobDeferred(
+            "The review window has not closed yet.",
+            code="rating_window_open",
+            delay=timedelta(minutes=15),
+        )
     return result
 
 
@@ -402,7 +505,9 @@ def handle_boost_expiry(payload: dict) -> str:
 
     purchase_id = payload.get("boost_purchase_id")
     if not isinstance(purchase_id, int):
-        raise JobFailed("boost_expiry needs an integer boost_purchase_id.")
+        raise PermanentJobError(
+            "boost_expiry needs an integer boost_purchase_id.", code="invalid_payload"
+        )
     result = expire_boost(purchase_id=purchase_id)
     if result == "not_due":
         # Fired early. Recording that as success would mark the obligation
@@ -410,7 +515,11 @@ def handle_boost_expiry(payload: dict) -> str:
         # Ranking would still end on time -- the hook compares against
         # `expires_at` -- but the row and the derived columns would go stale,
         # and a stale row is what an operator or a dispute later reads.
-        raise JobFailed("the boost window has not closed yet")
+        raise JobDeferred(
+            "The boost window has not closed yet.",
+            code="boost_window_open",
+            delay=timedelta(minutes=15),
+        )
     return result
 
 
@@ -421,18 +530,25 @@ def handle_outbound_message(payload: dict) -> str:
 
     message_id = payload.get("message_id")
     if not isinstance(message_id, int):
-        raise JobFailed("outbound_message needs an integer message_id.")
+        raise PermanentJobError(
+            "outbound_message needs an integer message_id.", code="invalid_payload"
+        )
     try:
         result = dispatch_message(message_id=message_id)
     except Exception as exc:  # noqa: BLE001 - transport failures are retryable
-        raise JobFailed(
-            f"outbound message dispatch failed: {type(exc).__name__}"
+        raise RetryableJobError(
+            "Outbound message transport failed.",
+            code=f"outbound_{type(exc).__name__}"[:64],
         ) from exc
     if result == "disabled":
         # Do not discharge the durable job while the operator kill switch is
         # active. The message row stays pending and the normal retry/sweep path
         # can carry it after an approved activation.
-        raise JobFailed("transactional email is disabled")
+        raise JobDeferred(
+            "Transactional email is disabled by the operator.",
+            code="email_disabled",
+            delay=timedelta(hours=6),
+        )
     return result
 
 
@@ -489,6 +605,130 @@ def claim_due_jobs(*, limit: int, at: datetime | None = None) -> list[ScheduledJ
     return claimed
 
 
+def _already_satisfied_reason(job: ScheduledJob) -> str:
+    """Return a safe reason when domain truth proves a failed job is obsolete."""
+
+    payload = dict(job.payload or {})
+    if job.kind in {
+        ScheduledJob.Kind.ATTEMPT_EXPIRY,
+        ScheduledJob.Kind.PROVIDER_RECONCILE,
+    }:
+        attempt_id = payload.get("attempt_id")
+        if not isinstance(attempt_id, int):
+            return ""
+        attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
+        if attempt is None:
+            return "attempt_missing"
+        if job.kind == ScheduledJob.Kind.ATTEMPT_EXPIRY:
+            return (
+                "attempt_already_terminal"
+                if attempt.status not in PaymentAttempt.OPEN_STATUSES
+                else ""
+            )
+        return (
+            "payment_already_succeeded"
+            if attempt.status == PaymentAttempt.Status.SUCCEEDED
+            else ""
+        )
+    if job.kind == ScheduledJob.Kind.PROVIDER_EVENT_PROCESS:
+        event_id = payload.get("event_id")
+        if not isinstance(event_id, int):
+            return ""
+        event = PaymentProviderEvent.objects.filter(pk=event_id).first()
+        if event is None:
+            return "provider_event_missing"
+        return (
+            f"provider_event_{event.processing_result}"
+            if event.processing_result
+            in {
+                PaymentProviderEvent.ProcessingResult.APPLIED,
+                PaymentProviderEvent.ProcessingResult.IGNORED,
+            }
+            else ""
+        )
+    if job.kind == ScheduledJob.Kind.REFUND_RECONCILE:
+        refund_id = payload.get("refund_id")
+        if not isinstance(refund_id, int):
+            return ""
+        refund = PaymentRefund.objects.filter(pk=refund_id).first()
+        if refund is None:
+            return "refund_missing"
+        return (
+            "refund_already_succeeded"
+            if refund.status == PaymentRefund.Status.SUCCEEDED
+            else ""
+        )
+    if job.kind == ScheduledJob.Kind.PAYOUT_RELEASE_CHECK:
+        payout_id = payload.get("payout_id")
+        if not isinstance(payout_id, int):
+            return ""
+        payout = Payout.objects.filter(pk=payout_id).first()
+        if payout is None:
+            return "payout_missing"
+        return (
+            f"payout_{payout.status}"
+            if payout.status not in Payout.PRE_RELEASE_STATUSES
+            else ""
+        )
+    if job.kind == ScheduledJob.Kind.OUTBOUND_MESSAGE:
+        from apps.notifications.models import OutboundMessage
+
+        message_id = payload.get("message_id")
+        if not isinstance(message_id, int):
+            return ""
+        message = OutboundMessage.objects.filter(pk=message_id).first()
+        if message is None:
+            return "outbound_message_missing"
+        return (
+            f"outbound_message_{message.status}"
+            if message.status
+            in {OutboundMessage.Status.DISPATCHED, OutboundMessage.Status.CANCELLED}
+            else ""
+        )
+    return ""
+
+
+def resolve_satisfied_failed_jobs(*, limit: int = 100) -> int:
+    """Archive dead letters whose authoritative operation already completed."""
+
+    if limit <= 0 or limit > 500:
+        raise ValueError("Satisfied-job sweep limit must be between 1 and 500.")
+    candidate_ids = list(
+        ScheduledJob.objects.filter(status=ScheduledJob.Status.FAILED, resolution="")
+        .order_by("completed_at", "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for job_id in candidate_ids:
+        with transaction.atomic():
+            job = ScheduledJob.objects.select_for_update(no_key=True).get(pk=job_id)
+            if job.status != ScheduledJob.Status.FAILED or job.resolution:
+                continue
+            reason = _already_satisfied_reason(job)
+            if not reason:
+                continue
+            now = timezone.now()
+            job.resolution = ScheduledJob.Resolution.SUPERSEDED
+            job.resolved_at = now
+            job.resolution_reason = reason
+            job.save(
+                update_fields=(
+                    "resolution",
+                    "resolved_at",
+                    "resolution_reason",
+                    "updated_at",
+                )
+            )
+            resolved += 1
+            logger.info(
+                "finance.job_auto_resolved job=%s kind=%s reason=%s",
+                job.pk,
+                job.kind,
+                reason,
+            )
+    return resolved
+
+
 def run_job(job: ScheduledJob) -> str:
     """Execute one claimed job and record its outcome. Never raises."""
 
@@ -497,7 +737,12 @@ def run_job(job: ScheduledJob) -> str:
     if handler is None:
         ScheduledJob.objects.filter(pk=job.pk).update(
             status=ScheduledJob.Status.FAILED,
-            last_error=f"No handler for kind {job.kind!r}.",
+            attempts=int(job.attempts) + 1,
+            last_attempt_at=now,
+            last_error_code="handler_missing",
+            last_error="No handler is registered for this job kind.",
+            locked_at=None,
+            locked_by="",
             completed_at=now,
             updated_at=now,
         )
@@ -507,8 +752,63 @@ def run_job(job: ScheduledJob) -> str:
     attempts = int(job.attempts) + 1
     try:
         result = handler(dict(job.payload or {}))
+    except JobDeferred as exc:
+        # A disabled kill switch or an authoritative time gate is not a
+        # failure.  Keep the durable obligation live without consuming its
+        # retry budget or raising a false incident.
+        delay = max(exc.delay, timedelta(seconds=30))
+        ScheduledJob.objects.filter(pk=job.pk).update(
+            status=ScheduledJob.Status.PENDING,
+            run_at=now + delay,
+            last_attempt_at=now,
+            last_error_code="",
+            last_error="",
+            last_result=f"deferred:{exc.code}"[:255],
+            locked_at=None,
+            locked_by="",
+            completed_at=None,
+            updated_at=now,
+        )
+        logger.info(
+            "finance.job_deferred job=%s kind=%s code=%s",
+            job.pk,
+            job.kind,
+            exc.code,
+        )
+        return "deferred"
+    except PermanentJobError as exc:
+        ScheduledJob.objects.filter(pk=job.pk).update(
+            status=ScheduledJob.Status.FAILED,
+            attempts=attempts,
+            last_attempt_at=now,
+            last_error_code=exc.code[:64],
+            last_error=str(exc)[:500],
+            locked_at=None,
+            locked_by="",
+            completed_at=now,
+            updated_at=now,
+        )
+        logger.error(
+            "finance.job_terminal job=%s kind=%s key=%s attempts=%s code=%s",
+            job.pk,
+            job.kind,
+            job.key,
+            attempts,
+            exc.code,
+        )
+        return "failed"
     except Exception as exc:  # noqa: BLE001 - a job must never kill the loop
         failed_permanently = attempts >= int(job.max_attempts)
+        error_code = (
+            exc.code
+            if isinstance(exc, RetryableJobError)
+            else f"unexpected_{type(exc).__name__}"
+        )[:64]
+        safe_message = (
+            str(exc)[:500]
+            if isinstance(exc, RetryableJobError)
+            else f"Unexpected {type(exc).__name__} while running the handler."
+        )
         ScheduledJob.objects.filter(pk=job.pk).update(
             status=(
                 ScheduledJob.Status.FAILED
@@ -516,7 +816,9 @@ def run_job(job: ScheduledJob) -> str:
                 else ScheduledJob.Status.PENDING
             ),
             attempts=attempts,
-            last_error=f"{type(exc).__name__}: {exc}"[:500],
+            last_attempt_at=now,
+            last_error_code=error_code,
+            last_error=safe_message,
             run_at=now + _retry_delay(attempts),
             locked_at=None,
             locked_by="",
@@ -533,7 +835,7 @@ def run_job(job: ScheduledJob) -> str:
                 job.kind,
                 job.key,
                 attempts,
-                type(exc).__name__,
+                error_code,
             )
         else:
             logger.warning(
@@ -541,18 +843,24 @@ def run_job(job: ScheduledJob) -> str:
                 job.pk,
                 job.kind,
                 attempts,
-                type(exc).__name__,
+                error_code,
             )
         return "failed"
 
     ScheduledJob.objects.filter(pk=job.pk).update(
         status=ScheduledJob.Status.SUCCEEDED,
         attempts=attempts,
+        last_attempt_at=now,
         last_result=str(result)[:255],
+        last_error_code="",
         last_error="",
         locked_at=None,
         locked_by="",
         completed_at=now,
+        resolution="",
+        resolved_at=None,
+        resolved_by=None,
+        resolution_reason="",
         updated_at=now,
     )
     return str(result)
@@ -561,12 +869,15 @@ def run_job(job: ScheduledJob) -> str:
 def run_due_jobs(*, limit: int = 50, at: datetime | None = None) -> JobRunReport:
     """Claim and run every due job, up to `limit`."""
 
+    resolve_satisfied_failed_jobs(limit=min(limit, 100))
     jobs = claim_due_jobs(limit=limit, at=at)
     results = [run_job(job) for job in jobs]
     failed = sum(1 for result in results if result in {"failed", "no_handler"})
+    deferred = results.count("deferred")
     return JobRunReport(
         claimed=len(jobs),
-        succeeded=len(results) - failed,
+        succeeded=len(results) - failed - deferred,
+        deferred=deferred,
         failed=failed,
         results=results,
     )

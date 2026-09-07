@@ -13,7 +13,7 @@ from decimal import Decimal
 from django import forms
 
 from apps.disputes.models import Dispute
-from apps.finance.models import PaymentRefund
+from apps.finance.models import PaymentAttempt, PaymentRefund, ScheduledJob
 from apps.finance.money import CURRENCY_EXPONENTS
 
 from .permissions import ROLE_CHOICES
@@ -47,6 +47,79 @@ class SearchForm(ConsoleForm):
         max_length=200,
         label="Search",
         widget=forms.TextInput(attrs={"placeholder": "Name, email or reference"}),
+    )
+
+
+class JobRetryForm(ConsoleForm):
+    reason = forms.CharField(
+        max_length=500,
+        label="Why retry this job now?",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label="Queue one retry through the existing idempotent handler."
+    )
+
+
+class JobResolutionForm(ConsoleForm):
+    resolution = forms.ChoiceField(
+        choices=ScheduledJob.Resolution.choices, label="Resolution"
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="Reason",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label=(
+            "Archive this failure without deleting it. Dismissing an email job "
+            "also cancels its still-pending message obligation."
+        )
+    )
+
+
+class JobBulkActionForm(ConsoleForm):
+    action = forms.ChoiceField(
+        choices=(("retry", "Retry now"), ("dismiss", "Dismiss")), label="Action"
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="Reason for every selected job",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label=(
+            "I reviewed the selected terminal jobs and understand this is audited; "
+            "dismissing email jobs cancels their pending message obligations."
+        )
+    )
+
+
+class PaymentReconcileForm(ConsoleForm):
+    reason = forms.CharField(
+        max_length=500,
+        label="Reason for reconciliation",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label=(
+            "Queue provider/refund reconciliation. This does not mark the payment paid."
+        )
+    )
+
+
+class PaymentAttentionResolutionForm(ConsoleForm):
+    resolution = forms.ChoiceField(
+        choices=PaymentAttempt.OperationalResolution.choices,
+        label="Resolution",
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="Investigation outcome",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label="Archive only the attention item; retain all financial records."
     )
 
 

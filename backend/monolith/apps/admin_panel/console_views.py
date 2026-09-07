@@ -61,6 +61,13 @@ from apps.finance.models import (
     Payout,
     ScheduledJob,
 )
+from apps.finance.operations import (
+    payment_attention_queryset,
+    queue_payment_reconciliation,
+    resolve_failed_job,
+    resolve_payment_attention,
+    retry_failed_job,
+)
 from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
 from apps.finance.providers import (
     MODE_LIVE,
@@ -95,8 +102,13 @@ from .console_forms import (
     DisputeStatusForm,
     FxSettingsForm,
     InvitationForm,
+    JobBulkActionForm,
+    JobResolutionForm,
+    JobRetryForm,
     ManualPayoutForm,
     ManualRefundForm,
+    PaymentAttentionResolutionForm,
+    PaymentReconcileForm,
     PricingSettingsForm,
     ProviderSettingsForm,
     RefundRequestForm,
@@ -247,6 +259,8 @@ def _table(
     search_placeholder: str = "Search",
     actions: tuple[dict, ...] = (),
     eyebrow: str = "Operations",
+    bulk_action_url: str = "",
+    bulk_form=None,
 ):
     # A column of amounts has to line up under a header that agrees with it, or
     # the alignment reads as an accident. The cell kind already says which
@@ -279,6 +293,8 @@ def _table(
             "query": request.GET.get("q", ""),
             "search_placeholder": search_placeholder,
             "actions": actions,
+            "bulk_action_url": bulk_action_url,
+            "bulk_form": bulk_form,
         },
     )
 
@@ -524,11 +540,9 @@ def _attention_items(user) -> list[dict]:
     )
     add(
         "view_payment_attempts",
-        "Failed or unapplied payments",
-        "Captured or attempted money needs finance review.",
-        PaymentAttempt.objects.filter(
-            Q(status=PaymentAttempt.Status.FAILED) | Q(is_unapplied=True)
-        ).count(),
+        "Payments needing finance review",
+        "Unapplied captures and amount/currency anomalies need a decision.",
+        payment_attention_queryset().count(),
         "admin_console:payments",
         "attention=1",
         "bad",
@@ -568,9 +582,11 @@ def _attention_items(user) -> list[dict]:
     )
     add(
         "view_scheduled_jobs",
-        "Failed background jobs",
-        "Investigate the stored error before requeueing the job.",
-        ScheduledJob.objects.filter(status=ScheduledJob.Status.FAILED).count(),
+        "Background jobs needing attention",
+        "Terminal, unresolved work needs retry or an audited resolution.",
+        ScheduledJob.objects.filter(
+            status=ScheduledJob.Status.FAILED, resolution=""
+        ).count(),
         "admin_console:jobs",
         "status=failed",
         "bad",
@@ -1746,9 +1762,7 @@ def payments(request):
         "order__owner", "order__deal", "payer"
     ).order_by("-created_at")
     if request.GET.get("attention") == "1":
-        queryset = queryset.filter(
-            Q(status=PaymentAttempt.Status.FAILED) | Q(is_unapplied=True)
-        )
+        queryset = payment_attention_queryset(queryset)
     else:
         queryset = _filter_choice(queryset, request)
     query = request.GET.get("q", "").strip()[:200]
@@ -1767,12 +1781,7 @@ def payments(request):
             if attempt.payer_id
             else (attempt.guest_email or "Guest payer")
         )
-        actions = ""
-        if (
-            has_admin_permission(request.user, "issue_refunds")
-            and attempt.status == PaymentAttempt.Status.SUCCEEDED
-        ):
-            actions = reverse("admin_console:refund-new", args=(attempt.pk,))
+        actions = reverse("admin_console:payment-detail", args=(attempt.pk,))
         settlement = format_minor_amount(
             attempt.provider_amount_minor,
             attempt.provider_amount_exponent,
@@ -1807,9 +1816,7 @@ def payments(request):
                         or "—"
                     ),
                     datetime_cell(attempt.updated_at, relative=True),
-                    text_cell("Request refund", href=actions, kind="strong")
-                    if actions
-                    else text_cell("—"),
+                    text_cell("Review", href=actions, kind="strong"),
                 )
             }
         )
@@ -1836,6 +1843,200 @@ def payments(request):
         empty_text="No payment attempt matches this view.",
         filter_choices=tuple(PaymentAttempt.Status.choices),
         search_placeholder="Search payer or reference",
+    )
+
+
+@capability_required("view_payment_attempts", "view_payment_orders")
+def payment_detail(request, pk: int):
+    attempt = get_object_or_404(
+        PaymentAttempt.objects.select_related(
+            "order", "payer", "operational_resolved_by"
+        ),
+        pk=pk,
+    )
+    is_actionable = payment_attention_queryset(
+        PaymentAttempt.objects.filter(pk=attempt.pk)
+    ).exists()
+    if attempt.operational_resolution:
+        payment_state = attempt.get_operational_resolution_display()
+        payment_state_code = attempt.operational_resolution
+    elif is_actionable:
+        payment_state = "Needs finance review"
+        payment_state_code = "needs_review"
+    else:
+        payment_state = attempt.get_status_display()
+        payment_state_code = attempt.status
+    actions = []
+    if has_admin_permission(request.user, "reconcile_finance"):
+        if attempt.status != PaymentAttempt.Status.SUCCEEDED or attempt.is_unapplied:
+            actions.append(
+                {
+                    "label": "Retry reconciliation",
+                    "url": reverse(
+                        "admin_console:payment-reconcile", args=(attempt.pk,)
+                    ),
+                }
+            )
+        if is_actionable:
+            actions.append(
+                {
+                    "label": "Resolve attention item",
+                    "url": reverse("admin_console:payment-resolve", args=(attempt.pk,)),
+                }
+            )
+    if (
+        has_admin_permission(request.user, "issue_refunds")
+        and attempt.status == PaymentAttempt.Status.SUCCEEDED
+        and not attempt.is_unapplied
+    ):
+        actions.append(
+            {
+                "label": "Request refund",
+                "url": reverse("admin_console:refund-new", args=(attempt.pk,)),
+            }
+        )
+    return _render(
+        request,
+        "admin/console/operations_detail.html",
+        {
+            "title": f"Payment attempt {attempt.pk}",
+            "eyebrow": "Finance recovery",
+            "description": (
+                "Provider reconciliation may discover money, but this screen "
+                "cannot mark an order paid."
+            ),
+            "state": payment_state,
+            "state_tone": tone_for(payment_state_code),
+            "facts": (
+                ("Provider", attempt.get_provider_display()),
+                ("Order reference", str(attempt.order.public_reference)),
+                ("Canonical amount", format_eur(attempt.amount_eur_cents)),
+                (
+                    "Provider amount",
+                    format_minor_amount(
+                        attempt.provider_amount_minor,
+                        attempt.provider_amount_exponent,
+                        attempt.payment_currency,
+                    ),
+                ),
+                ("Failure category", attempt.failure_code or "None"),
+                (
+                    "Provider reference",
+                    attempt.provider_payment_id
+                    or attempt.provider_session_id
+                    or "Not assigned",
+                ),
+                ("Unapplied capture", "Yes" if attempt.is_unapplied else "No"),
+                (
+                    "Attention state",
+                    "Needs finance review" if is_actionable else "Historical / clear",
+                ),
+                (
+                    "Resolution reason",
+                    attempt.operational_resolution_reason or "Not resolved",
+                ),
+                (
+                    "Resolved by",
+                    attempt.operational_resolved_by.get_username()
+                    if attempt.operational_resolved_by_id
+                    else "Not resolved",
+                ),
+                (
+                    "Resolved at",
+                    attempt.operational_resolved_at or "Not resolved",
+                ),
+            ),
+            "actions": actions,
+            "back_url": reverse("admin_console:payments"),
+        },
+    )
+
+
+@capability_required("reconcile_finance")
+def payment_reconcile(request, pk: int):
+    attempt = get_object_or_404(PaymentAttempt.objects.select_related("order"), pk=pk)
+    form = PaymentReconcileForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                job, recovery_kind = queue_payment_reconciliation(attempt_id=attempt.pk)
+                record_admin_action(
+                    actor=request.user,
+                    action="payment.reconciliation_queued",
+                    target=attempt,
+                    after={"job_id": job.pk, "recovery_kind": recovery_kind},
+                    reason=form.cleaned_data["reason"],
+                )
+            messages.success(
+                request,
+                "Reconciliation was queued through the existing idempotent handler.",
+            )
+            return redirect("admin_console:payment-detail", pk=attempt.pk)
+        except Exception as exc:
+            _operation_error(request, "Payment reconciliation", exc)
+    return _render(
+        request,
+        "admin/console/action_form.html",
+        {
+            "title": "Retry payment reconciliation",
+            "description": (
+                f"Attempt {attempt.pk} · {attempt.get_provider_display()} · "
+                "the worker will re-check provider and financial state."
+            ),
+            "form": form,
+            "submit_label": "Queue reconciliation",
+            "back_url": reverse("admin_console:payment-detail", args=(attempt.pk,)),
+        },
+    )
+
+
+@capability_required("reconcile_finance")
+def payment_resolve(request, pk: int):
+    attempt = get_object_or_404(PaymentAttempt, pk=pk)
+    form = PaymentAttentionResolutionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                before = {
+                    "status": attempt.status,
+                    "is_unapplied": attempt.is_unapplied,
+                    "operational_resolution": attempt.operational_resolution,
+                }
+                resolved = resolve_payment_attention(
+                    attempt_id=attempt.pk,
+                    actor_id=request.user.pk,
+                    resolution=form.cleaned_data["resolution"],
+                    reason=form.cleaned_data["reason"],
+                )
+                record_admin_action(
+                    actor=request.user,
+                    action="payment.attention_resolved",
+                    target=resolved,
+                    before=before,
+                    after={"operational_resolution": resolved.operational_resolution},
+                    reason=form.cleaned_data["reason"],
+                )
+            messages.success(
+                request,
+                "The attention item was archived; financial history was retained.",
+            )
+            return redirect("admin_console:payment-detail", pk=attempt.pk)
+        except Exception as exc:
+            _operation_error(request, "Payment attention resolution", exc)
+    return _render(
+        request,
+        "admin/console/action_form.html",
+        {
+            "title": "Resolve payment attention item",
+            "description": (
+                "This changes only the operations queue. Unapplied money cannot "
+                "be dismissed until its full refund has succeeded."
+            ),
+            "form": form,
+            "submit_label": "Archive attention item",
+            "danger": True,
+            "back_url": reverse("admin_console:payment-detail", args=(attempt.pk,)),
+        },
     )
 
 
@@ -2745,8 +2946,16 @@ def system_status(request):
             "jobs": {
                 "pending": pending.count(),
                 "running": jobs.filter(status=ScheduledJob.Status.RUNNING).count(),
-                "retrying": pending.filter(attempts__gt=0).count(),
-                "failed": jobs.filter(status=ScheduledJob.Status.FAILED).count(),
+                "retrying": pending.filter(attempts__gt=0)
+                .exclude(last_result__startswith="deferred:")
+                .count(),
+                "deferred": pending.filter(last_result__startswith="deferred:").count(),
+                "failed": jobs.filter(
+                    status=ScheduledJob.Status.FAILED, resolution=""
+                ).count(),
+                "resolved": jobs.filter(status=ScheduledJob.Status.FAILED)
+                .exclude(resolution="")
+                .count(),
                 "oldest_age": age_label(oldest) if oldest else "None",
             },
             "email": {
@@ -2784,35 +2993,427 @@ def system_status(request):
 
 @capability_required("view_scheduled_jobs", "view_operational_incidents")
 def background_jobs(request):
-    queryset = _filter_choice(ScheduledJob.objects.order_by("run_at"), request)
+    queryset = ScheduledJob.objects.order_by("run_at", "pk")
+    attention = request.GET.get("attention") == "1"
+    history = request.GET.get("history", "")
+    if attention:
+        queryset = queryset.filter(status=ScheduledJob.Status.FAILED, resolution="")
+    elif history == "resolved":
+        queryset = queryset.filter(status=ScheduledJob.Status.FAILED).exclude(
+            resolution=""
+        )
+    else:
+        queryset = _filter_choice(queryset, request)
+        if request.GET.get("status") == ScheduledJob.Status.FAILED:
+            queryset = queryset.filter(resolution="")
+    query = request.GET.get("q", "").strip()[:200]
+    if query:
+        queryset = queryset.filter(
+            Q(key__icontains=query)
+            | Q(last_error_code__icontains=query)
+            | Q(last_result__icontains=query)
+        )
     page_obj = _page(request, queryset)
+    rows = []
+    for job in page_obj.object_list:
+        related_label, related_url = _job_related_object(job)
+        state, state_code = _job_operational_state(job)
+        category = _job_error_category(job)
+        rows.append(
+            {
+                "select_id": (
+                    job.pk
+                    if job.status == ScheduledJob.Status.FAILED and not job.resolution
+                    else None
+                ),
+                "cells": (
+                    text_cell(job.get_kind_display(), kind="strong"),
+                    text_cell(related_label, href=related_url),
+                    status_cell(state_code, state),
+                    text_cell(f"{job.attempts} / {job.max_attempts}"),
+                    datetime_cell(job.last_attempt_at, relative=True),
+                    datetime_cell(
+                        job.run_at
+                        if job.status == ScheduledJob.Status.PENDING
+                        else None,
+                        relative=True,
+                    ),
+                    text_cell(category or "None"),
+                    text_cell(
+                        "Review",
+                        href=reverse("admin_console:job-detail", args=(job.pk,)),
+                        kind="strong",
+                    ),
+                ),
+            }
+        )
     return _table(
         request,
         title="Background jobs",
-        description="Durable obligations. Use the job reference to investigate logs before any technical requeue; payloads and raw errors stay private.",
-        columns=("Work", "State", "Attempts", "Scheduled", "Reference"),
-        rows=[
-            {
-                "cells": (
-                    text_cell(job.get_kind_display(), kind="strong"),
-                    status_cell(job.status, job.get_status_display()),
-                    text_cell(f"{job.attempts} / {job.max_attempts}"),
-                    datetime_cell(job.run_at),
-                    text_cell(f"Job {job.pk}"),
-                )
-            }
-            for job in page_obj.object_list
-        ],
+        description="Durable obligations with safe error categories. Raw payloads and provider errors stay private.",
+        columns=(
+            "Work",
+            "Related object",
+            "Operational state",
+            "Attempts",
+            "Last attempt",
+            "Next attempt",
+            "Error category",
+            "Action",
+        ),
+        rows=rows,
         page_obj=page_obj,
         empty_title="No background jobs in this state",
         empty_text="No durable work matches the selected filter.",
         filter_choices=tuple(ScheduledJob.Status.choices),
+        actions=(
+            {
+                "label": "Actionable failures",
+                "url": f'{reverse("admin_console:jobs")}?attention=1',
+            },
+            {
+                "label": "Resolved history",
+                "url": f'{reverse("admin_console:jobs")}?history=resolved',
+            },
+        ),
+        bulk_action_url=(
+            reverse("admin_console:job-bulk")
+            if (attention or request.GET.get("status") == ScheduledJob.Status.FAILED)
+            and (
+                has_admin_permission(request.user, "reconcile_finance")
+                or has_admin_permission(request.user, "manage_lifecycle")
+            )
+            else ""
+        ),
+        bulk_form=JobBulkActionForm(),
     )
+
+
+def _job_related_object(job: ScheduledJob) -> tuple[str, str]:
+    payload = dict(job.payload or {})
+
+    def integer(name: str) -> int | None:
+        value = payload.get(name)
+        return value if isinstance(value, int) and value > 0 else None
+
+    if job.kind in {
+        ScheduledJob.Kind.ATTEMPT_EXPIRY,
+        ScheduledJob.Kind.PROVIDER_RECONCILE,
+    } and (pk := integer("attempt_id")):
+        return f"Payment attempt {pk}", reverse(
+            "admin_console:payment-detail", args=(pk,)
+        )
+    if job.kind == ScheduledJob.Kind.REFUND_RECONCILE and (pk := integer("refund_id")):
+        return f"Refund {pk}", reverse("admin_console:refund-detail", args=(pk,))
+    if job.kind == ScheduledJob.Kind.PAYOUT_RELEASE_CHECK and (
+        pk := integer("payout_id")
+    ):
+        return f"Payout {pk}", reverse("admin_console:payout-detail", args=(pk,))
+    if job.kind in {
+        ScheduledJob.Kind.PAYMENT_GRACE_RELEASE,
+        ScheduledJob.Kind.DELIVERY_CODE_RELEASE,
+        ScheduledJob.Kind.PROTECTION_EXPIRY,
+        ScheduledJob.Kind.RATING_REVEAL,
+    } and (pk := integer("deal_id")):
+        return f"Deal {pk}", reverse("admin_console:deal-detail", args=(pk,))
+    if job.kind == ScheduledJob.Kind.OUTBOUND_MESSAGE and (pk := integer("message_id")):
+        return f"Message {pk}", f'{reverse("admin_console:email")}?q={pk}'
+    if job.kind == ScheduledJob.Kind.PROVIDER_EVENT_PROCESS and (
+        pk := integer("event_id")
+    ):
+        return f"Provider event {pk}", ""
+    if job.kind == ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND and (
+        pk := integer("delivery_request_id")
+    ):
+        return f"Delivery request {pk}", reverse("admin_console:requests")
+    if job.kind == ScheduledJob.Kind.BOOST_EXPIRY and (
+        pk := integer("boost_purchase_id")
+    ):
+        return f"Boost purchase {pk}", ""
+    return f"Job {job.pk}", ""
+
+
+def _job_operational_state(job: ScheduledJob) -> tuple[str, str]:
+    if job.resolution:
+        return job.get_resolution_display(), "resolved"
+    if job.status == ScheduledJob.Status.FAILED:
+        return "Needs attention", "failed"
+    if job.status == ScheduledJob.Status.PENDING and job.last_result.startswith(
+        "deferred:"
+    ):
+        return "Deferred", "deferred"
+    if job.status == ScheduledJob.Status.PENDING and job.attempts:
+        return "Retrying", "retrying"
+    return job.get_status_display(), job.status
+
+
+def _job_error_category(job: ScheduledJob) -> str:
+    if job.last_error_code:
+        return job.last_error_code
+    if job.last_result.startswith("deferred:"):
+        return job.last_result.partition(":")[2]
+    if job.status == ScheduledJob.Status.FAILED:
+        return "legacy_failure"
+    return "None"
+
+
+_FINANCE_JOB_KINDS = frozenset(
+    {
+        ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND,
+        ScheduledJob.Kind.PAYMENT_GRACE_RELEASE,
+        ScheduledJob.Kind.ATTEMPT_EXPIRY,
+        ScheduledJob.Kind.PROVIDER_RECONCILE,
+        ScheduledJob.Kind.PROVIDER_EVENT_PROCESS,
+        ScheduledJob.Kind.REFUND_RECONCILE,
+        ScheduledJob.Kind.PAYOUT_RELEASE_CHECK,
+    }
+)
+
+
+def _can_manage_job(user, job: ScheduledJob) -> bool:
+    if job.kind in _FINANCE_JOB_KINDS:
+        return has_admin_permission(user, "reconcile_finance")
+    return has_admin_permission(user, "manage_lifecycle") or has_admin_permission(
+        user, "reconcile_finance"
+    )
+
+
+@capability_required("view_scheduled_jobs", "view_operational_incidents")
+def background_job_detail(request, pk: int):
+    job = get_object_or_404(ScheduledJob.objects.select_related("resolved_by"), pk=pk)
+    related_label, related_url = _job_related_object(job)
+    state, state_code = _job_operational_state(job)
+    may_act = (
+        job.status == ScheduledJob.Status.FAILED
+        and not job.resolution
+        and _can_manage_job(request.user, job)
+    )
+    actions = []
+    if related_url:
+        actions.append({"label": "View related object", "url": related_url})
+    if may_act:
+        actions.extend(
+            (
+                {
+                    "label": "Retry now",
+                    "url": reverse("admin_console:job-retry", args=(job.pk,)),
+                },
+                {
+                    "label": "Resolve or dismiss",
+                    "url": reverse("admin_console:job-resolve", args=(job.pk,)),
+                },
+            )
+        )
+    return _render(
+        request,
+        "admin/console/operations_detail.html",
+        {
+            "title": f"Background job {job.pk}",
+            "eyebrow": "Durable work",
+            "description": (
+                "Payloads and raw errors are intentionally hidden. Retry invokes "
+                "the same idempotent handler used by the worker."
+            ),
+            "state": state,
+            "state_tone": tone_for(state_code),
+            "facts": (
+                ("Work", job.get_kind_display()),
+                ("Related object", related_label),
+                ("Attempts", f"{job.attempts} / {job.max_attempts}"),
+                ("Error category", _job_error_category(job)),
+                ("Last attempt", job.last_attempt_at or "Not recorded"),
+                (
+                    "Next attempt",
+                    job.run_at
+                    if job.status == ScheduledJob.Status.PENDING
+                    else "Not scheduled",
+                ),
+                ("Resolution reason", job.resolution_reason or "Not resolved"),
+                (
+                    "Resolved by",
+                    job.resolved_by.get_username()
+                    if job.resolved_by_id
+                    else ("System" if job.resolution else "Not resolved"),
+                ),
+                ("Resolved at", job.resolved_at or "Not resolved"),
+            ),
+            "actions": actions,
+            "related_url": related_url,
+            "back_url": reverse("admin_console:jobs"),
+        },
+    )
+
+
+@capability_required("reconcile_finance", "manage_lifecycle")
+def background_job_retry(request, pk: int):
+    job = get_object_or_404(ScheduledJob, pk=pk)
+    if not _can_manage_job(request.user, job):
+        raise PermissionDenied("Your role cannot retry this kind of job.")
+    form = JobRetryForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                before = {
+                    "status": job.status,
+                    "attempts": job.attempts,
+                    "error_code": job.last_error_code,
+                }
+                requeued = retry_failed_job(job_id=job.pk)
+                record_admin_action(
+                    actor=request.user,
+                    action="scheduled_job.retry_queued",
+                    target=requeued,
+                    before=before,
+                    after={"status": requeued.status, "run_at": requeued.run_at},
+                    reason=form.cleaned_data["reason"],
+                )
+            messages.success(request, "The job was queued for an immediate retry.")
+            return redirect("admin_console:job-detail", pk=job.pk)
+        except Exception as exc:
+            _operation_error(request, "Background job retry", exc)
+    return _render(
+        request,
+        "admin/console/action_form.html",
+        {
+            "title": "Retry background job",
+            "description": (
+                f"Job {job.pk} · {job.get_kind_display()}. The worker will "
+                "re-check authoritative state before doing any work."
+            ),
+            "form": form,
+            "submit_label": "Queue retry",
+            "back_url": reverse("admin_console:job-detail", args=(job.pk,)),
+        },
+    )
+
+
+@capability_required("reconcile_finance", "manage_lifecycle")
+def background_job_resolve(request, pk: int):
+    job = get_object_or_404(ScheduledJob, pk=pk)
+    if not _can_manage_job(request.user, job):
+        raise PermissionDenied("Your role cannot resolve this kind of job.")
+    form = JobResolutionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                resolved = resolve_failed_job(
+                    job_id=job.pk,
+                    actor_id=request.user.pk,
+                    resolution=form.cleaned_data["resolution"],
+                    reason=form.cleaned_data["reason"],
+                )
+                record_admin_action(
+                    actor=request.user,
+                    action="scheduled_job.resolved",
+                    target=resolved,
+                    before={"status": job.status, "resolution": job.resolution},
+                    after={
+                        "status": resolved.status,
+                        "resolution": resolved.resolution,
+                    },
+                    reason=form.cleaned_data["reason"],
+                )
+            messages.success(
+                request, "The failure left the active queue; its history was retained."
+            )
+            return redirect("admin_console:job-detail", pk=job.pk)
+        except Exception as exc:
+            _operation_error(request, "Background job resolution", exc)
+    return _render(
+        request,
+        "admin/console/action_form.html",
+        {
+            "title": "Resolve background job",
+            "description": (
+                "This archives the terminal failure from the active queue. It "
+                "does not delete the job or any related record. Dismissing an "
+                "email job cancels its still-pending message obligation."
+            ),
+            "form": form,
+            "submit_label": "Archive failure",
+            "danger": True,
+            "back_url": reverse("admin_console:job-detail", args=(job.pk,)),
+        },
+    )
+
+
+@capability_required("reconcile_finance", "manage_lifecycle")
+def background_job_bulk(request):
+    if request.method != "POST":
+        return redirect("admin_console:jobs")
+    form = JobBulkActionForm(request.POST)
+    raw_ids = request.POST.getlist("job_ids")
+    try:
+        job_ids = sorted({int(value) for value in raw_ids if int(value) > 0})
+    except (TypeError, ValueError):
+        job_ids = []
+    if not form.is_valid() or not job_ids or len(job_ids) > 100:
+        messages.error(request, "Select between 1 and 100 jobs and confirm the action.")
+        return redirect(f'{reverse("admin_console:jobs")}?attention=1')
+    try:
+        with transaction.atomic():
+            # Lock in stable order before any mutation so a concurrent worker
+            # or second operator cannot split the selected set.
+            locked = list(
+                ScheduledJob.objects.select_for_update(no_key=True)
+                .filter(pk__in=job_ids)
+                .order_by("pk")
+            )
+            if len(locked) != len(job_ids) or any(
+                row.status != ScheduledJob.Status.FAILED or row.resolution
+                for row in locked
+            ):
+                raise ValueError("selected_jobs_changed")
+            if any(not _can_manage_job(request.user, row) for row in locked):
+                raise PermissionDenied(
+                    "Your role cannot manage every selected job kind."
+                )
+            for row in locked:
+                before = {
+                    "status": row.status,
+                    "attempts": row.attempts,
+                    "error_code": row.last_error_code,
+                }
+                if form.cleaned_data["action"] == "retry":
+                    changed = retry_failed_job(job_id=row.pk)
+                    action = "scheduled_job.retry_queued"
+                    after = {"status": changed.status, "run_at": changed.run_at}
+                else:
+                    changed = resolve_failed_job(
+                        job_id=row.pk,
+                        actor_id=request.user.pk,
+                        resolution=ScheduledJob.Resolution.DISMISSED,
+                        reason=form.cleaned_data["reason"],
+                    )
+                    action = "scheduled_job.resolved"
+                    after = {
+                        "status": changed.status,
+                        "resolution": changed.resolution,
+                    }
+                record_admin_action(
+                    actor=request.user,
+                    action=action,
+                    target=changed,
+                    before=before,
+                    after=after,
+                    reason=form.cleaned_data["reason"],
+                    metadata={"bulk": True, "selection_size": len(locked)},
+                )
+        messages.success(request, f"Updated {len(job_ids)} audited job records.")
+    except Exception as exc:
+        _operation_error(request, "Bulk background job action", exc)
+    return redirect(f'{reverse("admin_console:jobs")}?attention=1')
 
 
 @capability_required("view_provider_health")
 def email_queue(request):
     queryset = _filter_choice(OutboundMessage.objects.order_by("-created_at"), request)
+    query = request.GET.get("q", "").strip()[:200]
+    if query:
+        condition = Q(key__icontains=query) | Q(kind__icontains=query)
+        if query.isdigit():
+            condition |= Q(pk=int(query))
+        queryset = queryset.filter(condition)
     page_obj = _page(request, queryset)
     return _table(
         request,
@@ -2843,6 +3444,7 @@ def email_queue(request):
         empty_title="No email in this state",
         empty_text="No email obligations match the selected filter.",
         filter_choices=tuple(OutboundMessage.Status.choices),
+        search_placeholder="Search message reference or kind",
     )
 
 

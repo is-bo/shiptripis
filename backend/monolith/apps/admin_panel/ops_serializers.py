@@ -708,7 +708,13 @@ class AdminScheduledJobSerializer(serializers.ModelSerializer):
             "max_attempts",
             "locked_at",
             "locked_by",
+            "last_attempt_at",
+            "last_error_code",
             "completed_at",
+            "resolution",
+            "resolved_at",
+            "resolved_by_id",
+            "resolution_reason",
             "created_at",
             "updated_at",
         )

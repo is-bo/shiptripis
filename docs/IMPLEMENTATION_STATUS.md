@@ -4522,3 +4522,55 @@ exist until this APK is installed and a signed-in user grants notification
 permission, so no Django to stream to Firebase to handset test was run and none
 is claimed. This remains a private pre-launch candidate; public launch gates are
 unchanged.
+
+## Phase 8F-G1 — finance operations reliability (implementation in progress)
+
+The authenticated production review on release `v1.0.0-rc.9+b3bad99` found
+**29** terminal `outbound_message` ScheduledJobs, not payment-dispatch jobs.
+Every row had the same safe cause, `transactional email is disabled`: the
+intentional kill switch returned `disabled`, the finance adapter converted that
+expected gate into a generic failure, and repeated six-hour retries exhausted
+the budget. The corresponding 29 durable messages had never attempted SMTP.
+Twenty-eight recipients were unambiguously QA data (`t@t.com`, `send@t.com`, or
+the reserved `.invalid` domain); one delivery-code message used a non-synthetic
+recipient and remains a real durable obligation. The observed range was 1–7
+September 2026; 28 jobs had 10/10 attempts and one had 12/12.
+
+The Overview's **4 failed or unapplied payments** were four TEST Chargily
+attempts, not unapplied captures: two unauthenticated checkout failures for a
+cancelled test order, one for a pending synthetic order, and one
+provider-declared failed checkout for another synthetic order. No provider
+reference or evidence of received money existed for the first three; none of
+the four had `is_unapplied=True`. They remain payment history but are not
+action-required finance incidents under the corrected definition.
+
+G1 adds classified deferred/retryable/permanent execution, bounded backoff,
+first-failure dead-lettering for permanent input/configuration defects,
+last-attempt/error-category fields, and worker self-healing when authoritative
+state already satisfies a failed job. Expected timing and disabled-email gates
+no longer consume attempts. Resolution metadata is additive and constrained;
+job/payment rows retain their original financial/execution outcome.
+
+The data migration matches only the proven disabled-email signature. It retains
+all 29 job rows and attempt counts, cancels and dismisses the 28 synthetic
+message obligations with a recorded reason, and re-arms the one non-synthetic
+obligation under deferred semantics. Unrelated failures are untouched. No
+PaymentAttempt, PaymentOrder, provider event, ledger transaction, refund,
+payout, audit row, or reconciliation evidence is deleted.
+
+Task-focused admin actions now provide audited, confirmed single/bulk retry and
+resolution, safe related-object links and error categories, actionable versus
+retrying/deferred/history counts, and reconciliation-only payment recovery.
+Support has no recovery permission. Dismissing an email job atomically cancels
+its pending message while retaining both rows. Raw Django ScheduledJob records
+are read-only. A conservative ScheduledJob pruning command is dry-run by
+default, has a 90-day default/30-day floor, and limits execution to old
+succeeded or already-resolved rows.
+
+Local focused verification currently reports **85 passed**, with Ruff clean,
+Django checks clean, and `makemigrations --check --dry-run` reporting no changes.
+Full suites, PostgreSQL schema export/drift, CI, release SHA, deployment, and
+post-deploy live counts remain to be completed before this section is final.
+No provider was switched from TEST, no external payment/refund/payout call was
+made, no mobile code changed, no APK/AAB was built, and G2 visual polish was not
+started.

@@ -49,9 +49,11 @@
         <div><strong>{{ jobs.pending }}</strong><span>Pending</span></div>
         <div><strong>{{ jobs.running }}</strong><span>Running</span></div>
         <div><strong>{{ jobs.retrying }}</strong><span>Retrying</span></div>
-        <div><strong class="{% if jobs.failed %}st-tone-bad{% endif %}">{{ jobs.failed }}</strong><span>Failed</span></div>
+        <div><strong>{{ jobs.deferred }}</strong><span>Deferred</span></div>
+        <div><strong class="{% if jobs.failed %}st-tone-bad{% endif %}">{{ jobs.failed }}</strong><span>Needs attention</span></div>
+        <div><strong>{{ jobs.resolved }}</strong><span>Resolved history</span></div>
       </div>
-      <p class="st-muted">Oldest pending job: {{ jobs.oldest_age }}. A failed job keeps its stored error for investigation; the error itself is not shown here.</p>
+      <p class="st-muted">Oldest pending job: {{ jobs.oldest_age }}. Deferred work is waiting on an intentional gate and does not consume retries. Resolved failures retain their execution history.</p>
     </section>
 
     <section class="st-card" id="email">

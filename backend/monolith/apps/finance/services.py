@@ -2826,6 +2826,10 @@ def schedule_job(
         job.locked_at = None
         job.locked_by = ""
         job.completed_at = None
+        job.resolution = ""
+        job.resolved_at = None
+        job.resolved_by = None
+        job.resolution_reason = ""
         job.save(
             update_fields=[
                 "status",
@@ -2834,6 +2838,10 @@ def schedule_job(
                 "locked_at",
                 "locked_by",
                 "completed_at",
+                "resolution",
+                "resolved_at",
+                "resolved_by",
+                "resolution_reason",
                 "updated_at",
             ]
         )

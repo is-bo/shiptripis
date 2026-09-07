@@ -7,16 +7,23 @@ append-only, and a payout may only be settled through
 records the evidence the database constraint demands. An admin who could edit
 these rows by hand could produce a state no service would ever create.
 
-The one action offered is `requeue`, on a failed scheduled job — that is not a
-money mutation, it is asking an idempotent handler to run again.
+Scheduled-job recovery lives in the task-focused operations console, where it
+is capability checked, row locked and written to the immutable admin audit log.
+The raw model screen remains read-only.
 """
 
 from __future__ import annotations
 
-from django.contrib import admin, messages
-from django.utils import timezone
+from django.contrib import admin
 
-from apps.core.admin_display import TONE_ATTENTION, TONE_OK, flag, money, money_of, status
+from apps.core.admin_display import (
+    TONE_ATTENTION,
+    TONE_OK,
+    flag,
+    money,
+    money_of,
+    status,
+)
 
 from .models import (
     GuestPaymentLink,
@@ -86,8 +93,10 @@ class PaymentRefundInline(admin.TabularInline):
     amount_display = money("amount_eur_cents", "Refund amount", emphasis=True)
     status_chip = status("status", "Status")
     manual_chip = flag(
-        "requires_manual_action", "Manual action",
-        true_text="Required", false_text="Not needed",
+        "requires_manual_action",
+        "Manual action",
+        true_text="Required",
+        false_text="Not needed",
     )
 
     def has_add_permission(self, request, obj=None):  # noqa: ARG002
@@ -222,8 +231,10 @@ class PaymentRefundAdmin(_ReadOnlyAdmin):
     amount_display = money("amount_eur_cents", "Refund amount", emphasis=True)
     status_chip = status("status", "Status")
     manual_chip = flag(
-        "requires_manual_action", "Manual action",
-        true_text="Required", false_text="Not needed",
+        "requires_manual_action",
+        "Manual action",
+        true_text="Required",
+        false_text="Not needed",
     )
     list_filter = ("provider", "status", "reason", "requires_manual_action")
     list_select_related = ("order",)
@@ -355,20 +366,20 @@ class ScheduledJobAdmin(admin.ModelAdmin):
         "status_chip",
         "run_at",
         "attempt_budget",
+        "last_error_code",
+        "resolution",
         "last_result",
         "locked_by",
     )
     status_chip = status("status", "Status")
-    list_filter = ("kind", "status")
+    list_filter = ("kind", "status", "resolution", "last_error_code")
     search_fields = ("key", "last_error", "last_result")
     date_hierarchy = "run_at"
-    # Every column is read-only, `requeue_jobs` included in the docstring above
-    # as the one mutation. `status`, `run_at` and `max_attempts` used to stay
+    # Every column is read-only. `status`, `run_at` and `max_attempts` used to stay
     # editable on the change form, which quietly reopened the path the action
     # exists to replace: marking a `payout_release_check` job "succeeded" by
     # hand cancels a scheduled money action, and leaves no record that anyone
-    # did. The action is now the only way to move a job, and it says what it
-    # did in the message log.
+    # did. The audited operations console is now the only way to move a job.
     readonly_fields = (
         "key",
         "kind",
@@ -380,13 +391,19 @@ class ScheduledJobAdmin(admin.ModelAdmin):
         "max_attempts",
         "locked_at",
         "locked_by",
+        "last_attempt_at",
+        "last_error_code",
         "last_error",
         "last_result",
         "completed_at",
+        "resolution",
+        "resolved_at",
+        "resolved_by",
+        "resolution_reason",
         "created_at",
         "updated_at",
     )
-    actions = ("requeue_jobs",)
+    actions = None
 
     @admin.display(description="Attempts", ordering="attempts")
     def attempt_budget(self, obj: ScheduledJob) -> str:
@@ -405,22 +422,3 @@ class ScheduledJobAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):  # noqa: ARG002
         return False
-
-    @admin.action(description="Requeue selected jobs to run now")
-    def requeue_jobs(self, request, queryset):
-        """Ask an idempotent handler to run again. Not a money mutation."""
-
-        updated = queryset.filter(
-            status__in=(ScheduledJob.Status.FAILED, ScheduledJob.Status.RUNNING)
-        ).update(
-            status=ScheduledJob.Status.PENDING,
-            run_at=timezone.now(),
-            attempts=0,
-            locked_at=None,
-            locked_by="",
-            completed_at=None,
-            updated_at=timezone.now(),
-        )
-        self.message_user(
-            request, f"Requeued {updated} job(s).", level=messages.INFO
-        )

@@ -301,6 +301,11 @@ class PaymentAttempt(models.Model):
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
+    class OperationalResolution(models.TextChoices):
+        RESOLVED = "resolved", "Resolved"
+        DISMISSED = "dismissed", "Dismissed"
+        SUPERSEDED = "superseded", "Superseded"
+
     #: Statuses in which the attempt may still become succeeded.
     OPEN_STATUSES = ("created", "checkout_pending", "processing")
     TERMINAL_STATUSES = ("succeeded", "failed", "expired", "cancelled")
@@ -384,6 +389,28 @@ class PaymentAttempt(models.Model):
         default=False,
         help_text="Succeeded but not applied to the order; awaiting refund.",
     )
+    operational_resolution = models.CharField(
+        max_length=16,
+        choices=OperationalResolution.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text=(
+            "Operator attention state only. It never changes the provider or "
+            "financial outcome recorded above."
+        ),
+    )
+    operational_resolved_at = models.DateTimeField(null=True, blank=True)
+    operational_resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resolved_payment_attempt_alerts",
+    )
+    operational_resolution_reason = models.CharField(
+        max_length=500, blank=True, default=""
+    )
 
     expires_at = models.DateTimeField(null=True, blank=True)
     succeeded_at = models.DateTimeField(null=True, blank=True)
@@ -435,6 +462,22 @@ class PaymentAttempt(models.Model):
                     | (~Q(payment_currency="EUR") & Q(fx_rate_micros__isnull=False))
                 ),
                 name="fin_attempt_fx_required_for_conversion",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        operational_resolution="",
+                        operational_resolved_at__isnull=True,
+                        operational_resolved_by__isnull=True,
+                        operational_resolution_reason="",
+                    )
+                    | (
+                        ~Q(operational_resolution="")
+                        & Q(operational_resolved_at__isnull=False)
+                        & ~Q(operational_resolution_reason="")
+                    )
+                ),
+                name="fin_attempt_resolution_complete",
             ),
         ]
 
@@ -1082,6 +1125,11 @@ class ScheduledJob(models.Model):
         FAILED = "failed", "Failed"
         CANCELLED = "cancelled", "Cancelled"
 
+    class Resolution(models.TextChoices):
+        RESOLVED = "resolved", "Resolved"
+        DISMISSED = "dismissed", "Dismissed"
+        SUPERSEDED = "superseded", "Superseded"
+
     key = models.CharField(max_length=160, unique=True)
     kind = models.CharField(max_length=32, choices=Kind.choices, db_index=True)
     payload = models.JSONField(default=dict, blank=True)
@@ -1093,9 +1141,28 @@ class ScheduledJob(models.Model):
     max_attempts = models.PositiveSmallIntegerField(default=8)
     locked_at = models.DateTimeField(null=True, blank=True)
     locked_by = models.CharField(max_length=64, blank=True, default="")
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=64, blank=True, default="")
     last_error = models.CharField(max_length=500, blank=True, default="")
     last_result = models.CharField(max_length=255, blank=True, default="")
     completed_at = models.DateTimeField(null=True, blank=True)
+    resolution = models.CharField(
+        max_length=16,
+        choices=Resolution.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Operational resolution only; execution history is retained.",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resolved_scheduled_jobs",
+    )
+    resolution_reason = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1105,6 +1172,25 @@ class ScheduledJob(models.Model):
         indexes = [
             models.Index(fields=["status", "run_at"], name="fin_job_due_idx"),
             models.Index(fields=["kind", "status"], name="fin_job_kind_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        resolution="",
+                        resolved_at__isnull=True,
+                        resolved_by__isnull=True,
+                        resolution_reason="",
+                    )
+                    | (
+                        ~Q(resolution="")
+                        & Q(resolved_at__isnull=False)
+                        & ~Q(resolution_reason="")
+                        & Q(status="failed")
+                    )
+                ),
+                name="fin_job_resolution_complete",
+            )
         ]
 
     def __str__(self) -> str:

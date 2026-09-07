@@ -92,7 +92,7 @@ python manage.py shell --settings=config.settings.local_preview -c "exec(open('.
 python -m http.server 4174 --directory build/adminshots
 ```
 
-`dump_console_pages.py` writes `build/adminshots/console-*.html` for all 34
+`dump_console_pages.py` writes `build/adminshots/console-*.html` for all 41
 screens, covering pending and decided KYC, flight proofs, a multi-leg journey,
 a Deal, an open and a resolved dispute, Stripe and Chargily payments, a refund,
 a payout, staff with a pending invitation, provider warnings and an empty

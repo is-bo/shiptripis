@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ back_url }}">Back to queue</a> &rsaquo; {{ title }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">{{ eyebrow }}</p>
+      <h1>{{ title }}</h1>
+      <p>{{ description }}</p>
+    </div>
+    <div class="st-page-aside"><span class="st-chip st-{{ state_tone }}">{{ state }}</span></div>
+  </header>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Safe operational metadata</p>
+    <h2>Current record</h2>
+    <dl class="st-facts">
+      {% for label, value in facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+    </dl>
+  </section>
+
+  {% if actions %}
+  <section class="st-card">
+    <p class="st-eyebrow">Audited actions</p>
+    <h2>Recovery controls</h2>
+    <p>Each action has its own confirmation and records the operator and reason.</p>
+    <div class="st-page-actions">{% for action in actions %}<a class="button" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div>
+  </section>
+  {% else %}
+  <div class="st-readonly-note"><span>No action is available in this state, or your role cannot take it.</span></div>
+  {% endif %}
+</main>
+{% endblock %}

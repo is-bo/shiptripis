@@ -47,6 +47,7 @@ from apps.finance.models import (
     Payout,
     ScheduledJob,
 )
+from apps.finance.operations import payment_attention_queryset
 from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
 from apps.finance.providers import available_providers
 from apps.finance.serializers import (
@@ -357,9 +358,10 @@ class DashboardView(APIView):
                         Payout.Status.PROCESSING,
                     )
                 ).count(),
-                "unapplied_funds": PaymentAttempt.objects.filter(
-                    is_unapplied=True
-                ).count(),
+                "unapplied_funds": payment_attention_queryset()
+                .filter(is_unapplied=True)
+                .count(),
+                "payments_attention": payment_attention_queryset().count(),
             }
         if has_admin_permission(request.user, "view_provider_health"):
             payload["system_health"] = _provider_health()
@@ -383,10 +385,21 @@ class DashboardView(APIView):
                     status=ScheduledJob.Status.RUNNING
                 ).count(),
                 "failed": ScheduledJob.objects.filter(
-                    status=ScheduledJob.Status.FAILED
+                    status=ScheduledJob.Status.FAILED, resolution=""
                 ).count(),
+                "resolved": ScheduledJob.objects.filter(
+                    status=ScheduledJob.Status.FAILED
+                )
+                .exclude(resolution="")
+                .count(),
                 "retrying": ScheduledJob.objects.filter(
                     status=ScheduledJob.Status.PENDING, attempts__gt=0
+                )
+                .exclude(last_result__startswith="deferred:")
+                .count(),
+                "deferred": ScheduledJob.objects.filter(
+                    status=ScheduledJob.Status.PENDING,
+                    last_result__startswith="deferred:",
                 ).count(),
             }
         return Response(payload)
@@ -916,6 +929,15 @@ class AdminScheduledJobListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(ScheduledJob.objects.order_by("run_at"), request)
+        if (
+            request.query_params.get("status") == ScheduledJob.Status.FAILED
+            and request.query_params.get("history") != "resolved"
+        ):
+            queryset = queryset.filter(resolution="")
+        elif request.query_params.get("history") == "resolved":
+            queryset = queryset.filter(status=ScheduledJob.Status.FAILED).exclude(
+                resolution=""
+            )
         if kind := request.query_params.get("kind"):
             if kind not in ScheduledJob.Kind.values:
                 raise serializers.ValidationError({"kind": "Unsupported job kind."})

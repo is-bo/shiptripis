@@ -39,6 +39,17 @@ urlpatterns = [
         name="dispute-evidence",
     ),
     path("finance/payments/", views.payments, name="payments"),
+    path("finance/payments/<int:pk>/", views.payment_detail, name="payment-detail"),
+    path(
+        "finance/payments/<int:pk>/reconcile/",
+        views.payment_reconcile,
+        name="payment-reconcile",
+    ),
+    path(
+        "finance/payments/<int:pk>/resolve/",
+        views.payment_resolve,
+        name="payment-resolve",
+    ),
     path("finance/refunds/", views.refunds, name="refunds"),
     path(
         "finance/refunds/new/<int:attempt_id>/", views.refund_request, name="refund-new"
@@ -58,6 +69,18 @@ urlpatterns = [
     path("settings/", views.business_settings, name="settings"),
     path("system/", views.system_status, name="system"),
     path("system/jobs/", views.background_jobs, name="jobs"),
+    path("system/jobs/bulk/", views.background_job_bulk, name="job-bulk"),
+    path("system/jobs/<int:pk>/", views.background_job_detail, name="job-detail"),
+    path(
+        "system/jobs/<int:pk>/retry/",
+        views.background_job_retry,
+        name="job-retry",
+    ),
+    path(
+        "system/jobs/<int:pk>/resolve/",
+        views.background_job_resolve,
+        name="job-resolve",
+    ),
     path("system/email/", views.email_queue, name="email"),
     path("system/geography/", views.geography, name="geography"),
     path("audit/", views.audit_log, name="audit"),

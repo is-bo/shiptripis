@@ -25,5 +25,6 @@ class Command(BaseCommand):
         report = run_due_jobs(limit=options["limit"])
         self.stdout.write(
             f"requeued={requeued} claimed={report.claimed} "
-            f"succeeded={report.succeeded} failed={report.failed}"
+            f"succeeded={report.succeeded} deferred={report.deferred} "
+            f"failed={report.failed}"
         )

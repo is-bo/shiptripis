@@ -40,9 +40,7 @@ class Command(BaseCommand):
         self.stdout.write(f"finance worker started (interval={interval}s)")
         while running["value"]:
             try:
-                requeue_stuck_jobs(
-                    stale_after_seconds=options["stale_after_seconds"]
-                )
+                requeue_stuck_jobs(stale_after_seconds=options["stale_after_seconds"])
                 report = run_due_jobs(limit=options["limit"])
                 # The outbox sweep is the same kind of backstop as
                 # `release_expired_reservations`: a message whose ScheduledJob
@@ -56,7 +54,8 @@ class Command(BaseCommand):
                 if report.claimed or dispatched or push_results:
                     self.stdout.write(
                         f"claimed={report.claimed} succeeded={report.succeeded} "
-                        f"failed={report.failed} messages={dispatched} "
+                        f"deferred={report.deferred} failed={report.failed} "
+                        f"messages={dispatched} "
                         f"push_results={push_results}"
                     )
             except Exception as exc:  # noqa: BLE001 - the loop must survive

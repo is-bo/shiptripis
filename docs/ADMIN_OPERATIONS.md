@@ -169,6 +169,65 @@ palette meets WCAG AA in both the light and dark themes. Empty queues explain th
 they are clear; action failures preserve a request reference and never claim a
 state change when the audited service refused the operation.
 
+## Finance operations and failed-job recovery
+
+The Overview counters are action queues, not lifetime failure totals. **Payments
+needing attention** includes an unapplied capture until its purpose-bound full
+refund succeeds, plus amount/currency verification anomalies that require a
+Finance decision. A normal provider decline that moved no money remains visible
+in payment history but is not an incident. **Background jobs needing attention**
+counts only unresolved terminal failures. Automatically retrying or deliberately
+deferred jobs and resolved history are reported separately under **System &
+operations**.
+
+Open a payment or background-job row through **Review**. The page shows safe
+identifiers, the related domain object, attempts, last/next attempt, and a
+classified error code; payloads, raw provider errors, tokens, and credentials
+are not rendered.
+
+Background-job outcomes have these meanings:
+
+- **Deferred** means a known time/configuration gate is closed, such as the
+  transactional-email kill switch. It is scheduled again without consuming an
+  attempt.
+- **Retrying** means a transient provider or availability failure. Retries use
+  bounded exponential backoff and stop at the job's configured maximum.
+- **Failed** means a permanent failure or exhausted retry budget and requires
+  review. Invalid payload/configuration failures dead-letter on the first
+  attempt.
+- **Superseded** means authoritative state proves the work already succeeded or
+  no longer exists. The worker self-heals these terminal rows before claiming
+  new work.
+
+**Retry now** resets the current retry cycle and invokes the existing
+idempotent handler; it never directly marks a payment paid. **Resolve** and
+**Dismiss** remove an unresolved terminal job from the active queue while
+retaining its execution row, attempts, timestamps, safe error category, actor,
+and required reason. Dismissing an outbound-email job also cancels its still
+pending message obligation so it cannot be sent later. Bulk retry/dismiss is
+limited to 100 unchanged terminal rows and requires confirmation plus one
+reason applied to every individually audited row. Finance can manage financial
+jobs, Ops can manage lifecycle/email jobs, Super Admin can manage both, and
+Support cannot perform recovery actions.
+
+For a payment attention item, **Queue reconciliation** schedules the existing
+provider/refund reconciliation path. Chargily attempts without a provider
+checkout reference are refused because blindly creating another checkout could
+charge twice. Unapplied money is never changed to paid from the console: the
+automatic full-refund obligation must reconcile to success before its attention
+item can be resolved. Reconciliation re-locks canonical domain rows and relies
+on the existing unique provider IDs, stable idempotency keys, event application,
+ledger, refund, and payout constraints.
+
+Never delete a PaymentAttempt, PaymentOrder, provider event, ledger transaction,
+refund, payout, audit event, or reconciliation evidence to clear a counter.
+`prune_scheduled_jobs` is the only physical cleanup introduced here. It is a
+dry-run by default, refuses retention shorter than 30 days, defaults to 90 days,
+and can delete only old succeeded job-execution rows or old terminal rows that
+already have a recorded resolution. It never selects an unresolved failure.
+Run `python manage.py prune_scheduled_jobs` to inspect the candidate count and
+add `--execute --days N` only after review.
+
 ## Review and verification
 
 Use Python 3.12 with the pinned requirements, matching the application image.

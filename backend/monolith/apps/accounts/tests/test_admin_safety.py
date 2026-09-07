@@ -124,8 +124,8 @@ class ScheduledJobSafetyTests(TestCase):
     def test_the_job_page_offers_nothing_to_edit(self):
         model_admin = admin.site._registry[ScheduledJob]
         request = self.client.get("/admin/finance/scheduledjob/").wsgi_request
-        # The list keeps change permission, because the requeue action needs
-        # it; the object itself is a view.
+        # The list remains inspectable; mutations live only in the audited,
+        # capability-checked operations console.
         assert model_admin.has_change_permission(request) is True
         assert model_admin.has_change_permission(request, self.job) is False
         assert model_admin.has_add_permission(request) is False
@@ -140,7 +140,7 @@ class ScheduledJobSafetyTests(TestCase):
         assert response.status_code in (302, 403)
         assert self.job.status == ScheduledJob.Status.PENDING
 
-    def test_requeue_is_still_available_and_still_only_touches_stuck_jobs(self):
+    def test_raw_admin_has_no_unaudited_requeue_action(self):
         dead = ScheduledJob.objects.create(
             key="safety-dead-job",
             kind=ScheduledJob.Kind.PROVIDER_RECONCILE,
@@ -148,7 +148,7 @@ class ScheduledJobSafetyTests(TestCase):
             status=ScheduledJob.Status.FAILED,
             attempts=8,
         )
-        self.client.post(
+        response = self.client.post(
             "/admin/finance/scheduledjob/",
             {
                 "action": "requeue_jobs",
@@ -158,9 +158,9 @@ class ScheduledJobSafetyTests(TestCase):
         )
         dead.refresh_from_db()
         self.job.refresh_from_db()
-        assert dead.status == ScheduledJob.Status.PENDING
-        # A job that was merely waiting is not dragged forward by the action.
+        assert dead.status == ScheduledJob.Status.FAILED
         assert self.job.status == ScheduledJob.Status.PENDING
+        assert "Requeue selected jobs" not in response.content.decode()
 
     def test_the_attempt_budget_reads_as_a_position_not_a_bare_number(self):
         body = self.client.get("/admin/finance/scheduledjob/").content.decode()

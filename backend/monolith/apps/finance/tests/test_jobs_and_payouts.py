@@ -120,17 +120,26 @@ class ScheduledJobTests(TestCase):
             kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,
             key="will-fail",
             run_at=timezone.now() - timedelta(minutes=1),
-            payload={"attempt_id": "not-an-int"},
+            payload={"attempt_id": 999_999},
         )
 
-        report = jobs.run_due_jobs(limit=10)
+        def temporarily_unavailable(_payload):
+            raise jobs.RetryableJobError(
+                "Temporary outage.", code="provider_unavailable"
+            )
+
+        with patch.dict(
+            jobs.HANDLERS,
+            {ScheduledJob.Kind.ATTEMPT_EXPIRY: temporarily_unavailable},
+        ):
+            report = jobs.run_due_jobs(limit=10)
 
         assert report.failed >= 1
         row = ScheduledJob.objects.get(key="will-fail")
         assert row.status == ScheduledJob.Status.PENDING
         assert row.attempts == 1
         assert row.run_at > timezone.now()
-        assert "JobFailed" in row.last_error
+        assert row.last_error_code == "provider_unavailable"
 
     def test_a_job_that_exhausts_its_attempts_is_marked_failed(self):
         schedule_job(
@@ -165,7 +174,7 @@ class ScheduledJobTests(TestCase):
             patch(
                 "apps.notifications.outbox.dispatch_message", return_value="disabled"
             ),
-            self.assertRaises(jobs.JobFailed, msg="transactional email is disabled"),
+            self.assertRaises(jobs.JobDeferred, msg="transactional email is disabled"),
         ):
             jobs.handle_outbound_message({"message_id": 1})
 
@@ -463,7 +472,8 @@ class PayoutCapabilityTests(TestCase):
         # delivery it is meant to watch has even happened.
         rearmed = ScheduledJob.objects.get(pk=job.pk)
         assert rearmed.status == ScheduledJob.Status.PENDING
-        assert "delivery_not_confirmed" in rearmed.last_error
+        assert rearmed.last_result == "deferred:payout_delivery_not_confirmed"
+        assert rearmed.attempts == 0
         assert rearmed.run_at > timezone.now()
 
 

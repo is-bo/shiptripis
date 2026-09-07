@@ -69,6 +69,7 @@ CANONICAL_LOCK_MODULES = (
     "apps/core/business_settings.py",
     "apps/finance/services.py",
     "apps/finance/jobs.py",
+    "apps/finance/operations.py",
     "apps/finance/payout_release.py",
     "apps/finance/settlement.py",
     "apps/parcels/services.py",
@@ -120,9 +121,7 @@ class FinanceLockContractTests(SimpleTestCase):
     def test_the_canonical_order_is_documented_beside_the_helper(self):
         """Item 11: one place to read, not one assumption per service."""
 
-        text = (_REPO_ROOT / "apps/core/financial_locks.py").read_text(
-            encoding="utf-8"
-        )
+        text = (_REPO_ROOT / "apps/core/financial_locks.py").read_text(encoding="utf-8")
         for marker in (
             "FOR NO KEY UPDATE",
             "DEFERRABLE INITIALLY DEFERRED",
@@ -558,9 +557,7 @@ class RefundRollbackTests(FinanceConcurrencyTestCase):
                     idempotency_key="p8df-doomed",
                 )
 
-        assert not PaymentRefund.objects.filter(
-            idempotency_key="p8df-doomed"
-        ).exists()
+        assert not PaymentRefund.objects.filter(idempotency_key="p8df-doomed").exists()
         self.order.refresh_from_db()
         assert int(self.order.paid_eur_cents) == before["paid"]
         assert int(self.order.refunded_eur_cents) == before["refunded"]
@@ -580,11 +577,8 @@ class RefundRollbackTests(FinanceConcurrencyTestCase):
         assert refund.pk is not None
         self.order.refresh_from_db()
         assert self.order.refunded_eur_cents <= self.order.paid_eur_cents
-        assert (
-            int(
-                PaymentOrder.objects.filter(pk=self.order.pk).aggregate(
-                    total=Sum("refunded_eur_cents")
-                )["total"]
-            )
-            == int(attempt.amount_eur_cents)
-        )
+        assert int(
+            PaymentOrder.objects.filter(pk=self.order.pk).aggregate(
+                total=Sum("refunded_eur_cents")
+            )["total"]
+        ) == int(attempt.amount_eur_cents)
