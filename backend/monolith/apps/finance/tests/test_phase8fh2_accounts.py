@@ -683,6 +683,23 @@ class TestOwnershipAndMode:
         assert [name for name, _ in recovering.calls] == ["find_account_by_metadata"]
         assert StripePayoutAccount.objects.count() == 0
 
+    def test_normal_onboarding_also_refuses_to_repost_an_expired_unknown_creation(
+        self, db, h2, traveler
+    ):
+        with pytest.raises(ProviderUnavailable):
+            start_onboarding(actor=traveler, gateway=FakeGateway(create=ProviderUnavailable("timeout")))
+        operation = PayoutProviderOperation.objects.get(kind="account_create")
+        PayoutProviderOperation.objects.filter(pk=operation.pk).update(
+            first_request_at=timezone.now() - timedelta(days=2)
+        )
+        gateway = FakeGateway()
+        with pytest.raises(AccountCreationUnresolved):
+            start_onboarding(actor=traveler, gateway=gateway)
+        assert "create_account" not in [name for name, _ in gateway.calls]
+        operation.refresh_from_db()
+        assert operation.status == "unknown"
+        assert PayoutProviderOperation.objects.count() == 1
+
     def test_an_account_belonging_to_another_traveler_is_never_adopted(
         self, db, h2, traveler
     ):

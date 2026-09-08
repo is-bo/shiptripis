@@ -697,10 +697,8 @@ def ensure_account(*, actor, country="", gateway=None):
 
     observed_at = timezone.now()
     try:
-        snapshot = gateway.create_account(
-            country=declared,
-            idempotency_key=operation.idempotency_key,
-            metadata=_account_metadata(method, operation),
+        snapshot = _recover_account_creation(
+            method=method, operation=operation, country=declared, gateway=gateway,
         )
     except (ProviderCheckoutRejected, ProviderNotConfigured):
         PayoutProviderOperation.objects.filter(pk=operation.pk).update(status="failed")
