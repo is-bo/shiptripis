@@ -1,6 +1,84 @@
 # Phase 8F-H2.5 — TEST activation and verification
 
-## Current continuation result — after Connect activation
+## Latest continuation — Accounts v1 enabled
+
+**H2.5 FAIL. Are H3 prerequisites now satisfied? NO.** This section supersedes
+the earlier snapshots below. H3 was not started.
+
+The actual ShipTrip onboarding API created connected account
+`acct_1UDSCoKWXRqQfWCd` for synthetic Traveler `14`. Platform is the existing
+`acct_1TLWM93aixfgmaTz`; country FR, default currency EUR. Controller readback:
+Express Dashboard, Stripe requirement collection, application pays fees and
+application bears payment losses, `is_controller=true`. Transfers requested,
+currently inactive; card_payments explicitly unrequested. TEST provenance is
+the configured TEST credential, local binding and authoritative connected events
+with `livemode=false` (Accounts v1 account projection has no livemode field).
+
+Failed creation operations 1 and 2 remain unchanged; operation 3 is accepted.
+One local account and immutable method version 2 are bound. Authenticated resume
+returned 201 and fresh Account Links before and after redeploy without new
+account creation. The unrelated pre-existing provider account remains untouched;
+provider total is two, of which exactly one belongs to ShipTrip Traveler 14.
+
+The Stripe-hosted onboarding page opened. Selecting Stripe's test phone option
+presented an hCaptcha challenge. It was not solved or bypassed. Hosted completion
+therefore remains blocked. Valid signed return and refresh routes return 200 with
+no-store; authenticated readiness refresh returns 200. These are direct route
+checks, not a claim that completed Stripe onboarding redirected successfully.
+Manage with Stripe returns 400 for the incomplete account; an Express-hosted
+dashboard session remains unverified.
+
+Authoritative final readiness: `setup_required`, reason `transfers_inactive`;
+details_submitted=false, payouts_enabled=false, transfers=inactive, EUR bank=false,
+external account count=0, schedule=manual, disabled reason=`requirements.past_due`.
+Required/past-due codes: business_profile.url, external_account,
+individual.address.city/line1/postal_code, individual.dob.day/month/year,
+individual.first_name/last_name, tos_acceptance.date/ip. Pending verification
+codes are empty; no deadline. No readiness was manufactured.
+
+The pre-activation webhook had `application=null` and did not receive natural
+connected events. A CLI resend reached ingress without connected-account scope
+and was correctly stored as ignored (`platform_scope_event`). That history is
+preserved. Recreated the dedicated destination using `connect=true` after Connect
+activation: `we_1UDSGx3aixfgmaTzPxCXmtOB`, associated application
+`ca_VDpMytk0vAiL5tYeKrrGbA1RAbw3bsaW`. Securely installed its new signing secret
+and disabled old `we_1UDN0J3aixfgmaTzAPfIXgX0`. Existing Checkout destination
+unchanged. Exact five H2 events, TEST, API `2026-03-25.dahlia` retained.
+
+Adding an honest synthetic-QA metadata label produced natural account.updated
+`evt_1UDSIPKWXRqQfWCdCpjyGocF`. Stripe reports pending_webhooks=0; ShipTrip row 18
+is signature_verified, scope=connect, mode=test, correct account, applied.
+Repeated signed replays before/after redeploy return 200/duplicate without new
+rows. Scrubbed stored payload excludes sensitive fields. No bank event was
+manufactured; actual bank-event payload verification awaits hosted onboarding.
+
+User 15's DZ EUR preference returns 400 with DZD manual alternative. Onboarding,
+refresh and dashboard attempts naming Traveler 14's real account cannot access
+it; authenticated listing does not expose it. Unauthenticated actions return
+401. User 15 has no account/provider operation. Finance page returns 200 with
+synthetic Traveler, masked reference, TEST/FR, readiness, transfers inactive,
+payouts off, no EUR bank, manual schedule. Full provider ID and sensitive field
+markers absent. Support and Ops return 403. Temporary role identities rolled back.
+
+Configuration redeploy `31dee751-e711-465f-b121-3149cf0fbcb5` and final durability
+redeploy `25022b37-4db1-40e0-8791-fe68ffc7bd83` both reached SUCCESS. The CLI
+restart command did not return promptly, so completion is based on the observed
+final redeploy, not its exit status. Deployed application remains reviewed
+`dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`, rc.14. Binding, intent history,
+readiness refresh, webhook duplicate handling, encryption round-trip survive.
+Health/readiness 200, zero pending migrations, FR-only, all execution flags and
+email remain false. Stripe/Chargily TEST. Existing EUR 3 Checkout remains paid
+exactly once with one applied platform event and two balanced ledger entries;
+additional duplicate replays change nothing. No new payment was made.
+
+No new application fix was needed in this continuation: webhook configuration
+was repaired operationally. Prior six-job CI remains the deployed code's evidence.
+No Transfer, bank Payout, reversal, cancellation, Chargily money or LIVE mutation.
+EUR 60 QA payout remains blocked/unpaid. No secrets or hosted access URLs printed
+or committed. Remaining blocker: hosted hCaptcha, incomplete onboarding/bank/
+readiness and successful Express Dashboard access. All audit history retained.
+
+## Earlier continuation result — after Connect activation
 
 **H2.5 FAIL. Are H3 prerequisites now satisfied? NO.** H3 was not started.
 This section supersedes the earlier baseline below where results differ.

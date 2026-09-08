@@ -4,11 +4,12 @@ Latest backend phase: **Phase 8F-H2 deployed; H2.5 external verification blocked
 H1/H2 and the H2.5 retry fix are deployed at
 `dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`
 (`v1.0.0-rc.14+dcb8c52`). FR-only TEST onboarding flags, independent payout
-encryption keys and the dedicated Connect TEST webhook are configured. Stripe
-now recognizes Connect activation but rejects Accounts v1 creation until the
-sandbox enables Accounts v1 support in Dashboard settings. The authenticated
-CLI exposes no such operation; existing Dashboard sessions were unauthenticated.
-No ShipTrip-bound connected account, Transfer or bank Payout was created. The existing
+encryption keys and the dedicated Connect TEST webhook are configured. Connect
+and Accounts v1 activation now work. Traveler 14 has one TEST FR connected account
+`acct_1UDSCoKWXRqQfWCd`, correct H0 controller and manual schedule; both failed
+intents remain intact. Hosted onboarding is blocked by hCaptcha at the TEST phone
+step. Readiness is honestly setup_required: transfers inactive, payouts off,
+details not submitted, no EUR bank. No Transfer or bank Payout was created. The existing
 EUR 3 TEST Sender Checkout succeeded and its platform webhook applied exactly
 once, including duplicate/restart checks. **H2.5 FAIL; H3 prerequisites NO.**
 See [H2.5 verification report](PHASE8F_H25_TEST_ACTIVATION_VERIFICATION.md).
@@ -19,10 +20,15 @@ preserves definite failures and allocates a new durable creation identity;
 ambiguous/conflicting responses remain unknown and retain their original key.
 The fix passed all six CI jobs and was merged through PR #1. Deployment
 `4000b6e3-f4f0-412a-a2d7-7a68ed000a4a` reached SUCCESS; health/readiness are 200
-and migrations current. A fresh durable intent reached the new Accounts v1
-provider blocker. One unrelated provider account with empty metadata exists;
-it was not adopted or changed. Onboarding/readiness and actual-account gates
-remain unverified. H3 was not started.
+and migrations current. The pre-activation webhook lacked an application binding;
+replacement `we_1UDSGx3aixfgmaTzPxCXmtOB` receives legitimate TEST account.updated
+events with correct scope, signature and durable duplicate safety. Old destination
+disabled, history retained. Real-account isolation, DZ refusal, masked Finance
+visibility and Support/Ops denial pass. Final durability redeploy
+`25022b37-4db1-40e0-8791-fe68ffc7bd83` reached SUCCESS; account binding, readiness
+refresh, webhook/payment idempotency and encryption survive. Hosted completion,
+real ready state/EUR bank and successful Express Dashboard access remain blocked.
+No new application fix was required in this continuation. H3 was not started.
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
