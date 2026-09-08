@@ -781,6 +781,14 @@ def read_onboarding_state(state: str) -> dict:
         raise ValidationError("This onboarding link is no longer valid.") from None
     if not isinstance(payload, dict) or set(payload) != {"u", "m", "a", "p", "d"}:
         raise ValidationError("This onboarding link is no longer valid.")
+    # Shape-check even though the payload is signed. A state that reached here
+    # is authentic, not necessarily well-formed, and the fields below go
+    # straight into a typed query.
+    if type(payload["u"]) is not int or any(
+        not isinstance(payload[key], str) or not payload[key]
+        for key in ("m", "a", "p", "d")
+    ):
+        raise ValidationError("This onboarding link is no longer valid.")
     return payload
 
 
@@ -793,12 +801,15 @@ def resolve_state_account(payload: dict) -> StripePayoutAccount:
     minted.
     """
 
-    account = StripePayoutAccount.objects.filter(
-        public_reference=payload["a"],
-        traveler_id=payload["u"],
-        platform_id=payload["p"],
-        provider_mode=payload["d"],
-    ).first()
+    try:
+        account = StripePayoutAccount.objects.filter(
+            public_reference=payload["a"],
+            traveler_id=payload["u"],
+            platform_id=payload["p"],
+            provider_mode=payload["d"],
+        ).first()
+    except (ValueError, TypeError, ValidationError):
+        raise ValidationError("This onboarding link is no longer valid.") from None
     if not account:
         raise ValidationError("This onboarding link is no longer valid.")
     platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")

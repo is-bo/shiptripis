@@ -734,6 +734,39 @@ class TestOnboardingSecurity:
             with pytest.raises(ValidationError):
                 read_onboarding_state(state)
 
+    def test_an_authentic_but_malformed_state_is_refused_not_crashed(
+        self, db, h2, traveler
+    ):
+        """Signed is not the same as well-formed.
+
+        The fields go straight into a typed query, so a state carrying the
+        right signature and the wrong types must be a refusal rather than a
+        500 on an unauthenticated page.
+        """
+
+        signer = TimestampSigner(salt="shiptrip.payouts.stripe.onboarding.v1")
+        for broken in (
+            {"u": "not-an-int", "m": "m", "a": "a", "p": PLATFORM, "d": "test"},
+            {"u": traveler.pk, "m": "", "a": "a", "p": PLATFORM, "d": "test"},
+            {"u": traveler.pk, "m": "m", "a": 7, "p": PLATFORM, "d": "test"},
+        ):
+            with pytest.raises(ValidationError):
+                read_onboarding_state(signer.sign(json.dumps(broken)))
+
+    def test_a_state_naming_an_account_reference_that_is_not_a_uuid_is_refused(
+        self, db, h2, traveler
+    ):
+        with pytest.raises(ValidationError):
+            resolve_state_account(
+                {
+                    "u": traveler.pk,
+                    "m": "m",
+                    "a": "not-a-uuid",
+                    "p": PLATFORM,
+                    "d": "test",
+                }
+            )
+
     def test_a_forged_state_is_refused(self, db, h2, traveler):
         forged = TimestampSigner(salt="not-the-right-salt").sign(
             json.dumps({"u": traveler.pk, "m": "x", "a": "y", "p": PLATFORM, "d": "test"})

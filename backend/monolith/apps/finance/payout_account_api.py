@@ -231,10 +231,16 @@ class StripeOnboardingReturnView(_HostedStateView):
     outcome = "return"
 
     def _resolve(self, account):
+        # A reloaded tab must not become one Stripe request per keystroke. The
+        # cooldown is a convenience, not a control, so a cache outage degrades
+        # to "refresh anyway" rather than to an error page.
         key = f"connect_return_refresh:{account.pk}"
-        if cache.get(key):
-            return account.status
-        cache.set(key, 1, timeout=15)
+        try:
+            if cache.get(key):
+                return account.status
+            cache.set(key, 1, timeout=15)
+        except Exception:  # noqa: BLE001 - the cache is not a correctness gate
+            logger.warning("finance.connect_return_cooldown_unavailable")
         try:
             refreshed, _ = refresh_account(account, gateway=get_connect_gateway())
             return refreshed.status
