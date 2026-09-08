@@ -361,6 +361,17 @@ class StripeConnectGateway:
                 "Stripe Connect rate limited the request.", provider_code="429"
             )
         error = body.get("error") if isinstance(body.get("error"), dict) else {}
+        if (
+            response.status_code == 409
+            or error.get("code") == "idempotency_key_in_use"
+            or error.get("type") == "idempotency_error"
+        ):
+            # Another request under this identity may still create the account.
+            # It must remain unknown, never eligible for a fresh creation key.
+            raise ProviderUnavailable(
+                "Stripe Connect request is still in progress.",
+                provider_code=str(error.get("code") or "idempotency_error"),
+            )
         if response.status_code in (401, 403):
             logger.error(
                 "stripe_connect auth rejected status=%s credential_mode=%s request_id=%s",

@@ -43,7 +43,11 @@ from .models import (
     StripePayoutAccount,
     TravelerPayoutMethod,
 )
-from .providers.base import ProviderError, ProviderUnavailable
+from .providers.base import (
+    ProviderCheckoutRejected,
+    ProviderError,
+    ProviderNotConfigured,
+)
 from .providers.stripe_connect import EXPECTED_CONTROLLER, get_connect_gateway
 
 logger = logging.getLogger(__name__)
@@ -332,8 +336,18 @@ def _prepare_account_creation(*, user, method_id, country):
     if existing:
         return method, existing, None
 
-    key, fingerprint, platform, mode = _creation_identity(method, country)
-    operation = PayoutProviderOperation.objects.filter(idempotency_key=key).first()
+    version = 1
+    while True:
+        key, fingerprint, platform, mode = _creation_identity(method, country, version)
+        operation = PayoutProviderOperation.objects.filter(idempotency_key=key).first()
+        if not operation or operation.status != "failed":
+            break
+        # Stripe caches definite rejections too. Preserve that failed intent
+        # and commit a new identity after configuration is repaired. Never
+        # advance an ambiguous or accepted operation to a fresh provider key.
+        if operation.provider_object_id:
+            raise ValidationError("A failed creation already has a provider identity.")
+        version += 1
     if operation:
         if operation.request_fingerprint != fingerprint:
             # Same identity, different request. The country changed after an
@@ -688,13 +702,13 @@ def ensure_account(*, actor, country="", gateway=None):
             idempotency_key=operation.idempotency_key,
             metadata=_account_metadata(method, operation),
         )
-    except ProviderUnavailable:
+    except (ProviderCheckoutRejected, ProviderNotConfigured):
+        PayoutProviderOperation.objects.filter(pk=operation.pk).update(status="failed")
+        raise
+    except ProviderError:
         # Transport loss is not "failed, safe to resend with a new key". The
         # operation stays committed and the next attempt recovers this identity.
         PayoutProviderOperation.objects.filter(pk=operation.pk).update(status="unknown")
-        raise
-    except ProviderError:
-        PayoutProviderOperation.objects.filter(pk=operation.pk).update(status="failed")
         raise
 
     account = _bind_account(
