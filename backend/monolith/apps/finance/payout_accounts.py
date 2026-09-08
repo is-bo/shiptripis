@@ -59,6 +59,29 @@ POLICY_VERSION = "payout_profile_v1"
 #: below that; past it, the answer must be *retrieved*, never re-POSTed.
 IDEMPOTENT_REPLAY_SECONDS = 23 * 3600
 
+#: What ShipTrip tells Stripe the connected account actually does, so Stripe's
+#: hosted onboarding does not have to ask the Traveler to describe a business.
+#:
+#: Stripe requires `business_profile.url` for these accounts and accepts
+#: `business_profile.product_description` in its place when the account holder
+#: has no website of their own. A Traveler carrying parcels has no website, so
+#: this sentence is what removes the website question — not a URL invented for
+#: them, and not ShipTrip's own site presented as theirs.
+#:
+#: Every clause here is something ShipTrip can assert from its own records: the
+#: Traveler is independent, they transport parcels, they do so through this
+#: marketplace, and they are paid after a delivery completes. It deliberately
+#: does not call them a retailer, a merchant, a carrier company or an owner of
+#: ShipTrip, because none of that is true. English because it is provider-facing
+#: risk copy, which Stripe reads; no Traveler is shown this sentence.
+#:
+#: Changing this string changes the account-creation fingerprint, which is the
+#: point: a different assertion to Stripe is a different request.
+TRAVELER_PRODUCT_DESCRIPTION = (
+    "Independent traveler providing parcel transportation services through the "
+    "ShipTrip marketplace and receiving compensation after completed deliveries."
+)
+
 #: The connected-account payout schedule this application requires. "Manual"
 #: is an API scheduling mode: Stripe holds the balance until the platform
 #: creates a payout. It is not an admin-click product flow, and H2 creates no
@@ -299,6 +322,7 @@ def _creation_identity(method, country: str, version: int = 1) -> tuple:
                 "eur",
                 "individual",
                 sorted(EXPECTED_CONTROLLER.items()),
+                TRAVELER_PRODUCT_DESCRIPTION,
                 version,
             ],
             sort_keys=True,
@@ -630,6 +654,7 @@ def _recover_account_creation(*, method, operation, country, gateway):
             country=country,
             idempotency_key=operation.idempotency_key,
             metadata=_account_metadata(method, operation),
+            product_description=TRAVELER_PRODUCT_DESCRIPTION,
         )
     found = gateway.find_account_by_metadata(
         key="shiptrip_method",

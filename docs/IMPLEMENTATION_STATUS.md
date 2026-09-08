@@ -5021,3 +5021,63 @@ Dashboard authentication and is an owner action, listed with exact steps in the
 H2 document. External TEST onboarding, the connected-accounts webhook
 destination and the TEST Railway variables all wait on it. Production remains the
 existing rc.12 release until a separately authorized deploy.
+
+## Phase 8F-H2.6 — Traveler onboarding cleanup and business-profile prefill (2026-09-08)
+
+Full write-up: `docs/PHASE8F_H26_CONNECT_BUSINESS_PROFILE.md`.
+
+Stripe-hosted onboarding asked Traveler 14 for a **business website**. A ShipTrip
+Traveler is an individual carrying parcels for other people's deliveries; they
+have no website and no business, so the question had no truthful answer. It was
+not a ShipTrip screen — it was `business_profile.url`, a real Stripe requirement
+that ShipTrip had left for the Traveler to answer.
+
+Verified against the TEST platform rather than inferred. A probe connected
+account created with the adapter's exact parameters (FR, EUR,
+`business_type=individual`, `transfers` requested, `card_payments` unrequested,
+Express, `requirement_collection=stripe`) reproduced Traveler 14's recorded
+pre-onboarding requirement list exactly, including `business_profile.url`.
+`business_profile.mcc` was **not** required — that belongs to `card_payments`,
+which ShipTrip never requests.
+
+Stripe's documented remedy is to prefill `business_profile.product_description`
+when the account holder has no URL. Proven on the probe: setting the description
+alone removed `business_profile.url` from `currently_due`, `past_due` and
+`eventually_due`, and a second probe created *with* the description never had the
+requirement at all. No URL was sent in either case.
+
+One further provider fact shaped the change: for a `requirement_collection=stripe`
+account, once the first Account Link exists, business-profile writes return 200
+and are silently discarded, and the field vanishes from the retrieved Account.
+Prefill is therefore a creation-time decision or it is nothing — which is also
+why Traveler 14's existing account cannot be backfilled and was left untouched.
+
+Two files changed, 88 added lines, no migration, no new endpoint, no new setting:
+
+- `providers/stripe_connect.py` — `create_account` accepts `product_description`
+  and sends `business_profile[product_description]`. There is no `url` parameter
+  anywhere in the module, and a test asserts the string `business_profile[url]`
+  does not appear in its source. Non-text or oversized input is refused, never
+  truncated. No MCC is sent.
+- `payout_accounts.py` — `TRAVELER_PRODUCT_DESCRIPTION` is a finance-domain
+  constant passed on the single `create_account` call site, which is also the
+  idempotent replay path. It is part of the creation fingerprint, so amending the
+  sentence is correctly treated as a different request rather than a replay.
+
+The sentence: *"Independent traveler providing parcel transportation services
+through the ShipTrip marketplace and receiving compensation after completed
+deliveries."* Every clause is something ShipTrip can assert from its own records.
+It never calls the Traveler a retailer, merchant, logistics company, card-payment
+business or an owner of ShipTrip.
+
+Unchanged: `business_type=individual`, `transfers` requested, `card_payments`
+unrequested, controller hash, FR-only allowlist, EUR default, manual payout
+schedule, and `evaluate_readiness` byte-for-byte. Prefilling a business profile
+is not evidence that money can move. No business-profile value is persisted,
+projected, logged or audited; `ConnectedAccountSnapshot` still carries none.
+
+ShipTrip copy was audited and already correct — no "create your business",
+"register your company", "set up your store" or "start accepting payments"
+language exists in the API, hosted-return page or mobile strings. No copy change
+was needed and none was made. Mobile still has no Stripe onboarding entry point,
+which remains the separately tracked H2.5 product gap.

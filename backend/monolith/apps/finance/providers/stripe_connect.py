@@ -75,6 +75,32 @@ EXPECTED_CONTROLLER = {
 #: The only external-account object type that can receive a EUR bank payout.
 BANK_ACCOUNT_OBJECT = "bank_account"
 
+#: The one `business_profile` field this adapter will ever send.
+#:
+#: Stripe lists `business_profile.url` in `currently_due` for a FR
+#: `business_type=individual` account with only `transfers` requested, and
+#: Stripe's own guidance is: "If you onboard an account and your platform
+#: provides it with a URL, prefill the account's `business_profile.url`. If the
+#: business doesn't have a URL, you can prefill its
+#: `business_profile.product_description` instead."
+#:
+#: ShipTrip does not provide Travelers with a website, so `url` is the field
+#: this adapter must never send: it is documented as "the business's publicly
+#: available website", and a Traveler carrying parcels has no such website. The
+#: platform's own marketing site is not theirs to assert. `product_description`
+#: is documented as an "internal-only description of the product sold by, or
+#: service provided by, the business", which is exactly what ShipTrip can state
+#: truthfully on their behalf.
+#:
+#: There is deliberately no `url` parameter anywhere in this module. A field
+#: that cannot be passed cannot be faked, injected by a client, or reached by a
+#: future caller that means well.
+PRODUCT_DESCRIPTION_PARAM = "business_profile[product_description]"
+
+#: Stripe does not publish a maximum for `product_description`. This is a
+#: conservative local ceiling so an accidental blob can never be posted.
+MAX_PRODUCT_DESCRIPTION_CHARS = 500
+
 
 class ConnectPlatformMismatch(ProviderError):
     """The credential answers for an account this deployment is not configured for."""
@@ -438,6 +464,7 @@ class StripeConnectGateway:
         business_type: str = "individual",
         default_currency: str = "eur",
         email: str = "",
+        product_description: str = "",
     ) -> ConnectedAccountSnapshot:
         """Create one connected account with H0's explicit controller hash.
 
@@ -445,6 +472,17 @@ class StripeConnectGateway:
         anything; it receives platform transfers and pays them to a bank. Asking
         for a capability the product does not use would add verification the
         Traveler cannot complete and requirements that would hold payouts.
+
+        `product_description` is the only business-profile context sent, and it
+        is sent *here* rather than in a later update because Stripe stops
+        accepting business-profile writes for a `requirement_collection=stripe`
+        account once its first Account Link exists. Prefill is a creation-time
+        decision or it is nothing.
+
+        No MCC is sent. Stripe does not ask for `business_profile.mcc` in this
+        transfers-only configuration, and asserting a merchant category the
+        provider never requested would be a claim about the Traveler's trade
+        that ShipTrip has not verified.
         """
 
         data = {
@@ -453,6 +491,9 @@ class StripeConnectGateway:
             "business_type": business_type,
             "capabilities[transfers][requested]": "true",
         }
+        description = self._business_description(product_description)
+        if description:
+            data[PRODUCT_DESCRIPTION_PARAM] = description
         data.update(CONTROLLER)
         if email:
             data["email"] = email
@@ -462,6 +503,28 @@ class StripeConnectGateway:
             "POST", "/v1/accounts", data=data, idempotency_key=idempotency_key
         )
         return self._snapshot(response)
+
+    @staticmethod
+    def _business_description(value: object) -> str:
+        """Accept one plain, bounded sentence or refuse the whole request.
+
+        The caller is the finance domain passing a module constant, never a
+        request body, so anything that is not a short piece of plain text here
+        means a caller is wrong. Refusing is safer than truncating: a silently
+        shortened description would be a different assertion to Stripe than the
+        one the product reviewed.
+        """
+
+        if value in (None, ""):
+            return ""
+        if not isinstance(value, str):
+            raise ProviderError("The product description must be text.")
+        description = " ".join(value.split())
+        if not description:
+            return ""
+        if len(description) > MAX_PRODUCT_DESCRIPTION_CHARS:
+            raise ProviderError("The product description is too long to send.")
+        return description
 
     def retrieve_account(self, account_id: str) -> ConnectedAccountSnapshot:
         """Read current readiness. Platform scope: this account is ours."""
