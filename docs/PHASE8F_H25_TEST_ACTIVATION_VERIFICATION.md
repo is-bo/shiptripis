@@ -1,5 +1,79 @@
 # Phase 8F-H2.5 — TEST activation and verification
 
+## Current continuation result — after Connect activation
+
+**H2.5 FAIL. Are H3 prerequisites now satisfied? NO.** H3 was not started.
+This section supersedes the earlier baseline below where results differ.
+
+Connect activation is recognized on the existing `ship-trip sandbox`,
+`acct_1TLWM93aixfgmaTz`. The old signup rejection was cached: Stripe returned
+`Idempotent-Replayed: true`. A minimal H2 repair preserves the failed intent,
+commits a fresh identity after a definitive rejection, retains the original
+identity for ambiguous/conflicting outcomes, and applies the existing bounded
+replay/recovery window to normal onboarding retries.
+
+- Starting application SHA: `5af0850f633c9a05d3f55205e95d405983da31b2`.
+- Continuation started from documentation main `e3b5ab2459806677325603682e7f4f8f383488e5`.
+- Reviewed fix HEAD: `7a60ff29b5af6f7ef66ac92d5b5b75f366dc0beb`.
+- [PR #1](https://github.com/is-bo/shiptripis/pull/1) merged to main as
+  `dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`.
+- Deployed exact clean archive of that merge SHA, release `v1.0.0-rc.14+dcb8c52`.
+- Deployment `4000b6e3-f4f0-412a-a2d7-7a68ed000a4a`: observed SUCCESS.
+- `/healthz` and `/readyz`: 200 on rc.14; pending migrations: zero.
+- Final focused H2 tests: 193 passed. Local PostgreSQL full suite: 1,566 passed,
+  34 skipped; that run started before the final replay-window adjustment.
+- [Final-commit CI](https://github.com/is-bo/shiptripis/actions/runs/34250301221):
+  all six jobs passed, including full Django tests/migrations/lint, schema drift,
+  Flutter, Go unit/build/vet, real-Redis integration and production configuration.
+
+The real public onboarding API was retried for synthetic Traveler `14` (FR).
+It committed a second account-creation intent and returned 502 after Stripe
+definitively rejected the request. Replaying this latest intent for diagnosis
+returned `invalid_request_error`: Accounts v1 support must be enabled in
+[Stripe Dashboard settings](https://dashboard.stripe.com/settings/features/feat_accounts_v1_support).
+The authenticated CLI tools expose branding operations only, not this setting.
+Previously accessible Dashboard sessions were unauthenticated; no further
+Dashboard/browser-auth attempts were made, respecting the user's instruction.
+The mandated Accounts v1/controller architecture was retained.
+
+Local bound account count remains zero; both failed intents remain auditable.
+Stripe lists one unrelated account `acct_1UDNjJ3aixhRxAXF` with empty metadata,
+which predates this fresh attempt. It was not created, modified or adopted by
+this continuation. Therefore no synthetic connected-account country, mode,
+controller, requested capabilities, EUR bank, readiness, requirements, manual
+schedule, hosted link, return/resume or Express Dashboard result is claimed.
+Actual-account idempotency/isolation, legitimate Connect delivery and populated
+admin/durability tests remain blocked. Local regression tests do not substitute
+for those external gates.
+
+Reverified after the deployment:
+
+- Current rotated TEST key authenticates; authoritative platform remains FR/EUR.
+- Connect webhook remains enabled, TEST, API `2026-03-25.dahlia`, exactly the
+  five events below. Platform webhook is unchanged; signing secrets are distinct.
+- Connect event rows: zero. Invalid signatures return 400 without storing events.
+- Independent payout crypto remains installed, valid and passes AEAD round-trip.
+- FR-only; Connect and payout profiles enabled; every payout execution flag,
+  finance dashboard and email disabled. Chargily remains TEST.
+- Existing authorized EUR 3 Checkout remains paid, TEST, Adaptive Pricing false,
+  currency conversion absent; its verified platform event remains applied once.
+  Two more signed duplicate replays returned 200/duplicate; one event, two ledger
+  entries and EUR 3 paid remain unchanged. No second payment was made.
+- Finance payout-account page: 200 and empty; Support/Ops: 403. Temporary role
+  identities/sessions rolled back. Checked responses contained no sensitive fields.
+- EUR 60 QA payout `1`: blocked, no paid timestamp or provider payout reference.
+- No Transfer, connected-account Payout, reversal, cancellation, Chargily money
+  operation, LIVE mutation or email send. No secrets or hosted access URLs printed
+  or committed; no subagents used.
+
+**BLOCKER:** provider Accounts v1 support setting, followed by the uncompleted
+external account/onboarding/readiness/webhook/ownership/durability gates.
+Prior historical-job and gateway-inspection findings below remain unchanged.
+The existing safe DZ refusal and pre-account authorization tests remain baseline
+evidence; actual-account isolation cannot be claimed without a bound account.
+
+## Earlier baseline — before activation and retry repair
+
 8 September 2026. **H2.5 FAIL. H3 prerequisites: NO.** H3 was not started.
 
 The authorized setup and independent payment checks completed, but Stripe

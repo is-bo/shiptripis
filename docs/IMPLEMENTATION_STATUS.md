@@ -1,11 +1,14 @@
 # ShipTrip V1 Implementation Status
 
 Latest backend phase: **Phase 8F-H2 deployed; H2.5 external verification blocked**.
-H1/H2 are deployed at `5af0850f633c9a05d3f55205e95d405983da31b2`
-(`v1.0.0-rc.13+5af0850`). FR-only TEST onboarding flags, independent payout
+H1/H2 and the H2.5 retry fix are deployed at
+`dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`
+(`v1.0.0-rc.14+dcb8c52`). FR-only TEST onboarding flags, independent payout
 encryption keys and the dedicated Connect TEST webhook are configured. Stripe
-rejects connected-account creation because the sandbox has not signed up for
-Connect. No connected account, Transfer or bank Payout was created. The existing
+now recognizes Connect activation but rejects Accounts v1 creation until the
+sandbox enables Accounts v1 support in Dashboard settings. The authenticated
+CLI exposes no such operation; existing Dashboard sessions were unauthenticated.
+No ShipTrip-bound connected account, Transfer or bank Payout was created. The existing
 EUR 3 TEST Sender Checkout succeeded and its platform webhook applied exactly
 once, including duplicate/restart checks. **H2.5 FAIL; H3 prerequisites NO.**
 See [H2.5 verification report](PHASE8F_H25_TEST_ACTIVATION_VERIFICATION.md).
@@ -14,8 +17,12 @@ H2.5 continuation: after the owner activated Connect, the old signup rejection
 was reproduced with Stripe's `Idempotent-Replayed: true` header. H2 retry repair
 preserves definite failures and allocates a new durable creation identity;
 ambiguous/conflicting responses remain unknown and retain their original key.
-External onboarding verification is in progress; the prior FAIL is not yet
-superseded by a PASS.
+The fix passed all six CI jobs and was merged through PR #1. Deployment
+`4000b6e3-f4f0-412a-a2d7-7a68ed000a4a` reached SUCCESS; health/readiness are 200
+and migrations current. A fresh durable intent reached the new Accounts v1
+provider blocker. One unrelated provider account with empty metadata exists;
+it was not adopted or changed. Onboarding/readiness and actual-account gates
+remain unverified. H3 was not started.
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
