@@ -1,40 +1,34 @@
 # ShipTrip V1 Implementation Status
 
-Latest backend phase: **Phase 8F-H2 deployed; H2.5 external verification blocked**.
-H1/H2 and the H2.5 retry fix are deployed at
-`dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`
-(`v1.0.0-rc.14+dcb8c52`). FR-only TEST onboarding flags, independent payout
-encryption keys and the dedicated Connect TEST webhook are configured. Connect
-and Accounts v1 activation now work. Traveler 14 has one TEST FR connected account
-`acct_1UDSCoKWXRqQfWCd`, correct H0 controller and manual schedule; both failed
-intents remain intact. Hosted onboarding is blocked by hCaptcha at the TEST phone
-step. Readiness is honestly setup_required: transfers inactive, payouts off,
-details not submitted, no EUR bank. No Transfer or bank Payout was created. The existing
-EUR 3 TEST Sender Checkout succeeded and its platform webhook applied exactly
-once, including duplicate/restart checks. **H2.5 FAIL; H3 prerequisites NO.**
+Latest backend phase: **Phase 8F-H2.5 PASS; H3 prerequisites satisfied**.
+H1/H2 and the retry repair remain deployed at
+`dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b` (`v1.0.0-rc.14+dcb8c52`).
+Final durability deployment `6ee72bc8-137d-48ef-ba85-2d7c6bc45829` reached SUCCESS.
+Health/readiness 200; zero pending migrations. H3 was not started.
+
+Synthetic Traveler 14's single TEST FR account `acct_1UDSCoKWXRqQfWCd` is
+**ready**: transfers active, details submitted, payouts enabled, EUR bank present,
+manual schedule and empty requirements. Both failed intents remain auditable.
+The owner completed hosted onboarding and confirmed Express Dashboard access
+using links from ShipTrip's authenticated backend. No hCaptcha bypass occurred.
+Connected account/capability/bank events have valid signatures and correct TEST
+scope, safe payload storage and duplicate safety before/after redeploy.
+Real-account isolation, DZ refusal, ready-state masked Finance visibility and
+Support/Ops denial pass. Existing EUR 3 Checkout remains applied exactly once.
 See [H2.5 verification report](PHASE8F_H25_TEST_ACTIVATION_VERIFICATION.md).
+
+Connect and payout profiles are enabled for FR only. All payout execution flags,
+finance dashboard and email remain disabled. Stripe and Chargily remain TEST.
+No Transfer, bank Payout, reversal, cancellation, Chargily money or LIVE mutation;
+EUR 60 QA payout remains unpaid. H3 prerequisites means readiness to implement
+H3, not authorization to execute payouts. The deployed retry fix passed all six
+CI jobs; this final continuation required operational verification and docs only.
 
 Product gap (owner-reported): the current mobile APK payout page only shows
 "No payouts yet" and lacks a "Set up payouts / Continue Stripe onboarding"
-entry point. Track separately; no mobile implementation or rebuild is included
-in this H2.5 continuation. Human TEST onboarding uses a fresh Account Link from
-the existing authenticated backend API for Traveler 14's already-bound account.
-
-H2.5 continuation: after the owner activated Connect, the old signup rejection
-was reproduced with Stripe's `Idempotent-Replayed: true` header. H2 retry repair
-preserves definite failures and allocates a new durable creation identity;
-ambiguous/conflicting responses remain unknown and retain their original key.
-The fix passed all six CI jobs and was merged through PR #1. Deployment
-`4000b6e3-f4f0-412a-a2d7-7a68ed000a4a` reached SUCCESS; health/readiness are 200
-and migrations current. The pre-activation webhook lacked an application binding;
-replacement `we_1UDSGx3aixfgmaTzPxCXmtOB` receives legitimate TEST account.updated
-events with correct scope, signature and durable duplicate safety. Old destination
-disabled, history retained. Real-account isolation, DZ refusal, masked Finance
-visibility and Support/Ops denial pass. Final durability redeploy
-`25022b37-4db1-40e0-8791-fe68ffc7bd83` reached SUCCESS; account binding, readiness
-refresh, webhook/payment idempotency and encryption survive. Hosted completion,
-real ready state/EUR bank and successful Express Dashboard access remain blocked.
-No new application fix was required in this continuation. H3 was not started.
+entry point. Tracked separately; no mobile implementation or rebuild in H2.5.
+Prior historical reconciliation-job and gateway runtime-inspection findings are
+retained in the report for separate follow-up.
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.

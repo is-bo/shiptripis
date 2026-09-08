@@ -406,13 +406,17 @@ any personal data.
 
 ## Countries actually validated
 
-**None.** `STRIPE_CONNECT_ALLOWED_COUNTRIES` ships empty, and no country is
-claimed as working. FR is the first to prove, and DE/ES are not enabled merely
-because Stripe's documentation lists them.
+**FR only**, validated in H2.5 on 8 September 2026 with real TEST hosted
+onboarding, authoritative ready state, EUR bank, manual schedule and connected
+webhook delivery. Code defaults remain empty; production allowlist is FR.
+DE/ES/DZ are not enabled. See the H2.5 verification report for evidence.
 
 ## Remaining H3 gates
 
 H3 may not create a Transfer or a bank Payout until all of these hold:
+
+H2.5 now satisfies items 1–2. Items 3–9 remain H3 implementation/execution gates;
+H2.5 PASS permits planning/implementation to begin, not money execution.
 
 1. FR TEST onboarding is proven end to end against this implementation.
 2. The exposed TEST key is rotated and the connected-accounts webhook

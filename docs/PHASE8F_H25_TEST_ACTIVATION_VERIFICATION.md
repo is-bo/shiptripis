@@ -1,5 +1,71 @@
 # Phase 8F-H2.5 — TEST activation and verification
 
+## Final result — human-hosted onboarding completed
+
+**H2.5 PASS. Are H3 prerequisites now satisfied? YES.** This means prerequisites
+to begin H3 implementation, not permission or readiness to execute payouts.
+H3 was not started. This result supersedes the historical snapshots below.
+
+The owner completed Stripe TEST hosted onboarding using the fresh link issued
+by ShipTrip for Traveler 14 and then confirmed the Express Dashboard opened
+successfully from ShipTrip's authenticated Manage with Stripe flow. hCaptcha
+was handled by the human, not bypassed. Account/hosted URLs were not printed or
+saved. The synthetic login email was simplified at the owner's request; the
+same user ID and connected-account binding were retained.
+
+Authoritative Stripe readback before and after final redeploy:
+
+- Account `acct_1UDSCoKWXRqQfWCd`, parent `acct_1TLWM93aixfgmaTz`, TEST, FR/EUR.
+- Express Dashboard, Stripe requirement collection, application fees payer and
+  payment-loss responsibility, is_controller=true.
+- Transfers requested/active; card_payments requested=false/unrequested.
+- details_submitted=true, payouts_enabled=true, EUR bank present (one external
+  account), manual payout schedule. Local readiness **ready**.
+- Requirements/currently due, past due and pending verification all empty;
+  disabled reason empty; deadline absent.
+- Exactly one local account, immutable bound method version 2. Failed operations
+  1/2 retained, operation 3 accepted; earlier resume/idempotency tests passed.
+
+Hosted signed return/refresh checks and authenticated readiness refresh returned
+200; backend projects ready and can_manage=true with execution disabled. Hosted
+completion and successful Express page access include owner confirmation; direct
+return-route tests do not claim an independently captured browser redirect.
+
+Ten legitimate connected events are signature-verified, TEST, correctly scoped
+and applied, including account.updated, capability.updated and
+account.external_account.created. Real bank event
+`evt_1UDShwKWXRqQfWCdHSSNyuJN` (row 31) reports pending_webhooks=0 and API
+2026-03-25.dahlia. Its raw bank fields are absent from stored payloads. Repeated
+signed duplicate replays before and after final redeploy return 200/duplicate,
+preserve row counts and do not repeat financial effects. Bank update/deletion
+events remain subscribed but were not artificially generated. The earlier
+scope-mismatched ignored event is retained separately for audit.
+
+Final restart/redeploy `6ee72bc8-137d-48ef-ba85-2d7c6bc45829` reached SUCCESS.
+Deployed code is still `dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b`, release
+v1.0.0-rc.14+dcb8c52. Ready binding, immutable history, authoritative reconciliation,
+crypto validation/round-trip and webhook idempotency survive. Health/readiness
+200; migrations zero pending. No additional application fix or new CI needed;
+the deployed fix passed all six CI jobs as recorded below.
+
+Ready-state Finance view shows synthetic Traveler, masked account, TEST/FR,
+Ready, transfers active, payouts enabled, EUR bank on file and manual schedule.
+Full provider ID and sensitive markers absent. Support/Ops 403. User 15's real
+account injection, unauthenticated action and DZ refusal checks pass again,
+with no user-15 account or provider operation. EUR 3 Checkout remains applied
+once: one event, two balanced ledger entries, paid 300 cents; duplicate replays
+remain safe. No second payment was made.
+
+Final flags: Connect and profiles enabled, FR only, all payout execution flags,
+finance dashboard and email false. Stripe/Chargily TEST. No Transfer, bank Payout,
+reversal, cancellation, Chargily money or LIVE mutation; EUR 60 QA payout remains
+blocked/unpaid. No secret values printed/committed. No mobile changes/rebuild.
+
+No remaining H2.5 blocker. Separately tracked product gap: the current mobile APK
+lacks Set up payouts / Continue Stripe onboarding. Prior historical reconciliation
+job and gateway environment-inspection limitations remain recorded below; they
+do not authorize execution or substitute for H3's implementation gates.
+
 ## Latest continuation — Accounts v1 enabled
 
 **H2.5 FAIL. Are H3 prerequisites now satisfied? NO.** This section supersedes
