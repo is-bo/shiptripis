@@ -21,15 +21,38 @@ from .views import (
     PostingDepositView,
 )
 from .webhooks import ChargilyWebhookView, MockWebhookView, StripeWebhookView
+from .connect_webhooks import StripeConnectWebhookView
 from .payout_profile_api import (
     PayoutMethodsView,
     DzdProfileView,
     PayoutIdentityReviewView,
 )
+from .payout_account_api import (
+    StripeDashboardView,
+    StripeOnboardingView,
+    StripeReadinessRefreshView,
+)
 
 urlpatterns = [
     path("payouts/methods", PayoutMethodsView.as_view(), name="payout-methods"),
     path("payouts/profiles/dzd", DzdProfileView.as_view(), name="payout-dzd-profile"),
+    # H2 Stripe Connect setup. Every one of these is owner-scoped from the
+    # authenticated user; none accepts a connected-account id as input.
+    path(
+        "payouts/methods/stripe/onboarding",
+        StripeOnboardingView.as_view(),
+        name="payout-stripe-onboarding",
+    ),
+    path(
+        "payouts/methods/stripe/refresh",
+        StripeReadinessRefreshView.as_view(),
+        name="payout-stripe-refresh",
+    ),
+    path(
+        "payouts/methods/stripe/dashboard",
+        StripeDashboardView.as_view(),
+        name="payout-stripe-dashboard",
+    ),
     path(
         "admin/payout-identity-reviews/<uuid:reference>",
         PayoutIdentityReviewView.as_view(),
@@ -105,6 +128,14 @@ urlpatterns = [
         "payments/webhooks/stripe",
         StripeWebhookView.as_view(),
         name="finance-webhook-stripe",
+    ),
+    # Connected accounts. A separate URL, a separate scope and its own
+    # signing secret: neither endpoint's secret can verify the other's events,
+    # and neither endpoint's handler can apply the other's.
+    path(
+        "payments/webhooks/stripe-connect",
+        StripeConnectWebhookView.as_view(),
+        name="finance-webhook-stripe-connect",
     ),
     path(
         "payments/webhooks/chargily",

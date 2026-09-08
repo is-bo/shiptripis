@@ -60,7 +60,9 @@ from apps.finance.models import (
     PaymentRefund,
     Payout,
     ScheduledJob,
+    StripePayoutAccount,
 )
+from apps.finance.payout_accounts import evaluate_readiness, mask_account
 from apps.finance.operations import (
     payment_attention_queryset,
     queue_payment_reconciliation,
@@ -2359,6 +2361,94 @@ def payout_detail(request, pk: int):
             and payout.status == Payout.Status.ELIGIBLE
             and payout.method == Payout.Method.MANUAL,
         },
+    )
+
+
+@capability_required("view_finance_summary")
+def payout_accounts(request):
+    """Read-only Stripe Connect setup, for Finance and Super Admin only.
+
+    Deliberately the *minimum* useful visibility: whether each Traveler can be
+    paid, and if not, which safe code says why. There is no bank data here and
+    there cannot be — none is stored — and the connected-account id is masked,
+    because an operator needs to correlate a support conversation, not to act
+    on the account. This is not the H5 Finance dashboard.
+    """
+
+    queryset = (
+        StripePayoutAccount.objects.select_related("traveler")
+        # One query for the whole page rather than a hold lookup per row: the
+        # readiness evaluator takes the answer, it does not go and find it.
+        .annotate(
+            open_holds=Count("holds", filter=Q(holds__cleared_at__isnull=True))
+        )
+        .order_by("-created_at")
+    )
+    if request.GET.get("attention") == "1":
+        queryset = queryset.exclude(status="ready")
+    else:
+        queryset = _filter_choice(queryset, request)
+    page_obj = _page(request, queryset)
+    rows = []
+    for account in page_obj.object_list:
+        verdict = evaluate_readiness(account, holds_exist=account.open_holds > 0)
+        rows.append(
+            {
+                "cells": (
+                    text_cell(
+                        account.traveler.full_name or account.traveler.email,
+                        account.traveler.email,
+                        kind="strong",
+                    ),
+                    ref_cell(
+                        mask_account(account.provider_account_id),
+                        f"{account.provider_mode} · {account.verified_country or account.declared_country}",
+                    ),
+                    status_cell(verdict.status, verdict.status.replace("_", " ").title()),
+                    text_cell(
+                        verdict.reason.replace("_", " ") if verdict.reason else "—",
+                        ", ".join(account.requirement_codes[:3]) or "",
+                    ),
+                    text_cell(
+                        account.transfers_status,
+                        "payouts enabled" if account.payouts_enabled else "payouts off",
+                    ),
+                    text_cell(
+                        "EUR bank on file" if account.eur_bank_present else "No EUR bank",
+                        account.payout_schedule_interval or "schedule unknown",
+                    ),
+                    datetime_cell(account.readiness_checked_at, relative=True),
+                )
+            }
+        )
+    return _table(
+        request,
+        title="Payout accounts",
+        description=(
+            "Stripe Connect setup for Traveler EUR payouts. Setup state only — "
+            "no money moves from this page, and no bank details are held here."
+        ),
+        eyebrow="Finance",
+        columns=(
+            "Traveler",
+            "Connected account",
+            "Readiness",
+            "Reason",
+            "Transfers",
+            "Destination",
+            "Last checked",
+        ),
+        rows=rows,
+        page_obj=page_obj,
+        empty_title="No Stripe payout accounts",
+        empty_text="No Traveler has started Stripe payout setup yet.",
+        filter_choices=(
+            ("setup_required", "Setup required"),
+            ("pending_review", "Pending review"),
+            ("ready", "Ready"),
+            ("needs_attention", "Needs attention"),
+            ("unavailable", "Unavailable"),
+        ),
     )
 
 

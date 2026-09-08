@@ -1,7 +1,9 @@
 # ShipTrip V1 Implementation Status
 
-Latest backend phase: **Phase 8F-H1 implemented, dormant, not deployed**.
-See the H1 entry below for validation and external prerequisites.
+Latest backend phase: **Phase 8F-H2 implemented, dormant, not deployed**.
+Stripe Connect TEST onboarding and readiness exist behind flags that are all
+false; no Stripe Connect object has been created and no money path exists.
+See the H2 entry below for validation and the owner actions external TEST needs.
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
@@ -4911,3 +4913,86 @@ appropriate TEST webhook setup. H3/H4 money execution remains outside H1.
 
 GitHub CI and final branch integration are reported in the delivery record;
 production remains the existing rc.12 release until a separately authorized deploy.
+
+## Phase 8F-H2 — Stripe Connect TEST onboarding and readiness (2026-09-08)
+
+Implemented the H0-selected Stripe Connect onboarding and readiness layer on top
+of H1's dormant domain. Starting local main and origin/main were
+`2a6aff4fd3c2514023cc324056c5818dd092decd`.
+
+A Traveler can now enable EUR, declare an eligible account country, have the
+server create or safely reuse one connected account, open Stripe-hosted
+onboarding, return, and see an authoritative readiness state that refreshes from
+connected-account webhooks. **No Transfer, bank Payout, reversal or cancellation
+exists anywhere in this phase**, and a test asserts the Connect adapter's own
+source contains no such path.
+
+What landed:
+
+- `apps/finance/providers/stripe_connect.py` — a separate, thin Connect adapter
+  pinning its own `Stripe-Version` (`2026-03-25.dahlia`), asserting the platform
+  account before any mutation, capturing Stripe request ids, and projecting an
+  Account into safe codes and booleans only. The Checkout adapter and its API
+  version are untouched.
+- `apps/finance/payout_accounts.py` — the single readiness authority plus
+  idempotent account provisioning, ambiguous-create recovery, hosted-link
+  issuance, the signed return state and the safe mobile projection.
+- `apps/finance/payout_account_api.py` — owner-scoped onboarding, refresh and
+  Express Dashboard endpoints, and the two server-owned hosted return routes.
+- `apps/finance/connect_webhooks.py` — a dedicated
+  `POST /api/payments/webhooks/stripe-connect` with its own signing secret, its
+  own scope and an explicit five-event allowlist. Readiness always comes from a
+  fresh account retrieve, never from the payload.
+- `config/settings/connect.py` — boot-time configuration validation, called from
+  the production profile. With the flags off it asserts only the FR/DE/ES country
+  ceiling and that the two payout-execution flags are false, so existing
+  production boots unchanged and needs no new secret.
+- One read-only Finance console page, **Finance → Payout accounts**, gated on
+  `view_finance_summary`. No bank data, because none is stored.
+- `backend/railway/start.py` now strips the Stripe and Chargily secrets, and the
+  new Connect webhook secret, from the Go and gateway child environments.
+
+Developer contract, provider-documentation verification, the deliberate H0
+deviation on method-version immutability, and the exact owner actions external
+TEST needs are in
+[`PHASE8F_H2_STRIPE_CONNECT_ONBOARDING.md`](PHASE8F_H2_STRIPE_CONNECT_ONBOARDING.md).
+
+Verified against current Stripe documentation on 8 September 2026: H0's
+controller properties, hosted onboarding, Express login links, transfers-only
+capability, connected-account webhook scope, the five event names and the pinned
+`2026-03-25.dahlia` version are all current and compatible. Two notes recorded
+rather than silently absorbed: Stripe's manual-payout guide now leads with the
+Balance Settings API while explicitly permitting continued use of Accounts v1
+`settings.payouts`, which is what H0 chose and H2 implements; and Dahlia's one
+Connect breaking change adds risk requirements to the Capability object, which
+H2 does not read.
+
+Local validation:
+
+- Full PostgreSQL backend run: **1,560 passed, 34 skipped** (skips are the
+  explicitly retired legacy Trip/DZD matching contracts).
+- H2 suites: **185 passed** across adapter, account/readiness/onboarding,
+  webhook and deployment tiers; finance plus admin on SQLite **670 passed,
+  42 skipped**.
+- Ruff clean; Django system checks clean; `makemigrations --check` reports no
+  changes.
+- Migration `finance/0019_phase8fh2_connect_projections` is purely additive
+  (six safe projection columns on `StripePayoutAccount`, two provenance columns
+  and one index on `PaymentProviderEvent`). Forward, reverse and reapply
+  rehearsed on a disposable PostgreSQL database. No H1 migration was rewritten
+  and no schema object removed. `backend/contracts/sql/schema.sql` regenerated;
+  the diff is exactly those nine additions.
+
+Feature flags remain `STRIPE_CONNECT_ENABLED=false`,
+`STRIPE_CONNECT_PAYOUTS_ENABLED=false`,
+`STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED=false`,
+`PAYOUT_PROFILES_ENABLED=false`. `STRIPE_CONNECT_ALLOWED_COUNTRIES` ships empty
+and **no country is claimed as validated** — FR is the first to prove.
+
+No Stripe or Chargily operation, Connect object, connected account, Account Link,
+email, deployment, APK/AAB, provider or Railway mutation occurred. The exposed
+Stripe TEST secret key recorded in H0 has **not** been rotated: that needs Stripe
+Dashboard authentication and is an owner action, listed with exact steps in the
+H2 document. External TEST onboarding, the connected-accounts webhook
+destination and the TEST Railway variables all wait on it. Production remains the
+existing rc.12 release until a separately authorized deploy.

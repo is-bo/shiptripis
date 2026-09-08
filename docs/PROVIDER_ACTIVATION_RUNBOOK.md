@@ -4,8 +4,15 @@ This runbook is deliberately unexecuted. It contains placeholders only; never pa
 
 Use `https://<PUBLIC-API-ORIGIN>` below as the value of `PAYMENTS_PUBLIC_BASE_URL`. Exact webhook endpoints from the current URL configuration are:
 
-- Stripe: `https://<PUBLIC-API-ORIGIN>/api/payments/webhooks/stripe`
+- Stripe (platform / **Your account** scope): `https://<PUBLIC-API-ORIGIN>/api/payments/webhooks/stripe`
+- Stripe Connect (**Connected accounts** scope): `https://<PUBLIC-API-ORIGIN>/api/payments/webhooks/stripe-connect`
 - Chargily: `https://<PUBLIC-API-ORIGIN>/api/payments/webhooks/chargily`
+
+The two Stripe endpoints are separate destinations with separate scopes and
+**separate signing secrets**. Neither secret may be reused for the other: the
+platform endpoint refuses a connected-account event and the Connect endpoint
+refuses a platform one, and that separation is only meaningful if a compromise
+of either secret cannot verify the other's traffic.
 
 The endpoints are unauthenticated only at the HTTP layer. They verify the raw request body signature before database processing, record a unique `(provider, provider_event_id)`, scrub stored payloads, safely redrive incomplete duplicates, and return no order/customer details. Do not place a general authentication proxy in front of them.
 
@@ -56,6 +63,78 @@ Activation sequence:
 12. Review logs for request/provider references only—no secret, token, card, payer email, or webhook body leakage.
 
 Rollback switch: activate a new audited settings version with Stripe disabled for **new** checkout. Do not remove the webhook secret or route while attempts/refunds are in flight; reconciliation must continue.
+
+## Stripe Connect — Traveler payout accounts (Phase 8F-H2)
+
+A separate capability from Sender Checkout above. It creates connected accounts
+and reads their readiness; it moves no money, and H3 owns execution. Do not
+convert Sender Checkout into direct or destination charges to serve it.
+
+Environment placeholders:
+
+```text
+STRIPE_CONNECT_ENABLED=<false until the steps below pass>
+STRIPE_CONNECT_EXPECTED_MODE=test
+STRIPE_CONNECT_PLATFORM_ACCOUNT_ID=<the platform's own acct_ id>
+STRIPE_CONNECT_API_VERSION=2026-03-25.dahlia
+STRIPE_CONNECT_WEBHOOK_SECRET=<secret-manager reference, distinct from STRIPE_WEBHOOK_SECRET>
+STRIPE_CONNECT_ALLOWED_COUNTRIES=<empty, then FR once FR is proven>
+STRIPE_CONNECT_ONBOARDING_RETURN_URL=https://<PUBLIC-API-ORIGIN>/payouts/stripe/return
+STRIPE_CONNECT_ONBOARDING_REFRESH_URL=https://<PUBLIC-API-ORIGIN>/payouts/stripe/refresh
+```
+
+`STRIPE_CONNECT_PAYOUTS_ENABLED` and `STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED`
+must stay false. Production refuses to boot with either on, because neither the
+execution path nor the funding approval they describe exists.
+
+Configure exactly these events, with **Events from: Connected accounts**:
+
+- `account.updated`
+- `capability.updated`
+- `account.external_account.created`
+- `account.external_account.updated`
+- `account.external_account.deleted`
+
+No wildcard subscription. Payout-execution events (`payout.*`) are already
+ingested and stored without acting, so they may be added when H3 lands rather
+than needing a second destination.
+
+Activation sequence:
+
+1. Rotate any Stripe TEST secret key that has been exposed, and install the
+   replacement, before creating a single Connect object.
+2. Activate Connect in Stripe test mode and complete the platform profile:
+   marketplace model, platform pays Stripe fees, platform responsible for
+   negative balances, Stripe-hosted requirement collection, Express Dashboard.
+   An empty connected-account list does not prove this is done.
+3. Enable Stripe-hosted onboarding with Stripe's own bank-account collection.
+   ShipTrip must never render an IBAN form.
+4. Deploy the route, then register the connected-accounts destination at the
+   exact URL above with API version `2026-03-25.dahlia`, and store its own
+   signing secret.
+5. Set the variables above with `STRIPE_CONNECT_ALLOWED_COUNTRIES` empty, and
+   confirm the service boots. A missing secret, a mode that disagrees with the
+   credential's prefix, or a return URL off the public origin is a boot refusal.
+6. Enable France only. Run one synthetic Traveler through account creation,
+   Account Link, hosted onboarding, return, readiness refresh, resume after an
+   expired link, and the Express Dashboard link.
+7. Verify the retrieved account reports the expected controller hash,
+   `capabilities.transfers`, `payouts_enabled`, an eligible EUR bank destination
+   and `settings.payouts.schedule.interval=manual`.
+8. Verify each of the five events arrives and refreshes readiness, that a
+   redelivery is a no-op, and that a live-mode event against a test deployment
+   is classified rather than applied.
+9. Confirm a Traveler declaring Algeria is refused with
+   `payout_country_unsupported` and offered the DZD rail, and that no French
+   account was created for them.
+10. Review logs and the audit trail: no Account Link, no login link, no bank
+    holder name, no last four, no routing number, no secret.
+
+Only after all ten may DE or ES be considered, one validated country at a time.
+
+Rollback switch: set `STRIPE_CONNECT_ENABLED=false`. Onboarding stops; the
+webhook route and its secret stay in place so readiness for existing accounts
+keeps reconciling.
 
 ## Chargily
 

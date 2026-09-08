@@ -57,6 +57,11 @@ urlpatterns = [
     path("finance/refunds/<int:pk>/", views.refund_detail, name="refund-detail"),
     path("finance/payouts/", views.payouts, name="payouts"),
     path("finance/payouts/<int:pk>/", views.payout_detail, name="payout-detail"),
+    path(
+        "finance/payout-accounts/",
+        views.payout_accounts,
+        name="payout-accounts",
+    ),
     path("finance/ledger/", views.ledger, name="ledger"),
     path("staff/", views.staff, name="staff"),
     path("staff/<int:pk>/role/", views.staff_role, name="staff-role"),

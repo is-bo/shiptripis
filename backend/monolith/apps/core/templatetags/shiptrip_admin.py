@@ -143,6 +143,12 @@ NAVIGATION = (
                 ("view_payouts",),
                 ("payouts", "payout-detail"),
             ),
+            (
+                "Payout accounts",
+                "admin_console:payout-accounts",
+                ("view_finance_summary",),
+                ("payout-accounts",),
+            ),
             ("Ledger", "admin_console:ledger", ("reconcile_finance",), ("ledger",)),
         ),
     ),

@@ -5,7 +5,7 @@
 \restrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
 
 -- Dumped from database version 16.2
--- Dumped by pg_dump version 16.13
+-- Dumped by pg_dump version 16.2
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -1927,6 +1927,8 @@ CREATE TABLE public.finance_provider_event (
     endpoint_scope character varying(24) NOT NULL,
     provider_account_id character varying(255) NOT NULL,
     provider_mode character varying(16) NOT NULL,
+    object_id character varying(255) NOT NULL,
+    object_type character varying(64) NOT NULL,
     CONSTRAINT finance_provider_event_processing_attempts_check CHECK ((processing_attempts >= 0))
 );
 
@@ -2018,6 +2020,12 @@ CREATE TABLE public.finance_stripe_payout_account (
     payout_schedule_interval character varying(16) NOT NULL,
     created_at timestamp with time zone NOT NULL,
     traveler_id bigint NOT NULL,
+    controller_summary jsonb NOT NULL,
+    default_currency character varying(3) NOT NULL,
+    past_due_codes jsonb NOT NULL,
+    pending_verification_codes jsonb NOT NULL,
+    requirements_deadline timestamp with time zone,
+    status_reason character varying(64) NOT NULL,
     CONSTRAINT fin_stripe_account_known_mode CHECK (((provider_mode)::text = ANY ((ARRAY['test'::character varying, 'live'::character varying])::text[]))),
     CONSTRAINT finance_stripe_payout_account_readiness_generation_check CHECK ((readiness_generation >= 0))
 );
@@ -5782,6 +5790,13 @@ CREATE INDEX fin_event_provider_idx ON public.finance_provider_event USING btree
 --
 
 CREATE INDEX fin_event_recovery_idx ON public.finance_provider_event USING btree (processing_result, next_retry_at);
+
+
+--
+-- Name: fin_event_scope_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fin_event_scope_idx ON public.finance_provider_event USING btree (endpoint_scope, provider_account_id, received_at DESC);
 
 
 --

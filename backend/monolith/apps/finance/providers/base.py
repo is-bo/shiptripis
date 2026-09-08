@@ -139,6 +139,10 @@ class ProviderEvent:
     event_id: str
     event_type: str
     outcome: str  # one of: succeeded | failed | expired | cancelled | ignored
+    #: Stripe's top-level `account` on a Connect event. Non-empty means the
+    #: event belongs to a connected account, which the platform endpoint must
+    #: refuse to apply -- see `apps.finance.connect_webhooks`.
+    provider_account_id: str = ""
     provider_session_id: str = ""
     provider_payment_id: str = ""
     reference: str = ""

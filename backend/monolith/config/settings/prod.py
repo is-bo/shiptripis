@@ -237,6 +237,34 @@ if bool(STRIPE_SECRET_KEY) != bool(STRIPE_WEBHOOK_SECRET):  # noqa: F405
         "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set together."
     )
 
+# --- V1 payouts: Stripe Connect onboarding (H2) ---
+# With STRIPE_CONNECT_ENABLED false this asserts only the two rules that hold
+# unconditionally — the country ceiling and the money-execution flags this
+# release does not implement — so existing production boots unchanged with no
+# new secret. With the flag on, an incomplete or mode-contradicting
+# configuration is a boot refusal rather than a first-onboarding surprise.
+from .connect import ConnectConfigurationError, validate_connect_configuration  # noqa: E402
+
+try:
+    validate_connect_configuration(
+        enabled=STRIPE_CONNECT_ENABLED,  # noqa: F405
+        expected_mode=STRIPE_CONNECT_EXPECTED_MODE,  # noqa: F405
+        platform_account_id=STRIPE_CONNECT_PLATFORM_ACCOUNT_ID,  # noqa: F405
+        api_version=STRIPE_CONNECT_API_VERSION,  # noqa: F405
+        webhook_secret=STRIPE_CONNECT_WEBHOOK_SECRET,  # noqa: F405
+        allowed_countries=STRIPE_CONNECT_ALLOWED_COUNTRIES,  # noqa: F405
+        return_url=STRIPE_CONNECT_ONBOARDING_RETURN_URL,  # noqa: F405
+        refresh_url=STRIPE_CONNECT_ONBOARDING_REFRESH_URL,  # noqa: F405
+        public_base_url=PAYMENTS_PUBLIC_BASE_URL,  # noqa: F405
+        stripe_secret_key=STRIPE_SECRET_KEY,  # noqa: F405
+        payouts_enabled=STRIPE_CONNECT_PAYOUTS_ENABLED,  # noqa: F405
+        non_stripe_funding_enabled=(
+            STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED  # noqa: F405
+        ),
+    )
+except ConnectConfigurationError as exc:
+    raise RuntimeError(str(exc)) from None
+
 # --- V1 handover: production safety ---
 # Without its own secret the handover key derivation falls back to SECRET_KEY.
 # That is a fine developer convenience and an unacceptable production posture:

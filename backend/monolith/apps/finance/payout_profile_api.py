@@ -12,6 +12,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from .models import TravelerPayoutMethod, PayoutIdentityReviewAssignment
+from .payout_accounts import CountryUnsupported, allowed_countries, stripe_setup_projection
 from .payout_profiles import (
     set_preference,
     submit_dzd_profile,
@@ -86,7 +87,10 @@ def method_projection(method):
         }
         if profile
         else None,
-        "stripe_setup": {"available": False, "status": "setup_required"}
+        # H2 replaces H1's placeholder with the real, single-authority
+        # readiness projection. Statuses and safe reason codes only: no
+        # requirement payload, no bank data, no account id, no hosted link.
+        "stripe_setup": stripe_setup_projection(method)
         if method.currency == "EUR"
         else None,
     }
@@ -103,6 +107,22 @@ class ProfileView(APIView):
             raise Http404
 
     def handle_exception(self, exc):
+        if isinstance(exc, CountryUnsupported):
+            # H2: an unsupported payout-account country is a distinct product
+            # state, not a generic validation failure. The client can name what
+            # is supported and offer the DZD manual rail instead of asking the
+            # Traveler to guess. Nothing here suggests a residency they do not
+            # have.
+            return Response(
+                {
+                    "code": "payout_country_unsupported",
+                    "detail": "Stripe EUR payouts are not available for this "
+                    "account country.",
+                    "supported_countries": list(allowed_countries()),
+                    "alternative": {"currency": "DZD", "rail": "manual"},
+                },
+                status=400,
+            )
         if isinstance(exc, DomainError):
             return Response(
                 {

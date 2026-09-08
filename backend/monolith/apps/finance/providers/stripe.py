@@ -475,6 +475,10 @@ class StripeGateway:
             event_id=event_id,
             event_type=event_type,
             outcome=outcome,
+            # Captured, never acted on here. A Connect event carries this and a
+            # platform event does not, so the receiving view can tell the two
+            # apart before any reconciliation runs.
+            provider_account_id=str(event.get("account") or ""),
             provider_session_id=str(session_id or ""),
             provider_payment_id=str(payment_intent or ""),
             reference=str(obj.get("client_reference_id") or ""),

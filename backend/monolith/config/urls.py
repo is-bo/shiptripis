@@ -3,6 +3,13 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from apps.core.health import healthz, readyz
+from apps.finance.payout_account_api import (
+    StripeOnboardingRefreshView,
+    StripeOnboardingReturnView,
+)
+
+connect_return = StripeOnboardingReturnView.as_view()
+connect_refresh = StripeOnboardingRefreshView.as_view()
 
 admin.site.site_header = "ShipTrip Operations"
 admin.site.site_title = "ShipTrip Admin"
@@ -32,6 +39,21 @@ urlpatterns = [
         "pay/<uuid:reference>/return",
         TemplateView.as_view(template_name="payments/return.html"),
         name="payment-return",
+    ),
+    # Where Stripe sends the Traveler's browser back from hosted Connect
+    # onboarding. Server-owned URLs, allowlisted in settings and bound to a
+    # signed state. Returning here is not evidence that setup finished, so the
+    # return route re-reads the account from Stripe and the refresh route only
+    # points back at the app, where minting a new link is authenticated.
+    path(
+        "payouts/stripe/return",
+        connect_return,
+        name="payout-stripe-onboarding-return",
+    ),
+    path(
+        "payouts/stripe/refresh",
+        connect_refresh,
+        name="payout-stripe-onboarding-refresh",
     ),
     path("api/", include("apps.accounts.urls")),
     # The Phase 6A least-privilege operations surface owns every /api/admin/*

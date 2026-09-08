@@ -7,6 +7,12 @@ status entry and H0 architecture/status documentation are preserved in this work
 No provider execution, Connect setup, evidence upload, Finance dashboard or
 mobile payout interface is introduced.
 
+**Status (8 September 2026):** the "H2 prerequisites and limits" section at the
+end of this document has been acted on by
+[H2](PHASE8F_H2_STRIPE_CONNECT_ONBOARDING.md), which implements Stripe Connect
+onboarding and readiness behind flags that remain false. Item 1 — rotating the
+exposed Stripe TEST secret — is still outstanding and is an owner action.
+
 ## Domain and ownership
 
 Django remains the migration authority. `apps/finance/payout_models.py` is

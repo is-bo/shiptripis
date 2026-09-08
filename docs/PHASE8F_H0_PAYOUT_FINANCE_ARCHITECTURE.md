@@ -4,8 +4,18 @@
 
 H1 implementation status (8 September 2026): dormant domain, snapshot, profile,
 encryption and permission foundations are implemented and locally validated.
-See [H1 developer notes](PHASE8F_H1_PAYOUT_FOUNDATIONS.md). H2–H8 and
-all external enablement gates remain pending; the H0 decisions below are retained.
+See [H1 developer notes](PHASE8F_H1_PAYOUT_FOUNDATIONS.md).
+
+H2 implementation status (8 September 2026): the Stripe Connect onboarding and
+readiness layer below is implemented behind flags that are all false, and its
+provider contract was re-verified against Stripe's current documentation with no
+redesign required. See [H2 developer notes](PHASE8F_H2_STRIPE_CONNECT_ONBOARDING.md),
+which records the one deliberate deviation — H1 made `PayoutMethodVersion`
+strictly immutable, so binding an account creates a new version rather than
+using the "one verified binding" edit sketched in section 14. No Connect object
+has been created; the exposed TEST key rotation and every external TEST gate
+remain owner actions. H3–H8 and all external enablement gates remain pending;
+the H0 decisions below are retained.
 
 Repository baseline: `94aad9be50960f47cc73b47033a704effc4101b8`. The pre-existing, uncommitted G3 entry in `IMPLEMENTATION_STATUS.md` is preserved. H0 changes documentation only. No application code, migration, provider mutation, deployment, email activation, or Railway configuration change is authorized by this document.
 

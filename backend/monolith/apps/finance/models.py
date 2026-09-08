@@ -549,6 +549,11 @@ class PaymentProviderEvent(models.Model):
     api_version = models.CharField(max_length=64, blank=True, default="")
     provider_event_id = models.CharField(max_length=255)
     event_type = models.CharField(max_length=128, blank=True, default="")
+    # H2 provenance: which provider object the event was about, so a connected
+    # account event can be correlated without re-reading the payload. Opaque
+    # ids and Stripe's own object names only.
+    object_type = models.CharField(max_length=64, blank=True, default="")
+    object_id = models.CharField(max_length=255, blank=True, default="")
 
     attempt = models.ForeignKey(
         PaymentAttempt,
@@ -599,6 +604,10 @@ class PaymentProviderEvent(models.Model):
             models.Index(
                 fields=["processing_result", "next_retry_at"],
                 name="fin_event_recovery_idx",
+            ),
+            models.Index(
+                fields=["endpoint_scope", "provider_account_id", "-received_at"],
+                name="fin_event_scope_idx",
             ),
         ]
         constraints = [

@@ -84,6 +84,29 @@ class _ProviderWebhookView(APIView):
                 status=http.HTTP_400_BAD_REQUEST,
             )
 
+        if getattr(event, "provider_account_id", ""):
+            # A connected-account event on the platform endpoint. Stripe never
+            # routes one here, so this is either a misconfigured subscription or
+            # a forgery that somehow carried the platform secret. Either way the
+            # payment reconciler must not see it: it would be asked to match a
+            # connected account's object against this platform's orders.
+            #
+            # Recorded rather than dropped, so the misconfiguration is visible,
+            # and answered 200 so the provider stops redelivering something this
+            # endpoint will never apply.
+            from .connect_webhooks import record_out_of_scope_event
+
+            record_out_of_scope_event(event)
+            logger.warning(
+                "finance.webhook_wrong_scope provider=%s type=%s",
+                self.provider,
+                event.event_type,
+            )
+            return Response(
+                {"received": True, "duplicate": False},
+                status=http.HTTP_200_OK,
+            )
+
         try:
             outcome = apply_provider_event(event)
         except Exception:  # noqa: BLE001 - a 500 asks the provider to retry

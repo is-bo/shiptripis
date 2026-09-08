@@ -31,6 +31,31 @@ FINANCE_DASHBOARD_ENABLED = env.bool("FINANCE_DASHBOARD_ENABLED", default=False)
 STRIPE_CONNECT_ALLOWED_COUNTRIES = env.list(
     "STRIPE_CONNECT_ALLOWED_COUNTRIES", default=[]
 )
+# H2 Stripe Connect onboarding. All of these are inert while
+# STRIPE_CONNECT_ENABLED is false; `config.settings.prod` refuses to boot with
+# the flag on and any of them missing or contradictory.
+STRIPE_CONNECT_EXPECTED_MODE = env.str(
+    "STRIPE_CONNECT_EXPECTED_MODE", default="test"
+).strip().lower()
+STRIPE_CONNECT_PLATFORM_ACCOUNT_ID = env.str(
+    "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", default=""
+).strip()
+STRIPE_CONNECT_API_VERSION = env.str(
+    "STRIPE_CONNECT_API_VERSION", default="2026-03-25.dahlia"
+).strip()
+STRIPE_CONNECT_WEBHOOK_SECRET = env.str("STRIPE_CONNECT_WEBHOOK_SECRET", default="")
+STRIPE_CONNECT_ONBOARDING_RETURN_URL = env.str(
+    "STRIPE_CONNECT_ONBOARDING_RETURN_URL", default=""
+).strip()
+STRIPE_CONNECT_ONBOARDING_REFRESH_URL = env.str(
+    "STRIPE_CONNECT_ONBOARDING_REFRESH_URL", default=""
+).strip()
+#: How long a signed onboarding return/refresh state stays valid. Stripe's own
+#: Account Link expires in five minutes, but the Traveler is inside Stripe's
+#: hosted flow for much longer than that before landing back here.
+STRIPE_CONNECT_STATE_TTL_SECONDS = env.int(
+    "STRIPE_CONNECT_STATE_TTL_SECONDS", default=3600
+)
 PAYOUT_DATA_KEYRING = env.str("PAYOUT_DATA_KEYRING", default="{}")
 PAYOUT_DATA_ACTIVE_KEY_ID = env.str("PAYOUT_DATA_ACTIVE_KEY_ID", default="")
 PAYOUT_ACCOUNT_FINGERPRINT_KEY = env.str("PAYOUT_ACCOUNT_FINGERPRINT_KEY", default="")

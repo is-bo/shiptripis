@@ -64,12 +64,26 @@ class StripePayoutAccount(models.Model):
     verified_country = models.CharField(max_length=2, blank=True)
     creation_operation_key = models.CharField(max_length=160, unique=True)
     status = models.CharField(max_length=24, default="setup_required")
+    # H2: a safe machine reason for the current status. Never provider prose,
+    # never a requirement's `errors[].reason`, which can quote what was typed.
+    status_reason = models.CharField(max_length=64, blank=True)
     active = models.BooleanField(default=True)
     transfers_status = models.CharField(max_length=24, default="unrequested")
     payouts_enabled = models.BooleanField(default=False)
     details_submitted = models.BooleanField(default=False)
     requirement_codes = models.JSONField(default=list)
+    # H2: `requirements.past_due` and `requirements.pending_verification` keys
+    # and the deadline. Keys only; the projections stay code-shaped.
+    past_due_codes = models.JSONField(default=list)
+    pending_verification_codes = models.JSONField(default=list)
+    requirements_deadline = models.DateTimeField(null=True, blank=True)
     disabled_reason = models.CharField(max_length=64, blank=True)
+    # H2: the four controller values H0 selected, as the provider reports them.
+    # Readiness compares against the expected hash rather than trusting that an
+    # account this platform once created still has the configuration it asked
+    # for.
+    controller_summary = models.JSONField(default=dict)
+    default_currency = models.CharField(max_length=3, blank=True)
     external_account_id = models.CharField(max_length=255, blank=True)
     eur_bank_present = models.BooleanField(default=False)
     readiness_checked_at = models.DateTimeField(null=True, blank=True)

@@ -45,12 +45,24 @@ def spawn(name: str, command: list[str], *, env: dict[str, str] | None = None) -
     print(f"starting {name}", flush=True)
     process_env = (env or os.environ).copy()
     if name in {"chat", "notification", "kyc", "email", "gateway"}:
+        # Payout and payment secrets belong to Django alone. None of the Go
+        # services or the gateway verifies a Stripe signature, decrypts a payout
+        # profile or reads a payout bucket, so inheriting these would widen the
+        # blast radius of any one of those processes for no capability at all.
         for key in (
             "PAYOUT_DATA_KEYRING",
             "PAYOUT_DATA_ACTIVE_KEY_ID",
             "PAYOUT_ACCOUNT_FINGERPRINT_KEY",
             "PAYOUT_S3_ACCESS_KEY",
             "PAYOUT_S3_SECRET_KEY",
+            # H2: the connected-accounts endpoint's own signing secret, plus
+            # the platform payment credentials it sits beside. Django's own
+            # children (web, grpc, workers) keep them.
+            "STRIPE_CONNECT_WEBHOOK_SECRET",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "CHARGILY_SECRET_KEY",
+            "CHARGILY_WEBHOOK_SECRET",
         ):
             process_env.pop(key, None)
     child = Child(

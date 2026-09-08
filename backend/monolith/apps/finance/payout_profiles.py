@@ -111,9 +111,12 @@ def set_preference(
     method.currency = currency
     method.save(update_fields=["currency"])
     if enabled and currency == "EUR":
-        allowed = set(settings.STRIPE_CONNECT_ALLOWED_COUNTRIES) & {"FR", "DE", "ES"}
-        if country not in allowed:
-            raise ValidationError("Payout country is unavailable.")
+        # H2 owns the country decision so there is exactly one answer to "can
+        # this account country hold a Stripe EUR payout account here", and the
+        # refusal carries a distinct machine code the client can act on.
+        from .payout_accounts import require_supported_country
+
+        require_supported_country(country)
     if not enabled and method.current_version_id is None:
         # Disabled method is a preference only, not a destination snapshot.
         country = ""
