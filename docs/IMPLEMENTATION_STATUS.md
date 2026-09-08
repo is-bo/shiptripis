@@ -14,6 +14,12 @@ EUR 3 TEST Sender Checkout succeeded and its platform webhook applied exactly
 once, including duplicate/restart checks. **H2.5 FAIL; H3 prerequisites NO.**
 See [H2.5 verification report](PHASE8F_H25_TEST_ACTIVATION_VERIFICATION.md).
 
+Product gap (owner-reported): the current mobile APK payout page only shows
+"No payouts yet" and lacks a "Set up payouts / Continue Stripe onboarding"
+entry point. Track separately; no mobile implementation or rebuild is included
+in this H2.5 continuation. Human TEST onboarding uses a fresh Account Link from
+the existing authenticated backend API for Traveler 14's already-bound account.
+
 H2.5 continuation: after the owner activated Connect, the old signup rejection
 was reproduced with Stripe's `Idempotent-Replayed: true` header. H2 retry repair
 preserves definite failures and allocates a new durable creation identity;
