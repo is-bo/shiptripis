@@ -47,7 +47,7 @@ from apps.finance.payout_accounts import (
     stripe_setup_projection,
 )
 from apps.finance.payout_profiles import set_preference
-from apps.finance.providers.base import ProviderUnavailable
+from apps.finance.providers.base import ProviderCheckoutRejected, ProviderError, ProviderUnavailable
 from apps.finance.providers.stripe_connect import ConnectedAccountSnapshot
 from .factories import make_user
 
@@ -603,6 +603,54 @@ class TestOwnershipAndMode:
         assert operation.status == "unknown"
         assert StripePayoutAccount.objects.count() == 0
 
+    def test_a_cached_rejection_gets_a_new_durable_identity_after_repair(
+        self, db, h2, traveler
+    ):
+        failed_keys = set()
+
+        class CachingGateway(FakeGateway):
+            activated = False
+
+            def create_account(self, **kwargs):
+                operation = PayoutProviderOperation.objects.get(
+                    idempotency_key=kwargs["idempotency_key"]
+                )
+                assert operation.status == "committed"
+                if not self.activated or kwargs["idempotency_key"] in failed_keys:
+                    failed_keys.add(kwargs["idempotency_key"])
+                    raise ProviderCheckoutRejected("Connect signup required")
+                return super().create_account(**kwargs)
+
+        gateway = CachingGateway()
+        with pytest.raises(ProviderCheckoutRejected):
+            ensure_account(actor=traveler, gateway=gateway)
+        failed = PayoutProviderOperation.objects.get(kind="account_create")
+        gateway.activated = True
+        first = ensure_account(actor=traveler, gateway=gateway)
+        second = ensure_account(actor=traveler, gateway=gateway)
+        failed.refresh_from_db()
+        accepted = PayoutProviderOperation.objects.get(status="accepted")
+        assert failed.status == "failed" and failed.provider_object_id == ""
+        assert accepted.idempotency_key != failed.idempotency_key
+        assert accepted.provider_object_id == first.provider_account_id
+        assert first.pk == second.pk
+        assert StripePayoutAccount.objects.count() == 1
+        assert PayoutProviderOperation.objects.count() == 2
+
+    def test_an_unclassified_provider_response_keeps_the_creation_identity(
+        self, db, h2, traveler
+    ):
+        gateway = FakeGateway(create=ProviderError("Malformed success response"))
+        with pytest.raises(ProviderError):
+            ensure_account(actor=traveler, gateway=gateway)
+        operation = PayoutProviderOperation.objects.get(kind="account_create")
+        assert operation.status == "unknown"
+        recovering = FakeGateway()
+        accounts.resume_account(actor=traveler, gateway=recovering)
+        replay = [kw for name, kw in recovering.calls if name == "create_account"]
+        assert replay[0]["idempotency_key"] == operation.idempotency_key
+        assert PayoutProviderOperation.objects.count() == 1
+
     def test_an_unknown_creation_replays_the_same_key_inside_the_window(
         self, db, h2, traveler
     ):
@@ -634,6 +682,23 @@ class TestOwnershipAndMode:
             accounts.resume_account(actor=traveler, gateway=recovering)
         assert [name for name, _ in recovering.calls] == ["find_account_by_metadata"]
         assert StripePayoutAccount.objects.count() == 0
+
+    def test_normal_onboarding_also_refuses_to_repost_an_expired_unknown_creation(
+        self, db, h2, traveler
+    ):
+        with pytest.raises(ProviderUnavailable):
+            start_onboarding(actor=traveler, gateway=FakeGateway(create=ProviderUnavailable("timeout")))
+        operation = PayoutProviderOperation.objects.get(kind="account_create")
+        PayoutProviderOperation.objects.filter(pk=operation.pk).update(
+            first_request_at=timezone.now() - timedelta(days=2)
+        )
+        gateway = FakeGateway()
+        with pytest.raises(AccountCreationUnresolved):
+            start_onboarding(actor=traveler, gateway=gateway)
+        assert "create_account" not in [name for name, _ in gateway.calls]
+        operation.refresh_from_db()
+        assert operation.status == "unknown"
+        assert PayoutProviderOperation.objects.count() == 1
 
     def test_an_account_belonging_to_another_traveler_is_never_adopted(
         self, db, h2, traveler

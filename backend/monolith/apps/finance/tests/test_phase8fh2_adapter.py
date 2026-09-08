@@ -541,6 +541,21 @@ class TestRecoverySearch:
 
 
 class TestFailures:
+    def test_a_conflicting_idempotent_request_keeps_the_original_identity(self):
+        with pytest.raises(ProviderUnavailable):
+            gateway(FakeResponse(
+                status_code=400,
+                body={"error": {"type": "idempotency_error"}},
+            )).create_account(country="FR", idempotency_key="k", metadata={})
+
+    @pytest.mark.parametrize("status", [400, 409])
+    def test_an_in_progress_idempotent_request_is_not_a_definite_rejection(self, status):
+        with pytest.raises(ProviderUnavailable):
+            gateway(FakeResponse(
+                status_code=status,
+                body={"error": {"code": "idempotency_key_in_use"}},
+            )).create_account(country="FR", idempotency_key="k", metadata={})
+
     def test_a_malformed_non_json_response_is_unavailable(self):
         with pytest.raises(ProviderUnavailable):
             gateway(FakeResponse(text="<html>502</html>")).retrieve_account("a")
