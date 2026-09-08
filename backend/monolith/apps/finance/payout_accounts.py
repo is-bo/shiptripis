@@ -398,9 +398,12 @@ def _apply_snapshot(account: StripePayoutAccount, snapshot, *, observed_at):
         deadline = None
         if snapshot.current_deadline:
             deadline = datetime.fromtimestamp(snapshot.current_deadline, tz=UTC)
-        current.verified_country = snapshot.country
-        current.default_currency = snapshot.default_currency
-        current.transfers_status = snapshot.transfers_capability
+        # Truncated at the provider boundary. These are enum-shaped fields with
+        # narrow columns, and a provider answer that does not fit one is a
+        # readiness projection to bound, not a database error to raise.
+        current.verified_country = snapshot.country[:2]
+        current.default_currency = snapshot.default_currency[:3]
+        current.transfers_status = snapshot.transfers_capability[:24]
         current.payouts_enabled = snapshot.payouts_enabled
         current.details_submitted = snapshot.details_submitted
         current.requirement_codes = snapshot.requirement_codes
@@ -409,9 +412,9 @@ def _apply_snapshot(account: StripePayoutAccount, snapshot, *, observed_at):
         current.requirements_deadline = deadline
         current.disabled_reason = snapshot.disabled_reason[:64]
         current.controller_summary = snapshot.controller
-        current.external_account_id = snapshot.eur_bank_account_id
+        current.external_account_id = snapshot.eur_bank_account_id[:255]
         current.eur_bank_present = snapshot.eur_bank_present
-        current.payout_schedule_interval = snapshot.payout_schedule_interval
+        current.payout_schedule_interval = snapshot.payout_schedule_interval[:16]
         current.readiness_checked_at = observed_at
         current.readiness_generation = current.readiness_generation + 1
         verdict = evaluate_readiness(current)
