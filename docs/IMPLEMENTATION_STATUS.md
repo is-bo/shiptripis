@@ -5081,3 +5081,45 @@ ShipTrip copy was audited and already correct — no "create your business",
 language exists in the API, hosted-return page or mobile strings. No copy change
 was needed and none was made. Mobile still has no Stripe onboarding entry point,
 which remains the separately tracked H2.5 product gap.
+
+Verified on the deployed release `v1.0.0-rc.15+e00c6b7`, deployment
+`21b0fbb0-6bb9-43f7-88b0-c929d5d1516b` SUCCESS, `/healthz` and `/readyz` 200,
+migrations `ok`. A fresh synthetic FR Traveler (user `37`) was created through the
+real ShipTrip API, not by hand in the Stripe Dashboard. Its connected account's
+requirements contain no `business_profile.url` in `currently_due`,
+`eventually_due` or `past_due`; everything else matches Traveler 14's recorded
+list exactly.
+
+The hosted TEST flow was opened and inspected rather than inferred. Its Business
+details step now contains exactly one field — Product description — pre-filled
+with ShipTrip's sentence, and no website field anywhere. Stripe's own test phone
+and test code affordances were used; no CAPTCHA was solved or bypassed, no
+identity or bank data was entered, and onboarding was left incomplete, so no
+readiness is claimed for the fresh account beyond `setup_required` /
+`transfers_inactive`.
+
+One correction to the original write-up: the Traveler *does* see the description.
+Stripe calls `product_description` "internal-only", which means never shown to
+end customers, but hosted onboarding renders it as an editable pre-filled answer
+the account holder confirms. The code comment and phase document were corrected.
+
+Regression on the deployed release: Traveler 14 unchanged and still `ready`; the
+fresh account is `individual`, transfers-only with `card_payments` absent,
+expected controller, FR/EUR, manual schedule, and correctly **not** ready; both
+natural connected events arrived verified, scoped and applied, and a signed
+duplicate replay returned `200 duplicate` twice with no new rows;
+`business_profile.url` and `product_description` in the request body are refused
+`400 "Unexpected payout profile fields."`; DZ returns `400
+payout_country_unsupported` with the DZD manual alternative; unauthenticated
+onboarding returns `401`. EUR 3 TEST Checkout remains paid exactly once with two
+balanced ledger entries. No Transfer, connected-account Payout, reversal,
+cancellation, Chargily money operation or LIVE mutation; the EUR 60 QA payout
+remains `blocked` and unpaid; email disabled.
+
+Two TEST QA probe accounts (`acct_1UDWlx3VljT9k3Z7`, `acct_1UDWmc441t5Pa3jV`) were
+created directly against the Stripe TEST API to establish the requirement
+contract before any code was written. They are labelled
+`shiptrip_qa=h26_contract_probe_retained_test_qa` and retained. Belonging to no
+ShipTrip Traveler, their natural events were stored as `ignored /
+unknown_connected_account` — live evidence that an unbound account cannot affect
+local state.

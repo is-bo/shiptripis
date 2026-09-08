@@ -64,9 +64,11 @@ honestly be used here:
   and underwriting purposes."
 
 `url` means *the account holder's* website. A Traveler has none, and ShipTrip's
-own marketing site is not theirs to claim. `product_description` is provider-
-facing risk copy that the platform is expected to supply on the account's
-behalf, and it is never shown to the Traveler.
+own marketing site is not theirs to claim. `product_description` is risk copy
+that the platform is expected to supply on the account's behalf. Stripe calls it
+"internal-only", meaning it is never shown to end customers — but the Traveler
+does see it, pre-filled and editable, in hosted onboarding's Business details
+step.
 
 ## Proven, not assumed
 
@@ -132,8 +134,9 @@ ShipTrip marketplace and receiving compensation after completed deliveries.
 
 Every clause is something ShipTrip can assert from its own records. It does not
 call the Traveler a retailer, a merchant, a logistics company, a card-payment
-business, or an owner of ShipTrip. English because Stripe reads it; no Traveler
-is ever shown it.
+business, or an owner of ShipTrip. The Traveler sees it pre-filled in Stripe's
+Business details step and can correct it, so it has to read plainly to them as
+well as usefully to Stripe's underwriting.
 
 ## What did not change
 
@@ -172,3 +175,89 @@ questions Stripe still asks — legal name, date of birth, address, terms
 acceptance, bank details, and an identity document eventually — are genuine
 French regulatory requirements, and no attempt was made to route around them
 with a custom form.
+
+## Verified on the deployed release
+
+`v1.0.0-rc.15+e00c6b7`, deployment `21b0fbb0-6bb9-43f7-88b0-c929d5d1516b`,
+SUCCESS. `/healthz` and `/readyz` 200, migrations `ok`.
+
+A fresh synthetic FR Traveler (user `37`) was created through the real ShipTrip
+API — sign-up, EUR/FR payout preference, then `POST
+/api/payouts/methods/stripe/onboarding`. No account was created by hand in the
+Stripe Dashboard. Its connected account's `requirements` came back as:
+
+```
+external_account
+individual.address.city, individual.address.line1, individual.address.postal_code
+individual.dob.day, individual.dob.month, individual.dob.year
+individual.first_name, individual.last_name
+tos_acceptance.date, tos_acceptance.ip
+```
+
+`business_profile.url` is absent from `currently_due`, `eventually_due` and
+`past_due`. Everything else is identical to Traveler 14's recorded list.
+
+### Before and after
+
+| Question | Traveler 14 (before) | Traveler 37 (after) |
+|---|---|---|
+| Business website | Asked — `business_profile.url` required | **Not asked** — requirement absent |
+| What service do you provide | Asked, as the fallback branch of the website question | Asked, but **pre-filled** — one field to confirm |
+| Business type | Not asked (already `individual`) | Not asked |
+| Merchant category (MCC) | Not asked | Not asked |
+| Legal name, DOB, address | Asked | Asked — unchanged, French regulatory requirement |
+| Terms acceptance, bank details | Asked | Asked — unchanged |
+
+The hosted TEST flow was opened and inspected rather than inferred. Its step list
+is Business type (already satisfied), Personal details, Business details, Bank
+details. The **Business details step contains exactly one field — "Product
+description" — pre-filled with ShipTrip's sentence, followed by Continue. There
+is no website field anywhere in the step.** Stripe's own phone-verification test
+affordances were used; no CAPTCHA was solved or bypassed, no identity or bank
+data was entered, and onboarding was deliberately left incomplete, so no
+readiness result is claimed for the fresh account beyond the evaluator's
+authoritative `setup_required` / `transfers_inactive`.
+
+### Regression
+
+* Traveler 14 unchanged: readiness `ready`, transfers active, payouts enabled,
+  EUR bank present, manual schedule, requirements empty. Not recreated, reset or
+  rewritten.
+* Fresh account: `business_type=individual`, `capabilities={"transfers":
+  "inactive"}` with `card_payments` absent, expected controller, FR/EUR, manual
+  payout schedule provisioned. Local readiness `setup_required` /
+  `transfers_inactive` — prefill did not manufacture readiness.
+* Webhooks: the two natural connected events for the new account
+  (`capability.updated`, `account.updated`) arrived signature-verified, scoped
+  `connect`, TEST, API `2026-03-25.dahlia`, and applied. A signed duplicate
+  replay returned `200 {"received":true,"duplicate":true}` twice with no new
+  rows and no repeated effect. Stored payloads carry no bank, identity or
+  business-profile values.
+* Client injection refused live: `business_profile.url` and
+  `product_description` in the onboarding request body both return
+  `400 "Unexpected payout profile fields."`.
+* DZ remains unsupported: `400 payout_country_unsupported` with the DZD manual
+  alternative and `supported_countries: ["FR"]`.
+* Unauthenticated onboarding returns `401`. Accounts stay owner-scoped and
+  distinct.
+* EUR 3 TEST Checkout unchanged: `paid`, 300/300 cents, 0 refunded, exactly one
+  applied platform event, two balanced ledger entries. Platform event count
+  unchanged at 10.
+* No Stripe Transfer, no connected-account Payout on either account, no
+  reversal, no cancellation, no Chargily money operation, no LIVE mutation. The
+  EUR 60 QA payout `1` remains `blocked` with no paid, sent or settled timestamp
+  and no provider payout reference. Email disabled.
+
+### Retained TEST QA artifacts
+
+Two throwaway connected accounts were created directly against the Stripe TEST
+API to establish the requirement contract before any code was written:
+`acct_1UDWlx3VljT9k3Z7` (baseline, no prefill) and `acct_1UDWmc441t5Pa3jV`
+(created with the description). Both are labelled
+`shiptrip_qa=h26_contract_probe_retained_test_qa` and are retained rather than
+deleted, per this phase's instruction to preserve provider history.
+
+They had one unplanned but useful side effect: because they belong to no ShipTrip
+Traveler, their natural `account.updated` events reached the Connect webhook and
+were stored as `ignored / unknown_connected_account`. That is live evidence that
+an account outside ShipTrip's own binding cannot affect local state.

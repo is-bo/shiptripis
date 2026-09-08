@@ -72,8 +72,15 @@ IDEMPOTENT_REPLAY_SECONDS = 23 * 3600
 #: Traveler is independent, they transport parcels, they do so through this
 #: marketplace, and they are paid after a delivery completes. It deliberately
 #: does not call them a retailer, a merchant, a carrier company or an owner of
-#: ShipTrip, because none of that is true. English because it is provider-facing
-#: risk copy, which Stripe reads; no Traveler is shown this sentence.
+#: ShipTrip, because none of that is true.
+#:
+#: The Traveler does see it. Stripe calls `product_description` "internal-only",
+#: meaning it is never shown to end customers, but hosted onboarding renders it
+#: into the Business details step as an editable, pre-filled answer the account
+#: holder confirms. Verified on the TEST flow. So this sentence has to read
+#: plainly to a Traveler as well as usefully to Stripe's underwriting, and it is
+#: theirs to correct if ShipTrip has it wrong. English because Stripe's own form
+#: presents it in the onboarding locale and the underwriting reader is Stripe.
 #:
 #: Changing this string changes the account-creation fingerprint, which is the
 #: point: a different assertion to Stripe is a different request.
