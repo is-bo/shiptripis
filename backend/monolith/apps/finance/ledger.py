@@ -86,9 +86,31 @@ def post(
 
     try:
         with transaction.atomic():
+            from .models import PaymentAttempt, Payout
+
+            modes = set(
+                PaymentAttempt.objects.filter(
+                    pk__in=[leg.attempt_id for leg in legs if leg.attempt_id]
+                ).values_list("provider_mode", flat=True)
+            )
+            modes.update(
+                Payout.objects.filter(
+                    pk__in=[leg.payout_id for leg in legs if leg.payout_id]
+                ).values_list("provider_mode", flat=True)
+            )
+            if not modes:
+                modes.update(
+                    PaymentAttempt.objects.filter(
+                        order_id__in=[leg.order_id for leg in legs if leg.order_id],
+                        status="succeeded",
+                        is_unapplied=False,
+                    ).values_list("provider_mode", flat=True)
+                )
+            mode = next(iter(modes)) if len(modes) == 1 else "legacy_unknown"
             ledger_transaction = LedgerTransaction.objects.create(
                 key=key,
                 kind=kind,
+                provider_mode=mode,
                 note=note[:255],
                 reverses_id=reverses_id,
             )

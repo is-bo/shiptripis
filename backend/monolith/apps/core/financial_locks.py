@@ -21,6 +21,9 @@ in this order::
     -> PaymentProviderEvent
     -> PaymentRefund (ascending id)
     -> Payout
+    -> TravelerPayoutMethod (ascending id)
+    -> StripePayoutAccount (ascending id)
+    -> FinanceHold / payout allocations / attempts / operations (ascending id)
     -> append-only ledger rows
     -> ScheduledJob
 
@@ -28,6 +31,11 @@ A Deal's money can sit in several obligations -- its balance order, the
 posting-deposit order whose cash was credited into that balance, and paid boost
 orders. Any transition that reaches more than one acquires the complete set in
 ascending id order before processing them in its domain-specific refund order.
+
+H1 profile writers lock User then method only. They never lock prior Deals;
+future account refresh must enqueue work after commit instead of acquiring a
+Deal while holding an account. Future multi-Deal disbursements must lock the
+union table-by-table, never loop this single-Deal helper after taking Payout.
 
 Provider-event and ScheduledJob claims are deliberately short transactions.
 They commit before acquiring any business or finance rows, so they are never a

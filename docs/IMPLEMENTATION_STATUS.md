@@ -1,5 +1,8 @@
 # ShipTrip V1 Implementation Status
 
+Latest backend phase: **Phase 8F-H1 implemented, dormant, not deployed**.
+See the H1 entry below for validation and external prerequisites.
+
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
 Overall status: Phase 1–4 backend lifecycle work remains complete and the V1 delivery lifecycle runs end to end. Money is
@@ -4764,3 +4767,147 @@ counters, safe Retry, Resolve, Dismiss, the history filters, bulk limits, audit,
 pruning behaviour and unapplied-payment recovery rules are unchanged and
 covered by tests. No payment semantics changed, email remains disabled, and no
 APK/AAB was built.
+
+## Phase 8F-G3 — provider reconciliation queue review (2026-09-07)
+
+Operations-only review on `v1.0.0-rc.12+94aad9b`; no application code,
+migration, release, CI run or deployment was needed. Authenticated production
+admin reads and Railway configuration/logs supplied the evidence.
+
+| Attempt / job | Evidence and classification | Audited action |
+|---|---|---|
+| 2 / 7 | Historical TEST Chargily authentication rejection, order 1, EUR 4.38. No session/payment reference, success timestamp or associated webhook. Stripe attempt 9 subsequently paid this order; refund 1 returned the full EUR 4.38 and the order is cancelled. Superseded. | Superseded; retained 25/32 attempts. |
+| 3 / 10 | Same historical rejection and order as attempt 2; same later Stripe payment and full refund. Superseded. | Superseded; retained 25/32 attempts. |
+| 4 / 18 | Historical TEST Chargily authentication rejection, order 2, EUR 3.00, explicitly synthetic phase8fc `.invalid` account. No session/payment reference, success timestamp or associated webhook. Later Stripe attempt 5 expired; order remains pending with zero paid/refunded. Permanently unrecoverable synthetic QA attempt. | Dismissed; retained 23/32 attempts. |
+
+All three retain the provider's `Unauthenticated` rejection. Together with
+their dates and the recorded 8F-C investigation, this identifies the old test
+credential/live endpoint mismatch, not an expired checkout or provider 404.
+The retained rejection supports checkout creation being refused; no independent
+provider dashboard enumeration was performed and no provider object was fetched
+without an identifier. None of these three attempts has capture evidence. All
+nine retained provider-event records were checked for attempt associations.
+
+Before G1 the missing-session path raised generic `JobFailed` and consumed
+bounded retries. Current code raises `PermanentJobError` and stops immediately.
+Live records were already terminal with no next attempt; a G2-release log
+confirms job 18 terminated at 23 attempts with `provider_session_unknown`.
+The earlier counts were historical retries, not a remaining recurrence bug.
+No retry, attempt reset or provider recovery call was performed.
+
+At 17:20 UTC the existing confirmed admin resolution endpoint archived jobs
+7, 10 and 18 under the authenticated operator, recording three
+`scheduled_job.resolved` audit entries with individual reasons. Read-back
+verified the original error category, last attempt and attempt count remained
+unchanged, and all three rows remain searchable in resolved history. Background
+jobs needing attention changed **3 to 0**; resolved history **28 to 31**.
+Payments needing finance review and refunds needing action remain **0**.
+All **11 PaymentAttempts**, **9 provider events**, the existing refund and
+payout remain present; financial and audit history was not deleted.
+
+Payout **1**, Deal **1**, traveler **2** (QA account `t@t.com`), is a
+**EUR 60.00 manual-settlement TEST QA obligation**. Delivery was confirmed
+2026-09-05 at 15:23 UTC; the full 48-hour protection window ended 2026-09-07
+at 15:23 UTC. The Deal is completed with no dispute and its balance paid by
+Stripe TEST attempt 11. The payout remains **eligible**, unpaid, without a
+provider payout ID or transfer reference. The existing payout admin action
+only records a transfer that actually happened; there is no appropriate G1
+job-dismissal action for this eligible financial obligation. It was left
+unchanged. Overview therefore retains **1** payout action item, identified
+here as QA state. No payout, payment, charge retry or refund was initiated.
+
+Local and origin G1 branch tips both equalled
+`8eb1fa1ed3c0facafc004ec7831f4f657545eec6`; ancestry checks against their
+respective main branches passed. Both G1 branches were deleted. Local and
+origin now contain only `main`, at
+`94aad9be50960f47cc73b47033a704effc4101b8`; unrelated upstream branches were
+untouched.
+
+Production health/readiness returned HTTP 200 (`ok` / `ready`) with database,
+migrations and rate-limit cache healthy. Stripe and Chargily remain TEST,
+Chargily uses its test API endpoint, and `EMAIL_ENABLED=false` agrees with
+the admin's disabled-email status. No G3 blocker or major finance finding
+remains. Existing operational warnings remain: routing provider unavailable
+with fallback, and the KYC limiter's single-replica local-mode warning. The
+eligible QA payout remains a known minor source of Overview noise.
+
+## Phase 8F-H0 — payout architecture and Finance control plane (2026-09-07)
+
+Architecture only. The durable decision record is
+[`PHASE8F_H0_PAYOUT_FINANCE_ARCHITECTURE.md`](PHASE8F_H0_PAYOUT_FINANCE_ARCHITECTURE.md).
+It covers all 36 requested areas, grounded in current Django/Flutter finance,
+ledger, lifecycle, storage, role and notification code, official Stripe/Chargily
+documentation, and read-only Railway/provider API observations.
+
+The selected EUR design is Stripe Connect with v1 controller properties,
+Stripe-hosted onboarding/Express Dashboard, separate platform transfers and
+application-initiated standard bank payouts. Payout routing and DZD business FX
+freeze at funding. DZD settlement requires a versioned reviewed CCP/RIP profile,
+private evidence, a single operator instruction and receipt-backed confirmation.
+Existing Payout, ScheduledJob, provider-event and ledger foundations are extended;
+incomplete setup remains an owed, blocked obligation rather than a lost payout.
+
+The report specifies source reservations, unknown-result recovery, late bank
+returns, dispute/refund races, current-liability versus period-flow metrics,
+earned/deferred revenue, precise permissions, dormant email events, migration
+backfill rules, API/env/webhook checklists, and H1–H8 implementation gates.
+
+Read-only inspection confirmed France Stripe TEST, no connected accounts,
+checkout-only TEST webhook, latest checkout Adaptive Pricing disabled, and
+platform charge/payout capability flags false. Chargily TEST authentication and
+balance retrieval succeeded. EUR-only payouts funded through Chargily remain a
+specific external capability gate: EU platform top-ups are documented as private
+preview, so the architecture does not assume production support or borrow other
+travelers' money. Algeria is not assumed eligible for self-serve EUR Connect.
+
+No implementation, migration, provider mutation, configuration change or
+deployment was performed. `EMAIL_ENABLED=false` remains unchanged. Existing G3
+history and QA payout were preserved. The report also records an intermediate
+TEST-secret output handling incident and a separate operator rotation follow-up;
+no secret is included in repository documentation.
+
+## Phase 8F-H1 — dormant payout foundations (2026-09-08)
+
+Implemented the H0 payout schema, immutable destination versions and funding
+snapshots, integer EUR/DZD FX projections, source-allocation primitives,
+amount/instruction revisions, local attempts/provider-operation intents,
+independent holds, provider-dispute/event contracts, encrypted DZD profiles,
+scoped KYC legal-name attestation and fresh AND capability checks. The existing
+Payout and TravelerPayoutMethod remain authoritative. All six new feature flags
+default false; no external payout execution or Connect integration is enabled.
+
+Developer contracts, migration details and H2 prerequisites are in
+[`PHASE8F_H1_PAYOUT_FOUNDATIONS.md`](PHASE8F_H1_PAYOUT_FOUNDATIONS.md).
+Existing uncommitted G3/H0 documentation was preserved from starting main
+`94aad9be50960f47cc73b47033a704effc4101b8`.
+
+Local validation:
+
+- Full PostgreSQL backend run: **1,365 passed, 34 skipped**; skips are explicitly
+  retired legacy Trip/DZD matching contracts. This run preceded final review edits.
+- After final domain edits, finance/disputes/Boost/admin/KYC PostgreSQL suite:
+  **603 passed, zero skipped**, including H1, finance concurrency/lock order and
+  populated reverse/reapply migration tests.
+- Ruff clean; Django checks clean; `makemigrations --check` reports no changes.
+- Fresh disposable PostgreSQL forward migration and capability-seed matrix
+  verified; schema exported with pg_dump 16.13. No existing schema object removed.
+  sqlc query directories remain empty, so generation is explicitly skipped.
+- Integer conversion includes **€60 × 260 = 15,600 DZD**, one-cent/fractional
+  ceilings, large integers, bool/float refusal, immutable FX and missing-FX debt.
+
+Review fixes preserve readiness across preference toggles, retain amount-revision
+ledger/actor references and protection timing, cancel stale prepared intents,
+protect raw SQL snapshot/request/account identity, and quarantine unpaid legacy
+instructions without changing paid history. Unknown legacy FX/identity/evidence
+is not fabricated. The legacy inventory command is read-only.
+
+No Stripe/Chargily operation, Connect object, email, deployment, APK/AAB,
+provider/Railway mutation or storage provisioning occurred. Read-only Railway
+inspection showed no repository source on the application service, so the
+authorized GitHub integration does not trigger deployment. H2 requires separate
+authorization, exposed Stripe TEST-key rotation before external testing, TEST
+platform/country/bank verification, pinned v1 API/controller contracts and
+appropriate TEST webhook setup. H3/H4 money execution remains outside H1.
+
+GitHub CI and final branch integration are reported in the delivery record;
+production remains the existing rc.12 release until a separately authorized deploy.

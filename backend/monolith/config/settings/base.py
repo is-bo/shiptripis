@@ -17,6 +17,30 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
 SHIPTRIP_ENVIRONMENT = env.str("SHIPTRIP_ENVIRONMENT", default="development").lower()
 
+# H1 dormant payout contracts. No key is needed for existing production boot.
+PAYOUT_PROFILES_ENABLED = env.bool("PAYOUT_PROFILES_ENABLED", default=False)
+PAYOUT_DZD_EXECUTION_ENABLED = env.bool("PAYOUT_DZD_EXECUTION_ENABLED", default=False)
+STRIPE_CONNECT_ENABLED = env.bool("STRIPE_CONNECT_ENABLED", default=False)
+STRIPE_CONNECT_PAYOUTS_ENABLED = env.bool(
+    "STRIPE_CONNECT_PAYOUTS_ENABLED", default=False
+)
+STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED = env.bool(
+    "STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED", default=False
+)
+FINANCE_DASHBOARD_ENABLED = env.bool("FINANCE_DASHBOARD_ENABLED", default=False)
+STRIPE_CONNECT_ALLOWED_COUNTRIES = env.list(
+    "STRIPE_CONNECT_ALLOWED_COUNTRIES", default=[]
+)
+PAYOUT_DATA_KEYRING = env.str("PAYOUT_DATA_KEYRING", default="{}")
+PAYOUT_DATA_ACTIVE_KEY_ID = env.str("PAYOUT_DATA_ACTIVE_KEY_ID", default="")
+PAYOUT_ACCOUNT_FINGERPRINT_KEY = env.str("PAYOUT_ACCOUNT_FINGERPRINT_KEY", default="")
+S3_BUCKET_PAYOUT = env.str("S3_BUCKET_PAYOUT", default="")
+PAYOUT_S3_ENDPOINT_URL = env.str("PAYOUT_S3_ENDPOINT_URL", default="")
+PAYOUT_S3_REGION = env.str("PAYOUT_S3_REGION", default="")
+PAYOUT_S3_ACCESS_KEY = env.str("PAYOUT_S3_ACCESS_KEY", default="")
+PAYOUT_S3_SECRET_KEY = env.str("PAYOUT_S3_SECRET_KEY", default="")
+PAYOUT_S3_USE_PATH_STYLE = env.bool("PAYOUT_S3_USE_PATH_STYLE", default=False)
+
 # --- Apps ---
 INSTALLED_APPS = [
     "django.contrib.admin",

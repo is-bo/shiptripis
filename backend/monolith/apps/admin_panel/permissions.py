@@ -94,6 +94,13 @@ ADMIN_PERMISSION_CODES: tuple[str, ...] = (
     "manage_admins",
     "manage_permissions",
     "view_audit_log",
+    "view_finance_summary",
+    "view_payout_sensitive",
+    "view_payout_evidence",
+    "review_payout_profiles",
+    "attest_payout_identity",
+    "manage_payout_holds",
+    "retry_payouts",
 )
 
 # Explicit least-privilege matrix.  ``super_admin`` receives every code in the
@@ -139,6 +146,12 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     AdminRole.FINANCE: frozenset(
         {
+            "view_finance_summary",
+            "view_payout_sensitive",
+            "view_payout_evidence",
+            "review_payout_profiles",
+            "manage_payout_holds",
+            "retry_payouts",
             "view_dashboard",
             "view_deals",
             "view_payment_orders",
@@ -158,6 +171,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     AdminRole.TRUST: frozenset(
         {
+            "attest_payout_identity",
+            "manage_payout_holds",
             "view_dashboard",
             "view_users",
             "view_user_sensitive",
@@ -213,6 +228,25 @@ def admin_permission(codename: str) -> str:
     return f"admin_panel.{codename}"
 
 
+def has_all_admin_permissions(user, *codes: str) -> bool:
+    """Fresh capability AND gate, including immediate downgrade/ban revocation.
+
+    Reload identity and permission membership instead of Django's per-instance
+    cached has_perm set. Sensitive payout services use this boundary each time.
+    """
+    from django.contrib.auth import get_user_model
+
+    if not getattr(user, "is_authenticated", False) or not codes:
+        return False
+    current = get_user_model().objects.filter(pk=user.pk).first()
+    return bool(
+        current
+        and current.is_active
+        and not current.is_banned
+        and all(has_admin_permission(current, code) for code in codes)
+    )
+
+
 def has_admin_permission(user, codename: str) -> bool:
     """Check a Phase 6A capability with a staff boundary.
 
@@ -234,7 +268,9 @@ def has_admin_permission(user, codename: str) -> bool:
     return bool(user.has_perm(permission))
 
 
-def assign_admin_roles(user, roles: Iterable[str], *, elevate_super_admin: bool = False):
+def assign_admin_roles(
+    user, roles: Iterable[str], *, elevate_super_admin: bool = False
+):
     """Replace a user's Phase 6A role groups with validated roles.
 
     Legacy Phase 4 administrator groups are removed from this account.  Their
@@ -247,9 +283,7 @@ def assign_admin_roles(user, roles: Iterable[str], *, elevate_super_admin: bool 
     groups = [role_group(slug) for slug in slugs]
     phase6_names = set(ROLE_GROUP_NAMES.values())
     legacy_names = set(LEGACY_ADMIN_GROUP_TO_ROLE)
-    user.groups.remove(
-        *Group.objects.filter(name__in=phase6_names | legacy_names)
-    )
+    user.groups.remove(*Group.objects.filter(name__in=phase6_names | legacy_names))
     if groups:
         user.groups.add(*groups)
         user.is_staff = True
@@ -265,8 +299,14 @@ def assign_admin_roles(user, roles: Iterable[str], *, elevate_super_admin: bool 
 def user_admin_roles(user) -> tuple[str, ...]:
     """Return the validated Phase 6A role slugs assigned to ``user``."""
 
-    names = set(user.groups.filter(name__in=ROLE_GROUP_NAMES.values()).values_list("name", flat=True))
-    return tuple(sorted(slug for slug, name in ROLE_GROUP_NAMES.items() if name in names))
+    names = set(
+        user.groups.filter(name__in=ROLE_GROUP_NAMES.values()).values_list(
+            "name", flat=True
+        )
+    )
+    return tuple(
+        sorted(slug for slug, name in ROLE_GROUP_NAMES.items() if name in names)
+    )
 
 
 class HasAdminPermission(BasePermission):
@@ -282,7 +322,9 @@ class HasAdminPermission(BasePermission):
     message = "You do not have permission to perform this administrative operation."
 
     def has_permission(self, request, view) -> bool:
-        required = getattr(view, "required_admin_permission", self.required_admin_permission)
+        required = getattr(
+            view, "required_admin_permission", self.required_admin_permission
+        )
         if isinstance(required, str):
             required = (required,)
         return any(has_admin_permission(request.user, code) for code in required)
@@ -302,19 +344,13 @@ CanViewMatches = _permission_class("CanViewMatches", "view_matches")
 CanViewDeals = _permission_class("CanViewDeals", "view_deals")
 CanViewKyc = _permission_class("CanViewKyc", "view_kyc")
 CanReviewKyc = _permission_class("CanReviewKyc", "review_kyc")
-CanViewFlightProofs = _permission_class(
-    "CanViewFlightProofs", "view_flight_proofs"
-)
-CanReviewFlightProof = _permission_class(
-    "CanReviewFlightProof", "review_flight_proofs"
-)
+CanViewFlightProofs = _permission_class("CanViewFlightProofs", "view_flight_proofs")
+CanReviewFlightProof = _permission_class("CanReviewFlightProof", "review_flight_proofs")
 CanViewDisputes = _permission_class("CanViewDisputes", "view_disputes")
 CanManageDisputes = _permission_class("CanManageDisputes", "manage_disputes")
 CanResolveDisputes = _permission_class("CanResolveDisputes", "resolve_disputes")
 CanRecordNoShow = _permission_class("CanRecordNoShow", "record_no_show")
-CanViewPaymentOrders = _permission_class(
-    "CanViewPaymentOrders", "view_payment_orders"
-)
+CanViewPaymentOrders = _permission_class("CanViewPaymentOrders", "view_payment_orders")
 CanViewPaymentAttempts = _permission_class(
     "CanViewPaymentAttempts", "view_payment_attempts"
 )
@@ -330,9 +366,7 @@ CanSettleManualRefunds = _permission_class(
 )
 CanViewPayouts = _permission_class("CanViewPayouts", "view_payouts")
 CanSettlePayouts = _permission_class("CanSettlePayouts", "settle_payouts")
-CanViewScheduledJobs = _permission_class(
-    "CanViewScheduledJobs", "view_scheduled_jobs"
-)
+CanViewScheduledJobs = _permission_class("CanViewScheduledJobs", "view_scheduled_jobs")
 CanViewRatings = _permission_class("CanViewRatings", "view_ratings")
 CanViewBoosts = _permission_class("CanViewBoosts", "view_boosts")
 CanViewProviderHealth = _permission_class(
@@ -344,7 +378,5 @@ CanViewOperationalIncidents = _permission_class(
 CanViewSettings = _permission_class("CanViewSettings", "view_settings")
 CanManageSettings = _permission_class("CanManageSettings", "manage_settings")
 CanManageAdmins = _permission_class("CanManageAdmins", "manage_admins")
-CanManagePermissions = _permission_class(
-    "CanManagePermissions", "manage_permissions"
-)
+CanManagePermissions = _permission_class("CanManagePermissions", "manage_permissions")
 CanViewAuditLog = _permission_class("CanViewAuditLog", "view_audit_log")

@@ -1037,6 +1037,9 @@ def start_checkout(
             raise NothingOutstanding("This order has nothing left to collect.")
 
         amounts = _resolve_amounts(order=order, gateway=gateway, policy=policy)
+        from .payout_snapshots import preflight
+
+        preflight(order=order, provider=provider, policy=policy)
 
         open_attempt = (
             PaymentAttempt.objects.select_for_update(no_key=True)
@@ -1077,6 +1080,10 @@ def start_checkout(
         attempt = PaymentAttempt.objects.create(
             order=order,
             provider=provider,
+            provider_mode=gateway.credential_mode()
+            if gateway.credential_mode() in ("test", "live")
+            else "legacy_unknown",
+            mode_evidence="checkout_credential_mode",
             payer_id=actor_id,
             guest_link=guest_link,
             guest_email=guest_email[:254],
@@ -1331,6 +1338,14 @@ def _provider_event_fingerprint(event, normalized: dict) -> str:
 
 def _persist_provider_event(event) -> tuple[PaymentProviderEvent, bool, bool]:
     attempt = _match_attempt(event)
+    live_flag = (
+        event.payload.get("livemode") if isinstance(event.payload, dict) else None
+    )
+    event_mode = (
+        ("live" if live_flag else "test")
+        if type(live_flag) is bool
+        else "legacy_unknown"
+    )
     normalized = _normalized_provider_event(event)
     fingerprint = _provider_event_fingerprint(event, normalized)
     duplicate = False
@@ -1339,6 +1354,7 @@ def _persist_provider_event(event) -> tuple[PaymentProviderEvent, bool, bool]:
             record = PaymentProviderEvent.objects.create(
                 provider=event.provider,
                 provider_event_id=event.event_id,
+                provider_mode=event_mode,
                 event_type=event.event_type,
                 attempt=attempt,
                 order=attempt.order if attempt else None,
@@ -1447,6 +1463,17 @@ def process_provider_event(*, event_id: int) -> str:
             attempt=attempt,
             order_id=attempt.order_id,
         )
+    if (
+        record.provider_mode in ("test", "live")
+        and attempt.provider_mode in ("test", "live")
+        and record.provider_mode != attempt.provider_mode
+    ):
+        _finish_event(
+            record.pk,
+            PaymentProviderEvent.ProcessingResult.IGNORED,
+            "provider_mode_mismatch",
+        )
+        return "provider_mode_mismatch"
     if durable_event.outcome == "ignored":
         _finish_event(
             record.pk,
@@ -1871,6 +1898,7 @@ def request_refund(
                 attempt=attempt,
                 amount_eur_cents=amount_eur_cents,
                 provider=attempt.provider,
+                provider_mode=attempt.provider_mode,
                 idempotency_key=key,
                 reason=reason,
                 requested_by_id=requested_by_id,
@@ -2681,6 +2709,12 @@ def ensure_payout_for_deal(
     boundary structural rather than a convention.
     """
 
+    if settings.PAYOUT_PROFILES_ENABLED:
+        from .payout_snapshots import create_snapshot
+
+        return create_snapshot(
+            deal_id=deal_id, traveler_id=traveler_id, amount_eur_cents=amount_eur_cents
+        )
     policy = policy or phase3_policy()
     method, reason = resolve_payout_method(
         traveler_id=traveler_id,
@@ -2734,8 +2768,16 @@ def complete_manual_payout(
     """
 
     payout = Payout.objects.select_for_update(no_key=True).get(pk=payout_id)
+    if payout.snapshot_version:
+        raise PayoutNotReleasable(
+            "Versioned payouts require the future receipt/provider execution service."
+        )
     if payout.status == Payout.Status.PAID:
         return payout
+    if payout.block_reason == "legacy_instruction_required":
+        raise PayoutNotReleasable(
+            "Legacy payout instructions require reviewed remediation."
+        )
     if payout.status not in (
         Payout.Status.ELIGIBLE,
         Payout.Status.SCHEDULED,

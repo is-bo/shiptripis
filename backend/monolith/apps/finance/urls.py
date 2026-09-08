@@ -21,8 +21,20 @@ from .views import (
     PostingDepositView,
 )
 from .webhooks import ChargilyWebhookView, MockWebhookView, StripeWebhookView
+from .payout_profile_api import (
+    PayoutMethodsView,
+    DzdProfileView,
+    PayoutIdentityReviewView,
+)
 
 urlpatterns = [
+    path("payouts/methods", PayoutMethodsView.as_view(), name="payout-methods"),
+    path("payouts/profiles/dzd", DzdProfileView.as_view(), name="payout-dzd-profile"),
+    path(
+        "admin/payout-identity-reviews/<uuid:reference>",
+        PayoutIdentityReviewView.as_view(),
+        name="payout-identity-review",
+    ),
     path(
         "payments/providers",
         PaymentProvidersView.as_view(),

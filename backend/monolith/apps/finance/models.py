@@ -52,6 +52,26 @@ from django.db import models
 from django.db.models import F, Q
 
 from apps.core.languages import CommunicationLanguage
+from .payout_models import (  # noqa: F401 -- Django model registration/public imports
+    FinancialMode,
+    StripePayoutAccount,
+    PayoutIdentityAttestation,
+    PayoutIdentityRevocation,
+    PayoutIdentityReviewAssignment,
+    PayoutEvidence,
+    DzdPayoutProfileRevision,
+    PayoutProfileReview,
+    PayoutMethodVersion,
+    PayoutAmountRevision,
+    PayoutInstructionAmendment,
+    PayoutInstructionConfirmation,
+    PayoutAttempt,
+    PayoutProviderOperation,
+    PayoutFundingAllocation,
+    FinanceHold,
+    ProviderDispute,
+    PayoutEvent,
+)
 
 
 class PaymentProvider(models.TextChoices):
@@ -310,6 +330,14 @@ class PaymentAttempt(models.Model):
     OPEN_STATUSES = ("created", "checkout_pending", "processing")
     TERMINAL_STATUSES = ("succeeded", "failed", "expired", "cancelled")
 
+    provider_mode = models.CharField(
+        max_length=16,
+        choices=FinancialMode.choices,
+        default=FinancialMode.LEGACY_UNKNOWN,
+    )
+    provider_charge_id = models.CharField(max_length=255, blank=True, default="")
+    mode_evidence = models.CharField(max_length=64, blank=True, default="")
+
     order = models.ForeignKey(
         PaymentOrder,
         on_delete=models.PROTECT,
@@ -511,6 +539,14 @@ class PaymentProviderEvent(models.Model):
         FAILED = "failed", "Failed"
 
     provider = models.CharField(max_length=16, choices=PaymentProvider.choices)
+    provider_mode = models.CharField(
+        max_length=16,
+        choices=FinancialMode.choices,
+        default=FinancialMode.LEGACY_UNKNOWN,
+    )
+    provider_account_id = models.CharField(max_length=255, blank=True, default="")
+    endpoint_scope = models.CharField(max_length=24, default="platform")
+    api_version = models.CharField(max_length=64, blank=True, default="")
     provider_event_id = models.CharField(max_length=255)
     event_type = models.CharField(max_length=128, blank=True, default="")
 
@@ -589,6 +625,12 @@ class PaymentRefund(models.Model):
         PROCESSING = "processing", "Processing"
         SUCCEEDED = "succeeded", "Succeeded"
         FAILED = "failed", "Failed"
+
+    provider_mode = models.CharField(
+        max_length=16,
+        choices=FinancialMode.choices,
+        default=FinancialMode.LEGACY_UNKNOWN,
+    )
 
     class Reason(models.TextChoices):
         DEPOSIT_EXPIRY = "deposit_expiry", "Request expired unmatched"
@@ -767,6 +809,12 @@ class LedgerTransaction(models.Model):
     refused by the unique index before any entry is written.
     """
 
+    provider_mode = models.CharField(
+        max_length=16,
+        choices=FinancialMode.choices,
+        default=FinancialMode.LEGACY_UNKNOWN,
+    )
+
     class Kind(models.TextChoices):
         CUSTOMER_PAYMENT = "customer_payment", "Customer payment"
         DEPOSIT_CREDIT = "deposit_credit", "Posting-deposit credit"
@@ -917,6 +965,30 @@ class TravelerPayoutMethod(models.Model):
         STRIPE_CONNECT = "stripe_connect", "Stripe connected account"
         MANUAL = "manual", "Manual settlement"
 
+    class Status(models.TextChoices):
+        SETUP_REQUIRED = "setup_required", "Setup required"
+        PENDING_REVIEW = "pending_review", "Pending review"
+        READY = "ready", "Ready"
+        NEEDS_ATTENTION = "needs_attention", "Needs attention"
+        UNAVAILABLE = "unavailable", "Unavailable"
+        DISABLED = "disabled", "Disabled"
+
+    public_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    currency = models.CharField(max_length=3, blank=True, default="")
+    enabled = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=24, choices=Status.choices, default=Status.SETUP_REQUIRED
+    )
+    status_reason = models.CharField(max_length=64, blank=True, default="")
+    current_version = models.OneToOneField(
+        "finance.PayoutMethodVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="current_for",
+    )
+    revision = models.PositiveBigIntegerField(default=0)
+
     traveler = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -936,6 +1008,12 @@ class TravelerPayoutMethod(models.Model):
         db_table = "finance_traveler_payout_method"
         ordering = ["-is_default", "-created_at"]
         constraints = [
+            models.CheckConstraint(
+                condition=Q(currency="", current_version__isnull=True, enabled=False)
+                | Q(method="manual", currency="DZD")
+                | Q(method="stripe_connect", currency="EUR"),
+                name="fin_payout_method_pairing",
+            ),
             models.UniqueConstraint(
                 fields=["traveler", "method"],
                 name="fin_payout_method_unique_per_traveler",
@@ -964,6 +1042,8 @@ class Payout(models.Model):
 
     class Status(models.TextChoices):
         NOT_ELIGIBLE = "not_eligible", "Not eligible (protection window open)"
+        BLOCKED = "blocked", "Blocked"
+        SENT = "sent", "Sent"
         ELIGIBLE = "eligible", "Eligible"
         SCHEDULED = "scheduled", "Scheduled"
         PROCESSING = "processing", "Processing"
@@ -984,6 +1064,75 @@ class Payout(models.Model):
         STRIPE_TRANSFER = "stripe_transfer", "Stripe transfer"
         MANUAL = "manual", "Manual settlement"
 
+    public_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    provider_mode = models.CharField(
+        max_length=16,
+        choices=FinancialMode.choices,
+        default=FinancialMode.LEGACY_UNKNOWN,
+    )
+    snapshot_version = models.PositiveSmallIntegerField(default=0)
+    legacy_classification = models.CharField(max_length=64, blank=True, default="")
+    routing_policy_version = models.CharField(max_length=64, blank=True, default="")
+    funding_attempt = models.ForeignKey(
+        PaymentAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="funded_payouts",
+    )
+    funding_provider_snapshot = models.CharField(max_length=16, blank=True, default="")
+    method_version = models.ForeignKey(
+        "finance.PayoutMethodVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="initial_payouts",
+    )
+    active_instruction_version = models.ForeignKey(
+        "finance.PayoutMethodVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="active_payouts",
+    )
+    stripe_account = models.ForeignKey(
+        "finance.StripePayoutAccount", null=True, blank=True, on_delete=models.PROTECT
+    )
+    dzd_profile_revision = models.ForeignKey(
+        "finance.DzdPayoutProfileRevision",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
+    snapshot_at = models.DateTimeField(null=True, blank=True)
+    funded_amount_eur_cents = models.PositiveBigIntegerField(null=True, blank=True)
+    original_settlement_amount_minor = models.PositiveBigIntegerField(
+        null=True, blank=True
+    )
+    fx_source = models.CharField(max_length=64, blank=True, default="")
+    fx_settings_version = models.ForeignKey(
+        "core.BusinessSettingsVersion", null=True, blank=True, on_delete=models.PROTECT
+    )
+    fx_snapshot_at = models.DateTimeField(null=True, blank=True)
+    fx_source_attempt = models.ForeignKey(
+        PaymentAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payout_fx_snapshots",
+    )
+    rounding_policy = models.CharField(max_length=32, blank=True, default="")
+    block_reason = models.CharField(max_length=64, blank=True, default="")
+    next_action_at = models.DateTimeField(null=True, blank=True)
+    state_version = models.PositiveBigIntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    settlement_basis = models.CharField(max_length=64, blank=True, default="")
+    eligibility_basis = models.CharField(max_length=32, blank=True, default="")
+    eligibility_decision_reference = models.CharField(
+        max_length=160, blank=True, default=""
+    )
+
     deal = models.OneToOneField(
         "deals.Deal", on_delete=models.PROTECT, related_name="payout"
     )
@@ -993,7 +1142,7 @@ class Payout(models.Model):
         related_name="payouts",
     )
     amount_eur_cents = models.PositiveBigIntegerField(
-        validators=[MinValueValidator(1)],
+        validators=[MinValueValidator(0)],
         help_text="Canonical traveler obligation in EUR cents.",
     )
     method = models.CharField(
@@ -1053,8 +1202,62 @@ class Payout(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=Q(amount_eur_cents__gt=0),
+                condition=Q(amount_eur_cents__gt=0)
+                | (
+                    Q(snapshot_version__gt=0, amount_eur_cents=0, status="cancelled")
+                    & ~Q(eligibility_decision_reference="")
+                ),
                 name="fin_payout_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(snapshot_version=0)
+                | Q(
+                    funded_amount_eur_cents__gt=0,
+                    funded_amount_eur_cents__isnull=False,
+                    snapshot_at__isnull=False,
+                ),
+                name="fin_payout_funded_snapshot",
+            ),
+            models.CheckConstraint(
+                condition=Q(snapshot_version=0)
+                | Q(
+                    method="manual",
+                    payout_currency="DZD",
+                    payout_amount_exponent=0,
+                    stripe_account__isnull=True,
+                )
+                | Q(
+                    method="stripe_transfer",
+                    payout_currency="EUR",
+                    payout_amount_exponent=2,
+                    fx_rate_micros__isnull=True,
+                    fx_settings_version__isnull=True,
+                    fx_source_attempt__isnull=True,
+                    dzd_profile_revision__isnull=True,
+                )
+                | Q(
+                    method="undecided",
+                    payout_currency="",
+                    block_reason="payout_preference_required",
+                ),
+                name="fin_payout_snapshot_pairing",
+            ),
+            models.CheckConstraint(
+                condition=Q(snapshot_version=0)
+                | ~Q(payout_currency="DZD")
+                | Q(
+                    fx_rate_micros__gt=0,
+                    fx_rate_micros__isnull=False,
+                    fx_settings_version__isnull=False,
+                    fx_snapshot_at__isnull=False,
+                    payout_amount_minor__isnull=False,
+                )
+                | Q(
+                    block_reason="fx_snapshot_missing",
+                    fx_rate_micros__isnull=True,
+                    payout_amount_minor__isnull=True,
+                ),
+                name="fin_payout_dzd_fx_snapshot",
             ),
             # A paid payout must carry proof: either a provider payout id, or a
             # named admin actor plus a reference. Marking money as sent with no
@@ -1076,7 +1279,15 @@ class Payout(models.Model):
             # the Phase 4 release service sets.
             models.CheckConstraint(
                 condition=(
-                    ~Q(status__in=["eligible", "scheduled", "processing", "paid"])
+                    ~Q(
+                        status__in=[
+                            "eligible",
+                            "scheduled",
+                            "processing",
+                            "sent",
+                            "paid",
+                        ]
+                    )
                     | Q(eligible_at__isnull=False)
                 ),
                 name="fin_payout_release_requires_eligibility",

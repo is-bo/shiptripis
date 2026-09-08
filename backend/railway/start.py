@@ -43,12 +43,22 @@ def child_env(**overrides: str) -> dict[str, str]:
 
 def spawn(name: str, command: list[str], *, env: dict[str, str] | None = None) -> Child:
     print(f"starting {name}", flush=True)
+    process_env = (env or os.environ).copy()
+    if name in {"chat", "notification", "kyc", "email", "gateway"}:
+        for key in (
+            "PAYOUT_DATA_KEYRING",
+            "PAYOUT_DATA_ACTIVE_KEY_ID",
+            "PAYOUT_ACCOUNT_FINGERPRINT_KEY",
+            "PAYOUT_S3_ACCESS_KEY",
+            "PAYOUT_S3_SECRET_KEY",
+        ):
+            process_env.pop(key, None)
     child = Child(
         name,
         subprocess.Popen(
             command,
             cwd=ROOT,
-            env=env or os.environ.copy(),
+            env=process_env,
             start_new_session=True,
         ),
     )

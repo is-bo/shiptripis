@@ -377,6 +377,13 @@ def apply_settlement(
         .order_by("pk")
     )
 
+    versioned_payout = Payout.objects.filter(
+        deal_id=money.deal_id, snapshot_version__gt=0
+    ).first()
+    if versioned_payout:
+        from .payout_domain import require_uncommitted
+
+        require_uncommitted(versioned_payout)
     result.ledger_transaction_id = _post_reallocation(
         plan=plan, settlement_key=settlement_key, note=note
     )
@@ -388,7 +395,11 @@ def apply_settlement(
             actor_id=actor_id,
         )
     result.payout_status = _apply_payout_share(
-        plan=plan, settlement_key=settlement_key, note=note
+        plan=plan,
+        settlement_key=settlement_key,
+        note=note,
+        actor_id=actor_id,
+        ledger_transaction_id=result.ledger_transaction_id,
     )
     result.changed = True
     return result
@@ -660,13 +671,19 @@ def _release_deposit_credit_share(
     return amount
 
 
-def _apply_payout_share(*, plan: SettlementPlan, settlement_key: str, note: str) -> str:
+def _apply_payout_share(
+    *,
+    plan: SettlementPlan,
+    settlement_key: str,
+    note: str,
+    actor_id=None,
+    ledger_transaction_id=None,
+) -> str:
     """Set the traveler's payout to what the settlement says they are owed.
 
-    A settlement is a decision, so it releases directly rather than waiting for
-    a protection window that has either already run or been overtaken by the
-    dispute. A zero share cancels the payout instead of storing a zero amount,
-    which the `fin_payout_amount_positive` constraint would refuse anyway.
+    Versioned awards retain original funding economics and the delivery
+    protection window. An explicit zero award records a cancellation revision.
+    Legacy payouts retain their historical positive-amount representation.
     """
 
     payout = (
@@ -687,6 +704,46 @@ def _apply_payout_share(*, plan: SettlementPlan, settlement_key: str, note: str)
         return Payout.Status.PAID
 
     now = timezone.now()
+    if payout.snapshot_version:
+        from .payout_domain import revise_amount_locked, append_event_locked
+        from apps.accounts.models import User
+
+        actor = User.objects.get(pk=actor_id) if actor_id else None
+        revise_amount_locked(
+            payout,
+            amount=plan.traveler_payout_eur_cents,
+            settlement_reference=settlement_key,
+            reason_code="settlement_award",
+            actor=actor,
+            ledger_transaction_id=ledger_transaction_id,
+        )
+        if payout.amount_eur_cents == 0:
+            return payout.status
+        previous = payout.status
+        deal = payout.deal
+        payout.eligibility_basis = (
+            "dispute_settlement"
+            if deal.disputes.exists()
+            else "cancellation_compensation"
+        )
+        if deal.delivery_confirmed_at and (
+            not deal.protection_ends_at or now < deal.protection_ends_at
+        ):
+            payout.status = "not_eligible"
+        else:
+            payout.eligible_at = payout.eligible_at or now
+            payout.status = "blocked" if payout.block_reason else "eligible"
+        payout.save(
+            update_fields=["status", "eligible_at", "eligibility_basis", "updated_at"]
+        )
+        append_event_locked(
+            payout,
+            previous=previous,
+            reason="settlement_eligibility",
+            actor=actor,
+            ledger_transaction_id=ledger_transaction_id,
+        )
+        return payout.status
     if plan.traveler_payout_eur_cents <= 0:
         payout.status = Payout.Status.CANCELLED
         payout.notes = f"{note}"[:2000]

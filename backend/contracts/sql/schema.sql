@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict qpk1RlpenyWVNELpBuFyBa2VufMWw9njS1dCzfyqqKgoTK1dhz3RCIjIdm7JDql
+\restrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
 
--- Dumped from database version 16.15
--- Dumped by pg_dump version 16.15 (Ubuntu 16.15-1.pgdg24.04+2)
+-- Dumped from database version 16.2
+-- Dumped by pg_dump version 16.13
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -17,6 +17,112 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: finance_payout_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_payout_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+        BEGIN RAISE EXCEPTION 'Payout history is immutable'; END; $$;
+
+
+--
+-- Name: finance_payout_relation_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_payout_relation_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF TG_TABLE_NAME = 'finance_payout_method_version' THEN
+        IF NOT EXISTS (SELECT 1 FROM finance_traveler_payout_method m WHERE m.id=NEW.method_id
+          AND m.currency=NEW.currency AND ((m.method='manual' AND NEW.rail='manual') OR (m.method='stripe_connect' AND NEW.rail='stripe_transfer')))
+          THEN RAISE EXCEPTION 'Method version pairing mismatch'; END IF;
+        IF NEW.dzd_profile_revision_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM finance_dzd_profile_revision d WHERE d.id=NEW.dzd_profile_revision_id AND d.method_id=NEW.method_id)
+          THEN RAISE EXCEPTION 'Postal revision owner mismatch'; END IF;
+        IF NEW.stripe_account_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM finance_stripe_payout_account a JOIN finance_traveler_payout_method m ON m.traveler_id=a.traveler_id WHERE a.id=NEW.stripe_account_id AND m.id=NEW.method_id)
+          THEN RAISE EXCEPTION 'Stripe destination owner mismatch'; END IF;
+      ELSIF TG_TABLE_NAME = 'finance_traveler_payout_method' THEN
+        IF NEW.current_version_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM finance_payout_method_version v WHERE v.id=NEW.current_version_id AND v.method_id=NEW.id AND v.currency=NEW.currency)
+          THEN RAISE EXCEPTION 'Current method version owner mismatch'; END IF;
+      ELSIF TG_TABLE_NAME = 'finance_payout_attempt' THEN
+        IF TG_OP='UPDATE' AND ROW(NEW.payout_id, NEW.instruction_version_id, NEW.amount_revision_id, NEW.amount_eur_cents, NEW.currency, NEW.rail, NEW.provider_mode, NEW.sequence, NEW.idempotency_key, NEW.request_fingerprint)
+          IS DISTINCT FROM ROW(OLD.payout_id, OLD.instruction_version_id, OLD.amount_revision_id, OLD.amount_eur_cents, OLD.currency, OLD.rail, OLD.provider_mode, OLD.sequence, OLD.idempotency_key, OLD.request_fingerprint)
+          THEN RAISE EXCEPTION 'Prepared payout request is immutable'; END IF;
+        IF NOT EXISTS (SELECT 1 FROM finance_payout p JOIN finance_payout_method_version v ON v.id=NEW.instruction_version_id
+          JOIN finance_traveler_payout_method m ON m.id=v.method_id
+          WHERE p.id=NEW.payout_id AND p.provider_mode=NEW.provider_mode AND p.method=NEW.rail AND p.payout_currency=NEW.currency
+          AND p.amount_eur_cents=NEW.amount_eur_cents AND m.traveler_id=p.traveler_id AND v.rail=NEW.rail AND v.currency=NEW.currency)
+          THEN RAISE EXCEPTION 'Payout attempt contract mismatch'; END IF;
+        IF EXISTS (SELECT 1 FROM finance_payout_method_version v JOIN finance_stripe_payout_account a ON a.id=v.stripe_account_id WHERE v.id=NEW.instruction_version_id AND a.provider_mode<>NEW.provider_mode)
+          THEN RAISE EXCEPTION 'Payout destination mode mismatch'; END IF;
+      ELSIF TG_TABLE_NAME = 'finance_payout_provider_operation' THEN
+        IF TG_OP='UPDATE' AND ROW(NEW.attempt_id, NEW.method_id, NEW.kind, NEW.account_scope, NEW.provider_mode, NEW.sequence, NEW.idempotency_key, NEW.request_fingerprint, NEW.amount_minor, NEW.currency)
+          IS DISTINCT FROM ROW(OLD.attempt_id, OLD.method_id, OLD.kind, OLD.account_scope, OLD.provider_mode, OLD.sequence, OLD.idempotency_key, OLD.request_fingerprint, OLD.amount_minor, OLD.currency)
+          THEN RAISE EXCEPTION 'Provider operation request is immutable'; END IF;
+        IF NEW.attempt_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM finance_payout_attempt a WHERE a.id=NEW.attempt_id AND a.provider_mode=NEW.provider_mode)
+          THEN RAISE EXCEPTION 'Provider operation mode mismatch'; END IF;
+      ELSIF TG_TABLE_NAME = 'finance_payout_funding_allocation' THEN
+        IF NOT EXISTS (SELECT 1 FROM finance_payout p JOIN finance_payment_attempt a ON a.id=NEW.source_attempt_id WHERE p.id=NEW.payout_id AND p.provider_mode=NEW.provider_mode AND a.provider_mode=NEW.provider_mode AND a.status='succeeded' AND NOT a.is_unapplied AND a.provider=NEW.provider)
+          THEN RAISE EXCEPTION 'Payout funding allocation source mismatch'; END IF;
+      ELSIF TG_TABLE_NAME = 'finance_stripe_payout_account' THEN
+        IF TG_OP='UPDATE' AND ROW(NEW.traveler_id, NEW.platform_id, NEW.provider_account_id, NEW.provider_mode, NEW.creation_operation_key)
+          IS DISTINCT FROM ROW(OLD.traveler_id, OLD.platform_id, OLD.provider_account_id, OLD.provider_mode, OLD.creation_operation_key)
+          THEN RAISE EXCEPTION 'Provider account identity is immutable'; END IF;
+      END IF;
+      RETURN NEW;
+    END; $$;
+
+
+--
+-- Name: finance_payout_snapshot_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_payout_snapshot_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+        BEGIN
+            IF TG_OP='INSERT' AND NEW.snapshot_version > 0 AND NEW.amount_eur_cents = 0
+              THEN RAISE EXCEPTION 'Funded payout must start with a positive obligation'; END IF;
+            IF OLD.snapshot_version > 0 AND ROW(
+                NEW.snapshot_version, NEW.funded_amount_eur_cents,
+                NEW.original_settlement_amount_minor, NEW.method, NEW.payout_currency,
+                NEW.payout_amount_exponent, NEW.fx_rate_micros, NEW.fx_settings_version_id,
+                NEW.fx_source, NEW.fx_snapshot_at, NEW.fx_source_attempt_id,
+                NEW.rounding_policy, NEW.method_version_id, NEW.stripe_account_id,
+                NEW.dzd_profile_revision_id, NEW.snapshot_at, NEW.funding_attempt_id,
+                NEW.funding_provider_snapshot, NEW.provider_mode, NEW.routing_policy_version
+            ) IS DISTINCT FROM ROW(
+                OLD.snapshot_version, OLD.funded_amount_eur_cents,
+                OLD.original_settlement_amount_minor, OLD.method, OLD.payout_currency,
+                OLD.payout_amount_exponent, OLD.fx_rate_micros, OLD.fx_settings_version_id,
+                OLD.fx_source, OLD.fx_snapshot_at, OLD.fx_source_attempt_id,
+                OLD.rounding_policy, OLD.method_version_id, OLD.stripe_account_id,
+                OLD.dzd_profile_revision_id, OLD.snapshot_at, OLD.funding_attempt_id,
+                OLD.funding_provider_snapshot, OLD.provider_mode, OLD.routing_policy_version
+            ) THEN RAISE EXCEPTION 'Funded payout snapshot is immutable'; END IF;
+            IF OLD.snapshot_version > 0 AND ROW(NEW.amount_eur_cents, NEW.payout_amount_minor) IS DISTINCT FROM ROW(OLD.amount_eur_cents, OLD.payout_amount_minor)
+              AND NOT EXISTS (SELECT 1 FROM finance_payout_amount_revision r
+                WHERE r.payout_id=NEW.id AND r.previous_amount_eur_cents=OLD.amount_eur_cents
+                AND r.amount_eur_cents=NEW.amount_eur_cents
+                AND r.previous_settlement_amount_minor IS NOT DISTINCT FROM OLD.payout_amount_minor
+                AND r.settlement_amount_minor IS NOT DISTINCT FROM NEW.payout_amount_minor
+                AND r.settlement_reference=NEW.eligibility_decision_reference)
+              THEN RAISE EXCEPTION 'Amount change requires explicit revision'; END IF;
+            IF OLD.snapshot_version > 0 AND NEW.active_instruction_version_id IS DISTINCT FROM OLD.active_instruction_version_id
+              AND NOT EXISTS (SELECT 1 FROM finance_payout_instruction_amendment a
+                WHERE a.payout_id=NEW.id AND a.old_version_id=OLD.active_instruction_version_id
+                AND a.new_version_id=NEW.active_instruction_version_id AND a.expected_state_version=OLD.state_version)
+              THEN RAISE EXCEPTION 'Destination change requires explicit amendment'; END IF;
+            IF NEW.snapshot_version > 0 AND NEW.amount_eur_cents = 0 AND NOT EXISTS (
+                SELECT 1 FROM finance_payout_amount_revision r WHERE r.payout_id = NEW.id
+                AND r.amount_eur_cents = 0 AND r.settlement_reference = NEW.eligibility_decision_reference
+            ) THEN RAISE EXCEPTION 'Zero award requires settlement revision'; END IF;
+            RETURN NEW;
+        END; $$;
+
 
 SET default_tablespace = '';
 
@@ -860,6 +966,45 @@ CREATE TABLE public.django_session (
 
 
 --
+-- Name: finance_dzd_profile_revision; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_dzd_profile_revision (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    sequence integer NOT NULL,
+    first_name_encrypted text NOT NULL,
+    last_name_encrypted text NOT NULL,
+    ccp_number_encrypted text NOT NULL,
+    ccp_key_encrypted text NOT NULL,
+    nip_encrypted text NOT NULL,
+    ccp_last_four character varying(4) NOT NULL,
+    nip_last_four character varying(4) NOT NULL,
+    account_fingerprint character varying(64) NOT NULL,
+    status character varying(24) NOT NULL,
+    submitted_at timestamp with time zone NOT NULL,
+    method_id bigint NOT NULL,
+    evidence_id bigint,
+    identity_attestation_id bigint,
+    CONSTRAINT finance_dzd_profile_revision_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_dzd_profile_revision_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_dzd_profile_revision ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_dzd_profile_revision_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: finance_guest_payment_link; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -883,6 +1028,45 @@ CREATE TABLE public.finance_guest_payment_link (
 
 ALTER TABLE public.finance_guest_payment_link ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME public.finance_guest_payment_link_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_hold; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_hold (
+    id bigint NOT NULL,
+    kind character varying(24) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    source_reference character varying(160) NOT NULL,
+    amount_exposure_eur_cents bigint,
+    opened_at timestamp with time zone NOT NULL,
+    cleared_at timestamp with time zone,
+    generation bigint NOT NULL,
+    cleared_by_id bigint,
+    deal_id bigint,
+    opened_by_id bigint,
+    payout_id bigint,
+    source_attempt_id bigint,
+    account_id bigint,
+    CONSTRAINT fin_hold_exactly_one_scope CHECK ((((account_id IS NULL) AND (deal_id IS NOT NULL) AND (payout_id IS NULL) AND (source_attempt_id IS NULL)) OR ((account_id IS NULL) AND (deal_id IS NULL) AND (payout_id IS NOT NULL) AND (source_attempt_id IS NULL)) OR ((account_id IS NOT NULL) AND (deal_id IS NULL) AND (payout_id IS NULL) AND (source_attempt_id IS NULL)) OR ((account_id IS NULL) AND (deal_id IS NULL) AND (payout_id IS NULL) AND (source_attempt_id IS NOT NULL)))),
+    CONSTRAINT finance_hold_amount_exposure_eur_cents_check CHECK ((amount_exposure_eur_cents >= 0)),
+    CONSTRAINT finance_hold_generation_check CHECK ((generation >= 0))
+);
+
+
+--
+-- Name: finance_hold_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_hold ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_hold_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -938,7 +1122,8 @@ CREATE TABLE public.finance_ledger_transaction (
     kind character varying(24) NOT NULL,
     note character varying(255) NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    reverses_id bigint
+    reverses_id bigint,
+    provider_mode character varying(16) NOT NULL
 );
 
 
@@ -991,6 +1176,9 @@ CREATE TABLE public.finance_payment_attempt (
     operational_resolution_reason character varying(500) NOT NULL,
     operational_resolved_at timestamp with time zone,
     operational_resolved_by_id bigint,
+    mode_evidence character varying(64) NOT NULL,
+    provider_charge_id character varying(255) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
     CONSTRAINT fin_attempt_amount_positive CHECK ((amount_eur_cents > 0)),
     CONSTRAINT fin_attempt_fx_required_for_conversion CHECK ((((fx_rate_micros IS NULL) AND ((payment_currency)::text = 'EUR'::text)) OR ((NOT ((payment_currency)::text = 'EUR'::text)) AND (fx_rate_micros IS NOT NULL)))),
     CONSTRAINT fin_attempt_resolution_complete CHECK (((((operational_resolution)::text = ''::text) AND ((operational_resolution_reason)::text = ''::text) AND (operational_resolved_at IS NULL) AND (operational_resolved_by_id IS NULL)) OR ((NOT ((operational_resolution)::text = ''::text)) AND (operational_resolved_at IS NOT NULL) AND (NOT ((operational_resolution_reason)::text = ''::text))))),
@@ -1094,6 +1282,7 @@ CREATE TABLE public.finance_payment_refund (
     processing_attempts smallint NOT NULL,
     processing_started_at timestamp with time zone,
     requires_manual_action boolean NOT NULL,
+    provider_mode character varying(16) NOT NULL,
     CONSTRAINT fin_refund_amount_positive CHECK ((amount_eur_cents > 0)),
     CONSTRAINT fin_refund_manual_requires_reference CHECK (((settled_by_id IS NULL) OR (NOT ((settlement_reference)::text = ''::text)))),
     CONSTRAINT finance_payment_refund_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
@@ -1141,14 +1330,248 @@ CREATE TABLE public.finance_payout (
     admin_actor_id bigint,
     deal_id bigint NOT NULL,
     traveler_id bigint NOT NULL,
-    CONSTRAINT fin_payout_amount_positive CHECK ((amount_eur_cents > 0)),
+    block_reason character varying(64) NOT NULL,
+    eligibility_basis character varying(32) NOT NULL,
+    eligibility_decision_reference character varying(160) NOT NULL,
+    funded_amount_eur_cents bigint,
+    funding_attempt_id bigint,
+    funding_provider_snapshot character varying(16) NOT NULL,
+    fx_settings_version_id bigint,
+    fx_snapshot_at timestamp with time zone,
+    fx_source character varying(64) NOT NULL,
+    fx_source_attempt_id bigint,
+    legacy_classification character varying(64) NOT NULL,
+    next_action_at timestamp with time zone,
+    original_settlement_amount_minor bigint,
+    provider_mode character varying(16) NOT NULL,
+    public_reference uuid NOT NULL,
+    rounding_policy character varying(32) NOT NULL,
+    routing_policy_version character varying(64) NOT NULL,
+    sent_at timestamp with time zone,
+    settled_at timestamp with time zone,
+    settlement_basis character varying(64) NOT NULL,
+    snapshot_at timestamp with time zone,
+    snapshot_version smallint NOT NULL,
+    state_version bigint NOT NULL,
+    dzd_profile_revision_id bigint,
+    active_instruction_version_id bigint,
+    method_version_id bigint,
+    stripe_account_id bigint,
+    CONSTRAINT fin_payout_amount_positive CHECK (((amount_eur_cents > 0) OR ((amount_eur_cents = 0) AND (snapshot_version > 0) AND ((status)::text = 'cancelled'::text) AND (NOT ((eligibility_decision_reference)::text = ''::text))))),
+    CONSTRAINT fin_payout_dzd_fx_snapshot CHECK (((snapshot_version = 0) OR (NOT ((payout_currency)::text = 'DZD'::text)) OR ((fx_rate_micros > 0) AND (fx_rate_micros IS NOT NULL) AND (fx_settings_version_id IS NOT NULL) AND (fx_snapshot_at IS NOT NULL) AND (payout_amount_minor IS NOT NULL)) OR (((block_reason)::text = 'fx_snapshot_missing'::text) AND (fx_rate_micros IS NULL) AND (payout_amount_minor IS NULL)))),
+    CONSTRAINT fin_payout_funded_snapshot CHECK (((snapshot_version = 0) OR ((funded_amount_eur_cents > 0) AND (funded_amount_eur_cents IS NOT NULL) AND (snapshot_at IS NOT NULL)))),
     CONSTRAINT fin_payout_paid_requires_evidence CHECK (((NOT ((status)::text = 'paid'::text)) OR (NOT ((provider_payout_id)::text = ''::text)) OR ((admin_actor_id IS NOT NULL) AND (NOT ((reference)::text = ''::text))))),
     CONSTRAINT fin_payout_paid_requires_timestamp CHECK (((NOT ((status)::text = 'paid'::text)) OR (paid_at IS NOT NULL))),
-    CONSTRAINT fin_payout_release_requires_eligibility CHECK (((NOT ((status)::text = ANY ((ARRAY['eligible'::character varying, 'scheduled'::character varying, 'processing'::character varying, 'paid'::character varying])::text[]))) OR (eligible_at IS NOT NULL))),
+    CONSTRAINT fin_payout_release_requires_eligibility CHECK (((NOT ((status)::text = ANY ((ARRAY['eligible'::character varying, 'scheduled'::character varying, 'processing'::character varying, 'sent'::character varying, 'paid'::character varying])::text[]))) OR (eligible_at IS NOT NULL))),
+    CONSTRAINT fin_payout_snapshot_pairing CHECK (((snapshot_version = 0) OR (((method)::text = 'manual'::text) AND (payout_amount_exponent = 0) AND ((payout_currency)::text = 'DZD'::text) AND (stripe_account_id IS NULL)) OR ((dzd_profile_revision_id IS NULL) AND (fx_rate_micros IS NULL) AND (fx_settings_version_id IS NULL) AND (fx_source_attempt_id IS NULL) AND ((method)::text = 'stripe_transfer'::text) AND (payout_amount_exponent = 2) AND ((payout_currency)::text = 'EUR'::text)) OR (((block_reason)::text = 'payout_preference_required'::text) AND ((method)::text = 'undecided'::text) AND ((payout_currency)::text = ''::text)))),
     CONSTRAINT finance_payout_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
+    CONSTRAINT finance_payout_funded_amount_eur_cents_check CHECK ((funded_amount_eur_cents >= 0)),
     CONSTRAINT finance_payout_fx_rate_micros_check CHECK ((fx_rate_micros >= 0)),
+    CONSTRAINT finance_payout_original_settlement_amount_minor_check CHECK ((original_settlement_amount_minor >= 0)),
     CONSTRAINT finance_payout_payout_amount_exponent_check CHECK ((payout_amount_exponent >= 0)),
-    CONSTRAINT finance_payout_payout_amount_minor_check CHECK ((payout_amount_minor >= 0))
+    CONSTRAINT finance_payout_payout_amount_minor_check CHECK ((payout_amount_minor >= 0)),
+    CONSTRAINT finance_payout_snapshot_version_check CHECK ((snapshot_version >= 0)),
+    CONSTRAINT finance_payout_state_version_check CHECK ((state_version >= 0))
+);
+
+
+--
+-- Name: finance_payout_amount_revision; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_amount_revision (
+    id bigint NOT NULL,
+    revision integer NOT NULL,
+    previous_amount_eur_cents bigint NOT NULL,
+    amount_eur_cents bigint NOT NULL,
+    previous_settlement_amount_minor bigint,
+    settlement_amount_minor bigint,
+    fx_rate_micros bigint,
+    settlement_reference character varying(160) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    actor_id bigint,
+    fx_settings_version_id bigint,
+    ledger_transaction_id bigint,
+    payout_id bigint NOT NULL,
+    CONSTRAINT finance_payout_amount_revisi_previous_settlement_amount_m_check CHECK ((previous_settlement_amount_minor >= 0)),
+    CONSTRAINT finance_payout_amount_revision_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
+    CONSTRAINT finance_payout_amount_revision_fx_rate_micros_check CHECK ((fx_rate_micros >= 0)),
+    CONSTRAINT finance_payout_amount_revision_previous_amount_eur_cents_check CHECK ((previous_amount_eur_cents >= 0)),
+    CONSTRAINT finance_payout_amount_revision_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT finance_payout_amount_revision_settlement_amount_minor_check CHECK ((settlement_amount_minor >= 0))
+);
+
+
+--
+-- Name: finance_payout_amount_revision_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_amount_revision ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_amount_revision_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_attempt; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_attempt (
+    id bigint NOT NULL,
+    sequence integer NOT NULL,
+    amount_eur_cents bigint NOT NULL,
+    currency character varying(3) NOT NULL,
+    rail character varying(20) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
+    status character varying(24) NOT NULL,
+    idempotency_key character varying(160) NOT NULL,
+    request_fingerprint character varying(64) NOT NULL,
+    fencing_generation bigint NOT NULL,
+    committed_at timestamp with time zone,
+    result_at timestamp with time zone,
+    failure_code character varying(64) NOT NULL,
+    provider_request_id character varying(255) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    amount_revision_id bigint,
+    operator_id bigint,
+    payout_id bigint NOT NULL,
+    instruction_version_id bigint NOT NULL,
+    CONSTRAINT fin_payout_attempt_known_mode CHECK (((provider_mode)::text = ANY ((ARRAY['test'::character varying, 'live'::character varying])::text[]))),
+    CONSTRAINT fin_payout_attempt_pairing CHECK (((((currency)::text = 'DZD'::text) AND ((rail)::text = 'manual'::text)) OR (((currency)::text = 'EUR'::text) AND ((rail)::text = 'stripe_transfer'::text)))),
+    CONSTRAINT fin_payout_attempt_positive CHECK ((amount_eur_cents > 0)),
+    CONSTRAINT finance_payout_attempt_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
+    CONSTRAINT finance_payout_attempt_fencing_generation_check CHECK ((fencing_generation >= 0)),
+    CONSTRAINT finance_payout_attempt_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_payout_attempt_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_attempt ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_attempt_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_event; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_event (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    sequence bigint NOT NULL,
+    previous_state character varying(16) NOT NULL,
+    new_state character varying(16) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    source character varying(32) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    actor_id bigint,
+    ledger_transaction_id bigint,
+    payout_id bigint NOT NULL,
+    evidence_id bigint,
+    operation_id bigint,
+    CONSTRAINT finance_payout_event_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_payout_event_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_event ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_event_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_evidence; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_evidence (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    purpose character varying(24) NOT NULL,
+    logical_store character varying(24) NOT NULL,
+    object_key character varying(512) NOT NULL,
+    encryption_key_id character varying(64) NOT NULL,
+    digest character varying(64) NOT NULL,
+    mime_type character varying(64) NOT NULL,
+    size_bytes bigint,
+    upload_state character varying(16) NOT NULL,
+    retention_class character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    owner_id bigint NOT NULL,
+    CONSTRAINT fin_payout_evidence_store CHECK (((logical_store)::text = 'payout'::text)),
+    CONSTRAINT finance_payout_evidence_size_bytes_check CHECK ((size_bytes >= 0))
+);
+
+
+--
+-- Name: finance_payout_evidence_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_evidence ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_evidence_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_funding_allocation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_funding_allocation (
+    id bigint NOT NULL,
+    allocation_key character varying(160) NOT NULL,
+    source_charge_id character varying(255) NOT NULL,
+    provider character varying(16) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
+    purpose character varying(24) NOT NULL,
+    currency character varying(3) NOT NULL,
+    amount_eur_cents bigint NOT NULL,
+    unavailable_reason character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    attempt_id bigint,
+    payout_id bigint NOT NULL,
+    source_attempt_id bigint NOT NULL,
+    CONSTRAINT fin_payout_allocation_positive CHECK ((amount_eur_cents > 0)),
+    CONSTRAINT finance_payout_funding_allocation_amount_eur_cents_check CHECK ((amount_eur_cents >= 0))
+);
+
+
+--
+-- Name: finance_payout_funding_allocation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_funding_allocation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_funding_allocation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1158,6 +1581,316 @@ CREATE TABLE public.finance_payout (
 
 ALTER TABLE public.finance_payout ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME public.finance_payout_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_identity_attestation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_identity_attestation (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    given_name_encrypted text NOT NULL,
+    family_name_encrypted text NOT NULL,
+    aliases_encrypted text NOT NULL,
+    script_metadata character varying(64) NOT NULL,
+    policy_version character varying(64) NOT NULL,
+    attested_at timestamp with time zone NOT NULL,
+    attested_by_id bigint NOT NULL,
+    kyc_submission_id bigint NOT NULL,
+    supersedes_id bigint,
+    traveler_id bigint NOT NULL
+);
+
+
+--
+-- Name: finance_payout_identity_attestation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_identity_attestation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_identity_attestation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_identity_review_assignment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_identity_review_assignment (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    closed_at timestamp with time zone,
+    assigned_by_id bigint NOT NULL,
+    kyc_submission_id bigint NOT NULL,
+    reviewer_id bigint NOT NULL,
+    traveler_id bigint NOT NULL
+);
+
+
+--
+-- Name: finance_payout_identity_review_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_identity_review_assignment ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_identity_review_assignment_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_identity_revocation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_identity_revocation (
+    id bigint NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    actor_id bigint NOT NULL,
+    attestation_id bigint NOT NULL
+);
+
+
+--
+-- Name: finance_payout_identity_revocation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_identity_revocation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_identity_revocation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_instruction_amendment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_instruction_amendment (
+    id bigint NOT NULL,
+    sequence integer NOT NULL,
+    confirmed_at timestamp with time zone NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    expected_state character varying(16) NOT NULL,
+    expected_state_version bigint NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    payout_id bigint NOT NULL,
+    reviewed_by_id bigint NOT NULL,
+    traveler_id bigint NOT NULL,
+    new_version_id bigint NOT NULL,
+    old_version_id bigint NOT NULL,
+    CONSTRAINT finance_payout_instruction_amendme_expected_state_version_check CHECK ((expected_state_version >= 0)),
+    CONSTRAINT finance_payout_instruction_amendment_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_payout_instruction_amendment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_instruction_amendment ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_instruction_amendment_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_instruction_confirmation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_instruction_confirmation (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    expected_state_version bigint NOT NULL,
+    confirmed_at timestamp with time zone NOT NULL,
+    new_version_id bigint NOT NULL,
+    payout_id bigint NOT NULL,
+    traveler_id bigint NOT NULL,
+    CONSTRAINT finance_payout_instruction_confirm_expected_state_version_check CHECK ((expected_state_version >= 0))
+);
+
+
+--
+-- Name: finance_payout_instruction_confirmation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_instruction_confirmation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_instruction_confirmation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_method_version; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_method_version (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    sequence integer NOT NULL,
+    rail character varying(20) NOT NULL,
+    currency character varying(3) NOT NULL,
+    country character varying(2) NOT NULL,
+    policy_version character varying(64) NOT NULL,
+    consent_at timestamp with time zone NOT NULL,
+    source character varying(32) NOT NULL,
+    content_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    created_by_id bigint,
+    dzd_profile_revision_id bigint,
+    method_id bigint NOT NULL,
+    stripe_account_id bigint,
+    CONSTRAINT fin_method_version_pairing CHECK (((((currency)::text = 'DZD'::text) AND ((rail)::text = 'manual'::text) AND (stripe_account_id IS NULL)) OR (((currency)::text = 'EUR'::text) AND (dzd_profile_revision_id IS NULL) AND ((rail)::text = 'stripe_transfer'::text)))),
+    CONSTRAINT finance_payout_method_version_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_payout_method_version_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_method_version ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_method_version_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_profile_review; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_profile_review (
+    id bigint NOT NULL,
+    status character varying(24) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    identity_attestation_id bigint NOT NULL,
+    profile_id bigint NOT NULL,
+    reviewer_id bigint NOT NULL
+);
+
+
+--
+-- Name: finance_payout_profile_review_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_profile_review ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_profile_review_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_payout_provider_operation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_payout_provider_operation (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    kind character varying(24) NOT NULL,
+    account_scope character varying(255) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
+    sequence integer NOT NULL,
+    idempotency_key character varying(160) NOT NULL,
+    request_fingerprint character varying(64) NOT NULL,
+    provider_object_id character varying(255) NOT NULL,
+    provider_request_id character varying(255) NOT NULL,
+    status character varying(16) NOT NULL,
+    amount_minor bigint,
+    currency character varying(3) NOT NULL,
+    retry_after timestamp with time zone,
+    first_request_at timestamp with time zone,
+    last_request_at timestamp with time zone,
+    response_code smallint,
+    created_at timestamp with time zone NOT NULL,
+    attempt_id bigint,
+    method_id bigint,
+    CONSTRAINT fin_payout_operation_known_mode CHECK (((provider_mode)::text = ANY ((ARRAY['test'::character varying, 'live'::character varying])::text[]))),
+    CONSTRAINT fin_payout_operation_owner CHECK ((((attempt_id IS NOT NULL) AND (method_id IS NULL)) OR ((attempt_id IS NULL) AND ((kind)::text = 'account_create'::text) AND (method_id IS NOT NULL)))),
+    CONSTRAINT finance_payout_provider_operation_amount_minor_check CHECK ((amount_minor >= 0)),
+    CONSTRAINT finance_payout_provider_operation_response_code_check CHECK ((response_code >= 0)),
+    CONSTRAINT finance_payout_provider_operation_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
+-- Name: finance_payout_provider_operation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_payout_provider_operation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_payout_provider_operation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finance_provider_dispute; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_provider_dispute (
+    id bigint NOT NULL,
+    provider character varying(16) NOT NULL,
+    platform_id character varying(255) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
+    provider_object_id character varying(255) NOT NULL,
+    source_charge_id character varying(255) NOT NULL,
+    amount_minor bigint NOT NULL,
+    currency character varying(3) NOT NULL,
+    canonical_amount_eur_cents bigint,
+    status character varying(32) NOT NULL,
+    funds_withdrawn_reference character varying(255) NOT NULL,
+    funds_reinstated_reference character varying(255) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    source_attempt_id bigint,
+    CONSTRAINT finance_provider_dispute_amount_minor_check CHECK ((amount_minor >= 0)),
+    CONSTRAINT finance_provider_dispute_canonical_amount_eur_cents_check CHECK ((canonical_amount_eur_cents >= 0))
+);
+
+
+--
+-- Name: finance_provider_dispute_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_provider_dispute ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_provider_dispute_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1190,6 +1923,10 @@ CREATE TABLE public.finance_provider_event (
     payload_fingerprint character varying(64) NOT NULL,
     processing_attempts smallint NOT NULL,
     processing_started_at timestamp with time zone,
+    api_version character varying(64) NOT NULL,
+    endpoint_scope character varying(24) NOT NULL,
+    provider_account_id character varying(255) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
     CONSTRAINT finance_provider_event_processing_attempts_check CHECK ((processing_attempts >= 0))
 );
 
@@ -1255,6 +1992,52 @@ ALTER TABLE public.finance_scheduled_job ALTER COLUMN id ADD GENERATED BY DEFAUL
 
 
 --
+-- Name: finance_stripe_payout_account; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_stripe_payout_account (
+    id bigint NOT NULL,
+    public_reference uuid NOT NULL,
+    platform_id character varying(255) NOT NULL,
+    provider_account_id character varying(255) NOT NULL,
+    provider_mode character varying(16) NOT NULL,
+    declared_country character varying(2) NOT NULL,
+    verified_country character varying(2) NOT NULL,
+    creation_operation_key character varying(160) NOT NULL,
+    status character varying(24) NOT NULL,
+    active boolean NOT NULL,
+    transfers_status character varying(24) NOT NULL,
+    payouts_enabled boolean NOT NULL,
+    details_submitted boolean NOT NULL,
+    requirement_codes jsonb NOT NULL,
+    disabled_reason character varying(64) NOT NULL,
+    external_account_id character varying(255) NOT NULL,
+    eur_bank_present boolean NOT NULL,
+    readiness_checked_at timestamp with time zone,
+    readiness_generation bigint NOT NULL,
+    payout_schedule_interval character varying(16) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    traveler_id bigint NOT NULL,
+    CONSTRAINT fin_stripe_account_known_mode CHECK (((provider_mode)::text = ANY ((ARRAY['test'::character varying, 'live'::character varying])::text[]))),
+    CONSTRAINT finance_stripe_payout_account_readiness_generation_check CHECK ((readiness_generation >= 0))
+);
+
+
+--
+-- Name: finance_stripe_payout_account_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_stripe_payout_account ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finance_stripe_payout_account_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: finance_traveler_payout_method; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1269,7 +2052,16 @@ CREATE TABLE public.finance_traveler_payout_method (
     is_default boolean NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    traveler_id bigint NOT NULL
+    traveler_id bigint NOT NULL,
+    currency character varying(3) NOT NULL,
+    enabled boolean NOT NULL,
+    public_reference uuid NOT NULL,
+    revision bigint NOT NULL,
+    status character varying(24) NOT NULL,
+    status_reason character varying(64) NOT NULL,
+    current_version_id bigint,
+    CONSTRAINT fin_payout_method_pairing CHECK (((((currency)::text = ''::text) AND (current_version_id IS NULL) AND (NOT enabled)) OR (((currency)::text = 'DZD'::text) AND ((method)::text = 'manual'::text)) OR (((currency)::text = 'EUR'::text) AND ((method)::text = 'stripe_connect'::text)))),
+    CONSTRAINT finance_traveler_payout_method_revision_check CHECK ((revision >= 0))
 );
 
 
@@ -3038,11 +3830,35 @@ ALTER TABLE ONLY public.django_session
 
 
 --
+-- Name: finance_payout_amount_revision fin_amount_revision_decision; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT fin_amount_revision_decision UNIQUE (payout_id, settlement_reference);
+
+
+--
+-- Name: finance_payout_amount_revision fin_amount_revision_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT fin_amount_revision_sequence UNIQUE (payout_id, revision);
+
+
+--
 -- Name: finance_payment_attempt fin_attempt_unique_idempotency; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_payment_attempt
     ADD CONSTRAINT fin_attempt_unique_idempotency UNIQUE (provider, idempotency_key);
+
+
+--
+-- Name: finance_dzd_profile_revision fin_dzd_profile_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT fin_dzd_profile_sequence UNIQUE (method_id, sequence);
 
 
 --
@@ -3054,11 +3870,75 @@ ALTER TABLE ONLY public.finance_provider_event
 
 
 --
+-- Name: finance_payout_instruction_amendment fin_instruction_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT fin_instruction_sequence UNIQUE (payout_id, sequence);
+
+
+--
+-- Name: finance_payout_method_version fin_method_version_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT fin_method_version_sequence UNIQUE (method_id, sequence);
+
+
+--
+-- Name: finance_payout_attempt fin_payout_attempt_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT fin_payout_attempt_sequence UNIQUE (payout_id, sequence);
+
+
+--
+-- Name: finance_payout_event fin_payout_event_sequence; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT fin_payout_event_sequence UNIQUE (payout_id, sequence);
+
+
+--
 -- Name: finance_traveler_payout_method fin_payout_method_unique_per_traveler; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_traveler_payout_method
     ADD CONSTRAINT fin_payout_method_unique_per_traveler UNIQUE (traveler_id, method);
+
+
+--
+-- Name: finance_provider_dispute fin_provider_dispute_identity; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_provider_dispute
+    ADD CONSTRAINT fin_provider_dispute_identity UNIQUE (provider, platform_id, provider_mode, provider_object_id);
+
+
+--
+-- Name: finance_stripe_payout_account fin_stripe_account_identity; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_stripe_payout_account
+    ADD CONSTRAINT fin_stripe_account_identity UNIQUE (platform_id, provider_mode, provider_account_id);
+
+
+--
+-- Name: finance_dzd_profile_revision finance_dzd_profile_revision_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT finance_dzd_profile_revision_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_dzd_profile_revision finance_dzd_profile_revision_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT finance_dzd_profile_revision_public_reference_key UNIQUE (public_reference);
 
 
 --
@@ -3075,6 +3955,14 @@ ALTER TABLE ONLY public.finance_guest_payment_link
 
 ALTER TABLE ONLY public.finance_guest_payment_link
     ADD CONSTRAINT finance_guest_payment_link_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: finance_hold finance_hold_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_pkey PRIMARY KEY (id);
 
 
 --
@@ -3150,6 +4038,30 @@ ALTER TABLE ONLY public.finance_payment_refund
 
 
 --
+-- Name: finance_payout_amount_revision finance_payout_amount_revision_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT finance_payout_amount_revision_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attempt_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attempt_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attempt_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attempt_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: finance_payout finance_payout_deal_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3158,11 +4070,195 @@ ALTER TABLE ONLY public.finance_payout
 
 
 --
+-- Name: finance_payout_event finance_payout_event_event_uuid_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_event_uuid_key UNIQUE (event_uuid);
+
+
+--
+-- Name: finance_payout_event finance_payout_event_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_evidence finance_payout_evidence_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_evidence
+    ADD CONSTRAINT finance_payout_evidence_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_evidence finance_payout_evidence_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_evidence
+    ADD CONSTRAINT finance_payout_evidence_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_payout_funding_allocation finance_payout_funding_allocation_allocation_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_funding_allocation
+    ADD CONSTRAINT finance_payout_funding_allocation_allocation_key_key UNIQUE (allocation_key);
+
+
+--
+-- Name: finance_payout_funding_allocation finance_payout_funding_allocation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_funding_allocation
+    ADD CONSTRAINT finance_payout_funding_allocation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_identity_attestation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_identity_attestation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_identity_attestation_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_identity_attestation_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_identity_review_assignment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_identity_review_assignment_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_identity_review_assignment_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_identity_review_assignment_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_payout_identity_revocation finance_payout_identity_revocation_attestation_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_revocation
+    ADD CONSTRAINT finance_payout_identity_revocation_attestation_id_key UNIQUE (attestation_id);
+
+
+--
+-- Name: finance_payout_identity_revocation finance_payout_identity_revocation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_revocation
+    ADD CONSTRAINT finance_payout_identity_revocation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instruction_amendment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instruction_amendment_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_instruction_confirmation finance_payout_instruction_confirmation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_confirmation
+    ADD CONSTRAINT finance_payout_instruction_confirmation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_instruction_confirmation finance_payout_instruction_confirmation_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_confirmation
+    ADD CONSTRAINT finance_payout_instruction_confirmation_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_payout_method_version finance_payout_method_version_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_method_version_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_method_version finance_payout_method_version_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_method_version_public_reference_key UNIQUE (public_reference);
+
+
+--
 -- Name: finance_payout finance_payout_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_payout
     ADD CONSTRAINT finance_payout_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_profile_review finance_payout_profile_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_profile_review
+    ADD CONSTRAINT finance_payout_profile_review_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_provider_operation finance_payout_provider_operation_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_provider_operation
+    ADD CONSTRAINT finance_payout_provider_operation_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: finance_payout_provider_operation finance_payout_provider_operation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_provider_operation
+    ADD CONSTRAINT finance_payout_provider_operation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_payout_provider_operation finance_payout_provider_operation_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_provider_operation
+    ADD CONSTRAINT finance_payout_provider_operation_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_payout finance_payout_public_reference_f27f5dde_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_public_reference_f27f5dde_uniq UNIQUE (public_reference);
+
+
+--
+-- Name: finance_provider_dispute finance_provider_dispute_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_provider_dispute
+    ADD CONSTRAINT finance_provider_dispute_pkey PRIMARY KEY (id);
 
 
 --
@@ -3190,11 +4286,51 @@ ALTER TABLE ONLY public.finance_scheduled_job
 
 
 --
+-- Name: finance_stripe_payout_account finance_stripe_payout_account_creation_operation_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_stripe_payout_account
+    ADD CONSTRAINT finance_stripe_payout_account_creation_operation_key_key UNIQUE (creation_operation_key);
+
+
+--
+-- Name: finance_stripe_payout_account finance_stripe_payout_account_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_stripe_payout_account
+    ADD CONSTRAINT finance_stripe_payout_account_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_stripe_payout_account finance_stripe_payout_account_public_reference_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_stripe_payout_account
+    ADD CONSTRAINT finance_stripe_payout_account_public_reference_key UNIQUE (public_reference);
+
+
+--
+-- Name: finance_traveler_payout_method finance_traveler_payout_method_current_version_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_traveler_payout_method
+    ADD CONSTRAINT finance_traveler_payout_method_current_version_id_key UNIQUE (current_version_id);
+
+
+--
 -- Name: finance_traveler_payout_method finance_traveler_payout_method_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_traveler_payout_method
     ADD CONSTRAINT finance_traveler_payout_method_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_traveler_payout_method finance_traveler_payout_method_public_reference_dee0c057_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_traveler_payout_method
+    ADD CONSTRAINT finance_traveler_payout_method_public_reference_dee0c057_uniq UNIQUE (public_reference);
 
 
 --
@@ -4579,6 +5715,13 @@ CREATE INDEX django_session_session_key_c0390e0f_like ON public.django_session U
 
 
 --
+-- Name: fin_account_operation_sequence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_account_operation_sequence ON public.finance_payout_provider_operation USING btree (method_id, sequence) WHERE (method_id IS NOT NULL);
+
+
+--
 -- Name: fin_attempt_expiry_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4653,6 +5796,13 @@ CREATE UNIQUE INDEX fin_guest_one_live_link_per_order ON public.finance_guest_pa
 --
 
 CREATE INDEX fin_guest_order_idx ON public.finance_guest_payment_link USING btree (order_id, created_at DESC);
+
+
+--
+-- Name: fin_hold_active_payout; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fin_hold_active_payout ON public.finance_hold USING btree (payout_id, cleared_at);
 
 
 --
@@ -4754,6 +5904,34 @@ CREATE UNIQUE INDEX fin_payout_method_one_default ON public.finance_traveler_pay
 
 
 --
+-- Name: fin_payout_one_committed_attempt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_payout_one_committed_attempt ON public.finance_payout_attempt USING btree (payout_id) WHERE ((status)::text = ANY ((ARRAY['dispatch_committed'::character varying, 'unknown'::character varying, 'accepted'::character varying, 'sent'::character varying])::text[]));
+
+
+--
+-- Name: fin_payout_one_prepared_attempt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_payout_one_prepared_attempt ON public.finance_payout_attempt USING btree (payout_id) WHERE ((status)::text = 'prepared'::text);
+
+
+--
+-- Name: fin_payout_operation_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_payout_operation_identity ON public.finance_payout_provider_operation USING btree (kind, account_scope, provider_mode, provider_object_id) WHERE (NOT ((provider_object_id)::text = ''::text));
+
+
+--
+-- Name: fin_payout_operation_sequence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_payout_operation_sequence ON public.finance_payout_provider_operation USING btree (attempt_id, sequence) WHERE (attempt_id IS NOT NULL);
+
+
+--
 -- Name: fin_payout_queue_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4789,6 +5967,48 @@ CREATE UNIQUE INDEX fin_refund_unique_provider_refund ON public.finance_payment_
 
 
 --
+-- Name: fin_stripe_one_active_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fin_stripe_one_active_account ON public.finance_stripe_payout_account USING btree (traveler_id, platform_id, provider_mode) WHERE active;
+
+
+--
+-- Name: finance_dzd_profile_revision_account_fingerprint_d6496213; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_dzd_profile_revision_account_fingerprint_d6496213 ON public.finance_dzd_profile_revision USING btree (account_fingerprint);
+
+
+--
+-- Name: finance_dzd_profile_revision_account_fingerprint_d6496213_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_dzd_profile_revision_account_fingerprint_d6496213_like ON public.finance_dzd_profile_revision USING btree (account_fingerprint varchar_pattern_ops);
+
+
+--
+-- Name: finance_dzd_profile_revision_evidence_id_f926fc32; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_dzd_profile_revision_evidence_id_f926fc32 ON public.finance_dzd_profile_revision USING btree (evidence_id);
+
+
+--
+-- Name: finance_dzd_profile_revision_identity_attestation_id_16c42fd4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_dzd_profile_revision_identity_attestation_id_16c42fd4 ON public.finance_dzd_profile_revision USING btree (identity_attestation_id);
+
+
+--
+-- Name: finance_dzd_profile_revision_method_id_136d0c5f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_dzd_profile_revision_method_id_136d0c5f ON public.finance_dzd_profile_revision USING btree (method_id);
+
+
+--
 -- Name: finance_guest_payment_link_created_by_id_551a1ab1; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4814,6 +6034,48 @@ CREATE INDEX finance_guest_payment_link_order_id_a42e1ebd ON public.finance_gues
 --
 
 CREATE INDEX finance_guest_payment_link_token_hash_da4954f5_like ON public.finance_guest_payment_link USING btree (token_hash varchar_pattern_ops);
+
+
+--
+-- Name: finance_hold_account_id_2d03ecf0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_account_id_2d03ecf0 ON public.finance_hold USING btree (account_id);
+
+
+--
+-- Name: finance_hold_cleared_by_id_ddcd1db0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_cleared_by_id_ddcd1db0 ON public.finance_hold USING btree (cleared_by_id);
+
+
+--
+-- Name: finance_hold_deal_id_b4f859f8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_deal_id_b4f859f8 ON public.finance_hold USING btree (deal_id);
+
+
+--
+-- Name: finance_hold_opened_by_id_61ed2329; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_opened_by_id_61ed2329 ON public.finance_hold USING btree (opened_by_id);
+
+
+--
+-- Name: finance_hold_payout_id_ea48e192; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_payout_id_ea48e192 ON public.finance_hold USING btree (payout_id);
+
+
+--
+-- Name: finance_hold_source_attempt_id_f547de2d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_hold_source_attempt_id_f547de2d ON public.finance_hold USING btree (source_attempt_id);
 
 
 --
@@ -5083,10 +6345,374 @@ CREATE INDEX finance_payment_refund_status_51679129_like ON public.finance_payme
 
 
 --
+-- Name: finance_payout_active_instruction_version_id_3ce5d7a7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_active_instruction_version_id_3ce5d7a7 ON public.finance_payout USING btree (active_instruction_version_id);
+
+
+--
 -- Name: finance_payout_admin_actor_id_a9ddc7f4; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX finance_payout_admin_actor_id_a9ddc7f4 ON public.finance_payout USING btree (admin_actor_id);
+
+
+--
+-- Name: finance_payout_amount_revision_actor_id_b0b41f39; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_amount_revision_actor_id_b0b41f39 ON public.finance_payout_amount_revision USING btree (actor_id);
+
+
+--
+-- Name: finance_payout_amount_revision_fx_settings_version_id_5f2066c7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_amount_revision_fx_settings_version_id_5f2066c7 ON public.finance_payout_amount_revision USING btree (fx_settings_version_id);
+
+
+--
+-- Name: finance_payout_amount_revision_ledger_transaction_id_e08d7cb7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_amount_revision_ledger_transaction_id_e08d7cb7 ON public.finance_payout_amount_revision USING btree (ledger_transaction_id);
+
+
+--
+-- Name: finance_payout_amount_revision_payout_id_ca8521da; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_amount_revision_payout_id_ca8521da ON public.finance_payout_amount_revision USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_attempt_amount_revision_id_0d37b95e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_attempt_amount_revision_id_0d37b95e ON public.finance_payout_attempt USING btree (amount_revision_id);
+
+
+--
+-- Name: finance_payout_attempt_idempotency_key_b2f08040_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_attempt_idempotency_key_b2f08040_like ON public.finance_payout_attempt USING btree (idempotency_key varchar_pattern_ops);
+
+
+--
+-- Name: finance_payout_attempt_instruction_version_id_62243bca; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_attempt_instruction_version_id_62243bca ON public.finance_payout_attempt USING btree (instruction_version_id);
+
+
+--
+-- Name: finance_payout_attempt_operator_id_6ce3fbf2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_attempt_operator_id_6ce3fbf2 ON public.finance_payout_attempt USING btree (operator_id);
+
+
+--
+-- Name: finance_payout_attempt_payout_id_0e1e7692; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_attempt_payout_id_0e1e7692 ON public.finance_payout_attempt USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_dzd_profile_revision_id_da138436; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_dzd_profile_revision_id_da138436 ON public.finance_payout USING btree (dzd_profile_revision_id);
+
+
+--
+-- Name: finance_payout_event_actor_id_a62d3ee7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_event_actor_id_a62d3ee7 ON public.finance_payout_event USING btree (actor_id);
+
+
+--
+-- Name: finance_payout_event_evidence_id_997f5917; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_event_evidence_id_997f5917 ON public.finance_payout_event USING btree (evidence_id);
+
+
+--
+-- Name: finance_payout_event_ledger_transaction_id_a72df823; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_event_ledger_transaction_id_a72df823 ON public.finance_payout_event USING btree (ledger_transaction_id);
+
+
+--
+-- Name: finance_payout_event_operation_id_807b1409; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_event_operation_id_807b1409 ON public.finance_payout_event USING btree (operation_id);
+
+
+--
+-- Name: finance_payout_event_payout_id_89e98008; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_event_payout_id_89e98008 ON public.finance_payout_event USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_evidence_owner_id_751cc2e0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_evidence_owner_id_751cc2e0 ON public.finance_payout_evidence USING btree (owner_id);
+
+
+--
+-- Name: finance_payout_funding_allocation_allocation_key_1e7a6fa1_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_funding_allocation_allocation_key_1e7a6fa1_like ON public.finance_payout_funding_allocation USING btree (allocation_key varchar_pattern_ops);
+
+
+--
+-- Name: finance_payout_funding_allocation_attempt_id_da72ee55; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_funding_allocation_attempt_id_da72ee55 ON public.finance_payout_funding_allocation USING btree (attempt_id);
+
+
+--
+-- Name: finance_payout_funding_allocation_payout_id_872f06e0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_funding_allocation_payout_id_872f06e0 ON public.finance_payout_funding_allocation USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_funding_allocation_source_attempt_id_62488a9d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_funding_allocation_source_attempt_id_62488a9d ON public.finance_payout_funding_allocation USING btree (source_attempt_id);
+
+
+--
+-- Name: finance_payout_funding_attempt_id_b068abb2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_funding_attempt_id_b068abb2 ON public.finance_payout USING btree (funding_attempt_id);
+
+
+--
+-- Name: finance_payout_fx_settings_version_id_13a001ba; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_fx_settings_version_id_13a001ba ON public.finance_payout USING btree (fx_settings_version_id);
+
+
+--
+-- Name: finance_payout_fx_source_attempt_id_a9f6861d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_fx_source_attempt_id_a9f6861d ON public.finance_payout USING btree (fx_source_attempt_id);
+
+
+--
+-- Name: finance_payout_identity_attestation_attested_by_id_cbc2d8a6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_attestation_attested_by_id_cbc2d8a6 ON public.finance_payout_identity_attestation USING btree (attested_by_id);
+
+
+--
+-- Name: finance_payout_identity_attestation_kyc_submission_id_b5c6a3de; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_attestation_kyc_submission_id_b5c6a3de ON public.finance_payout_identity_attestation USING btree (kyc_submission_id);
+
+
+--
+-- Name: finance_payout_identity_attestation_supersedes_id_f05f6ad1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_attestation_supersedes_id_f05f6ad1 ON public.finance_payout_identity_attestation USING btree (supersedes_id);
+
+
+--
+-- Name: finance_payout_identity_attestation_traveler_id_521b64a4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_attestation_traveler_id_521b64a4 ON public.finance_payout_identity_attestation USING btree (traveler_id);
+
+
+--
+-- Name: finance_payout_identity_re_assigned_by_id_8bd7ea44; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_re_assigned_by_id_8bd7ea44 ON public.finance_payout_identity_review_assignment USING btree (assigned_by_id);
+
+
+--
+-- Name: finance_payout_identity_re_kyc_submission_id_1a3e6ceb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_re_kyc_submission_id_1a3e6ceb ON public.finance_payout_identity_review_assignment USING btree (kyc_submission_id);
+
+
+--
+-- Name: finance_payout_identity_review_assignment_reviewer_id_849f357f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_review_assignment_reviewer_id_849f357f ON public.finance_payout_identity_review_assignment USING btree (reviewer_id);
+
+
+--
+-- Name: finance_payout_identity_review_assignment_traveler_id_b6071b64; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_review_assignment_traveler_id_b6071b64 ON public.finance_payout_identity_review_assignment USING btree (traveler_id);
+
+
+--
+-- Name: finance_payout_identity_revocation_actor_id_0d4669c1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_identity_revocation_actor_id_0d4669c1 ON public.finance_payout_identity_revocation USING btree (actor_id);
+
+
+--
+-- Name: finance_payout_instruction_amendment_new_version_id_6d591f63; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_amendment_new_version_id_6d591f63 ON public.finance_payout_instruction_amendment USING btree (new_version_id);
+
+
+--
+-- Name: finance_payout_instruction_amendment_old_version_id_56abaf12; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_amendment_old_version_id_56abaf12 ON public.finance_payout_instruction_amendment USING btree (old_version_id);
+
+
+--
+-- Name: finance_payout_instruction_amendment_payout_id_e1b50536; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_amendment_payout_id_e1b50536 ON public.finance_payout_instruction_amendment USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_instruction_amendment_reviewed_by_id_75d0cfa3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_amendment_reviewed_by_id_75d0cfa3 ON public.finance_payout_instruction_amendment USING btree (reviewed_by_id);
+
+
+--
+-- Name: finance_payout_instruction_amendment_traveler_id_add22ee2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_amendment_traveler_id_add22ee2 ON public.finance_payout_instruction_amendment USING btree (traveler_id);
+
+
+--
+-- Name: finance_payout_instruction_confirmation_new_version_id_b22618a4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_confirmation_new_version_id_b22618a4 ON public.finance_payout_instruction_confirmation USING btree (new_version_id);
+
+
+--
+-- Name: finance_payout_instruction_confirmation_payout_id_7512f0ca; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_confirmation_payout_id_7512f0ca ON public.finance_payout_instruction_confirmation USING btree (payout_id);
+
+
+--
+-- Name: finance_payout_instruction_confirmation_traveler_id_16f8a562; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_instruction_confirmation_traveler_id_16f8a562 ON public.finance_payout_instruction_confirmation USING btree (traveler_id);
+
+
+--
+-- Name: finance_payout_method_version_created_by_id_9540ff66; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_method_version_created_by_id_9540ff66 ON public.finance_payout_method_version USING btree (created_by_id);
+
+
+--
+-- Name: finance_payout_method_version_dzd_profile_revision_id_3f3cc202; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_method_version_dzd_profile_revision_id_3f3cc202 ON public.finance_payout_method_version USING btree (dzd_profile_revision_id);
+
+
+--
+-- Name: finance_payout_method_version_id_de3d06b7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_method_version_id_de3d06b7 ON public.finance_payout USING btree (method_version_id);
+
+
+--
+-- Name: finance_payout_method_version_method_id_2f8935e7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_method_version_method_id_2f8935e7 ON public.finance_payout_method_version USING btree (method_id);
+
+
+--
+-- Name: finance_payout_method_version_stripe_account_id_bd562a2f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_method_version_stripe_account_id_bd562a2f ON public.finance_payout_method_version USING btree (stripe_account_id);
+
+
+--
+-- Name: finance_payout_profile_review_identity_attestation_id_14d1410f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_profile_review_identity_attestation_id_14d1410f ON public.finance_payout_profile_review USING btree (identity_attestation_id);
+
+
+--
+-- Name: finance_payout_profile_review_profile_id_5fa4ff9b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_profile_review_profile_id_5fa4ff9b ON public.finance_payout_profile_review USING btree (profile_id);
+
+
+--
+-- Name: finance_payout_profile_review_reviewer_id_cf325963; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_profile_review_reviewer_id_cf325963 ON public.finance_payout_profile_review USING btree (reviewer_id);
+
+
+--
+-- Name: finance_payout_provider_operation_attempt_id_6ca74607; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_provider_operation_attempt_id_6ca74607 ON public.finance_payout_provider_operation USING btree (attempt_id);
+
+
+--
+-- Name: finance_payout_provider_operation_idempotency_key_71abdc6f_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_provider_operation_idempotency_key_71abdc6f_like ON public.finance_payout_provider_operation USING btree (idempotency_key varchar_pattern_ops);
+
+
+--
+-- Name: finance_payout_provider_operation_method_id_822f098e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_provider_operation_method_id_822f098e ON public.finance_payout_provider_operation USING btree (method_id);
 
 
 --
@@ -5104,10 +6730,24 @@ CREATE INDEX finance_payout_status_652246a6_like ON public.finance_payout USING 
 
 
 --
+-- Name: finance_payout_stripe_account_id_8c52326c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_payout_stripe_account_id_8c52326c ON public.finance_payout USING btree (stripe_account_id);
+
+
+--
 -- Name: finance_payout_traveler_id_5ad36ce0; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX finance_payout_traveler_id_5ad36ce0 ON public.finance_payout USING btree (traveler_id);
+
+
+--
+-- Name: finance_provider_dispute_source_attempt_id_82a7e9a7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_provider_dispute_source_attempt_id_82a7e9a7 ON public.finance_provider_dispute USING btree (source_attempt_id);
 
 
 --
@@ -5185,6 +6825,20 @@ CREATE INDEX finance_scheduled_job_status_15b1c1fe ON public.finance_scheduled_j
 --
 
 CREATE INDEX finance_scheduled_job_status_15b1c1fe_like ON public.finance_scheduled_job USING btree (status varchar_pattern_ops);
+
+
+--
+-- Name: finance_stripe_payout_ac_creation_operation_key_fadc9128_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_stripe_payout_ac_creation_operation_key_fadc9128_like ON public.finance_stripe_payout_account USING btree (creation_operation_key varchar_pattern_ops);
+
+
+--
+-- Name: finance_stripe_payout_account_traveler_id_d9df979a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finance_stripe_payout_account_traveler_id_d9df979a ON public.finance_stripe_payout_account USING btree (traveler_id);
 
 
 --
@@ -6938,6 +8592,132 @@ CREATE INDEX wallet_withdrawal_wallet_id_4825123a ON public.wallet_withdrawal US
 
 
 --
+-- Name: finance_dzd_profile_revision payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_dzd_profile_revision FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_amount_revision payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_amount_revision FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_event payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_event FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_evidence payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_evidence FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_funding_allocation payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_funding_allocation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_identity_attestation payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_identity_attestation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_identity_revocation payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_identity_revocation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_instruction_amendment payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_instruction_amendment FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_instruction_confirmation payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_instruction_confirmation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_method_version payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_method_version FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_profile_review payout_history_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_history_immutable BEFORE DELETE OR UPDATE ON public.finance_payout_profile_review FOR EACH ROW EXECUTE FUNCTION public.finance_payout_immutable();
+
+
+--
+-- Name: finance_payout_attempt payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_payout_attempt FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_payout_funding_allocation payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_payout_funding_allocation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_payout_method_version payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_payout_method_version FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_payout_provider_operation payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_payout_provider_operation FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_stripe_payout_account payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_stripe_payout_account FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_traveler_payout_method payout_relation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_relation_guard BEFORE INSERT OR UPDATE ON public.finance_traveler_payout_method FOR EACH ROW EXECUTE FUNCTION public.finance_payout_relation_guard();
+
+
+--
+-- Name: finance_payout payout_snapshot_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payout_snapshot_immutable BEFORE INSERT OR UPDATE ON public.finance_payout FOR EACH ROW EXECUTE FUNCTION public.finance_payout_snapshot_guard();
+
+
+--
 -- Name: accounts_emailverificationcode accounts_emailverifi_user_id_2d1d1145_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7314,6 +9094,30 @@ ALTER TABLE ONLY public.django_admin_log
 
 
 --
+-- Name: finance_dzd_profile_revision finance_dzd_profile__evidence_id_f926fc32_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT finance_dzd_profile__evidence_id_f926fc32_fk_finance_p FOREIGN KEY (evidence_id) REFERENCES public.finance_payout_evidence(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_dzd_profile_revision finance_dzd_profile__identity_attestation_16c42fd4_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT finance_dzd_profile__identity_attestation_16c42fd4_fk_finance_p FOREIGN KEY (identity_attestation_id) REFERENCES public.finance_payout_identity_attestation(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_dzd_profile_revision finance_dzd_profile__method_id_136d0c5f_fk_finance_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_dzd_profile_revision
+    ADD CONSTRAINT finance_dzd_profile__method_id_136d0c5f_fk_finance_t FOREIGN KEY (method_id) REFERENCES public.finance_traveler_payout_method(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: finance_guest_payment_link finance_guest_paymen_created_by_id_551a1ab1_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7327,6 +9131,54 @@ ALTER TABLE ONLY public.finance_guest_payment_link
 
 ALTER TABLE ONLY public.finance_guest_payment_link
     ADD CONSTRAINT finance_guest_paymen_order_id_a42e1ebd_fk_finance_p FOREIGN KEY (order_id) REFERENCES public.finance_payment_order(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_account_id_2d03ecf0_fk_finance_s; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_account_id_2d03ecf0_fk_finance_s FOREIGN KEY (account_id) REFERENCES public.finance_stripe_payout_account(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_cleared_by_id_ddcd1db0_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_cleared_by_id_ddcd1db0_fk_accounts_user_id FOREIGN KEY (cleared_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_deal_id_b4f859f8_fk_deals_deal_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_deal_id_b4f859f8_fk_deals_deal_id FOREIGN KEY (deal_id) REFERENCES public.deals_deal(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_opened_by_id_61ed2329_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_opened_by_id_61ed2329_fk_accounts_user_id FOREIGN KEY (opened_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_payout_id_ea48e192_fk_finance_payout_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_payout_id_ea48e192_fk_finance_payout_id FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_hold finance_hold_source_attempt_id_f547de2d_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_hold
+    ADD CONSTRAINT finance_hold_source_attempt_id_f547de2d_fk_finance_p FOREIGN KEY (source_attempt_id) REFERENCES public.finance_payment_attempt(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -7506,11 +9358,83 @@ ALTER TABLE ONLY public.finance_payment_refund
 
 
 --
+-- Name: finance_payout finance_payout_active_instruction_v_3ce5d7a7_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_active_instruction_v_3ce5d7a7_fk_finance_p FOREIGN KEY (active_instruction_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: finance_payout finance_payout_admin_actor_id_a9ddc7f4_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_payout
     ADD CONSTRAINT finance_payout_admin_actor_id_a9ddc7f4_fk_accounts_user_id FOREIGN KEY (admin_actor_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_amount_revision finance_payout_amoun_actor_id_b0b41f39_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT finance_payout_amoun_actor_id_b0b41f39_fk_accounts_ FOREIGN KEY (actor_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_amount_revision finance_payout_amoun_fx_settings_version__5f2066c7_fk_core_busi; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT finance_payout_amoun_fx_settings_version__5f2066c7_fk_core_busi FOREIGN KEY (fx_settings_version_id) REFERENCES public.core_business_settings_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_amount_revision finance_payout_amoun_ledger_transaction_i_e08d7cb7_fk_finance_l; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT finance_payout_amoun_ledger_transaction_i_e08d7cb7_fk_finance_l FOREIGN KEY (ledger_transaction_id) REFERENCES public.finance_ledger_transaction(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_amount_revision finance_payout_amoun_payout_id_ca8521da_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_amount_revision
+    ADD CONSTRAINT finance_payout_amoun_payout_id_ca8521da_fk_finance_p FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attem_amount_revision_id_0d37b95e_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attem_amount_revision_id_0d37b95e_fk_finance_p FOREIGN KEY (amount_revision_id) REFERENCES public.finance_payout_amount_revision(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attem_instruction_version__62243bca_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attem_instruction_version__62243bca_fk_finance_p FOREIGN KEY (instruction_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attempt_operator_id_6ce3fbf2_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attempt_operator_id_6ce3fbf2_fk_accounts_user_id FOREIGN KEY (operator_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_attempt finance_payout_attempt_payout_id_0e1e7692_fk_finance_payout_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_attempt
+    ADD CONSTRAINT finance_payout_attempt_payout_id_0e1e7692_fk_finance_payout_id FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -7522,11 +9446,355 @@ ALTER TABLE ONLY public.finance_payout
 
 
 --
+-- Name: finance_payout finance_payout_dzd_profile_revision_da138436_fk_finance_d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_dzd_profile_revision_da138436_fk_finance_d FOREIGN KEY (dzd_profile_revision_id) REFERENCES public.finance_dzd_profile_revision(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_event finance_payout_event_actor_id_a62d3ee7_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_actor_id_a62d3ee7_fk_accounts_user_id FOREIGN KEY (actor_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_event finance_payout_event_evidence_id_997f5917_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_evidence_id_997f5917_fk_finance_p FOREIGN KEY (evidence_id) REFERENCES public.finance_payout_evidence(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_event finance_payout_event_ledger_transaction_i_a72df823_fk_finance_l; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_ledger_transaction_i_a72df823_fk_finance_l FOREIGN KEY (ledger_transaction_id) REFERENCES public.finance_ledger_transaction(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_event finance_payout_event_operation_id_807b1409_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_operation_id_807b1409_fk_finance_p FOREIGN KEY (operation_id) REFERENCES public.finance_payout_provider_operation(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_event finance_payout_event_payout_id_89e98008_fk_finance_payout_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_event
+    ADD CONSTRAINT finance_payout_event_payout_id_89e98008_fk_finance_payout_id FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_evidence finance_payout_evidence_owner_id_751cc2e0_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_evidence
+    ADD CONSTRAINT finance_payout_evidence_owner_id_751cc2e0_fk_accounts_user_id FOREIGN KEY (owner_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_funding_allocation finance_payout_fundi_attempt_id_da72ee55_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_funding_allocation
+    ADD CONSTRAINT finance_payout_fundi_attempt_id_da72ee55_fk_finance_p FOREIGN KEY (attempt_id) REFERENCES public.finance_payout_attempt(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_funding_allocation finance_payout_fundi_payout_id_872f06e0_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_funding_allocation
+    ADD CONSTRAINT finance_payout_fundi_payout_id_872f06e0_fk_finance_p FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_funding_allocation finance_payout_fundi_source_attempt_id_62488a9d_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_funding_allocation
+    ADD CONSTRAINT finance_payout_fundi_source_attempt_id_62488a9d_fk_finance_p FOREIGN KEY (source_attempt_id) REFERENCES public.finance_payment_attempt(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout finance_payout_funding_attempt_id_b068abb2_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_funding_attempt_id_b068abb2_fk_finance_p FOREIGN KEY (funding_attempt_id) REFERENCES public.finance_payment_attempt(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout finance_payout_fx_settings_version__13a001ba_fk_core_busi; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_fx_settings_version__13a001ba_fk_core_busi FOREIGN KEY (fx_settings_version_id) REFERENCES public.core_business_settings_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout finance_payout_fx_source_attempt_id_a9f6861d_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_fx_source_attempt_id_a9f6861d_fk_finance_p FOREIGN KEY (fx_source_attempt_id) REFERENCES public.finance_payment_attempt(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_revocation finance_payout_ident_actor_id_0d4669c1_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_revocation
+    ADD CONSTRAINT finance_payout_ident_actor_id_0d4669c1_fk_accounts_ FOREIGN KEY (actor_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_ident_assigned_by_id_8bd7ea44_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_ident_assigned_by_id_8bd7ea44_fk_accounts_ FOREIGN KEY (assigned_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_revocation finance_payout_ident_attestation_id_6f29f57b_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_revocation
+    ADD CONSTRAINT finance_payout_ident_attestation_id_6f29f57b_fk_finance_p FOREIGN KEY (attestation_id) REFERENCES public.finance_payout_identity_attestation(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_ident_attested_by_id_cbc2d8a6_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_ident_attested_by_id_cbc2d8a6_fk_accounts_ FOREIGN KEY (attested_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_ident_kyc_submission_id_1a3e6ceb_fk_kyc_submi; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_ident_kyc_submission_id_1a3e6ceb_fk_kyc_submi FOREIGN KEY (kyc_submission_id) REFERENCES public.kyc_submission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_ident_kyc_submission_id_b5c6a3de_fk_kyc_submi; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_ident_kyc_submission_id_b5c6a3de_fk_kyc_submi FOREIGN KEY (kyc_submission_id) REFERENCES public.kyc_submission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_ident_reviewer_id_849f357f_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_ident_reviewer_id_849f357f_fk_accounts_ FOREIGN KEY (reviewer_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_ident_supersedes_id_f05f6ad1_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_ident_supersedes_id_f05f6ad1_fk_finance_p FOREIGN KEY (supersedes_id) REFERENCES public.finance_payout_identity_attestation(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_attestation finance_payout_ident_traveler_id_521b64a4_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_attestation
+    ADD CONSTRAINT finance_payout_ident_traveler_id_521b64a4_fk_accounts_ FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_identity_review_assignment finance_payout_ident_traveler_id_b6071b64_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_identity_review_assignment
+    ADD CONSTRAINT finance_payout_ident_traveler_id_b6071b64_fk_accounts_ FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instr_new_version_id_6d591f63_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instr_new_version_id_6d591f63_fk_finance_p FOREIGN KEY (new_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_confirmation finance_payout_instr_new_version_id_b22618a4_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_confirmation
+    ADD CONSTRAINT finance_payout_instr_new_version_id_b22618a4_fk_finance_p FOREIGN KEY (new_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instr_old_version_id_56abaf12_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instr_old_version_id_56abaf12_fk_finance_p FOREIGN KEY (old_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_confirmation finance_payout_instr_payout_id_7512f0ca_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_confirmation
+    ADD CONSTRAINT finance_payout_instr_payout_id_7512f0ca_fk_finance_p FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instr_payout_id_e1b50536_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instr_payout_id_e1b50536_fk_finance_p FOREIGN KEY (payout_id) REFERENCES public.finance_payout(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instr_reviewed_by_id_75d0cfa3_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instr_reviewed_by_id_75d0cfa3_fk_accounts_ FOREIGN KEY (reviewed_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_confirmation finance_payout_instr_traveler_id_16f8a562_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_confirmation
+    ADD CONSTRAINT finance_payout_instr_traveler_id_16f8a562_fk_accounts_ FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_instruction_amendment finance_payout_instr_traveler_id_add22ee2_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_instruction_amendment
+    ADD CONSTRAINT finance_payout_instr_traveler_id_add22ee2_fk_accounts_ FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_method_version finance_payout_metho_created_by_id_9540ff66_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_metho_created_by_id_9540ff66_fk_accounts_ FOREIGN KEY (created_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_method_version finance_payout_metho_dzd_profile_revision_3f3cc202_fk_finance_d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_metho_dzd_profile_revision_3f3cc202_fk_finance_d FOREIGN KEY (dzd_profile_revision_id) REFERENCES public.finance_dzd_profile_revision(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_method_version finance_payout_metho_method_id_2f8935e7_fk_finance_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_metho_method_id_2f8935e7_fk_finance_t FOREIGN KEY (method_id) REFERENCES public.finance_traveler_payout_method(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_method_version finance_payout_metho_stripe_account_id_bd562a2f_fk_finance_s; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_method_version
+    ADD CONSTRAINT finance_payout_metho_stripe_account_id_bd562a2f_fk_finance_s FOREIGN KEY (stripe_account_id) REFERENCES public.finance_stripe_payout_account(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout finance_payout_method_version_id_de3d06b7_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_method_version_id_de3d06b7_fk_finance_p FOREIGN KEY (method_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_profile_review finance_payout_profi_identity_attestation_14d1410f_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_profile_review
+    ADD CONSTRAINT finance_payout_profi_identity_attestation_14d1410f_fk_finance_p FOREIGN KEY (identity_attestation_id) REFERENCES public.finance_payout_identity_attestation(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_profile_review finance_payout_profi_profile_id_5fa4ff9b_fk_finance_d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_profile_review
+    ADD CONSTRAINT finance_payout_profi_profile_id_5fa4ff9b_fk_finance_d FOREIGN KEY (profile_id) REFERENCES public.finance_dzd_profile_revision(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_profile_review finance_payout_profi_reviewer_id_cf325963_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_profile_review
+    ADD CONSTRAINT finance_payout_profi_reviewer_id_cf325963_fk_accounts_ FOREIGN KEY (reviewer_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_provider_operation finance_payout_provi_attempt_id_6ca74607_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_provider_operation
+    ADD CONSTRAINT finance_payout_provi_attempt_id_6ca74607_fk_finance_p FOREIGN KEY (attempt_id) REFERENCES public.finance_payout_attempt(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout_provider_operation finance_payout_provi_method_id_822f098e_fk_finance_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout_provider_operation
+    ADD CONSTRAINT finance_payout_provi_method_id_822f098e_fk_finance_t FOREIGN KEY (method_id) REFERENCES public.finance_traveler_payout_method(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_payout finance_payout_stripe_account_id_8c52326c_fk_finance_s; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_payout
+    ADD CONSTRAINT finance_payout_stripe_account_id_8c52326c_fk_finance_s FOREIGN KEY (stripe_account_id) REFERENCES public.finance_stripe_payout_account(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: finance_payout finance_payout_traveler_id_5ad36ce0_fk_accounts_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.finance_payout
     ADD CONSTRAINT finance_payout_traveler_id_5ad36ce0_fk_accounts_user_id FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_provider_dispute finance_provider_dis_source_attempt_id_82a7e9a7_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_provider_dispute
+    ADD CONSTRAINT finance_provider_dis_source_attempt_id_82a7e9a7_fk_finance_p FOREIGN KEY (source_attempt_id) REFERENCES public.finance_payment_attempt(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -7551,6 +9819,22 @@ ALTER TABLE ONLY public.finance_provider_event
 
 ALTER TABLE ONLY public.finance_scheduled_job
     ADD CONSTRAINT finance_scheduled_jo_resolved_by_id_45521f75_fk_accounts_ FOREIGN KEY (resolved_by_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_stripe_payout_account finance_stripe_payou_traveler_id_d9df979a_fk_accounts_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_stripe_payout_account
+    ADD CONSTRAINT finance_stripe_payou_traveler_id_d9df979a_fk_accounts_ FOREIGN KEY (traveler_id) REFERENCES public.accounts_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finance_traveler_payout_method finance_traveler_pay_current_version_id_ea63db31_fk_finance_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_traveler_payout_method
+    ADD CONSTRAINT finance_traveler_pay_current_version_id_ea63db31_fk_finance_p FOREIGN KEY (current_version_id) REFERENCES public.finance_payout_method_version(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -8269,5 +10553,5 @@ ALTER TABLE ONLY public.wallet_withdrawal
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qpk1RlpenyWVNELpBuFyBa2VufMWw9njS1dCzfyqqKgoTK1dhz3RCIjIdm7JDql
+\unrestrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
 

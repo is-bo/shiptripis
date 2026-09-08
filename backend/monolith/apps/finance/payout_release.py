@@ -89,7 +89,9 @@ def freeze_payout(
     """
 
     deal = aggregate.deal
-    payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=deal.pk).first()
+    payout = (
+        Payout.objects.select_for_update(no_key=True).filter(deal_id=deal.pk).first()
+    )
     if payout is None:
         return "no_payout"
     if payout.status == Payout.Status.PAID:
@@ -108,6 +110,10 @@ def freeze_payout(
     payout.scheduled_for = None
     payout.notes = f"Frozen by dispute #{dispute_id or ''}: {reason}"[:2000]
     payout.save(update_fields=["status", "scheduled_for", "notes", "updated_at"])
+    if payout.snapshot_version:
+        from .payout_domain import append_event_locked
+
+        append_event_locked(payout, previous=previous, reason="dispute_freeze")
     lifecycle.record_event(
         deal,
         DealEvent.Kind.PAYOUT_STATUS_CHANGED,
@@ -171,9 +177,51 @@ def evaluate_payout_release(
             )
             return f"financial_state_{problem}"
 
-        payout = Payout.objects.select_for_update(no_key=True).filter(deal_id=deal.pk).first()
+        payout = (
+            Payout.objects.select_for_update(no_key=True)
+            .filter(deal_id=deal.pk)
+            .first()
+        )
         if payout is None:
             return "no_payout"
+        if payout.block_reason == "legacy_instruction_required":
+            _close_out(aggregate, reason=reason, at=at)
+            return "legacy_instruction_required"
+        if payout.snapshot_version:
+            from .payout_domain import active_holds, append_event_locked
+
+            if active_holds(payout).exists():
+                return "finance_hold_active"
+            if payout.status in (
+                "processing",
+                "sent",
+                "paid",
+                "cancelled",
+                "scheduled",
+            ):
+                _close_out(aggregate, reason=reason, at=at)
+                return f"payout_{payout.status}"
+            target = "blocked" if payout.block_reason else "eligible"
+            if payout.status != target or not payout.eligible_at:
+                previous = payout.status
+                payout.status = target
+                payout.eligible_at = payout.eligible_at or at
+                payout.eligibility_basis = (
+                    payout.eligibility_basis or "delivery_protection"
+                )
+                payout.save(
+                    update_fields=[
+                        "status",
+                        "eligible_at",
+                        "eligibility_basis",
+                        "updated_at",
+                    ]
+                )
+                append_event_locked(
+                    payout, previous=previous, reason="protection_release"
+                )
+            _close_out(aggregate, reason=reason, at=at)
+            return f"payout_{target}"
         if payout.status in (
             Payout.Status.PAID,
             Payout.Status.CANCELLED,
@@ -261,9 +309,7 @@ def _notify_protection_ended(aggregate: LockedLifecycleAggregate) -> None:
         )
 
 
-def _notify_payout_status(
-    aggregate: LockedLifecycleAggregate, payout: Payout
-) -> None:
+def _notify_payout_status(aggregate: LockedLifecycleAggregate, payout: Payout) -> None:
     """Tell the traveler their money is now released for settlement.
 
     Keyed on the payout and the status, so a re-evaluation that finds the
