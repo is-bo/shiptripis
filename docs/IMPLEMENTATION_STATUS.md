@@ -1,9 +1,14 @@
 # ShipTrip V1 Implementation Status
 
-Latest backend phase: **Phase 8F-H2 implemented, dormant, not deployed**.
-Stripe Connect TEST onboarding and readiness exist behind flags that are all
-false; no Stripe Connect object has been created and no money path exists.
-See the H2 entry below for validation and the owner actions external TEST needs.
+Latest backend phase: **Phase 8F-H2 deployed; H2.5 external verification blocked**.
+H1/H2 are deployed at `5af0850f633c9a05d3f55205e95d405983da31b2`
+(`v1.0.0-rc.13+5af0850`). FR-only TEST onboarding flags, independent payout
+encryption keys and the dedicated Connect TEST webhook are configured. Stripe
+rejects connected-account creation because the sandbox has not signed up for
+Connect. No connected account, Transfer or bank Payout was created. The existing
+EUR 3 TEST Sender Checkout succeeded and its platform webhook applied exactly
+once, including duplicate/restart checks. **H2.5 FAIL; H3 prerequisites NO.**
+See [H2.5 verification report](PHASE8F_H25_TEST_ACTIVATION_VERIFICATION.md).
 
 Current phase: Phase 5 **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 5C visual restoration **IMPLEMENTED / HARDWARE QA PENDING**; Phase 6B **IMPLEMENTED / NATIVE-LANGUAGE, EMAIL-CLIENT AND LEGAL REVIEW PENDING**; Phase 6C **IMPLEMENTED / EXTERNAL SENDING INACTIVE**; Phase 6D mobile communication-language integration **IMPLEMENTED**; Phase 7A production hardening **IMPLEMENTED / EXTERNAL ACTIVATION PENDING**; Phase 8A mobile reliability **IMPLEMENTED / RELEASE-MODE HARDWARE QA PENDING**; Phase 8B authoritative geography catalogue **IMPLEMENTED**; Phase 8C canonical location UX and locality matching **IMPLEMENTED / DEVICE REVIEW PENDING**; Phase 8C UX review pass **IMPLEMENTED / HARDWARE QA PENDING**; Phase 8D admin rebuild, 8D-R matching lock repair, 8D-F finance deadlock repair and 8D-V visual pass **IMPLEMENTED**; Phase 8E integration and private release candidate **IMPLEMENTED / OWNER DEVICE QA AND PROVIDER-MODE READ PENDING**; Phase 8F-A journey UX and flight-proof repair **IMPLEMENTED / RELEASED**; Phase 8F-B parcel posting UX, validation flow and required item photo **IMPLEMENTED / RELEASED**; Phase 8F-C provider/storage integration **IMPLEMENTED / RELEASED**; Phase 8F-D real phone push notifications **IMPLEMENTED / RELEASED, SERVER-SIDE FCM ACTIVE, HARDWARE QA PENDING**
 Latest repair phase: Phase 8F-F6 final consolidation **IMPLEMENTED / RELEASED, OWNER DEVICE QA PENDING** — F1–F5 consolidated as `v1.0.0-rc.9+b3bad99`, deployed to production and built as one private profile ARM64 APK; physical phone push receipt remains unproven and is the owner's step.
