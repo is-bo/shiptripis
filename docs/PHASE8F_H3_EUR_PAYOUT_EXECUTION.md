@@ -278,3 +278,129 @@ once real provider operations exist.
   passes Stripe's `pending`-only refusal through. Nothing calls it
   automatically.
 * **Non-Stripe-funded EUR.** Still gated, still false, still blocked.
+
+## Verified on the deployed release
+
+`v1.0.0-rc.17+1d86cb3`, deployment `2eb9b372-d756-477a-bc6b-5099a18d5044`,
+SUCCESS. `/healthz` and `/readyz` 200, migrations `ok`, zero pending. Merged as
+a fast-forward of the CI-green SHA; six required jobs passed, including the
+schema-drift gate.
+
+Webhook events were added **after** the deploy, never before: the connected
+destination `we_1UDSGx3aixfgmaTzPxCXmtOB` now carries 11 events and the platform
+destination `we_1UAYk83aixfgmaTzEQr2WKS0` 16, both on `2026-03-25.dahlia`, all
+five original payment events retained, no wildcard.
+
+Both authorisations were turned on — `STRIPE_CONNECT_PAYOUTS_ENABLED=true` and
+business settings **v9** with `payments.payout.auto_stripe_enabled=true`.
+
+### The controlled TEST payouts
+
+Three new Deals were built for synthetic Traveler `14` through the real
+services — offer, acceptance, recipient, pickup and delivery all through
+production code paths — and paid with real Stripe TEST Checkout sessions. The
+historical EUR 60 QA payout `1` was not reused and is untouched.
+
+**The gate was proven before it was passed.** With the flag on, the business
+setting on, the account authoritatively `ready` and the money captured, the
+first payout still refused: `payout_not_eligible`, zero attempts, zero external
+operations. Only then was the stored protection deadline moved into the past —
+a database fixture, with no endpoint added and the production check unchanged.
+
+| | Payout 2 | Payout 3 |
+|---|---|---|
+| Source charge | `ch_3UDl9N3aixfgmaTz0xwd8rr2` | `ch_3UDlGS3aixfgmaTz1kSe4R12` |
+| Transfer | `tr_3UDl9N3aixfgmaTz0MVUi3Zp` | `tr_3UDlGS3aixfgmaTz1OOyOZSO` |
+| Bank payout | `po_1UDlHlKWXRqQfWCdfzxKss8X` | `po_1UDlOGKWXRqQfWCdqaaSLs2W` |
+| Stripe status | **paid** | **paid** |
+| ShipTrip status | **paid** | **paid** |
+
+Stripe's own `GET /v1/payouts/po_1UDlHl…` reports `status: paid`, `amount: 6000`,
+`currency: eur`, `method: standard`, `automatic: false`, `livemode: false`,
+destination `ba_1UDShtKWXRqQfWCdLiAFt2n0`, and metadata containing only
+ShipTrip's opaque operation and payout references.
+
+Nobody clicked anything. `evaluate_payout_release` armed `payout_execute`, and
+the deployed worker did the rest.
+
+### What the evidence actually shows
+
+**The PaymentIntent gap is real and was closed.** The checkout rail had stored
+only `pi_3UDl9N…`; `provider_charge_id` was empty. H3 resolved it to `ch_…`,
+verified the charge and persisted it, and Stripe accepted the Transfer with that
+charge as `source_transaction`.
+
+**A Transfer is not a payment.** After the transfer accepted, the ledger read
+`connect_funds 6000`, `traveler_payable −6000` — money out of the platform, and
+the Traveler still owed every cent. The payable only reached zero when Stripe
+said `paid`.
+
+**Deferral is real, not decorative.** Payout 2's transfer was made against an
+unsettled charge, so Stripe placed the funds in the connected account's
+*pending* balance. The bank stage deferred with `connected_balance_pending`,
+retry budget untouched at attempts `0`, rather than paying a bank from money
+that had not settled.
+
+**Convergence is idempotent under real provider behaviour.** Eight `payout.*`
+events arrived across the two payouts — `created`, `updated` twice, `paid` —
+and every one resolved to `bank_payout_paid` with **one** ledger effect each and
+zero failed events. `transfer.created` (platform) and `balance.available` (both
+scopes) were also ingested and applied.
+
+**Exactly one Transfer per payout**, counted on the provider's own objects:
+`{payout 2: 1, payout 3: 1, payout 4: 1}`.
+
+**Ledger, per Deal, after settlement:** `traveler_payable 0`, `connect_funds 0`,
+`payout_in_transit 0`, `provider_clearing 1500`, `platform_commission −1500`,
+net **0**. The Traveler received the full EUR 60.00; no Stripe cost was
+deducted from it.
+
+**Notifications leaked nothing.** Nine durable `payout_status` messages, all
+`pending`, none dispatched, keyed on the payout reference and state version, and
+containing no `acct_`, `tr_`, `po_`, `ch_` or `ba_` value.
+
+**Admin surface, rendered live on the paid payout.** Finance gets `200` with the
+Stripe panel, the transfer and bank-payout references, the source charge, a
+masked account reference (the full connected id is absent), the timeline through
+`bank_payout_paid`, and the recovery actions. There is no “Mark payout paid” on
+the page, no secret and no IBAN. Support gets `403`.
+
+### The failure test, and why it is not live evidence
+
+H0 and this phase prefer a Stripe-supported TEST bank-payout failure. Stripe
+publishes FR test IBANs for exactly that — `FR89370400440532013002` fails with
+`account_closed`. Adding one to Traveler 14's connected account was refused:
+
+```
+403 invalid_request_error / oauth_not_supported
+This application does not have the required permissions for this endpoint
+on account 'acct_1UDSCoKWXRqQfWCd'.
+```
+
+That was the **platform's own credential**, not a restricted CLI key. A platform
+may not manage the external account of a `requirement_collection=stripe`
+controller account — which is the architecture working exactly as H0 and H2
+specified: the Traveler owns their bank details in the Express Dashboard and
+ShipTrip never holds or changes them. Forcing a live failure requires the
+Traveler to add the failing IBAN themselves, the same class of human step as
+H2.5's hCaptcha.
+
+So the failure and recovery paths — definitive bank rejection, bank failure
+before paid, late return after paid, ambiguous-result recovery, transfer
+rejection and release — are proven by **provider-adapter fault injection against
+real PostgreSQL**, not by Stripe. That distinction is deliberate and this
+document does not blur it.
+
+### Open at the end of the run
+
+Payout 4 is `processing` with its Transfer accepted (`tr_3UDlMD3aixfgmaTz0VBDqz5s`)
+and its bank payout waiting for connected-account availability. That is the
+deferral behaving correctly, not a stall; the sweeper carries it. The historical
+EUR 60 QA payout `1` remains `blocked / legacy_instruction_required`, unpaid,
+with no provider reference.
+
+One minor finding worth recording: `PayoutDeferred` does not advance the
+payout's `next_action_at`, so the sweeper re-arms a deferred payout on its own
+cadence rather than the deferral's. Each re-arm simply re-reads the balance and
+defers again, so it is not a correctness problem — but the deferral's own delay
+is advisory rather than binding, and a later phase should make the two agree.

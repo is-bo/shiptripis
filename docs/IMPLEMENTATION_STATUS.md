@@ -5238,3 +5238,63 @@ are unchanged and false.
 Migrations `finance/0020_phase8fh3_execution` (additive models, columns, ledger
 accounts and job kinds) and `finance/0021_phase8fh3_guards` (write-boundary
 triggers) rewrite no data and make no provider call.
+
+### H3 TEST verification (2026-09-09)
+
+Deployed `v1.0.0-rc.17+1d86cb3`, deployment `2eb9b372-d756-477a-bc6b-5099a18d5044`
+SUCCESS, `/healthz` and `/readyz` 200, migrations `ok`. Merged as a fast-forward
+of the CI-green SHA; all six required jobs passed including schema drift.
+
+Webhook events were added after the deploy, never before: the connected
+destination now carries 11 events and the platform destination 16, both on
+`2026-03-25.dahlia`, all five original payment events retained, no wildcard.
+Both authorisations were enabled — the deployment flag and business settings v9.
+
+Three controlled Deals were built for synthetic Traveler 14 through the real
+services and paid with real Stripe TEST Checkout. The historical EUR 60 QA
+payout `1` was not reused and remains `blocked / legacy_instruction_required`,
+unpaid, with no provider reference.
+
+The gate was proven before it was passed: with both switches on, a ready
+account and the money captured, the payout still refused with
+`payout_not_eligible` and zero external operations. Only then was the stored
+protection deadline moved into the past — a database fixture, no endpoint added.
+
+Two payouts completed end to end, driven entirely by the deployed worker with no
+admin action. Payout 2: charge `ch_3UDl9N…` → transfer `tr_3UDl9N…` → bank
+payout `po_1UDlHl…`. Payout 3: `ch_3UDlGS…` → `tr_3UDlGS…` → `po_1UDlOG…`.
+Stripe's own payout object reports `status: paid`, EUR 6000, `method: standard`,
+`automatic: false`, `livemode: false`, with metadata carrying only ShipTrip's
+opaque references.
+
+The checkout rail had stored only the PaymentIntent — `provider_charge_id` was
+empty — so the charge resolution H3 exists for was genuinely exercised. After
+each transfer the ledger read `connect_funds 6000` with `traveler_payable −6000`:
+money out of the platform, Traveler still owed in full. The payable reached zero
+only on Stripe's `paid`. Payout 2's transfer was made against an unsettled
+charge, so the bank stage deferred on `connected_balance_pending` with its retry
+budget untouched rather than paying a bank from unsettled money.
+
+Eight `payout.*` events arrived and every one converged on `bank_payout_paid`
+with one ledger effect each and zero failed events; `transfer.created` and
+`balance.available` were ingested on both scopes. Exactly one Transfer exists
+per payout, counted on Stripe's own objects. Each Deal's ledger nets zero and
+the Traveler received the full EUR 60.00 with no provider cost deducted. Nine
+durable payout notifications were enqueued, all pending, none dispatched, none
+containing a provider identifier. The Finance console renders the Stripe panel,
+references, masked account and timeline for Finance and returns 403 for Support,
+with no "Mark payout paid" control.
+
+A live bank-payout failure could not be produced. Adding Stripe's FR
+`account_closed` test IBAN was refused `403 oauth_not_supported` using the
+platform's own credential, because a platform may not manage the external
+account of a Stripe-collected controller account — the architecture working as
+H0 and H2 specified. The failure and recovery paths are therefore proven by
+provider-adapter fault injection against real PostgreSQL, and that distinction
+is stated rather than blurred.
+
+Payout 4 ended the run `processing` with its transfer accepted and its bank
+payout waiting on connected-account availability — the deferral behaving
+correctly, carried by the sweeper. Non-Stripe funding, DZD execution, the
+Finance dashboard and email all remain false; Chargily remains TEST; no LIVE
+money operation occurred.
