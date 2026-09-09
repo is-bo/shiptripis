@@ -5371,7 +5371,7 @@ they are done.
 
 ## Phase 8F-H4 — DZD manual payout core (2026-09-09)
 
-Implementation and focused PostgreSQL verification are in progress on
+Implementation and PostgreSQL verification completed on
 `codex/phase8fh4-dzd-manual`, starting at `98e72a926d41c3766782a3870c173fd19d0cee19`.
 The H0/H1-compatible encrypted CCP/RIP profile, private cheque/receipt evidence,
 Finance review/reveal, claimed manual instruction and evidence-backed settlement
@@ -5388,5 +5388,10 @@ authorized sharing/renaming an existing bucket. The KYC bucket label is now
 `shiptrip-private-evidence`; its physical name, endpoint, credentials and existing
 objects are unchanged. Explicit payout storage variables use that private bucket
 with separate account-document and transfer-receipt prefixes and H1 encryption.
-Execution remains off outside isolated tests. Final CI, merge, deployment and
-controlled deployed verification are pending; no H4 PASS is claimed yet.
+Execution remains off outside isolated tests. The complete local finance release
+suite passed **793 tests** (270 warnings, 644.41 seconds). GitHub Actions run
+34402704364 could not start jobs because of the account billing/monthly limit;
+the owner explicitly authorized local verification and a direct main update.
+Cloud CI is unavailable, not passed. Implementation commit: `dc0f872ef283f0c805692c7e1ed6cd9a08e2b360`.
+Deployment and controlled deployed verification follow this release gate; their
+final identifiers/results are recorded in the H4 release report.
