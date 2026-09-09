@@ -5298,3 +5298,72 @@ payout waiting on connected-account availability — the deferral behaving
 correctly, carried by the sweeper. Non-Stripe funding, DZD execution, the
 Finance dashboard and email all remain false; Chargily remains TEST; no LIVE
 money operation occurred.
+
+### H3.1 security recovery (2026-09-09)
+
+Deployed `v1.0.0-rc.18+a6ce45b`, deployment `78cbb827-f2c6-4de6-9702-36e86155faa4`
+SUCCESS, `/healthz` and `/readyz` 200, 124 migrations with none pending. CI green
+on the deployed SHA across all six required jobs.
+
+One repository change was needed, and it was found by trying to verify rather than
+by reading. Stripe echoes `client_reference_id` back verbatim and anything able to
+open a Checkout Session on the account chooses it; `_match_attempt` handed that
+free text straight to a `UUIDField` lookup. A non-UUID value raised
+`ValidationError` out of the webhook view, which answered 500 and asked Stripe to
+redeliver the same event forever — an H3.1 credential probe had left exactly such
+an event redelivering into a 500 since 17:22 UTC. The reference is now read as a
+UUID or as nothing. A regression test at the endpoint level fails without the
+guard and passes with it; the finance suite is green at 767 passed.
+
+Rotated and independently verified this pass: the Stripe **Connect** webhook
+signing secret (rolled with immediate expiry, endpoint `we_1UDSGx…` keeping its
+id, URL, `2026-03-25.dahlia`, connected-accounts scope and all 11 events), the
+**PostgreSQL** role password, and the **Firebase Admin** private key
+(`f75c68b1…` → `e576510343…` on the same service account).
+
+The webhook proofs are deliveries, not inspections. The platform endpoint took a
+genuine redelivery: Stripe's `pending_webhooks` went 1 → 0, the event stored
+`signature_verified=True`, and a second redelivery left exactly one row with only
+the attempt counter moving. The Connect endpoint took a brand-new connected-account
+event raised by writing and then removing one benign metadata key — no money
+touched — which arrived `sig_verified=True`, `mode=test`, scoped to
+`acct_1UDSCo…`, and applied as `readiness_refreshed`; its redelivery was a no-op.
+Zero failed or retryable connect events.
+
+The database was rotated by changing the role password itself, not only the
+variable: `PGPASSWORD` and `POSTGRES_PASSWORD` are the two literals on the
+Postgres service and both `DATABASE_URL`s followed them as references, so the
+reference graph was preserved rather than flattened. `/readyz` reports
+`database: ok` and a deliberately wrong password is refused with
+`password authentication failed`, so password auth is genuinely enforced.
+
+Storage was verified, not re-rotated. Each credential wrote, read and deleted its
+own synthetic object and was refused 403 on the other bucket, in both directions.
+No probe residue remained. Payout crypto is `k2` only — `k1` is absent from the
+deployed keyring, the fingerprint key is distinct from every data key, AAD binding
+is enforced, and normalisation still collapses spacing and Arabic-Indic digits to
+one fingerprint. Zero encrypted rows exist, so "existing data still readable" is
+true only vacuously and is recorded that way.
+
+One Gitleaks scan reproduced the same 10 candidates: all `generic-api-key`
+heuristics — synthetic test literals, CI placeholders against `.invalid` hosts, a
+bucket *variable name* in a retired `render.yaml`, and UUIDs inside committed
+Claude session transcripts. No provider rule fired. Decisively, every currently
+active secret was searched for across all 2,266 blobs in full history and the
+working tree: zero occurrences.
+
+Financial state is unchanged by the recovery. Payout 1 stays
+`blocked / legacy_instruction_required` and unpaid; payouts 2 and 3 remain `paid`;
+payout 4 remains `processing`, its transfer accepted and its bank stage still
+deferring on `connected_balance_pending` with its retry budget untouched at 0/32 —
+Stripe reports the connected balance as 0 available and 6000 pending, which is
+exactly the condition the deferral names. Stripe's own objects hold three
+Transfers and two bank Payouts with no duplicates, and the only refund predates
+this work by four days. The ledger nets to zero across 21 transactions.
+
+Two items could not be completed and are not reported as if they were. The
+Chargily TEST secret is still the compromised one: regeneration requires the
+account password in a confirmation dialog. The old Firebase key `f75c68b1…` is
+still active: revoking it needs a Google Cloud Terms-of-Service acceptance that
+belongs to the account owner. Both need the owner, and H4 should not begin until
+they are done.
