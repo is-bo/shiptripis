@@ -163,7 +163,7 @@ class PayoutIdentityReviewAssignment(models.Model):
 
 
 class PayoutEvidence(ImmutableRecord):
-    """Reference contract only. H1 has no upload/storage/proxy endpoint."""
+    """Immutable metadata for encrypted objects in the private payout store."""
 
     public_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner = protected(settings.AUTH_USER_MODEL)
@@ -200,9 +200,9 @@ class DzdPayoutProfileRevision(ImmutableRecord):
     last_name_encrypted = models.TextField()
     ccp_number_encrypted = models.TextField()
     ccp_key_encrypted = models.TextField()
-    nip_encrypted = models.TextField()
+    rip_encrypted = models.TextField()
     ccp_last_four = models.CharField(max_length=4)
-    nip_last_four = models.CharField(max_length=4)
+    rip_last_four = models.CharField(max_length=4)
     account_fingerprint = models.CharField(max_length=64, db_index=True)
     evidence = optional(PayoutEvidence)
     identity_attestation = optional(PayoutIdentityAttestation)
@@ -394,6 +394,23 @@ class PayoutAttempt(models.Model):
                 condition=Q(provider_mode__in=["test", "live"]),
                 name="fin_payout_attempt_known_mode",
             ),
+        ]
+
+
+class ManualPayoutReceipt(ImmutableRecord):
+    attempt = protected(PayoutAttempt, related_name="manual_receipts")
+    evidence = models.OneToOneField(PayoutEvidence, on_delete=models.PROTECT)
+    revision = models.PositiveIntegerField()
+    operator = protected(settings.AUTH_USER_MODEL)
+    completed_attested = models.BooleanField(default=False)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "finance_manual_payout_receipt"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "revision"], name="fin_manual_receipt_revision"
+            )
         ]
 
 

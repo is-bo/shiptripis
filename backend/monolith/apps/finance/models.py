@@ -54,6 +54,7 @@ from django.db.models import F, Q
 from apps.core.languages import CommunicationLanguage
 from .payout_models import (  # noqa: F401 -- Django model registration/public imports
     FinancialMode,
+    ManualPayoutReceipt,
     StripePayoutAccount,
     PayoutIdentityAttestation,
     PayoutIdentityRevocation,

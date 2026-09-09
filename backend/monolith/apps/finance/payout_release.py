@@ -137,9 +137,7 @@ def freeze_payout(
         append_event_locked(
             payout,
             previous=previous,
-            reason="dispute_freeze_with_commitment"
-            if committed
-            else "dispute_freeze",
+            reason="dispute_freeze_with_commitment" if committed else "dispute_freeze",
         )
     lifecycle.record_event(
         deal,
@@ -219,6 +217,23 @@ def evaluate_payout_release(
 
             if active_holds(payout).exists():
                 return "finance_hold_active"
+            if payout.method == "manual" and payout.block_reason in (
+                "",
+                "payout_setup_required",
+            ):
+                from .payout_manual_profiles import approved_profile
+                from .models import TravelerPayoutMethod
+
+                version = payout.active_instruction_version
+                if version:
+                    TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
+                        pk=version.method_id
+                    )
+                ready = version and approved_profile(version.dzd_profile_revision)
+                reason_code = "" if ready else "payout_setup_required"
+                if payout.block_reason != reason_code:
+                    payout.block_reason = reason_code
+                    payout.save(update_fields=["block_reason"])
             if payout.status in (
                 "processing",
                 "sent",

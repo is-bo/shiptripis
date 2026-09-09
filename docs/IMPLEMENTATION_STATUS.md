@@ -5367,3 +5367,26 @@ account password in a confirmation dialog. The old Firebase key `f75c68b1…` is
 still active: revoking it needs a Google Cloud Terms-of-Service acceptance that
 belongs to the account owner. Both need the owner, and H4 should not begin until
 they are done.
+
+
+## Phase 8F-H4 — DZD manual payout core (2026-09-09)
+
+Implementation and focused PostgreSQL verification are in progress on
+`codex/phase8fh4-dzd-manual`, starting at `98e72a926d41c3766782a3870c173fd19d0cee19`.
+The H0/H1-compatible encrypted CCP/RIP profile, private cheque/receipt evidence,
+Finance review/reveal, claimed manual instruction and evidence-backed settlement
+are implemented. Detailed contracts and limits are in
+[H4 manual DZD payout](PHASE8F_H4_DZD_MANUAL_PAYOUT.md).
+
+The synthetic EUR 60 / rate 260 case settles exactly 15,600 DZD with a balanced
+ledger. The consolidated focused run passed 75 tests on PostgreSQL, including four
+manual races; a separate 9-test run covered targeted H3 EUR regressions and
+manual races. Schema drift, migration-state checks and lint passed.
+
+Railway refused a new payout bucket because of its quota. The owner explicitly
+authorized sharing/renaming an existing bucket. The KYC bucket label is now
+`shiptrip-private-evidence`; its physical name, endpoint, credentials and existing
+objects are unchanged. Explicit payout storage variables use that private bucket
+with separate account-document and transfer-receipt prefixes and H1 encryption.
+Execution remains off outside isolated tests. Final CI, merge, deployment and
+controlled deployed verification are pending; no H4 PASS is claimed yet.

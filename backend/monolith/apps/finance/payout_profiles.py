@@ -20,6 +20,7 @@ from .models import (
     PayoutIdentityAttestation,
     PayoutIdentityReviewAssignment,
     PayoutIdentityRevocation,
+    PayoutEvidence,
 )
 from .sensitive_data import encrypt, decrypt, account_fingerprint, normalize_digits
 
@@ -158,23 +159,39 @@ def submit_dzd_profile(
     last_name,
     ccp_number,
     ccp_key,
-    nip,
+    rip,
+    proof_reference,
     consent_policy=POLICY_VERSION,
 ):
     if (
         consent_policy != POLICY_VERSION
+        or not isinstance(first_name, str)
+        or not isinstance(last_name, str)
         or not first_name.strip()
         or not last_name.strip()
         or max(len(first_name), len(last_name)) > 160
     ):
         raise ValidationError("Profile names and current consent are required.")
     method = _method(actor, "DZD", expected_revision)
+    proof = (
+        PayoutEvidence.objects.select_for_update(no_key=True)
+        .filter(
+            public_reference=proof_reference,
+            owner=actor,
+            purpose="account_document",
+            upload_state="complete",
+            logical_store="payout",
+        )
+        .first()
+    )
+    if not proof or DzdPayoutProfileRevision.objects.filter(evidence=proof).exists():
+        raise ValidationError("A new owned full crossed cheque image is required.")
     method.currency = "DZD"
     method.save(update_fields=["currency"])
     number = normalize_digits(ccp_number, minimum=1, maximum=20)
     key = normalize_digits(ccp_key, minimum=2, maximum=2)
-    nip = normalize_digits(nip, minimum=20, maximum=20)
-    fingerprint = account_fingerprint(number, key, nip)
+    rip = normalize_digits(rip, minimum=20, maximum=20)
+    fingerprint = account_fingerprint(number, key, rip)
     sequence = (
         method.dzd_revisions.order_by("-sequence")
         .values_list("sequence", flat=True)
@@ -185,15 +202,16 @@ def submit_dzd_profile(
         method=method,
         sequence=sequence,
         ccp_last_four=number[-4:],
-        nip_last_four=nip[-4:],
+        rip_last_four=rip[-4:],
         account_fingerprint=fingerprint,
+        evidence=proof,
     )
     for field, value in {
         "first_name": first_name,
         "last_name": last_name,
         "ccp_number": number,
         "ccp_key": key,
-        "nip": nip,
+        "rip": rip,
     }.items():
         setattr(
             profile,
@@ -206,6 +224,12 @@ def submit_dzd_profile(
             ),
         )
     profile.save()
+    record_admin_action(
+        actor=actor,
+        action="payout_profile.proof_attached",
+        target=profile,
+        after={"evidence": str(proof.public_reference)},
+    )
     method.current_version = _version(
         method, actor=actor, country="DZ", profile=profile
     )

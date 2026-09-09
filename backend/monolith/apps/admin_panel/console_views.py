@@ -2412,6 +2412,10 @@ def _stripe_payout_panel(payout: Payout) -> dict | None:
 @capability_required("view_payouts")
 def payout_detail(request, pk: int):
     payout = get_object_or_404(Payout.objects.select_related("traveler", "deal"), pk=pk)
+    if payout.snapshot_version and payout.method == "manual":
+        from .console_manual_payout import manual_detail
+
+        return manual_detail(request, payout)
     stripe_panel = _stripe_payout_panel(payout)
     form = ManualPayoutForm(
         request.POST or None,

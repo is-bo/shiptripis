@@ -27,6 +27,7 @@ bucket and the credential profile that owns it:
 `readable(key)` exists for the same reason: it is the only way to find out
 before rendering a page whether the object can actually be fetched.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -60,6 +61,7 @@ STORAGE_CLASSES: dict[str, tuple[str, str]] = {
     "dispute": ("S3_BUCKET_DISPUTE", GENERIC_CREDENTIAL),
     # Identity evidence. Separate bucket, separate credential, deliberately.
     "kyc": ("S3_BUCKET_KYC", KYC_CREDENTIAL),
+    "payout": ("S3_BUCKET_PAYOUT", "PAYOUT_S3_*"),
 }
 
 
@@ -114,6 +116,16 @@ def _kyc_credential() -> _Credential:
 
 
 def _credential_for(profile: str) -> _Credential:
+    if profile == "PAYOUT_S3_*":
+        if not settings.PAYOUT_S3_ACCESS_KEY or not settings.PAYOUT_S3_SECRET_KEY:
+            raise StorageNotConfigured("Dedicated payout storage credentials required.")
+        return _Credential(
+            endpoint_url=settings.PAYOUT_S3_ENDPOINT_URL,
+            region=settings.PAYOUT_S3_REGION,
+            access_key=settings.PAYOUT_S3_ACCESS_KEY,
+            secret_key=settings.PAYOUT_S3_SECRET_KEY,
+            use_path_style=settings.PAYOUT_S3_USE_PATH_STYLE,
+        )
     return _kyc_credential() if profile == KYC_CREDENTIAL else _generic_credential()
 
 
@@ -200,6 +212,7 @@ class ObjectStore:
             Key=key,
             Body=body,
             ContentType=content_type,
+            **({"IfNoneMatch": "*"} if self.name == "payout" else {}),
         )
 
     def get(self, key: str) -> bytes:
@@ -369,9 +382,7 @@ def s3_client():
 def put_object(*, bucket: str, key: str, body: bytes, content_type: str) -> None:
     """Upload with the generic credential. Prefer `storage_for(...).put`."""
 
-    s3_client().put_object(
-        Bucket=bucket, Key=key, Body=body, ContentType=content_type
-    )
+    s3_client().put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
 
 
 def make_key(prefix: str, ext: str) -> str:

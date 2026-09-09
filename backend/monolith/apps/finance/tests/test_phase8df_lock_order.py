@@ -82,6 +82,8 @@ CANONICAL_LOCK_MODULES = (
     # `payout_sweeper` are deliberately absent: they take no lock at all, and
     # this gate asserts that a listed module still locks something.
     "apps/finance/payout_execution.py",
+    "apps/finance/payout_manual.py",
+    "apps/finance/payout_manual_profiles.py",
     "apps/finance/payout_reconciliation.py",
     "apps/parcels/services.py",
     "apps/disputes/services.py",

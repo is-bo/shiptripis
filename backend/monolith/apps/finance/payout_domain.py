@@ -508,6 +508,7 @@ def open_hold(*, actor, payout_id, kind, reason_code, source_reference):
         reason_code=reason_code,
         source_reference=source_reference,
         opened_by=actor,
+        amount_exposure_eur_cents=committed_exposure_cents(payout),
     )
     append_event_locked(
         payout, previous=payout.status, reason="hold_opened", actor=actor

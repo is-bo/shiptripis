@@ -52,7 +52,7 @@ def test_crypto_authenticates_aad_and_uses_random_nonce(configured):
     assert encrypted != encrypt("00123456789", **context)
     assert decrypt(encrypted, **context) == "00123456789"
     with pytest.raises(ValidationError):
-        decrypt(encrypted, **{**context, "field": "nip"})
+        decrypt(encrypted, **{**context, "field": "rip"})
     with override_settings(
         PAYOUT_DATA_KEYRING=json.dumps(
             {"test-key": base64.b64encode(b"x" * 32).decode()}
@@ -130,7 +130,8 @@ def test_profile_version_and_safe_projection(configured):
         last_name="PrivateFamily",
         ccp_number="00123456789",
         ccp_key="01",
-        nip="00123456789012345678",
+        rip="00123456789012345678",
+        proof_reference=_profile_proof(user).public_reference,
     )
     profile = method.current_version.dzd_profile_revision
     assert old != method.current_version_id
@@ -580,7 +581,8 @@ def test_instruction_amendment_keeps_original_snapshot(funded_snapshot):
         last_name="Holder",
         ccp_number="00123456789",
         ccp_key="01",
-        nip="00123456789012345678",
+        rip="00123456789012345678",
+        proof_reference=_profile_proof(scenario.traveler).public_reference,
     )
     # H4 will own evidence-backed review. This domain test supplies its ready
     # projection without exposing an approval endpoint in H1.
@@ -659,3 +661,17 @@ def test_settlement_revision_keeps_ledger_actor_and_protection(funded_snapshot, 
     assert revision.actor_id == scenario.admin.pk
     assert payout.funded_amount_eur_cents == 6000 and payout.amount_eur_cents == award
     assert payout.status == ("cancelled" if award == 0 else "not_eligible")
+
+
+def _profile_proof(owner):
+    from apps.finance.models import PayoutEvidence
+
+    return PayoutEvidence.objects.create(
+        owner=owner,
+        purpose="account_document",
+        upload_state="complete",
+        object_key=f"qa/{uuid.uuid4()}",
+        digest="0" * 64,
+        mime_type="image/png",
+        size_bytes=1,
+    )

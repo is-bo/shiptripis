@@ -33,7 +33,42 @@ from .payout_account_api import (
     StripeReadinessRefreshView,
 )
 
+from .payout_manual_api import (
+    EvidenceUploadView,
+    ReceiptUploadView,
+    EvidenceReadView,
+    RevealView,
+    ReviewView,
+    ManualDetailView,
+)
+
 urlpatterns = [
+    path("payouts/proofs", EvidenceUploadView.as_view()),
+    path("admin/payouts/receipts", ReceiptUploadView.as_view()),
+    path("admin/payouts/evidence/<uuid:reference>", EvidenceReadView.as_view()),
+    path("admin/payouts/profiles/<uuid:reference>/reveal", RevealView.as_view()),
+    path("admin/payouts/profiles/<uuid:reference>/review", ReviewView.as_view()),
+    path("admin/payouts/<int:pk>/manual", ManualDetailView.as_view()),
+    path(
+        "admin/payouts/<int:pk>/manual/prepare",
+        ManualDetailView.as_view(),
+        {"action": "prepare"},
+    ),
+    path(
+        "admin/payouts/<int:pk>/manual/begin",
+        ManualDetailView.as_view(),
+        {"action": "begin"},
+    ),
+    path(
+        "admin/payouts/<int:pk>/manual/release",
+        ManualDetailView.as_view(),
+        {"action": "release"},
+    ),
+    path(
+        "admin/payouts/<int:pk>/manual/confirm",
+        ManualDetailView.as_view(),
+        {"action": "confirm"},
+    ),
     path("payouts/methods", PayoutMethodsView.as_view(), name="payout-methods"),
     path("payouts/profiles/dzd", DzdProfileView.as_view(), name="payout-dzd-profile"),
     # H2 Stripe Connect setup. Every one of these is owner-scoped from the

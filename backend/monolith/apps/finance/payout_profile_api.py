@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DomainError, PermissionDenied
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
@@ -12,7 +13,11 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from .models import TravelerPayoutMethod, PayoutIdentityReviewAssignment
-from .payout_accounts import CountryUnsupported, allowed_countries, stripe_setup_projection
+from .payout_accounts import (
+    CountryUnsupported,
+    allowed_countries,
+    stripe_setup_projection,
+)
 from .payout_profiles import (
     set_preference,
     submit_dzd_profile,
@@ -51,7 +56,8 @@ class DzdInput(StrictInput):
     last_name = serializers.CharField(max_length=160, write_only=True)
     ccp_number = serializers.CharField(max_length=100, write_only=True)
     ccp_key = serializers.CharField(max_length=100, write_only=True)
-    nip = serializers.CharField(max_length=100, write_only=True)
+    rip = serializers.CharField(max_length=100, write_only=True)
+    proof_reference = serializers.UUIDField(write_only=True)
     consent_policy = serializers.CharField(max_length=64)
 
 
@@ -80,9 +86,12 @@ def method_projection(method):
         "version": str(version.public_reference) if version else None,
         "profile": {
             "reference": str(profile.public_reference),
-            "status": profile.status,
+            "status": (
+                profile.reviews.order_by("-pk").values_list("status", flat=True).first()
+                or profile.status
+            ),
             "ccp_last_four": profile.ccp_last_four,
-            "nip_last_four": profile.nip_last_four,
+            "rip_last_four": profile.rip_last_four,
             "submitted_at": profile.submitted_at,
         }
         if profile
@@ -101,12 +110,30 @@ class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ProfileThrottle]
 
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store, private"
+        return response
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if not settings.PAYOUT_PROFILES_ENABLED:
             raise Http404
 
     def handle_exception(self, exc):
+        from apps.core.storage import StorageNotConfigured
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        if isinstance(exc, (StorageNotConfigured, BotoCoreError, ClientError)):
+            return Response(
+                {
+                    "code": "payout_evidence_unavailable",
+                    "detail": "Private payout evidence storage is unavailable.",
+                },
+                status=503,
+            )
+        if isinstance(exc, ObjectDoesNotExist):
+            return Response({"detail": "Payout resource not found."}, status=404)
         if isinstance(exc, CountryUnsupported):
             # H2: an unsupported payout-account country is a distinct product
             # state, not a generic validation failure. The client can name what

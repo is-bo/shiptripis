@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Manual DZD payout</h1>
+<dl>
+  <dt>Reference</dt><dd>{{ manual.reference }}</dd>
+  <dt>Status</dt><dd>{{ manual.status }}</dd>
+  <dt>Canonical EUR cents</dt><dd>{{ manual.eur_cents }}</dd>
+  <dt>Exact DZD amount</dt><dd>{{ manual.dzd_amount }} DZD</dd>
+  <dt>Frozen rate (millionths DZD/EUR)</dt><dd>{{ manual.fx_rate_micros }}</dd>
+  <dt>Destination</dt><dd>CCP ••••{{ manual.ccp_last_four }} / RIP ••••{{ manual.rip_last_four }}</dd>
+  <dt>Instruction revision</dt><dd>{{ manual.instruction_revision|default:"Not prepared" }}</dd>
+  <dt>Operator</dt><dd>{{ manual.operator|default:"Unclaimed" }}</dd>
+  <dt>Committed / sent / settled</dt><dd>{{ manual.committed_at }} / {{ manual.sent_at }} / {{ manual.paid_at }}</dd>
+</dl>
+{% if revealed %}<dl>{% for key, value in revealed.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>{% endif %}
+<form method="post">{% csrf_token %}<button name="action" value="reveal">Reveal payout destination (audited)</button></form>
+<form method="post">{% csrf_token %}<button name="action" value="proof">View full crossed cheque (audited)</button></form>
+<form method="post">{% csrf_token %}<label><input type="checkbox" name="accept_name_difference"> I reviewed and accept the attested name difference</label><button name="action" value="review">Approve profile evidence</button></form>
+{% if manual.status == "eligible" %}
+<form method="post">{% csrf_token %}<input type="hidden" name="state_version" value="{{ manual.state_version }}"><button name="action" value="prepare">Prepare transfer</button></form>
+{% endif %}
+{% if manual.status == "scheduled" %}
+<form method="post">{% csrf_token %}<input type="hidden" name="sequence" value="{{ manual.instruction_revision }}"><button name="action" value="begin">Begin external transfer</button><button name="action" value="release">Release uncommitted preparation</button></form>
+{% endif %}
+{% if manual.status == "processing" or manual.status == "sent" %}
+<p>Send only the exact amount above to this frozen destination. A committed instruction cannot expire or be automatically reversed.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+<input type="hidden" name="sequence" value="{{ manual.instruction_revision }}">
+<label>Transfer receipt <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required></label>
+<label><input type="checkbox" name="confirmed" required> I attest that this exact transfer was sent to this destination.</label>
+<label><input type="checkbox" name="settled"> The receipt proves completion; I confirm settlement.</label>
+<button name="action" value="receipt">Record transfer evidence</button></form>
+{% endif %}
+<form method="post">{% csrf_token %}<button name="action" value="hold">Hold for correction / recovery review</button></form>
+<h2>Holds</h2><ul>{% for hold in manual.holds %}<li>{{ hold.kind }}: {{ hold.reason_code }}<form method="post">{% csrf_token %}<input type="hidden" name="hold_id" value="{{ hold.id }}"><input type="hidden" name="generation" value="{{ hold.generation }}"><button name="action" value="clear_hold">Release own hold</button></form></li>{% empty %}<li>No active holds</li>{% endfor %}</ul>
+<h2>Audit timeline</h2><ul>{% for event in manual.timeline %}<li>{{ event.recorded_at }} — {{ event.reason_code }} — operator {{ event.actor_id }} — receipt {{ event.evidence__public_reference|default:"—" }}{% if event.evidence__public_reference %}<form method="post">{% csrf_token %}<input type="hidden" name="evidence_reference" value="{{ event.evidence__public_reference }}"><button name="action" value="view_receipt">View transfer receipt (audited)</button></form>{% endif %}</li>{% endfor %}</ul>
+{% endblock %}

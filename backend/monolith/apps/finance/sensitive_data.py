@@ -108,7 +108,7 @@ def normalize_digits(value: str, *, minimum: int, maximum: int) -> str:
         if not isinstance(value, str) or len(value) > 100:
             raise ValueError
         normalized = "".join(
-            str(unicodedata.decimal(c)) for c in value if not c.isspace()
+            str(unicodedata.decimal(c)) for c in value if not c.isspace() and c != "-"
         )
         if not minimum <= len(normalized) <= maximum:
             raise ValueError
@@ -118,13 +118,13 @@ def normalize_digits(value: str, *, minimum: int, maximum: int) -> str:
 
 
 @sensitive_variables()
-def account_fingerprint(ccp_number: str, ccp_key: str, nip: str) -> str:
+def account_fingerprint(ccp_number: str, ccp_key: str, rip: str) -> str:
     _, _, key = key_configuration()
     parts = [
         "dz-ccp-v1",
         normalize_digits(ccp_number, minimum=1, maximum=20),
         normalize_digits(ccp_key, minimum=2, maximum=2),
-        normalize_digits(nip, minimum=20, maximum=20),
+        normalize_digits(rip, minimum=20, maximum=20),
     ]
     return hmac.new(
         key, json.dumps(parts, separators=(",", ":")).encode(), hashlib.sha256
