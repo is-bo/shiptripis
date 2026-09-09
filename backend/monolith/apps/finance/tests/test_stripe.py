@@ -17,10 +17,14 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from urllib.parse import parse_qs
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
+
+from apps.finance.models import PaymentProviderEvent
+from apps.finance.services import _reference_uuid
 
 from apps.finance.providers.base import (
     CheckoutRequest,
@@ -502,3 +506,53 @@ class StripeWebhookEndpointTests(TestCase):
         )
 
         assert response.status_code in (400, 503)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET=SECRET)
+    def test_a_reference_that_is_not_an_order_reference_does_not_wedge_the_endpoint(
+        self,
+    ):
+        """`client_reference_id` is free text, and our references are UUIDs.
+
+        Anything that can open a Checkout Session on this account chooses that
+        string. Handing it to a `UUIDField` lookup raised `ValidationError` out
+        of the view, which answered 500 and asked Stripe to redeliver the same
+        poisoned event forever — one malformed value stalling every event queued
+        behind it. It must simply match no order.
+        """
+
+        body = json.dumps(
+            {
+                "id": "evt_bad_reference",
+                "type": "checkout.session.expired",
+                "livemode": False,
+                "data": {
+                    "object": {
+                        "object": "checkout.session",
+                        "id": "cs_bad_reference",
+                        "client_reference_id": "not-a-uuid",
+                    }
+                },
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        response = self.client.post(
+            reverse("finance-webhook-stripe"),
+            data=body,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=stripe_signature(body),
+        )
+
+        assert response.status_code == 200
+        # Receipt is durable, so a redelivery is a duplicate rather than a
+        # second economic identity.
+        assert PaymentProviderEvent.objects.filter(
+            provider_event_id="evt_bad_reference"
+        ).exists()
+
+    def test_a_reference_that_is_not_a_uuid_matches_no_order(self):
+        assert _reference_uuid("not-a-uuid") is None
+        assert _reference_uuid("") is None
+        assert _reference_uuid(None) is None
+        reference = uuid.uuid4()
+        assert _reference_uuid(str(reference)) == reference

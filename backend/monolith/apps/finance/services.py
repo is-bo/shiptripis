@@ -36,6 +36,7 @@ import hashlib
 import json
 import logging
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -1542,6 +1543,26 @@ def process_provider_event(*, event_id: int) -> str:
     return note
 
 
+def _reference_uuid(reference) -> uuid.UUID | None:
+    """Read a provider-echoed reference as an order reference, or as nothing.
+
+    `client_reference_id` is free text the provider hands back verbatim, and
+    anything able to open a Checkout Session on this account chooses it. Our
+    own references are UUIDs, so a value that is not one cannot name an order.
+    Passing it to a `UUIDField` lookup raises `ValidationError` out of the
+    webhook view, which answers 500 and asks the provider to redeliver the same
+    poisoned event forever. Refusing it here keeps one malformed reference from
+    wedging the whole endpoint for every other event behind it.
+    """
+
+    if not reference:
+        return None
+    try:
+        return uuid.UUID(str(reference))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def _match_attempt(event) -> PaymentAttempt | None:
     queryset = PaymentAttempt.objects.select_related("order")
     if event.provider_session_id:
@@ -1556,13 +1577,14 @@ def _match_attempt(event) -> PaymentAttempt | None:
         ).first()
         if found is not None:
             return found
-    if event.reference:
+    reference = _reference_uuid(event.reference)
+    if reference is not None:
         # The provider echoed our order reference. This fallback exists for one
         # case only: an event that arrives before we managed to store the
         # session id. It is therefore restricted to an attempt that has no
         # session id yet, so a late event can never be bound to the wrong
         # attempt on an order that has several.
-        order = PaymentOrder.objects.filter(public_reference=event.reference).first()
+        order = PaymentOrder.objects.filter(public_reference=reference).first()
         if order is not None:
             return (
                 queryset.filter(
