@@ -148,16 +148,27 @@ class RefundNotPermitted(FinanceError):
 class RefundExceedsCapture(FinanceError):
     code = "refund_exceeds_capture"
 
-    def __init__(self, message: str, *, captured: int, already_refunded: int):
+    def __init__(
+        self,
+        message: str,
+        *,
+        captured: int,
+        already_refunded: int,
+        reserved_for_payout: int = 0,
+    ):
         super().__init__(message)
         self.captured = captured
         self.already_refunded = already_refunded
+        self.reserved_for_payout = reserved_for_payout
 
     def details(self) -> dict:
-        return {
+        detail = {
             "captured_eur_cents": self.captured,
             "already_refunded_eur_cents": self.already_refunded,
         }
+        if self.reserved_for_payout:
+            detail["reserved_for_payout_eur_cents"] = self.reserved_for_payout
+        return detail
 
 
 class PayoutNotReleasable(FinanceError):
@@ -1348,6 +1359,11 @@ def _persist_provider_event(event) -> tuple[PaymentProviderEvent, bool, bool]:
     )
     normalized = _normalized_provider_event(event)
     fingerprint = _provider_event_fingerprint(event, normalized)
+    # Which provider object this event was about, so a payout-domain event can
+    # be correlated without re-reading the payload. Opaque ids only.
+    payload_object = (event.payload or {}).get("data") or {}
+    payload_object = payload_object.get("object") or {}
+    payload_object = payload_object if isinstance(payload_object, dict) else {}
     duplicate = False
     try:
         with transaction.atomic():
@@ -1356,6 +1372,8 @@ def _persist_provider_event(event) -> tuple[PaymentProviderEvent, bool, bool]:
                 provider_event_id=event.event_id,
                 provider_mode=event_mode,
                 event_type=event.event_type,
+                object_type=str(payload_object.get("object") or "")[:64],
+                object_id=str(payload_object.get("id") or "")[:255],
                 attempt=attempt,
                 order=attempt.order if attempt else None,
                 signature_verified=True,
@@ -1445,6 +1463,35 @@ def process_provider_event(*, event_id: int) -> str:
                 "next_retry_at",
             ]
         )
+
+    from .payout_provider_events import PLATFORM_PAYOUT_EVENTS, handle_platform_event
+
+    if record.event_type in PLATFORM_PAYOUT_EVENTS:
+        # Transfers, refunds, disputes and platform liquidity. These are payout
+        # domain facts, not checkout attempts, so they never reach
+        # `reconcile_attempt` and can never be matched against an order.
+        note = handle_platform_event(record)
+        # An event that was deliberately not acted on is `ignored`, not
+        # `applied`. The distinction is what an operator reads when asking
+        # whether a wrong-mode or unrecognised object had any effect.
+        result = (
+            PaymentProviderEvent.ProcessingResult.IGNORED
+            if note
+            in (
+                "mode_isolated",
+                "event_not_subscribed",
+                "unknown_transfer",
+                "unknown_refund_source",
+                "known_refund",
+                "external_refund_not_settled",
+                "transfer_id_missing",
+                "refund_id_missing",
+                "dispute_id_missing",
+            )
+            else PaymentProviderEvent.ProcessingResult.APPLIED
+        )
+        _finish_event(record.pk, result, note)
+        return note
 
     durable_event = _provider_event_from_record(record)
     attempt = record.attempt or _match_attempt(durable_event)
@@ -1890,6 +1937,22 @@ def request_refund(
                 "A refund cannot exceed the captured amount.",
                 captured=captured,
                 already_refunded=already,
+            )
+        # The same euro can fund a Traveler payout or a Sender refund, never
+        # both. A live payout reservation on this capture is money that is
+        # already committed — or already gone — so it is subtracted here, under
+        # the same lock the dispatch path takes, rather than discovered later
+        # when the ledger no longer balances.
+        from .payout_domain import source_reserved_cents
+
+        reserved = source_reserved_cents(attempt)
+        if already + reserved + amount_eur_cents > captured:
+            raise RefundExceedsCapture(
+                "This capture is reserved for a Traveler payout and cannot also "
+                "fund a refund of this size.",
+                captured=captured,
+                already_refunded=already,
+                reserved_for_payout=reserved,
             )
 
         try:

@@ -63,19 +63,27 @@ READINESS_EVENTS = frozenset(
     }
 )
 
-#: Event types H3 will own. Accepting them now means an operator can register
-#: the full destination once; ingesting them here records provenance and moves
-#: no money, because this module has no execution path at all.
-DEFERRED_EVENTS = frozenset(
+#: H3's bank-payout lifecycle. `payout.paid` is the only event in this system
+#: that can discharge a Traveler's obligation, and even it is never trusted on
+#: arrival: the handler re-reads the authoritative Payout object in the
+#: connected-account scope before anything moves.
+PAYOUT_EVENTS = frozenset(
     {
         "payout.created",
         "payout.updated",
         "payout.paid",
         "payout.failed",
         "payout.canceled",
-        "account.application.deauthorized",
     }
 )
+
+#: Transferred funds settling in a connected account. Wakes a bank payout that
+#: was deferred for availability; polling still exists, because a webhook is an
+#: optimisation and never the only path.
+BALANCE_EVENTS = frozenset({"balance.available"})
+
+#: Recorded for provenance, acted on by no handler here.
+DEFERRED_EVENTS = frozenset({"account.application.deauthorized"})
 
 
 class ConnectWebhookThrottle(AnonRateThrottle):
@@ -159,6 +167,10 @@ def _classification(event: dict) -> tuple:
         return "ignored", "mode_isolated"
     if event_type in READINESS_EVENTS:
         return "refresh", ""
+    if event_type in PAYOUT_EVENTS:
+        return "bank_payout", ""
+    if event_type in BALANCE_EVENTS:
+        return "balance", ""
     if event_type in DEFERRED_EVENTS:
         return "ignored", "deferred_to_execution_phase"
     return "ignored", "event_not_subscribed"
@@ -256,11 +268,35 @@ def process_connect_event(event: dict, record) -> str:
     """
 
     action, note = _classification(event)
-    if action != "refresh":
+    if action == "ignored":
         _finish(record, result=PaymentProviderEvent.ProcessingResult.IGNORED, note=note)
         return note
 
     account_id = str(event.get("account") or "")
+    if action == "bank_payout":
+        from .payout_provider_events import handle_connect_payout_event
+
+        outcome = handle_connect_payout_event(event, account_id)
+        _finish(
+            record,
+            result=(
+                PaymentProviderEvent.ProcessingResult.IGNORED
+                if outcome
+                in ("unknown_connected_account", "payout_id_missing")
+                else PaymentProviderEvent.ProcessingResult.APPLIED
+            ),
+            note=outcome,
+        )
+        return outcome
+    if action == "balance":
+        from .payout_provider_events import handle_connect_balance_available
+
+        outcome = handle_connect_balance_available(account_id)
+        _finish(
+            record, result=PaymentProviderEvent.ProcessingResult.APPLIED, note=outcome
+        )
+        return outcome
+
     account = StripePayoutAccount.objects.filter(
         provider_account_id=account_id,
         provider_mode=expected_mode(),

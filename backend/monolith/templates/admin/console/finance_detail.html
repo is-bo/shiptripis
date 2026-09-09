@@ -36,6 +36,116 @@
     </dl>
   </section>
 
+  {% if stripe %}
+  <section class="st-card">
+    <p class="st-eyebrow">Stripe EUR payout</p>
+    <h2>Where this money actually is</h2>
+    <dl class="st-facts">
+      <div><dt>Payout account</dt><dd>{{ stripe.account_reference|default:"Not bound" }} &middot; {{ stripe.provider_mode|upper }}</dd></div>
+      <div><dt>Account readiness</dt><dd>{{ stripe.account_status|default:"unknown" }}{% if stripe.account_status_reason %} &middot; {{ stripe.account_status_reason }}{% endif %}</dd></div>
+      <div><dt>EUR bank on file</dt><dd>{% if stripe.account_bank_present %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Payout schedule</dt><dd>{{ stripe.account_schedule|default:"unknown" }}</dd></div>
+      <div><dt>Last provider check</dt><dd>{{ stripe.account_checked_at|date:"d M Y, H:i"|default:"Never" }}</dd></div>
+      <div><dt>Committed externally</dt><dd>{{ stripe.committed_exposure_eur_cents|eur }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="st-table-card">
+    <h2>Source funding</h2>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Source</th><th scope="col">Charge</th><th scope="col" class="is-numeric">Amount</th><th scope="col">State</th></tr></thead>
+        <tbody>
+          {% for row in stripe.allocations %}
+          <tr><td>{{ row.source_order }}</td><td><span class="st-ref">{{ row.charge|default:"—" }}</span></td><td class="is-numeric">{{ row.amount_eur_cents|eur }}</td><td>{% if row.released %}Released{% else %}Reserved{% endif %}</td></tr>
+          {% empty %}
+          <tr><td colspan="4">No source funds have been reserved yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="st-table-card">
+    <h2>External operations</h2>
+    <p>A platform transfer moves ShipTrip's euros into the Traveler's connected account. It is not a bank payment, and it never means the Traveler has been paid.</p>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Operation</th><th scope="col">State</th><th scope="col">Provider reference</th><th scope="col" class="is-numeric">Amount</th><th scope="col">First sent</th></tr></thead>
+        <tbody>
+          {% for row in stripe.operations %}
+          <tr><td>{{ row.kind }}</td><td>{{ row.status }}{% if row.failure_code %} &middot; {{ row.failure_code }}{% endif %}</td><td><span class="st-ref">{{ row.reference|default:"—" }}</span></td><td class="is-numeric">{{ row.amount_eur_cents|eur }}{% if row.reversed_eur_cents %} (reversed {{ row.reversed_eur_cents|eur }}){% endif %}</td><td>{{ row.first_request_at|date:"d M Y, H:i"|default:"—" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="5">No external instruction has been issued.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="st-table-card">
+    <h2>Bank payouts</h2>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Reference</th><th scope="col">State</th><th scope="col" class="is-numeric">Amount</th><th scope="col">Submitted</th><th scope="col">Paid</th><th scope="col">Expected arrival</th></tr></thead>
+        <tbody>
+          {% for row in stripe.disbursements %}
+          <tr><td><span class="st-ref">{{ row.reference|default:"—" }}</span></td><td>{{ row.status }}{% if row.failure_code %} &middot; {{ row.failure_code }}{% endif %}</td><td class="is-numeric">{{ row.amount_eur_cents|eur }}</td><td>{{ row.submitted_at|date:"d M Y, H:i"|default:"—" }}</td><td>{{ row.paid_at|date:"d M Y, H:i"|default:"—" }}</td><td>{{ row.arrival_estimate|date:"d M Y"|default:"—" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="6">No bank payout has been created.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if stripe.holds %}
+  <section class="st-card">
+    <p class="st-eyebrow">Holds</p>
+    <h2>What is stopping this payout</h2>
+    <ul>{% for hold in stripe.holds %}<li><strong>{{ hold.kind }}</strong> &middot; {{ hold.reason }} &middot; {{ hold.opened_at|date:"d M Y, H:i" }}</li>{% endfor %}</ul>
+    <p>Clearing one hold clears only that one. Each has its own authority.</p>
+  </section>
+  {% endif %}
+
+  {% if stripe.unresolved %}
+  <div class="st-readonly-note"><span><strong>An external operation's outcome is unknown.</strong> The money may already have moved. Nothing new will be sent for this payout, and no action on this page can resolve it &mdash; only a provider read can.</span></div>
+  {% endif %}
+
+  <section class="st-table-card">
+    <h2>Timeline</h2>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col" class="is-numeric">#</th><th scope="col">Change</th><th scope="col">Reason</th><th scope="col">When</th></tr></thead>
+        <tbody>
+          {% for event in stripe.events %}
+          <tr><td class="is-numeric">{{ event.sequence }}</td><td>{{ event.previous_state|default:"—" }} &rarr; {{ event.new_state }}</td><td>{{ event.reason }}</td><td>{{ event.occurred_at|date:"d M Y, H:i" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="4">No payout events are recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Recovery</p>
+    <h2>State-safe actions</h2>
+    <p><strong>There is no &ldquo;Mark paid&rdquo; on this rail.</strong> A Traveler is paid when Stripe reports the bank payout as paid, and a failed bank payout is retried as a bank payout only &mdash; the platform transfer is never sent again, because its money is already at the connected account.</p>
+    <div class="st-split-actions">
+      {% if may_refresh %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="refresh"><button class="button st-button-quiet" type="submit">Re-read Stripe state</button></form>
+      {% endif %}
+      {% if may_retry_bank %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="retry_bank"><input type="hidden" name="expected_state_version" value="{{ record.state_version }}"><button class="button" type="submit">Retry bank payout</button></form>
+      {% endif %}
+      {% if may_flag %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="flag"><input type="hidden" name="reason" value="operation_under_review"><button class="button st-button-quiet" type="submit">Hold for Finance review</button></form>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if may_act %}
   <section class="st-card st-decision-card">
     <p class="st-eyebrow">Irreversible action</p>
@@ -50,7 +160,7 @@
       </div>
     </form>
   </section>
-  {% else %}
+  {% elif not stripe %}
   <div class="st-readonly-note"><span>No manual action is available in this state, or your role cannot take it.</span></div>
   {% endif %}
 </main>

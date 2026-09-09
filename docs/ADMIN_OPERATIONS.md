@@ -87,6 +87,27 @@ method; manual settlement records external evidence rather than pretending to
 send money. **Ledger** presents append-only transactions before technical
 entries. No page changes V1 money rules or exposes a handover/delivery code.
 
+A payout on the **Stripe EUR rail is automatic and has no Pay button.** Its
+detail page adds a Stripe panel: the canonical obligation, a masked account
+reference and its readiness, how much is committed externally, which Stripe
+charges support it, the platform transfer and its provider reference, the bank
+payout with submitted/paid/arrival times, any active holds, and the full payout
+timeline. Read it in that order — a transfer having succeeded means the money is
+at the Traveler's connected account, not that they have been paid. Only the bank
+payout reaching `paid` means that.
+
+Three recovery actions, each on its own capability and each state-safe.
+**Re-read Stripe state** asks the provider what is true and is always the first
+thing to try. **Retry bank payout** appears only on a failed payout with no
+active hold and no unresolved operation; it creates another bank payout, never
+another transfer, and clearing the block reason is the recorded judgement that
+the Traveler's bank details have actually been corrected. **Hold for Finance
+review** stops the next stage and changes nothing about what has already been
+reserved or sent. There is no Mark paid, no reset, no force, and no way to edit
+an amount or a destination. When the page says an operation's outcome is
+unknown, the money may already have moved: nothing new will be sent for that
+payout, and no button on the page can resolve it — only a provider read can.
+
 ## Staff and settings
 
 On **Staff**, enter a work email, choose one fixed role and an expiry. The

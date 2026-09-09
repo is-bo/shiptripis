@@ -83,9 +83,10 @@ STRIPE_CONNECT_ONBOARDING_RETURN_URL=https://<PUBLIC-API-ORIGIN>/payouts/stripe/
 STRIPE_CONNECT_ONBOARDING_REFRESH_URL=https://<PUBLIC-API-ORIGIN>/payouts/stripe/refresh
 ```
 
-`STRIPE_CONNECT_PAYOUTS_ENABLED` and `STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED`
-must stay false. Production refuses to boot with either on, because neither the
-execution path nor the funding approval they describe exists.
+`STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED` must stay false in every mode:
+production refuses to boot with it on, because the funding approval it describes
+does not exist. `STRIPE_CONNECT_PAYOUTS_ENABLED` is covered by the H3 section
+below and stays false until the whole onboarding sequence here has passed.
 
 Configure exactly these events, with **Events from: Connected accounts**:
 
@@ -95,9 +96,7 @@ Configure exactly these events, with **Events from: Connected accounts**:
 - `account.external_account.updated`
 - `account.external_account.deleted`
 
-No wildcard subscription. Payout-execution events (`payout.*`) are already
-ingested and stored without acting, so they may be added when H3 lands rather
-than needing a second destination.
+No wildcard subscription. H3 adds six more to this same destination; see below.
 
 Activation sequence:
 
@@ -135,6 +134,77 @@ Only after all ten may DE or ES be considered, one validated country at a time.
 Rollback switch: set `STRIPE_CONNECT_ENABLED=false`. Onboarding stops; the
 webhook route and its secret stay in place so readiness for existing accounts
 keeps reconciling.
+
+## Stripe Connect — automatic EUR payout execution (Phase 8F-H3)
+
+Do not start this until the H2 sequence above has passed for at least one
+country and at least one Traveler is authoritatively `ready`.
+
+**Two switches, both required.** The deployment flag says this release may move
+money; the versioned business setting says the business has authorised it.
+
+```text
+STRIPE_CONNECT_PAYOUTS_ENABLED=true          # TEST only in this release
+STRIPE_CONNECT_MINIMUM_PAYOUT_EUR_CENTS=100  # optional; FR/EUR default
+```
+
+and, through the admin Settings page or an authorised settings activation, a new
+`BusinessSettingsVersion` whose `payments.payout.auto_stripe_enabled` is `true`.
+With either one off the worker dispatches nothing and says which one is off.
+
+Production refuses to boot with `STRIPE_CONNECT_PAYOUTS_ENABLED=true` when
+`STRIPE_CONNECT_ENABLED` is false, and refuses it outright when
+`STRIPE_CONNECT_EXPECTED_MODE` is `live`. Live payout execution is a separate,
+later gate and is not enabled by this variable.
+
+**Webhook events to add.** Deploy first; a destination must never name a route
+or an event type the running code cannot handle.
+
+On the existing **Connected accounts** destination, add six:
+
+- `payout.created`
+- `payout.updated`
+- `payout.paid`
+- `payout.failed`
+- `payout.canceled` — one `l`, which is Stripe's own spelling
+- `balance.available`
+
+On the existing **Your account** (platform) destination, add nine, keeping the
+five payment events already there:
+
+- `transfer.created`
+- `transfer.reversed`
+- `balance.available`
+- `refund.created`, `refund.updated`, `refund.failed`
+- `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`
+
+Still no wildcard. `transfer.updated` is a metadata change and is deliberately
+not subscribed; there is no `transfer.paid` or `transfer.failed` event to wait
+for, because a transfer failure is an API outcome, not an event.
+
+Activation sequence:
+
+1. Deploy the release that implements H3. Confirm `/healthz`, `/readyz` and zero
+   pending migrations before touching any provider configuration.
+2. Add the webhook events above to the two existing destinations.
+3. Set `STRIPE_CONNECT_PAYOUTS_ENABLED=true` and activate the business settings
+   revision. Confirm the service boots.
+4. Run one controlled TEST payout end to end: Sender pays, delivery is
+   confirmed, protection expires, the worker transfers, the connected balance
+   settles, the bank payout is created, and the payout reaches whatever final
+   state Stripe reports. **Do not call Stripe by hand at any point** — the point
+   is to prove ShipTrip's own worker does it.
+5. Verify the ledger: `connect_funds` after the transfer, `payout_in_transit`
+   after the bank payout, and the traveler payable discharged only on `paid`.
+6. Verify the Traveler amount was never reduced by a Stripe fee: the transfer
+   amount, the bank payout amount and the canonical obligation are one number.
+
+Rollback switch: set `STRIPE_CONNECT_PAYOUTS_ENABLED=false`. New dispatch stops
+immediately. Webhook intake, provider retrieval, reconciliation of already
+committed operations and the ledger all keep running, which is the point — a
+kill switch must never stop the system finding out what the money already sent
+actually did. Turning it off never reclassifies an existing EUR obligation to
+DZD.
 
 ## Chargily
 

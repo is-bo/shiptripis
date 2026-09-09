@@ -5123,3 +5123,118 @@ contract before any code was written. They are labelled
 ShipTrip Traveler, their natural events were stored as `ignored /
 unknown_connected_account` — live evidence that an unbound account cannot affect
 local state.
+
+## Phase 8F-H3 — automatic EUR payout execution and recovery (2026-09-09)
+
+Implementation complete and locally verified. Full developer notes:
+[H3 EUR payout execution](PHASE8F_H3_EUR_PAYOUT_EXECUTION.md). Starting `main`
+was `b3a71307da9644f3d0a6205b7a6e8682b3385175`, release `v1.0.0-rc.16+b3a7130`.
+
+H3 builds the rail that actually pays a Traveler in EUR, automatically. There is
+no admin "Pay" button on it: a payout goes out because delivery was confirmed,
+the 48-hour protection window closed, every hold was clear and a worker did the
+arithmetic — or it does not, and the reason is a machine code an operator reads.
+
+Stripe's current documentation was re-verified before any execution code was
+written. Every H0 selection stands: `source_transaction` takes a **charge** id
+and not a PaymentIntent; a transfer against an unsettled charge succeeds but its
+funds only become available in the destination when the source charge settles;
+connected balances are read with `Stripe-Account`; payout statuses are `pending`,
+`in_transit`, `paid`, `failed`, `canceled`, and a payout that shows `paid` can
+later become `failed` on a genuine bank return; a payout can be cancelled only
+while `pending`; idempotency keys are retained for *at least* 24 hours; the
+FR/EUR minimum payout is 1 EUR. Every subscribed event name exists verbatim,
+including `payout.canceled` with one `l`.
+
+Execution is three transactions, and the seam between the second and third is the
+design. **Reserve** writes immutable funding allocations, an attempt and one
+provider operation per source slice, all `prepared`, under the Deal lifecycle
+aggregate — fully revocable. **Commit** is a short guarded transition to
+`dispatch_committed` immediately before the first byte leaves; after it the
+amount is treated as externally exposed even though no request has been made,
+because a crash there is indistinguishable from a lost answer. **Send** happens
+with no lock held, and a timeout becomes `unknown`, never "failed, safe to resend
+with a new key".
+
+Two external operations, not one. A platform Transfer moves ShipTrip's EUR into
+the Traveler's connected account and discharges nothing; a connected-account bank
+Payout moves that balance to their bank. The traveler payable goes down only when
+Stripe reports `paid`. A failed bank payout is retried as a bank payout — the
+Transfer is never created again, because its money is already at the connected
+account. New ledger accounts `connect_funds` and `payout_in_transit` hold those
+two intermediate positions, and every posting carries the payout and the Deal so
+each Deal's sub-ledger still sums to zero.
+
+An unknown result has three routes and no fourth: replay the byte-identical
+request under the same key inside 23 hours; past that, one bounded search by the
+payout's own opaque transfer group or by the operation reference in the connected
+account; otherwise block for Finance with the reservation intact. A fresh POST is
+never issued because a retry window expired.
+
+Money rules that are enforced rather than documented. The Transfer amount, the
+bank payout amount and the canonical obligation are the same number — no Stripe
+fee, Connect cost or bank charge is deducted anywhere. `request_refund` subtracts
+live payout reservations from a capture's spendable amount under the same lock the
+dispatch path takes, so a refund and a payout racing for the same cents produce
+one winner and one explicit refusal. `settlement.read_deal_money` now counts
+externally committed exposure and not only `paid`, because a Transfer Stripe has
+accepted has left the platform balance even though nobody has been paid. An award
+below Stripe's 1 EUR minimum is `blocked/payout_below_minimum`, checked *before*
+the Transfer so the money is not stranded one step further from the Traveler;
+never rounded up, never forfeited, never marked paid. A failed bank payout does
+not retry itself either: the failure sets a block reason that stops both the
+worker and the sweeper, and only an operator's audited retry clears it, because
+a closed account or a wrong holder name is not something another attempt fixes. Same-account accumulation is
+modelled in the schema and deliberately deferred rather than faked.
+
+Webhooks add `payout.*` and `balance.available` on the connected endpoint and
+`transfer.created`, `transfer.reversed`, `balance.available`, `refund.*` and
+`charge.dispute.*` on the platform endpoint. No event is trusted on arrival:
+every handler re-reads the authoritative object in the correct account scope, and
+the write is guarded on an observation timestamp so a slow old `GET` cannot
+regress a newer one. A refund ShipTrip did not raise opens a hold and creates no
+second refund. A provider dispute records a `ProviderDispute` and holds the Deal;
+a **won** close clears that dispute's own hold and nothing else. A bank payout on
+a tracked account that ShipTrip did not create quarantines the account.
+
+Races were proven against real PostgreSQL with real threads, asserting external
+effects from the provider's own call log rather than local row counts: two
+workers produce exactly one Transfer and exactly one bank payout; refund versus
+dispatch never over-commits a capture; a dispute before dispatch sends nothing
+and a dispute after commitment freezes the next stage while recording the
+committed exposure instead of denying it; a hold arriving between the two stages
+stops the bank payout; a worker killed after the commitment recovers the same
+operation once its lease expires, still one Transfer; two simultaneous bank
+retries produce one new disbursement. Database guards refuse a second committed
+attempt, an over-allocated disbursement, an edited funding release, a repointed
+operation link and a swapped provider payout id.
+
+Two defects were found and fixed before merge. A lock-order inversion between
+the webhook path and the HTTP-response path took the disbursement and its payouts
+in opposite orders — a deadlock waiting for traffic — and the observation path now
+takes the Deal lifecycle and Payout locks first, in the canonical order; the H3
+execution modules were also added to the `test_phase8df_lock_order` AST gate. And
+PostgreSQL found one SQLite had accepted silently: the
+payout row lock was `select_related`-ing its nullable destination version, so
+PostgreSQL refused `FOR NO KEY UPDATE` on the nullable side of an outer join.
+Fixed by naming the lock target explicitly, which is also more honest — only the
+Payout row needs locking.
+
+The Finance payout detail page gains a Stripe panel (canonical obligation, masked
+account, readiness, committed exposure, source allocations and their charge
+references, external operations, bank payouts, holds, full timeline) and three
+state-safe recovery actions: re-read Stripe state, retry the bank payout only,
+and hold for Finance review. There is no Mark paid, no reset, no force, and no
+amount or destination edit.
+
+`STRIPE_CONNECT_PAYOUTS_ENABLED` is no longer refused at boot, but is still
+refused without `STRIPE_CONNECT_ENABLED` and still refused in `live` mode — live
+payout execution is a separate later gate. H0 requires it *and* the versioned
+`payments.payout.auto_stripe_enabled` business authorisation; either one off and
+nothing dispatches. `STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED`,
+`PAYOUT_DZD_EXECUTION_ENABLED`, `FINANCE_DASHBOARD_ENABLED` and `EMAIL_ENABLED`
+are unchanged and false.
+
+Migrations `finance/0020_phase8fh3_execution` (additive models, columns, ledger
+accounts and job kinds) and `finance/0021_phase8fh3_guards` (write-boundary
+triggers) rewrite no data and make no provider call.

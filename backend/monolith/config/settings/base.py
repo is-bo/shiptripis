@@ -56,6 +56,13 @@ STRIPE_CONNECT_ONBOARDING_REFRESH_URL = env.str(
 STRIPE_CONNECT_STATE_TTL_SECONDS = env.int(
     "STRIPE_CONNECT_STATE_TTL_SECONDS", default=3600
 )
+#: Stripe's published minimum for a standard EUR payout in France is 1 EUR. A
+#: smaller obligation is kept owed and blocked — never rounded up, never
+#: forfeited, and never marked paid. Configurable so a validated DE/ES rollout
+#: is a deployment change rather than a code change.
+STRIPE_CONNECT_MINIMUM_PAYOUT_EUR_CENTS = env.int(
+    "STRIPE_CONNECT_MINIMUM_PAYOUT_EUR_CENTS", default=100
+)
 PAYOUT_DATA_KEYRING = env.str("PAYOUT_DATA_KEYRING", default="{}")
 PAYOUT_DATA_ACTIVE_KEY_ID = env.str("PAYOUT_DATA_ACTIVE_KEY_ID", default="")
 PAYOUT_ACCOUNT_FINGERPRINT_KEY = env.str("PAYOUT_ACCOUNT_FINGERPRINT_KEY", default="")

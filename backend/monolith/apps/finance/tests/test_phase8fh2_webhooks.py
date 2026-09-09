@@ -294,14 +294,37 @@ class TestReadinessRefresh:
         assert record.processing_note == "unknown_connected_account"
         assert StripePayoutAccount.objects.count() == 1
 
-    def test_a_deferred_execution_event_is_stored_without_acting(
+    def test_a_bank_payout_event_never_touches_account_readiness(
         self, client, account, connect
     ):
+        """H3 acts on `payout.*`; it still must not confuse the two surfaces.
+
+        Readiness comes from `GET /v1/accounts/{acct}` and nothing else. A bank
+        payout event goes to the disbursement reconciler, and — because this
+        account has no disbursement carrying that payout id — it is refused as
+        an unexpected provider payout rather than silently applied.
+        """
+
         response = post(
             client, connect_event(event_id="evt_payout", event_type="payout.paid")
         )
         assert response.status_code == 200
         record = PaymentProviderEvent.objects.get(provider_event_id="evt_payout")
+        assert record.processing_note != "readiness_refreshed"
+        assert "retrieve_account" not in [name for name, _ in connect.calls]
+
+    def test_an_unhandled_connect_event_is_stored_without_acting(
+        self, client, account, connect
+    ):
+        response = post(
+            client,
+            connect_event(
+                event_id="evt_deauth",
+                event_type="account.application.deauthorized",
+            ),
+        )
+        assert response.status_code == 200
+        record = PaymentProviderEvent.objects.get(provider_event_id="evt_deauth")
         assert record.processing_note == "deferred_to_execution_phase"
         assert "retrieve_account" not in [name for name, _ in connect.calls]
 

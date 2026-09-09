@@ -387,11 +387,20 @@ class TestNoRegression:
                 expected_revision=0,
             )
 
-    def test_the_adapter_still_cannot_move_money(self):
+    def test_the_adapter_still_sends_no_business_profile_url(self):
+        """H2.6's own guarantee, unchanged by H3's execution surface.
+
+        The blanket "this module moves no money" assertion belonged to H2 and is
+        gone: H3 added the four provider calls H0 selected. What H2.6 asserted
+        survives literally — a Traveler has no website, so there is no way for
+        this adapter to claim they do, and the unselected top-up path stays
+        absent.
+        """
+
         import apps.finance.providers.stripe_connect as module
 
         body = open(module.__file__, encoding="utf-8").read()
-        for path in ("/v1/transfers", "/v1/payouts", "/reversals", "/v1/topups"):
+        for path in ("business_profile[url]", "/v1/topups"):
             assert path not in body
 
 

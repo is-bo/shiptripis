@@ -32,11 +32,28 @@ TRANSITIONS = {
     "blocked": {"eligible", "scheduled", "frozen", "cancelled"},
     "processing": {"sent", "paid", "failed", "frozen"},
     "sent": {"paid", "failed", "frozen"},
+    # A genuine bank return after settlement. The paid history stays; the
+    # obligation comes back.
     "paid": {"failed"},
     "failed": {"scheduled", "processing", "blocked", "eligible", "frozen", "cancelled"},
-    "frozen": {"not_eligible", "eligible", "blocked", "paid", "cancelled"},
+    # A freeze stops new instructions, not callbacks. An already-committed bank
+    # payout may still complete or fail underneath a hold, and pretending
+    # otherwise would leave the aggregate claiming money that has moved.
+    "frozen": {"not_eligible", "eligible", "blocked", "paid", "failed", "cancelled"},
     "cancelled": set(),
 }
+
+#: Attempt statuses in which an external instruction exists, or may exist. From
+#: the first of these onwards the amount is treated as unavailable to anyone
+#: else — a refund, a settlement or a second dispatch — until the provider says
+#: otherwise.
+COMMITTED_ATTEMPT_STATUSES = (
+    "dispatch_committed",
+    "unknown",
+    "accepted",
+    "sent",
+    "succeeded",
+)
 
 
 def validate_transition(previous, new):
@@ -67,6 +84,67 @@ def require_uncommitted(payout):
         status__in=["prepared", "cancelled", "returned"]
     ).exists():
         raise ValidationError("Payout has committed or unrecovered external exposure.")
+
+
+def committed_exposure_cents(payout) -> int:
+    """How much of this payout is already outside the platform's control.
+
+    Not "how much has been paid". A Transfer that Stripe accepted has left the
+    platform's balance even though the Traveler has not seen it, and a dispatch
+    whose HTTP result was lost may have done the same. Both are money a
+    settlement can no longer re-allocate to the Sender, so both count here.
+
+    Returns zero for a payout with only prepared, cancelled or returned
+    attempts, which is the ordinary case.
+    """
+
+    if not payout.pk:
+        return 0
+    committed = payout.attempts.filter(status__in=COMMITTED_ATTEMPT_STATUSES)
+    return int(
+        committed.aggregate(total=Sum("amount_eur_cents"))["total"]
+        or (int(payout.amount_eur_cents) if payout.status == "paid" else 0)
+    )
+
+
+def source_reserved_cents(source_attempt) -> int:
+    """Cents of one capture currently earmarked for some Traveler payout.
+
+    Allocations are immutable, so a reservation that never executed is undone by
+    an append-only `PayoutFundingRelease` rather than by deleting the row. Only
+    unreleased allocations bind the source.
+    """
+
+    from .models import PayoutFundingAllocation
+
+    return int(
+        PayoutFundingAllocation.objects.filter(
+            source_attempt=source_attempt, release__isnull=True
+        ).aggregate(total=Sum("amount_eur_cents"))["total"]
+        or 0
+    )
+
+
+def source_refunded_cents(source_attempt) -> int:
+    """Cents of one capture already promised back to the payer."""
+
+    return int(
+        source_attempt.refunds.exclude(status__in=["failed", "cancelled"]).aggregate(
+            total=Sum("amount_eur_cents")
+        )["total"]
+        or 0
+    )
+
+
+def source_available_cents(source_attempt) -> int:
+    """What is left of one capture after refunds and live reservations."""
+
+    return max(
+        0,
+        int(source_attempt.amount_eur_cents)
+        - source_refunded_cents(source_attempt)
+        - source_reserved_cents(source_attempt),
+    )
 
 
 def cancel_prepared_locked(payout):
@@ -351,17 +429,16 @@ def allocate_source(*, payout_id, source_attempt_id, amount_eur_cents, allocatio
         source.provider != "stripe" or not source.provider_charge_id.startswith("ch_")
     ):
         raise ValidationError("EUR source requires a verified Stripe charge.")
-    used = (
-        source.payout_allocations.aggregate(total=Sum("amount_eur_cents"))["total"] or 0
-    )
-    refunds = (
-        source.refunds.exclude(status__in=["failed", "cancelled"]).aggregate(
+    # Released reservations do not bind the source. H1 never released one, so
+    # this was the same number; H3 hands a slice back when its provider
+    # operation is definitively rejected before execution, and the source must
+    # become spendable again.
+    used = source_reserved_cents(source)
+    refunds = source_refunded_cents(source)
+    payout_used = (
+        payout.funding_allocations.filter(release__isnull=True).aggregate(
             total=Sum("amount_eur_cents")
         )["total"]
-        or 0
-    )
-    payout_used = (
-        payout.funding_allocations.aggregate(total=Sum("amount_eur_cents"))["total"]
         or 0
     )
     if (
@@ -372,7 +449,8 @@ def allocate_source(*, payout_id, source_attempt_id, amount_eur_cents, allocatio
     if source.order_id == balance.credit_source_id:
         credited_used = (
             payout.funding_allocations.filter(
-                source_attempt__order_id=balance.credit_source_id
+                source_attempt__order_id=balance.credit_source_id,
+                release__isnull=True,
             ).aggregate(total=Sum("amount_eur_cents"))["total"]
             or 0
         )

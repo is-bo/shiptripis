@@ -2309,9 +2309,110 @@ def payouts(request):
     )
 
 
+def _stripe_payout_panel(payout: Payout) -> dict | None:
+    """Everything Finance may see about one Stripe EUR payout's execution.
+
+    Safe references only, and deliberately complete: the canonical obligation,
+    which captures support it, what left the platform, what is at the connected
+    account, what the bank is doing and why anything is stopped. An operator who
+    cannot see all of that ends up guessing, and guessing about a payout means
+    sending money twice.
+    """
+
+    if payout.method != Payout.Method.STRIPE_TRANSFER or not payout.snapshot_version:
+        return None
+    from apps.finance.models import (
+        PayoutProviderOperation,
+        StripeDisbursementAllocation,
+    )
+    from apps.finance.payout_domain import active_holds, committed_exposure_cents
+
+    version = payout.active_instruction_version
+    account = version.stripe_account if version else None
+    allocations = list(
+        payout.funding_allocations.select_related("source_attempt__order").order_by("pk")
+    )
+    operations = list(
+        PayoutProviderOperation.objects.filter(attempt__payout=payout)
+        .select_related("attempt")
+        .order_by("attempt__sequence", "sequence")
+    )
+    disbursements = list(
+        StripeDisbursementAllocation.objects.filter(payout=payout)
+        .select_related("disbursement")
+        .order_by("pk")
+    )
+    holds = list(active_holds(payout).order_by("pk"))
+    return {
+        "account_reference": mask_account(account.provider_account_id)
+        if account
+        else None,
+        "account_status": account.status if account else "",
+        "account_status_reason": account.status_reason if account else "",
+        "account_bank_present": bool(account and account.eur_bank_present),
+        "account_schedule": account.payout_schedule_interval if account else "",
+        "account_checked_at": account.readiness_checked_at if account else None,
+        "provider_mode": payout.provider_mode,
+        "committed_exposure_eur_cents": committed_exposure_cents(payout),
+        "allocations": [
+            {
+                "source_order": allocation.source_attempt.order.purpose,
+                "charge": allocation.source_charge_id,
+                "amount_eur_cents": allocation.amount_eur_cents,
+                "released": hasattr(allocation, "release"),
+            }
+            for allocation in allocations
+        ],
+        "operations": [
+            {
+                "kind": operation.kind,
+                "status": operation.status,
+                "reference": operation.provider_object_id,
+                "amount_eur_cents": operation.amount_minor,
+                "reversed_eur_cents": operation.amount_reversed_minor,
+                "failure_code": operation.failure_code,
+                "first_request_at": operation.first_request_at,
+                "reconciled_at": operation.reconciled_at,
+            }
+            for operation in operations
+        ],
+        "disbursements": [
+            {
+                "reference": row.disbursement.provider_payout_id,
+                "status": row.disbursement.status,
+                "amount_eur_cents": row.amount_eur_cents,
+                "failure_code": row.disbursement.failure_code,
+                "submitted_at": row.disbursement.submitted_at,
+                "paid_at": row.disbursement.paid_at,
+                "arrival_estimate": row.disbursement.arrival_estimate,
+                "active": row.active,
+            }
+            for row in disbursements
+        ],
+        "holds": [
+            {"kind": hold.kind, "reason": hold.reason_code, "opened_at": hold.opened_at}
+            for hold in holds
+        ],
+        "events": [
+            {
+                "sequence": event.sequence,
+                "previous_state": event.previous_state,
+                "new_state": event.new_state,
+                "reason": event.reason_code,
+                "occurred_at": event.occurred_at,
+            }
+            for event in payout.events.order_by("-sequence")[:30]
+        ],
+        "unresolved": any(
+            operation.status == "unknown" for operation in operations
+        ),
+    }
+
+
 @capability_required("view_payouts")
 def payout_detail(request, pk: int):
     payout = get_object_or_404(Payout.objects.select_related("traveler", "deal"), pk=pk)
+    stripe_panel = _stripe_payout_panel(payout)
     form = ManualPayoutForm(
         request.POST or None,
         initial={
@@ -2319,6 +2420,9 @@ def payout_detail(request, pk: int):
             "payout_amount": decimal_eur(payout.amount_eur_cents),
         },
     )
+    action = request.POST.get("action", "manual") if request.method == "POST" else ""
+    if action in ("refresh", "retry_bank", "flag"):
+        return _payout_recovery_action(request, payout, action)
     if request.method == "POST":
         if not has_admin_permission(request.user, "settle_payouts"):
             raise PermissionDenied("Payout settlement permission is required.")
@@ -2357,11 +2461,65 @@ def payout_detail(request, pk: int):
             "kind": "payout",
             "record": payout,
             "form": form,
+            "stripe": stripe_panel,
+            # The manual evidence form is for the DZD/operator rail only. On the
+            # Stripe rail there is no "Mark paid": the provider says paid or
+            # nobody does.
             "may_act": has_admin_permission(request.user, "settle_payouts")
             and payout.status == Payout.Status.ELIGIBLE
             and payout.method == Payout.Method.MANUAL,
+            "may_refresh": bool(stripe_panel)
+            and has_admin_permission(request.user, "reconcile_finance"),
+            "may_retry_bank": bool(stripe_panel)
+            and has_admin_permission(request.user, "retry_payouts")
+            and payout.status == Payout.Status.FAILED
+            and not stripe_panel["unresolved"]
+            and not stripe_panel["holds"],
+            "may_flag": bool(stripe_panel)
+            and has_admin_permission(request.user, "manage_payout_holds"),
         },
     )
+
+
+def _payout_recovery_action(request, payout: Payout, action: str):
+    """The three H3 recovery actions, each gated on its own capability."""
+
+    from apps.finance.payout_execution import (
+        PayoutExecutionError,
+        admin_flag_unresolved_operation,
+        admin_refresh_payout,
+        admin_retry_bank_payout,
+    )
+
+    try:
+        if action == "refresh":
+            result = admin_refresh_payout(actor=request.user, payout_id=payout.pk)
+            messages.success(request, f"Stripe state re-read: {result}.")
+        elif action == "retry_bank":
+            expected = int(request.POST.get("expected_state_version") or -1)
+            admin_retry_bank_payout(
+                actor=request.user,
+                payout_id=payout.pk,
+                expected_state_version=expected,
+            )
+            messages.success(
+                request,
+                "A new bank payout was authorised. The original transfer is "
+                "untouched and is not repeated.",
+            )
+        else:
+            admin_flag_unresolved_operation(
+                actor=request.user,
+                payout_id=payout.pk,
+                reason=(request.POST.get("reason") or "operation_under_review")[:64],
+            )
+            messages.success(
+                request,
+                "A Finance hold was opened. The reservation is unchanged.",
+            )
+    except (PayoutExecutionError, PermissionDenied, ValidationError) as exc:
+        _operation_error(request, "Payout recovery", exc)
+    return redirect("admin_console:payout-detail", pk=payout.pk)
 
 
 @capability_required("view_finance_summary")

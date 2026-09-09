@@ -68,6 +68,9 @@ from .payout_models import (  # noqa: F401 -- Django model registration/public i
     PayoutAttempt,
     PayoutProviderOperation,
     PayoutFundingAllocation,
+    PayoutFundingRelease,
+    StripeDisbursement,
+    StripeDisbursementAllocation,
     FinanceHold,
     ProviderDispute,
     PayoutEvent,
@@ -808,6 +811,14 @@ class LedgerAccount(models.TextChoices):
     DEAL_FUNDS = "deal_funds", "Deal funds held (liability)"
     TRAVELER_PAYABLE = "traveler_payable", "Traveler payable (liability)"
     PLATFORM_COMMISSION = "platform_commission", "Platform commission (revenue)"
+    # --- H3: where externally committed EUR actually sits -----------------
+    #: Money that has left the platform's Stripe balance and now sits in a
+    #: Traveler's connected account. Still ShipTrip's asset, still owed to the
+    #: Traveler: a Transfer does not discharge the payable.
+    CONNECT_FUNDS = "connect_funds", "Connected account funds (asset)"
+    #: Money a bank payout has taken out of the connected account and not yet
+    #: delivered. Discharges the payable only when the provider says `paid`.
+    PAYOUT_IN_TRANSIT = "payout_in_transit", "Bank payout in transit (asset)"
 
 
 class LedgerTransaction(models.Model):
@@ -1337,6 +1348,11 @@ class ScheduledJob(models.Model):
         RATING_REVEAL = "rating_reveal", "Rating reveal"
         BOOST_EXPIRY = "boost_expiry", "Boost expiry"
         OUTBOUND_MESSAGE = "outbound_message", "Outbound message dispatch"
+        # --- Phase 8F-H3 automatic EUR payout execution ---
+        PAYOUT_EXECUTE = "payout_execute", "Payout execution"
+        PAYOUT_RECONCILE = "payout_reconcile", "Payout reconciliation"
+        PAYOUT_ACCOUNT_REFRESH = "payout_account_refresh", "Payout account refresh"
+        PAYOUT_SWEEP = "payout_sweep", "Payout sweep"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

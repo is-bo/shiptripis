@@ -105,15 +105,42 @@ def freeze_payout(
     if payout.status in (Payout.Status.CANCELLED, Payout.Status.FROZEN):
         return payout.status
 
+    from .payout_domain import committed_exposure_cents
+
+    committed = committed_exposure_cents(payout)
     previous = payout.status
     payout.status = Payout.Status.FROZEN
     payout.scheduled_for = None
     payout.notes = f"Frozen by dispute #{dispute_id or ''}: {reason}"[:2000]
+    if committed:
+        # A freeze stops the *next* instruction. It cannot recall a Transfer
+        # Stripe has already accepted or a bank payout already in transit, and
+        # saying otherwise on an operator screen would be a lie about where the
+        # money is. Record the exposure instead; recovery is a new provider
+        # operation, not a status change.
+        payout.notes = (
+            f"{payout.notes} External money already committed: "
+            f"{committed} EUR cents. Recovery review required."
+        )[:2000]
+        logger.error(
+            "finance.dispute_after_dispatch_commitment deal=%s payout=%s "
+            "committed_eur_cents=%s dispute=%s",
+            deal.pk,
+            payout.pk,
+            committed,
+            dispute_id,
+        )
     payout.save(update_fields=["status", "scheduled_for", "notes", "updated_at"])
     if payout.snapshot_version:
         from .payout_domain import append_event_locked
 
-        append_event_locked(payout, previous=previous, reason="dispute_freeze")
+        append_event_locked(
+            payout,
+            previous=previous,
+            reason="dispute_freeze_with_commitment"
+            if committed
+            else "dispute_freeze",
+        )
     lifecycle.record_event(
         deal,
         DealEvent.Kind.PAYOUT_STATUS_CHANGED,
@@ -220,6 +247,16 @@ def evaluate_payout_release(
                 append_event_locked(
                     payout, previous=previous, reason="protection_release"
                 )
+                from .payout_reconciliation import notify_payout_state
+
+                notify_payout_state(
+                    payout, "eligible" if target == "eligible" else "needs_attention"
+                )
+            if target == "eligible" and payout.method == "stripe_transfer":
+                # Automatic from here: no admin "Pay" button exists on this
+                # rail. The durable job is the promise; the worker decides
+                # nothing this gate has not already decided.
+                _arm_execution(payout)
             _close_out(aggregate, reason=reason, at=at)
             return f"payout_{target}"
         if payout.status in (
@@ -267,6 +304,22 @@ def evaluate_payout_release(
         _notify_protection_ended(aggregate)
         _notify_payout_status(aggregate, payout)
         return "released"
+
+
+def _arm_execution(payout: Payout) -> None:
+    """Record the durable obligation to attempt this payout automatically."""
+
+    from .models import ScheduledJob
+    from .services import schedule_job
+
+    schedule_job(
+        kind=ScheduledJob.Kind.PAYOUT_EXECUTE,
+        key=f"payout_execute:{payout.pk}",
+        run_at=timezone.now(),
+        payload={"payout_id": payout.pk},
+        max_attempts=32,
+        reactivate_failed=True,
+    )
 
 
 def _close_out(

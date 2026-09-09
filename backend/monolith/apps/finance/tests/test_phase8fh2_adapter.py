@@ -3,7 +3,8 @@
 Every test here drives a fake transport, so nothing reaches Stripe. What is
 asserted is exactly the boundary H0 fixed: which headers go out, which
 parameters go out, what comes back as a safe projection, and what happens on
-each failure shape. The last test in the file is the money guard.
+each failure shape. The last class asserts which provider paths H0 selected
+and, just as importantly, which ones must never appear.
 """
 
 from __future__ import annotations
@@ -594,36 +595,102 @@ class TestFailures:
             gateway(requests.Timeout("timed out")).retrieve_account("a")
 
 
-class TestNoMoneyExecution:
-    """The structural guarantee, not a behavioural one.
+class TestExecutionSurfaceBoundary:
+    """What the adapter may and may not contain, now that H3 exists.
 
-    H3 owns transfers and bank payouts. Until then the adapter must contain no
-    path that could create, reverse or cancel either — asserted against the
-    module's own source so a future edit that adds one fails here first.
+    H2 asserted the module had no money-moving path at all. H3 added exactly
+    four — Transfer, bank Payout, payout cancel, transfer reversal — so that
+    blanket assertion is gone and a narrower one replaces it: the paths H0 did
+    **not** select must still be absent, and no caller may hand this adapter a
+    business-profile URL for a Traveler who has no website.
     """
 
     SOURCE = Path(
         __import__("apps.finance.providers.stripe_connect", fromlist=["__file__"]).__file__
     ).read_text(encoding="utf-8")
 
+    #: Comments and docstrings explain *why* a parameter is not sent, so they
+    #: legitimately name it. Only what the module can actually put on the wire
+    #: is searched.
+    WIRE = "\n".join(
+        line.split("#", 1)[0]
+        for line in SOURCE.splitlines()
+        if not line.strip().startswith(("#", "*", '"""', "'''"))
+    )
+
     @pytest.mark.parametrize(
         "forbidden",
         [
-            "/v1/transfers",
-            "/v1/payouts",
-            "/reversals",
+            # Not selected by H0 and never to be reached by accident.
             "/v1/topups",
-            "/v1/balance",
+            '"application_fee_amount"',
+            '"on_behalf_of"',
+            '"transfer_data"',
+            "business_profile[url]",
         ],
     )
-    def test_no_money_moving_endpoint_appears_in_the_adapter(self, forbidden):
-        assert forbidden not in self.SOURCE
+    def test_an_unselected_provider_path_never_appears(self, forbidden):
+        assert forbidden not in self.WIRE
 
-    def test_no_method_is_named_after_moving_money(self):
+    def test_instant_payouts_are_refused_rather_than_offered(self):
+        # `instant` appears in the module only as the value the bank-payout call
+        # refuses, never as one it sends.
+        assert 'method: str = "standard"' in self.SOURCE
+        assert 'if method != "standard"' in self.SOURCE
+
+    def test_the_four_selected_execution_paths_exist(self):
         names = set(re.findall(r"\n    def (\w+)", self.SOURCE))
-        assert not {
-            name
-            for name in names
-            if any(word in name for word in ("transfer", "payout_create", "reverse"))
-        }
+        assert {
+            "create_transfer",
+            "create_bank_payout",
+            "cancel_bank_payout",
+            "reverse_transfer",
+        } <= names
         assert "set_payout_schedule" in names
+
+    def test_a_transfer_refuses_a_payment_intent_as_its_source(self):
+        client = gateway(FakeResponse(body={"id": "tr_1"}))
+        with pytest.raises(ProviderError):
+            client.create_transfer(
+                amount_minor=6000,
+                destination="acct_1TESTconnected",
+                source_transaction="pi_not_a_charge",
+                transfer_group="g",
+                idempotency_key="k",
+                metadata={},
+            )
+
+    def test_a_transfer_refuses_a_non_positive_amount(self):
+        client = gateway(FakeResponse(body={"id": "tr_1"}))
+        with pytest.raises(ProviderError):
+            client.create_transfer(
+                amount_minor=0,
+                destination="acct_1TESTconnected",
+                source_transaction="ch_1",
+                transfer_group="g",
+                idempotency_key="k",
+                metadata={},
+            )
+
+    def test_a_bank_payout_requires_connected_account_scope(self):
+        client = gateway(FakeResponse(body={"id": "po_1"}))
+        with pytest.raises(ProviderError):
+            client.create_bank_payout(
+                account_id="",
+                amount_minor=6000,
+                destination="ba_1",
+                idempotency_key="k",
+                metadata={},
+            )
+
+    def test_a_bank_payout_refuses_instant(self):
+        client = gateway(FakeResponse(body={"id": "po_1"}))
+        with pytest.raises(ProviderError):
+            client.create_bank_payout(
+                account_id="acct_1TESTconnected",
+                amount_minor=6000,
+                destination="ba_1",
+                idempotency_key="k",
+                metadata={},
+                method="instant",
+            )

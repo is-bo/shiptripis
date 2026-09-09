@@ -443,6 +443,39 @@ class PayoutProviderOperation(models.Model):
     last_request_at = models.DateTimeField(null=True)
     response_code = models.PositiveSmallIntegerField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # --- H3 execution links and safe provider facts -----------------------
+    #: The exact source slice a `transfer_create` moves. One Transfer per
+    #: allocation, so a payout supported by several Stripe charges creates
+    #: several Transfers whose amounts sum to the obligation.
+    funding_allocation = models.ForeignKey(
+        "finance.PayoutFundingAllocation",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="operations",
+    )
+    #: The bank payout a `bank_payout_create` / `bank_payout_cancel` belongs to.
+    disbursement = models.ForeignKey(
+        "finance.StripeDisbursement",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="operations",
+    )
+    #: The provider's own status word for the object, kept as reported so a
+    #: later reconciliation can tell `pending` from `in_transit` without
+    #: re-deriving it from local state.
+    provider_object_status = models.CharField(max_length=32, blank=True)
+    #: Safe balance-transaction references for cash reconciliation. Ids only.
+    balance_transaction_id = models.CharField(max_length=255, blank=True)
+    destination_payment_id = models.CharField(max_length=255, blank=True)
+    #: Cumulative reversed amount on a Transfer, bounded by its own amount.
+    amount_reversed_minor = models.PositiveBigIntegerField(default=0)
+    failure_code = models.CharField(max_length=64, blank=True)
+    #: Monotonic observation guard, same contract as the account snapshot.
+    observation_generation = models.PositiveBigIntegerField(default=0)
+    last_observed_at = models.DateTimeField(null=True, blank=True)
+    reconciled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "finance_payout_provider_operation"
@@ -620,4 +653,163 @@ class PayoutEvent(ImmutableRecord):
             models.UniqueConstraint(
                 fields=["payout", "sequence"], name="fin_payout_event_sequence"
             )
+        ]
+
+
+# ---------------------------------------------------------------------------
+# H3 — EUR execution: bank disbursements and funding-reservation releases
+# ---------------------------------------------------------------------------
+
+
+class PayoutFundingRelease(ImmutableRecord):
+    """A reserved source slice handed back because its dispatch never executed.
+
+    `PayoutFundingAllocation` is immutable — it is the record that a specific
+    number of cents from a specific Stripe charge was earmarked for a specific
+    Payout. It is therefore never edited or deleted to "give the money back".
+    Instead this append-only row says the reservation no longer binds, and every
+    capacity calculation subtracts released allocations.
+
+    A release is only ever written for an allocation whose provider operation
+    was *definitively rejected before execution*. An ambiguous or accepted
+    transfer keeps its reservation, because the cents may already be gone.
+    """
+
+    allocation = models.OneToOneField(
+        PayoutFundingAllocation, on_delete=models.PROTECT, related_name="release"
+    )
+    reason_code = models.CharField(max_length=64)
+    actor = optional(settings.AUTH_USER_MODEL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "finance_payout_funding_release"
+
+
+class StripeDisbursement(models.Model):
+    """One connected-account bank payout: `acct_…` → the Traveler's bank.
+
+    Deliberately a separate object from the platform Transfer. A Transfer moves
+    ShipTrip's money into the connected account's Stripe balance; a bank payout
+    moves that balance to an IBAN. They fail independently, they are reconciled
+    from different account scopes, and a Traveler is only paid when *this* one
+    reaches `paid`. A failed bank payout is retried by creating another
+    disbursement — never by creating the Transfer again.
+    """
+
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        COMMITTED = "committed", "Dispatch committed"
+        UNKNOWN = "unknown", "Unknown"
+        PENDING = "pending", "Pending at provider"
+        IN_TRANSIT = "in_transit", "In transit"
+        PAID = "paid", "Paid"
+        FAILED = "failed", "Failed"
+        CANCELED = "canceled", "Canceled"
+        RETURNED = "returned", "Returned after paid"
+
+    #: Statuses in which money is still externally exposed.
+    LIVE_STATUSES = ("committed", "unknown", "pending", "in_transit", "paid")
+    #: Statuses in which the transferred funds are back in the connected
+    #: account's balance and a further bank attempt is legitimate.
+    RECOVERED_STATUSES = ("failed", "canceled", "returned")
+
+    public_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    account = protected(StripePayoutAccount, related_name="disbursements")
+    provider_mode = models.CharField(max_length=16, choices=FinancialMode.choices)
+    currency = models.CharField(max_length=3, default="EUR")
+    amount_minor = models.PositiveBigIntegerField()
+    method = models.CharField(max_length=16, default="standard")
+    #: The opaque `ba_…` external account this disbursement was addressed to.
+    #: Never the IBAN, never the holder, never the bank object.
+    external_account_id = models.CharField(max_length=255, blank=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PLANNED
+    )
+    provider_payout_id = models.CharField(max_length=255, blank=True)
+    balance_transaction_id = models.CharField(max_length=255, blank=True)
+    failure_balance_transaction_id = models.CharField(max_length=255, blank=True)
+    failure_code = models.CharField(max_length=64, blank=True)
+    arrival_estimate = models.DateTimeField(null=True, blank=True)
+    #: Monotonic guard so a slower older GET cannot regress a newer observation.
+    observation_generation = models.PositiveBigIntegerField(default=0)
+    last_observed_at = models.DateTimeField(null=True, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    returned_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "finance_stripe_disbursement"
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="fin_disb_status_idx"),
+            models.Index(
+                fields=["account", "-created_at"], name="fin_disb_account_idx"
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "provider_mode", "provider_payout_id"],
+                condition=~Q(provider_payout_id=""),
+                name="fin_disbursement_provider_identity",
+            ),
+            models.CheckConstraint(
+                condition=Q(amount_minor__gt=0), name="fin_disbursement_positive"
+            ),
+            models.CheckConstraint(
+                condition=Q(currency="EUR", method="standard"),
+                name="fin_disbursement_rail",
+            ),
+            models.CheckConstraint(
+                condition=Q(provider_mode__in=["test", "live"]),
+                name="fin_disbursement_known_mode",
+            ),
+            models.CheckConstraint(
+                condition=~Q(status="paid") | Q(paid_at__isnull=False),
+                name="fin_disbursement_paid_requires_timestamp",
+            ),
+        ]
+
+
+class StripeDisbursementAllocation(models.Model):
+    """Exactly how many cents of one bank payout belong to one local Payout.
+
+    H0 permits accumulating several sub-minimum obligations for the same
+    Traveler/account/mode/currency into one disbursement. H3 creates exactly one
+    allocation per disbursement and keeps the model general, so the accumulation
+    case is a scheduling change rather than a schema change. In every case the
+    allocations must sum to the disbursement total.
+    """
+
+    disbursement = protected(StripeDisbursement, related_name="allocations")
+    payout = protected("finance.Payout", related_name="disbursement_allocations")
+    attempt = optional(PayoutAttempt, related_name="disbursement_allocations")
+    amount_eur_cents = models.PositiveBigIntegerField()
+    active = models.BooleanField(default=True)
+    released_reason = models.CharField(max_length=64, blank=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "finance_stripe_disbursement_allocation"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["disbursement", "payout"],
+                name="fin_disbursement_allocation_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["payout"],
+                condition=Q(active=True),
+                name="fin_payout_one_active_disbursement",
+            ),
+            models.CheckConstraint(
+                condition=Q(amount_eur_cents__gt=0),
+                name="fin_disbursement_allocation_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(active=True, released_at__isnull=True, released_reason="")
+                | Q(active=False, released_at__isnull=False),
+                name="fin_disbursement_allocation_release_complete",
+            ),
         ]

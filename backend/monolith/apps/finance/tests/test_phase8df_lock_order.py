@@ -76,6 +76,13 @@ CANONICAL_LOCK_MODULES = (
     "apps/finance/payout_profiles.py",
     "apps/finance/payout_snapshots.py",
     "apps/finance/payout_operations.py",
+    # H3 execution. These are the modules that actually move money, so a bare
+    # `select_for_update()` here would reintroduce the deferred-FK lock cycle
+    # this gate exists to keep closed. `payout_provider_events` and
+    # `payout_sweeper` are deliberately absent: they take no lock at all, and
+    # this gate asserts that a listed module still locks something.
+    "apps/finance/payout_execution.py",
+    "apps/finance/payout_reconciliation.py",
     "apps/parcels/services.py",
     "apps/disputes/services.py",
     "apps/trips/services.py",

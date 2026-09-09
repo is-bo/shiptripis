@@ -552,6 +552,118 @@ def handle_outbound_message(payload: dict) -> str:
     return result
 
 
+# --- Phase 8F-H3 automatic EUR payout execution ------------------------------
+
+
+def _payout_execution_error(exc) -> str:
+    """Translate a finance refusal into this loop's own vocabulary.
+
+    The distinction that matters: an expected wait must not consume a payout's
+    retry budget. "The protection window is still open", "the connected balance
+    has not settled", "another worker holds this operation" and "execution is
+    switched off" are all the system behaving correctly, and firing an incident
+    for them would train an operator to ignore the queue.
+    """
+
+    from .payout_execution import PayoutBlocked, PayoutDeferred, PayoutUnresolved
+
+    if isinstance(exc, PayoutDeferred):
+        raise JobDeferred(str(exc), code=exc.code, delay=exc.delay) from exc
+    if isinstance(exc, PayoutUnresolved):
+        # Never retried by re-sending. The obligation and its reservation stand
+        # until a person or a provider read establishes what happened.
+        raise PermanentJobError(str(exc), code=exc.code) from exc
+    if isinstance(exc, PayoutBlocked):
+        return f"blocked_{exc.code}"[:255]
+    raise exc
+
+
+def handle_payout_execute(payload: dict) -> str:
+    """Advance one Stripe EUR payout by exactly one external stage."""
+
+    from .payout_execution import PayoutExecutionError, execute_payout
+
+    payout_id = payload.get("payout_id")
+    if not isinstance(payout_id, int):
+        raise PermanentJobError(
+            "payout_execute needs an integer payout_id.", code="invalid_payload"
+        )
+    payout = Payout.objects.filter(pk=payout_id).first()
+    if payout is None:
+        return "payout_missing"
+    if payout.status in ("paid", "cancelled"):
+        return f"payout_{payout.status}"
+    try:
+        return execute_payout(payout_id)
+    except PayoutExecutionError as exc:
+        return _payout_execution_error(exc)
+
+
+def handle_payout_reconcile(payload: dict) -> str:
+    """Ask Stripe what really happened to this payout's live operations.
+
+    Runs whether or not execution is enabled. Turning off new instructions must
+    never stop the system finding out what the existing ones did.
+    """
+
+    from .payout_reconciliation import reconcile_payout
+
+    payout_id = payload.get("payout_id")
+    if not isinstance(payout_id, int):
+        raise PermanentJobError(
+            "payout_reconcile needs an integer payout_id.", code="invalid_payload"
+        )
+    if not Payout.objects.filter(pk=payout_id).exists():
+        return "payout_missing"
+    result = reconcile_payout(payout_id)
+    if "unavailable" in result:
+        raise RetryableJobError(
+            "Stripe was unavailable for reconciliation.", code="provider_unavailable"
+        )
+    return result[:255]
+
+
+def handle_payout_account_refresh(payload: dict) -> str:
+    """Re-read one connected account's authoritative readiness."""
+
+    from .models import StripePayoutAccount
+    from .payout_accounts import refresh_account
+    from .providers.base import ProviderError, ProviderUnavailable
+
+    account_id = payload.get("account_id")
+    if not isinstance(account_id, int):
+        raise PermanentJobError(
+            "payout_account_refresh needs an integer account_id.",
+            code="invalid_payload",
+        )
+    account = StripePayoutAccount.objects.filter(pk=account_id).first()
+    if account is None:
+        return "account_missing"
+    try:
+        _, applied = refresh_account(account)
+    except ProviderUnavailable as exc:
+        raise RetryableJobError(
+            "Stripe readiness is temporarily unavailable.", code=exc.code
+        ) from exc
+    except ProviderError as exc:
+        raise PermanentJobError(
+            "Stripe refused the readiness refresh.", code=exc.code
+        ) from exc
+    return "refreshed" if applied else "superseded_by_newer_observation"
+
+
+def handle_payout_sweep(payload: dict) -> str:
+    """Bounded recovery pass over stranded payout work."""
+
+    from .payout_sweeper import sweep_payouts
+
+    report = sweep_payouts()
+    return (
+        f"execute={report['execute']} reconcile={report['reconcile']} "
+        f"accounts={report['accounts']}"
+    )[:255]
+
+
 HANDLERS = {
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
     ScheduledJob.Kind.PAYMENT_GRACE_RELEASE: handle_payment_grace_release,
@@ -565,6 +677,10 @@ HANDLERS = {
     ScheduledJob.Kind.RATING_REVEAL: handle_rating_reveal,
     ScheduledJob.Kind.BOOST_EXPIRY: handle_boost_expiry,
     ScheduledJob.Kind.OUTBOUND_MESSAGE: handle_outbound_message,
+    ScheduledJob.Kind.PAYOUT_EXECUTE: handle_payout_execute,
+    ScheduledJob.Kind.PAYOUT_RECONCILE: handle_payout_reconcile,
+    ScheduledJob.Kind.PAYOUT_ACCOUNT_REFRESH: handle_payout_account_refresh,
+    ScheduledJob.Kind.PAYOUT_SWEEP: handle_payout_sweep,
 }
 
 
@@ -866,10 +982,29 @@ def run_job(job: ScheduledJob) -> str:
     return str(result)
 
 
+def _sweep_payout_backlog() -> None:
+    """Re-arm payout work the ordinary paths lost, before claiming this batch.
+
+    Deliberately in the loop rather than in a self-rescheduling job: a job that
+    has to re-arm itself is exactly the thing that stops running when a worker
+    dies mid-run, and this is the mechanism that is supposed to survive that.
+    Every query behind it is a bounded page over an indexed predicate, so a
+    deployment with no payout work pays three cheap lookups per cycle.
+    """
+
+    try:
+        from .payout_sweeper import sweep_payouts
+
+        sweep_payouts()
+    except Exception:  # noqa: BLE001 - the sweep must never stop the job loop
+        logger.exception("finance.payout_sweep_failed")
+
+
 def run_due_jobs(*, limit: int = 50, at: datetime | None = None) -> JobRunReport:
     """Claim and run every due job, up to `limit`."""
 
     resolve_satisfied_failed_jobs(limit=min(limit, 100))
+    _sweep_payout_backlog()
     jobs = claim_due_jobs(limit=limit, at=at)
     results = [run_job(job) for job in jobs]
     failed = sum(1 for result in results if result in {"failed", "no_handler"})

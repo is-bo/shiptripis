@@ -104,8 +104,9 @@ def validate_connect_configuration(
     """Refuse a Connect configuration that could act on the wrong rail.
 
     Called with the flag off too, because two of these rules apply regardless:
-    the country list may never exceed the architecture ceiling, and the money
-    execution flags H2 does not implement may never be on.
+    the country list may never exceed the architecture ceiling, and the
+    non-Stripe funding facility — which is neither approved nor implemented —
+    may never be on.
     """
 
     countries = normalise_countries(allowed_countries)
@@ -117,10 +118,21 @@ def validate_connect_configuration(
             + f"; refused {', '.join(outside)}."
         )
     if payouts_enabled:
-        raise ConnectConfigurationError(
-            "STRIPE_CONNECT_PAYOUTS_ENABLED must be false; payout execution is "
-            "not implemented in this release."
-        )
+        # H3 implements automatic EUR execution, so this flag is no longer
+        # refused outright. What it still refuses is the two configurations
+        # that would make it dangerous: execution without the onboarding and
+        # readiness layer it depends on, and execution against real money,
+        # which is H8's decision and not this release's.
+        if not enabled:
+            raise ConnectConfigurationError(
+                "STRIPE_CONNECT_PAYOUTS_ENABLED requires STRIPE_CONNECT_ENABLED; "
+                "payout execution cannot run without Connect onboarding."
+            )
+        if expected_mode != "test":
+            raise ConnectConfigurationError(
+                "STRIPE_CONNECT_PAYOUTS_ENABLED is authorised for TEST only in "
+                "this release; live payout execution is a separate gate."
+            )
     if non_stripe_funding_enabled:
         raise ConnectConfigurationError(
             "STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED must be false; the "

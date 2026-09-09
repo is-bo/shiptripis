@@ -85,8 +85,12 @@ class DealMoney:
     traveler_reward_eur_cents: int
     platform_fee_eur_cents: int
     sender_total_eur_cents: int
-    #: Already sent to the traveler and gone. A settlement cannot claw a bank
-    #: transfer back, so this is money the platform no longer has to allocate.
+    #: Already sent to the traveler, or already committed to an external
+    #: instruction whose outcome the platform no longer controls. A settlement
+    #: cannot claw a bank transfer back, and it cannot claw back an accepted
+    #: Stripe Transfer either — that money has left the platform balance even
+    #: though the Traveler has not seen it yet. Both are money this settlement
+    #: no longer has to allocate.
     paid_out_eur_cents: int = 0
 
     @property
@@ -171,6 +175,30 @@ def _applied_cash(order_id: int) -> int:
     return max(0, captured - refunded)
 
 
+def _externally_committed_cents(deal_id: int) -> int:
+    """Traveler money this settlement can no longer reassign.
+
+    Before the Stripe rail existed there was one answer: a `paid` Payout. That
+    is no longer sufficient. Between the platform Transfer and the bank payout
+    settling there is a window — sometimes days long — in which the money has
+    left ShipTrip's Stripe balance, has not reached the Traveler, and cannot be
+    refunded to the Sender. Treating that as still-available cash is how the
+    same euro gets promised to two people.
+
+    A prepared, cancelled or returned attempt is not committed: nothing left,
+    or what left has provably come back.
+    """
+
+    from .payout_domain import committed_exposure_cents
+
+    payout = Payout.objects.filter(deal_id=deal_id).first()
+    if payout is None:
+        return 0
+    if payout.status == Payout.Status.PAID:
+        return int(payout.amount_eur_cents)
+    return committed_exposure_cents(payout)
+
+
 def read_deal_money(deal: Deal) -> DealMoney:
     """Snapshot the Deal's finances. Call with the Deal aggregate held."""
 
@@ -195,11 +223,7 @@ def read_deal_money(deal: Deal) -> DealMoney:
         if balance.credit_source_id is not None:
             deposit_id = balance.credit_source_id
             deposit_cash = _applied_cash(deposit_id)
-    settled_payout = (
-        Payout.objects.filter(deal_id=deal.pk, status=Payout.Status.PAID)
-        .values_list("amount_eur_cents", flat=True)
-        .first()
-    )
+    settled_payout = _externally_committed_cents(deal.pk)
     boost_orders = list(
         PaymentOrder.objects.filter(
             deal_id=deal.pk, purpose=PaymentOrder.Purpose.BOOST
