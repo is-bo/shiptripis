@@ -5419,5 +5419,34 @@ payout.
 
 Eleven new console tests plus the existing H4 suite passed on PostgreSQL. Visual QA
 covered all seven required states in both themes and at 375px against real fixtures
-with synthetic data; three defects found there were fixed. Deployment, health and
-browser QA results are recorded in the H4.1 release report.
+with synthetic data; three defects found there were fixed.
+
+Local release gate on the implementation SHA `16d4e3afabf474a9033d687c5ef811fc1c3dff0d`:
+**866 tests passed** across `apps/finance` and `apps/admin_panel` on PostgreSQL in
+764.31 seconds, the 37-test deployment-safety suite passed, `ruff check` was clean, and
+`manage.py check --deploy --fail-level WARNING` under the production profile reported no
+issues. The commit touches no migration, no `schema.sql`, no Go and no Dart, so the
+schema-drift, Go and Flutter gates cover surfaces this change does not reach.
+`tools/check_static_web.py` and the Caddy config validation were not run locally.
+
+GitHub Actions run 34419653591 was dispatched once; all six jobs ended in about two
+seconds with no steps executed and no retrievable logs — the account billing/monthly
+limit, the same block as H4. It was not retried. The owner explicitly authorized the
+local gate and a direct main update. Cloud CI is unavailable, not passed.
+
+Deployed to Railway `shiptripis` / `shiptrip` as deployment
+`61d0e95e-507c-4f86-92ce-24f457126a17`, release `v1.0.0-rc.20+16d4e3a`. `/healthz` and
+`/readyz` both return 200 with database, migrations and rate-limit cache `ok`, so there
+are no pending migrations. Stripe stays TEST, Chargily stays TEST, `EMAIL_ENABLED`,
+`PAYOUT_DZD_EXECUTION_ENABLED` and `FINANCE_DASHBOARD_ENABLED` all remain false. The
+deployed console serves the new stylesheet and `payout.js`, and the new payout-evidence
+route redirects an anonymous request to the login page rather than serving a document.
+
+Two verification limits are recorded rather than glossed. Interactive QA of the deployed
+Finance console was not performed: it needs an operator credential to be typed into the
+login form, which this workflow does not do, so the deployed evidence is the artifact and
+route checks above and the substantive UI evidence is the local pass against real
+PostgreSQL fixtures. Row-level financial regression on the deployed database was likewise
+not re-read: Postgres is reachable only on Railway's private network, and exposing it
+through a public TCP proxy was not justified for a release that changes no financial code,
+no migration and no provider path.

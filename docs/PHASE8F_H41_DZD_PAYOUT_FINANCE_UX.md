@@ -130,5 +130,18 @@ this Chromium build fires neither `close` nor `cancel` for a programmatic
 `dialog.close()`, so an Escape-dismissed lightbox kept the decrypted document loaded;
 the clearing now also runs from an attribute observer, which no close path can skip.
 
+The local release gate on `16d4e3afabf474a9033d687c5ef811fc1c3dff0d` passed **866
+tests** across `apps/finance` and `apps/admin_panel` on PostgreSQL in 764.31 seconds,
+plus the 37-test deployment-safety suite, a clean `ruff check`, and
+`manage.py check --deploy --fail-level WARNING` under the production profile with no
+issues. GitHub Actions run 34419653591 was dispatched once and all six jobs died in two
+seconds with no steps and no logs — the account billing limit — so it was not retried and
+cloud CI is unavailable rather than passed.
+
+Deployment `61d0e95e-507c-4f86-92ce-24f457126a17`, release `v1.0.0-rc.20+16d4e3a`:
+`/healthz` and `/readyz` both 200, migrations clean, providers still TEST, email and both
+feature flags still off. The deployed console serves the new stylesheet and `payout.js`,
+and the new evidence route sends an anonymous request to the login page.
+
 No money moved. No provider call, no Stripe object, no Chargily object, no real DZD
 transfer, and no LIVE operation is involved in any of this work.
