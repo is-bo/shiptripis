@@ -5395,3 +5395,29 @@ the owner explicitly authorized local verification and a direct main update.
 Cloud CI is unavailable, not passed. Implementation commit: `dc0f872ef283f0c805692c7e1ed6cd9a08e2b360`.
 Deployment and controlled deployed verification follow this release gate; their
 final identifiers/results are recorded in the H4 release report.
+
+
+## Phase 8F-H4.1 — DZD payout Finance/Admin UX (2026-09-10)
+
+Presentation-only pass over the H4 manual DZD rail, starting at
+`6d8b8146fbf0913cd0d93b9d4cb1a7c6bce0b7d2`. No financial logic, model, migration,
+permission or provider path changed. Contracts and the full list of decisions are
+in [H4.1 DZD payout Finance/Admin UX](PHASE8F_H41_DZD_PAYOUT_FINANCE_UX.md).
+
+A new read-only presenter in `admin_panel` now owns how this rail reads, so the H4
+API projection is no longer shared with the console. The detail screen leads with
+the exact DZD figure to send beside the canonical EUR obligation and the frozen
+rate, masks the destination until an explicit audited reveal with per-field copy,
+keeps the Traveler's crossed cheque and Finance's transfer receipt as separate
+documents under their approved FR/AR/EN wording, serves either through a new
+payout-scoped audited evidence route, states the operator's five steps in order,
+distinguishes Processing / Transfer sent / Paid, and names every blocker before the
+action it would refuse. The payouts queue gained the payout reference, the rail, the
+DZD settlement figure and a "Waiting on" column. There is still no "Mark paid" on
+this rail, and the legacy one-click form is now additionally refused for any DZD
+payout.
+
+Eleven new console tests plus the existing H4 suite passed on PostgreSQL. Visual QA
+covered all seven required states in both themes and at 375px against real fixtures
+with synthetic data; three defects found there were fixed. Deployment, health and
+browser QA results are recorded in the H4.1 release report.

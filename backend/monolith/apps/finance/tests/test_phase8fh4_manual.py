@@ -323,8 +323,12 @@ def test_console_and_profile_replacement(configured_h4):
     url = reverse("admin_console:payout-detail", args=[payout.pk])
     response = client.get(url)
     assert response.status_code == 200
+    # H4.1 renamed this control "Claim and prepare transfer" to say what it
+    # actually does to ownership. The assertion is unchanged in intent: the
+    # claim control is offered, and nothing declares the payout paid.
     assert (
-        b"Prepare transfer" in response.content and b"Mark paid" not in response.content
+        b"Claim and prepare transfer" in response.content
+        and b"Mark paid" not in response.content
     )
     assert b"0000000000" not in response.content
     assert response["Cache-Control"] == "no-store, private"

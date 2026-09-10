@@ -7,7 +7,12 @@ from rest_framework.response import Response
 from .models import Payout
 from .payout_profile_api import ProfileView, StrictInput
 from .payout_profiles import require_capabilities
-from .payout_evidence import upload_evidence, read_evidence, CHEQUE_LABELS
+from .payout_evidence import (
+    upload_evidence,
+    read_evidence,
+    CHEQUE_LABELS,
+    RECEIPT_LABELS,
+)
 from .payout_manual_profiles import reveal_profile, review_profile
 from . import payout_manual
 
@@ -18,6 +23,7 @@ class UploadInput(StrictInput):
 
 class EvidenceUploadView(ProfileView):
     purpose = "account_document"
+    labels = CHEQUE_LABELS
 
     def post(self, request):
         data = UploadInput(data=request.data)
@@ -28,13 +34,21 @@ class EvidenceUploadView(ProfileView):
             purpose=self.purpose,
         )
         return Response(
-            {"reference": str(evidence.public_reference), "labels": CHEQUE_LABELS},
+            {"reference": str(evidence.public_reference), "labels": self.labels},
             status=201,
         )
 
 
 class ReceiptUploadView(EvidenceUploadView):
+    """Finance's own proof of the outgoing transfer, never the Traveler's cheque.
+
+    It echoes the transfer-receipt label rather than the crossed-cheque one so a
+    caller cannot present Finance evidence to a Traveler under the wording that
+    asks for their bank document.
+    """
+
     purpose = "transfer_receipt"
+    labels = RECEIPT_LABELS
 
 
 class EvidenceReadView(ProfileView):

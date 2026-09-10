@@ -2245,9 +2245,75 @@ def refund_detail(request, pk: int):
     )
 
 
+def _payout_readiness(payout, *, holds: int) -> tuple[str, str, bool]:
+    """What a payout row is waiting for, and whether *a person* is what it waits for.
+
+    The boolean is the point of the column. An operator scanning this queue is
+    looking for the rows that will not move unless they move them, and every
+    other row is noise until those are done.
+    """
+
+    from .console_manual_presenter import BLOCK_REASONS
+
+    manual = payout.method == Payout.Method.MANUAL and payout.payout_currency == "DZD"
+    if holds:
+        return (
+            "On hold",
+            "%d active hold%s stop progression" % (holds, "s" if holds > 1 else ""),
+            True,
+        )
+    if payout.status == Payout.Status.FROZEN:
+        return "Frozen by a dispute", "Resolve the dispute first", False
+    if payout.status == Payout.Status.NOT_ELIGIBLE:
+        return "Protection period", "48-hour window has not closed", False
+    if payout.status == Payout.Status.BLOCKED:
+        title = BLOCK_REASONS.get(
+            payout.block_reason,
+            (payout.block_reason.replace("_", " ").capitalize() or "Blocked", ""),
+        )[0]
+        return title, "Blocked before eligibility", True
+    if payout.status == Payout.Status.ELIGIBLE:
+        return (
+            "Ready - claim and send" if manual else "Ready for settlement",
+            "Manual DZD transfer" if manual else "Awaiting the payout rail",
+            manual,
+        )
+    if payout.status == Payout.Status.SCHEDULED:
+        return "Claimed, not started", "An operator owns the instruction", True
+    if payout.status == Payout.Status.PROCESSING:
+        return (
+            "Transfer in progress" if manual else "With the provider",
+            "Receipt still owed" if manual else "Awaiting the provider",
+            manual,
+        )
+    if payout.status == Payout.Status.SENT:
+        return "Transfer sent", "Settlement not yet confirmed", manual
+    if payout.status == Payout.Status.PAID:
+        return "Paid", "Settled against the ledger", False
+    if payout.status == Payout.Status.FAILED:
+        return "Failed", "Needs recovery review", True
+    return payout.get_status_display(), "", False
+
+
 @capability_required("view_payouts")
 def payouts(request):
-    queryset = Payout.objects.select_related("traveler", "deal").order_by("-created_at")
+    queryset = (
+        Payout.objects.select_related("traveler", "deal")
+        # One query for the page rather than a hold lookup per row. Deal-scoped
+        # holds count too: a dispute hold is written against the Deal, and a row
+        # that does not show it reads as ready when it is not.
+        .annotate(
+            payout_holds=Count(
+                "holds", filter=Q(holds__cleared_at__isnull=True), distinct=True
+            ),
+            deal_holds=Count(
+                "deal__finance_holds",
+                filter=Q(deal__finance_holds__cleared_at__isnull=True),
+                distinct=True,
+            ),
+        )
+        .order_by("-created_at")
+    )
     if request.GET.get("attention") == "1":
         queryset = queryset.filter(
             Q(status=Payout.Status.FAILED)
@@ -2258,14 +2324,21 @@ def payouts(request):
     page_obj = _page(request, queryset)
     rows = []
     for payout in page_obj.object_list:
-        if payout.status == Payout.Status.NOT_ELIGIBLE:
-            readiness = "Protection window open"
-        elif payout.status == Payout.Status.FROZEN:
-            readiness = "Frozen by dispute"
-        elif payout.status == Payout.Status.ELIGIBLE:
-            readiness = "Ready for settlement"
-        else:
-            readiness = payout.get_status_display()
+        readiness, why, actionable = _payout_readiness(
+            payout, holds=payout.payout_holds + payout.deal_holds
+        )
+        # The rail, not the enum: "Manual settlement" is equally true of a legacy
+        # EUR payout, and the operator's next move there is a different one.
+        rail = (
+            "Manual DZD transfer"
+            if payout.method == Payout.Method.MANUAL and payout.payout_currency == "DZD"
+            else payout.get_method_display()
+        )
+        settlement = (
+            format_minor_amount(payout.payout_amount_minor, 0, payout.payout_currency)
+            if payout.payout_currency and payout.payout_currency != "EUR"
+            else ""
+        )
         rows.append(
             {
                 "cells": (
@@ -2276,11 +2349,18 @@ def payouts(request):
                         opens_row=True,
                         kind="strong",
                     ),
-                    text_cell(f"Deal {payout.deal_id}"),
-                    money_cell(payout.amount_eur_cents, emphasis=True),
-                    text_cell(readiness),
-                    text_cell(payout.get_method_display()),
+                    # The reference is what an operator quotes; the Deal is how
+                    # they find the shipment behind it. Both, in one column.
+                    ref_cell(
+                        str(payout.public_reference)[:8], "Deal %d" % payout.deal_id
+                    ),
+                    # EUR stays the larger line even on the DZD rail: the
+                    # settlement figure is what gets typed into a bank, but the
+                    # obligation is euros and always was.
+                    money_pair_cell(payout.amount_eur_cents, settlement),
+                    text_cell(rail),
                     status_cell(payout.status, payout.get_status_display()),
+                    text_cell(readiness, why, kind="strong" if actionable else ""),
                     datetime_cell(payout.paid_at or payout.eligible_at, relative=True),
                 )
             }
@@ -2292,11 +2372,11 @@ def payouts(request):
         eyebrow="Finance",
         columns=(
             "Traveler",
-            "Deal",
-            "Reward",
-            "Readiness",
-            "Method",
+            "Payout",
+            "Owed",
+            "Rail",
             "State",
+            "Waiting on",
             "Relevant time",
         ),
         rows=rows,
@@ -2410,6 +2490,22 @@ def _stripe_payout_panel(payout: Payout) -> dict | None:
 
 
 @capability_required("view_payouts")
+def payout_evidence(request, pk: int, reference):
+    """One document belonging to one manual DZD payout, authenticated and audited.
+
+    Deliberately not a redirect to the object store the way KYC evidence is:
+    payout evidence is encrypted at rest with the H1 keyring, so it is decrypted
+    in process and streamed. There is no storage URL to leak and nothing here is
+    cacheable.
+    """
+
+    payout = get_object_or_404(Payout, pk=pk, method="manual", snapshot_version__gt=0)
+    from .console_manual_payout import manual_evidence
+
+    return manual_evidence(request, payout, reference)
+
+
+@capability_required("view_payouts")
 def payout_detail(request, pk: int):
     payout = get_object_or_404(Payout.objects.select_related("traveler", "deal"), pk=pk)
     if payout.snapshot_version and payout.method == "manual":
@@ -2466,12 +2562,17 @@ def payout_detail(request, pk: int):
             "record": payout,
             "form": form,
             "stripe": stripe_panel,
-            # The manual evidence form is for the DZD/operator rail only. On the
-            # Stripe rail there is no "Mark paid": the provider says paid or
-            # nobody does.
+            # The legacy manual-evidence form. On the Stripe rail there is no
+            # "Mark paid": the provider says paid or nobody does. On the DZD
+            # rail there is none either — reaching `paid` there requires a
+            # claim, a committed instruction, a receipt and an explicit
+            # settlement attestation — so a DZD payout must never fall back to
+            # this one-click form, even if it somehow arrives here without a
+            # snapshot version.
             "may_act": has_admin_permission(request.user, "settle_payouts")
             and payout.status == Payout.Status.ELIGIBLE
-            and payout.method == Payout.Method.MANUAL,
+            and payout.method == Payout.Method.MANUAL
+            and payout.payout_currency != "DZD",
             "may_refresh": bool(stripe_panel)
             and has_admin_permission(request.user, "reconcile_finance"),
             "may_retry_bank": bool(stripe_panel)
@@ -2541,9 +2642,7 @@ def payout_accounts(request):
         StripePayoutAccount.objects.select_related("traveler")
         # One query for the whole page rather than a hold lookup per row: the
         # readiness evaluator takes the answer, it does not go and find it.
-        .annotate(
-            open_holds=Count("holds", filter=Q(holds__cleared_at__isnull=True))
-        )
+        .annotate(open_holds=Count("holds", filter=Q(holds__cleared_at__isnull=True)))
         .order_by("-created_at")
     )
     if request.GET.get("attention") == "1":
@@ -2566,7 +2665,9 @@ def payout_accounts(request):
                         mask_account(account.provider_account_id),
                         f"{account.provider_mode} · {account.verified_country or account.declared_country}",
                     ),
-                    status_cell(verdict.status, verdict.status.replace("_", " ").title()),
+                    status_cell(
+                        verdict.status, verdict.status.replace("_", " ").title()
+                    ),
                     text_cell(
                         verdict.reason.replace("_", " ") if verdict.reason else "—",
                         ", ".join(account.requirement_codes[:3]) or "",
@@ -2576,7 +2677,9 @@ def payout_accounts(request):
                         "payouts enabled" if account.payouts_enabled else "payouts off",
                     ),
                     text_cell(
-                        "EUR bank on file" if account.eur_bank_present else "No EUR bank",
+                        "EUR bank on file"
+                        if account.eur_bank_present
+                        else "No EUR bank",
                         account.payout_schedule_interval or "schedule unknown",
                     ),
                     datetime_cell(account.readiness_checked_at, relative=True),

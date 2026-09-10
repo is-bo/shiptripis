@@ -14,15 +14,16 @@
  * card inside a card.
  *
  * Structure
- *   0  Faces                      9  Money
- *   1  Tokens                    10  Routes
- *   2  Django variable mapping   11  Overview queues
+ *   0  Faces                     10  Routes
+ *   1  Tokens                    11  Overview queues
+ *   2  Django variable mapping
  *   3  Shell and navigation      12  Evidence and cases
- *   4  Page furniture            13  Health and providers
- *   5  Cards and grids           14  Forms
- *   6  Tables                    15  Django's own screens
- *   7  Chips and tones           16  Openable rows and cards
- *   8  Lists, facts, timelines   17  Responsive, motion, print
+ *   4  Page furniture           12b  Manual DZD payout
+ *   5  Cards and grids           13  Health and providers
+ *   6  Tables                    14  Forms
+ *   7  Chips and tones           15  Django's own screens
+ *   8  Lists, facts, timelines   16  Openable rows and cards
+ *   9  Money                     17  Responsive, motion, print
  */
 
 /* ==========================================================================
@@ -1104,7 +1105,7 @@ td .st-money, th .st-money { width: 100%; }
    euro figure is the larger of the two, always. */
 .st-money-pair { display: flex; flex-direction: column; gap: 2px; }
 .st-money-pair strong { font-size: var(--st-fs-body); font-variant-numeric: tabular-nums; font-weight: 700; }
-.st-money-pair small { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-variant-numeric: tabular-nums; }
+.st-money-pair small { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .st-money-strip {
   display: grid;
@@ -1547,6 +1548,379 @@ td .st-money, th .st-money { width: 100%; }
 .st-disclosure > summary::-webkit-details-marker { display: none; }
 .st-disclosure > summary::before { content: "\203A"; display: inline-block; transform: rotate(90deg); }
 .st-disclosure[open] > summary::before { transform: rotate(-90deg); }
+
+/* ==========================================================================
+   12b. Manual DZD payout
+   ==========================================================================
+   One screen's worth of rules, and the only place in the console where an
+   amount is allowed to shout. Everything here is built from the same tokens as
+   the rest of the file, so both themes and the high-contrast fallbacks come
+   free; nothing below hard-codes a colour.
+
+   The judgement calls, since they are unusual for this stylesheet:
+     - the dinar figure is set larger than a page title, because it is retyped
+       into a bank and a transposed digit is money in a stranger's account;
+     - masked and revealed account values are the only text in the console set
+       in the mono face at body size, because they are read one character at a
+       time rather than as words;
+     - the terracotta is spent on exactly two things here, the amount to send
+       and the step that is due now. */
+
+.st-state-meaning {
+  margin: calc(var(--st-4) * -1) 0 var(--st-4);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-sm);
+  line-height: var(--st-lh-body);
+}
+
+/* --- Blockers ------------------------------------------------------------ */
+
+.st-blockers { border-left: 3px solid var(--st-attn); }
+.st-blockers > .st-eyebrow { color: var(--st-attn) !important; }
+.st-blocker-list { margin: 0; padding: 0; list-style: none; }
+.st-blocker-list > li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--st-3);
+  padding: var(--st-3) 0;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-blocker-list > li:last-child { border-bottom: 0; }
+.st-blocker-list strong { color: var(--st-ink); font-size: var(--st-fs-body); font-weight: 650; }
+.st-blocker-list span { grid-column: 1; color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+.st-blocker-list code {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: start;
+  color: var(--st-ink-3);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-micro);
+  white-space: nowrap;
+}
+
+.st-alert-attn {
+  border-color: var(--st-attn-line);
+  border-left-color: var(--st-attn);
+  background: var(--st-attn-bg);
+  color: var(--st-attn);
+}
+
+/* --- The amount ---------------------------------------------------------- */
+
+.st-send {
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  overflow: hidden;
+}
+.st-send-lead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--st-2) var(--st-4);
+  padding: var(--st-4) var(--st-5);
+  border-bottom: 1px solid var(--st-line);
+  background: var(--st-surface);
+}
+.st-send-lead > span {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.st-send-lead > strong {
+  color: var(--st-accent);
+  font-size: clamp(1.7rem, 1.1rem + 2.2vw, 2.4rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.1;
+}
+.st-send-lead .st-copy { align-self: center; margin-inline-start: auto; }
+.st-send-basis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--st-4);
+  margin: 0;
+  padding: var(--st-4) var(--st-5);
+}
+.st-send-basis > div { min-width: 0; }
+.st-send-basis dt {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.st-send-basis dt span {
+  margin-inline-start: 5px;
+  padding: 1px 5px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-pill);
+  color: var(--st-ink-2);
+  letter-spacing: .02em;
+}
+.st-send-basis dd {
+  margin: 3px 0 0;
+  color: var(--st-ink);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* --- Masked and revealed account values ---------------------------------- */
+
+.st-masked, .st-secret-value {
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-body);
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+
+.st-reveal-ask {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--st-3) var(--st-4);
+  margin-top: var(--st-4);
+  padding: var(--st-4);
+  border: 1px dashed var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-reveal-ask > div { flex: 1 1 260px; min-width: 0; }
+.st-reveal-ask strong { display: block; color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 650; }
+.st-reveal-ask span { color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: 1.45; }
+
+.st-reveal {
+  margin-top: var(--st-4);
+  padding: var(--st-4);
+  border: 1px solid var(--st-attn-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-attn-bg);
+}
+.st-reveal.is-hidden { border-color: var(--st-line); background: var(--st-surface-2); }
+.st-reveal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin-bottom: var(--st-3);
+}
+.st-reveal-head .st-eyebrow { margin: 0; color: var(--st-attn) !important; }
+.st-reveal .st-muted { color: var(--st-ink-2); }
+
+.st-secret-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--st-4);
+  margin: 0;
+}
+.st-secret-list > div { min-width: 0; }
+.st-secret-list dt {
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.st-secret-list dd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--st-2);
+  margin: 3px 0 0;
+  min-width: 0;
+}
+
+.st-copy {
+  padding: 3px 9px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-pill);
+  background: var(--st-surface);
+  color: var(--st-ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.st-copy:hover { border-color: var(--st-ink-3); color: var(--st-ink); }
+.st-copy.is-copied { border-color: var(--st-ok-line); background: var(--st-ok-bg); color: var(--st-ok); }
+
+/* --- Approved wording, in the languages it is approved in ---------------- */
+
+.st-label-set {
+  display: grid;
+  gap: var(--st-1);
+  margin: var(--st-3) 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  list-style: none;
+}
+.st-label-set > li {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--st-3);
+  margin: 0;
+  list-style: none;
+}
+.st-label-set > li::marker { content: ""; }
+.st-label-set span {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+.st-label-set b { color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 600; }
+/* An Arabic label inside an LTR page is still a right-to-left phrase. `dir` on
+   the element gives it the correct bidi ordering; this only stops it from being
+   flush against the language tag on the wrong side. */
+.st-label-set b[dir="rtl"] { display: block; text-align: right; }
+
+/* --- The operator's steps ------------------------------------------------ */
+
+.st-steps { margin: var(--st-3) 0 var(--st-4); padding: 0; list-style: none; counter-reset: none; }
+.st-steps > li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--st-3);
+  padding: var(--st-3) 0;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-steps > li:last-child { border-bottom: 0; }
+.st-steps > li::marker { content: ""; }
+.st-steps > li > div { min-width: 0; }
+.st-steps strong { display: block; color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 650; }
+/* Scoped to the step's own body so the number and the state badge, which are
+   siblings of that body rather than children, keep their own type. */
+.st-steps > li > div > span { color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: 1.45; }
+.st-step-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--st-line-2);
+  border-radius: 50%;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+}
+.st-step-state {
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: var(--st-r-pill);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.st-steps > li.is-done .st-step-mark {
+  border-color: var(--st-ok-line);
+  background: var(--st-ok-bg);
+  color: var(--st-ok);
+}
+.st-steps > li.is-done .st-step-state { color: var(--st-ok); }
+.st-steps > li.is-done strong { color: var(--st-ink-2); font-weight: 600; }
+.st-steps > li.is-current {
+  margin: 0 calc(var(--st-3) * -1);
+  padding-inline: var(--st-3);
+  border-radius: var(--st-r-2);
+  background: var(--st-accent-soft);
+}
+.st-steps > li.is-current .st-step-mark {
+  border-color: var(--st-accent);
+  background: var(--st-accent);
+  color: var(--st-ink-invert);
+}
+.st-steps > li.is-current .st-step-state { color: var(--st-accent); }
+.st-steps > li.is-current strong { color: var(--st-ink); }
+/* The step after the current one. Named, but not competing with it for the
+   eye: an operator needs to know what is coming, not to be told two things
+   are due at once. */
+.st-steps > li.is-next .st-step-mark { border-color: var(--st-ink-3); color: var(--st-ink-2); }
+.st-steps > li.is-next .st-step-state { color: var(--st-ink-2); }
+
+/* --- Receipt, holds ------------------------------------------------------ */
+
+.st-receipt-form { margin-top: var(--st-5); }
+.st-receipt-form h3 { margin: 0 0 var(--st-2); font-size: var(--st-fs-h3); }
+.st-receipt-form .st-form input[type="file"] { max-width: 100%; }
+.st-receipt-form em { font-style: italic; }
+.st-review-form { margin-top: var(--st-4); padding-top: var(--st-4); border-top: 1px solid var(--st-line); }
+.st-hold-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--st-2) var(--st-4);
+  margin-top: var(--st-4);
+}
+.st-hold-form .st-muted { margin: 0; flex: 1 1 240px; }
+
+button.is-busy, .button.is-busy { cursor: progress; opacity: .55; }
+
+/* --- The evidence lightbox ----------------------------------------------- */
+
+.st-evidence-dialog {
+  width: min(900px, calc(100vw - var(--st-5) * 2));
+  max-width: 100%;
+  max-height: calc(100vh - var(--st-6));
+  padding: var(--st-4);
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+  color: var(--st-ink);
+  box-shadow: var(--st-shadow-2);
+}
+.st-evidence-dialog::backdrop { background: rgba(6, 15, 23, .68); }
+.st-evidence-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin-bottom: var(--st-3);
+}
+.st-evidence-dialog-head h2 { margin: 0; font-size: var(--st-fs-h3); }
+.st-evidence-dialog-body {
+  display: grid;
+  place-items: center;
+  padding: var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  overflow: auto;
+}
+/* The document has to be readable, so it is fitted to the dialog rather than to
+   its own pixel size, and the dialog scrolls rather than clipping. */
+.st-evidence-dialog-body img {
+  max-width: 100%;
+  max-height: min(70vh, 640px);
+  object-fit: contain;
+}
+.st-evidence-dialog .st-muted { margin-top: var(--st-3); }
+
+@media (max-width: 720px) {
+  /* A heading and its chip side by side needs room the phone does not have:
+     at 375px "Photo of the full crossed cheque" wraps to one word a line to
+     leave space for a chip that could simply sit under it. Scoped to this
+     page, because the other consoles' card heads are short enough to hold. */
+  .st-manual .st-card-head { flex-direction: column-reverse; align-items: flex-start; gap: var(--st-2); }
+  .st-send-lead { padding: var(--st-3) var(--st-4); }
+  .st-send-lead .st-copy { margin-inline-start: 0; }
+  .st-send-basis { padding: var(--st-3) var(--st-4); gap: var(--st-3); }
+  .st-blocker-list > li { grid-template-columns: minmax(0, 1fr); }
+  .st-blocker-list code { grid-row: auto; grid-column: 1; }
+  .st-steps > li { grid-template-columns: 22px minmax(0, 1fr); }
+  .st-step-state { grid-column: 2; justify-self: start; padding-inline: 0; }
+  .st-evidence-dialog { width: calc(100vw - var(--st-4) * 2); padding: var(--st-3); }
+}
 
 /* ==========================================================================
    13. Health and providers

@@ -1,37 +1,435 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
+{% load shiptrip_admin %}
+
+{% comment %}
+One manual DZD payout, for the person who is about to move real money by hand.
+
+The order of this page is the order of the decision, not the order of the model.
+An operator arrives asking four questions and leaves when all four are answered:
+*how much do I send*, *where does it go*, *is the Traveler's evidence good*, and
+*what has already happened to this payout*. Everything on the page belongs to one
+of those, and anything that belongs to none of them is not on the page.
+
+Two things it must never say. It must never suggest ShipTrip performs the bank
+transfer — a person does, in a banking application, outside this system. And it
+must never offer a way to declare a payout paid: the only route to `paid` is the
+backend state machine, through a claim, a committed instruction, a receipt and an
+explicit settlement attestation, and there is deliberately no control here that
+skips any of them.
+{% endcomment %}
+
+{% block extrastyle %}{{ block.super }}
+  <script src="{% static 'shiptrip/payout.js' %}" defer></script>
+{% endblock %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:payouts' %}">Payouts</a> &rsaquo; {{ title }}</div>{% endblock %}
+
 {% block content %}
-<h1>Manual DZD payout</h1>
-<dl>
-  <dt>Reference</dt><dd>{{ manual.reference }}</dd>
-  <dt>Status</dt><dd>{{ manual.status }}</dd>
-  <dt>Canonical EUR cents</dt><dd>{{ manual.eur_cents }}</dd>
-  <dt>Exact DZD amount</dt><dd>{{ manual.dzd_amount }} DZD</dd>
-  <dt>Frozen rate (millionths DZD/EUR)</dt><dd>{{ manual.fx_rate_micros }}</dd>
-  <dt>Destination</dt><dd>CCP ••••{{ manual.ccp_last_four }} / RIP ••••{{ manual.rip_last_four }}</dd>
-  <dt>Instruction revision</dt><dd>{{ manual.instruction_revision|default:"Not prepared" }}</dd>
-  <dt>Operator</dt><dd>{{ manual.operator|default:"Unclaimed" }}</dd>
-  <dt>Committed / sent / settled</dt><dd>{{ manual.committed_at }} / {{ manual.sent_at }} / {{ manual.paid_at }}</dd>
-</dl>
-{% if revealed %}<dl>{% for key, value in revealed.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>{% endif %}
-<form method="post">{% csrf_token %}<button name="action" value="reveal">Reveal payout destination (audited)</button></form>
-<form method="post">{% csrf_token %}<button name="action" value="proof">View full crossed cheque (audited)</button></form>
-<form method="post">{% csrf_token %}<label><input type="checkbox" name="accept_name_difference"> I reviewed and accept the attested name difference</label><button name="action" value="review">Approve profile evidence</button></form>
-{% if manual.status == "eligible" %}
-<form method="post">{% csrf_token %}<input type="hidden" name="state_version" value="{{ manual.state_version }}"><button name="action" value="prepare">Prepare transfer</button></form>
-{% endif %}
-{% if manual.status == "scheduled" %}
-<form method="post">{% csrf_token %}<input type="hidden" name="sequence" value="{{ manual.instruction_revision }}"><button name="action" value="begin">Begin external transfer</button><button name="action" value="release">Release uncommitted preparation</button></form>
-{% endif %}
-{% if manual.status == "processing" or manual.status == "sent" %}
-<p>Send only the exact amount above to this frozen destination. A committed instruction cannot expire or be automatically reversed.</p>
-<form method="post" enctype="multipart/form-data">{% csrf_token %}
-<input type="hidden" name="sequence" value="{{ manual.instruction_revision }}">
-<label>Transfer receipt <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required></label>
-<label><input type="checkbox" name="confirmed" required> I attest that this exact transfer was sent to this destination.</label>
-<label><input type="checkbox" name="settled"> The receipt proves completion; I confirm settlement.</label>
-<button name="action" value="receipt">Record transfer evidence</button></form>
-{% endif %}
-<form method="post">{% csrf_token %}<button name="action" value="hold">Hold for correction / recovery review</button></form>
-<h2>Holds</h2><ul>{% for hold in manual.holds %}<li>{{ hold.kind }}: {{ hold.reason_code }}<form method="post">{% csrf_token %}<input type="hidden" name="hold_id" value="{{ hold.id }}"><input type="hidden" name="generation" value="{{ hold.generation }}"><button name="action" value="clear_hold">Release own hold</button></form></li>{% empty %}<li>No active holds</li>{% endfor %}</ul>
-<h2>Audit timeline</h2><ul>{% for event in manual.timeline %}<li>{{ event.recorded_at }} — {{ event.reason_code }} — operator {{ event.actor_id }} — receipt {{ event.evidence__public_reference|default:"—" }}{% if event.evidence__public_reference %}<form method="post">{% csrf_token %}<input type="hidden" name="evidence_reference" value="{{ event.evidence__public_reference }}"><button name="action" value="view_receipt">View transfer receipt (audited)</button></form>{% endif %}</li>{% endfor %}</ul>
+<main class="st-console st-narrow st-manual">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Manual DZD transfer &middot; money going to a Traveler</p>
+      <h1>{{ manual.amounts.eur_cents|eur }}</h1>
+      <p>Reward for Deal {{ manual.deal_id }}, owed to {{ manual.traveler.name }} &middot; {{ manual.traveler.email }}</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ manual.state.tone }}">{{ manual.state.label }}</span>
+      <span class="st-page-ref">{{ manual.reference|slice:":8" }}</span>
+    </div>
+  </header>
+
+  <p class="st-state-meaning">{{ manual.state.meaning }}</p>
+
+  {% if not manual.execution_enabled %}
+  <div class="st-alert st-alert-info" role="status">
+    <strong>Manual DZD execution is switched off in this environment.</strong>
+    <span>You can read this payout and review the Traveler's evidence. No instruction can be claimed, committed or recorded until the rail is enabled.</span>
+  </div>
+  {% endif %}
+
+  {% comment %}Blockers first and unmissable. Every action below is already
+  absent or disabled when one of these is present; this says why, so nobody
+  spends five minutes looking for a button that is correctly not there.{% endcomment %}
+  {% if manual.blockers %}
+  <section class="st-card st-blockers" aria-labelledby="st-blockers-head">
+    <p class="st-eyebrow">Stopped</p>
+    <h2 id="st-blockers-head">What is holding this payout</h2>
+    <ul class="st-blocker-list">
+      {% for blocker in manual.blockers %}
+      <li>
+        <strong>{{ blocker.title }}</strong>
+        <span>{{ blocker.detail }}</span>
+        <code>{{ blocker.code }}</code>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="st-muted">Until every one of these clears, the transfer controls stay unavailable. The server refuses them independently.</p>
+  </section>
+  {% endif %}
+
+  {% comment %}=====================================================================
+  1. The amount. The single most consequential thing on the page: a Finance
+  operator retypes this number into a bank. DZD is the dominant figure because
+  DZD is what gets sent; EUR is named the canonical obligation right beside it,
+  because that is what the ledger and every other screen account in. Neither
+  number is computed here — both were frozen by the server at funding.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-amount-head">
+    <p class="st-eyebrow">Amount</p>
+    <h2 id="st-amount-head">Send exactly this amount</h2>
+    <div class="st-send">
+      <div class="st-send-lead">
+        <span>Send</span>
+        <strong id="st-dzd-amount" data-copy-exact="{{ manual.amounts.dzd_minor }}">{{ manual.amounts.dzd_number }} {{ manual.amounts.currency }}</strong>
+        <button type="button" class="st-copy" data-copy="st-dzd-amount" data-copy-label="amount to send" aria-label="Copy amount to send, digits only">Copy amount</button>
+      </div>
+      <dl class="st-send-basis">
+        <div>
+          <dt>Traveler earnings <span>canonical</span></dt>
+          <dd>{{ manual.amounts.eur_cents|eur }}</dd>
+        </div>
+        <div>
+          <dt>Frozen exchange rate</dt>
+          <dd>1 EUR = {{ manual.amounts.rate_text }} DZD</dd>
+        </div>
+        <div>
+          <dt>Frozen at funding</dt>
+          <dd>{{ manual.amounts.frozen_at|date:"d M Y, H:i"|default:"—" }}</dd>
+        </div>
+      </dl>
+    </div>
+    <p class="st-muted">Copying the amount gives you <code>{{ manual.amounts.dzd_minor }}</code> &mdash; the same figure without the thousands separator, so it pastes into a bank field unchanged. The euro amount is what ShipTrip owes and what the ledger settles. The dinar amount is the exact figure to transfer, fixed by the rate captured when this Deal was funded. Neither can be edited, here or anywhere else in the console.</p>
+  </section>
+
+  {% comment %}=====================================================================
+  2. Destination. Masked by default and revealed only on purpose. The masks are
+  enough to confirm you are looking at the right account; the full values exist
+  on this page only inside a deliberate, audited reveal.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-destination-head">
+    <p class="st-eyebrow">Destination</p>
+    <div class="st-card-head">
+      <div><h2 id="st-destination-head">Where this money goes</h2></div>
+      <span class="st-chip st-{{ manual.destination.review.tone }}">Profile {{ manual.destination.review.label|lower }}</span>
+    </div>
+
+    {% if manual.destination.present %}
+    <dl class="st-facts">
+      <div><dt>CCP account</dt><dd class="st-masked">{{ manual.destination.ccp_masked }}</dd></div>
+      <div><dt>CCP key</dt><dd class="st-masked">{{ manual.destination.key_masked }}</dd></div>
+      <div><dt>RIP</dt><dd class="st-masked">{{ manual.destination.rip_masked }}</dd></div>
+      <div><dt>Payout method version</dt><dd>#{{ manual.destination.version_sequence }}</dd></div>
+      <div><dt>Profile submitted</dt><dd>{{ manual.destination.submitted_at|date:"d M Y, H:i"|default:"—" }}</dd></div>
+      <div><dt>Reviewed by</dt><dd>{{ manual.destination.review.reviewer|default:"Not reviewed" }}{% if manual.destination.review.decided_at %} <small>{{ manual.destination.review.decided_at|date:"d M Y, H:i" }}</small>{% endif %}</dd></div>
+    </dl>
+
+    <div class="st-readonly-note">
+      <span><strong>This destination was locked when the shipment was funded{% if manual.destination.locked_at %} on {{ manual.destination.locked_at|date:"d M Y" }}{% endif %}.</strong>
+      It is version&nbsp;#{{ manual.destination.version_sequence }} of the Traveler's payout method, and it is the only account this payout may be sent to.</span>
+    </div>
+
+    {% if manual.destination.newer_version %}
+    {% comment %}Said once, as a fact, and never as an option. An operator who
+    sends to the Traveler's newest account instead of the frozen one has sent to
+    an account this payout was never authorised against.{% endcomment %}
+    <div class="st-alert st-alert-info" role="status">
+      <strong>The Traveler has since changed their payout details.</strong>
+      <span>Version&nbsp;#{{ manual.destination.newer_version.sequence }} was submitted{% if manual.destination.newer_version.submitted_at %} on {{ manual.destination.newer_version.submitted_at|date:"d M Y" }}{% endif %} and applies to future payouts only. Send this one to version&nbsp;#{{ manual.destination.version_sequence }} above.</span>
+    </div>
+    {% endif %}
+
+    {% comment%}The reveal. Masked is the resting state of this page: the values
+    below exist only in this one no-store response, are never rendered on a GET,
+    and are cleared from the page after a few minutes so a screen left open in
+    an office does not keep displaying somebody's bank account.{% endcomment %}
+    {% if manual.revealed %}
+    <div class="st-reveal is-open" data-reveal-panel data-hide-after="300">
+      <div class="st-reveal-head">
+        <p class="st-eyebrow">Revealed &middot; this open was audited</p>
+        <form method="get" class="st-reveal-hide"><button class="button st-button-quiet" type="submit">Hide details</button></form>
+      </div>
+      <dl class="st-secret-list">
+        <div>
+          <dt>Account holder</dt>
+          <dd><span id="st-secret-name">{{ manual.revealed.first_name }} {{ manual.revealed.last_name }}</span>
+            <button type="button" class="st-copy" data-copy="st-secret-name" data-copy-label="account holder name" aria-label="Copy the account holder name">Copy</button></dd>
+        </div>
+        <div>
+          <dt>CCP account number</dt>
+          <dd><span id="st-secret-ccp" class="st-secret-value">{{ manual.revealed.ccp_number }}</span>
+            <button type="button" class="st-copy" data-copy="st-secret-ccp" data-copy-label="CCP account number" aria-label="Copy the CCP account number">Copy</button></dd>
+        </div>
+        <div>
+          <dt>CCP key</dt>
+          <dd><span id="st-secret-key" class="st-secret-value">{{ manual.revealed.ccp_key }}</span>
+            <button type="button" class="st-copy" data-copy="st-secret-key" data-copy-label="CCP key" aria-label="Copy the CCP key">Copy</button></dd>
+        </div>
+        <div>
+          <dt>RIP</dt>
+          <dd><span id="st-secret-rip" class="st-secret-value">{{ manual.revealed.rip }}</span>
+            <button type="button" class="st-copy" data-copy="st-secret-rip" data-copy-label="RIP" aria-label="Copy the RIP">Copy</button></dd>
+        </div>
+      </dl>
+      <p class="st-muted" data-reveal-countdown>These details hide automatically after five minutes. Reveal them again if you need longer &mdash; each reveal is recorded against your account.</p>
+    </div>
+    {% elif manual.may.reveal %}
+    <form method="post" class="st-reveal-ask" data-once>{% csrf_token %}
+      <div>
+        <strong>The full CCP number, CCP key and RIP are hidden.</strong>
+        <span>Reveal them only when you are about to perform the transfer. The reveal is recorded against your account, appears on this page only, and is never cached.</span>
+      </div>
+      <button name="action" value="reveal" type="submit">Reveal payout details</button>
+    </form>
+    {% endif %}
+
+    {% else %}
+    <p class="st-alert st-alert-bad" role="status"><strong>This payout has no frozen destination.</strong> There is nothing to send to, and no instruction can be prepared.</p>
+    {% endif %}
+  </section>
+
+  {% comment %}=====================================================================
+  3. The Traveler's own evidence. A different document from a different person
+  than the transfer receipt further down, so it lives in its own section under
+  its own approved wording, in the three languages that wording is approved in.
+  It is never rendered inline: opening it is a deliberate act and every open is
+  audited.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-proof-head">
+    <p class="st-eyebrow">Traveler evidence</p>
+    <div class="st-card-head">
+      <div><h2 id="st-proof-head">Photo of the full crossed cheque</h2></div>
+      <span class="st-chip st-info">Every open is audited</span>
+    </div>
+    <p>The Traveler's own proof that the account above is theirs. This is not proof of any transfer.</p>
+    <ul class="st-label-set">
+      <li><span>FR</span><b lang="fr">{{ manual.proof.labels.fr }}</b></li>
+      <li><span>AR</span><b lang="ar" dir="rtl">{{ manual.proof.labels.ar }}</b></li>
+      <li><span>EN</span><b lang="en">{{ manual.proof.labels.en }}</b></li>
+    </ul>
+
+    {% if manual.proof.present and manual.may.evidence %}
+    <div class="st-split-actions">
+      {% comment %}A real link, so it works with scripting off and the browser's
+      own "open in new tab" still does the obvious thing. `payout.js` upgrades it
+      to a lightbox; nothing depends on that upgrade.{% endcomment %}
+      <a class="button" data-evidence
+         data-evidence-title="Photo of the full crossed cheque"
+         target="_blank" rel="noreferrer"
+         href="{% url 'admin_console:payout-evidence' manual.payout.pk manual.proof.reference %}">View proof</a>
+      <span class="st-spacer"></span>
+      <span class="st-muted">Uploaded {{ manual.proof.uploaded_at|date:"d M Y, H:i"|default:"—" }}</span>
+    </div>
+    {% elif not manual.proof.present %}
+    <p class="st-alert st-alert-bad" role="status"><strong>No crossed cheque is attached.</strong> The profile cannot be approved and the payout cannot proceed.</p>
+    {% endif %}
+
+    {% if manual.may.review %}
+    <form method="post" class="st-form st-review-form" data-once>{% csrf_token %}
+      <p class="st-eyebrow">Review</p>
+      <p>Approve the profile only after opening the cheque and checking that the account holder matches the Traveler's attested identity.</p>
+      {% if manual.destination.review.reason and manual.destination.review.reason != "Consistent" %}
+      <p class="st-alert st-alert-attn" role="status"><strong>Name check: {{ manual.destination.review.reason }}.</strong> <span>Approving despite this needs the explicit acceptance below.</span></p>
+      {% endif %}
+      <div class="st-check">
+        <input type="checkbox" name="accept_name_difference" id="st-accept-name">
+        <label for="st-accept-name">I reviewed and accept the attested name difference</label>
+      </div>
+      <button name="action" value="review" type="submit">Approve profile evidence</button>
+    </form>
+    {% endif %}
+  </section>
+
+  {% comment %}=====================================================================
+  4. The transfer itself. Written as instructions to a person, in the order that
+  person does them, with the current step marked. "Manual DZD transfer", never
+  "payout" and never "automatic": step three happens in a bank, not here.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-transfer-head">
+    <p class="st-eyebrow">Manual DZD transfer</p>
+    <div class="st-card-head">
+      <div><h2 id="st-transfer-head">What you have to do</h2></div>
+      {% if manual.claim.claimed %}
+        <span class="st-chip st-{% if manual.claim.mine %}ok{% else %}attn{% endif %}">{% if manual.claim.mine %}You are processing this{% else %}Being processed by {{ manual.claim.operator }}{% endif %}</span>
+      {% elif manual.state.code == "eligible" %}
+        <span class="st-chip st-wait">Available for processing</span>
+      {% endif %}
+    </div>
+
+    <ol class="st-steps">
+      {% for step in manual.steps %}
+      <li class="is-{{ step.state }}">
+        <span class="st-step-mark" aria-hidden="true">{{ forloop.counter }}</span>
+        <div>
+          <strong>{{ step.title }}</strong>
+          <span>{{ step.detail }}</span>
+        </div>
+        <span class="st-step-state">{% if step.state == "done" %}Done{% elif step.state == "current" %}Now{% elif step.state == "next" %}Next{% else %}Later{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ol>
+
+    <p class="st-muted"><strong>ShipTrip does not perform this transfer.</strong> A Finance operator sends the dinars from a bank, outside this system, and records here what they did.</p>
+
+    {% if manual.claim.claimed and not manual.claim.mine %}
+    <div class="st-readonly-note"><span><strong>{{ manual.claim.operator }} claimed instruction&nbsp;#{{ manual.claim.instruction }}{% if manual.claim.committed_at %} and has already committed to sending it{% endif %}.</strong> Only that operator can act on it. Do not send a second transfer.</span></div>
+    {% endif %}
+
+    <div class="st-split-actions">
+      {% if manual.may.prepare %}
+      <form method="post" data-once>{% csrf_token %}
+        <input type="hidden" name="state_version" value="{{ manual.state_version }}">
+        <button name="action" value="prepare" type="submit">Claim and prepare transfer</button>
+      </form>
+      {% endif %}
+      {% if manual.may.begin %}
+      <form method="post" data-once>{% csrf_token %}
+        <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
+        <button name="action" value="begin" type="submit">Start the transfer</button>
+      </form>
+      {% endif %}
+      {% if manual.may.release %}
+      <form method="post" data-once>{% csrf_token %}
+        <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
+        <button name="action" value="release" class="button st-button-quiet" type="submit">Release the claim</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if manual.may.begin %}
+    <p class="st-muted">Starting the transfer commits the instruction. After that it cannot be released, cannot expire, and cannot be reversed by this system &mdash; a committed instruction can only be resolved through a recovery hold.</p>
+    {% elif manual.may.release %}
+    <p class="st-muted">Nothing has been sent yet, so this preparation can still be handed back. Releasing it frees the reserved source funds and returns the payout to the queue.</p>
+    {% endif %}
+
+    {% comment %}The receipt. Its own evidence, its own person, its own wording,
+    and it is required before anything reaches `sent`. Settlement is a separate
+    tick on the same form because attesting "I sent it" and attesting "it
+    arrived" are two different claims and only the first is ever automatic.{% endcomment %}
+    {% if manual.may.receipt %}
+    <div class="st-decision-card st-receipt-form">
+      <p class="st-eyebrow">Evidence required</p>
+      <h3>Transfer receipt</h3>
+      <ul class="st-label-set">
+        <li><span>FR</span><b lang="fr">{{ manual.receipt_labels.fr }}</b></li>
+        <li><span>AR</span><b lang="ar" dir="rtl">{{ manual.receipt_labels.ar }}</b></li>
+        <li><span>EN</span><b lang="en">{{ manual.receipt_labels.en }}</b></li>
+      </ul>
+      <p>Proof of the DZD transfer <em>you</em> performed &mdash; not the Traveler's cheque. JPEG, PNG or WebP, up to 8&nbsp;MB. Recorded receipts are never replaced; a correction adds a new revision.</p>
+      <form method="post" enctype="multipart/form-data" class="st-form" data-once>{% csrf_token %}
+        <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
+        <div class="st-field">
+          <label for="st-receipt-file">Receipt image</label>
+          <input id="st-receipt-file" type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required>
+        </div>
+        <div class="st-check">
+          <input type="checkbox" name="confirmed" id="st-receipt-confirmed" required>
+          <label for="st-receipt-confirmed">I attest that exactly {{ manual.amounts.dzd_number }} {{ manual.amounts.currency }} was sent to the destination above.</label>
+        </div>
+        <div class="st-check">
+          <input type="checkbox" name="settled" id="st-receipt-settled">
+          <label for="st-receipt-settled">The receipt proves the transfer completed &mdash; record settlement as well. Leave this unticked if the transfer is still in progress.</label>
+        </div>
+        <button name="action" value="receipt" type="submit">Record transfer evidence</button>
+      </form>
+      <p class="st-muted">Without settlement ticked this records <strong>Transfer sent</strong>. With it ticked the payout also becomes <strong>Paid</strong> and the euro obligation is discharged in the ledger. There is no other way to reach either state.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {% comment %}=====================================================================
+  5. Receipts already recorded. Append-only, newest first, with what each one
+  attested. A revision never overwrites the one before it.
+  ======================================================================{% endcomment %}
+  {% if manual.receipts %}
+  <section class="st-table-card" aria-labelledby="st-receipts-head">
+    <h2 id="st-receipts-head">Transfer receipts</h2>
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Revision</th><th scope="col">Attested</th><th scope="col">Operator</th><th scope="col">Recorded</th><th scope="col">Document</th></tr></thead>
+        <tbody>
+          {% for receipt in manual.receipts %}
+          <tr>
+            <td>#{{ receipt.instruction }}.{{ receipt.revision }}</td>
+            <td>{% if receipt.completed_attested %}<span class="st-chip st-ok">Transfer completed</span>{% else %}<span class="st-chip st-info">Transfer sent</span>{% endif %}</td>
+            <td>{{ receipt.operator }}</td>
+            <td><span class="st-time">{{ receipt.recorded_at|date:"d M Y, H:i" }}</span></td>
+            <td>{% if manual.may.evidence %}<a data-evidence data-evidence-title="Transfer receipt" target="_blank" rel="noreferrer" href="{% url 'admin_console:payout-evidence' manual.payout.pk receipt.reference %}">View receipt</a>{% else %}&mdash;{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% comment %}=====================================================================
+  6. Holds. Opening one stops progression; an operator may release only a hold
+  they opened themselves, and only the domain decides whether that is allowed.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-holds-head">
+    <p class="st-eyebrow">Holds</p>
+    <h2 id="st-holds-head">Correction and recovery</h2>
+    {% if manual.holds %}
+    <ul class="st-reading-list">
+      {% for hold in manual.holds %}
+      <li>
+        <div>
+          <strong>{{ hold.reason }}</strong>
+          <small>{{ hold.kind }} &middot; {{ hold.reason_code }} &middot; opened {{ hold.opened_at|date:"d M Y, H:i" }}{% if hold.opened_by %} by {{ hold.opened_by }}{% endif %}</small>
+        </div>
+        {% if hold.mine and manual.may.hold %}
+        <form method="post" data-once>{% csrf_token %}
+          <input type="hidden" name="hold_id" value="{{ hold.id }}">
+          <input type="hidden" name="generation" value="{{ hold.generation }}">
+          <button class="button st-button-quiet" name="action" value="clear_hold" type="submit">Release this hold</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No hold is stopping this payout.</p>
+    {% endif %}
+    {% if manual.may.hold %}
+    <form method="post" class="st-hold-form" data-once>{% csrf_token %}
+      <button class="button st-button-quiet" name="action" value="hold" type="submit">Hold for correction or recovery review</button>
+      <span class="st-muted">A hold stops progression. It does not reverse a transfer that has already left a bank &mdash; nothing in this system can.</span>
+    </form>
+    {% endif %}
+  </section>
+
+  {% comment %}=====================================================================
+  7. History. The same audited events the backend wrote, read as a sequence of
+  things that happened to money rather than as a table of reason codes.
+  ======================================================================{% endcomment %}
+  <section class="st-card" aria-labelledby="st-timeline-head">
+    <p class="st-eyebrow">History</p>
+    <h2 id="st-timeline-head">What has happened to this payout</h2>
+    <ul class="st-timeline">
+      {% for event in manual.timeline %}
+      <li>
+        <strong>{{ event.title }}</strong>
+        {% if event.detail %}<span>{{ event.detail }}</span>{% endif %}
+        <span>{{ event.at|date:"d M Y, H:i" }} &middot; {{ event.age }} ago &middot; {{ event.actor }}{% if event.previous_state %} &middot; {{ event.previous_state }} &rarr; {{ event.new_state }}{% endif %}</span>
+      </li>
+      {% empty %}
+      <li class="is-empty">No payout events are recorded.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  {% comment %}The evidence lightbox. Empty until a "View proof" or "View
+  receipt" link is used, so no document is fetched by simply loading the page.
+  `showModal` gives the focus trap and the Escape key for free.{% endcomment %}
+  <dialog class="st-evidence-dialog" id="st-evidence-dialog" aria-labelledby="st-evidence-dialog-title">
+    <div class="st-evidence-dialog-head">
+      <h2 id="st-evidence-dialog-title">Evidence</h2>
+      <button type="button" class="button st-button-quiet" data-evidence-close>Close</button>
+    </div>
+    <div class="st-evidence-dialog-body"><img alt="" id="st-evidence-image"></div>
+    <p class="st-muted">This document is served to you only, is never cached, and this open was recorded against your account.</p>
+  </dialog>
+
+  <p class="st-visually-hidden" role="status" aria-live="polite" id="st-copy-status"></p>
+</main>
 {% endblock %}

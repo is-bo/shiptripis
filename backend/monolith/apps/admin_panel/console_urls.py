@@ -58,6 +58,11 @@ urlpatterns = [
     path("finance/payouts/", views.payouts, name="payouts"),
     path("finance/payouts/<int:pk>/", views.payout_detail, name="payout-detail"),
     path(
+        "finance/payouts/<int:pk>/evidence/<uuid:reference>/",
+        views.payout_evidence,
+        name="payout-evidence",
+    ),
+    path(
         "finance/payout-accounts/",
         views.payout_accounts,
         name="payout-accounts",

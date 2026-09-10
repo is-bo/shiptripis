@@ -17,10 +17,23 @@ from .payout_profiles import require_capabilities, _traveler
 from .sensitive_data import encrypt, decrypt
 
 MAX_BYTES = 8 * 1024 * 1024
+#: The Traveler's own evidence that the CCP/RIP they typed is their account.
+#: The wording is approved and is carried verbatim in all three languages; it is
+#: never machine-translated, abbreviated or paraphrased, and it names no other
+#: banking identifier.
 CHEQUE_LABELS = {
     "fr": "Photo du chèque barré complet",
     "ar": "صورة كاملة لشيك مُسطَّر",
     "en": "Photo of the full crossed cheque",
+}
+#: A different document, from a different person, proving a different thing:
+#: that a ShipTrip Finance operator performed the outgoing DZD transfer. The
+#: two are never presented under one heading, because attaching one where the
+#: other belongs is an evidence failure that survives into the audit trail.
+RECEIPT_LABELS = {
+    "fr": "Reçu du virement",
+    "ar": "إيصال التحويل",
+    "en": "Transfer receipt",
 }
 FORMATS = {
     "JPEG": ("image/jpeg", {".jpg", ".jpeg"}),
