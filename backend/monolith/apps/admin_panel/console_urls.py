@@ -1,10 +1,12 @@
 from django.urls import path
 
 from . import console_views as views
+from .finance_control_plane import finance_control_plane
 
 app_name = "admin_console"
 
 urlpatterns = [
+    path("finance/control-plane/", finance_control_plane, name="finance-control-plane"),
     path("", views.overview, name="overview"),
     path("users/", views.users, name="users"),
     path("users/<int:pk>/", views.user_detail, name="user-detail"),

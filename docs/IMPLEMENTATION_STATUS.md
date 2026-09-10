@@ -5450,3 +5450,47 @@ PostgreSQL fixtures. Row-level financial regression on the deployed database was
 not re-read: Postgres is reachable only on Railway's private network, and exposing it
 through a public TCP proxy was not justified for a release that changes no financial code,
 no migration and no provider path.
+
+## Phase 8F-H5 — Finance control plane core (2026-09-10)
+
+Implemented on `codex/phase8fh5-finance-control-plane`, starting from
+`21c5c861c8936150e5473737684b3896bbf54932`. The versioned metric definitions,
+read-only PostgreSQL snapshot, reconciliation and bounded safe drilldowns are
+documented in [the H5 contract](PHASE8F_H5_FINANCE_CONTROL_PLANE.md).
+The minimal JSON consumer route is `/admin/finance/control-plane/`, protected
+by the existing fresh Finance/Super summary capability and
+`FINANCE_DASHBOARD_ENABLED`; the deployment flag remains false.
+
+Funding counts applied capture ledger entries once, including deposits and
+Boost, and subtracts finalized applied refunds once for net cash-flow volume.
+Traveler payable includes pre-delivery, protection, released, blocked/held and
+externally committed obligations. Connected assets and bank transit remain
+separate from paid historical discharge; late returns restore liability while
+preserving the earlier paid movement. Manual DZD uses each frozen instruction.
+The EUR 60 / rate 260 case remains exactly 15,600 DZD through every H4 stage.
+
+H0's proposed dedicated revenue accounts were not implemented in H1–H4. H5
+therefore projects the existing platform-share ledger through evidenced clean
+completion/final settlement, with later corrections on their own dates. Funding
+alone never becomes recognized revenue. Earned category splits, provider costs
+and provider-reported cash balances are explicitly unavailable, not guessed.
+One historical metadata gap is explicitly classified in the read model:
+unapplied-capture refund ledger rows marked legacy_unknown can be attributed
+when their refund and capture agree on a known mode; integrity reports that
+fallback as a warning and no stored financial record is changed.
+
+The consolidated isolated H5 PostgreSQL run passed **20 tests**, including
+ledger/state/refund reconciliation, F1 Boost, duplicate funding, Stripe stages,
+late returns, manual DZD stages, mode/date/provider/rail/state/hold/reference
+filters, Finance/Super permission boundaries, and bounded drilldowns. An
+EXPLAIN ANALYZE regression used the existing `fin_ledger_deal_idx`; no additive
+index was justified. Final response checks additionally exercise explicit
+integer JSON serialization. There are no model, migration, schema/sqlc, shared
+accounting-writer, provider-adapter, UI or mobile changes. No provider money
+operation was performed. H5.1 and H6 are not started.
+
+The release follows the owner's local-gate/direct-main policy if the one
+required CI dispatch remains billing-blocked. Exact implementation/main SHA,
+deployment ID, health/config and internal read-only snapshot evidence are
+reported in the H5 completion record; cloud CI is never represented as passed
+when jobs execute zero steps.
