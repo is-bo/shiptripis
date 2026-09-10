@@ -5519,3 +5519,12 @@ the H5.01 completion report. H5.1 and H6 remain unstarted.
 The consolidated targeted PostgreSQL gate passed 13 tests (15 deselected) in
 166.47 seconds; Ruff and diff whitespace checks passed. No full finance suite
 was run locally and no schema/sqlc regeneration was required.
+
+The first public-repository CI executed: five jobs passed; Django reported
+1731 passed, 34 skipped and 11 failures in older H4.1/staticfiles and storage
+fixtures. With the owner's explicit authorization for one further dispatch,
+test-only corrections supply non-manifest static storage for console rendering
+and include the dedicated payout credential in the storage fixture/contract.
+All 11 affected tests passed locally (the nine console tests required a fresh
+test database after earlier transaction tests flushed seed data). No runtime
+storage behavior or financial code changed for this CI repair.

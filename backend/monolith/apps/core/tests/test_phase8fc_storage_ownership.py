@@ -43,6 +43,11 @@ DEPLOYED = {
     "KYC_S3_REGION": "ams",
     "KYC_S3_ACCESS_KEY": "kyc-only-access",
     "KYC_S3_SECRET_KEY": "kyc-only-secret",
+    "S3_BUCKET_PAYOUT": "shiptrip-payout",
+    "PAYOUT_S3_ENDPOINT_URL": "https://t3.example.invalid",
+    "PAYOUT_S3_REGION": "ams",
+    "PAYOUT_S3_ACCESS_KEY": "payout-only-access",
+    "PAYOUT_S3_SECRET_KEY": "payout-only-secret",
 }
 
 
@@ -125,7 +130,7 @@ class StorageOwnershipTests(SimpleTestCase):
         for name, (setting, profile) in STORAGE_CLASSES.items():
             with self.subTest(store=name):
                 assert setting.startswith("S3_BUCKET_")
-                assert profile in (GENERIC_CREDENTIAL, KYC_CREDENTIAL)
+                assert profile in (GENERIC_CREDENTIAL, KYC_CREDENTIAL, "PAYOUT_S3_*")
 
 
 class ReachabilityIsSeparateFromSigningTests(SimpleTestCase):
@@ -193,4 +198,5 @@ class ObjectStoreHidesItsCredentialTests(SimpleTestCase):
                 rendered = f"{store.name} {store.bucket} {store.credential_source}"
                 assert DEPLOYED["S3_SECRET_KEY"] not in rendered
                 assert DEPLOYED["KYC_S3_SECRET_KEY"] not in rendered
+                assert DEPLOYED["PAYOUT_S3_SECRET_KEY"] not in rendered
                 assert store.credential_source.endswith("*")

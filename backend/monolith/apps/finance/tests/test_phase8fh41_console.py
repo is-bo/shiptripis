@@ -13,7 +13,7 @@ tells the operator which condition failed.
 import re
 
 import pytest
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.admin_panel.console_manual_presenter import (
@@ -30,6 +30,20 @@ from .test_phase8fh4_manual import configured_h4, build_manual, image_upload  # 
 
 SECRET_CCP = "0000000000"
 SECRET_RIP = "0" * 20
+
+
+@pytest.fixture(autouse=True)
+def console_staticfiles(settings):
+    # Render assertions do not depend on a pre-existing collectstatic manifest.
+    with override_settings(
+        STORAGES={
+            **settings.STORAGES,
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    ):
+        yield
 
 
 def detail_url(payout):
