@@ -46,6 +46,25 @@ to that mode in SQL and reports `source_attributed_legacy_entry_count` with an
 integrity warning. They are excluded from the unknown cohort. Contradictory
 known modes are never overridden, and no stored history is rewritten.
 
+H5.01 also resolves historical `customer_payment` classification when H1
+migration 0012 populated a PaymentAttempt from provider evidence but left its
+immutable ledger transaction at migration 0010's `legacy_unknown` default.
+The read-only rule requires `mode_evidence=historical_provider_evidence`, a
+succeeded explicit-mode attempt, a linked applied signature-verified event
+with matching provider/order and boolean `livemode` agreeing with the attempt,
+no contradictory signed mode evidence, and one common attempt/order link on
+every ledger leg. Known ledger modes are never overridden. This applies to
+proven Stripe and Chargily captures; it does not infer from current credentials.
+
+`integrity.provenance.derived_from_authoritative_payment_attempt` reports the
+verified contributing entry count. Proven classification is informational and
+does not by itself downgrade integrity to warning. Missing, conflicting or
+ambiguous evidence remains unknown and any capture/ledger gap stays visible.
+The original deployed attempts 8/9/10/11 have signed stored events 3/6–7/8/9
+with boolean `livemode=false`; attempt 10 is Chargily, the others Stripe.
+No metadata backfill, financial rewrite, schema change or writer change is
+needed: today's ledger writer already persists linked explicit modes.
+
 H0 reporting timezone is **Europe/Paris**, including DST. `period=today|7d|30d`
 means local today plus the preceding 0/6/29 calendar days. Default is `30d`.
 `period=custom&start=YYYY-MM-DD&end=YYYY-MM-DD` includes both named dates by

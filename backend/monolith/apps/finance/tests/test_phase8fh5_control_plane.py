@@ -24,6 +24,7 @@ from apps.finance.models import (
     LedgerEntry,
     PaymentAttempt,
     PaymentOrder,
+    PaymentProviderEvent,
     PaymentRefund,
     Payout,
     ProviderDispute,
@@ -167,6 +168,115 @@ def test_funding_payable_recognition_and_read_only_snapshot(world):
     assert cents(recognized, "pending_earnings") == 0
     assert recognized["integrity"]["status"] == "ok"
     assert drilldown(scope(), metric="recognized_revenue")["rows"][0]["effective_at"]
+
+
+def historical_capture(amount=300, mode="test", provider="stripe"):
+    order, attempt = record_capture(
+        None, amount=amount, mode="legacy_unknown", provider=provider
+    )
+    PaymentAttempt.objects.filter(pk=attempt.pk).update(
+        provider_mode=mode, mode_evidence="historical_provider_evidence"
+    )
+    event = PaymentProviderEvent.objects.create(
+        attempt=attempt,
+        order=order,
+        provider=provider,
+        provider_event_id=f"h501-{attempt.pk}",
+        signature_verified=True,
+        processing_result="applied",
+        payload={"livemode": mode == "live"},
+    )
+    return attempt, event
+
+
+def test_h501_proven_funding_reconciles_without_economic_mutation():
+    from apps.finance.control_plane.queries import mode_ledger
+
+    attempts = [
+        historical_capture(amount, provider=provider)[0]
+        for amount, provider in (
+            (300, "stripe"),
+            (438, "stripe"),
+            (663, "chargily"),
+            (6837, "stripe"),
+        )
+    ]
+    before = list(LedgerEntry.objects.values())
+    snapshot = build_snapshot(scope())
+    assert cents(snapshot, "gross_funded") == cents(snapshot, "net_funded") == 8238
+    assert snapshot["integrity"]["status"] == "ok"
+    assert snapshot["integrity"]["provenance"][
+        "derived_from_authoritative_payment_attempt"
+    ] == {
+        "status": "verified",
+        "entry_count": 8,
+    }
+    assert (
+        snapshot["integrity"]["comparisons"]["applied_funding"]["difference_eur_cents"]
+        == 0
+    )
+    assert mode_ledger("legacy_unknown").filter(attempt__in=attempts).count() == 0
+    assert mode_ledger("live").filter(attempt__in=attempts).count() == 0
+    assert (
+        drilldown(scope(), metric="gross_funded")["totals"]["amount_eur_cents"] == 8238
+    )
+    assert list(LedgerEntry.objects.values()) == before
+    assert all(
+        row.transaction.provider_mode == "legacy_unknown"
+        for row in LedgerEntry.objects.all()
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "unrelated",
+        "unsigned",
+        "missing",
+        "conflict",
+        "wrong_order",
+        "ambiguous",
+        "live",
+    ],
+)
+def test_h501_unknown_and_conflicting_provenance_stays_isolated(case):
+    from apps.finance.control_plane.queries import mode_ledger
+
+    attempt, event = historical_capture(mode="live" if case == "live" else "test")
+    if case == "unrelated":
+        PaymentAttempt.objects.filter(pk=attempt.pk).update(mode_evidence="")
+    elif case == "unsigned":
+        PaymentProviderEvent.objects.filter(pk=event.pk).update(
+            signature_verified=False
+        )
+    elif case == "missing":
+        PaymentProviderEvent.objects.filter(pk=event.pk).update(payload={})
+    elif case == "conflict":
+        PaymentProviderEvent.objects.create(
+            attempt=attempt,
+            order_id=attempt.order_id,
+            provider="stripe",
+            provider_event_id="h501-conflict",
+            signature_verified=True,
+            payload={"livemode": True},
+        )
+    elif case == "wrong_order":
+        PaymentProviderEvent.objects.filter(pk=event.pk).update(order=None)
+    elif case == "ambiguous":
+        # Fixture a malformed legacy link without altering amounts/accounts.
+        LedgerEntry.objects.filter(attempt=attempt, account="sender_deposit").update(
+            attempt=None
+        )
+    before = list(LedgerEntry.objects.values())
+    assert not mode_ledger("test").exists()
+    if case == "live":
+        assert mode_ledger("live").count() == 2
+        assert not mode_ledger("legacy_unknown").exists()
+        assert build_snapshot(scope(mode="live"))["integrity"]["status"] == "ok"
+    else:
+        assert mode_ledger("legacy_unknown").count() == 2
+        assert build_snapshot(scope())["integrity"]["status"] == "mismatch"
+    assert list(LedgerEntry.objects.values()) == before
 
 
 def test_deposit_credit_boost_and_duplicate_attempts_do_not_add_funding(world):

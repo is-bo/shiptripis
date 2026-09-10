@@ -29,6 +29,7 @@ from apps.finance.models import (
     LedgerEntry,
     PaymentAttempt,
     PaymentOrder,
+    PaymentProviderEvent,
     PaymentRefund,
     Payout,
     PayoutAttempt,
@@ -57,8 +58,58 @@ def mode_ledger(mode):
     modes. Attribute those rows in SQL and disclose the fallback in integrity;
     never infer from names, current credentials or a different known mode.
     """
-    return LedgerEntry.objects.annotate(
+    # H1 migration 0012 classified old attempts, but deliberately did not
+    # rewrite immutable ledger transactions introduced with unknown mode.
+    # Re-prove that evidence rather than trusting a mode label or credentials.
+    events = PaymentProviderEvent.objects.filter(
+        attempt_id=OuterRef("attempt_id"),
+        order_id=OuterRef("order_id"),
+        provider=OuterRef("attempt__provider"),
+        signature_verified=True,
+    )
+    evidence = events.filter(processing_result="applied").filter(
+        Q(payload__livemode=False, attempt__provider_mode="test")
+        | Q(payload__livemode=True, attempt__provider_mode="live")
+    )
+    conflicts = events.filter(
+        Q(payload__livemode=True, attempt__provider_mode="test")
+        | Q(payload__livemode=False, attempt__provider_mode="live")
+        | Q(payload__data__object__livemode=True, attempt__provider_mode="test")
+        | Q(payload__data__object__livemode=False, attempt__provider_mode="live")
+        | Q(provider_mode="live", attempt__provider_mode="test")
+        | Q(provider_mode="test", attempt__provider_mode="live")
+    )
+    other_links = LedgerEntry.objects.filter(
+        transaction_id=OuterRef("transaction_id")
+    ).exclude(attempt_id=OuterRef("attempt_id"), order_id=OuterRef("order_id"))
+    rows = LedgerEntry.objects.annotate(
+        proven_capture=Exists(evidence),
+        conflicting_capture=Exists(conflicts),
+        ambiguous_capture=Exists(other_links),
+    ).annotate(
+        mode_provenance=Case(
+            When(
+                transaction__provider_mode="legacy_unknown",
+                transaction__kind="customer_payment",
+                attempt__provider_mode__in=("test", "live"),
+                attempt__mode_evidence="historical_provider_evidence",
+                attempt__status="succeeded",
+                attempt__order_id=F("order_id"),
+                proven_capture=True,
+                conflicting_capture=False,
+                ambiguous_capture=False,
+                then=Value("derived_from_authoritative_payment_attempt"),
+            ),
+            default=Value("stored"),
+            output_field=CharField(),
+        )
+    )
+    return rows.annotate(
         accounting_mode=Case(
+            When(
+                mode_provenance="derived_from_authoritative_payment_attempt",
+                then=F("attempt__provider_mode"),
+            ),
             When(
                 transaction__provider_mode="legacy_unknown",
                 refund__provider_mode__in=("test", "live"),
@@ -459,8 +510,7 @@ class Queries:
 
     def metrics(self):
         scope = self.scope
-        funding = LedgerEntry.objects.filter(
-            transaction__provider_mode=scope.mode,
+        funding = mode_ledger(scope.mode).filter(
             transaction__kind="customer_payment",
             account="provider_clearing",
             amount_eur_cents__gt=0,

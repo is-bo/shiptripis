@@ -5494,3 +5494,28 @@ required CI dispatch remains billing-blocked. Exact implementation/main SHA,
 deployment ID, health/config and internal read-only snapshot evidence are
 reported in the H5 completion record; cloud CI is never represented as passed
 when jobs execute zero steps.
+
+### H5.01 — Historical funding provenance reconciliation
+
+Continuation from `2804a1bf1240be7bb0baec79f3d51b785b415b85`: the deployed
+EUR 82.38 gap came from attempts 8–11, classified by H1 migration 0012 while
+their immutable ledger retained migration 0010's unknown-mode default.
+Stored signature-verified applied events independently prove TEST for each;
+attempt 10 is Chargily and the others Stripe. No provider reads were needed.
+
+H5 now derives only unambiguously linked historical customer-payment modes
+from matching signed event evidence and the agreeing classified attempt.
+Snapshot funding and per-capture reconciliation share this rule. Verified
+provenance is disclosed explicitly; missing/conflicting evidence remains
+unknown and gaps remain visible. No historical rows, amounts, accounts,
+timestamps, allocations, schema or current accounting writers are changed.
+
+Targeted verification covers proven funding, unrelated/unsigned/missing/
+conflicting/wrong-order/ambiguous evidence, LIVE isolation and no ledger
+mutation, alongside affected H5 funding/deposit/Boost/refund/Stripe-return/DZD
+regressions. Release test, CI and deployed snapshot outcomes are recorded in
+the H5.01 completion report. H5.1 and H6 remain unstarted.
+
+The consolidated targeted PostgreSQL gate passed 13 tests (15 deselected) in
+166.47 seconds; Ruff and diff whitespace checks passed. No full finance suite
+was run locally and no schema/sqlc regeneration was required.

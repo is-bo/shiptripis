@@ -73,11 +73,10 @@ def reconcile(queries, metrics):
     ).count()
     capture_rows = captures.annotate(
         posted=sum_subquery(
-            LedgerEntry.objects.filter(
+            mode_ledger(scope.mode).filter(
                 attempt_id=OuterRef("pk"),
                 account="provider_clearing",
                 transaction__kind="customer_payment",
-                transaction__provider_mode=scope.mode,
             ),
             "attempt_id",
         )
@@ -113,8 +112,11 @@ def reconcile(queries, metrics):
         .aggregate(count=Count("transaction_id"))
     )
     warnings = []
+    derived_captures = ledger.filter(
+        mode_provenance="derived_from_authoritative_payment_attempt"
+    ).count()
     attributed = ledger.exclude(transaction__provider_mode=scope.mode).count()
-    if attributed:
+    if attributed > derived_captures:
         warnings.append(
             "legacy_refund_ledger_mode_attributed_from_agreeing_refund_and_capture"
         )
@@ -154,6 +156,12 @@ def reconcile(queries, metrics):
         "unbalanced_transaction_count": unbalanced["count"],
         "warnings": warnings,
         "source_attributed_legacy_entry_count": attributed,
+        "provenance": {
+            "derived_from_authoritative_payment_attempt": {
+                "status": "verified",
+                "entry_count": derived_captures,
+            }
+        },
         "data_issues": data_issues,
         "revenue_basis": "read_only_evidence_projection_of_existing_platform_share_ledger",
         "provider_cash_reconciliation": "unavailable_no_provider_balance_observation",
