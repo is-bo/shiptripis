@@ -6986,6 +6986,570 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Dispute update'**
   String get notificationDispute;
+
+  /// No description provided for @notificationPayout.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout update'**
+  String get notificationPayout;
+
+  /// No description provided for @payoutMethodsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout methods'**
+  String get payoutMethodsTitle;
+
+  /// No description provided for @profilePayoutMethods.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout methods'**
+  String get profilePayoutMethods;
+
+  /// No description provided for @profilePayoutHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout history'**
+  String get profilePayoutHistory;
+
+  /// No description provided for @payoutPreferenceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout preference'**
+  String get payoutPreferenceTitle;
+
+  /// No description provided for @payoutPreferenceEurOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'EUR only'**
+  String get payoutPreferenceEurOnly;
+
+  /// No description provided for @payoutPreferenceDzdOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'DZD only'**
+  String get payoutPreferenceDzdOnly;
+
+  /// No description provided for @payoutPreferenceBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Both'**
+  String get payoutPreferenceBoth;
+
+  /// No description provided for @payoutPreferenceBothExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe-funded deliveries are paid in EUR; Chargily-funded deliveries are paid in DZD.'**
+  String get payoutPreferenceBothExplainer;
+
+  /// No description provided for @payoutPreferenceScopeNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences apply to future payouts only.'**
+  String get payoutPreferenceScopeNote;
+
+  /// No description provided for @payoutPreferenceRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select your payout preference.'**
+  String get payoutPreferenceRequired;
+
+  /// No description provided for @payoutEurTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'EUR payouts (Stripe)'**
+  String get payoutEurTitle;
+
+  /// No description provided for @payoutEurNotConfiguredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your European bank account to receive payouts in EUR.'**
+  String get payoutEurNotConfiguredBody;
+
+  /// No description provided for @payoutEurSetupRequiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete your account setup with Stripe to enable EUR payouts.'**
+  String get payoutEurSetupRequiredBody;
+
+  /// No description provided for @payoutEurPendingVerificationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe is verifying your account details. You\'ll be notified once approved.'**
+  String get payoutEurPendingVerificationBody;
+
+  /// No description provided for @payoutEurReadyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your EUR account is verified and ready to receive payouts.'**
+  String get payoutEurReadyBody;
+
+  /// No description provided for @payoutEurNeedsAttentionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Stripe account requires attention before payouts can proceed.'**
+  String get payoutEurNeedsAttentionBody;
+
+  /// No description provided for @payoutActionSetupEur.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up EUR payouts'**
+  String get payoutActionSetupEur;
+
+  /// No description provided for @payoutActionResumeEur.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume setup'**
+  String get payoutActionResumeEur;
+
+  /// No description provided for @payoutActionManageEur.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage with Stripe'**
+  String get payoutActionManageEur;
+
+  /// No description provided for @payoutActionRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh status'**
+  String get payoutActionRefresh;
+
+  /// No description provided for @payoutDzdTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'DZD payouts (CCP / BaridiMob)'**
+  String get payoutDzdTitle;
+
+  /// No description provided for @payoutDzdNotConfiguredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your CCP account and crossed cheque to receive payouts in Algeria.'**
+  String get payoutDzdNotConfiguredBody;
+
+  /// No description provided for @payoutDzdSetupRequiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit your CCP information and crossed cheque to proceed.'**
+  String get payoutDzdSetupRequiredBody;
+
+  /// No description provided for @payoutDzdPendingReviewBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your CCP details and crossed cheque are being reviewed by our team.'**
+  String get payoutDzdPendingReviewBody;
+
+  /// No description provided for @payoutDzdReadyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your CCP account is verified and ready for DZD payouts.'**
+  String get payoutDzdReadyBody;
+
+  /// No description provided for @payoutDzdNeedsAttentionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your payout profile requires verification or an update.'**
+  String get payoutDzdNeedsAttentionBody;
+
+  /// No description provided for @payoutDzdInactiveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'DZD payouts are currently inactive for your account.'**
+  String get payoutDzdInactiveBody;
+
+  /// No description provided for @payoutActionSetupDzd.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up DZD payouts'**
+  String get payoutActionSetupDzd;
+
+  /// No description provided for @payoutActionReplaceDzd.
+  ///
+  /// In en, this message translates to:
+  /// **'Update payout information'**
+  String get payoutActionReplaceDzd;
+
+  /// No description provided for @payoutDzdCcpLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP account'**
+  String get payoutDzdCcpLabel;
+
+  /// No description provided for @payoutDzdRipLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RIP'**
+  String get payoutDzdRipLabel;
+
+  /// No description provided for @payoutDzdSubmittedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitted on {date}'**
+  String payoutDzdSubmittedAt(String date);
+
+  /// No description provided for @payoutDzdFutureScopeNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The new method applies to future eligible payouts. Already-funded payouts keep their historical payout destination.'**
+  String get payoutDzdFutureScopeNote;
+
+  /// No description provided for @dzdFormTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up DZD payouts'**
+  String get dzdFormTitle;
+
+  /// No description provided for @dzdFormUpdateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update payout information'**
+  String get dzdFormUpdateTitle;
+
+  /// No description provided for @dzdFormScopeExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'This information applies to future eligible payouts. Already-funded payouts keep their historical payout destination.'**
+  String get dzdFormScopeExplainer;
+
+  /// No description provided for @dzdFirstNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'First name'**
+  String get dzdFirstNameLabel;
+
+  /// No description provided for @dzdLastNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Last name'**
+  String get dzdLastNameLabel;
+
+  /// No description provided for @dzdCcpNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP account number'**
+  String get dzdCcpNumberLabel;
+
+  /// No description provided for @dzdCcpNumberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'1 to 20 digits'**
+  String get dzdCcpNumberHint;
+
+  /// No description provided for @dzdCcpKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP key'**
+  String get dzdCcpKeyLabel;
+
+  /// No description provided for @dzdCcpKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'2 digits'**
+  String get dzdCcpKeyHint;
+
+  /// No description provided for @dzdRipLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RIP'**
+  String get dzdRipLabel;
+
+  /// No description provided for @dzdRipHint.
+  ///
+  /// In en, this message translates to:
+  /// **'20 digits'**
+  String get dzdRipHint;
+
+  /// No description provided for @dzdChequeProofLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo of the full crossed cheque'**
+  String get dzdChequeProofLabel;
+
+  /// No description provided for @dzdChequeProofHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload a clear photo of the full crossed cheque.'**
+  String get dzdChequeProofHelper;
+
+  /// No description provided for @dzdChequeAddPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload photo'**
+  String get dzdChequeAddPhoto;
+
+  /// No description provided for @dzdChequeReplacePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace photo'**
+  String get dzdChequeReplacePhoto;
+
+  /// No description provided for @dzdChequeRemovePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo'**
+  String get dzdChequeRemovePhoto;
+
+  /// No description provided for @dzdSubmitAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit payout information'**
+  String get dzdSubmitAction;
+
+  /// No description provided for @dzdUpdateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update payout information'**
+  String get dzdUpdateAction;
+
+  /// No description provided for @dzdSubmitSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout information submitted successfully.'**
+  String get dzdSubmitSuccess;
+
+  /// No description provided for @payoutReasonSetupRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout setup required'**
+  String get payoutReasonSetupRequired;
+
+  /// No description provided for @payoutReasonUnderReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile under review'**
+  String get payoutReasonUnderReview;
+
+  /// No description provided for @payoutReasonNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile needs attention'**
+  String get payoutReasonNeedsAttention;
+
+  /// No description provided for @payoutReasonOnHold.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout on hold'**
+  String get payoutReasonOnHold;
+
+  /// No description provided for @payoutReasonDisputeActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Dispute open on this delivery'**
+  String get payoutReasonDisputeActive;
+
+  /// No description provided for @payoutReasonFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout attempt failed'**
+  String get payoutReasonFailed;
+
+  /// No description provided for @payoutReasonReturned.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank payout was returned'**
+  String get payoutReasonReturned;
+
+  /// No description provided for @payoutReasonCountryUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Country not supported for Stripe EUR payouts'**
+  String get payoutReasonCountryUnsupported;
+
+  /// No description provided for @deliveryPayoutSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout status'**
+  String get deliveryPayoutSectionTitle;
+
+  /// No description provided for @deliveryPayoutProtectionExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'48-hour protection period is active. Funds are held until the period ends.'**
+  String get deliveryPayoutProtectionExplainer;
+
+  /// No description provided for @deliveryPayoutReadyExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery is complete and payout is now eligible.'**
+  String get deliveryPayoutReadyExplainer;
+
+  /// No description provided for @deliveryPayoutProcessingExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout processing has started.'**
+  String get deliveryPayoutProcessingExplainer;
+
+  /// No description provided for @deliveryPayoutSentExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout has been sent and is in transit.'**
+  String get deliveryPayoutSentExplainer;
+
+  /// No description provided for @deliveryPayoutPaidExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout has been settled to your account.'**
+  String get deliveryPayoutPaidExplainer;
+
+  /// No description provided for @deliveryPayoutReturnedExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'The bank returned this payout. Please check your payout method.'**
+  String get deliveryPayoutReturnedExplainer;
+
+  /// No description provided for @deliveryPayoutNeedsAttentionExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'This payout requires attention before it can be settled.'**
+  String get deliveryPayoutNeedsAttentionExplainer;
+
+  /// No description provided for @payoutRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen rate: 1 EUR = {rate} DZD'**
+  String payoutRateLabel(String rate);
+
+  /// No description provided for @payoutHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout history'**
+  String get payoutHistoryTitle;
+
+  /// No description provided for @payoutDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout detail'**
+  String get payoutDetailTitle;
+
+  /// No description provided for @payoutRailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout rail'**
+  String get payoutRailLabel;
+
+  /// No description provided for @payoutRailStripeEur.
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe EUR'**
+  String get payoutRailStripeEur;
+
+  /// No description provided for @payoutRailManualDzd.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP Transfer (DZD)'**
+  String get payoutRailManualDzd;
+
+  /// No description provided for @payoutRailUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get payoutRailUnavailable;
+
+  /// No description provided for @payoutReferenceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout reference'**
+  String get payoutReferenceLabel;
+
+  /// No description provided for @payoutDeliveryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Associated delivery'**
+  String get payoutDeliveryLabel;
+
+  /// No description provided for @payoutEligibleAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Eligible at'**
+  String get payoutEligibleAtLabel;
+
+  /// No description provided for @payoutSentAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent at'**
+  String get payoutSentAtLabel;
+
+  /// No description provided for @payoutPaidAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid at'**
+  String get payoutPaidAtLabel;
+
+  /// No description provided for @payoutProtectionEndsAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection ends at'**
+  String get payoutProtectionEndsAtLabel;
+
+  /// No description provided for @payoutViewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View payout'**
+  String get payoutViewAction;
+
+  /// No description provided for @payoutViewHistoryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View payout history'**
+  String get payoutViewHistoryAction;
+
+  /// No description provided for @payoutOpenStripeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open Stripe setup link. Please try again.'**
+  String get payoutOpenStripeError;
+
+  /// No description provided for @payoutStatusAwaitingDelivery.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting delivery'**
+  String get payoutStatusAwaitingDelivery;
+
+  /// No description provided for @payoutStatusProtectionActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection period'**
+  String get payoutStatusProtectionActive;
+
+  /// No description provided for @payoutStatusReleasePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting release'**
+  String get payoutStatusReleasePending;
+
+  /// No description provided for @payoutStatusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout ready'**
+  String get payoutStatusReady;
+
+  /// No description provided for @payoutStatusSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout sent'**
+  String get payoutStatusSent;
+
+  /// No description provided for @payoutStatusReturned.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout returned'**
+  String get payoutStatusReturned;
+
+  /// No description provided for @payoutStatusNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get payoutStatusNeedsAttention;
+
+  /// No description provided for @payoutProfileReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout method ready'**
+  String get payoutProfileReady;
+
+  /// No description provided for @payoutProfileNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'Method needs attention'**
+  String get payoutProfileNeedsAttention;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

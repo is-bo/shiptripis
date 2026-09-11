@@ -37,6 +37,7 @@ import '../domain/location.dart';
 import '../domain/notification.dart';
 import '../domain/offer.dart';
 import '../domain/payment.dart';
+import '../domain/payout.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
 
@@ -1205,6 +1206,144 @@ class PaymentRepository {
         .map((r) => Payout.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
   }
+
+  /// H6A Payout Methods summary.
+  Future<PayoutMethodsSummary> payoutMethods({CancelToken? cancelToken}) async =>
+      PayoutMethodsSummary.fromJson(
+        await _api.getObject(
+          '/api/payouts/methods',
+          cancelToken: cancelToken,
+        ),
+      );
+
+  /// Atomic preference update (EUR only, DZD only, both).
+  Future<PayoutMethodsSummary> updatePayoutPreference({
+    required PayoutPreference preference,
+    required int eurRevision,
+    required int dzdRevision,
+    String? country,
+    String consentPolicy = 'payout_profile_v1',
+  }) async => PayoutMethodsSummary.fromJson(
+    await _api.patchObject(
+      '/api/payouts/methods',
+      body: {
+        'preference': preference.wire,
+        'eur_revision': eurRevision,
+        'dzd_revision': dzdRevision,
+        if (country != null && country.isNotEmpty) 'country': country,
+        'consent_policy': consentPolicy,
+      },
+    ),
+  );
+
+  /// Stripe Connect onboarding / resume link.
+  Future<({String onboardingUrl, DateTime? expiresAt, EurPayoutMethod? method})>
+  startStripeOnboarding({String? country}) async {
+    final body = await _api.postObject(
+      '/api/payouts/methods/stripe/onboarding',
+      body: {if (country != null && country.isNotEmpty) 'country': country},
+    );
+    return (
+      onboardingUrl: readText(body['onboarding_url']),
+      expiresAt: readDate(body['expires_at']),
+      method: EurPayoutMethod.maybe(body['method']),
+    );
+  }
+
+  /// Stripe Express Dashboard single-use access.
+  Future<String> openStripeDashboard() async {
+    final body = await _api.postObject(
+      '/api/payouts/methods/stripe/dashboard',
+      body: const {},
+    );
+    return readText(body['dashboard_url']);
+  }
+
+  /// Re-reads authoritative account state from Stripe.
+  Future<EurPayoutMethod?> refreshStripeReadiness() async {
+    final body = await _api.postObject(
+      '/api/payouts/methods/stripe/refresh',
+      body: const {},
+    );
+    return EurPayoutMethod.maybe(body['method']);
+  }
+
+  /// Upload crossed-cheque proof image.
+  Future<String> uploadPayoutProof({
+    required String filePath,
+    required String fileName,
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final form = FormData.fromMap({
+      'image': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    final body = await _api.upload(
+      '/api/payouts/proofs',
+      form: form,
+      onProgress: onProgress,
+      cancelToken: cancelToken,
+    );
+    return readText(body['reference']);
+  }
+
+  /// Submit DZD profile configuration or replacement.
+  /// Exactly six product inputs: firstName, lastName, ccpNumber, ccpKey, rip, proofReference.
+  /// NO NIP.
+  Future<Map<String, dynamic>> submitDzdProfile({
+    required int expectedRevision,
+    required String firstName,
+    required String lastName,
+    required String ccpNumber,
+    required String ccpKey,
+    required String rip,
+    required String proofReference,
+    String consentPolicy = 'payout_profile_v1',
+  }) async {
+    return await _api.postObject(
+      '/api/payouts/profiles/dzd',
+      body: {
+        'expected_revision': expectedRevision,
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'ccp_number': ccpNumber.trim(),
+        'ccp_key': ccpKey.trim(),
+        'rip': rip.trim(),
+        'proof_reference': proofReference.trim(),
+        'consent_policy': consentPolicy,
+      },
+    );
+  }
+
+  /// Paginated payout history list using H6A bounded pagination.
+  Future<PayoutHistoryPage> payoutHistoryPaginated({
+    int page = 1,
+    int pageSize = 30,
+    PayoutStatus? status,
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.getObject(
+      '/api/payouts',
+      query: {
+        'page': page,
+        'page_size': pageSize,
+        if (status != null) 'status': _payoutStatusWire(status),
+      },
+      cancelToken: cancelToken,
+    );
+    return PayoutHistoryPage.fromJson(body);
+  }
+
+  /// Single payout detail from `GET /api/payouts/<public UUID>`.
+  Future<PayoutMobile> payoutDetail(
+    String reference, {
+    CancelToken? cancelToken,
+  }) async => PayoutMobile.fromJson(
+    await _api.getObject(
+      '/api/payouts/$reference',
+      cancelToken: cancelToken,
+    ),
+  );
 
   static String _purposeWire(PaymentPurpose purpose) => switch (purpose) {
     PaymentPurpose.postingDeposit => 'posting_deposit',

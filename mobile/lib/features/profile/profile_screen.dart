@@ -79,6 +79,11 @@ class ProfileScreen extends ConsumerWidget {
               onTap: () => context.pushNamed(Routes.profilePayouts),
             ),
             _Row(
+              icon: Icons.account_balance_outlined,
+              label: l.payoutMethodsTitle,
+              onTap: () => context.pushNamed(Routes.profilePayoutMethods),
+            ),
+            _Row(
               icon: Icons.star_outline_rounded,
               label: l.profileRatings,
               onTap: () => context.pushNamed(Routes.profileRatings),

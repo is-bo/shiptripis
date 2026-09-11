@@ -3999,4 +3999,316 @@ class LEn extends L {
 
   @override
   String get notificationDispute => 'Dispute update';
+
+  @override
+  String get notificationPayout => 'Payout update';
+
+  @override
+  String get payoutMethodsTitle => 'Payout methods';
+
+  @override
+  String get profilePayoutMethods => 'Payout methods';
+
+  @override
+  String get profilePayoutHistory => 'Payout history';
+
+  @override
+  String get payoutPreferenceTitle => 'Payout preference';
+
+  @override
+  String get payoutPreferenceEurOnly => 'EUR only';
+
+  @override
+  String get payoutPreferenceDzdOnly => 'DZD only';
+
+  @override
+  String get payoutPreferenceBoth => 'Both';
+
+  @override
+  String get payoutPreferenceBothExplainer =>
+      'Stripe-funded deliveries are paid in EUR; Chargily-funded deliveries are paid in DZD.';
+
+  @override
+  String get payoutPreferenceScopeNote =>
+      'Preferences apply to future payouts only.';
+
+  @override
+  String get payoutPreferenceRequired =>
+      'Please select your payout preference.';
+
+  @override
+  String get payoutEurTitle => 'EUR payouts (Stripe)';
+
+  @override
+  String get payoutEurNotConfiguredBody =>
+      'Connect your European bank account to receive payouts in EUR.';
+
+  @override
+  String get payoutEurSetupRequiredBody =>
+      'Complete your account setup with Stripe to enable EUR payouts.';
+
+  @override
+  String get payoutEurPendingVerificationBody =>
+      'Stripe is verifying your account details. You\'ll be notified once approved.';
+
+  @override
+  String get payoutEurReadyBody =>
+      'Your EUR account is verified and ready to receive payouts.';
+
+  @override
+  String get payoutEurNeedsAttentionBody =>
+      'Your Stripe account requires attention before payouts can proceed.';
+
+  @override
+  String get payoutActionSetupEur => 'Set up EUR payouts';
+
+  @override
+  String get payoutActionResumeEur => 'Resume setup';
+
+  @override
+  String get payoutActionManageEur => 'Manage with Stripe';
+
+  @override
+  String get payoutActionRefresh => 'Refresh status';
+
+  @override
+  String get payoutDzdTitle => 'DZD payouts (CCP / BaridiMob)';
+
+  @override
+  String get payoutDzdNotConfiguredBody =>
+      'Add your CCP account and crossed cheque to receive payouts in Algeria.';
+
+  @override
+  String get payoutDzdSetupRequiredBody =>
+      'Submit your CCP information and crossed cheque to proceed.';
+
+  @override
+  String get payoutDzdPendingReviewBody =>
+      'Your CCP details and crossed cheque are being reviewed by our team.';
+
+  @override
+  String get payoutDzdReadyBody =>
+      'Your CCP account is verified and ready for DZD payouts.';
+
+  @override
+  String get payoutDzdNeedsAttentionBody =>
+      'Your payout profile requires verification or an update.';
+
+  @override
+  String get payoutDzdInactiveBody =>
+      'DZD payouts are currently inactive for your account.';
+
+  @override
+  String get payoutActionSetupDzd => 'Set up DZD payouts';
+
+  @override
+  String get payoutActionReplaceDzd => 'Update payout information';
+
+  @override
+  String get payoutDzdCcpLabel => 'CCP account';
+
+  @override
+  String get payoutDzdRipLabel => 'RIP';
+
+  @override
+  String payoutDzdSubmittedAt(String date) {
+    return 'Submitted on $date';
+  }
+
+  @override
+  String get payoutDzdFutureScopeNote =>
+      'The new method applies to future eligible payouts. Already-funded payouts keep their historical payout destination.';
+
+  @override
+  String get dzdFormTitle => 'Set up DZD payouts';
+
+  @override
+  String get dzdFormUpdateTitle => 'Update payout information';
+
+  @override
+  String get dzdFormScopeExplainer =>
+      'This information applies to future eligible payouts. Already-funded payouts keep their historical payout destination.';
+
+  @override
+  String get dzdFirstNameLabel => 'First name';
+
+  @override
+  String get dzdLastNameLabel => 'Last name';
+
+  @override
+  String get dzdCcpNumberLabel => 'CCP account number';
+
+  @override
+  String get dzdCcpNumberHint => '1 to 20 digits';
+
+  @override
+  String get dzdCcpKeyLabel => 'CCP key';
+
+  @override
+  String get dzdCcpKeyHint => '2 digits';
+
+  @override
+  String get dzdRipLabel => 'RIP';
+
+  @override
+  String get dzdRipHint => '20 digits';
+
+  @override
+  String get dzdChequeProofLabel => 'Photo of the full crossed cheque';
+
+  @override
+  String get dzdChequeProofHelper =>
+      'Upload a clear photo of the full crossed cheque.';
+
+  @override
+  String get dzdChequeAddPhoto => 'Upload photo';
+
+  @override
+  String get dzdChequeReplacePhoto => 'Replace photo';
+
+  @override
+  String get dzdChequeRemovePhoto => 'Remove photo';
+
+  @override
+  String get dzdSubmitAction => 'Submit payout information';
+
+  @override
+  String get dzdUpdateAction => 'Update payout information';
+
+  @override
+  String get dzdSubmitSuccess => 'Payout information submitted successfully.';
+
+  @override
+  String get payoutReasonSetupRequired => 'Payout setup required';
+
+  @override
+  String get payoutReasonUnderReview => 'Profile under review';
+
+  @override
+  String get payoutReasonNeedsAttention => 'Profile needs attention';
+
+  @override
+  String get payoutReasonOnHold => 'Payout on hold';
+
+  @override
+  String get payoutReasonDisputeActive => 'Dispute open on this delivery';
+
+  @override
+  String get payoutReasonFailed => 'Payout attempt failed';
+
+  @override
+  String get payoutReasonReturned => 'Bank payout was returned';
+
+  @override
+  String get payoutReasonCountryUnsupported =>
+      'Country not supported for Stripe EUR payouts';
+
+  @override
+  String get deliveryPayoutSectionTitle => 'Payout status';
+
+  @override
+  String get deliveryPayoutProtectionExplainer =>
+      '48-hour protection period is active. Funds are held until the period ends.';
+
+  @override
+  String get deliveryPayoutReadyExplainer =>
+      'Delivery is complete and payout is now eligible.';
+
+  @override
+  String get deliveryPayoutProcessingExplainer =>
+      'Payout processing has started.';
+
+  @override
+  String get deliveryPayoutSentExplainer =>
+      'Payout has been sent and is in transit.';
+
+  @override
+  String get deliveryPayoutPaidExplainer =>
+      'Payout has been settled to your account.';
+
+  @override
+  String get deliveryPayoutReturnedExplainer =>
+      'The bank returned this payout. Please check your payout method.';
+
+  @override
+  String get deliveryPayoutNeedsAttentionExplainer =>
+      'This payout requires attention before it can be settled.';
+
+  @override
+  String payoutRateLabel(String rate) {
+    return 'Frozen rate: 1 EUR = $rate DZD';
+  }
+
+  @override
+  String get payoutHistoryTitle => 'Payout history';
+
+  @override
+  String get payoutDetailTitle => 'Payout detail';
+
+  @override
+  String get payoutRailLabel => 'Payout rail';
+
+  @override
+  String get payoutRailStripeEur => 'Stripe EUR';
+
+  @override
+  String get payoutRailManualDzd => 'CCP Transfer (DZD)';
+
+  @override
+  String get payoutRailUnavailable => 'Unavailable';
+
+  @override
+  String get payoutReferenceLabel => 'Payout reference';
+
+  @override
+  String get payoutDeliveryLabel => 'Associated delivery';
+
+  @override
+  String get payoutEligibleAtLabel => 'Eligible at';
+
+  @override
+  String get payoutSentAtLabel => 'Sent at';
+
+  @override
+  String get payoutPaidAtLabel => 'Paid at';
+
+  @override
+  String get payoutProtectionEndsAtLabel => 'Protection ends at';
+
+  @override
+  String get payoutViewAction => 'View payout';
+
+  @override
+  String get payoutViewHistoryAction => 'View payout history';
+
+  @override
+  String get payoutOpenStripeError =>
+      'Could not open Stripe setup link. Please try again.';
+
+  @override
+  String get payoutStatusAwaitingDelivery => 'Awaiting delivery';
+
+  @override
+  String get payoutStatusProtectionActive => 'Protection period';
+
+  @override
+  String get payoutStatusReleasePending => 'Awaiting release';
+
+  @override
+  String get payoutStatusReady => 'Payout ready';
+
+  @override
+  String get payoutStatusSent => 'Payout sent';
+
+  @override
+  String get payoutStatusReturned => 'Payout returned';
+
+  @override
+  String get payoutStatusNeedsAttention => 'Needs attention';
+
+  @override
+  String get payoutProfileReady => 'Payout method ready';
+
+  @override
+  String get payoutProfileNeedsAttention => 'Method needs attention';
 }

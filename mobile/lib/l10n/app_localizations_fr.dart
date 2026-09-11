@@ -4034,4 +4034,317 @@ class LFr extends L {
 
   @override
   String get notificationDispute => 'Mise à jour du litige';
+
+  @override
+  String get notificationPayout => 'Mise à jour du versement';
+
+  @override
+  String get payoutMethodsTitle => 'Moyens de versement';
+
+  @override
+  String get profilePayoutMethods => 'Moyens de versement';
+
+  @override
+  String get profilePayoutHistory => 'Historique des versements';
+
+  @override
+  String get payoutPreferenceTitle => 'Préférence de versement';
+
+  @override
+  String get payoutPreferenceEurOnly => 'EUR uniquement';
+
+  @override
+  String get payoutPreferenceDzdOnly => 'DZD uniquement';
+
+  @override
+  String get payoutPreferenceBoth => 'Les deux';
+
+  @override
+  String get payoutPreferenceBothExplainer =>
+      'Les livraisons financées par Stripe sont versées en EUR ; celles financées par Chargily en DZD.';
+
+  @override
+  String get payoutPreferenceScopeNote =>
+      'Cette préférence s\'applique uniquement aux prochains versements.';
+
+  @override
+  String get payoutPreferenceRequired =>
+      'Veuillez choisir votre préférence de versement.';
+
+  @override
+  String get payoutEurTitle => 'Versements en EUR (Stripe)';
+
+  @override
+  String get payoutEurNotConfiguredBody =>
+      'Connectez votre compte bancaire européen pour recevoir vos versements en EUR.';
+
+  @override
+  String get payoutEurSetupRequiredBody =>
+      'Complétez votre dossier sur Stripe pour activer les versements en EUR.';
+
+  @override
+  String get payoutEurPendingVerificationBody =>
+      'Stripe vérifie actuellement vos informations. Vous serez notifié dès validation.';
+
+  @override
+  String get payoutEurReadyBody =>
+      'Votre compte EUR est vérifié et prêt à recevoir des versements.';
+
+  @override
+  String get payoutEurNeedsAttentionBody =>
+      'Votre compte Stripe nécessite une action avant de pouvoir effectuer des versements.';
+
+  @override
+  String get payoutActionSetupEur => 'Configurer les versements en EUR';
+
+  @override
+  String get payoutActionResumeEur => 'Reprendre la configuration';
+
+  @override
+  String get payoutActionManageEur => 'Gérer sur Stripe';
+
+  @override
+  String get payoutActionRefresh => 'Actualiser le statut';
+
+  @override
+  String get payoutDzdTitle => 'Versements en DZD (CCP / BaridiMob)';
+
+  @override
+  String get payoutDzdNotConfiguredBody =>
+      'Renseignez votre compte CCP et votre chèque barré pour recevoir vos versements en Algérie.';
+
+  @override
+  String get payoutDzdSetupRequiredBody =>
+      'Transmettez vos coordonnées CCP et votre chèque barré pour continuer.';
+
+  @override
+  String get payoutDzdPendingReviewBody =>
+      'Vos coordonnées CCP et votre chèque barré sont en cours d\'examen par notre équipe.';
+
+  @override
+  String get payoutDzdReadyBody =>
+      'Votre compte CCP est vérifié et prêt pour les versements en DZD.';
+
+  @override
+  String get payoutDzdNeedsAttentionBody =>
+      'Votre profil de versement nécessite une vérification ou une mise à jour.';
+
+  @override
+  String get payoutDzdInactiveBody =>
+      'Les versements en DZD sont actuellement inactifs sur votre compte.';
+
+  @override
+  String get payoutActionSetupDzd => 'Configurer les versements en DZD';
+
+  @override
+  String get payoutActionReplaceDzd => 'Mettre à jour les informations';
+
+  @override
+  String get payoutDzdCcpLabel => 'Compte CCP';
+
+  @override
+  String get payoutDzdRipLabel => 'RIP';
+
+  @override
+  String payoutDzdSubmittedAt(String date) {
+    return 'Envoyé le $date';
+  }
+
+  @override
+  String get payoutDzdFutureScopeNote =>
+      'Ces informations s\'appliquent aux prochains versements éligibles. Les versements déjà financés conservent leur destination d\'origine.';
+
+  @override
+  String get dzdFormTitle => 'Configurer les versements en DZD';
+
+  @override
+  String get dzdFormUpdateTitle => 'Mettre à jour les informations';
+
+  @override
+  String get dzdFormScopeExplainer =>
+      'Ces informations s\'appliquent aux prochains versements éligibles. Les versements déjà financés conservent leur destination d\'origine.';
+
+  @override
+  String get dzdFirstNameLabel => 'Prénom';
+
+  @override
+  String get dzdLastNameLabel => 'Nom';
+
+  @override
+  String get dzdCcpNumberLabel => 'Numéro de compte CCP';
+
+  @override
+  String get dzdCcpNumberHint => '1 à 20 chiffres';
+
+  @override
+  String get dzdCcpKeyLabel => 'Clé CCP';
+
+  @override
+  String get dzdCcpKeyHint => '2 chiffres';
+
+  @override
+  String get dzdRipLabel => 'RIP';
+
+  @override
+  String get dzdRipHint => '20 chiffres';
+
+  @override
+  String get dzdChequeProofLabel => 'Photo du chèque barré complet';
+
+  @override
+  String get dzdChequeProofHelper =>
+      'Téléversez une photo claire du chèque barré complet.';
+
+  @override
+  String get dzdChequeAddPhoto => 'Choisir une photo';
+
+  @override
+  String get dzdChequeReplacePhoto => 'Changer la photo';
+
+  @override
+  String get dzdChequeRemovePhoto => 'Supprimer la photo';
+
+  @override
+  String get dzdSubmitAction => 'Enregistrer les coordonnées';
+
+  @override
+  String get dzdUpdateAction => 'Mettre à jour les coordonnées';
+
+  @override
+  String get dzdSubmitSuccess =>
+      'Coordonnées de versement enregistrées avec succès.';
+
+  @override
+  String get payoutReasonSetupRequired => 'Configuration du versement requise';
+
+  @override
+  String get payoutReasonUnderReview => 'Dossier en cours d\'examen';
+
+  @override
+  String get payoutReasonNeedsAttention => 'Action requise sur votre profil';
+
+  @override
+  String get payoutReasonOnHold => 'Versement en attente';
+
+  @override
+  String get payoutReasonDisputeActive => 'Litige en cours sur cette livraison';
+
+  @override
+  String get payoutReasonFailed => 'Échec du versement';
+
+  @override
+  String get payoutReasonReturned => 'Le versement bancaire a été retourné';
+
+  @override
+  String get payoutReasonCountryUnsupported =>
+      'Pays non supporté pour les versements Stripe EUR';
+
+  @override
+  String get deliveryPayoutSectionTitle => 'Statut du versement';
+
+  @override
+  String get deliveryPayoutProtectionExplainer =>
+      'La période de protection de 48h est en cours. Les fonds sont retenus jusqu\'à son terme.';
+
+  @override
+  String get deliveryPayoutReadyExplainer =>
+      'La livraison est terminée et le versement est maintenant éligible.';
+
+  @override
+  String get deliveryPayoutProcessingExplainer =>
+      'Le traitement du versement a commencé.';
+
+  @override
+  String get deliveryPayoutSentExplainer =>
+      'Le versement a été envoyé et est en cours d\'acheminement.';
+
+  @override
+  String get deliveryPayoutPaidExplainer =>
+      'Le versement a été crédité sur votre compte.';
+
+  @override
+  String get deliveryPayoutReturnedExplainer =>
+      'Le virement a été retourné par la banque. Veuillez vérifier votre moyen de versement.';
+
+  @override
+  String get deliveryPayoutNeedsAttentionExplainer =>
+      'Ce versement nécessite une action avant de pouvoir être réglé.';
+
+  @override
+  String payoutRateLabel(String rate) {
+    return 'Taux figé : 1 EUR = $rate DZD';
+  }
+
+  @override
+  String get payoutHistoryTitle => 'Historique des versements';
+
+  @override
+  String get payoutDetailTitle => 'Détail du versement';
+
+  @override
+  String get payoutRailLabel => 'Méthode de versement';
+
+  @override
+  String get payoutRailStripeEur => 'Stripe EUR';
+
+  @override
+  String get payoutRailManualDzd => 'Virement CCP (DZD)';
+
+  @override
+  String get payoutRailUnavailable => 'Non disponible';
+
+  @override
+  String get payoutReferenceLabel => 'Référence du versement';
+
+  @override
+  String get payoutDeliveryLabel => 'Livraison associée';
+
+  @override
+  String get payoutEligibleAtLabel => 'Éligible le';
+
+  @override
+  String get payoutSentAtLabel => 'Envoyé le';
+
+  @override
+  String get payoutPaidAtLabel => 'Payé le';
+
+  @override
+  String get payoutProtectionEndsAtLabel => 'Fin de protection';
+
+  @override
+  String get payoutViewAction => 'Voir le versement';
+
+  @override
+  String get payoutViewHistoryAction => 'Voir l\'historique des versements';
+
+  @override
+  String get payoutOpenStripeError =>
+      'Impossible d\'ouvrir le lien Stripe. Veuillez réessayer.';
+
+  @override
+  String get payoutStatusAwaitingDelivery => 'En attente de livraison';
+
+  @override
+  String get payoutStatusProtectionActive => 'Période de protection';
+
+  @override
+  String get payoutStatusReleasePending => 'En attente de déblocage';
+
+  @override
+  String get payoutStatusReady => 'Versement prêt';
+
+  @override
+  String get payoutStatusSent => 'Versement envoyé';
+
+  @override
+  String get payoutStatusReturned => 'Versement retourné';
+
+  @override
+  String get payoutStatusNeedsAttention => 'Action requise';
+
+  @override
+  String get payoutProfileReady => 'Moyen de versement prêt';
+
+  @override
+  String get payoutProfileNeedsAttention => 'Moyen de versement à vérifier';
 }

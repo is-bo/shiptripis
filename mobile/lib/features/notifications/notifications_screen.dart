@@ -151,6 +151,10 @@ class NotificationsScreen extends ConsumerWidget {
         context.openRequest(requestId);
       case OpenPayments():
         context.pushNamed(Routes.profilePayouts);
+      case OpenPayoutDetail(:final reference):
+        context.openPayoutDetail(reference);
+      case OpenPayoutMethods():
+        context.openPayoutMethods();
       case OpenJourney(:final journeyId):
         context.pushNamed(
           Routes.journeyDetail,
@@ -293,7 +297,7 @@ class _Row extends StatelessWidget {
         Icons.credit_card_rounded,
       ),
       NotificationChannel.payoutStatusChanged => (
-        l.notificationPayment,
+        l.notificationPayout,
         Icons.account_balance_wallet_outlined,
       ),
       NotificationChannel.chatMessage => (

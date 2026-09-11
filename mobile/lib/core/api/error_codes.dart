@@ -207,6 +207,20 @@ class ApiErrorCode {
   );
   static const refundNotPermitted = ApiErrorCode('refund_not_permitted');
   static const invalidMoney = ApiErrorCode('invalid_money');
+  static const payoutProfileInvalid = ApiErrorCode('payout_profile_invalid');
+  static const payoutCountryUnsupported = ApiErrorCode(
+    'payout_country_unsupported',
+  );
+  static const stripeConnectUnavailable = ApiErrorCode(
+    'stripe_connect_unavailable',
+  );
+  static const stripeConnectProviderError = ApiErrorCode(
+    'stripe_connect_provider_error',
+  );
+  static const payoutSetupInvalid = ApiErrorCode('payout_setup_invalid');
+  static const payoutEvidenceUnavailable = ApiErrorCode(
+    'payout_evidence_unavailable',
+  );
 
   // ---------------------------------------------------------------------------
   // Disputes

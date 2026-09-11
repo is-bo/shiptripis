@@ -63,8 +63,11 @@ import '../features/offers/negotiation_screen.dart';
 import '../features/onboarding/benefits_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/profile/appearance_screen.dart';
+import '../features/profile/dzd_setup_screen.dart';
 import '../features/profile/language_screen.dart';
 import '../features/profile/notification_settings_screen.dart';
+import '../features/profile/payout_detail_screen.dart';
+import '../features/profile/payout_methods_screen.dart';
 import '../features/profile/payouts_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/ratings_screen.dart';
@@ -130,6 +133,9 @@ abstract final class Routes {
   static const profileAppearance = 'profile-appearance';
   static const profileRatings = 'profile-ratings';
   static const profilePayouts = 'profile-payouts';
+  static const profilePayoutMethods = 'profile-payout-methods';
+  static const dzdProfileSetup = 'dzd-profile-setup';
+  static const payoutDetail = 'payout-detail';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -519,6 +525,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const PayoutsScreen(),
       ),
+      GoRoute(
+        path: '/profile/payout-methods',
+        name: Routes.profilePayoutMethods,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PayoutMethodsScreen(),
+        routes: [
+          GoRoute(
+            path: 'dzd',
+            name: Routes.dzdProfileSetup,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const DzdSetupScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/payouts/:reference',
+        name: Routes.payoutDetail,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => PayoutDetailScreen(
+          reference: state.pathParameters['reference'] ?? '',
+        ),
+      ),
     ],
 
     errorBuilder: (context, state) => const RouteNotFoundScreen(),
@@ -606,6 +634,13 @@ extension AppNavigation on BuildContext {
   );
 
   void openKyc() => pushNamed(Routes.kyc);
+
+  void openPayoutMethods() => pushNamed(Routes.profilePayoutMethods);
+  void openDzdProfileSetup() => pushNamed(Routes.dzdProfileSetup);
+  void openPayoutDetail(String reference) => pushNamed(
+    Routes.payoutDetail,
+    pathParameters: {'reference': reference},
+  );
 
   /// Opens the country → place picker.
   ///
