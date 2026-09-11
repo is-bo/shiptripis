@@ -1,0 +1,23 @@
+{% comment %}
+  A row of H5 metrics.
+
+  A tile that can be opened is an anchor, so it is reachable by keyboard, has a
+  real href and opens in a new tab like any other link; a tile that cannot be
+  opened is a plain element and never pretends otherwise. `is-unknown` marks a
+  value H5 did not assert, and it is styled as a sentence rather than as a
+  number so it can never be skimmed as a small amount.
+{% endcomment %}
+<div class="st-kpi-grid">
+  {% for kpi in group %}
+    {% if kpi.url %}<a class="st-kpi{% if kpi.lead %} is-lead{% endif %}{% if kpi.tone %} is-{{ kpi.tone }}{% endif %}" href="{{ kpi.url }}">{% else %}<div class="st-kpi{% if kpi.lead %} is-lead{% endif %}{% if kpi.tone %} is-{{ kpi.tone }}{% endif %}">{% endif %}
+      <span class="st-kpi-label">{{ kpi.label }}</span>
+      <span class="st-kpi-value{% if not kpi.value.available %} is-unknown{% endif %}">{{ kpi.value.text }}</span>
+      {% if kpi.value.known_text %}<span class="st-kpi-meta">{{ kpi.value.known_text }}</span>{% endif %}
+      {% if kpi.value.count_text %}<span class="st-kpi-meta">{{ kpi.value.count_text }}</span>{% endif %}
+      {% if kpi.note %}<span class="st-kpi-note">{{ kpi.note }}</span>{% endif %}
+      {% if kpi.definition %}<span class="st-kpi-def">{{ kpi.definition }}</span>{% endif %}
+      <span class="st-kpi-basis">{{ kpi.basis }}</span>
+      {% if kpi.url %}<span class="st-kpi-go">See the rows behind this</span>{% endif %}
+    {% if kpi.url %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</div>

@@ -2,11 +2,14 @@ from django.urls import path
 
 from . import console_views as views
 from .finance_control_plane import finance_control_plane
+from .finance_dashboard import finance_dashboard, finance_rows
 
 app_name = "admin_console"
 
 urlpatterns = [
     path("finance/control-plane/", finance_control_plane, name="finance-control-plane"),
+    path("finance/dashboard/", finance_dashboard, name="finance-dashboard"),
+    path("finance/dashboard/rows/", finance_rows, name="finance-rows"),
     path("", views.overview, name="overview"),
     path("users/", views.users, name="users"),
     path("users/<int:pk>/", views.user_detail, name="user-detail"),

@@ -5528,3 +5528,147 @@ and include the dedicated payout credential in the storage fixture/contract.
 All 11 affected tests passed locally (the nine console tests required a fresh
 test database after earlier transaction tests flushed seed data). No runtime
 storage behavior or financial code changed for this CI repair.
+
+### H5.02 — new Railway cutover and deployed H5 acceptance
+
+Operational continuation only; no source or configuration change was required.
+The reviewed main SHA `c8c60a7dcc3e7e538f96e924bc08b4e4a3337015` is now
+deployed to the new Railway workspace `medshipdev's Projects`, project
+`shiptripis` `d7aeffbc-05b0-4c62-86a6-43e8fc99de88`, environment production
+`e83d6196-1d8d-47a2-b210-dc391f7b6aaa`, existing `shiptrip` service, as
+deployment `6238018b-a9a3-4aac-87a9-7c4b4f02750f` and release
+`v1.0.0-rc.22+c8c60a7`. The migrated deployment `9fcf3947` on
+`2804a1bf1240be7bb0baec79f3d51b785b415b85` was replaced. Deployment is a
+directory upload; all 517 deployed monolith Python files hash byte-identical to
+the reviewed worktree, so the running source is `c8c60a7` and not a label.
+`/healthz` and `/readyz` return 200 with database, migrations and rate-limit
+cache ok, zero pending migrations, and gunicorn, Caddy, loopback Redis, the
+reservation releaser, the finance worker, the KYC gRPC listener and the four Go
+workers all running.
+
+The two active Stripe TEST endpoints were edited in place, so their IDs, API
+version `2026-03-25.dahlia`, TEST mode, scope and signing secrets are
+unchanged and the Railway secrets stay valid. Platform
+`we_1UAYk83aixfgmaTzEQr2WKS0` keeps its 16 events and Connect
+`we_1UDSGx3aixfgmaTzPxCXmtOB` its 11 and its `ca_` application; only the URLs
+moved to `https://shiptrip-production-f7f7.up.railway.app`. The superseded
+Connect endpoint `we_1UDN0J3aixfgmaTzAPfIXgX0` remains disabled. Four
+historical TEST events were redelivered — platform `balance.available` and
+`checkout.session.completed`, connected-account `account.updated` and
+`payout.paid` — all HTTP 200 at the new origin, all `signature_verified`, all
+correct `endpoint_scope` and `provider_mode=test`. The three previously
+delivered events kept their original `received_at` and single stored row, so
+replay created no second row and no duplicate ledger effect. Chargily was not
+touched.
+
+One deployed H5 snapshot (`h5.v1`, `mode=test`, 2026-09-01..2026-09-11)
+returns `integrity = ok` with every comparison at EUR 0.00 and zero row
+mismatches: applied funding 385.38 = 385.38, traveler liability 60.00 = 60.00,
+finalized refunds 0.00 = 0.00, paid settlements 180.00 = 180.00, platform
+recognition partition 60.00 = 60.00, zero unbalanced transactions, no warnings
+and no data issues. The EUR 82.38 discrepancy is gone: attempts 8, 9, 10 and 11
+(300, 438, 663 and 6837 cents) are reported as TEST from
+`derived_from_authoritative_payment_attempt` provenance over exactly their
+eight ledger legs. Their stored rows are unchanged — amount, provider,
+PaymentAttempt and PaymentOrder identity, accounts, signs, timestamps and
+refund state are as before, and every capture transaction still stores
+`provider_mode = legacy_unknown`. Only the read model derives the mode.
+
+Existing payouts were read only and none was progressed by hand: payout 1
+blocked manual, payouts 2 and 3 paid by Stripe transfer, payout 4 processing
+with the H3 worker deferring `payout_execute` on `connected_balance_pending`,
+payout 5 the manual DZD 15,600 instruction. No Stripe charge, Checkout,
+Transfer, connected-account Payout, refund, reversal, cancellation, Chargily
+operation, manual DZD transfer or LIVE operation was performed.
+
+Origin configuration is coherent on the new host: allowed hosts, CSRF, CORS,
+frontend and payments base URL, the Connect return and refresh URLs and the
+`/pay/<reference>/return` pattern all resolve to
+`https://shiptrip-production-f7f7.up.railway.app`. Stripe and Chargily remain
+TEST, email disabled, `FINANCE_DASHBOARD_ENABLED` false, DZD execution false
+and non-Stripe EUR funding false. The mobile client holds no origin: `API_BASE_URL`
+is a required `--dart-define` and the WebSocket base is derived from it, so no
+repository change was needed for the cutover and future builds simply pass the
+new origin.
+
+Split-brain assessment is class A. The old origin
+`https://shiptrip-production.up.railway.app` returns Railway's edge
+`Application not found`, the migrated database's write frontier across all 52
+populated models is `2026-09-09T22:58:07Z` — nothing at all was written on
+2026-09-10 — and the only provider event in the post-backup window was the
+informational `balance.available` of 2026-09-11T01:15Z, now applied in the new
+environment with no ledger effect. The old Railway account is not reachable
+from the new login, so its database was not queried directly; this is inference
+from the dead origin, the complete Stripe event history and the write frontier.
+Nothing was deleted and the old project remains for the owner to disable.
+
+One finding remains, MINOR and by design. H5.01 derives provenance for historical
+`customer_payment` legs only, so the EUR 4.38 succeeded refund of attempt 9 keeps
+`provider_mode = legacy_unknown` and stays in the legacy bucket while its capture
+is now reported as TEST. Each mode bucket is independently balanced (test 46
+entries, legacy 7, live 0, all summing to zero, covering all 53 entries), so no
+reconciliation mismatch arises, but the TEST view shows EUR 385.38 gross funded
+with EUR 0.00 refunds and carries no marker. The existing
+`legacy_refund_ledger_mode_attributed_from_agreeing_refund_and_capture` warning
+cannot fire in this configuration because it compares attributed against derived
+entry counts, which are both 8. H5.1 and H6 remain unstarted.
+
+### H5.1 — Finance control-plane dashboard and operator UX
+
+Two read-only HTML pages over the H5 control plane, and the words a Finance
+operator reads them in. No accounting was added: every amount, count, bucket,
+stage and verdict on screen is a value `apps/finance/control_plane` returned,
+and `apps/admin_panel/finance_dashboard.py` performs no arithmetic on money
+beyond formatting integer cents and frozen minor units. The H5 JSON endpoint is
+unchanged. Full detail is in `docs/PHASE8F_H51_FINANCE_DASHBOARD_UX.md`.
+
+`/admin/finance/dashboard/` renders one bounded snapshot;
+`/admin/finance/dashboard/rows/` renders the contributing rows of one metric.
+Both are GET-only, `no-store`, and gated on the fresh `view_finance_summary`
+capability — Finance and Super allowed, Support, Ops and Trust denied with 403.
+The capability is checked before `FINANCE_DASHBOARD_ENABLED`, which answers 404
+when false and also removes the navigation entry, so the console never
+advertises a destination that would 404.
+
+The page opens on three named amounts rather than a grid of equal tiles —
+money processed, ShipTrip earned, owed to Travelers — because funded volume and
+platform revenue are routinely read as one figure. Below that: funded volume,
+recognised and pending platform earnings, outstanding Traveler liability with
+its eleven exclusive buckets and its rail/funding split, where that money
+currently sits, the Stripe EUR and manual DZD rails as separate lifecycles,
+refunds, ShipTrip and provider disputes and Finance holds counted separately,
+posting deposits, per-provider exposure, and the reconciliation verdict. Every
+figure H5 exposes as a row query links to its drilldown, carrying the current
+scope; rail stages drill with `metric=payout_operations` plus that group's rail
+and operation.
+
+Transfer to a connected account and a bank payout stay six distinct Stripe
+stages and are never collapsed. Dinar figures are the sum of the stored frozen
+instructions, never a conversion of the euro column, and euros and dinars are
+never added; a group with a missing stored amount reads Partial with its
+missing count. Provider balances render as "Provider-reported balance
+unavailable" and provider costs as "Not available", never as `€0`; a null from
+H5 becomes Partial or Not available in muted words, never `€0.00`. The
+reconciliation verdict sits above every amount, and a mismatch is disclosed
+without disabling the page or the application.
+
+H5 publishes no residual count of legacy/unknown rows per environment, so the
+legacy disclosure is standing and generic — the refunds section states that the
+totals cover the selected environment only and links to the
+`mode=legacy_unknown` cohort — rather than inventing a number or hard-coding
+attempt 9 or EUR 4.38. That gap is recorded as a limitation for the H5 backend.
+
+Invalid filters, rejected date ranges, backend timeouts, empty drilldowns, idle
+rails, unauthorised roles and the disabled flag all have their own answered
+state; none exposes a traceback and the 400 page leaves no stale figure on
+screen. One snapshot per request, no per-KPI call, no polling and no auto
+refresh. Light and dark verified, desktop through 375px verified, no
+click-only div, no two filter options sharing a label.
+
+27 new tests in `apps/finance/tests/test_phase8fh51_finance_dashboard.py` cover
+role access, the flag, read-only behaviour, snapshot-sourced figures, frozen
+dinars, partial and unavailable values, both integrity states, filter
+forwarding and five invalid filter shapes, drilldown pagination and bounds,
+sensitive-field absence, the legacy disclosure, and request behaviour. H5's own
+28 tests and the 56 console/admin tests were re-run unchanged and pass. No
+accounting code changed, so the H3/H4 financial suites were not re-run.

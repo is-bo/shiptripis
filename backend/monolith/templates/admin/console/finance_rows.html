@@ -1,0 +1,117 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ back_url }}">Finance control plane</a> &rsaquo; {{ metric_label|default:"Rows" }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finance">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Contributing rows</p>
+      <h1>{{ metric_label|default:"Rows" }}</h1>
+      {% if metric_definition %}<p>{{ metric_definition }}</p>{% endif %}
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip {% if filters.mode == 'live' %}st-bad{% elif filters.mode == 'test' %}st-info{% else %}st-wait{% endif %}">{{ filters.mode_label }}</span>
+      {% if filters.range_text %}<span class="st-page-ref">{{ filters.range_text }}</span>{% endif %}
+      <a class="button st-button-quiet" href="{{ back_url }}">Back to the dashboard</a>
+    </div>
+  </header>
+
+  {% if errors %}
+  <div class="st-alert st-alert-bad" role="alert">
+    <strong>These rows could not be listed.</strong>
+    <span>{% for error in errors %}{{ error }}{% if not forloop.last %} {% endif %}{% endfor %}</span>
+  </div>
+  <p class="st-muted">Go <a href="{{ back_url }}">back to the dashboard</a> and open the figure again, or narrow the scope below.</p>
+  {% endif %}
+
+  {% if unavailable %}
+  <div class="st-alert st-alert-bad" role="alert">
+    <strong>The Finance query is temporarily unavailable.</strong>
+    <span>The reporting query did not finish. Narrow the period or the filters and try again; no financial state was changed.</span>
+  </div>
+  {% endif %}
+
+  {% include "admin/console/_finance_filters.html" %}
+
+  {% if filters.applied %}
+  <p class="st-fin-applied"><span>Scope</span>{% for label in filters.applied %}<span class="st-chip st-mute">{{ label }}</span>{% endfor %}</p>
+  {% endif %}
+
+  {% if totals %}
+  <dl class="st-ledger-strip is-lean">
+    <div class="is-lead">
+      <dt>Total for this metric</dt>
+      <dd>
+        <span class="st-ledger-value{% if not totals.available %} is-unknown{% endif %}">{{ totals.text }}</span>
+        <span class="st-ledger-says">{% if totals.count_text %}{{ totals.count_text }} in scope. {% endif %}This is the whole metric, not only the page below.</span>
+      </dd>
+    </div>
+    {% if metric_time_basis %}
+    <div>
+      <dt>Counted on</dt>
+      <dd><span class="st-ledger-says">{{ metric_time_basis }}</span></dd>
+    </div>
+    {% endif %}
+  </dl>
+  {% endif %}
+
+  {% if metric_exclusion %}
+  <p class="st-fin-note"><strong>Deliberately excluded:</strong> {{ metric_exclusion }}</p>
+  {% endif %}
+
+  <section class="st-table-card" aria-label="{{ metric_label|default:'Rows' }}">
+    {% if rows %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead>
+          <tr>
+            {% for column in columns %}<th scope="col"{% if column.numeric %} class="is-numeric"{% endif %}>{{ column.label }}</th>{% endfor %}
+            <th scope="col" class="st-row-go"><span class="st-visually-hidden">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr{% if row.open_url %} data-row-link{% endif %}>
+            {% for cell in row.cells %}
+            <td{% if cell.kind == "money" %} class="is-numeric"{% endif %}>
+              {% if cell.kind == "markers" %}
+                {% if cell.markers %}<span class="st-markers">{% for mark in cell.markers %}<span class="st-chip st-attn">{{ mark }}</span>{% endfor %}</span>{% else %}<span class="st-unknown">None</span>{% endif %}
+              {% elif cell.kind == "status" %}
+                <span class="st-chip st-mute">{{ cell.text }}</span>
+              {% else %}
+                <span class="{% if cell.kind == 'money' %}st-money{% elif cell.kind == 'ref' %}st-ref{% elif cell.kind == 'time' %}st-time{% endif %}">{{ cell.text }}</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+            {% if row.open_url %}<td class="st-row-go"><a href="{{ row.open_url }}" aria-label="{{ row.open_label }}" data-row-primary></a></td>{% else %}<td class="st-row-go" aria-hidden="true"></td>{% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="st-pagination" aria-label="Pagination">
+      <span>Page {{ page }} &middot; up to {{ page_size }} rows a page, in stable order</span>
+      <div>
+        {% if has_previous %}<a href="{{ previous_url }}">Previous</a>{% endif %}
+        {% if has_next %}<a href="{{ next_url }}">Next</a>{% endif %}
+      </div>
+    </nav>
+    {% elif not errors and not unavailable %}
+    <div class="st-empty">
+      <span aria-hidden="true">&#10003;</span>
+      <h2>Nothing contributes to this figure in this scope.</h2>
+      <p>No row matches {{ metric_label|default:"this metric" }} for the {{ filters.mode_label }} environment{% if filters.range_text %} over {{ filters.range_text }}{% endif %}. Widen the period or clear a filter to look further.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if rows %}
+  <footer class="st-fin-foot">
+    <p>Read at {{ as_of }} under one consistent database snapshot &middot; contract {{ version }}. Row references are staff-only display identifiers for tables that carry no public reference of their own.</p>
+    <p>This list carries no bank account, CCP or RIP number, no provider payload or secret, no identity document, no evidence link and no delivery code. Those stay on the authorised screen that needs them.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

@@ -19,11 +19,12 @@
  *   2  Django variable mapping
  *   3  Shell and navigation      12  Evidence and cases
  *   4  Page furniture           12b  Manual DZD payout
- *   5  Cards and grids           13  Health and providers
- *   6  Tables                    14  Forms
- *   7  Chips and tones           15  Django's own screens
- *   8  Lists, facts, timelines   16  Openable rows and cards
- *   9  Money                     17  Responsive, motion, print
+ *   5  Cards and grids          12c  Finance control plane
+ *   6  Tables                    13  Health and providers
+ *   7  Chips and tones           14  Forms
+ *   8  Lists, facts, timelines   15  Django's own screens
+ *   9  Money                     16  Openable rows and cards
+ *                                17  Responsive, motion, print
  */
 
 /* ==========================================================================
@@ -1920,6 +1921,235 @@ button.is-busy, .button.is-busy { cursor: progress; opacity: .55; }
   .st-steps > li { grid-template-columns: 22px minmax(0, 1fr); }
   .st-step-state { grid-column: 2; justify-self: start; padding-inline: 0; }
   .st-evidence-dialog { width: calc(100vw - var(--st-4) * 2); padding: var(--st-3); }
+}
+
+/* ==========================================================================
+   12c. Finance control plane
+   ==========================================================================
+   The dashboard answers one question before any other: how much money moved,
+   and how much of it is ShipTrip's. Those two figures are routinely confused,
+   and a grid of identically-weighted tiles is how that confusion is designed
+   in. So the page opens with three named amounts that state the distinction in
+   words — processed, earned, owed — and only then spends tiles on detail.
+
+   Nothing here is decorative. There are no charts, because H5 publishes no
+   time series and a drawn trend would be an invention. There is no colour
+   scale across the tiles: terracotta still means only "a person has to look at
+   this", and an amount ShipTrip does not know is rendered as words, never as a
+   zero that would read as settled fact. */
+
+.st-ledger-strip {
+  display: grid;
+  /* Explicit tracks, not `auto-fit`: the strip's cells are separated by a 1px
+     seam drawn as the container's own background, so a track left empty by a
+     wrapped row would paint as a grey block rather than as nothing. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0 0 var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-line);
+  overflow: hidden;
+}
+.st-ledger-strip > div { padding: var(--st-4) var(--st-5); background: var(--st-surface); }
+.st-ledger-strip > div.is-lead { background: var(--st-surface-2); box-shadow: inset 3px 0 0 var(--st-accent); }
+.st-ledger-strip dt {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+}
+.st-ledger-strip dd { margin: var(--st-2) 0 0; }
+.st-ledger-strip .st-ledger-value {
+  display: block;
+  color: var(--st-ink);
+  font-size: clamp(1.35rem, 1.1rem + .8vw, 1.75rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: var(--st-track-display);
+  line-height: var(--st-lh-tight);
+}
+.st-ledger-strip .st-ledger-value.is-unknown { font-size: var(--st-fs-h2); font-weight: 600; color: var(--st-ink-3); }
+.st-ledger-strip.is-lean { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.st-ledger-strip .st-ledger-says { display: block; margin-top: var(--st-2); color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+
+/* One KPI. A tile that drills is an anchor and nothing else — there is no
+   click-only div on this page, so every number an operator can open is also a
+   number they can Tab to and a link they can open in a new tab. */
+.st-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: var(--st-2);
+  margin: 0;
+}
+.st-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-1);
+  padding: var(--st-3) var(--st-4) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  color: inherit;
+  text-decoration: none;
+}
+a.st-kpi:hover { border-color: var(--st-line-2); background: var(--st-surface); }
+a.st-kpi:hover .st-kpi-value { color: var(--st-accent); }
+a.st-kpi:hover .st-kpi-go { color: var(--st-accent); }
+.st-kpi.is-lead { grid-column: span 2; border-color: var(--st-line-2); background: var(--st-surface); }
+.st-kpi-label { color: var(--st-ink-2); font-size: var(--st-fs-xs); font-weight: 650; }
+.st-kpi-value {
+  color: var(--st-ink);
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: var(--st-track-display);
+  line-height: var(--st-lh-tight);
+}
+.st-kpi.is-lead .st-kpi-value { font-size: 1.7rem; }
+/* An amount H5 does not know is a sentence, not a number: it must never be
+   mistaken at a glance for a figure that happens to be small. */
+.st-kpi-value.is-unknown { color: var(--st-ink-3); font-size: var(--st-fs-body); font-weight: 600; letter-spacing: 0; }
+.st-kpi.is-attn .st-kpi-value { color: var(--st-attn); }
+.st-kpi.is-bad { border-color: var(--st-bad-line); background: var(--st-bad-bg); }
+.st-kpi.is-bad .st-kpi-value { color: var(--st-bad); }
+.st-kpi-meta { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-variant-numeric: tabular-nums; }
+.st-kpi-note { margin-top: var(--st-1); color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+.st-kpi-def { color: var(--st-ink-3); font-size: var(--st-fs-micro); line-height: var(--st-lh-snug); }
+/* Period or current. H5's own `time_basis` names database columns, which is
+   the right register for the metric dictionary and the wrong one for a tile;
+   what an operator needs on the tile is only whether the period selector above
+   moves this number. */
+.st-kpi-basis {
+  margin-top: var(--st-1);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+}
+.st-kpi-go { margin-top: auto; padding-top: var(--st-2); color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; }
+.st-kpi-go::after { content: " \203A"; }
+
+/* The reconciliation verdict. It sits under the page title because a total
+   nobody can trust is worse than no total, and an operator must meet that fact
+   before they meet the amounts. */
+.st-integrity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--st-2) var(--st-4);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-left: 3px solid var(--st-ink-3);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+}
+.st-integrity > div { flex: 1 1 320px; min-width: 0; }
+.st-integrity strong { display: block; font-size: var(--st-fs-h3); }
+.st-integrity p { margin: 2px 0 0; color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-snug); }
+.st-integrity a { font-size: var(--st-fs-xs); white-space: nowrap; }
+.st-integrity.is-ok { border-color: var(--st-ok-line); border-left-color: var(--st-ok); background: var(--st-ok-bg); }
+.st-integrity.is-ok strong { color: var(--st-ok); }
+.st-integrity.is-wait { border-color: var(--st-wait-line); border-left-color: var(--st-wait); background: var(--st-wait-bg); }
+.st-integrity.is-wait strong { color: var(--st-wait); }
+.st-integrity.is-bad { border-color: var(--st-bad-line); border-left-color: var(--st-bad); background: var(--st-bad-bg); }
+.st-integrity.is-bad strong { color: var(--st-bad); }
+
+/* The filter bar carries ten controls, which is too many for the flex row the
+   queue screens use: at laptop width it wrapped into a ragged two-and-a-half
+   lines with one select left stranded beside the search box. The selects get a
+   grid of equal columns instead, and the reference field — the only control an
+   operator types into — takes the full width underneath it beside the actions.
+   Every control then has the same size, and the whole bar collapses to one
+   column on a phone without a label ever losing its input. */
+.st-fin-filters { display: block; }
+.st-fin-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  align-items: end;
+  gap: var(--st-3);
+}
+.st-fin-filter-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--st-3) var(--st-4);
+  margin-top: var(--st-4);
+  padding-top: var(--st-3);
+  border-top: 1px solid var(--st-line);
+}
+.st-fin-filter-foot > .st-filter { flex: 1 1 320px; min-width: 0; }
+.st-fin-filter-actions { display: flex; flex-direction: row; align-items: center; gap: var(--st-3); padding-top: 18px; }
+.st-fin-filters .st-filter { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.st-fin-filters input, .st-fin-filters select { width: 100%; max-width: none; }
+.st-fin-filters input[type="search"] { width: 100%; }
+.st-fin-filters small { color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+.st-fin-filters button { align-self: auto; }
+.st-fin-filters .st-filter-clear { align-self: center; white-space: nowrap; }
+
+.st-fin-applied { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--st-2); margin: 0 0 var(--st-4); }
+.st-fin-applied > span { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: var(--st-track-label); text-transform: uppercase; }
+
+/* Section headings. The dashboard is long, and a reader arriving from a
+   drilldown needs to land on a heading that says which question they are in. */
+.st-fin-section { margin-bottom: var(--st-5); }
+.st-fin-section > .st-eyebrow { margin-bottom: 2px; }
+.st-fin-section > h2 { margin: 0 0 var(--st-1); font-family: var(--st-serif); font-size: 1.15rem; font-weight: 600; letter-spacing: var(--st-track-display); }
+.st-fin-section > p { max-width: 78ch; margin: 0 0 var(--st-3); color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-body); }
+
+.st-fin-note {
+  margin: var(--st-3) 0 0;
+  padding: var(--st-3) var(--st-4);
+  border: 1px dashed var(--st-line-2);
+  border-radius: var(--st-r-2);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  line-height: var(--st-lh-body);
+}
+
+/* A value the backend did not assert. Deliberately words in muted ink rather
+   than an amount: "Not available" and "€0.00" are different claims. */
+.st-unknown { color: var(--st-ink-3); font-size: var(--st-fs-sm); font-style: normal; }
+.st-data-table .st-unknown { white-space: nowrap; }
+
+.st-stage-help { display: block; margin-top: 2px; color: var(--st-ink-3); font-size: var(--st-fs-micro); line-height: var(--st-lh-snug); }
+.st-markers { display: flex; flex-wrap: wrap; gap: var(--st-1); }
+
+.st-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--st-4); }
+.st-provider dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--st-2) var(--st-3); margin: 0 0 var(--st-3); }
+.st-provider dt { color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+.st-provider dd { margin: 0; font-size: var(--st-fs-sm); font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
+.st-provider-balance {
+  padding: var(--st-3);
+  border: 1px dashed var(--st-line-2);
+  border-radius: var(--st-r-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+  line-height: var(--st-lh-snug);
+}
+
+.st-fin-gap { margin-top: var(--st-4); }
+.st-fin-gap-sm { margin-top: var(--st-3); }
+.st-table-note { padding: var(--st-3) var(--st-4); }
+
+.st-fin-foot { margin-top: var(--st-6); color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: var(--st-lh-body); }
+.st-fin-foot ul { margin: var(--st-2) 0 0; padding-left: 18px; }
+.st-fin-foot li { margin: 0 0 var(--st-1); }
+
+@media (max-width: 980px) {
+  .st-kpi.is-lead { grid-column: span 1; }
+  .st-ledger-strip { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .st-fin-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .st-fin-filter-actions { padding-top: 0; }
+  .st-ledger-strip > div { padding: var(--st-3) var(--st-4); }
+  .st-provider dl { grid-template-columns: minmax(0, 1fr); }
+  .st-provider dd { text-align: left; }
 }
 
 /* ==========================================================================

@@ -1,0 +1,88 @@
+{% comment %}
+  The Finance scope, as one GET form.
+
+  Every control maps to a filter the H5 backend already validates, and the form
+  sends nothing the backend does not accept. The date range is selected, never
+  computed: H5 resolves "last 7 days" in the Europe/Paris reporting timezone
+  and refuses a range longer than 366 days or one ending in the future, which
+  is why no script recalculates a boundary on this page.
+
+  Ten controls are too many for the flex row the queue screens use, so the
+  selects sit in their own grid and the reference field takes the full width
+  underneath it, next to the actions. That keeps every control the same size
+  and lets the whole bar fall to one column on a phone with no label orphaned
+  from its input.
+{% endcomment %}
+<form method="get" class="st-filters st-fin-filters" role="search" aria-label="Finance scope">
+  <div class="st-fin-filter-grid">
+    <div class="st-filter">
+      <label for="fin-mode">Environment</label>
+      <select id="fin-mode" name="mode" aria-describedby="fin-mode-help">
+        {% for value, label in filters.mode_choices %}<option value="{{ value }}"{% if filters.mode == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-period">Period</label>
+      <select id="fin-period" name="period">
+        {% for value, label in filters.period_choices %}<option value="{{ value }}"{% if filters.period == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-start">From</label>
+      <input id="fin-start" type="date" name="start" value="{{ filters.start }}">
+    </div>
+    <div class="st-filter">
+      <label for="fin-end">To</label>
+      <input id="fin-end" type="date" name="end" value="{{ filters.end }}">
+    </div>
+    <div class="st-filter">
+      <label for="fin-provider">Funding provider</label>
+      <select id="fin-provider" name="provider">
+        {% for value, label in filters.provider_choices %}<option value="{{ value }}"{% if filters.provider == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-rail">Payout rail</label>
+      <select id="fin-rail" name="rail">
+        {% for value, label in filters.rail_choices %}<option value="{{ value }}"{% if filters.rail == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-state">Payout state</label>
+      <select id="fin-state" name="state">
+        {% for value, label in filters.state_choices %}<option value="{{ value }}"{% if filters.state == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-operation">Rail stage</label>
+      <select id="fin-operation" name="operation">
+        {% for value, label in filters.operation_choices %}<option value="{{ value }}"{% if filters.operation == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-held">Holds and disputes</label>
+      <select id="fin-held" name="held">
+        {% for value, label in filters.held_choices %}<option value="{{ value }}"{% if filters.held == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="st-filter">
+      <label for="fin-currency">Settlement currency</label>
+      <select id="fin-currency" name="currency">
+        {% for value, label in filters.currency_choices %}<option value="{{ value }}"{% if filters.currency == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="st-fin-filter-foot">
+    <div class="st-filter">
+      <label for="fin-search">Reference</label>
+      <input id="fin-search" type="search" name="search" value="{{ filters.search }}" placeholder="ST-42, TR-14 or a payout / order UUID" aria-describedby="fin-search-help">
+      <small id="fin-search-help">Exact references only. There is no search over names, emails or account details.</small>
+    </div>
+    <div class="st-fin-filter-actions">
+      <button type="submit">Apply</button>
+      <a class="st-filter-clear" href="{{ reset_url }}">Reset</a>
+    </div>
+  </div>
+  {% if metric %}<input type="hidden" name="metric" value="{{ metric }}">{% endif %}
+  <p id="fin-mode-help" class="st-visually-hidden">{{ filters.mode_help }}</p>
+</form>

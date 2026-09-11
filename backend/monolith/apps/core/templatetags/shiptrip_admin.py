@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from django import template
 from django.apps import apps
+from django.conf import settings
 from django.db.models import Q
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html, mark_safe
@@ -126,6 +127,12 @@ NAVIGATION = (
         "Finance",
         (
             (
+                "Finance dashboard",
+                "admin_console:finance-dashboard",
+                ("view_finance_summary",),
+                ("finance-dashboard", "finance-rows"),
+            ),
+            (
                 "Payments",
                 "admin_console:payments",
                 ("view_payment_attempts", "view_payment_orders"),
@@ -222,6 +229,14 @@ NAVIGATION = (
 )
 
 
+#: Destinations that exist only while a deployment flag is on. A half-enabled
+#: navigation item is worse than a missing one: it advertises a page that
+#: answers 404, and an operator cannot tell that from a broken console. The
+#: view's own flag check remains the authority; this only keeps the shell
+#: honest about where it can actually go.
+FLAG_GATED_ROUTES = {"admin_console:finance-dashboard": "FINANCE_DASHBOARD_ENABLED"}
+
+
 def _may_reach(user, capabilities: tuple[str, ...]) -> bool:
     """UI filtering only. The view's own capability check stays authoritative."""
 
@@ -232,6 +247,11 @@ def _may_reach(user, capabilities: tuple[str, ...]) -> bool:
     return any(has_admin_permission(user, code) for code in capabilities)
 
 
+def _is_enabled(route: str) -> bool:
+    flag = FLAG_GATED_ROUTES.get(route)
+    return flag is None or bool(getattr(settings, flag, False))
+
+
 def _navigation_sections(user):
     """The destinations this staff role may reach, grouped into sections."""
 
@@ -239,7 +259,7 @@ def _navigation_sections(user):
     for label, entries in NAVIGATION:
         items = []
         for item_label, route, capabilities, routes in entries:
-            if not _may_reach(user, capabilities):
+            if not _may_reach(user, capabilities) or not _is_enabled(route):
                 continue
             try:
                 url = reverse(route)
