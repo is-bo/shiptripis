@@ -395,10 +395,7 @@ StatusCopy payoutDisplayStateCopy(
 }
 
 /// EUR method card state copy (H6A).
-StatusCopy eurMethodStateCopy(
-  BuildContext context,
-  EurPayoutState state,
-) {
+StatusCopy eurMethodStateCopy(BuildContext context, EurPayoutState state) {
   final l = L.of(context);
   return switch (state) {
     EurPayoutState.notConfigured => StatusCopy(
@@ -435,10 +432,7 @@ StatusCopy eurMethodStateCopy(
 }
 
 /// DZD method card state copy (H6A).
-StatusCopy dzdMethodStateCopy(
-  BuildContext context,
-  DzdPayoutState state,
-) {
+StatusCopy dzdMethodStateCopy(BuildContext context, DzdPayoutState state) {
   final l = L.of(context);
   return switch (state) {
     DzdPayoutState.notConfigured => StatusCopy(

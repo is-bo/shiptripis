@@ -1208,13 +1208,11 @@ class PaymentRepository {
   }
 
   /// H6A Payout Methods summary.
-  Future<PayoutMethodsSummary> payoutMethods({CancelToken? cancelToken}) async =>
-      PayoutMethodsSummary.fromJson(
-        await _api.getObject(
-          '/api/payouts/methods',
-          cancelToken: cancelToken,
-        ),
-      );
+  Future<PayoutMethodsSummary> payoutMethods({
+    CancelToken? cancelToken,
+  }) async => PayoutMethodsSummary.fromJson(
+    await _api.getObject('/api/payouts/methods', cancelToken: cancelToken),
+  );
 
   /// Atomic preference update (EUR only, DZD only, both).
   Future<PayoutMethodsSummary> updatePayoutPreference({
@@ -1339,10 +1337,7 @@ class PaymentRepository {
     String reference, {
     CancelToken? cancelToken,
   }) async => PayoutMobile.fromJson(
-    await _api.getObject(
-      '/api/payouts/$reference',
-      cancelToken: cancelToken,
-    ),
+    await _api.getObject('/api/payouts/$reference', cancelToken: cancelToken),
   );
 
   static String _purposeWire(PaymentPurpose purpose) => switch (purpose) {

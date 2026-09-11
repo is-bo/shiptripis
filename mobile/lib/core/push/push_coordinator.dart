@@ -365,6 +365,19 @@ String? pushLocation(Map<String, String> data) {
   }
   final disputeId = positive('dispute_id');
   if (disputeId != null) return '/disputes/$disputeId';
+  if (channel == 'payout.status_changed') {
+    final payoutRef = data['payout_reference']?.trim();
+    if (payoutRef != null && payoutRef.isNotEmpty) {
+      return '/payouts/$payoutRef';
+    }
+    final event = data['event']?.trim();
+    if (event == 'profile_ready' || event == 'profile_needs_attention') {
+      return '/profile/payout-methods';
+    }
+    final dealId = positive('deal_id');
+    if (dealId != null) return '/deals/$dealId';
+    return '/profile/payouts';
+  }
   final dealId = positive('deal_id');
   if (dealId != null) return '/deals/$dealId';
   // An open negotiation belongs on the negotiation screen. These payloads are

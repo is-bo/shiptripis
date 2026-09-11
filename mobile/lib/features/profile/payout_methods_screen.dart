@@ -81,7 +81,9 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
       final summary = ref.read(payoutMethodsProvider).value;
       final eurRev = summary?.revisionFor('EUR') ?? 0;
       final dzdRev = summary?.revisionFor('DZD') ?? 0;
-      await ref.read(paymentRepositoryProvider).updatePayoutPreference(
+      await ref
+          .read(paymentRepositoryProvider)
+          .updatePayoutPreference(
             preference: newPref,
             eurRevision: eurRev,
             dzdRevision: dzdRev,
@@ -111,8 +113,10 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
         if (url.isNotEmpty) {
           final uri = Uri.parse(url);
           _launchedExternalFlow = true;
-          final opened =
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
+          final opened = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
           if (!opened && mounted) {
             _launchedExternalFlow = false;
             AppSnack.failure(context, l.payoutOpenStripeError);
@@ -123,8 +127,10 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
         if (url.isNotEmpty) {
           final uri = Uri.parse(url);
           _launchedExternalFlow = true;
-          final opened =
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
+          final opened = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
           if (!opened && mounted) {
             _launchedExternalFlow = false;
             AppSnack.failure(context, l.payoutOpenStripeError);
@@ -150,10 +156,7 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
     final summaryAsync = ref.watch(payoutMethodsProvider);
 
     return AppScaffold(
-      topBar: AppTopBar(
-        title: l.payoutMethodsTitle,
-        showBack: true,
-      ),
+      topBar: AppTopBar(title: l.payoutMethodsTitle, showBack: true),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(payoutMethodsProvider),
         child: AsyncView<PayoutMethodsSummary>(
@@ -184,10 +187,7 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
                 ],
 
                 if (summary.dzd != null) ...[
-                  _DzdCard(
-                    dzd: summary.dzd!,
-                    isBusy: _isActionBusy,
-                  ),
+                  _DzdCard(dzd: summary.dzd!, isBusy: _isActionBusy),
                   const SizedBox(height: AppSpace.xxl),
                 ],
 
@@ -326,8 +326,9 @@ class _PreferenceRadioOption extends StatelessWidget {
                   Text(
                     title,
                     style: text.bodyMedium?.copyWith(
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w400,
                     ),
                   ),
                   if (subtitle != null) ...[
@@ -452,11 +453,7 @@ class _EurCard extends StatelessWidget {
         Icons.refresh_rounded,
         AppButtonVariant.tertiary,
       ),
-      _ => (
-        action,
-        Icons.touch_app_rounded,
-        AppButtonVariant.secondary,
-      ),
+      _ => (action, Icons.touch_app_rounded, AppButtonVariant.secondary),
     };
 
     return AppButton(
@@ -474,10 +471,7 @@ class _EurCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _DzdCard extends StatelessWidget {
-  const _DzdCard({
-    required this.dzd,
-    required this.isBusy,
-  });
+  const _DzdCard({required this.dzd, required this.isBusy});
 
   final DzdPayoutMethod dzd;
   final bool isBusy;
@@ -589,11 +583,7 @@ class _DzdCard extends StatelessWidget {
         Icons.edit_note_rounded,
         AppButtonVariant.secondary,
       ),
-      _ => (
-        action,
-        Icons.touch_app_rounded,
-        AppButtonVariant.secondary,
-      ),
+      _ => (action, Icons.touch_app_rounded, AppButtonVariant.secondary),
     };
 
     return AppButton(

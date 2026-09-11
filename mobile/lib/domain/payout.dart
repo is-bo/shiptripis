@@ -165,22 +165,24 @@ class EurPayoutMethod {
     this.checkedAt,
   });
 
-  factory EurPayoutMethod.fromJson(Map<String, dynamic> json) => EurPayoutMethod(
-    state: EurPayoutState.parse(readString(json['state'])),
-    ready: readBool(json['ready']),
-    supported: readBool(json['supported']),
-    blockingReason: readString(json['blocking_reason']),
-    country: readString(json['country']),
-    checkedAt: readDate(json['checked_at']),
-    availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
-        .map((e) => e.toString())
-        .where((s) => s.isNotEmpty)
-        .toList(growable: false),
-    supportedCountries:
-        (json['supported_countries'] as List<dynamic>? ?? const [])
-            .map((e) => e.toString())
-            .toList(growable: false),
-  );
+  factory EurPayoutMethod.fromJson(Map<String, dynamic> json) =>
+      EurPayoutMethod(
+        state: EurPayoutState.parse(readString(json['state'])),
+        ready: readBool(json['ready']),
+        supported: readBool(json['supported']),
+        blockingReason: readString(json['blocking_reason']),
+        country: readString(json['country']),
+        checkedAt: readDate(json['checked_at']),
+        availableActions:
+            (json['available_actions'] as List<dynamic>? ?? const [])
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList(growable: false),
+        supportedCountries:
+            (json['supported_countries'] as List<dynamic>? ?? const [])
+                .map((e) => e.toString())
+                .toList(growable: false),
+      );
 
   static EurPayoutMethod? maybe(Object? raw) {
     final json = readObject(raw);
@@ -212,19 +214,21 @@ class DzdPayoutMethod {
     this.replacementScope,
   });
 
-  factory DzdPayoutMethod.fromJson(Map<String, dynamic> json) => DzdPayoutMethod(
-    state: DzdPayoutState.parse(readString(json['state'])),
-    ready: readBool(json['ready']),
-    supported: readBool(json['supported']),
-    blockingReason: readString(json['blocking_reason']),
-    country: readString(json['country']),
-    profile: DzdProfileSummary.maybe(json['profile']),
-    replacementScope: readString(json['replacement_scope']),
-    availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
-        .map((e) => e.toString())
-        .where((s) => s.isNotEmpty)
-        .toList(growable: false),
-  );
+  factory DzdPayoutMethod.fromJson(Map<String, dynamic> json) =>
+      DzdPayoutMethod(
+        state: DzdPayoutState.parse(readString(json['state'])),
+        ready: readBool(json['ready']),
+        supported: readBool(json['supported']),
+        blockingReason: readString(json['blocking_reason']),
+        country: readString(json['country']),
+        profile: DzdProfileSummary.maybe(json['profile']),
+        replacementScope: readString(json['replacement_scope']),
+        availableActions:
+            (json['available_actions'] as List<dynamic>? ?? const [])
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList(growable: false),
+      );
 
   static DzdPayoutMethod? maybe(Object? raw) {
     final json = readObject(raw);
@@ -409,11 +413,10 @@ class PayoutHistoryPage {
         count: readInt(json['count']) ?? 0,
         next: readString(json['next']),
         previous: readString(json['previous']),
-        results:
-            (json['results'] as List<dynamic>? ?? const [])
-                .whereType<Map>()
-                .map((r) => PayoutListItem.fromJson(Map<String, dynamic>.from(r)))
-                .toList(growable: false),
+        results: (json['results'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((r) => PayoutListItem.fromJson(Map<String, dynamic>.from(r)))
+            .toList(growable: false),
       );
 
   final int count;

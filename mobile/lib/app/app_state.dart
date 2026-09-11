@@ -315,37 +315,37 @@ final payoutsProvider = Provider.autoDispose<AsyncValue<List<Payout>>>(
   (ref) => _projectLiveQuery(ref, _payoutsQuery(_watchAccountId(ref))),
 );
 
-final _payoutMethodsQuery = FutureProvider.autoDispose.family<
-  PayoutMethodsSummary,
-  int?
->((ref, accountId) async {
-  final repo = ref.watch(paymentRepositoryProvider);
-  return _liveRead(
-    ref,
-    accountId,
-    const LiveResource.payouts(),
-    repo.payoutMethods,
-  );
-});
-final payoutMethodsProvider = Provider.autoDispose<
-  AsyncValue<PayoutMethodsSummary>
->((ref) => _projectLiveQuery(ref, _payoutMethodsQuery(_watchAccountId(ref))));
+final _payoutMethodsQuery = FutureProvider.autoDispose
+    .family<PayoutMethodsSummary, int?>((ref, accountId) async {
+      final repo = ref.watch(paymentRepositoryProvider);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.payouts(),
+        repo.payoutMethods,
+      );
+    });
+final payoutMethodsProvider =
+    Provider.autoDispose<AsyncValue<PayoutMethodsSummary>>(
+      (ref) =>
+          _projectLiveQuery(ref, _payoutMethodsQuery(_watchAccountId(ref))),
+    );
 
-final _payoutHistoryQuery = FutureProvider.autoDispose.family<
-  PayoutHistoryPage,
-  int?
->((ref, accountId) async {
-  final repo = ref.watch(paymentRepositoryProvider);
-  return _liveRead(
-    ref,
-    accountId,
-    const LiveResource.payouts(),
-    () => repo.payoutHistoryPaginated(page: 1, pageSize: 50),
-  );
-});
-final payoutHistoryProvider = Provider.autoDispose<
-  AsyncValue<PayoutHistoryPage>
->((ref) => _projectLiveQuery(ref, _payoutHistoryQuery(_watchAccountId(ref))));
+final _payoutHistoryQuery = FutureProvider.autoDispose
+    .family<PayoutHistoryPage, int?>((ref, accountId) async {
+      final repo = ref.watch(paymentRepositoryProvider);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.payouts(),
+        () => repo.payoutHistoryPaginated(page: 1, pageSize: 50),
+      );
+    });
+final payoutHistoryProvider =
+    Provider.autoDispose<AsyncValue<PayoutHistoryPage>>(
+      (ref) =>
+          _projectLiveQuery(ref, _payoutHistoryQuery(_watchAccountId(ref))),
+    );
 
 final payoutDetailProvider = FutureProvider.autoDispose
     .family<PayoutMobile, String>((ref, reference) async {

@@ -637,10 +637,8 @@ extension AppNavigation on BuildContext {
 
   void openPayoutMethods() => pushNamed(Routes.profilePayoutMethods);
   void openDzdProfileSetup() => pushNamed(Routes.dzdProfileSetup);
-  void openPayoutDetail(String reference) => pushNamed(
-    Routes.payoutDetail,
-    pathParameters: {'reference': reference},
-  );
+  void openPayoutDetail(String reference) =>
+      pushNamed(Routes.payoutDetail, pathParameters: {'reference': reference});
 
   /// Opens the country → place picker.
   ///

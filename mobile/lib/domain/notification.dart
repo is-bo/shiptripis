@@ -206,7 +206,11 @@ class AppNotification {
       _ => const OpenPayments(),
     },
     NotificationChannel.paymentRefunded => const OpenPayments(),
-    NotificationChannel.payoutStatusChanged => switch ((payoutReference, dealId, event)) {
+    NotificationChannel.payoutStatusChanged => switch ((
+      payoutReference,
+      dealId,
+      event,
+    )) {
       (final String ref, _, _) => OpenPayoutDetail(ref),
       (_, _, 'profile_ready' || 'profile_needs_attention') =>
         const OpenPayoutMethods(),

@@ -888,8 +888,10 @@ class _PayoutBlock extends StatelessWidget {
     if (payoutSummary != null) {
       final summary = payoutSummary!;
       final stateCopy = payoutDisplayStateCopy(context, summary.displayState);
-      final blockingCopy =
-          payoutBlockingReasonLabel(context, summary.blockingReason);
+      final blockingCopy = payoutBlockingReasonLabel(
+        context,
+        summary.blockingReason,
+      );
       final dzdAmount = summary.dzdAmount;
       final isDzd = dzdAmount != null && dzdAmount > 0;
       final fxRate = summary.formattedFxRate;
@@ -903,20 +905,20 @@ class _PayoutBlock extends StatelessWidget {
                 Expanded(
                   child: StatusPill(
                     label: stateCopy.label,
-                    tone: (frozen ||
+                    tone:
+                        (frozen ||
                             summary.displayState ==
                                 PayoutDisplayState.needsAttention)
                         ? StatusTone.bad
                         : (summary.displayState ==
-                                PayoutDisplayState.protectionActive
-                            ? StatusTone.waiting
-                            : stateCopy.tone),
+                                  PayoutDisplayState.protectionActive
+                              ? StatusTone.waiting
+                              : stateCopy.tone),
                     icon: frozen ? Icons.ac_unit_rounded : stateCopy.icon,
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () =>
-                      context.openPayoutDetail(summary.reference),
+                  onPressed: () => context.openPayoutDetail(summary.reference),
                   icon: const Icon(Icons.open_in_new_rounded, size: 16),
                   label: Text(l.payoutViewAction),
                 ),
@@ -925,8 +927,10 @@ class _PayoutBlock extends StatelessWidget {
             const SizedBox(height: AppSpace.md),
             DetailRow(
               label: l.payoutAmountLabel,
-              value: MoneyText(summary.canonicalEurAmount,
-                  semanticPrefix: l.a11yMoneyAmount),
+              value: MoneyText(
+                summary.canonicalEurAmount,
+                semanticPrefix: l.a11yMoneyAmount,
+              ),
             ),
             if (isDzd) ...[
               const SizedBox(height: AppSpace.sm),
@@ -949,8 +953,9 @@ class _PayoutBlock extends StatelessWidget {
                 style: text.bodySmall?.copyWith(color: c.danger),
               ),
             ],
-            if (summary.availableActions
-                .contains('configure_payout_method')) ...[
+            if (summary.availableActions.contains(
+              'configure_payout_method',
+            )) ...[
               const SizedBox(height: AppSpace.md),
               AppButton(
                 label: l.payoutMethodsTitle,

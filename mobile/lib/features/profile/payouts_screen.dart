@@ -112,16 +112,18 @@ class _PayoutItemCard extends StatelessWidget {
     final dzdAmount = mobile?.dzdAmount;
     final isDzd = dzdAmount != null && dzdAmount > 0;
     final fxRate = mobile?.formattedFxRate;
-    final blockingCopy =
-        payoutBlockingReasonLabel(context, mobile?.blockingReason);
+    final blockingCopy = payoutBlockingReasonLabel(
+      context,
+      mobile?.blockingReason,
+    );
 
     return AppCard(
       onTap: () => context.openPayoutDetail(item.reference),
       accent: displayState == PayoutDisplayState.needsAttention
           ? StatusTone.bad
           : (displayState == PayoutDisplayState.protectionActive
-              ? StatusTone.waiting
-              : null),
+                ? StatusTone.waiting
+                : null),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -146,10 +148,7 @@ class _PayoutItemCard extends StatelessWidget {
             const SizedBox(height: AppSpace.xs),
             Row(
               children: [
-                MoneyText(
-                  Money.minor(dzdAmount, 'DZD', 0),
-                  size: 16,
-                ),
+                MoneyText(Money.minor(dzdAmount, 'DZD', 0), size: 16),
                 if (fxRate != null) ...[
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
@@ -187,8 +186,8 @@ class _PayoutItemCard extends StatelessWidget {
                   item.method == 'stripe'
                       ? l.payoutRailStripeEur
                       : (item.method == 'dzd_manual'
-                          ? l.payoutRailManualDzd
-                          : l.payoutRailUnavailable),
+                            ? l.payoutRailManualDzd
+                            : l.payoutRailUnavailable),
                   overflow: TextOverflow.ellipsis,
                   style: text.bodySmall?.copyWith(color: c.textTertiary),
                 ),

@@ -24,10 +24,7 @@ import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 
 class PayoutDetailScreen extends ConsumerWidget {
-  const PayoutDetailScreen({
-    required this.reference,
-    super.key,
-  });
+  const PayoutDetailScreen({required this.reference, super.key});
 
   final String reference;
 
@@ -56,10 +53,14 @@ class PayoutDetailScreen extends ConsumerWidget {
             children: const [SkeletonCardList()],
           ),
           data: (payout) {
-            final stateCopy =
-                payoutDisplayStateCopy(context, payout.displayState);
-            final blockingText =
-                payoutBlockingReasonLabel(context, payout.blockingReason);
+            final stateCopy = payoutDisplayStateCopy(
+              context,
+              payout.displayState,
+            );
+            final blockingText = payoutBlockingReasonLabel(
+              context,
+              payout.blockingReason,
+            );
             final dzdAmount = payout.dzdAmount;
             final isDzd = dzdAmount != null && dzdAmount > 0;
             final fxRate = payout.formattedFxRate;
@@ -154,12 +155,12 @@ class PayoutDetailScreen extends ConsumerWidget {
                     message: blockingText,
                     tone:
                         payout.displayState == PayoutDisplayState.needsAttention
-                            ? StatusTone.bad
-                            : StatusTone.waiting,
+                        ? StatusTone.bad
+                        : StatusTone.waiting,
                     icon:
                         payout.displayState == PayoutDisplayState.needsAttention
-                            ? Icons.error_outline_rounded
-                            : Icons.lock_clock_rounded,
+                        ? Icons.error_outline_rounded
+                        : Icons.lock_clock_rounded,
                   ),
                   const SizedBox(height: AppSpace.xl),
                 ],
@@ -171,16 +172,18 @@ class PayoutDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         l.payoutRailLabel,
-                        style: text.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: text.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: AppSpace.md),
                       DetailRow(
                         label: l.payoutRailLabel,
                         value: Text(
                           _railName(context, payout.rail),
-                          style: text.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w500),
+                          style: text.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                       const SizedBox(height: AppSpace.sm),
@@ -188,8 +191,9 @@ class PayoutDetailScreen extends ConsumerWidget {
                         label: l.payoutReferenceLabel,
                         value: Text(
                           payout.reference,
-                          style:
-                              text.bodySmall?.copyWith(color: c.textTertiary),
+                          style: text.bodySmall?.copyWith(
+                            color: c.textTertiary,
+                          ),
                         ),
                       ),
                     ],
@@ -204,8 +208,9 @@ class PayoutDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         l.deliveriesFilterHistory,
-                        style: text.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: text.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       if (payout.eligibleAt != null) ...[
                         const SizedBox(height: AppSpace.md),
@@ -244,7 +249,9 @@ class PayoutDetailScreen extends ConsumerWidget {
                           label: l.payoutProtectionEndsAtLabel,
                           value: Text(
                             LocaleFormats.dateTime(
-                                locale, payout.protectionEndsAt!),
+                              locale,
+                              payout.protectionEndsAt!,
+                            ),
                             style: text.bodyMedium,
                           ),
                         ),
@@ -255,8 +262,9 @@ class PayoutDetailScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpace.xxl),
 
                 // Contextual Actions
-                if (payout.availableActions
-                    .contains('configure_payout_method')) ...[
+                if (payout.availableActions.contains(
+                  'configure_payout_method',
+                )) ...[
                   AppButton(
                     label: l.payoutMethodsTitle,
                     icon: Icons.account_balance_rounded,

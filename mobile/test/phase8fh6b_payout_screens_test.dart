@@ -12,8 +12,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/domain/account.dart';
+import 'package:shiptrip/domain/notification.dart';
 import 'package:shiptrip/features/deals/delivery_screen.dart';
 import 'package:shiptrip/features/profile/dzd_setup_screen.dart';
 import 'package:shiptrip/features/profile/payout_detail_screen.dart';
@@ -179,8 +181,9 @@ void main() {
       expect(find.text('Update payout information'), findsOneWidget);
     });
 
-    testWidgets('selecting preference sends PATCH with exact wire fields',
-        (tester) async {
+    testWidgets('selecting preference sends PATCH with exact wire fields', (
+      tester,
+    ) async {
       final backend = FakeBackend();
       backend.on(
         'GET',
@@ -235,72 +238,97 @@ void main() {
       expect(find.byType(TextFormField), findsNWidgets(5));
 
       // Scroll to reveal cheque card and submit button
-      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -600),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Photo of the full crossed cheque'), findsOneWidget);
       expect(find.text('Upload photo'), findsOneWidget);
 
       // Verify ABSOLUTELY NO NIP anywhere
       expect(find.textContaining('NIP', findRichText: true), findsNothing);
-      expect(find.textContaining('National Identification', findRichText: true),
-          findsNothing);
-      expect(find.textContaining('numéro d\'identification', findRichText: true),
-          findsNothing);
+      expect(
+        find.textContaining('National Identification', findRichText: true),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('numéro d\'identification', findRichText: true),
+        findsNothing,
+      );
     });
 
-    testWidgets('displays mandated cheque copy in English, French, and Arabic',
-        (tester) async {
-      final backend = FakeBackend();
-      backend.on(
-        'GET',
-        '/api/payouts/methods',
-        FakeResponse(200, payoutMethodsFixture()),
-      );
+    testWidgets(
+      'displays mandated cheque copy in English, French, and Arabic',
+      (tester) async {
+        final backend = FakeBackend();
+        backend.on(
+          'GET',
+          '/api/payouts/methods',
+          FakeResponse(200, payoutMethodsFixture()),
+        );
 
-      // EN
-      await pumpRouted(
-        tester,
-        const DzdSetupScreen(),
-        container: containerFor(backend),
-        device: DeviceProfile.iphone,
-        locale: const Locale('en'),
-      );
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
-      await tester.pumpAndSettle();
-      expect(find.text('Photo of the full crossed cheque'), findsOneWidget);
-      expect(find.text('Upload a clear photo of the full crossed cheque.'),
-          findsOneWidget);
+        // EN
+        await pumpRouted(
+          tester,
+          const DzdSetupScreen(),
+          container: containerFor(backend),
+          device: DeviceProfile.iphone,
+          locale: const Locale('en'),
+        );
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byType(SingleChildScrollView),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Photo of the full crossed cheque'), findsOneWidget);
+        expect(
+          find.text('Upload a clear photo of the full crossed cheque.'),
+          findsOneWidget,
+        );
 
-      // FR
-      await pumpRouted(
-        tester,
-        const DzdSetupScreen(),
-        container: containerFor(backend),
-        device: DeviceProfile.iphone,
-        locale: const Locale('fr'),
-      );
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
-      await tester.pumpAndSettle();
-      expect(find.text('Photo du chèque barré complet'), findsOneWidget);
-      expect(find.text('Téléversez une photo claire du chèque barré complet.'),
-          findsOneWidget);
+        // FR
+        await pumpRouted(
+          tester,
+          const DzdSetupScreen(),
+          container: containerFor(backend),
+          device: DeviceProfile.iphone,
+          locale: const Locale('fr'),
+        );
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byType(SingleChildScrollView),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Photo du chèque barré complet'), findsOneWidget);
+        expect(
+          find.text('Téléversez une photo claire du chèque barré complet.'),
+          findsOneWidget,
+        );
 
-      // AR
-      await pumpRouted(
-        tester,
-        const DzdSetupScreen(),
-        container: containerFor(backend),
-        device: DeviceProfile.iphone,
-        locale: const Locale('ar'),
-      );
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
-      await tester.pumpAndSettle();
-      expect(find.text('صورة كاملة لشيك مُسطَّر'), findsOneWidget);
-      expect(find.text('حمّل صورة واضحة وكاملة للشيك المُسطَّر.'), findsOneWidget);
-    });
+        // AR
+        await pumpRouted(
+          tester,
+          const DzdSetupScreen(),
+          container: containerFor(backend),
+          device: DeviceProfile.iphone,
+          locale: const Locale('ar'),
+        );
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byType(SingleChildScrollView),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('صورة كاملة لشيك مُسطَّر'), findsOneWidget);
+        expect(
+          find.text('حمّل صورة واضحة وكاملة للشيك المُسطَّر.'),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('validates required fields before submission', (tester) async {
       final backend = FakeBackend();
@@ -313,7 +341,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -600),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Submit payout information'));
       await tester.pumpAndSettle();
@@ -324,8 +355,9 @@ void main() {
   });
 
   group('PayoutDetailScreen', () {
-    testWidgets('renders canonical EUR, snapshotted DZD, and rate formula',
-        (tester) async {
+    testWidgets('renders canonical EUR, snapshotted DZD, and rate formula', (
+      tester,
+    ) async {
       final backend = FakeBackend();
       backend.on(
         'GET',
@@ -394,11 +426,7 @@ void main() {
       );
 
       final container = containerFor(backend);
-      await pumpRouted(
-        tester,
-        const PayoutsScreen(),
-        container: container,
-      );
+      await pumpRouted(tester, const PayoutsScreen(), container: container);
       await tester.pumpAndSettle();
 
       expect(find.text('Payout history'), findsOneWidget);
@@ -409,8 +437,9 @@ void main() {
   });
 
   group('DeliveryScreen payout integration', () {
-    testWidgets('renders payoutSummary in traveler delivery screen',
-        (tester) async {
+    testWidgets('renders payoutSummary in traveler delivery screen', (
+      tester,
+    ) async {
       final backend = FakeBackend();
       final account = Account.fromJson(meFixture());
 
@@ -467,5 +496,186 @@ void main() {
       expect(find.text('€45.00'), findsWidgets);
       expect(find.text('View payout'), findsOneWidget);
     });
+  });
+
+  group('Payout notifications and deep-linking', () {
+    test('notification parsing and destinations for all payout states', () {
+      final states = [
+        ('eligible', 'po-ref-1'),
+        ('processing', 'po-ref-2'),
+        ('sent', 'po-ref-3'),
+        ('paid', 'po-ref-4'),
+        ('returned', 'po-ref-5'),
+        ('needs_attention', 'po-ref-6'),
+      ];
+
+      for (final (event, ref) in states) {
+        final notif = AppNotification.fromJson({
+          'id': 1,
+          'channel': 'payout.status_changed',
+          'payload': {'event': event, 'payout_reference': ref, 'deal_id': 42},
+        });
+
+        expect(notif.channel, NotificationChannel.payoutStatusChanged);
+        expect(notif.destination, isA<OpenPayoutDetail>());
+        expect((notif.destination as OpenPayoutDetail).reference, ref);
+      }
+    });
+
+    test('profile notification destinations map to payout methods', () {
+      for (final profileEvent in ['profile_ready', 'profile_needs_attention']) {
+        final notif = AppNotification.fromJson({
+          'id': 2,
+          'channel': 'payout.status_changed',
+          'payload': {
+            'event': profileEvent,
+            'message_key': 'payout.$profileEvent',
+          },
+        });
+
+        expect(notif.destination, isA<OpenPayoutMethods>());
+      }
+    });
+
+    test(
+      'deal fallback deep-link works where defined when payout_reference is absent',
+      () {
+        final notif = AppNotification.fromJson({
+          'id': 3,
+          'channel': 'payout.status_changed',
+          'payload': {'deal_id': 42},
+        });
+
+        expect(notif.destination, isA<OpenDeal>());
+        expect((notif.destination as OpenDeal).dealId, 42);
+      },
+    );
+
+    test(
+      'fallback to payout methods when neither reference, profile event nor deal is present',
+      () {
+        final notif = AppNotification.fromJson({
+          'id': 4,
+          'channel': 'payout.status_changed',
+          'payload': const {},
+        });
+
+        expect(notif.destination, isA<OpenPayoutMethods>());
+      },
+    );
+
+    test('pushLocation routes payout notifications correctly', () {
+      // Payout reference deep-links to payout detail (even if deal_id is present)
+      expect(
+        pushLocation({
+          'channel': 'payout.status_changed',
+          'payout_reference': 'po-ref-detail',
+          'deal_id': '42',
+        }),
+        '/payouts/po-ref-detail',
+      );
+
+      // Profile events deep-link to payout methods
+      expect(
+        pushLocation({
+          'channel': 'payout.status_changed',
+          'event': 'profile_ready',
+        }),
+        '/profile/payout-methods',
+      );
+      expect(
+        pushLocation({
+          'channel': 'payout.status_changed',
+          'event': 'profile_needs_attention',
+        }),
+        '/profile/payout-methods',
+      );
+
+      // Deal fallback deep-link works when no payout_reference is present
+      expect(
+        pushLocation({'channel': 'payout.status_changed', 'deal_id': '42'}),
+        '/deals/42',
+      );
+
+      // Generic fallback
+      expect(
+        pushLocation({'channel': 'payout.status_changed'}),
+        '/profile/payouts',
+      );
+    });
+  });
+
+  group('Arabic RTL widget layout', () {
+    testWidgets(
+      'PayoutMethodsScreen renders cleanly in Arabic RTL without overflow',
+      (tester) async {
+        final backend = FakeBackend();
+        backend.on(
+          'GET',
+          '/api/payouts/methods',
+          FakeResponse(200, payoutMethodsFixture()),
+        );
+
+        await pumpRouted(
+          tester,
+          const PayoutMethodsScreen(),
+          container: containerFor(backend),
+          device: DeviceProfile.iphone,
+          locale: const Locale('ar'),
+        );
+        await tester.pumpAndSettle();
+
+        // RTL directionality verified
+        expect(
+          Directionality.of(tester.element(find.byType(PayoutMethodsScreen))),
+          TextDirection.rtl,
+        );
+
+        // Arabic strings present in top part
+        expect(find.text('وسائل التحويل'), findsOneWidget);
+        expect(find.text('التحويلات باليورو (Stripe)'), findsOneWidget);
+
+        // Scroll to reveal DZD card
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('التحويلات بالدينار'), findsOneWidget);
+        expect(find.textContaining('بريدي موب'), findsWidgets);
+        expect(find.text('•••• 1234'), findsOneWidget);
+        expect(find.text('•••• 5678'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'PayoutDetailScreen renders cleanly in Arabic RTL with readable EUR and DZD',
+      (tester) async {
+        final backend = FakeBackend();
+        backend.on(
+          'GET',
+          '/api/payouts/po-ref-123',
+          FakeResponse(200, payoutMobileFixture()),
+        );
+
+        await pumpRouted(
+          tester,
+          const PayoutDetailScreen(reference: 'po-ref-123'),
+          container: containerFor(backend),
+          device: DeviceProfile.iphone,
+          locale: const Locale('ar'),
+        );
+        await tester.pumpAndSettle();
+
+        // RTL directionality verified
+        expect(
+          Directionality.of(tester.element(find.byType(PayoutDetailScreen))),
+          TextDirection.rtl,
+        );
+
+        // EUR and DZD amounts readable
+        expect(find.textContaining('45'), findsWidgets);
+        expect(find.textContaining('700'), findsOneWidget);
+        expect(find.text('po-ref-123'), findsWidgets);
+      },
+    );
   });
 }

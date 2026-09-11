@@ -189,10 +189,7 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
     final c = context.colors;
 
     return AppScaffold(
-      topBar: AppTopBar(
-        title: l.dzdFormTitle,
-        showBack: true,
-      ),
+      topBar: AppTopBar(title: l.dzdFormTitle, showBack: true),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -200,199 +197,203 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-            // Future-scope notice: does not retroactively mutate in-flight payouts.
-            InfoNotice(
-              title: l.payoutPreferenceScopeNote,
-              message: l.dzdFormScopeExplainer,
-              tone: StatusTone.waiting,
-              icon: Icons.info_outline_rounded,
-            ),
-            const SizedBox(height: AppSpace.xl),
+              // Future-scope notice: does not retroactively mutate in-flight payouts.
+              InfoNotice(
+                title: l.payoutPreferenceScopeNote,
+                message: l.dzdFormScopeExplainer,
+                tone: StatusTone.waiting,
+                icon: Icons.info_outline_rounded,
+              ),
+              const SizedBox(height: AppSpace.xl),
 
-            // Account holder identity
-            AppTextField(
-              label: l.dzdFirstNameLabel,
-              controller: _firstNameController,
-              isRequired: true,
-              errorText: _fieldErrors['first_name'],
-              textCapitalization: TextCapitalization.words,
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? l.validationRequired
-                  : null,
-            ),
-            const SizedBox(height: AppSpace.lg),
+              // Account holder identity
+              AppTextField(
+                label: l.dzdFirstNameLabel,
+                controller: _firstNameController,
+                isRequired: true,
+                errorText: _fieldErrors['first_name'],
+                textCapitalization: TextCapitalization.words,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? l.validationRequired
+                    : null,
+              ),
+              const SizedBox(height: AppSpace.lg),
 
-            AppTextField(
-              label: l.dzdLastNameLabel,
-              controller: _lastNameController,
-              isRequired: true,
-              errorText: _fieldErrors['last_name'],
-              textCapitalization: TextCapitalization.words,
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? l.validationRequired
-                  : null,
-            ),
-            const SizedBox(height: AppSpace.xl),
+              AppTextField(
+                label: l.dzdLastNameLabel,
+                controller: _lastNameController,
+                isRequired: true,
+                errorText: _fieldErrors['last_name'],
+                textCapitalization: TextCapitalization.words,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? l.validationRequired
+                    : null,
+              ),
+              const SizedBox(height: AppSpace.xl),
 
-            // Postal account details
-            AppTextField(
-              label: l.dzdCcpNumberLabel,
-              controller: _ccpNumberController,
-              hint: l.dzdCcpNumberHint,
-              isRequired: true,
-              errorText: _fieldErrors['ccp_number'],
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return l.validationRequired;
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpace.lg),
+              // Postal account details
+              AppTextField(
+                label: l.dzdCcpNumberLabel,
+                controller: _ccpNumberController,
+                hint: l.dzdCcpNumberHint,
+                isRequired: true,
+                errorText: _fieldErrors['ccp_number'],
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return l.validationRequired;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpace.lg),
 
-            AppTextField(
-              label: l.dzdCcpKeyLabel,
-              controller: _ccpKeyController,
-              hint: l.dzdCcpKeyHint,
-              isRequired: true,
-              errorText: _fieldErrors['ccp_key'],
-              keyboardType: TextInputType.number,
-              maxLength: 2,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return l.validationRequired;
-                }
-                if (v.trim().length != 2) {
-                  return l.validationRequired;
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpace.lg),
+              AppTextField(
+                label: l.dzdCcpKeyLabel,
+                controller: _ccpKeyController,
+                hint: l.dzdCcpKeyHint,
+                isRequired: true,
+                errorText: _fieldErrors['ccp_key'],
+                keyboardType: TextInputType.number,
+                maxLength: 2,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return l.validationRequired;
+                  }
+                  if (v.trim().length != 2) {
+                    return l.validationRequired;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpace.lg),
 
-            AppTextField(
-              label: l.dzdRipLabel,
-              controller: _ripController,
-              hint: l.dzdRipHint,
-              isRequired: true,
-              errorText: _fieldErrors['rip'],
-              keyboardType: TextInputType.number,
-              maxLength: 20,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(20),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return l.validationRequired;
-                }
-                if (v.trim().length != 20) {
-                  return l.validationRequired;
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpace.xl),
+              AppTextField(
+                label: l.dzdRipLabel,
+                controller: _ripController,
+                hint: l.dzdRipHint,
+                isRequired: true,
+                errorText: _fieldErrors['rip'],
+                keyboardType: TextInputType.number,
+                maxLength: 20,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(20),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return l.validationRequired;
+                  }
+                  if (v.trim().length != 20) {
+                    return l.validationRequired;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpace.xl),
 
-            // Mandated Cheque Image Section
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.document_scanner_outlined,
-                        size: 20,
-                        color: c.brand,
-                      ),
-                      const SizedBox(width: AppSpace.sm),
-                      Expanded(
-                        child: Text(
-                          l.dzdChequeProofLabel,
-                          style: text.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+              // Mandated Cheque Image Section
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.document_scanner_outlined,
+                          size: 20,
+                          color: c.brand,
+                        ),
+                        const SizedBox(width: AppSpace.sm),
+                        Expanded(
+                          child: Text(
+                            l.dzdChequeProofLabel,
+                            style: text.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      l.dzdChequeProofHelper,
+                      style: text.bodySmall?.copyWith(color: c.textSecondary),
+                    ),
+                    const SizedBox(height: AppSpace.md),
+
+                    if (_chequeFile != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(_chequeFile!.path),
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(
+                            height: 120,
+                            color: c.surfaceSunken,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              color: c.textTertiary,
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    l.dzdChequeProofHelper,
-                    style: text.bodySmall?.copyWith(color: c.textSecondary),
-                  ),
-                  const SizedBox(height: AppSpace.md),
-
-                  if (_chequeFile != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(_chequeFile!.path),
-                        height: 180,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          height: 120,
-                          color: c.surfaceSunken,
-                          alignment: Alignment.center,
-                          child: Icon(Icons.broken_image_rounded,
-                              color: c.textTertiary),
+                      const SizedBox(height: AppSpace.sm),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _isSubmitting
+                              ? null
+                              : _showImageSourceDialog,
+                          icon: const Icon(Icons.edit_rounded, size: 16),
+                          label: Text(l.dzdChequeReplacePhoto),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpace.sm),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed:
-                            _isSubmitting ? null : _showImageSourceDialog,
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: Text(l.dzdChequeReplacePhoto),
+                    ] else ...[
+                      OutlinedButton.icon(
+                        onPressed: _isSubmitting
+                            ? null
+                            : _showImageSourceDialog,
+                        icon: const Icon(Icons.add_a_photo_outlined),
+                        label: Text(l.dzdChequeAddPhoto),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 52),
+                        ),
                       ),
-                    ),
-                  ] else ...[
-                    OutlinedButton.icon(
-                      onPressed:
-                          _isSubmitting ? null : _showImageSourceDialog,
-                      icon: const Icon(Icons.add_a_photo_outlined),
-                      label: Text(l.dzdChequeAddPhoto),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 52),
-                      ),
-                    ),
-                  ],
+                    ],
 
-                  if (_chequeError != null) ...[
-                    const SizedBox(height: AppSpace.sm),
-                    Text(
-                      _chequeError!,
-                      style: text.bodySmall?.copyWith(color: c.danger),
-                    ),
+                    if (_chequeError != null) ...[
+                      const SizedBox(height: AppSpace.sm),
+                      Text(
+                        _chequeError!,
+                        style: text.bodySmall?.copyWith(color: c.danger),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpace.xxl),
+              const SizedBox(height: AppSpace.xxl),
 
-            AppButton(
-              label: l.dzdSubmitAction,
-              variant: AppButtonVariant.primary,
-              icon: Icons.check_circle_outline_rounded,
-              isLoading: _isSubmitting,
-              onPressed: _isSubmitting ? null : _submit,
-            ),
-            const SizedBox(height: AppSpace.xxl),
-          ],
+              AppButton(
+                label: l.dzdSubmitAction,
+                variant: AppButtonVariant.primary,
+                icon: Icons.check_circle_outline_rounded,
+                isLoading: _isSubmitting,
+                onPressed: _isSubmitting ? null : _submit,
+              ),
+              const SizedBox(height: AppSpace.xxl),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
