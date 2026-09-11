@@ -463,6 +463,7 @@ def _apply_snapshot(account: StripePayoutAccount, snapshot, *, observed_at):
         current.readiness_checked_at = observed_at
         current.readiness_generation = current.readiness_generation + 1
         verdict = evaluate_readiness(current)
+        previous_status = current.status
         current.status = verdict.status
         current.status_reason = verdict.reason
         current.save(
@@ -488,6 +489,13 @@ def _apply_snapshot(account: StripePayoutAccount, snapshot, *, observed_at):
             ]
         )
         _sync_method_status(current, verdict)
+        if previous_status != verdict.status:
+            from .payout_reconciliation import notify_profile_state
+
+            method = _method_for(current.traveler)
+            if method and method.current_version and method.current_version.stripe_account_id == current.pk:
+                notify_profile_state(method, state=verdict.status,
+                                     key=f"eur:{current.public_reference}:{current.readiness_generation}")
         return current, True
 
 
@@ -963,9 +971,7 @@ def stripe_setup_projection(method) -> dict:
         "status_reason": reason,
         "country": country,
         "supported_countries": supported,
-        "account_reference": mask_account(account.provider_account_id)
-        if account
-        else None,
+        "account_reference": None,  # H6A: provider identifiers are not mobile data.
         "mode": account.provider_mode if account else None,
         "bank_present": bool(account.eur_bank_present) if account else False,
         "checked_at": account.readiness_checked_at if account else None,

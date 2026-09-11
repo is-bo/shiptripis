@@ -1041,7 +1041,7 @@ class TestMobileContract:
         assert projection["status"] == "setup_required"
         assert projection["status_reason"] == "requirements_due"
         assert projection["supported_countries"] == ["FR"]
-        assert projection["account_reference"].startswith("acct_1TE")
+        assert projection["account_reference"] is None
         assert "acct_1TESTconnected" not in json.dumps(projection, default=str)
         assert "individual.id_number" not in json.dumps(projection, default=str)
         assert projection["payouts_execution_enabled"] is False

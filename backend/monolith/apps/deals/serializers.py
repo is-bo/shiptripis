@@ -152,6 +152,7 @@ class DealSerializer(serializers.ModelSerializer):
     recipient = serializers.SerializerMethodField()
     handover = serializers.SerializerMethodField()
     protection = serializers.SerializerMethodField()
+    payout_summary = serializers.SerializerMethodField()
     dispute = serializers.SerializerMethodField()
     ratings = serializers.SerializerMethodField()
     cancellation = serializers.SerializerMethodField()
@@ -177,6 +178,7 @@ class DealSerializer(serializers.ModelSerializer):
             "recipient",
             "handover",
             "protection",
+            "payout_summary",
             "dispute",
             "ratings",
             "cancellation",
@@ -240,6 +242,14 @@ class DealSerializer(serializers.ModelSerializer):
                 }
             ),
         }
+
+    def get_payout_summary(self, deal):
+        if self._viewer_id() != deal.traveler_id:
+            return None
+        from apps.finance.payout_mobile import payout_status
+
+        payout = getattr(deal, "payout", None)
+        return payout_status(payout) if payout else None
 
     def get_dispute(self, deal: Deal) -> dict | None:
         from apps.disputes.models import Dispute

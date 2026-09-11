@@ -18,6 +18,7 @@ from .views import (
     PaymentOrderListView,
     PaymentProvidersView,
     PayoutListView,
+    PayoutDetailView,
     PostingDepositView,
 )
 from .webhooks import ChargilyWebhookView, MockWebhookView, StripeWebhookView
@@ -130,6 +131,7 @@ urlpatterns = [
         name="finance-deal-payment",
     ),
     path("payouts", PayoutListView.as_view(), name="finance-payouts"),
+    path("payouts/<uuid:reference>", PayoutDetailView.as_view(), name="finance-payout-detail"),
     path(
         "admin/payouts/<int:pk>/complete",
         AdminManualPayoutView.as_view(),

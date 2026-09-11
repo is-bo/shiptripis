@@ -87,9 +87,15 @@ def review_profile(*, actor, reference, approve, accept_name_difference=False):
         reason_code=result["classification"],
     )
     if method.current_version.dzd_profile_revision_id == profile.pk:
+        previous_status = method.status
         method.status = "ready" if status == "approved" else "needs_review"
         method.status_reason = "" if status == "approved" else "profile_review_required"
         method.save(update_fields=["status", "status_reason"])
+        if previous_status != method.status:
+            from .payout_reconciliation import notify_profile_state
+
+            notify_profile_state(method, state="ready" if status == "approved" else "needs_attention",
+                                 key=f"dzd:{profile.public_reference}:{review.pk}")
     record_admin_action(
         actor=actor,
         action="payout_profile.reviewed",

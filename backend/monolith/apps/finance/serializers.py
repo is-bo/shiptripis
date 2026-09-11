@@ -165,6 +165,8 @@ class PayoutSerializer(serializers.ModelSerializer):
 
     deal_id = serializers.IntegerField(read_only=True)
     payout_amount = serializers.SerializerMethodField()
+    mobile = serializers.SerializerMethodField()
+    reference = serializers.UUIDField(source="public_reference", read_only=True)
 
     class Meta:
         model = Payout
@@ -181,8 +183,14 @@ class PayoutSerializer(serializers.ModelSerializer):
             "reference",
             "paid_at",
             "created_at",
+            "mobile",
         )
         read_only_fields = fields
+
+    def get_mobile(self, obj):
+        from .payout_mobile import payout_status
+
+        return payout_status(obj, context=self.context.get("payout_page"))
 
     def get_payout_amount(self, obj: Payout) -> str | None:
         if obj.payout_amount_minor is None or obj.payout_amount_exponent is None:

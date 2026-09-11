@@ -76,6 +76,11 @@ class ConnectView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ConnectThrottle]
 
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store, private"
+        return response
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if not settings.PAYOUT_PROFILES_ENABLED:
@@ -176,6 +181,8 @@ class StripeReadinessRefreshView(ConnectView):
     """Re-read authoritative account state from Stripe."""
 
     def post(self, request):
+        data = StrictInput(data=request.data)
+        data.is_valid(raise_exception=True)
         require_connect_enabled()
         _, account = self._account(request)
         refresh_account(account, gateway=get_connect_gateway())
@@ -186,6 +193,8 @@ class StripeDashboardView(ConnectView):
     """Single-use Express Dashboard access for the account's own owner."""
 
     def post(self, request):
+        data = StrictInput(data=request.data)
+        data.is_valid(raise_exception=True)
         url = open_dashboard(actor=request.user)
         return Response({"dashboard_url": url}, status=201)
 

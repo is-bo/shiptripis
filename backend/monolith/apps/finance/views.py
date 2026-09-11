@@ -530,10 +530,40 @@ class PayoutListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        queryset = Payout.objects.filter(traveler=request.user).order_by("-created_at")
+        from .payout_mobile import page_context, payouts_for
+        from apps.notifications.views import _Pagination
+
+        queryset = payouts_for(request.user)
         if payout_status := request.query_params.get("status"):
             queryset = queryset.filter(status=payout_status)
-        return Response(PayoutSerializer(queryset[:100], many=True).data)
+        paginator = None
+        if "page" in request.query_params or "page_size" in request.query_params:
+            paginator = _Pagination()
+            page = list(paginator.paginate_queryset(queryset, request))
+        else:
+            page = list(queryset[:100])
+        # The page's dispute, hold and setup facts are read once for the whole
+        # list, so a hundred rows cost the same queries as one.
+        context = {"payout_page": page_context(page, user=request.user)}
+        data = PayoutSerializer(page, many=True, context=context).data
+        response = (
+            paginator.get_paginated_response(data) if paginator else Response(data)
+        )
+        response["Cache-Control"] = "no-store, private"
+        return response
+
+
+class PayoutDetailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, reference):
+        from django.shortcuts import get_object_or_404
+        from .payout_mobile import payouts_for, payout_status
+
+        payout = get_object_or_404(payouts_for(request.user), public_reference=reference)
+        response = Response(payout_status(payout))
+        response["Cache-Control"] = "no-store, private"
+        return response
 
 
 class AdminManualPayoutView(APIView):

@@ -1,5 +1,33 @@
 # ShipTrip V1 Implementation Status
 
+## Phase 8F-H6A — Mobile payout contract (2026-09-11)
+
+Implemented additive `h6a.v1` summary, atomic three-value preference PATCH,
+owner-only payout detail, optional paginated history, and Traveler-only Deal
+payout projection. H2/H4 remain readiness authorities; funded destination and
+FX snapshots remain unchanged. Existing payout notifications gain transactional
+inbox persistence and deterministic IDs; profile review decisions reuse the
+same channel. No schema/migration or Flutter changes, no provider money calls.
+
+Review corrected one real defect before release: the mobile read model derived a
+returned bank payout from the platform Transfer's `PayoutAttempt`, which H3 puts
+back to `accepted` on a return and never marks `returned`. The EUR bank stage now
+reads `StripeDisbursementAllocation.disbursement.status` — H3's authority — so a
+paid-then-returned payout maps to `needs_attention` / `payout_returned` while the
+`paid_at` history and the restored obligation stay exactly as H3 recorded them.
+The financial state machine itself is untouched; H6A only consumes it. History
+rendering was also made bounded: dispute, hold and setup facts are read once per
+page and DZD profile verdicts memoised, so page length no longer drives queries.
+
+The focused PostgreSQL suite passes 40 tests, including a regression that fails
+against the previous Transfer-derived mapping and a page-length query-count
+guard; a consolidated compatibility run over the shared payout, deal and
+notification read paths passes 280. Final release evidence is recorded in the
+H6A completion report. Gemini's authority is
+[the mobile payout contract](PHASE8F_H6A_MOBILE_PAYOUT_CONTRACT.md).
+Transport callback crash can still miss a push, while the payout inbox survives;
+H6B UI and I1 delivery-list lifecycle work remain separate.
+
 Latest backend phase: **Phase 8F-H2.5 PASS; H3 prerequisites satisfied**.
 H1/H2 and the retry repair remain deployed at
 `dcb8c52f02fe20efb8d7409f52fd2b6ed5a2668b` (`v1.0.0-rc.14+dcb8c52`).

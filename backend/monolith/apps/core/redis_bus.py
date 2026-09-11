@@ -59,6 +59,7 @@ def publish_after_commit(
     payload: dict[str, Any],
     *,
     targets: list[int] | None = None,
+    idempotency_key: str | None = None,
 ) -> str:
     """Schedule a Redis publish + audit-row write to fire on commit.
 
@@ -72,7 +73,8 @@ def publish_after_commit(
     if not isinstance(payload, dict):
         raise TypeError("payload must be a dict")
 
-    event_id = uuid.uuid4().hex
+    event_id = (uuid.uuid5(uuid.NAMESPACE_URL, f"shiptrip:{channel}:{idempotency_key}").hex
+                if idempotency_key else uuid.uuid4().hex)
     target_ids = list(
         dict.fromkeys(int(uid) for uid in (targets or []) if int(uid) > 0)
     )
@@ -84,6 +86,24 @@ def publish_after_commit(
     }
     serialized = json.dumps(enriched, separators=(",", ":"))
     digest = _payload_hash(enriched)
+
+    if idempotency_key:
+        # Critical callers opt in: inbox obligation commits with the business
+        # fact, not in the crash-prone after-commit delivery callback. Existing
+        # uniqueness handles replay and concurrent callers without new tables.
+        from apps.notifications.models import Notification
+
+        created_targets = []
+        for uid in target_ids:
+            _, created = Notification.objects.get_or_create(
+                recipient_id=uid, event_id=event_id,
+                defaults={"channel": channel, "payload": enriched},
+            )
+            if created:
+                created_targets.append(uid)
+        if not created_targets:
+            return event_id
+        target_ids = created_targets
 
     def _fire() -> None:
         try:

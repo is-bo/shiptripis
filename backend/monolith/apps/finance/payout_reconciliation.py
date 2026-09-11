@@ -105,8 +105,26 @@ def notify_payout_state(payout, code: str) -> None:
         )
     publish_after_commit(
         channels.PAYOUT_STATUS_CHANGED,
-        {**deal_resources(deal), "status": payout.status, "event": code},
+        {**deal_resources(deal), "status": payout.status, "event": code,
+         "payout_reference": str(payout.public_reference),
+         "message_key": "payout." + {"eligible": "ready", "setup_required": "needs_attention"}.get(code, code)},
         targets=[deal.traveler_id],
+        idempotency_key=f"payout:{payout.public_reference}:{payout.state_version}:{code}",
+    )
+
+
+def notify_profile_state(method, *, state, key):
+    """Same payout channel; only terminal setup decisions notify the Traveler."""
+    if state not in ("ready", "needs_attention"):
+        return
+    from apps.core.channels import PAYOUT_STATUS_CHANGED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        PAYOUT_STATUS_CHANGED,
+        {"event": f"profile_{state}", "message_key": f"payout.profile_{state}",
+         "currency": method.currency},
+        targets=[method.traveler_id], idempotency_key=f"payout_profile:{key}",
     )
 
 

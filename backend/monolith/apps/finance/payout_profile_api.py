@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError as DomainError, PermissionDenied
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
 from rest_framework import serializers
@@ -61,6 +62,14 @@ class DzdInput(StrictInput):
     consent_policy = serializers.CharField(max_length=64)
 
 
+class MobilePreferenceInput(StrictInput):
+    preference = serializers.ChoiceField(choices=["eur_only", "dzd_only", "both"])
+    eur_revision = serializers.IntegerField(min_value=0)
+    dzd_revision = serializers.IntegerField(min_value=0)
+    country = serializers.CharField(max_length=2, required=False, default="", allow_blank=True)
+    consent_policy = serializers.ChoiceField(choices=["payout_profile_v1"])
+
+
 class AttestationInput(StrictInput):
     given_name = serializers.CharField(max_length=160, write_only=True)
     family_name = serializers.CharField(max_length=160, write_only=True)
@@ -75,6 +84,7 @@ class AttestationInput(StrictInput):
 
 
 def method_projection(method):
+    from .payout_mobile import eur_method, dzd_method
     version = method.current_version
     profile = version.dzd_profile_revision if version else None
     return {
@@ -102,6 +112,7 @@ def method_projection(method):
         "stripe_setup": stripe_setup_projection(method)
         if method.currency == "EUR"
         else None,
+        "mobile": eur_method(method) if method.currency == "EUR" else dzd_method(method),
     }
 
 
@@ -163,18 +174,43 @@ class ProfileView(APIView):
 
 class PayoutMethodsView(ProfileView):
     def get(self, request):
-        methods = (
-            TravelerPayoutMethod.objects.filter(traveler=request.user)
-            .select_related("current_version__dzd_profile_revision")
-            .order_by("currency")
-        )
+        from .payout_mobile import methods_for, payout_summary
+
+        methods = list(methods_for(request.user))
         return Response(
             {
                 "methods": [method_projection(m) for m in methods],
                 "policy_version": "payout_profile_v1",
                 "execution_enabled": False,
+                **payout_summary(request.user, methods),
             }
         )
+
+    @transaction.atomic
+    def patch(self, request):
+        from apps.accounts.models import User
+        from .payout_profiles import _traveler
+
+        data = MobilePreferenceInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        values = data.validated_data
+        _traveler(request.user)
+        User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+        # Match funding's method lock order before making either preference
+        # change; rollback both when any revision/country check fails.
+        current = list(TravelerPayoutMethod.objects.select_for_update(no_key=True)
+                       .filter(traveler=request.user).order_by("pk"))
+        by_currency = {m.currency: m for m in current}
+        for currency in ("EUR", "DZD"):
+            method = by_currency.get(currency)
+            enabled = values["preference"] in ("both", "eur_only" if currency == "EUR" else "dzd_only")
+            country = values["country"].upper() or (
+                method.current_version.country if method and method.current_version else ""
+            )
+            set_preference(actor=request.user, currency=currency, enabled=enabled,
+                           expected_revision=values[f"{currency.lower()}_revision"],
+                           country=country, consent_policy=values["consent_policy"])
+        return self.get(request)
 
     def post(self, request):
         data = PreferenceInput(data=request.data)
@@ -185,6 +221,13 @@ class PayoutMethodsView(ProfileView):
 
 
 class DzdProfileView(ProfileView):
+    def get(self, request):
+        from .payout_mobile import methods_for, dzd_method
+
+        method = methods_for(request.user).filter(currency="DZD").first()
+        return Response({"method": method_projection(method) if method else None,
+                         "dzd": dzd_method(method)})
+
     def post(self, request):
         data = DzdInput(data=request.data)
         data.is_valid(raise_exception=True)
