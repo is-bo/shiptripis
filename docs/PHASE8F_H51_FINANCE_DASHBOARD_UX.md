@@ -23,7 +23,7 @@ A total H5 does not publish does not appear.
 | `apps/core/static/shiptrip/admin.css` §12c | `st-ledger-strip`, `st-kpi*`, `st-integrity`, `st-fin-*`, `st-unknown`, `st-provider*`. |
 | `apps/admin_panel/console_urls.py` | Two routes. |
 | `apps/core/templatetags/shiptrip_admin.py` | The navigation entry and its flag gate. |
-| `apps/finance/tests/test_phase8fh51_finance_dashboard.py` | 27 presentation, access, privacy and filter tests. |
+| `apps/finance/tests/test_phase8fh51_finance_dashboard.py` | 28 presentation, access, privacy and filter tests. |
 
 The H5 JSON endpoint `/admin/finance/control-plane/` is unchanged and still
 serves the same snapshot to any other consumer.
@@ -218,6 +218,17 @@ settlement, state, bucket, stage, rail, funding mix and hold/dispute markers.
 The page prints the metric's total for the whole scope, H5's `time_basis`, and
 H5's own exclusion sentence.
 
+Two of H5's payout annotations are deliberately withheld on the operational
+cohort (`payout_operations`), which includes settled awards whose payable is
+zero: the exclusive **liability bucket**, which classifies outstanding payable
+and therefore says nothing true about a paid row, and the **`exposed` flag**,
+which is set by any accepted instruction including a completed one. Printing
+either beside a stage of "Paid" put two columns of the same row in
+contradiction. The stage column is authoritative there; the bucket is still
+shown on every liability drilldown, where it is the point of the row. The
+markers column is now exactly the three facts that hold a payout up — a hold, a
+ShipTrip dispute, a provider dispute.
+
 **Sensitive fields are absent by construction**: H5 never serialises them and
 H5.1 requests nothing beyond H5's projection. No CCP, RIP, bank account,
 provider payload, secret, evidence URL, identity document, delivery code, name
@@ -290,7 +301,7 @@ inherited from H4.1 are untouched and continue to render on their own screens.
 
 ## Tests
 
-`apps/finance/tests/test_phase8fh51_finance_dashboard.py` — 27 tests on
+`apps/finance/tests/test_phase8fh51_finance_dashboard.py` — 28 tests on
 PostgreSQL, reusing H3's `build_stripe_payout` and H4's `build_manual` so the
 pages are rendered against data the real services produced:
 
@@ -312,6 +323,8 @@ pages are rendered against data the real services produced:
 * Five invalid filter shapes each answer 400 with a message and no stale figure.
 * Drilldown totals, references, payout-detail link, pagination bounds, refused
   page size, unknown metric, empty drilldown.
+* A settled row carries no liability bucket and no "externally committed"
+  marker, while an outstanding one still carries its bucket.
 * No sensitive field on the snapshot page or four drilldowns.
 * Legacy cohort disclosed and reachable; the legacy banner renders in that mode.
 * One snapshot per page, no mutation query, no polling primitive.

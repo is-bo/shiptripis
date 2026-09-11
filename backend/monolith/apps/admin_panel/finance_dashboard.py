@@ -809,6 +809,16 @@ def _rate_cell(row):
 
 
 def _marker_cell(row):
+    """Only the three facts that say something is holding this payout up.
+
+    H5's `exposed` flag is deliberately not a marker. It is true of any award
+    with an accepted instruction, including one that has already been paid, and
+    every payout row already carries an `operation_stage` that says where the
+    money actually is — paid, at the connected account, in bank transit. A
+    marker reading "Externally committed" next to a stage reading "Paid" is two
+    columns contradicting each other about the same row.
+    """
+
     marks = []
     if row.get("has_hold"):
         marks.append("Hold")
@@ -816,8 +826,6 @@ def _marker_cell(row):
         marks.append("ShipTrip dispute")
     if row.get("has_provider_dispute"):
         marks.append("Provider dispute")
-    if row.get("exposed"):
-        marks.append("Externally committed")
     return marks
 
 
@@ -877,9 +885,17 @@ def build_rows(result, params, *, user):
         has_admin_permission(user, code)
         for code in ("issue_refunds", "settle_manual_refunds")
     )
+    # The exclusive liability bucket classifies *outstanding* payable. The
+    # operational cohort deliberately includes settled awards, whose payable is
+    # zero, so their bucket is not a statement about liability at all — and
+    # "Processing or externally committed" beside a stage of "Paid" reads as a
+    # contradiction. The stage is the authoritative column there.
+    liability_bucket = result["metric"] != "payout_operations"
     fields, rows = [], []
     for raw in result["rows"]:
         row = dict(raw)
+        if not liability_bucket:
+            row.pop("bucket", None)
         derived = {
             key: row.pop(key, None)
             for key in (
@@ -897,7 +913,7 @@ def build_rows(result, params, *, user):
         if "fx_rate_micros" in row:
             row["fx_rate_micros"] = _rate_cell({**derived, **raw})
         markers = _marker_cell(derived)
-        if any(key in raw for key in ("has_hold", "has_user_dispute", "exposed")):
+        if any(key in raw for key in ("has_hold", "has_user_dispute")):
             row["markers"] = markers
         cells = []
         for field in _ordered(row):

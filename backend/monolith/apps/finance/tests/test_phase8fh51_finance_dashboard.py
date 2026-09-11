@@ -369,6 +369,33 @@ def test_drilldown_rows_page_and_link_to_the_operational_record(world):
     assert "Back to the dashboard" in page
 
 
+def test_a_settled_row_is_not_labelled_as_still_owing(world):
+    """The operational cohort includes paid awards; their payable is zero.
+
+    H5 still annotates them with a liability bucket and an `exposed` flag, both
+    of which describe an obligation that no longer exists. Printing either one
+    beside a stage of "Paid" puts two columns in contradiction on a finance
+    screen, which is the exact misreading this dashboard exists to prevent.
+    """
+
+    s, payout, _, _ = world
+    client = signed_in(s.admin)
+    operations = drilldown(scope(), metric="payout_operations")["rows"][0]
+    # The backend still supplies both, unchanged; this is a presentation rule.
+    assert "bucket" in operations and "exposed" in operations
+    with override_settings(**ENABLED):
+        cohort = main(client.get(ROWS, {"mode": "test", "metric": "payout_operations"}))
+        liability = main(
+            client.get(ROWS, {"mode": "test", "metric": "traveler_outstanding"})
+        )
+    assert "Liability bucket" not in cohort
+    assert "Stage" in cohort
+    assert "Externally committed" not in cohort
+    # Where the rows really are outstanding, the bucket is the point of them.
+    assert "Liability bucket" in liability
+    assert "Externally committed" not in liability
+
+
 def test_drilldown_pagination_is_bounded_by_the_backend(world):
     s, _, _, _ = world
     client = signed_in(s.admin)

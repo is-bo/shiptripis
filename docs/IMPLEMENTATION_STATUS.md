@@ -5672,3 +5672,12 @@ forwarding and five invalid filter shapes, drilldown pagination and bounds,
 sensitive-field absence, the legacy disclosure, and request behaviour. H5's own
 28 tests and the 56 console/admin tests were re-run unchanged and pass. No
 accounting code changed, so the H3/H4 financial suites were not re-run.
+
+Deployed QA found one presentation defect and it was fixed before sign-off. The
+operational rail cohort includes settled awards, and H5 still annotates those
+with an exclusive liability bucket and an `exposed` flag; both describe an
+obligation a paid payout no longer has, so a drilldown row read "Stage: Paid"
+and "Liability bucket: Processing or externally committed" at the same time.
+The bucket and that marker are now withheld on `payout_operations` only, where
+the stage is authoritative, and both remain on every liability drilldown. The
+backend was not changed. Test count is 28.
