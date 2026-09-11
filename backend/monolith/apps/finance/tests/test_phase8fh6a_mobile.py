@@ -68,6 +68,12 @@ def test_preference_contract_and_future_route(value):
         expected = "EUR" if value == "eur_only" or (value == "both" and provider == "stripe") else "DZD"
         assert chosen.currency == expected
     assert response.data["preference_scope"] == "future_payouts_only"
+    # Country is the Stripe EUR legal account country; a DZD manual instruction
+    # is Algeria-side and must never carry it.
+    for method in methods:
+        version = method.current_version
+        if version and method.currency == "DZD":
+            assert version.country == ""
 
 
 def test_preference_invalid_country_revision_and_authority_rollback():

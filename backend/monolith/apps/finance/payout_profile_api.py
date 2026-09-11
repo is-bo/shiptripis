@@ -204,8 +204,13 @@ class PayoutMethodsView(ProfileView):
         for currency in ("EUR", "DZD"):
             method = by_currency.get(currency)
             enabled = values["preference"] in ("both", "eur_only" if currency == "EUR" else "dzd_only")
-            country = values["country"].upper() or (
-                method.current_version.country if method and method.current_version else ""
+            # Country is the Stripe EUR legal account country and belongs only
+            # to that rail. A DZD manual instruction is Algeria-side, and
+            # stamping a European country onto its version would make the
+            # snapshot say something about the destination that is not true.
+            country = "" if currency == "DZD" else (
+                values["country"].upper()
+                or (method.current_version.country if method and method.current_version else "")
             )
             set_preference(actor=request.user, currency=currency, enabled=enabled,
                            expected_revision=values[f"{currency.lower()}_revision"],
