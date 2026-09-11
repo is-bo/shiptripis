@@ -229,9 +229,20 @@ def payout_status(payout, *, at=None, context=None):
         state = "protection_active" if protection_active else "release_pending"
     version = payout.active_instruction_version
     bank = bank_stage(payout)
-    disputed = (deal.pk in context["disputed"] if context else Dispute.objects
-                .filter(deal_id=deal.pk).exclude(status__in=["resolved", "closed"]).exists())
-    held = payout.pk in context["held"] if context else active_holds(payout).exists()
+
+    # Read from the page's single pass when there is one, and otherwise only if
+    # the settlement facts above have not already decided the state.
+    def disputed():
+        if context is not None:
+            return deal.pk in context["disputed"]
+        return (Dispute.objects.filter(deal_id=deal.pk)
+                .exclude(status__in=["resolved", "closed"]).exists())
+
+    def held():
+        if context is not None:
+            return payout.pk in context["held"]
+        return active_holds(payout).exists()
+
     actions = ["view_payout", "refresh"]
     if bank and bank[1]:
         # A returned or failed bank payout outranks every local status — including
@@ -245,9 +256,9 @@ def payout_status(payout, *, at=None, context=None):
         state = "sent"
     elif payout.status == "failed":
         state, reason = "needs_attention", "payout_failed"
-    elif disputed:
+    elif disputed():
         state, reason = "needs_attention", "dispute_active"
-    elif held or payout.status == "frozen":
+    elif payout.status == "frozen" or held():
         state, reason = "needs_attention", "payout_on_hold"
     elif protection_active:
         state, reason = "protection_active", "protection_active"
