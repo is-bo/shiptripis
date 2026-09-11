@@ -22,8 +22,16 @@ page and DZD profile verdicts memoised, so page length no longer drives queries.
 The focused PostgreSQL suite passes 40 tests, including a regression that fails
 against the previous Transfer-derived mapping and a page-length query-count
 guard; a consolidated compatibility run over the shared payout, deal and
-notification read paths passes 280. Final release evidence is recorded in the
-H6A completion report. Gemini's authority is
+notification read paths passes 280. All six required CI jobs are green on
+`c73a4fc20165283153fb45909c8f31fbcc2345ab`, which is now `main` and is deployed
+as `v1.0.0-rc.25+c73a4fc` (Railway deployment `e996c8b0-ffa9-47aa-93f8-eabac5865d83`,
+SUCCESS). `/healthz` and `/readyz` return 200 with migrations current, the
+finance worker and reservation releaser running, Stripe and Chargily in TEST,
+email disabled, the Finance dashboard enabled, and the EUR/DZD execution flags
+unchanged. A bounded deployed check with two synthetic QA travelers confirmed
+the summary, preference PATCH, safe DZD projection, detail, history, owner
+isolation and unauthenticated refusals, with no provider identifier or
+plaintext DZD value anywhere in the mobile surface. Gemini's authority is
 [the mobile payout contract](PHASE8F_H6A_MOBILE_PAYOUT_CONTRACT.md).
 Transport callback crash can still miss a push, while the payout inbox survives;
 H6B UI and I1 delivery-list lifecycle work remain separate.
