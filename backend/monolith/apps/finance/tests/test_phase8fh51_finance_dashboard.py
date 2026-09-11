@@ -41,6 +41,28 @@ ROWS = "/admin/finance/dashboard/rows/"
 ENABLED = {"FINANCE_DASHBOARD_ENABLED": True}
 
 
+@pytest.fixture(autouse=True)
+def unhashed_static():
+    """CI does not run collectstatic, so the hashed manifest does not exist.
+
+    Every page these tests render extends the admin shell, which resolves
+    `{% static %}` through the production manifest storage and raises when an
+    entry is missing. The Phase 8D and G2 console suites already take this
+    override; H5.1 takes the same one rather than making a presentation test
+    depend on an asset build.
+    """
+
+    with override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    ):
+        yield
+
+
 @pytest.fixture
 def world():
     """H3's funded, delivered, EUR-payable Deal — H5's own reporting fixture."""
