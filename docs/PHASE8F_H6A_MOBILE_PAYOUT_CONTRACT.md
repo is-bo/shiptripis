@@ -276,6 +276,28 @@ Safe DRF field errors reject unknown fields. Existing domain codes remain:
 `payout_evidence_unavailable` (503). No raw Stripe/DB errors.
 Auth: 401/403; unowned resource: 404; throttle: 429; disabled profiles: 404.
 
-H6B owns UI, entry points, forms and state presentation. Active Sending placement
-of completed deliveries remains an I1 lifecycle concern; this phase does not
-change that list or arrival/delivery guardrails. No browser work was performed.
+### What Flutter must never calculate
+
+Payout eligibility, readiness, routing or rail choice; FX rates or settlement
+amounts; protection policy or its expiry; whether a bank payout has been
+returned; which actions are permitted. Every one of those arrives as a server
+value — `display_state`, `blocking_reason`, `available_actions`, `state`,
+`server_time` — and is rendered, not derived. A client that infers a return
+from `paid_at` plus elapsed time, or eligibility from a countdown reaching zero,
+is wrong by construction: only the server sees the disbursement and the holds.
+
+### Deferred
+
+**H6B (Gemini).** All UI: the Profile → Payout methods entry point, EUR and DZD
+method cards, the preference selector, the DZD form and cheque upload, payout
+history and detail screens, the post-delivery payout section, translation, RTL,
+empty/loading/error states and bottom-navigation clearance. No backend or
+contract change is expected; if one appears necessary, raise it rather than
+working around it client-side.
+
+**I1 (lifecycle).** Completed deliveries still appearing under active Sending is
+a delivery-list lifecycle defect, not a payout one, and is untouched here.
+Early-arrival rules and payout-floor/arrival guardrails also remain I1. This
+phase changes neither that list nor any arrival or delivery guardrail.
+
+No browser work was performed.
