@@ -1,5 +1,85 @@
 # ShipTrip V1 Implementation Status
 
+## Phase 8F-H7 — Full TEST payout rehearsal and release validation (2026-09-11)
+
+**H7 PASS.** A controlled end-to-end TEST rehearsal of the whole payout system on
+the deployed service, from `f6db163` with no source change required. Full evidence
+is in [the H7 rehearsal record](PHASE8F_H7_FULL_TEST_PAYOUT_REHEARSAL.md).
+
+Two funded Deals were driven through complete lifecycles against release
+`v1.0.0-rc.25+c73a4fc` on `https://shiptrip-production-f7f7.up.railway.app`, and
+both reached `paid`. Stripe TEST, Chargily TEST, email disabled, Finance dashboard
+enabled. No LIVE operation and no real dinar transfer.
+
+Path A (`ST-6` / `PAYOUT-6`, Traveler `TR-14`): €58.75 paid through the
+application's own Stripe Checkout Session, captured once by a signature-verified
+`checkout.session.completed`. Routing froze to Stripe EUR on method version 2 and
+connected account `acct_1UDSCo…`. Protection measured exactly 172,800 seconds and
+refused release while open. The deployed finance worker then did the rest
+unattended: one platform Transfer `tr_3UEbSe…` for 4,700 cents, one connected bank
+Payout `po_1UEbzs…` to `ba_1UDSht…`, paid at 21:28:37. Award, Transfer and bank
+payout are the same 4,700 cents with no deduction; three balanced ledger
+transactions leave the payable untouched until settlement.
+
+Path B (`ST-7` / `PAYOUT-7`, Traveler `TR-52`): 19,250.00 DZD paid on a real
+Chargily TEST checkout, captured once by a signature-verified `checkout.paid`
+after two earlier attempts had legitimately failed and expired. Routing froze to
+manual DZD on method version 10 / profile revision 2, FX 280,000,000 micros from
+business settings v9, settlement exactly `ceil(5500 × 280 / 100) = 15,400` DZD
+under `ceil_whole_dzd_v1`. The Finance workflow ran over the deployed HTTP API —
+prepare, begin, synthetic receipt upload, confirm settled — reaching `paid` with
+`sent_at` and `paid_at` both preserved. A second operator was refused at both
+prepare (400) and begin (403).
+
+Immutability held in both directions: preference changes after funding left both
+payouts on their frozen rails, and a replacement DZD profile (version 13 /
+revision 3) did not move `PAYOUT-7` off version 10 / revision 2.
+
+Idempotency and race safety: both providers' events redelivered as HTTP 200
+duplicates with one stored row, no new ledger entry and no new notification;
+`execute_payout` on the settled payout returned `PayoutBlocked: Terminal payout`;
+an `admin_refresh_payout` re-read Stripe and produced no second Transfer, bank
+payout or disbursement; the DZD confirm repeated idempotently at state version 9;
+a Finance hold blocked release with `finance_hold_active` and cleared cleanly.
+
+Seventeen payout notifications across both Travelers carry seventeen distinct
+`event_id` values, and a scan for Stripe object ids, `stripe.com` URLs and
+CCP/RIP-shaped data returned zero matches. The H5.1 dashboard tracked both objects
+through every bucket and shows them settled at €47.00 / 47.00 EUR and €55.00 /
+15,400 DZD at 1 EUR = 280 DZD, beside the H4 object still frozen at 260.
+
+One H5 snapshot after both paths: `integrity = ok`, applied funding €512.88 =
+€512.88, finalized refunds €0.00 = €0.00, paid settlements €282.00 = €282.00,
+traveler liability €60.00 = €60.00, platform recognition €85.50 = €85.50, every
+difference €0.00, zero row mismatches, zero unbalanced transactions, no warnings.
+The global ledger sums to zero across 71 entries in 32 transactions. Totals moved
+because H7 created real TEST transactions; the contributing rows agree exactly.
+
+Two deliberate, disclosed test controls. Each Deal's six lifecycle timestamps were
+shifted back a uniform 72 hours after its protection state had been verified, so
+every interval — including the 48-hour window itself — was preserved and only made
+to have already elapsed; no status, amount, rate, payout, ledger or provider record
+was touched. `PAYOUT_DZD_EXECUTION_ENABLED` was set true so the manual workflow
+could run through the real API, then restored to false; both redeploys of the same
+release returned `/healthz` and `/readyz` 200 with all workers running, and every
+payout, provider, email and dashboard flag is back at its pre-H7 value.
+
+Returned and failed payout behaviour is **simulated test coverage, not
+real-provider evidence**: six passing tests (`TestBankPayoutFailure` plus the two
+H6A returned-payout mobile tests). `payout_returns` is €0.00 with zero rows — no
+returned state was fabricated. Mobile UI smoke reused the existing H6B suite, 16
+of 16 passing including Arabic RTL; no new APK was built.
+
+One MINOR finding, reported and not fixed: a superseded identity attestation
+retroactively invalidates the approval of an already-funded manual payout's frozen
+profile revision, blocking it as `payout_setup_required` — a reason that
+misdescribes a profile which is complete and approved, and which the Traveler
+cannot clear alone. Money is never at risk and the frozen destination never moves;
+a Finance operator recovers with one audited re-review, which is what was done
+here. The successor rule is deliberate H1/H4 identity anti-abuse design, so the
+remedy is a product decision for the payout identity owner rather than a bug fix.
+No BLOCKER and no MAJOR finding. I1 and H8 were not started.
+
 ## Phase 8F-H6B — Traveler mobile payout UX (2026-09-11)
 
 Implemented complete traveler mobile payout experience in Flutter consuming the frozen H6A backend contract (`docs/PHASE8F_H6A_MOBILE_PAYOUT_CONTRACT.md`, backend commit `c73a4fc`, release `v1.0.0-rc.25+c73a4fc`).
