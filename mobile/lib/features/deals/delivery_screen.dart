@@ -42,6 +42,7 @@ import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/money/money.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/codes.dart';
@@ -55,6 +56,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
 import '../../domain/handover.dart';
+import '../../domain/payout.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 
@@ -844,10 +846,14 @@ class _ProtectionSection extends StatelessWidget {
         ],
 
         // The payout belongs to the traveller and is only ever shown to them.
-        if (!isSender && payout != null) ...[
+        if (!isSender && (deal.payoutSummary != null || payout != null)) ...[
           const SizedBox(height: AppSpace.xl),
           SectionHeader(title: l.payoutTitle),
-          _PayoutBlock(payout: payout, frozen: hasActiveDispute),
+          _PayoutBlock(
+            payoutSummary: deal.payoutSummary,
+            legacyPayout: payout,
+            frozen: hasActiveDispute,
+          ),
         ],
 
         const SizedBox(height: AppSpace.xl),
@@ -862,9 +868,14 @@ class _ProtectionSection extends StatelessWidget {
 }
 
 class _PayoutBlock extends StatelessWidget {
-  const _PayoutBlock({required this.payout, required this.frozen});
+  const _PayoutBlock({
+    this.payoutSummary,
+    this.legacyPayout,
+    required this.frozen,
+  });
 
-  final DealPayout payout;
+  final PayoutMobile? payoutSummary;
+  final DealPayout? legacyPayout;
   final bool frozen;
 
   @override
@@ -872,52 +883,135 @@ class _PayoutBlock extends StatelessWidget {
     final l = L.of(context);
     final locale = Localizations.localeOf(context);
     final text = Theme.of(context).textTheme;
+    final c = context.colors;
 
-    // A frozen payout is a distinct state, not a failure. The status the
-    // server sent wins; `frozen` only decides the emphasis.
-    final status = payoutStatusCopy(context, payout.status);
-    final amount = payout.amount;
-    final eligibleAt = payout.eligibleAt;
-    final paidAt = payout.paidAt;
+    if (payoutSummary != null) {
+      final summary = payoutSummary!;
+      final stateCopy = payoutDisplayStateCopy(context, summary.displayState);
+      final blockingCopy =
+          payoutBlockingReasonLabel(context, summary.blockingReason);
+      final dzdAmount = summary.dzdAmount;
+      final isDzd = dzdAmount != null && dzdAmount > 0;
+      final fxRate = summary.formattedFxRate;
 
-    return AppInsetGroup(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          StatusPill(
-            label: status.label,
-            tone: frozen ? StatusTone.bad : status.tone,
-            icon: frozen ? Icons.ac_unit_rounded : status.icon,
-          ),
-          if (amount != null) ...[
+      return AppInsetGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: StatusPill(
+                    label: stateCopy.label,
+                    tone: (frozen ||
+                            summary.displayState ==
+                                PayoutDisplayState.needsAttention)
+                        ? StatusTone.bad
+                        : (summary.displayState ==
+                                PayoutDisplayState.protectionActive
+                            ? StatusTone.waiting
+                            : stateCopy.tone),
+                    icon: frozen ? Icons.ac_unit_rounded : stateCopy.icon,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      context.openPayoutDetail(summary.reference),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: Text(l.payoutViewAction),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpace.md),
             DetailRow(
               label: l.payoutAmountLabel,
-              value: MoneyText(amount, semanticPrefix: l.a11yMoneyAmount),
+              value: MoneyText(summary.canonicalEurAmount,
+                  semanticPrefix: l.a11yMoneyAmount),
             ),
-          ],
-          if (eligibleAt != null) ...[
-            const SizedBox(height: AppSpace.sm),
-            DetailRow(
-              label: l.payoutEligibleLabel,
-              value: Text(
-                LocaleFormats.dateTime(locale, eligibleAt),
-                style: text.bodyMedium,
+            if (isDzd) ...[
+              const SizedBox(height: AppSpace.sm),
+              DetailRow(
+                label: l.payoutDzdTitle,
+                value: MoneyText(Money.minor(dzdAmount, 'DZD', 0)),
               ),
-            ),
-          ],
-          if (paidAt != null) ...[
-            const SizedBox(height: AppSpace.sm),
-            DetailRow(
-              label: l.payoutStatusPaid,
-              value: Text(
-                LocaleFormats.dateTime(locale, paidAt),
-                style: text.bodyMedium,
+              if (fxRate != null) ...[
+                const SizedBox(height: AppSpace.xs),
+                DetailRow(
+                  label: l.payoutRateLabel(fxRate),
+                  value: const SizedBox.shrink(),
+                ),
+              ],
+            ],
+            if (blockingCopy != null && blockingCopy.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.sm),
+              Text(
+                blockingCopy,
+                style: text.bodySmall?.copyWith(color: c.danger),
               ),
-            ),
+            ],
+            if (summary.availableActions
+                .contains('configure_payout_method')) ...[
+              const SizedBox(height: AppSpace.md),
+              AppButton(
+                label: l.payoutMethodsTitle,
+                variant: AppButtonVariant.secondary,
+                icon: Icons.account_balance_rounded,
+                onPressed: () => context.openPayoutMethods(),
+              ),
+            ],
           ],
-        ],
-      ),
-    );
+        ),
+      );
+    }
+
+    if (legacyPayout != null) {
+      final payout = legacyPayout!;
+      final status = payoutStatusCopy(context, payout.status);
+      final amount = payout.amount;
+      final eligibleAt = payout.eligibleAt;
+      final paidAt = payout.paidAt;
+
+      return AppInsetGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StatusPill(
+              label: status.label,
+              tone: frozen ? StatusTone.bad : status.tone,
+              icon: frozen ? Icons.ac_unit_rounded : status.icon,
+            ),
+            if (amount != null) ...[
+              const SizedBox(height: AppSpace.md),
+              DetailRow(
+                label: l.payoutAmountLabel,
+                value: MoneyText(amount, semanticPrefix: l.a11yMoneyAmount),
+              ),
+            ],
+            if (eligibleAt != null) ...[
+              const SizedBox(height: AppSpace.sm),
+              DetailRow(
+                label: l.payoutEligibleLabel,
+                value: Text(
+                  LocaleFormats.dateTime(locale, eligibleAt),
+                  style: text.bodyMedium,
+                ),
+              ),
+            ],
+            if (paidAt != null) ...[
+              const SizedBox(height: AppSpace.sm),
+              DetailRow(
+                label: l.payoutStatusPaid,
+                value: Text(
+                  LocaleFormats.dateTime(locale, paidAt),
+                  style: text.bodyMedium,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }

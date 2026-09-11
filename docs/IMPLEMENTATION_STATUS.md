@@ -1,5 +1,17 @@
 # ShipTrip V1 Implementation Status
 
+## Phase 8F-H6B — Traveler mobile payout UX (2026-09-11)
+
+Implemented complete traveler mobile payout experience in Flutter consuming the frozen H6A backend contract (`docs/PHASE8F_H6A_MOBILE_PAYOUT_CONTRACT.md`, backend commit `c73a4fc`, release `v1.0.0-rc.25+c73a4fc`).
+- **Domain & State**: Additive domain models (`PayoutPreference`, `EurPayoutState`, `DzdPayoutState`, `PayoutDisplayState`, `PayoutRail`, `PayoutMethodsSummary`, `PayoutMobile`, `PayoutHistoryPage`, `PayoutListItem`). Riverpod providers for methods, paginated history, and live detail, wired into `refreshVolatileState()`.
+- **Payout Methods Screen**: Preference selection (`eur_only`, `dzd_only`, `both`) with optimistic locking revision tokens and future-scope notice. EUR Stripe card with status pill, hosted onboarding / dashboard via `url_launcher`, and app lifecycle observer for auto-refreshing readiness on return. DZD CCP / BaridiMob card with masked account numbers and dynamic action triggers.
+- **DZD Setup Screen**: Strictly 6 inputs (`first_name`, `last_name`, `ccp_number`, `ccp_key`, `rip`, `crossed_cheque_photo`). Zero NIP field anywhere. Mandated cheque photo copy in FR/AR/EN. Form uses `SingleChildScrollView` to prevent field recycling and ensure complete validation.
+- **Payout Detail Screen**: Canonical EUR amount, snapshotted DZD amount and frozen rate formula (`1 EUR = X DZD`), server-authoritative display states, safe blocking reasons, and contextual action buttons.
+- **Payout History**: Paginated list displaying EUR and DZD amounts, status pills, and direct item navigation to detail.
+- **Delivery Screen**: Integrated `deal.payoutSummary` into traveler delivery flow, presenting real-time payout status, amounts, rate, and method setup shortcuts.
+- **Deep Linking & Notifications**: Route paths `/profile/payout-methods`, `/profile/payout-methods/dzd`, `/payouts/:reference`. Push notification routing handles `OpenPayoutDetail` and `OpenPayoutMethods`.
+- **Quality Gates**: All 9 widget/flow tests in `mobile/test/phase8fh6b_payout_screens_test.dart` pass. Static analysis passes cleanly with 0 issues (`flutter analyze`). Zero regressions in existing test suite (`money_test.dart`, `phase8fc_payment_rails_test.dart`, `phase8fd_push_test.dart`).
+
 ## Phase 8F-H6A — Mobile payout contract (2026-09-11)
 
 Implemented additive `h6a.v1` summary, atomic three-value preference PATCH,

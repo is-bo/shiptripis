@@ -4015,4 +4015,312 @@ class LAr extends L {
 
   @override
   String get notificationDispute => 'تحديث النزاع';
+
+  @override
+  String get notificationPayout => 'تحديث التحويل';
+
+  @override
+  String get payoutMethodsTitle => 'وسائل التحويل';
+
+  @override
+  String get profilePayoutMethods => 'وسائل التحويل';
+
+  @override
+  String get profilePayoutHistory => 'سجل التحويلات';
+
+  @override
+  String get payoutPreferenceTitle => 'تفضيل التحويل';
+
+  @override
+  String get payoutPreferenceEurOnly => 'باليورو فقط';
+
+  @override
+  String get payoutPreferenceDzdOnly => 'بالدينار الجزائري فقط';
+
+  @override
+  String get payoutPreferenceBoth => 'كلاهما';
+
+  @override
+  String get payoutPreferenceBothExplainer =>
+      'الطلبات المدفوعة عبر Stripe تُحوَّل باليورو، والمدفوعة عبر Chargily تُحوَّل بالدينار الجزائري.';
+
+  @override
+  String get payoutPreferenceScopeNote =>
+      'ينطبق هذا التفضيل على التحويلات المستقبلية فقط.';
+
+  @override
+  String get payoutPreferenceRequired => 'يرجى اختيار تفضيل التحويل الخاص بك.';
+
+  @override
+  String get payoutEurTitle => 'التحويلات باليورو (Stripe)';
+
+  @override
+  String get payoutEurNotConfiguredBody =>
+      'اربط حسابك المصرفي الأوروبي لاستلام التحويلات باليورو.';
+
+  @override
+  String get payoutEurSetupRequiredBody =>
+      'أكمل إعداد حسابك مع Stripe لتفعيل التحويلات باليورو.';
+
+  @override
+  String get payoutEurPendingVerificationBody =>
+      'تقوم Stripe حالياً بالتحقق من بيانات حسابك. سيتم إشعارك فور اعتمادها.';
+
+  @override
+  String get payoutEurReadyBody =>
+      'حسابك باليورو معتمد وجاهز لاستلام التحويلات.';
+
+  @override
+  String get payoutEurNeedsAttentionBody =>
+      'يتطلب حسابك لدى Stripe مراجعة قبل إمكانية إتمام التحويلات.';
+
+  @override
+  String get payoutActionSetupEur => 'إعداد التحويلات باليورو';
+
+  @override
+  String get payoutActionResumeEur => 'متابعة الإعداد';
+
+  @override
+  String get payoutActionManageEur => 'إدارة الحساب على Stripe';
+
+  @override
+  String get payoutActionRefresh => 'تحديث الحالة';
+
+  @override
+  String get payoutDzdTitle => 'التحويلات بالدينار (CCP / بريدي موب)';
+
+  @override
+  String get payoutDzdNotConfiguredBody =>
+      'أضف حساب CCP وشيكاً مُسطَّراً لاستلام التحويلات في الجزائر.';
+
+  @override
+  String get payoutDzdSetupRequiredBody =>
+      'أرسل بيانات CCP والشيك المُسطَّر للمتابعة.';
+
+  @override
+  String get payoutDzdPendingReviewBody =>
+      'بيانات CCP والشيك المُسطَّر قيد المراجعة لدى فريقنا.';
+
+  @override
+  String get payoutDzdReadyBody => 'حساب CCP معتمد وجاهز للتحويلات بالدينار.';
+
+  @override
+  String get payoutDzdNeedsAttentionBody =>
+      'يلزم التحقق من ملف التحويل أو تحديثه.';
+
+  @override
+  String get payoutDzdInactiveBody =>
+      'التحويلات بالدينار غير مفعلة حالياً لحسابك.';
+
+  @override
+  String get payoutActionSetupDzd => 'إعداد التحويلات بالدينار الجزائري';
+
+  @override
+  String get payoutActionReplaceDzd => 'تحديث بيانات التحويل';
+
+  @override
+  String get payoutDzdCcpLabel => 'حساب CCP';
+
+  @override
+  String get payoutDzdRipLabel => 'RIP';
+
+  @override
+  String payoutDzdSubmittedAt(String date) {
+    return 'أُرسل بتاريخ $date';
+  }
+
+  @override
+  String get payoutDzdFutureScopeNote =>
+      'تنطبق هذه البيانات على التحويلات المؤهلة المستقبلية. التحويلات المموّلة مسبقاً تحتفظ بوجهتها الأصلية.';
+
+  @override
+  String get dzdFormTitle => 'إعداد التحويلات بالدينار الجزائري';
+
+  @override
+  String get dzdFormUpdateTitle => 'تحديث بيانات التحويل';
+
+  @override
+  String get dzdFormScopeExplainer =>
+      'تنطبق هذه البيانات على التحويلات المؤهلة المستقبلية. التحويلات المموّلة مسبقاً تحتفظ بوجهتها الأصلية.';
+
+  @override
+  String get dzdFirstNameLabel => 'الاسم';
+
+  @override
+  String get dzdLastNameLabel => 'اللقب';
+
+  @override
+  String get dzdCcpNumberLabel => 'رقم حساب CCP';
+
+  @override
+  String get dzdCcpNumberHint => 'من 1 إلى 20 رقماً';
+
+  @override
+  String get dzdCcpKeyLabel => 'مفتاح CCP';
+
+  @override
+  String get dzdCcpKeyHint => 'رقمان';
+
+  @override
+  String get dzdRipLabel => 'رقم الحساب البريدي الجاري (RIP)';
+
+  @override
+  String get dzdRipHint => '20 رقماً';
+
+  @override
+  String get dzdChequeProofLabel => 'صورة كاملة لشيك مُسطَّر';
+
+  @override
+  String get dzdChequeProofHelper => 'حمّل صورة واضحة وكاملة للشيك المُسطَّر.';
+
+  @override
+  String get dzdChequeAddPhoto => 'اختيار صورة';
+
+  @override
+  String get dzdChequeReplacePhoto => 'تغيير الصورة';
+
+  @override
+  String get dzdChequeRemovePhoto => 'حذف الصورة';
+
+  @override
+  String get dzdSubmitAction => 'حفظ بيانات التحويل';
+
+  @override
+  String get dzdUpdateAction => 'تحديث بيانات التحويل';
+
+  @override
+  String get dzdSubmitSuccess => 'تم حفظ بيانات التحويل بنجاح.';
+
+  @override
+  String get payoutReasonSetupRequired => 'يلزم إعداد وسيلة التحويل';
+
+  @override
+  String get payoutReasonUnderReview => 'الملف قيد المراجعة';
+
+  @override
+  String get payoutReasonNeedsAttention => 'يلزم التحقق من الملف';
+
+  @override
+  String get payoutReasonOnHold => 'التحويل معلّق مؤقتاً';
+
+  @override
+  String get payoutReasonDisputeActive => 'يوجد نزاع مفتوح على هذا الطلب';
+
+  @override
+  String get payoutReasonFailed => 'تعذّر تنفيذ التحويل';
+
+  @override
+  String get payoutReasonReturned => 'أعاد المصرف التحويل';
+
+  @override
+  String get payoutReasonCountryUnsupported =>
+      'البلد غير مدعوم للتحويلات باليورو عبر Stripe';
+
+  @override
+  String get deliveryPayoutSectionTitle => 'حالة التحويل';
+
+  @override
+  String get deliveryPayoutProtectionExplainer =>
+      'فترة الحماية (48 ساعة) جارية حالياً. سيصبح التحويل متاحاً فور انتهائها.';
+
+  @override
+  String get deliveryPayoutReadyExplainer =>
+      'تم تأكيد التسليم وأصبح التحويل مؤهلاً للدفع.';
+
+  @override
+  String get deliveryPayoutProcessingExplainer =>
+      'يجري حالياً تجهيز وإرسال التحويل.';
+
+  @override
+  String get deliveryPayoutSentExplainer =>
+      'تم إرسال المبلغ وهو في طريقه إلى حسابك.';
+
+  @override
+  String get deliveryPayoutPaidExplainer => 'تم تحويل المبلغ لحسابك بنجاح.';
+
+  @override
+  String get deliveryPayoutReturnedExplainer =>
+      'أعاد المصرف هذا التحويل. يرجى مراجعة وتحديث بيانات وسيلة التحويل.';
+
+  @override
+  String get deliveryPayoutNeedsAttentionExplainer =>
+      'يتطلب هذا التحويل إجراءً قبل إمكانية صرفه.';
+
+  @override
+  String payoutRateLabel(String rate) {
+    return 'سعر الصرف المعتمد: 1 EUR = $rate DZD';
+  }
+
+  @override
+  String get payoutHistoryTitle => 'سجل التحويلات';
+
+  @override
+  String get payoutDetailTitle => 'تفاصيل التحويل';
+
+  @override
+  String get payoutRailLabel => 'قناة التحويل';
+
+  @override
+  String get payoutRailStripeEur => 'Stripe (يورو)';
+
+  @override
+  String get payoutRailManualDzd => 'تحويل CCP (دينار)';
+
+  @override
+  String get payoutRailUnavailable => 'غير متاح';
+
+  @override
+  String get payoutReferenceLabel => 'مرجع التحويل';
+
+  @override
+  String get payoutDeliveryLabel => 'الطلب المرتبط';
+
+  @override
+  String get payoutEligibleAtLabel => 'تاريخ الاستحقاق';
+
+  @override
+  String get payoutSentAtLabel => 'تاريخ الإرسال';
+
+  @override
+  String get payoutPaidAtLabel => 'تاريخ الدفع';
+
+  @override
+  String get payoutProtectionEndsAtLabel => 'نهاية فترة الحماية';
+
+  @override
+  String get payoutViewAction => 'عرض تفاصيل التحويل';
+
+  @override
+  String get payoutViewHistoryAction => 'عرض سجل التحويلات';
+
+  @override
+  String get payoutOpenStripeError =>
+      'تعذّر فتح رابط إعداد Stripe. يرجى المحاولة مجدداً.';
+
+  @override
+  String get payoutStatusAwaitingDelivery => 'بانتظار التسليم';
+
+  @override
+  String get payoutStatusProtectionActive => 'فترة الحماية';
+
+  @override
+  String get payoutStatusReleasePending => 'بانتظار إتاحة التحويل';
+
+  @override
+  String get payoutStatusReady => 'التحويل جاهز';
+
+  @override
+  String get payoutStatusSent => 'تم إرسال التحويل';
+
+  @override
+  String get payoutStatusReturned => 'أُعيد التحويل';
+
+  @override
+  String get payoutStatusNeedsAttention => 'يلزم اتخاذ إجراء';
+
+  @override
+  String get payoutProfileReady => 'وسيلة التحويل جاهزة';
+
+  @override
+  String get payoutProfileNeedsAttention => 'يلزم التحقق من وسيلة التحويل';
 }

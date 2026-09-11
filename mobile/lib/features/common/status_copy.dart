@@ -25,6 +25,7 @@ import '../../domain/dispute.dart';
 import '../../domain/journey.dart';
 import '../../domain/offer.dart';
 import '../../domain/payment.dart';
+import '../../domain/payout.dart';
 import '../../l10n/app_localizations.dart';
 
 @immutable
@@ -330,6 +331,169 @@ StatusCopy payoutStatusCopy(BuildContext context, PayoutStatus status) {
       tone: StatusTone.neutral,
       icon: Icons.help_outline_rounded,
     ),
+  };
+}
+
+/// Normalized display state for payouts (H6A).
+StatusCopy payoutDisplayStateCopy(
+  BuildContext context,
+  PayoutDisplayState state,
+) {
+  final l = L.of(context);
+  return switch (state) {
+    PayoutDisplayState.awaitingDelivery => StatusCopy(
+      label: l.payoutStatusAwaitingDelivery,
+      tone: StatusTone.waiting,
+      icon: Icons.schedule_rounded,
+    ),
+    PayoutDisplayState.protectionActive => StatusCopy(
+      label: l.payoutStatusProtectionActive,
+      tone: StatusTone.waiting,
+      icon: Icons.shield_rounded,
+    ),
+    PayoutDisplayState.releasePending => StatusCopy(
+      label: l.payoutStatusReleasePending,
+      tone: StatusTone.waiting,
+      icon: Icons.hourglass_top_rounded,
+    ),
+    PayoutDisplayState.ready => StatusCopy(
+      label: l.payoutStatusReady,
+      tone: StatusTone.progress,
+      icon: Icons.check_circle_outline_rounded,
+    ),
+    PayoutDisplayState.processing => StatusCopy(
+      label: l.payoutStatusProcessing,
+      tone: StatusTone.progress,
+      icon: Icons.sync_rounded,
+    ),
+    PayoutDisplayState.sent => StatusCopy(
+      label: l.payoutStatusSent,
+      tone: StatusTone.progress,
+      icon: Icons.send_rounded,
+    ),
+    PayoutDisplayState.paid => StatusCopy(
+      label: l.payoutStatusPaid,
+      tone: StatusTone.good,
+      icon: Icons.payments_rounded,
+    ),
+    PayoutDisplayState.needsAttention => StatusCopy(
+      label: l.payoutStatusNeedsAttention,
+      tone: StatusTone.action,
+      icon: Icons.warning_amber_rounded,
+    ),
+    PayoutDisplayState.cancelled => StatusCopy(
+      label: l.payoutStatusCancelled,
+      tone: StatusTone.neutral,
+      icon: Icons.cancel_rounded,
+    ),
+    PayoutDisplayState.unknown => StatusCopy(
+      label: l.stateUnexpectedTitle,
+      tone: StatusTone.neutral,
+      icon: Icons.help_outline_rounded,
+    ),
+  };
+}
+
+/// EUR method card state copy (H6A).
+StatusCopy eurMethodStateCopy(
+  BuildContext context,
+  EurPayoutState state,
+) {
+  final l = L.of(context);
+  return switch (state) {
+    EurPayoutState.notConfigured => StatusCopy(
+      label: l.payoutStatusNotEligible,
+      tone: StatusTone.neutral,
+      icon: Icons.radio_button_unchecked_rounded,
+    ),
+    EurPayoutState.setupRequired => StatusCopy(
+      label: l.payoutReasonSetupRequired,
+      tone: StatusTone.action,
+      icon: Icons.info_outline_rounded,
+    ),
+    EurPayoutState.pendingVerification => StatusCopy(
+      label: l.payoutReasonUnderReview,
+      tone: StatusTone.waiting,
+      icon: Icons.schedule_rounded,
+    ),
+    EurPayoutState.ready => StatusCopy(
+      label: l.payoutProfileReady,
+      tone: StatusTone.good,
+      icon: Icons.check_circle_rounded,
+    ),
+    EurPayoutState.needsAttention => StatusCopy(
+      label: l.payoutProfileNeedsAttention,
+      tone: StatusTone.action,
+      icon: Icons.warning_amber_rounded,
+    ),
+    EurPayoutState.unknown => StatusCopy(
+      label: l.stateUnexpectedTitle,
+      tone: StatusTone.neutral,
+      icon: Icons.help_outline_rounded,
+    ),
+  };
+}
+
+/// DZD method card state copy (H6A).
+StatusCopy dzdMethodStateCopy(
+  BuildContext context,
+  DzdPayoutState state,
+) {
+  final l = L.of(context);
+  return switch (state) {
+    DzdPayoutState.notConfigured => StatusCopy(
+      label: l.payoutStatusNotEligible,
+      tone: StatusTone.neutral,
+      icon: Icons.radio_button_unchecked_rounded,
+    ),
+    DzdPayoutState.setupRequired => StatusCopy(
+      label: l.payoutReasonSetupRequired,
+      tone: StatusTone.action,
+      icon: Icons.info_outline_rounded,
+    ),
+    DzdPayoutState.pendingReview => StatusCopy(
+      label: l.payoutReasonUnderReview,
+      tone: StatusTone.waiting,
+      icon: Icons.schedule_rounded,
+    ),
+    DzdPayoutState.ready => StatusCopy(
+      label: l.payoutProfileReady,
+      tone: StatusTone.good,
+      icon: Icons.check_circle_rounded,
+    ),
+    DzdPayoutState.needsAttention => StatusCopy(
+      label: l.payoutProfileNeedsAttention,
+      tone: StatusTone.action,
+      icon: Icons.warning_amber_rounded,
+    ),
+    DzdPayoutState.inactive => StatusCopy(
+      label: l.payoutStatusCancelled,
+      tone: StatusTone.neutral,
+      icon: Icons.block_rounded,
+    ),
+    DzdPayoutState.unknown => StatusCopy(
+      label: l.stateUnexpectedTitle,
+      tone: StatusTone.neutral,
+      icon: Icons.help_outline_rounded,
+    ),
+  };
+}
+
+/// Safe user-facing description of H6A blocking reason codes.
+String? payoutBlockingReasonLabel(BuildContext context, String? code) {
+  if (code == null || code.isEmpty) return null;
+  final l = L.of(context);
+  return switch (code) {
+    'payout_setup_required' => l.payoutReasonSetupRequired,
+    'payout_profile_under_review' => l.payoutReasonUnderReview,
+    'payout_profile_needs_attention' => l.payoutReasonNeedsAttention,
+    'protection_active' => l.payoutStatusProtectionActive,
+    'payout_on_hold' => l.payoutReasonOnHold,
+    'dispute_active' => l.payoutReasonDisputeActive,
+    'payout_failed' => l.payoutReasonFailed,
+    'payout_returned' => l.payoutReasonReturned,
+    'payout_country_unsupported' => l.payoutReasonCountryUnsupported,
+    _ => l.payoutReasonNeedsAttention,
   };
 }
 

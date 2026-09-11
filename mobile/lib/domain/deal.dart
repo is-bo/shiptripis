@@ -20,6 +20,7 @@ import 'handover.dart';
 import 'json.dart';
 import 'money_perspective.dart';
 import 'payment.dart';
+import 'payout.dart';
 import 'rating.dart';
 
 enum DealStatus {
@@ -408,6 +409,7 @@ class Deal {
     this.cancellation,
     this.ratings,
     this.noShow,
+    this.payoutSummary,
     this.createdAt,
     this.updatedAt,
   });
@@ -450,6 +452,7 @@ class Deal {
     cancellation: CancellationAvailability.maybe(json['cancellation']),
     ratings: RatingState.maybe(json['ratings']),
     noShow: NoShowRecord.maybe(json['no_show']),
+    payoutSummary: PayoutMobile.maybe(json['payout_summary']),
     createdAt: readDate(json['created_at']),
     updatedAt: readDate(json['updated_at']),
   );
@@ -499,6 +502,7 @@ class Deal {
   final CancellationAvailability? cancellation;
   final RatingState? ratings;
   final NoShowRecord? noShow;
+  final PayoutMobile? payoutSummary;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;

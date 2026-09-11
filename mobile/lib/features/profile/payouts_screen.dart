@@ -1,12 +1,11 @@
-/// Earnings.
+/// Payout history screen.
 ///
-/// A traveller's money, and — more importantly — *why it has not arrived yet*.
-/// Payout is gated on a 48-hour protection window and frozen outright by an
-/// active dispute, and both of those are states the app must name rather than
-/// leave as a silence.
+/// Displays a traveler's payout history powered by H6A paginated endpoint
+/// `GET /api/payouts`.
 ///
-/// `frozen` gets its own treatment for that reason. It is not a failure and
-/// must never read as one: the money exists, and something is holding it.
+/// Each item displays canonical EUR amount, snapshotted DZD conversion if
+/// applicable, authoritative display state pill, rail, and created date.
+/// Tapping an item navigates to the authoritative [PayoutDetailScreen].
 library;
 
 import 'package:flutter/material.dart';
@@ -15,7 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/format/locale_formats.dart';
-import '../../design/components/codes.dart';
+import '../../core/money/money.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
@@ -23,7 +22,7 @@ import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
-import '../../domain/payment.dart';
+import '../../domain/payout.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 
@@ -33,21 +32,31 @@ class PayoutsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final payouts = ref.watch(payoutsProvider);
+    final historyAsync = ref.watch(payoutHistoryProvider);
 
     return AppScaffold(
-      topBar: AppTopBar(title: l.payoutTitle, showBack: true),
+      topBar: AppTopBar(
+        title: l.payoutHistoryTitle,
+        showBack: true,
+        actions: [
+          IconButton(
+            tooltip: l.payoutMethodsTitle,
+            icon: const Icon(Icons.account_balance_outlined),
+            onPressed: () => context.openPayoutMethods(),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(payoutsProvider),
-        child: AsyncView<List<Payout>>(
-          value: payouts,
-          onRetry: () => ref.invalidate(payoutsProvider),
+        onRefresh: () async => ref.invalidate(payoutHistoryProvider),
+        child: AsyncView<PayoutHistoryPage>(
+          value: historyAsync,
+          onRetry: () => ref.invalidate(payoutHistoryProvider),
           loading: () => ListView(
             padding: AppScrollPadding.page(context),
             children: const [SkeletonCardList()],
           ),
-          data: (all) {
-            if (all.isEmpty) {
+          data: (page) {
+            if (page.results.isEmpty) {
               return ListView(
                 padding: AppScrollPadding.page(context),
                 children: [
@@ -56,36 +65,26 @@ class PayoutsScreen extends ConsumerWidget {
                     body: l.payoutEmptyBody,
                     icon: Icons.payments_outlined,
                   ),
+                  const SizedBox(height: AppSpace.xl),
+                  AppButton(
+                    label: l.payoutMethodsTitle,
+                    variant: AppButtonVariant.secondary,
+                    icon: Icons.account_balance_rounded,
+                    onPressed: () => context.openPayoutMethods(),
+                  ),
                 ],
               );
             }
 
-            final pending = all
-                .where((p) => p.status.isPending)
-                .toList(growable: false);
-            final settled = all
-                .where((p) => !p.status.isPending)
-                .toList(growable: false);
-
-            return ListView(
+            return ListView.separated(
               padding: AppScrollPadding.page(context),
-              children: [
-                if (pending.isNotEmpty) ...[
-                  SectionHeader(title: l.payoutPendingTitle),
-                  for (final payout in pending) ...[
-                    _PayoutCard(payout: payout),
-                    const SizedBox(height: AppSpace.md),
-                  ],
-                  const SizedBox(height: AppSpace.lg),
-                ],
-                if (settled.isNotEmpty) ...[
-                  SectionHeader(title: l.deliveriesFilterHistory),
-                  for (final payout in settled) ...[
-                    _PayoutCard(payout: payout),
-                    const SizedBox(height: AppSpace.md),
-                  ],
-                ],
-              ],
+              itemCount: page.results.length,
+              separatorBuilder: (context, _) =>
+                  const SizedBox(height: AppSpace.md),
+              itemBuilder: (context, index) {
+                final item = page.results[index];
+                return _PayoutItemCard(item: item);
+              },
             );
           },
         ),
@@ -94,10 +93,10 @@ class PayoutsScreen extends ConsumerWidget {
   }
 }
 
-class _PayoutCard extends StatelessWidget {
-  const _PayoutCard({required this.payout});
+class _PayoutItemCard extends StatelessWidget {
+  const _PayoutItemCard({required this.item});
 
-  final Payout payout;
+  final PayoutListItem item;
 
   @override
   Widget build(BuildContext context) {
@@ -105,74 +104,108 @@ class _PayoutCard extends StatelessWidget {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context);
-    final copy = payoutStatusCopy(context, payout.status);
-    final amount = payout.amount;
-    final dealId = payout.dealId;
+
+    final mobile = item.mobile;
+    final displayState =
+        mobile?.displayState ?? PayoutDisplayState.parse(item.status);
+    final stateCopy = payoutDisplayStateCopy(context, displayState);
+    final dzdAmount = mobile?.dzdAmount;
+    final isDzd = dzdAmount != null && dzdAmount > 0;
+    final fxRate = mobile?.formattedFxRate;
+    final blockingCopy =
+        payoutBlockingReasonLabel(context, mobile?.blockingReason);
 
     return AppCard(
-      onTap: dealId == null ? null : () => context.openDeal(dealId),
-      accent: payout.status == PayoutStatus.frozen ? StatusTone.waiting : null,
+      onTap: () => context.openPayoutDetail(item.reference),
+      accent: displayState == PayoutDisplayState.needsAttention
+          ? StatusTone.bad
+          : (displayState == PayoutDisplayState.protectionActive
+              ? StatusTone.waiting
+              : null),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              if (amount != null)
-                Expanded(
-                  child: MoneyText(
-                    amount,
-                    semanticPrefix: l.moneyYourEarnings,
-                    size: 20,
-                  ),
-                )
-              else
-                const Spacer(),
+              Expanded(
+                child: MoneyText(
+                  item.amountEur,
+                  semanticPrefix: l.moneyYourEarnings,
+                  size: 20,
+                ),
+              ),
               StatusPill(
-                label: copy.label,
-                tone: copy.tone,
-                icon: copy.icon,
+                label: stateCopy.label,
+                tone: stateCopy.tone,
+                icon: stateCopy.icon,
                 compact: true,
               ),
             ],
           ),
-
-          // The one question a traveller actually has. Answered from the
-          // server's own instant, never from a locally computed 48 hours.
-          if (payout.status == PayoutStatus.notEligible &&
-              payout.eligibleAt != null) ...[
-            const SizedBox(height: AppSpace.md),
-            CodeCountdown(
-              target: payout.eligibleAt!,
-              label: l.payoutEligibleIn,
-              compact: true,
+          if (isDzd) ...[
+            const SizedBox(height: AppSpace.xs),
+            Row(
+              children: [
+                MoneyText(
+                  Money.minor(dzdAmount, 'DZD', 0),
+                  size: 16,
+                ),
+                if (fxRate != null) ...[
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text(
+                      '(${l.payoutRateLabel(fxRate)})',
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodySmall?.copyWith(color: c.textTertiary),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-
-          if (payout.status == PayoutStatus.frozen) ...[
-            const SizedBox(height: AppSpace.md),
-            Text(
-              l.payoutFrozenBody,
-              style: text.bodySmall?.copyWith(color: c.textSecondary),
-            ),
-          ],
-
-          if (payout.paidAt != null) ...[
-            const SizedBox(height: AppSpace.md),
-            Text(
-              LocaleFormats.fullDate(locale, payout.paidAt!),
-              style: text.bodySmall?.copyWith(color: c.textTertiary),
-            ),
-          ],
-
-          // Settled in whatever currency the transfer used. The server sends a
-          // pre-rendered string; it is never re-derived here.
-          if (payout.payoutAmountLabel != null &&
-              payout.payoutCurrency != null &&
-              payout.payoutCurrency!.isNotEmpty) ...[
+          ] else if (item.payoutAmountLabel != null &&
+              item.payoutCurrency != null &&
+              item.payoutCurrency!.isNotEmpty) ...[
             const SizedBox(height: AppSpace.xs),
             Text(
-              '${payout.payoutAmountLabel} ${payout.payoutCurrency}',
+              '${item.payoutAmountLabel} ${item.payoutCurrency}',
               style: text.bodySmall?.copyWith(color: c.textTertiary),
+            ),
+          ],
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            children: [
+              Icon(
+                item.method == 'stripe'
+                    ? Icons.credit_card_rounded
+                    : Icons.account_balance_rounded,
+                size: 14,
+                color: c.textTertiary,
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Text(
+                  item.method == 'stripe'
+                      ? l.payoutRailStripeEur
+                      : (item.method == 'dzd_manual'
+                          ? l.payoutRailManualDzd
+                          : l.payoutRailUnavailable),
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodySmall?.copyWith(color: c.textTertiary),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              if (item.createdAt != null)
+                Text(
+                  LocaleFormats.fullDate(locale, item.createdAt!),
+                  style: text.bodySmall?.copyWith(color: c.textTertiary),
+                ),
+            ],
+          ),
+          if (blockingCopy != null && blockingCopy.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              blockingCopy,
+              style: text.bodySmall?.copyWith(color: c.danger),
             ),
           ],
         ],

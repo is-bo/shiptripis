@@ -101,6 +101,15 @@ class OpenPayments extends NotificationDestination {
   const OpenPayments();
 }
 
+class OpenPayoutDetail extends NotificationDestination {
+  const OpenPayoutDetail(this.reference);
+  final String reference;
+}
+
+class OpenPayoutMethods extends NotificationDestination {
+  const OpenPayoutMethods();
+}
+
 class OpenJourney extends NotificationDestination {
   const OpenJourney(this.journeyId);
   final int journeyId;
@@ -165,6 +174,8 @@ class AppNotification {
   int? get journeyId =>
       readInt(payload['journey_id']) ?? readInt(payload['trip_id']);
   int? get disputeId => readInt(payload['dispute_id']);
+  String? get payoutReference => readString(payload['payout_reference']);
+  String? get event => readString(payload['event']);
 
   /// Resolved from the channel and the payload ids only.
   ///
@@ -195,7 +206,13 @@ class AppNotification {
       _ => const OpenPayments(),
     },
     NotificationChannel.paymentRefunded => const OpenPayments(),
-    NotificationChannel.payoutStatusChanged => const OpenPayments(),
+    NotificationChannel.payoutStatusChanged => switch ((payoutReference, dealId, event)) {
+      (final String ref, _, _) => OpenPayoutDetail(ref),
+      (_, _, 'profile_ready' || 'profile_needs_attention') =>
+        const OpenPayoutMethods(),
+      (_, final int id, _) => OpenDeal(id),
+      _ => const OpenPayoutMethods(),
+    },
     NotificationChannel.parcelCreated ||
     NotificationChannel.parcelCancelled => switch (parcelId) {
       final int id => OpenRequest(id),
