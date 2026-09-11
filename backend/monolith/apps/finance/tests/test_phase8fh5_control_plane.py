@@ -840,6 +840,15 @@ def test_user_dispute_is_separate_and_postgres_plan_uses_existing_indexes(world)
     assert cents(report, "provider_disputed_payouts") == 0
     assert cents(report, "liability_disputed") == 6000
     with consistent_read():
+        with connection.cursor() as cursor:
+            # On a ten-row test table a sequential scan is the planner's
+            # rational choice, so an unqualified EXPLAIN here measures how much
+            # data happened to precede this test in the same database rather
+            # than anything about the query. Ask the planner the question this
+            # gate actually cares about — given the choice, can the scoped
+            # payout query be served by an index H5 found already present? —
+            # and the answer stops moving with the suite's running order.
+            cursor.execute("SET LOCAL enable_seqscan = off")
         plan = json.loads(
             Queries(scope(search=str(payout.public_reference)), as_of=timezone.now())
             .payouts.values("pk", "payable")
