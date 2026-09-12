@@ -154,11 +154,15 @@ jobs:
   django:
     name: Django — migrations + tests + lint
     runs-on: ubuntu-latest
-    # The suite takes ~8.5 min locally, dominated by Argon2 password hashing
-    # (settings/base.py:101 — deliberately slow, with no test-time override).
-    # 30 min leaves headroom on a slower runner while still failing a hang
+    # The suite takes ~13 min locally, dominated by Argon2 password hashing
+    # (settings/base.py:101 — deliberately slow, with no test-time override)
+    # and, since H5.2, by the Finance suites: five operator surfaces now render
+    # where one did, and every render is a full control-plane snapshot of
+    # roughly seventy annotated queries. Those tests are already consolidated so
+    # that each expensive world is built once and asked everything.
+    # 45 min leaves headroom on a slower runner while still failing a hang
     # instead of burning GitHub's 6h default.
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: backend/monolith
