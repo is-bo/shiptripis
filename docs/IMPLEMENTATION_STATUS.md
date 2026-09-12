@@ -1,5 +1,40 @@
 # ShipTrip V1 Implementation Status
 
+## Pre-H8 — Finance blocker visibility and frozen DZD identity (2026-09-12)
+
+Implemented on `codex/pre-h8-finance-identity-hardening`, starting from
+`8311cd1ba6d235a9e4858405a5a2ab91d26d9f74`. The contract and policy are documented
+in [Pre-H8 Finance and identity hardening](PRE_H8_FINANCE_IDENTITY_HARDENING.md).
+
+H5 payout drilldowns expose safe `block_reason`, `needs_attention` and nullable
+`attention_owner` from the same backend evaluator used by mobile. Profile/setup
+blocks no longer have to be inferred from payout status. The H5.2 queue presenter
+consumes this field; its only remaining direct operational read is waiting time.
+No template, CSS, navigation, financial metric or permission changes are included.
+The Overview's aggregate attention count remains a later consumer change, with
+H5 pagination/completeness explicitly required by this backend contract.
+
+An originally bound DZD profile approved before funding remains valid when its
+identity attestation gains a later successor. Existing immutable review and funding
+timestamps provide the evidence; adverse review, revocation, KYC and evidence
+checks still apply. New snapshots and current/replacement profiles retain current
+identity requirements. Release, manual execution, mobile and the manual detail
+approval projection agree. Destination, method version and frozen FX are unchanged.
+There is no migration, schema/sqlc change, backfill or historical financial rewrite.
+
+Local final gate: **160 PostgreSQL tests passed** (21 new hardening regressions,
+26 H4 including concurrency, 28 H5, 40 H6A mobile, 34 H1 foundations and 11 H5.2
+compatibility tests). Ruff, Django system checks and diff whitespace checks passed.
+The existing local PostgreSQL cluster first required restart after an interrupted
+shutdown; stale reusable fixtures then required one fresh task-specific test DB.
+Those setup failures are not counted as passing tests. Final consolidated run:
+1564.42 seconds; the full Django suite was not run locally.
+
+CI, exact main/deployment identifiers, runtime flags and the single deployed
+read-only H5 reconciliation are recorded in the task's release report. No provider
+money operation or real H7 record mutation is authorized by this implementation.
+H8 remains unstarted.
+
 ## Phase 8F-H5.2 — Finance operator experience (2026-09-12)
 
 **H5.2 PASS.** A ground-up information-architecture redesign of the Finance

@@ -328,7 +328,7 @@ def destination_of(payout, profile, version) -> dict:
             "reason": _humanize(getattr(review, "reason_code", "")),
             "reviewer": _person(getattr(review, "reviewer", None)),
             "decided_at": getattr(review, "created_at", None),
-            "approved": approved_profile(profile),
+            "approved": approved_profile(profile, funded_payout=payout),
         },
         "newer_version": newer,
     }

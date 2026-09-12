@@ -65,7 +65,7 @@ def configured_h4():
         yield objects
 
 
-def build_manual(prefix="h4"):
+def build_manual(prefix="h4", *, delivered=True):
     with override_settings(PAYOUT_PROFILES_ENABLED=False):
         s = build_scenario(prefix=prefix)
         s.accept(reward_eur_cents=6000)
@@ -120,6 +120,8 @@ def build_manual(prefix="h4"):
         provider_currency="DZD",
     )
     payout = Payout.objects.get(deal=s.deal)
+    if not delivered:
+        return s, payout, profile
     now = timezone.now()
     Deal.objects.filter(pk=s.deal.pk).update(
         status="protection_window",

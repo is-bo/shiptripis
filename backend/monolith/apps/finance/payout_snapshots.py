@@ -219,6 +219,12 @@ def create_snapshot(*, deal_id, traveler_id, amount_eur_cents, order=None):
             ):
                 block = block or "payout_setup_required"
         else:
+            from .payout_manual_profiles import approved_profile
+
+            # Cached method.status cannot authorize new routing after identity
+            # supersession. Historical approval is only for an existing snapshot.
+            if not approved_profile(version.dzd_profile_revision if version else None):
+                block = block or "payout_setup_required"
             rate = settings_version = snapshot_at = fx_source = None
             if source and provider == "chargily":
                 rate, settings_version, snapshot_at, fx_source = (

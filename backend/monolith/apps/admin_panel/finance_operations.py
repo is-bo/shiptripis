@@ -530,14 +530,14 @@ def _pick(cohorts, requested, *, fallback):
 # ---------------------------------------------------------------------------
 
 #: The one place this module reads a model. Neither column is money.
-_OPERATIONAL_COLUMNS = ("id", "eligible_at", "created_at", "block_reason")
+_OPERATIONAL_COLUMNS = ("id", "eligible_at", "created_at")
 
 
 def _operational_facts(references):
-    """Waiting time and blocker for the payouts already on screen.
+    """Waiting time for the payouts already on screen.
 
-    A queue needs both and H5 publishes neither: its rows carry states and
-    amounts, not the clock. These two columns are operational facts about a
+    H5 publishes the authoritative safe blocker, but not the clock.
+    These two columns are operational facts about a
     payout record, of exactly the kind the Payouts console table has always
     rendered, and reading them here changes no figure on any page — no amount,
     count or total below comes from this query.
@@ -629,7 +629,7 @@ def _queue_rows(params, *, stage, user, limit=50, manual=False, rail=None):
                 "stage": STAGES.get(raw.get("operation_stage"))
                 or words.humanise(raw.get("operation_stage")),
                 "age": _age(fact.get("eligible_at") or fact.get("created_at"), now=now),
-                "blocker": _blocker(fact.get("block_reason")),
+                "blocker": _blocker(raw.get("block_reason")),
                 "markers": markers,
                 "url": reverse("admin_console:payout-detail", args=[pk])
                 if pk and may_open

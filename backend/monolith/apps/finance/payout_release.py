@@ -268,7 +268,9 @@ def evaluate_payout_release(
                     TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
                         pk=version.method_id
                     )
-                ready = version and approved_profile(version.dzd_profile_revision)
+                ready = version and approved_profile(
+                    version.dzd_profile_revision, funded_payout=payout
+                )
                 reason_code = "" if ready else "payout_setup_required"
                 if payout.block_reason != reason_code:
                     payout.block_reason = reason_code

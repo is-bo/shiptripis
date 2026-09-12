@@ -86,6 +86,18 @@ def drilldown(scope, *, metric, page=1, page_size=50):
                 offset : offset + page_size + 1
             ]
         )
+        attention = {}
+        if query.kind == "payout":
+            from apps.finance.models import Payout
+            from apps.finance.payout_mobile import (
+                page_context, payout_attention, payout_read_rows,
+            )
+
+            payouts = list(payout_read_rows(Payout.objects.filter(
+                pk__in=[row["pk"] for row in selected[:page_size]]
+            )))
+            context = page_context(payouts, include_actions=False)
+            attention = {p.pk: payout_attention(p, context=context) for p in payouts}
         result = []
         for row in selected[:page_size]:
             identifier = row.pop("pk")
@@ -117,6 +129,8 @@ def drilldown(scope, *, metric, page=1, page_size=50):
             # These legacy tables have no UUID. Staff-safe display refs avoid
             # serializing provider IDs, transaction keys or arbitrary notes.
             item["row_reference"] = f"{query.kind.upper()}-{identifier}"
+            if query.kind == "payout":
+                item.update(attention[identifier])
             result.append(item)
         return {
             "definition_version": VERSION,

@@ -76,7 +76,7 @@ def _gate(payout, balance):
     TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
         pk=version.method_id
     )
-    if not approved_profile(version.dzd_profile_revision):
+    if not approved_profile(version.dzd_profile_revision, funded_payout=payout):
         raise ValidationError("Reviewed profile and crossed cheque are required.")
 
 

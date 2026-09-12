@@ -16,7 +16,12 @@ from .payout_profiles import require_capabilities, profile_name_consistency
 from .sensitive_data import decrypt
 
 
-def approved_profile(profile):
+def approved_profile(profile, *, funded_payout=None):
+    """Current approval, with a narrow supersession exception for funded history.
+
+    Only the original, still-bound instruction can use approval predating funding.
+    Revocation, adverse review, invalid evidence and KYC remain live safety gates.
+    """
     if (
         not profile
         or not profile.evidence_id
@@ -25,18 +30,53 @@ def approved_profile(profile):
         or profile.evidence.owner_id != profile.method.traveler_id
     ):
         return False
-    review = (
-        profile.reviews.order_by("-pk")
-        .select_related("identity_attestation__kyc_submission")
-        .first()
-    )
+    reviews = list(profile.reviews.all())
+    review = max(reviews, key=lambda row: row.pk, default=None)
     if not review or review.status != "approved":
         return False
     identity = review.identity_attestation
+    if not _valid_identity(identity, profile.method.traveler_id):
+        return False
+    if not list(identity.successors.all()):
+        return True
+    bound_at = None
+    if (
+        funded_payout is not None
+        and funded_payout.snapshot_version
+        and funded_payout.snapshot_at
+        and funded_payout.method == "manual"
+        and funded_payout.payout_currency == "DZD"
+        and funded_payout.method_version_id
+        and funded_payout.active_instruction_version_id == funded_payout.method_version_id
+        and funded_payout.dzd_profile_revision_id == profile.pk
+        and funded_payout.active_instruction_version.dzd_profile_revision_id == profile.pk
+        and funded_payout.active_instruction_version.method_id == profile.method_id
+        and funded_payout.traveler_id == profile.method.traveler_id
+    ):
+        historical = max(
+            (row for row in reviews if row.created_at <= funded_payout.snapshot_at),
+            key=lambda row: row.pk, default=None,
+        )
+        if historical and historical.status == "approved":
+            review = historical
+            identity = review.identity_attestation
+            if identity.attested_at <= review.created_at:
+                bound_at = funded_payout.snapshot_at
+    superseded = any(
+        bound_at is None or successor.attested_at <= bound_at
+        for successor in identity.successors.all()
+    )
     return (
-        identity.traveler_id == profile.method.traveler_id
+        _valid_identity(identity, profile.method.traveler_id)
+        and not superseded
+    )
+
+
+def _valid_identity(identity, traveler_id):
+    """Supersession is distinct from these non-waivable safety gates."""
+    return (
+        identity.traveler_id == traveler_id
         and not hasattr(identity, "revocation")
-        and not identity.successors.exists()
         and identity.kyc_submission.status == "approved"
         and (
             not identity.kyc_submission.expires_at

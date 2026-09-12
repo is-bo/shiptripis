@@ -1,12 +1,11 @@
 """H6A read model. No routing, eligibility, settlement or FX writes here."""
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 
-from .models import FinanceHold, Payout, TravelerPayoutMethod
+from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import allowed_countries, evaluate_readiness, expected_mode
-from .payout_domain import active_holds
 from .payout_manual_profiles import approved_profile
 
 
@@ -97,14 +96,24 @@ def payout_summary(user, methods=None):
 
 
 def payouts_for(user):
-    return Payout.objects.filter(traveler=user).select_related(
+    return payout_read_rows(Payout.objects.filter(traveler=user)).order_by("-created_at", "-pk")
+
+
+def payout_read_rows(rows):
+    """Load the bounded Finance/mobile page without a query per payout."""
+    return rows.select_related(
         "deal", "stripe_account", "active_instruction_version__stripe_account",
         "active_instruction_version__dzd_profile_revision__evidence",
         "active_instruction_version__dzd_profile_revision__method",
     ).prefetch_related(
         "disbursement_allocations__disbursement", "funding_allocations",
-        "active_instruction_version__dzd_profile_revision__reviews",
-    ).order_by("-created_at", "-pk")
+        Prefetch(
+            "active_instruction_version__dzd_profile_revision__reviews",
+            queryset=PayoutProfileReview.objects.select_related(
+                "identity_attestation__kyc_submission", "identity_attestation__revocation"
+            ).prefetch_related("identity_attestation__successors"),
+        ),
+    )
 
 
 #: How H3's authoritative bank-payout state reads on the Traveler's phone.
@@ -140,7 +149,7 @@ def bank_stage(payout):
     return BANK_DISPLAY.get(current.disbursement.status)
 
 
-def page_context(payouts, *, user=None):
+def page_context(payouts, *, user=None, include_actions=True):
     """One bounded pass over a whole history page.
 
     Dispute, hold and setup lookups are per-payout facts, so a list that asks
@@ -150,6 +159,8 @@ def page_context(payouts, *, user=None):
     """
 
     from apps.disputes.models import Dispute
+    from .models import ProviderDispute
+    from .payout_provider_events import DISPUTE_OPEN_STATUSES
 
     payouts = list(payouts)
     if not payouts:
@@ -196,31 +207,95 @@ def page_context(payouts, *, user=None):
         .exclude(status__in=["resolved", "closed"])
         .values_list("deal_id", flat=True)
     )
+    provider_rows = ProviderDispute.objects.filter(
+        Q(source_attempt__order__deal_id__in=deal_ids)
+        | Q(source_attempt__order__credited_into__deal_id__in=deal_ids),
+        status__in=DISPUTE_OPEN_STATUSES,
+    ).values_list("provider_mode", "source_attempt__order__deal_id",
+                  "source_attempt__order__credited_into__deal_id")
+    provider_scopes = {(mode, deal) for mode, direct, credited in provider_rows
+                       for deal in (direct, credited) if deal}
+    disputed.update(p.deal_id for p in payouts if (p.provider_mode, p.deal_id) in provider_scopes)
     return {"disputed": disputed, "held": held, "account_holds": scopes["account_id"],
-            "actions": payout_summary(user or payouts[0].traveler)["available_actions"],
-            # Memo per DZD profile revision, not per row: a history is normally
-            # many payouts bound to one or two versions of the same profile.
+            "actions": payout_summary(user or payouts[0].traveler)["available_actions"] if include_actions else [],
+            # Approval depends on both the profile and the funding instant.
             "profiles": {}}
 
 
-def _profile_verdict(profile, context):
+def _profile_verdict(profile, context, payout):
     """`(approved, reviewed)` for one DZD profile revision, read at most once."""
 
     if profile is None:
         return False, False
     memo = context["profiles"] if context is not None else None
-    if memo is None or profile.pk not in memo:
-        verdict = (approved_profile(profile), profile.reviews.exists())
+    key = (profile.pk, payout.method_version_id, payout.active_instruction_version_id,
+           payout.dzd_profile_revision_id, payout.snapshot_at, payout.snapshot_version)
+    if memo is None or key not in memo:
+        verdict = (approved_profile(profile, funded_payout=payout), bool(profile.reviews.all()))
         if memo is None:
             return verdict
-        memo[profile.pk] = verdict
-    return memo[profile.pk]
+        memo[key] = verdict
+    return memo[key]
+
+
+def payout_attention(payout, *, context=None):
+    """Safe shared blocker classification, independent of delivery waiting time.
+
+    Bank failure/return > terminal settlement > failure > dispute > hold >
+    substantive stored gate > bound destination readiness > balance deferral.
+    Unknown stored text is never exposed. Owners are assigned only from facts.
+    """
+    if context is None:
+        context = page_context([payout], include_actions=False)
+    bank = bank_stage(payout)
+    reason, owner = None, None
+    if bank and bank[1]:
+        reason, owner = bank[1], "finance"
+    elif payout.status in ("paid", "cancelled") or (bank and bank[0] == "paid"):
+        pass
+    elif payout.status == "failed":
+        reason, owner = "payout_failed", "finance"
+    elif payout.deal_id in context["disputed"]:
+        reason = "dispute_active"
+    elif payout.status == "frozen" or payout.pk in context["held"]:
+        reason, owner = "payout_on_hold", "finance"
+    elif payout.block_reason not in ("", "payout_setup_required", "connected_balance_pending"):
+        reason = "payout_on_hold"
+    elif not bank and (payout.status != "processing" or payout.method == "manual"):
+        version = payout.active_instruction_version
+        if payout.method == "stripe_transfer" and version and version.stripe_account:
+            account = version.stripe_account
+            verdict = evaluate_readiness(account, holds_exist=account.pk in context["account_holds"])
+            if verdict.ready and payout.block_reason == "payout_setup_required":
+                # Account readiness alone cannot clear a stored execution gate.
+                reason = "payout_setup_required"
+            elif not verdict.ready:
+                if verdict.status == "pending_review":
+                    reason, owner = "payout_profile_under_review", "provider"
+                elif verdict.status == "setup_required":
+                    reason, owner = "payout_setup_required", "traveler"
+                else:
+                    reason = "payout_profile_needs_attention"
+        elif payout.method == "manual":
+            profile = version.dzd_profile_revision if version else None
+            approved, reviewed = _profile_verdict(profile, context, payout)
+            if not approved:
+                reason = ("payout_profile_needs_attention" if reviewed else
+                          "payout_profile_under_review" if profile else "payout_setup_required")
+                owner = "finance" if profile else None
+        else:
+            reason = "payout_setup_required"
+    if reason is None and payout.status not in ("paid", "cancelled", "sent") and not (bank and bank[0] in ("paid", "sent")):
+        if payout.block_reason == "connected_balance_pending":
+            reason, owner = "connected_balance_pending", "provider"
+        elif payout.status == "blocked" and payout.block_reason != "payout_setup_required":
+            reason = "payout_on_hold"
+    return {"block_reason": reason, "needs_attention": bool(reason and reason != "connected_balance_pending"),
+            "attention_owner": owner}
 
 
 def payout_status(payout, *, at=None, context=None):
     """Expired protection alone never upgrades a not-yet-released obligation."""
-    from apps.disputes.models import Dispute
-
     at = at or timezone.now()
     deal = payout.deal
     protection_active = bool(deal.protection_ends_at and at < deal.protection_ends_at)
@@ -233,21 +308,9 @@ def payout_status(payout, *, at=None, context=None):
     state, reason = "awaiting_delivery", None
     if deal.delivery_confirmed_at:
         state = "protection_active" if protection_active else "release_pending"
-    version = payout.active_instruction_version
     bank = bank_stage(payout)
 
-    # Read from the page's single pass when there is one, and otherwise only if
-    # the settlement facts above have not already decided the state.
-    def disputed():
-        if context is not None:
-            return deal.pk in context["disputed"]
-        return (Dispute.objects.filter(deal_id=deal.pk)
-                .exclude(status__in=["resolved", "closed"]).exists())
-
-    def held():
-        if context is not None:
-            return payout.pk in context["held"]
-        return active_holds(payout).exists()
+    attention = payout_attention(payout, context=context)
 
     actions = ["view_payout", "refresh"]
     if bank and bank[1]:
@@ -258,14 +321,10 @@ def payout_status(payout, *, at=None, context=None):
         state = "paid"
     elif payout.status == "cancelled":
         state = "cancelled"
+    elif attention["needs_attention"]:
+        state, reason = "needs_attention", attention["block_reason"]
     elif payout.status == "sent" or (bank and bank[0] == "sent"):
         state = "sent"
-    elif payout.status == "failed":
-        state, reason = "needs_attention", "payout_failed"
-    elif disputed():
-        state, reason = "needs_attention", "dispute_active"
-    elif payout.status == "frozen" or held():
-        state, reason = "needs_attention", "payout_on_hold"
     elif protection_active:
         state, reason = "protection_active", "protection_active"
     elif arrival_floor_pending:
@@ -278,24 +337,9 @@ def payout_status(payout, *, at=None, context=None):
     elif payout.status == "processing" or (bank and bank[0] == "processing"):
         state = "processing"
     elif payout.status in ("eligible", "scheduled", "blocked"):
-        reason = "payout_setup_required" if payout.block_reason == "payout_setup_required" else "payout_on_hold" if payout.block_reason else None
-        if payout.method == "stripe_transfer" and version and version.stripe_account:
-            account = version.stripe_account
-            verdict = evaluate_readiness(
-                account,
-                holds_exist=account.pk in context["account_holds"] if context else None,
-            )
-            if not verdict.ready:
-                reason = "payout_profile_under_review" if verdict.status == "pending_review" else "payout_setup_required" if verdict.status == "setup_required" else "payout_profile_needs_attention"
-        elif payout.method == "manual":
-            profile = version.dzd_profile_revision if version else None
-            approved, reviewed = _profile_verdict(profile, context)
-            if not approved:
-                reason = ("payout_profile_needs_attention" if reviewed
-                          else "payout_profile_under_review" if profile else "payout_setup_required")
-        state = "needs_attention" if reason or payout.status == "blocked" else "ready"
-        if state == "needs_attention" and not reason:
-            reason = "payout_on_hold"
+        state = "ready"
+    if not reason:
+        reason = attention["block_reason"]
     if state == "needs_attention" and reason in ("payout_setup_required", "payout_profile_needs_attention"):
         # Current setup can differ from this funded destination. Do not promise
         # that editing the current method will repair a historical instruction.
