@@ -1109,6 +1109,14 @@ class ActiveSendingTests(TestCase):
         assert deal.status == Deal.Status.COMPLETED
         assert activity_state(deal) == COMPLETED
 
+        from apps.finance.payout_mobile import payout_attention, payouts_for
+
+        payout = payouts_for(scenario.traveler).get(deal=deal)
+        assert not payout.snapshot_version
+        assert payout_attention(payout) == {
+            "block_reason": None, "needs_attention": False, "attention_owner": None,
+        }
+
         self.client = client_for(scenario.traveler)
         detail = self.client.get(reverse("deals-detail", args=[deal.pk])).json()
         assert detail["activity_state"] == COMPLETED

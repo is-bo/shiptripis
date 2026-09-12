@@ -261,7 +261,14 @@ def payout_attention(payout, *, context=None):
         reason, owner = "payout_on_hold", "finance"
     elif payout.block_reason not in ("", "payout_setup_required", "connected_balance_pending"):
         reason = "payout_on_hold"
-    elif not bank and (payout.status != "processing" or payout.method == "manual"):
+    elif (
+        not bank
+        and (payout.status != "processing" or payout.method == "manual")
+        and (payout.snapshot_version or payout.active_instruction_version_id
+             or payout.block_reason == "payout_setup_required")
+    ):
+        # Legacy obligations predate profile snapshots. Missing H1 evidence is
+        # not itself a setup gate; their explicit execution gates still apply.
         version = payout.active_instruction_version
         if payout.method == "stripe_transfer" and version and version.stripe_account:
             account = version.stripe_account

@@ -52,8 +52,11 @@ One primary reason is returned deterministically:
 8. `connected_balance_pending`: provider-owned waiting, `needs_attention=false`.
 9. Unexplained blocked state: `payout_on_hold`, owner unknown. Otherwise null/false/null.
 
-Profile/setup blockers are visible before delivery or protection expiry. Mobile
-retains its temporal `protection_active` and `scheduled_arrival_pending` reasons
+Profile/setup blockers are visible before delivery or protection expiry. The evaluator
+checks bound readiness only for versioned/instruction-bound payouts or an explicit
+setup gate. Legacy obligations without H1 snapshots do not acquire a setup blocker
+from missing historical fields; their explicit gates, holds and disputes still apply.
+Mobile retains its temporal `protection_active` and `scheduled_arrival_pending` reasons
 when there is no actionable blocker. Those normal waits are not Finance attention.
 Connected-balance deferral is informational in Finance; mobile keeps a null blocker
 for that normal wait so existing clients do not render their generic attention copy.

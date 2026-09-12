@@ -34,6 +34,12 @@ unknown blocking code as attention. Connected-balance deferral therefore remains
 informational in Finance and null in mobile's blocker field. Its focused PostgreSQL
 regression passed separately (1 test, 6.38 seconds); the changed files passed Ruff.
 The earlier CI dispatch was superseded so the release gate covers this correction.
+CI then found one I1A compatibility failure (1,904 passed): legacy payouts without
+H1 snapshots were incorrectly assigned setup attention while awaiting arrival.
+Readiness evaluation now requires snapshot/instruction evidence or an explicit
+setup gate; operational gates still apply to legacy rows. The I1A regression and
+all 21 hardening regressions passed together after this correction (22 tests).
+The release gate is rerun for the corrected commit.
 
 CI, exact main/deployment identifiers, runtime flags and the single deployed
 read-only H5 reconciliation are recorded in the task's release report. No provider
