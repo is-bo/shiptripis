@@ -1,5 +1,59 @@
 # ShipTrip V1 Implementation Status
 
+## Phase 8F-H5.2 — Finance operator experience (2026-09-12)
+
+**H5.2 PASS.** A ground-up information-architecture redesign of the Finance
+experience. Authoritative documentation: [the H5.2 operator UX
+specification](PHASE_H52_FINANCE_OPERATOR_UX.md). No file under
+`apps/finance/control_plane/` was touched: no metric renamed, no definition
+rewritten, no state machine altered, no permission widened.
+
+- **The audit, measured.** The deployed H5.1 dashboard was 7,241px (8.0 screens)
+  at 1440x900 and 14,814px (18.2 screens) at 375px, with 11 filter controls and
+  63 money values above the first work queue, which sat 2,839px down on desktop
+  and 6,783px down on a phone. Four tables scrolled sideways at 720-835px inside
+  a 311px column. The first phone screen carried no financial information at all.
+- **Five destinations replace one page.** Overview, Payouts, Manual DZD, Refunds
+  & disputes, Reconciliation. `finance-dashboard` keeps its url name — the flag,
+  the navigation and every bookmark address it; the page behind it changed.
+- **Overview is five zones**: head/health/scope, needs attention, work queues,
+  three amounts, recent activity. Health, attention, both queues and one-click
+  entry to Manual DZD are above the fold at 1440x900, achieved by removing
+  information rather than shrinking type.
+- **Operator cohorts, not the bucket taxonomy.** H5's 25 operation stages are
+  regrouped into five payout cohorts and four dinar cohorts; every stage lands
+  in exactly one and none is dropped. The stages themselves are unchanged.
+- **No invented totals.** An amount appears only where H5 published that exact
+  figure; a cohort spanning two published figures carries a count and no amount.
+  Counts may be grouped because H5's stages are disjoint. Null stays "Partial"
+  or "Not available", never `EUR 0.00`.
+- **One direct model read, fenced and documented.** `_operational_facts` reads
+  `eligible_at`/`created_at` and `block_reason` for the payouts already on
+  screen — a queue needs waiting time and blockers, H5 publishes neither, and
+  neither is money. No figure on any page comes from it.
+- **Reconciliation kept whole.** All six comparisons with differences and
+  mismatched-row counts, ledger conservation, data issues, warnings, provenance,
+  liability by state and by rail/funding, provider attribution, the metric
+  dictionary and the stated limitations all moved intact to their own page.
+- **Manual DZD detail.** Every H4.1 safety property preserved. The current
+  required step is now stated above the context that explains it, and the
+  breadcrumb returns to the queue cohort the operator came from — validated
+  against the queue's own keys, never an echoed `?next=`. No "next payout"
+  shortcut and no batch payment, deliberately.
+- **Filters.** Eleven controls became three on the Overview; the rest moved to
+  the queues where they apply. The full H5 filter form stays on the drilldown,
+  which is the audit surface.
+- **Responsive.** Queues are lists at every width, aligned into columns by CSS
+  grid from 1080px and becoming cards below 760px. Nothing on an operational
+  page scrolls sideways. At 375px the order is action, queues, money, health.
+- **Permissions unchanged.** Finance and Super reach all five; Ops, Support and
+  Trust reach none. With the flag off the five disappear and the raw Payouts,
+  Refunds, Payout accounts and Ledger queues return, so the console never loses
+  its route to a payout because a reporting flag is off.
+- **Recent activity** reads the existing immutable `AdminAuditLog`; no new event
+  model. Access events (evidence viewed, profile revealed) are excluded by
+  design.
+
 ## Phase I1B — Early Arrival, Route Visibility & Delivery Lifecycle Mobile UX (2026-09-12)
 
 **I1B PASS.** The Flutter/mobile half of Phase I1 completes the user-facing implementation of Early Arrival, Route Visibility, and Delivery Lifecycle separation. Authoritative documentation: [the I1B mobile UX specification](PHASE_I1B_JOURNEY_TIMING_MOBILE_UX.md).

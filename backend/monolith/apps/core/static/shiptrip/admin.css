@@ -20,10 +20,11 @@
  *   3  Shell and navigation      12  Evidence and cases
  *   4  Page furniture           12b  Manual DZD payout
  *   5  Cards and grids          12c  Finance control plane
- *   6  Tables                    13  Health and providers
- *   7  Chips and tones           14  Forms
- *   8  Lists, facts, timelines   15  Django's own screens
- *   9  Money                     16  Openable rows and cards
+ *   6  Tables                   12d  Finance operations
+ *   7  Chips and tones            13  Health and providers
+ *   8  Lists, facts, timelines   14  Forms
+ *   9  Money                     15  Django's own screens
+ *                                16  Openable rows and cards
  *                                17  Responsive, motion, print
  */
 
@@ -1923,6 +1924,27 @@ button.is-busy, .button.is-busy { cursor: progress; opacity: .55; }
   .st-evidence-dialog { width: calc(100vw - var(--st-4) * 2); padding: var(--st-3); }
 }
 
+/* H5.2. The current required step, hoisted above the context that explains it.
+   A new operator meeting this screen used to meet the amount, the destination
+   and the cheque photo before meeting a single instruction; the ordered list
+   still carries the whole procedure, and this carries only the next move. */
+.st-next-step {
+  margin: 0 0 var(--st-4);
+  padding: var(--st-4);
+  border: 1px solid var(--st-attn-line);
+  border-left: 3px solid var(--st-attn);
+  border-radius: var(--st-r-2);
+  background: var(--st-attn-bg);
+}
+.st-next-step .st-eyebrow { margin: 0 0 2px; color: var(--st-attn); }
+.st-next-step h2 { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: var(--st-track-display); }
+.st-next-step p { margin: var(--st-1) 0 0; color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-snug); }
+.st-next-step a { display: inline-block; margin-top: var(--st-2); font-size: var(--st-fs-xs); font-weight: 650; }
+
+.st-queue-return { margin: var(--st-5) 0 0; font-size: var(--st-fs-sm); }
+.st-queue-return a { font-weight: 650; }
+.st-queue-return span { display: block; margin-top: 2px; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+
 /* ==========================================================================
    12c. Finance control plane
    ==========================================================================
@@ -1973,64 +1995,6 @@ button.is-busy, .button.is-busy { cursor: progress; opacity: .55; }
 .st-ledger-strip .st-ledger-value.is-unknown { font-size: var(--st-fs-h2); font-weight: 600; color: var(--st-ink-3); }
 .st-ledger-strip.is-lean { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .st-ledger-strip .st-ledger-says { display: block; margin-top: var(--st-2); color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
-
-/* One KPI. A tile that drills is an anchor and nothing else — there is no
-   click-only div on this page, so every number an operator can open is also a
-   number they can Tab to and a link they can open in a new tab. */
-.st-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
-  gap: var(--st-2);
-  margin: 0;
-}
-.st-kpi {
-  display: flex;
-  flex-direction: column;
-  gap: var(--st-1);
-  padding: var(--st-3) var(--st-4) var(--st-4);
-  border: 1px solid var(--st-line);
-  border-radius: var(--st-r-2);
-  background: var(--st-surface-2);
-  color: inherit;
-  text-decoration: none;
-}
-a.st-kpi:hover { border-color: var(--st-line-2); background: var(--st-surface); }
-a.st-kpi:hover .st-kpi-value { color: var(--st-accent); }
-a.st-kpi:hover .st-kpi-go { color: var(--st-accent); }
-.st-kpi.is-lead { grid-column: span 2; border-color: var(--st-line-2); background: var(--st-surface); }
-.st-kpi-label { color: var(--st-ink-2); font-size: var(--st-fs-xs); font-weight: 650; }
-.st-kpi-value {
-  color: var(--st-ink);
-  font-size: 1.3rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  letter-spacing: var(--st-track-display);
-  line-height: var(--st-lh-tight);
-}
-.st-kpi.is-lead .st-kpi-value { font-size: 1.7rem; }
-/* An amount H5 does not know is a sentence, not a number: it must never be
-   mistaken at a glance for a figure that happens to be small. */
-.st-kpi-value.is-unknown { color: var(--st-ink-3); font-size: var(--st-fs-body); font-weight: 600; letter-spacing: 0; }
-.st-kpi.is-attn .st-kpi-value { color: var(--st-attn); }
-.st-kpi.is-bad { border-color: var(--st-bad-line); background: var(--st-bad-bg); }
-.st-kpi.is-bad .st-kpi-value { color: var(--st-bad); }
-.st-kpi-meta { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-variant-numeric: tabular-nums; }
-.st-kpi-note { margin-top: var(--st-1); color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
-.st-kpi-def { color: var(--st-ink-3); font-size: var(--st-fs-micro); line-height: var(--st-lh-snug); }
-/* Period or current. H5's own `time_basis` names database columns, which is
-   the right register for the metric dictionary and the wrong one for a tile;
-   what an operator needs on the tile is only whether the period selector above
-   moves this number. */
-.st-kpi-basis {
-  margin-top: var(--st-1);
-  color: var(--st-ink-3);
-  font-size: var(--st-fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--st-track-label);
-  text-transform: uppercase;
-}
-.st-kpi-go { margin-top: auto; padding-top: var(--st-2); color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; }
-.st-kpi-go::after { content: " \203A"; }
 
 /* The reconciliation verdict. It sits under the page title because a total
    nobody can trust is worse than no total, and an operator must meet that fact
@@ -2093,13 +2057,6 @@ a.st-kpi:hover .st-kpi-go { color: var(--st-accent); }
 .st-fin-applied { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--st-2); margin: 0 0 var(--st-4); }
 .st-fin-applied > span { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-weight: 600; letter-spacing: var(--st-track-label); text-transform: uppercase; }
 
-/* Section headings. The dashboard is long, and a reader arriving from a
-   drilldown needs to land on a heading that says which question they are in. */
-.st-fin-section { margin-bottom: var(--st-5); }
-.st-fin-section > .st-eyebrow { margin-bottom: 2px; }
-.st-fin-section > h2 { margin: 0 0 var(--st-1); font-family: var(--st-serif); font-size: 1.15rem; font-weight: 600; letter-spacing: var(--st-track-display); }
-.st-fin-section > p { max-width: 78ch; margin: 0 0 var(--st-3); color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-body); }
-
 .st-fin-note {
   margin: var(--st-3) 0 0;
   padding: var(--st-3) var(--st-4);
@@ -2140,7 +2097,6 @@ a.st-kpi:hover .st-kpi-go { color: var(--st-accent); }
 .st-fin-foot li { margin: 0 0 var(--st-1); }
 
 @media (max-width: 980px) {
-  .st-kpi.is-lead { grid-column: span 1; }
   .st-ledger-strip { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -2150,6 +2106,453 @@ a.st-kpi:hover .st-kpi-go { color: var(--st-accent); }
   .st-ledger-strip > div { padding: var(--st-3) var(--st-4); }
   .st-provider dl { grid-template-columns: minmax(0, 1fr); }
   .st-provider dd { text-align: left; }
+}
+
+/* ==========================================================================
+   12d. Finance operations (H5.2)
+   ==========================================================================
+   H5.1 gave every figure the same weight, and thirty figures of equal weight
+   are no hierarchy at all. These surfaces spend weight on one axis only:
+   whether a person has to do something. An amount that is merely true is quiet;
+   a count that is waiting for someone is loud. Terracotta and rust are rationed
+   the way the product rations them — if two things on this page are shouting,
+   one of them is wrong.
+
+   Nothing is decorative and nothing is a chart, because H5 publishes no time
+   series and a drawn trend would be an invention. Severity is never colour
+   alone: every raised state also carries a word, and most carry a count large
+   enough to read from across a desk. */
+
+.st-finops { --st-finops-gap: var(--st-4); }
+
+/* --- The opening band: who am I, can I trust this, what is in scope -------
+   All three answers inside roughly 120px, because everything below them is the
+   actual work and the fold at 1440x900 is a hard requirement. */
+
+.st-finops-head { margin: 0 0 var(--st-finops-gap); }
+.st-finops-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--st-2) var(--st-4);
+  padding-bottom: var(--st-2);
+}
+.st-finops-title h1 {
+  margin: 0;
+  font-family: var(--st-serif);
+  font-size: var(--st-fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--st-track-display);
+  line-height: var(--st-lh-tight);
+}
+.st-finops-title .st-eyebrow { margin: 0 0 2px; }
+.st-finops-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2); }
+.st-finops-range { color: var(--st-ink-3); font-size: var(--st-fs-xs); font-variant-numeric: tabular-nums; }
+
+/* Finance health as one line. The six comparisons are the answer to "prove it
+   reconciles"; this is the answer to "can I start work", and it is the only
+   reading the operational surfaces carry. */
+a.st-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-2);
+  padding: 5px var(--st-3);
+  border: 1px solid var(--st-ok-line);
+  border-radius: var(--st-r-pill);
+  background: var(--st-ok-bg);
+  color: var(--st-ok);
+  font-size: var(--st-fs-xs);
+  font-weight: 650;
+  text-decoration: none;
+}
+a.st-pulse:hover { border-color: currentColor; }
+.st-pulse-mark { font-size: var(--st-fs-sm); font-weight: 800; line-height: 1; }
+a.st-pulse.is-wait { border-color: var(--st-wait-line); background: var(--st-wait-bg); color: var(--st-wait); }
+a.st-pulse.is-bad { border-color: var(--st-bad-line); background: var(--st-bad-bg); color: var(--st-bad); }
+a.st-pulse.is-mute { border-color: var(--st-line); background: var(--st-surface-2); color: var(--st-ink-2); }
+
+/* --- Scope: three controls -------------------------------------------- */
+
+/* The scope bar is a grid, not a flex row, and that is deliberate. Three
+   controls of different intrinsic widths in a wrapping flex row resolve their
+   available space against the container's own content size, which put the
+   lookup field on its own line at 1440px and turned a one-line bar back into
+   three. A grid states the intent instead: one row of natural-width columns at
+   desktop, one wrapping row of equal columns on a phone. */
+.st-scope {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--st-3) var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-scope-period {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+}
+.st-scope-period a {
+  padding: 6px var(--st-3);
+  border-radius: var(--st-r-1);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.st-scope-period a:hover { color: var(--st-ink); background: var(--st-surface-2); }
+.st-scope-period a.is-current { background: var(--st-btn); color: var(--st-btn-fg); }
+.st-scope-form {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  justify-content: start;
+  align-items: end;
+  gap: var(--st-3);
+  min-width: 0;
+}
+.st-scope-field { display: grid; gap: 4px; min-width: 0; }
+.st-scope-field label {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.st-scope-field select, .st-scope-field input { width: 100%; max-width: none; margin: 0; }
+.st-scope-field select { min-width: 150px; }
+.st-scope-field.is-find { width: 300px; }
+.st-scope-actions { display: flex; align-items: center; gap: var(--st-3); }
+.st-scope-clear { font-size: var(--st-fs-xs); white-space: nowrap; }
+
+/* --- Zones ------------------------------------------------------------ */
+
+.st-zone { margin: 0 0 var(--st-finops-gap); }
+.st-zone-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--st-2) var(--st-3);
+  margin-bottom: var(--st-2);
+}
+.st-zone-head h2 {
+  margin: 0;
+  font-family: var(--st-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: var(--st-track-display);
+}
+.st-zone-count {
+  padding: 2px 9px;
+  border-radius: var(--st-r-pill);
+  background: var(--st-surface-3);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.st-zone-count.is-bad { background: var(--st-bad); color: var(--st-ink-invert); }
+.st-zone-link { margin-left: auto; font-size: var(--st-fs-xs); }
+.st-zone-amount { font-size: var(--st-fs-h2); font-weight: 650; }
+.st-zone-says { max-width: 80ch; margin: 0 0 var(--st-3); color: var(--st-ink-2); font-size: var(--st-fs-sm); line-height: var(--st-lh-body); }
+.st-zone-note { margin: var(--st-3) 0 0; color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-body); }
+
+/* "Nothing to do" and "not checked" must never look the same, so a cleared
+   queue is a stated sentence with a mark on it rather than an absence. */
+.st-calm {
+  display: flex;
+  align-items: baseline;
+  gap: var(--st-2);
+  margin: 0;
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-ok-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-ok-bg);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-sm);
+  line-height: var(--st-lh-snug);
+}
+.st-calm > span[aria-hidden] { color: var(--st-ok); font-weight: 800; }
+
+/* --- Needs attention: the loudest thing on the homepage ---------------- */
+
+.st-attn-list, .st-exceptions { display: grid; gap: var(--st-2); margin: 0; padding: 0; list-style: none; }
+/* Django's own admin sheet sets a marker on `li`, which with no list
+   padding draws outside the card. Reset it on the item, not the list. */
+.st-attn, .st-exception, .st-rows > li, .st-activity > li, .st-lane-list > li {
+  margin: 0;
+  list-style: none;
+}
+.st-attn > a, .st-exception > a, .st-exception > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--st-3) var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-left: 3px solid var(--st-ink-3);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+  color: inherit;
+  text-decoration: none;
+}
+.st-attn > a:hover, .st-exception > a:hover { border-color: var(--st-line-2); border-left-color: currentColor; background: var(--st-surface-2); }
+.st-attn-count, .st-exception-count {
+  min-width: 2ch;
+  color: var(--st-ink);
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: var(--st-track-display);
+  line-height: 1;
+  text-align: center;
+}
+.st-attn-body, .st-exception-body { display: block; min-width: 0; }
+.st-attn-body strong, .st-exception-body strong { display: block; font-size: var(--st-fs-h3); font-weight: 650; }
+.st-attn-body > span, .st-exception-body > span { display: block; margin-top: 2px; color: var(--st-ink-2); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+.st-attn-side, .st-exception-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.st-attn-owner, .st-exception-owner {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.st-attn.is-bad > a, .st-exception.is-bad > a, .st-exception.is-bad > div {
+  border-color: var(--st-bad-line);
+  border-left-color: var(--st-bad);
+  background: var(--st-bad-bg);
+}
+.st-attn.is-bad .st-attn-count, .st-exception.is-bad .st-exception-count { color: var(--st-bad); }
+.st-attn.is-attn > a, .st-exception.is-attn > a, .st-exception.is-attn > div {
+  border-left-color: var(--st-attn);
+}
+.st-attn.is-attn .st-attn-count, .st-exception.is-attn .st-exception-count { color: var(--st-attn); }
+.st-exception.is-ok > div { border-left-color: var(--st-ok); }
+
+/* --- Work lanes ------------------------------------------------------- */
+
+.st-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: var(--st-3); }
+.st-lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-2);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-3);
+  background: var(--st-surface);
+}
+/* The dinar queue is the one a person has to work by hand, so it is the one
+   that reads as primary even on a quiet day. */
+.st-lane.is-primary { border-color: var(--st-line-2); background: var(--st-surface-2); }
+.st-lane-head h3 { margin: 0; font-size: var(--st-fs-h2); font-weight: 650; }
+.st-lane-head p { margin: 1px 0 0; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-lane-list { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; background: var(--st-line); border: 1px solid var(--st-line); border-radius: var(--st-r-2); overflow: hidden; }
+.st-lane-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--st-3);
+  padding: 6px var(--st-3);
+  background: var(--st-surface);
+}
+.st-lane.is-primary .st-lane-list li { background: var(--st-surface); }
+.st-lane-list li.is-live { box-shadow: inset 3px 0 0 var(--st-attn); }
+.st-lane-label { color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+.st-lane-count { color: var(--st-ink); font-size: var(--st-fs-h2); font-variant-numeric: tabular-nums; font-weight: 700; }
+.st-lane-count.is-attn { color: var(--st-attn); }
+.st-lane-count.is-bad { color: var(--st-bad); }
+.st-lane-warn { margin: 0; font-size: var(--st-fs-xs); }
+.st-lane-warn a { color: var(--st-bad); font-weight: 650; }
+.st-lane-go { margin-top: auto; align-self: flex-start; }
+
+/* --- The three amounts ------------------------------------------------- */
+
+.st-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-line);
+  overflow: hidden;
+}
+.st-totals > div { padding: var(--st-3) var(--st-4); background: var(--st-surface); }
+.st-totals dt {
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+}
+.st-totals dd { margin: 6px 0 0; }
+.st-total-value {
+  display: block;
+  font-family: var(--st-serif);
+  font-size: clamp(1.4rem, 1.1rem + .9vw, 1.85rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: var(--st-track-display);
+  line-height: var(--st-lh-tight);
+}
+/* An amount H5 did not assert is a sentence, never a number, so it cannot be
+   skimmed as a small figure. */
+.st-total-value.is-unknown { font-family: var(--st-sans); font-size: var(--st-fs-h2); font-weight: 600; color: var(--st-ink-3); letter-spacing: 0; }
+.st-total-meta { display: block; margin-top: 3px; color: var(--st-ink-2); font-size: var(--st-fs-xs); font-variant-numeric: tabular-nums; }
+.st-total-says { display: block; margin-top: var(--st-2); color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+
+/* --- Recent activity --------------------------------------------------- */
+
+.st-activity { margin: 0; padding: 0; list-style: none; border: 1px solid var(--st-line); border-radius: var(--st-r-2); overflow: hidden; }
+.st-activity li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--st-1) var(--st-3);
+  padding: var(--st-2) var(--st-4);
+  background: var(--st-surface);
+  font-size: var(--st-fs-sm);
+}
+.st-activity li + li { border-top: 1px solid var(--st-line); }
+.st-activity-what { font-weight: 600; }
+.st-activity-ref { color: var(--st-ink-2); font-family: var(--st-mono); font-size: var(--st-fs-xs); }
+.st-activity-who { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-activity-age { margin-left: auto; color: var(--st-ink-3); font-size: var(--st-fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* --- Cohort tabs ------------------------------------------------------- */
+
+.st-cohorts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+}
+a.st-cohort {
+  display: flex;
+  align-items: baseline;
+  gap: var(--st-2);
+  padding: var(--st-2) var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-sm);
+  text-decoration: none;
+}
+a.st-cohort:hover { border-color: var(--st-line-2); color: var(--st-ink); }
+.st-cohort-label { white-space: nowrap; }
+.st-cohort-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+a.st-cohort.is-current { border-color: var(--st-btn); background: var(--st-btn); color: var(--st-btn-fg); }
+.st-cohort.is-current .st-cohort-count { color: var(--st-btn-fg); }
+/* A cohort that is empty has nothing to shout about, so severity is carried by
+   the count rather than by the tab: a red "Needs attention 0" is a false alarm
+   every single day it is right. */
+.st-cohort.is-bad:not(.is-current) .st-cohort-count { color: var(--st-bad); }
+.st-cohort.is-attn:not(.is-current) .st-cohort-count { color: var(--st-attn); }
+
+/* --- Stage groups and queue rows --------------------------------------- */
+
+.st-stage { margin: 0 0 var(--st-4); }
+.st-stage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--st-2) var(--st-3); margin-bottom: var(--st-2); }
+.st-stage-head h3 { margin: 0; font-size: var(--st-fs-h2); font-weight: 650; }
+.st-stage-facts { color: var(--st-ink-2); font-size: var(--st-fs-xs); font-variant-numeric: tabular-nums; }
+.st-stage-says { margin: 0 0 var(--st-2); color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: var(--st-lh-snug); }
+
+/* A queue is a list of payouts, and it stays a list at every width. CSS grid
+   aligns those list items into columns from tablet up, so the desktop reader
+   gets the scannable grid a table would have given them and the phone reader
+   gets cards instead of 720px of sideways scrolling inside a 311px column. */
+.st-rows-wrap { border: 1px solid var(--st-line); border-radius: var(--st-r-2); overflow: hidden; }
+.st-rows-head, .st-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr) auto minmax(0, 1.1fr);
+  align-items: baseline;
+  gap: var(--st-2) var(--st-4);
+  padding: var(--st-2) var(--st-4);
+}
+.st-rows-head {
+  background: var(--st-surface-3);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--st-track-label);
+  text-transform: uppercase;
+}
+.st-rows { margin: 0; padding: 0; list-style: none; }
+.st-row { background: var(--st-surface); border-top: 1px solid var(--st-line); }
+.st-row:first-child { border-top: 0; }
+.st-row.is-flagged { box-shadow: inset 3px 0 0 var(--st-attn); }
+.st-row-ref { font-family: var(--st-mono); font-size: var(--st-fs-xs); overflow-wrap: anywhere; }
+.st-row-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.st-row-deal { font-size: var(--st-fs-sm); font-weight: 600; }
+.st-row-trav { color: var(--st-ink-3); font-size: var(--st-fs-micro); font-family: var(--st-mono); }
+.st-row-money { display: flex; flex-direction: column; gap: 1px; }
+.st-row-lead { font-size: var(--st-fs-h3); font-weight: 700; }
+.st-row-basis { color: var(--st-ink-3); font-size: var(--st-fs-micro); }
+.st-row-age { color: var(--st-ink-2); font-size: var(--st-fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-row-state { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--st-1); }
+.st-row-blocker { color: var(--st-attn); font-size: var(--st-fs-micro); font-weight: 650; }
+.st-rows-more, .st-rows-empty {
+  margin: 0;
+  padding: var(--st-3) var(--st-4);
+  border-top: 1px solid var(--st-line);
+  background: var(--st-surface-2);
+  color: var(--st-ink-2);
+  font-size: var(--st-fs-xs);
+}
+.st-rows-empty { border-top: 0; }
+.st-rows-empty > span[aria-hidden] { color: var(--st-ok); font-weight: 800; }
+
+.st-finops-foot { margin-top: var(--st-6); color: var(--st-ink-3); font-size: var(--st-fs-xs); line-height: var(--st-lh-body); }
+.st-finops-foot ul { margin: var(--st-2) 0 0; padding-left: 18px; }
+
+/* The audit surface keeps H5.1's wide tables, because comparing down a column
+   is exactly what its reader is doing. */
+.st-finaudit .st-zone { margin-bottom: var(--st-6); }
+
+@media (max-width: 1080px) {
+  .st-rows-head, .st-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .st-rows-head > span:last-child { display: none; }
+  .st-row-state { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .st-finops { --st-finops-gap: var(--st-4); }
+  .st-scope { grid-template-columns: minmax(0, 1fr); gap: var(--st-3); }
+  /* Four period labels do not fit on one phone row, and a segmented control
+     that overflows its own container is worse than one on two rows. */
+  .st-scope-period { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+  .st-scope-period a { text-align: center; }
+  .st-scope-form {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  }
+  .st-scope-field.is-find { width: auto; grid-column: 1 / -1; }
+  .st-totals { grid-template-columns: minmax(0, 1fr); }
+  /* Below tablet the aligned columns stop being alignment and start being four
+     words per line, so each payout becomes a card. */
+  .st-rows-head { display: none; }
+  .st-row { grid-template-columns: minmax(0, 1fr) auto; gap: var(--st-1) var(--st-3); padding: var(--st-3) var(--st-4); }
+  .st-row-ref { grid-column: 1; }
+  .st-row-money { grid-column: 2; grid-row: 1 / span 2; align-items: flex-end; text-align: right; }
+  .st-row-who { grid-column: 1; }
+  .st-row-age { grid-column: 1; }
+  .st-row-state { grid-column: 1 / -1; }
+  .st-attn > a, .st-exception > a, .st-exception > div { grid-template-columns: auto minmax(0, 1fr); }
+  .st-attn-side, .st-exception-side { grid-column: 2; align-items: flex-start; text-align: left; }
+  .st-activity li { gap: var(--st-1) var(--st-2); }
+  .st-activity-age { margin-left: 0; }
+  .st-cohorts { gap: var(--st-1); }
+  .st-cohort { flex: 1 1 132px; justify-content: space-between; }
 }
 
 /* ==========================================================================

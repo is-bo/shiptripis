@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  The manual dinar queue.
+
+  This is the most human-sensitive workflow ShipTrip has: a person reads an
+  account number off a screen and moves real money by hand, and nothing
+  downstream will catch it if they send the wrong amount to the wrong person. It
+  earns a first-class queue rather than a stage table buried on a dashboard.
+
+  Four cohorts, in the order one payout travels them. The dinar figure leads on
+  every waiting row because it is the number that gets typed into a bank; the
+  canonical euro sits underneath it because it is the number that is owed. They
+  are never added together and the dinar is never a conversion of the euro at
+  today's rate — it is what was frozen when the instruction was created.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; Manual DZD</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops">
+  {% include "admin/console/_finance_head.html" %}
+
+  {% if not errors and not unavailable %}
+  {% if not execution_enabled %}
+  <div class="st-readonly-note"><span><strong>Dinar execution is switched off in this environment.</strong> The queue below is real and readable; the controls that commit or release a transfer stay disabled on each payout.</span></div>
+  {% endif %}
+
+  {% if stuck %}
+  <div class="st-alert st-alert-attn" role="alert">
+    <strong>{{ stuck }} dinar payout{{ stuck|pluralize }} cannot move.</strong>
+    <span>Blocked, held or disputed, so {{ stuck|pluralize:"it is,they are" }} in none of the four queues below. <a href="{{ stuck_url }}">Open them</a>.</span>
+  </div>
+  {% endif %}
+
+  <nav class="st-cohorts" aria-label="Dinar queue">
+    {% for row in cohorts %}
+    <a href="{{ row.url }}" class="st-cohort{% if row.key == selected %} is-current{% endif %}{% if row.tone %} is-{{ row.tone }}{% endif %}"{% if row.key == selected %} aria-current="true"{% endif %}>
+      <span class="st-cohort-label">{{ row.label }}</span>
+      <span class="st-cohort-count">{{ row.count }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="st-zone" aria-labelledby="cohort-title">
+    <div class="st-zone-head">
+      <h2 id="cohort-title">{{ current.label }}</h2>
+      {% if current.amount %}<span class="st-money st-zone-amount">{{ current.amount }}</span>{% endif %}
+    </div>
+    <p class="st-zone-says">{{ current.blurb }}</p>
+
+    {% if groups %}
+      {% for group in groups %}
+      <section class="st-stage"{% if groups|length > 1 %} aria-labelledby="stage-{{ group.stage }}-title"{% endif %}>
+        <div class="st-stage-head">
+          {% if groups|length > 1 %}<h3 id="stage-{{ group.stage }}-title">{{ group.label }}</h3>{% endif %}
+          <span class="st-stage-facts">
+            {% if group.dzd %}<span class="st-money">{{ group.dzd }}</span> &middot; {% endif %}<span class="st-money">{{ group.amount }}</span> canonical &middot; {{ group.count }} payout{{ group.count|pluralize }}
+          </span>
+        </div>
+        {% if group.dzd_missing %}<p class="st-stage-says">{{ group.dzd_missing }} instruction{{ group.dzd_missing|pluralize }} in this stage has no stored dinar amount, so the dinar figure above is partial.</p>{% endif %}
+        {% include "admin/console/_finance_queue.html" with group=group manual=True %}
+      </section>
+      {% endfor %}
+    {% else %}
+      <p class="st-calm"><span aria-hidden="true">&#10003;</span> Nothing is {{ current.label|lower }} in the {{ scope.mode_label }} environment.</p>
+    {% endif %}
+  </section>
+
+  <footer class="st-finops-foot">
+    <p>Read at {{ as_of }}. Dinar amounts are the settlement instructions as they were frozen when each one was created &mdash; never a conversion of the euro column at today's rate, and euros and dinars are never added together. Account details for a transfer stay on that payout's own authorised screen, and opening one is recorded.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

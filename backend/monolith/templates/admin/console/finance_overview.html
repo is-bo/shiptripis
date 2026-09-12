@@ -1,0 +1,151 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  The Finance operator's homepage. Five zones, in the order the questions get
+  asked: is the data trustworthy, does anything need me, what is queued, what
+  are the totals, what just happened.
+
+  What is deliberately *not* here: the liability-by-state table, the rail and
+  funding permutations, the Stripe stage table, the manual stage table, the
+  seven-card refund lifecycle, the provider cards, the six-comparison table,
+  ledger conservation, the metric dictionary and the stated-limitations block.
+  None of it was deleted. All of it is on the reconciliation page, which is
+  where its readers — a Finance lead, a CFO, an auditor, an engineer mid
+  investigation — were always going to open it.
+
+  Nothing on this page can move money, and nothing on it is computed here.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Finance</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops">
+  {% include "admin/console/_finance_head.html" %}
+
+  {% if not errors and not unavailable %}
+
+  {# ---- Zone 2. Needs attention. The strongest thing on the page. ---- #}
+  <section class="st-zone" aria-labelledby="attention-title">
+    <div class="st-zone-head">
+      <h2 id="attention-title">Needs attention</h2>
+      {% if attention %}<span class="st-zone-count is-bad">{{ attention_total }}</span>{% endif %}
+    </div>
+
+    {% if attention %}
+    <ul class="st-attn-list">
+      {% for row in attention %}
+      <li class="st-attn is-{{ row.tone }}">
+        <a href="{{ row.url }}">
+          <span class="st-attn-count">{{ row.count }}</span>
+          <span class="st-attn-body">
+            <strong>{{ row.label }}</strong>
+            <span>{{ row.says }}</span>
+          </span>
+          <span class="st-attn-side">
+            {% if row.amount %}<span class="st-money">{{ row.amount }}</span>{% endif %}
+            <span class="st-attn-owner">{{ row.owner }} acts</span>
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="st-calm"><span aria-hidden="true">&#10003;</span> Nothing needs Finance right now. No blocked or returned payouts, no holds, no disputes and no failed refunds in the {{ scope.mode_label }} environment.</p>
+    {% endif %}
+  </section>
+
+  {# ---- Zone 3. Work queues. ---- #}
+  <section class="st-zone" aria-labelledby="queues-title">
+    <h2 id="queues-title" class="st-visually-hidden">Work queues</h2>
+    <div class="st-lanes">
+
+      <section class="st-lane is-primary" aria-labelledby="dzd-title">
+        <div class="st-lane-head">
+          <h3 id="dzd-title">Manual DZD</h3>
+          <p>Dinar transfers a person sends by hand.</p>
+        </div>
+        <ul class="st-lane-list">
+          {% for row in dzd.cohorts %}{% if row.key != 'completed' %}
+          <li{% if row.key == 'waiting' and row.count %} class="is-live"{% endif %}>
+            <span class="st-lane-label">{{ row.label }}</span>
+            <span class="st-lane-count{% if row.key == 'waiting' and row.count %} is-attn{% endif %}">{{ row.count }}</span>
+          </li>
+          {% endif %}{% endfor %}
+        </ul>
+        {% if dzd.stuck %}<p class="st-lane-warn"><a href="{{ dzd.url }}">{{ dzd.stuck }} dinar payout{{ dzd.stuck|pluralize }} blocked, held or disputed</a></p>{% endif %}
+        <a class="button st-lane-go" href="{{ dzd.url }}">Open DZD queue</a>
+      </section>
+
+      <section class="st-lane" aria-labelledby="stripe-title">
+        <div class="st-lane-head">
+          <h3 id="stripe-title">Stripe EUR</h3>
+          <p>Automatic. Monitored, not worked.</p>
+        </div>
+        <ul class="st-lane-list">
+          <li>
+            <span class="st-lane-label">Processing normally</span>
+            <span class="st-lane-count">{% if stripe.moving %}{{ stripe.moving.count }}{% else %}0{% endif %}</span>
+          </li>
+          <li>
+            <span class="st-lane-label">Ready to send</span>
+            <span class="st-lane-count">{% if stripe.ready %}{{ stripe.ready.count }}{% else %}0{% endif %}</span>
+          </li>
+          <li{% if stripe.attention.count %} class="is-live"{% endif %}>
+            <span class="st-lane-label">Action required</span>
+            <span class="st-lane-count{% if stripe.attention.count %} is-bad{% endif %}">{% if stripe.attention %}{{ stripe.attention.count }}{% else %}0{% endif %}</span>
+          </li>
+        </ul>
+        <a class="button st-button-quiet st-lane-go" href="{{ stripe.url }}">Open Stripe payouts</a>
+      </section>
+
+    </div>
+  </section>
+
+  {# ---- Zone 4. The three amounts that are not the same thing. ---- #}
+  {% if headline %}
+  <section class="st-zone" aria-labelledby="totals-title">
+    <div class="st-zone-head">
+      <h2 id="totals-title">Money</h2>
+      <a class="st-zone-link" href="{{ reconciliation_url }}">Full accounting detail</a>
+    </div>
+    <dl class="st-totals">
+      {% for item in headline %}
+      <div>
+        <dt>{{ item.label }}</dt>
+        <dd>
+          <span class="st-total-value{% if not item.value.available %} is-unknown{% endif %}">{{ item.value.text }}</span>
+          {% if item.value.count_text %}<span class="st-total-meta">{{ item.value.count_text }}</span>{% endif %}
+          <span class="st-total-says">{{ item.says }}</span>
+        </dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </section>
+  {% endif %}
+
+  {# ---- Zone 5. What just happened. ---- #}
+  {% if activity %}
+  <section class="st-zone" aria-labelledby="activity-title">
+    <div class="st-zone-head">
+      <h2 id="activity-title">Recent Finance activity</h2>
+      <a class="st-zone-link" href="{% url 'admin_console:audit' %}">Full audit log</a>
+    </div>
+    <ul class="st-activity">
+      {% for row in activity %}
+      <li>
+        <span class="st-activity-what">{{ row.label }}</span>
+        {% if row.reference %}<span class="st-activity-ref">{{ row.reference }}</span>{% endif %}
+        <span class="st-activity-who">{{ row.actor }}</span>
+        <span class="st-activity-age">{{ row.age }} ago</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <footer class="st-finops-foot">
+    <p>Read at {{ as_of }} under one consistent database snapshot. This page observes and navigates; payouts, refunds, transfers and holds are acted on from their own authorised screens.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

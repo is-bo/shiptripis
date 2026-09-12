@@ -1,0 +1,77 @@
+{% comment %}
+  The Finance scope bar, and the whole of it.
+
+  H5.1 opened every Finance page with ten controls in a card of their own. Nine
+  of them answered questions an operator asks a handful of times a month, and
+  all ten stood between them and the first number every single day. This bar
+  carries three: which environment, which period, and find one reference.
+
+  The period is four links rather than a select plus Apply, because it is the
+  control that moves most and a submit round trip for it is a tax. The
+  environment and the lookup share one small form, and every filter the form
+  cannot see rides along as a hidden field so applying it never silently drops
+  the tab or the queue filter already in force.
+
+  `scope.refine` is the escape hatch, and it is deliberately narrow: the two or
+  three filters that mean something on this particular queue, next to that
+  queue. It is not the old bar folded into an accordion — the other controls are
+  not hidden here, they are gone.
+{% endcomment %}
+<div class="st-scope">
+  <nav class="st-scope-period" aria-label="Reporting period">
+    {% for item in scope.periods %}
+      <a href="{{ item.url }}"{% if item.current %} aria-current="true" class="is-current"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+  </nav>
+
+  <form method="get" action="{{ scope.action }}" class="st-scope-form" role="search" aria-label="Finance scope">
+    {% for name, value in scope.hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+
+    <div class="st-scope-field">
+      <label for="fin-mode">Environment</label>
+      <select id="fin-mode" name="mode" aria-describedby="fin-mode-help">
+        {% for value, label in scope.mode_choices %}<option value="{{ value }}"{% if scope.mode == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+
+    {% comment %}
+      The period is chosen by the links above, so the form carries it rather
+      than restating it as a control. A custom range additionally needs its two
+      dates, and H5 refuses dates alongside a preset period — so the hidden
+      field travels either way and the dates appear only with `custom`.
+    {% endcomment %}
+    <input type="hidden" name="period" value="{{ scope.period }}">
+    {% if scope.custom %}
+    <div class="st-scope-field">
+      <label for="fin-start">From</label>
+      <input id="fin-start" type="date" name="start" value="{{ scope.start }}">
+    </div>
+    <div class="st-scope-field">
+      <label for="fin-end">To</label>
+      <input id="fin-end" type="date" name="end" value="{{ scope.end }}">
+    </div>
+    {% endif %}
+
+    {% for item in scope.refine %}
+    <div class="st-scope-field">
+      <label for="fin-{{ item.name }}">{{ item.label }}</label>
+      <select id="fin-{{ item.name }}" name="{{ item.name }}">
+        {% for value, label in item.choices %}<option value="{{ value }}"{% if item.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+
+    <div class="st-scope-field is-find">
+      <label for="fin-search">Find payout or Deal</label>
+      <input id="fin-search" type="search" name="search" value="{{ scope.search }}"
+             placeholder="ST-42, TR-14 or a payout UUID" aria-describedby="fin-search-help">
+    </div>
+
+    <div class="st-scope-actions">
+      <button type="submit">Apply</button>
+      {% if scope.search or scope.refine %}<a class="st-scope-clear" href="{{ scope.reset_url }}">Reset</a>{% endif %}
+    </div>
+    <p id="fin-search-help" class="st-visually-hidden">Exact references only. There is no search over names, emails or account details.</p>
+    <p id="fin-mode-help" class="st-visually-hidden">{{ scope.mode_help }}</p>
+  </form>
+</div>

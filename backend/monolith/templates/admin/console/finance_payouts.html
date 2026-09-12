@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  Every payout, in one place, grouped by the only question an operator asks of
+  one: is it stuck, is it due, is it moving, or is it done.
+
+  H5's eleven liability buckets and twenty-five operation stages are all still
+  underneath and none of them was renamed. They are simply no longer the
+  navigation: nobody should have to know which of eleven buckets a payout falls
+  into in order to find it.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; Payouts</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops">
+  {% include "admin/console/_finance_head.html" %}
+
+  {% if not errors and not unavailable %}
+  <nav class="st-cohorts" aria-label="Payout cohort">
+    {% for row in cohorts %}
+    <a href="{{ row.url }}" class="st-cohort{% if row.key == selected %} is-current{% endif %}{% if row.tone %} is-{{ row.tone }}{% endif %}"{% if row.key == selected %} aria-current="true"{% endif %}>
+      <span class="st-cohort-label">{{ row.label }}</span>
+      <span class="st-cohort-count">{{ row.count }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="st-zone" aria-labelledby="cohort-title">
+    <div class="st-zone-head">
+      <h2 id="cohort-title">{{ current.label }}</h2>
+      {% if current.amount %}<span class="st-money st-zone-amount">{{ current.amount }}</span>{% endif %}
+    </div>
+    <p class="st-zone-says">{{ current.blurb }}</p>
+
+    {% if groups %}
+      {% for group in groups %}
+      <section class="st-stage"{% if groups|length > 1 %} aria-labelledby="stage-{{ group.stage }}-title"{% endif %}>
+        <div class="st-stage-head">
+          {% if groups|length > 1 %}<h3 id="stage-{{ group.stage }}-title">{{ group.label }}</h3>{% endif %}
+          <span class="st-stage-facts"><span class="st-money">{{ group.amount }}</span> &middot; {{ group.count }} payout{{ group.count|pluralize }} &middot; {{ group.method }}</span>
+        </div>
+        {% if group.help %}<p class="st-stage-says">{{ group.help }}</p>{% endif %}
+        {% include "admin/console/_finance_queue.html" with group=group manual=False %}
+      </section>
+      {% endfor %}
+    {% else %}
+      <p class="st-calm"><span aria-hidden="true">&#10003;</span> No payouts are {{ current.label|lower }} in the {{ scope.mode_label }} environment for this scope.</p>
+    {% endif %}
+  </section>
+
+  <footer class="st-finops-foot">
+    <p>Read at {{ as_of }}. This page observes and navigates &mdash; opening a payout takes you to the audited screen that owns it.
+      Related: <a href="{{ dzd_url }}">the manual dinar queue</a>, <a href="{{ accounts_url }}">Stripe payout accounts</a>, <a href="{{ legacy_url }}">the raw payout table</a>.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

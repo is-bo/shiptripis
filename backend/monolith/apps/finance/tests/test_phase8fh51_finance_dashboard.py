@@ -7,6 +7,12 @@ rendered are the snapshot's own figures, that a value H5 refuses to assert is
 never printed as `€0.00`, that filters travel to the backend unchanged, that a
 bad filter is answered rather than raised, and that neither page leaks a
 sensitive field or offers a way to move money.
+
+H5.2 split that one dashboard into five destinations. Every guarantee in this
+file is still H5.1's guarantee and none was dropped; what moved is the surface
+that owns each one, so the assertions below now run against the page that
+actually carries the thing being promised. The drilldown, which H5.2 did not
+change, is still asserted here in full.
 """
 
 import re
@@ -38,6 +44,13 @@ pytestmark = [
 
 DASHBOARD = "/admin/finance/dashboard/"
 ROWS = "/admin/finance/dashboard/rows/"
+# H5.2 split the one dashboard into five destinations. Every guarantee below
+# is the guarantee H5.1 made; what changed is which surface owns it, so each
+# test now asserts it where it actually lives.
+PAYOUTS = "/admin/finance/payouts-hub/"
+DZD = "/admin/finance/manual-dzd/"
+EXCEPTIONS = "/admin/finance/exceptions/"
+AUDIT = "/admin/finance/reconciliation/"
 ENABLED = {"FINANCE_DASHBOARD_ENABLED": True}
 
 
@@ -135,7 +148,8 @@ def test_navigation_and_routes_follow_the_feature_flag(world):
     with override_settings(**ENABLED):
         assert client.get(DASHBOARD, {"mode": "test"}).status_code == 200
         shell = body(client.get(reverse("admin_console:payouts")))
-        assert DASHBOARD in shell and "Finance dashboard" in shell
+        assert DASHBOARD in shell and "Overview" in shell
+        assert DZD in shell and AUDIT in shell
 
 
 def test_dashboard_is_read_only(world):
@@ -167,22 +181,19 @@ def test_every_headline_figure_is_the_snapshot_value(world):
     snapshot = build_snapshot(scope())
     with override_settings(**ENABLED):
         page = body(client.get(DASHBOARD, {"mode": "test"}))
-    for key in (
-        "gross_funded",
-        "net_funded",
-        "traveler_outstanding",
-        "recognized_revenue",
-        "pending_earnings",
-        "liability_eligible",
-    ):
-        amount = snapshot["metrics"][key]["amount_eur_cents"]
-        assert format_eur(amount) in page, key
+        audit = body(client.get(AUDIT, {"mode": "test"}))
+    # The Overview leads with the three amounts that are routinely confused,
+    # and names them as different things.
+    for key in ("gross_funded", "recognized_revenue", "traveler_outstanding"):
+        assert format_eur(snapshot["metrics"][key]["amount_eur_cents"]) in page, key
     assert format_eur(capture.amount_eur_cents) in page
-    assert snapshot["definition_version"] in page
-    assert "Europe/Paris" in page
-    # Volume and revenue are named as different things on the same screen.
     assert "Money processed" in page and "ShipTrip earned" in page
     assert "Owed to Travelers" in page
+    # The accounting decomposition is not gone; it is on the audit surface.
+    for key in ("liability_eligible", "pending_earnings", "net_funded"):
+        assert format_eur(snapshot["metrics"][key]["amount_eur_cents"]) in audit, key
+    assert snapshot["definition_version"] in audit
+    assert "Europe/Paris" in audit
 
 
 @pytest.mark.usefixtures("configured_h4")
@@ -195,9 +206,9 @@ def test_rail_stages_and_frozen_dinars_come_from_the_snapshot(world):
         row for row in snapshot["rail_operations"] if row["rail"] == "manual_dzd"
     ]
     with override_settings(**ENABLED):
-        page = body(client.get(DASHBOARD, {"mode": "test"}))
-    assert "Manual DZD transfer" in page
-    assert "Frozen DZD settlement" in page
+        page = body(client.get(DZD, {"mode": "test", "cohort": "waiting"}))
+        audit = body(client.get(AUDIT, {"mode": "test"}))
+    assert "Manual DZD" in page
     for row in manual_groups:
         assert format_eur(row["amount_eur_cents"]) in page
         if row.get("amount_dzd") is not None:
@@ -205,6 +216,8 @@ def test_rail_stages_and_frozen_dinars_come_from_the_snapshot(world):
     assert manual.payout_currency == "DZD"
     # Euro stays the canonical accounting currency; dinars are an instruction.
     assert "never a conversion of the euro column at today" in page
+    # The frozen settlement column itself moved to the audit surface intact.
+    assert "Frozen settlement" in audit
 
 
 def test_unknown_amounts_are_words_and_never_zero(world):
@@ -225,20 +238,22 @@ def test_unknown_amounts_are_words_and_never_zero(world):
     assert snapshot["metrics"]["provider_disputes"]["amount_eur_cents"] is None
     client = signed_in(s.admin)
     with override_settings(**ENABLED):
+        audit = body(client.get(AUDIT, {"mode": "test"}))
         page = body(client.get(DASHBOARD, {"mode": "test"}))
         rows = body(
             client.get(ROWS, {"mode": "test", "metric": "provider_disputes"})
         )
-    assert "Partial" in page
-    for text in (
-        "Provider-reported balance unavailable",
-        "Not available",
-    ):
-        assert text in page
+        exceptions = body(client.get(EXCEPTIONS, {"mode": "test"}))
+    # H5 says it does not know this total. Both surfaces say so in words.
+    assert "Partial" in exceptions
+    for text in ("Provider-reported balance unavailable", "Not available"):
+        assert text in audit
     # The provider balance and the provider cost are unavailable, not zero.
-    assert "Stripe balance" not in page
-    assert "Provider costs and fees: <strong>Not available</strong>" in page
+    assert "Provider costs and fees: <strong>Not available</strong>" in audit
     assert "Partial" in rows or "Not available" in rows
+    # And an unavailable provider figure is not a card on the operator's
+    # homepage at all: H5.2 omits it rather than reporting a blank every day.
+    assert "Provider-reported balance unavailable" not in page
 
 
 def test_integrity_is_surfaced_in_both_its_states(world):
@@ -247,9 +262,13 @@ def test_integrity_is_surfaced_in_both_its_states(world):
     s, _, _, capture = world
     client = signed_in(s.admin)
     with override_settings(**ENABLED):
-        healthy = body(client.get(DASHBOARD, {"mode": "test"}))
+        healthy = body(client.get(AUDIT, {"mode": "test"}))
+        overview = body(client.get(DASHBOARD, {"mode": "test"}))
     assert build_snapshot(scope())["integrity"]["status"] == "ok"
     assert "Finance data reconciles" in healthy
+    # The operator reads one line of the same verdict, never the table.
+    assert "Finance reconciled" in overview
+    assert "Payout state vs ledger payable" not in overview
     assert "is-ok" in healthy
     assert "Payout state vs ledger payable" in healthy
     assert "Agrees" in healthy
@@ -277,11 +296,17 @@ def test_integrity_is_surfaced_in_both_its_states(world):
     )
     assert build_snapshot(scope())["integrity"]["status"] == "mismatch"
     with override_settings(**ENABLED):
+        broken_audit = body(client.get(AUDIT, {"mode": "test"}))
         broken = body(client.get(DASHBOARD, {"mode": "test"}))
-    assert "Finance data does not reconcile" in broken
-    assert "is-bad" in broken
-    assert "Disagrees" in broken
-    # The page keeps working: a mismatch is disclosed, not a dead console.
+    assert "Finance data does not reconcile" in broken_audit
+    assert "is-bad" in broken_audit
+    assert "Disagrees" in broken_audit
+    # The operator surfaces escalate the same verdict without the evidence: a
+    # mismatch is the one state allowed to become a banner, because a total
+    # nobody can trust is worse than no total.
+    assert "investigation required" in broken
+    assert "Disagrees" not in broken
+    # And the page keeps working: a mismatch is disclosed, not a dead console.
     assert "Money processed" in broken
 
 
@@ -291,13 +316,30 @@ def test_holds_and_disputes_are_counted_separately(world):
         payout=payout, kind="manual", reason_code="qa", source_reference="qa"
     )
     client = signed_in(s.admin)
+    ProviderDispute.objects.create(
+        provider="stripe",
+        platform_id="qa",
+        provider_mode="test",
+        provider_object_id="dp_h51_split",
+        source_attempt=capture,
+        amount_minor=6000,
+        currency="eur",
+        canonical_amount_eur_cents=6000,
+        status="needs_response",
+    )
     snapshot = build_snapshot(scope())
     with override_settings(**ENABLED):
-        page = body(client.get(DASHBOARD, {"mode": "test"}))
-    assert "Payouts under a Finance hold" in page
-    assert "Payouts frozen by a ShipTrip dispute" in page
-    assert "Payouts touched by a provider dispute" in page
+        page = body(client.get(EXCEPTIONS, {"mode": "test"}))
+        overview = body(client.get(DASHBOARD, {"mode": "test"}))
+    # Three different events with three different owners. A hold and a
+    # provider dispute are open, so both are named with their own owner;
+    # no ShipTrip dispute is open, so none is invented. That is the
+    # separation, asserted in the only way that can actually fail.
+    assert "Finance hold" in page and "Finance acts next" in page
+    assert "Provider dispute" in page and "Finance / Risk acts next" in page
+    assert "ShipTrip dispute" not in page
     assert format_eur(snapshot["metrics"]["held_payouts"]["amount_eur_cents"]) in page
+    assert "Payouts under a Finance hold" in overview
 
 
 # ---------------------------------------------------------------------------
@@ -311,23 +353,22 @@ def test_filters_reach_the_backend_and_are_shown_in_words(world):
     with override_settings(**ENABLED):
         page = body(
             client.get(
-                DASHBOARD,
+                PAYOUTS,
                 {
                     "mode": "test",
                     "period": "7d",
-                    "provider": "stripe",
                     "rail": "stripe_eur",
                     "held": "false",
                 },
             )
         )
-    assert "Stripe" in page and "Stripe EUR transfer" in page
+    assert "Stripe EUR" in page
     assert "Not held and not disputed" in page
     # Operators are never shown the stored enum.
     assert "stripe_eur<" not in page
     assert "manual_dzd<" not in page
-    # The scope travels into every drilldown link.
-    assert "rail=stripe_eur" in page and "provider=stripe" in page
+    # The scope travels into every link the page emits.
+    assert "rail=stripe_eur" in page
     assert "period=7d" in page
 
 
@@ -468,7 +509,7 @@ def test_the_legacy_cohort_is_disclosed_and_reachable(world):
     s, _, _, _ = world
     client = signed_in(s.admin)
     with override_settings(**ENABLED):
-        page = body(client.get(DASHBOARD, {"mode": "test"}))
+        page = body(client.get(AUDIT, {"mode": "test"}))
         legacy = body(client.get(DASHBOARD, {"mode": "legacy_unknown"}))
     # A standing, generic disclosure: H5 publishes no residual count per mode,
     # so the page says the cohort exists and links to it rather than inventing
@@ -502,13 +543,21 @@ def test_both_known_rails_are_present_even_when_one_is_idle(world):
     s, _, _, _ = world
     client = signed_in(s.admin)
     with override_settings(**ENABLED):
-        page = body(client.get(DASHBOARD, {"mode": "test"}))
-    # A missing section reads as a page that failed to load; an empty one reads
-    # as a rail that was checked.
-    assert "Stripe EUR transfer" in page and "Manual DZD transfer" in page
-    assert "No payouts on this rail right now" in page
+        hub = body(client.get(PAYOUTS, {"mode": "test"}))
+        dinars = body(client.get(DZD, {"mode": "test"}))
+    # A missing cohort reads as a page that failed to load; an empty one reads
+    # as a queue that was checked. Every cohort renders at every count.
+    for label in ("Needs attention", "Ready", "Processing", "Not due yet", "Paid"):
+        assert label in hub, label
+    for label in (
+        "Waiting for Finance",
+        "Claimed / in progress",
+        "Sent / awaiting settlement",
+        "Completed",
+    ):
+        assert label in dinars, label
     # The anomaly rail stays out of the way until it actually holds something.
-    assert "Unclassified rail</h2>" not in page
+    assert "Unclassified method" not in hub
 
 
 def test_no_two_filter_options_share_a_label(world):

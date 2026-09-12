@@ -126,18 +126,50 @@ NAVIGATION = (
     (
         "Finance",
         (
+            # H5.2. Five Finance destinations, in the order an operator's day
+            # runs: what needs me, the payouts, the dinar queue by hand, the
+            # exceptions, and — last, because its reader arrives deliberately —
+            # the audit surface. Payments and the raw ledger stay because they
+            # are separate operational surfaces; the payout table and the refund
+            # queue are reached from the destinations that now front them.
             (
-                "Finance dashboard",
+                "Overview",
                 "admin_console:finance-dashboard",
                 ("view_finance_summary",),
-                ("finance-dashboard", "finance-rows"),
+                ("finance-dashboard",),
+            ),
+            (
+                "Payouts",
+                "admin_console:finance-payouts",
+                ("view_finance_summary",),
+                ("finance-payouts", "payouts", "payout-detail", "payout-accounts"),
+            ),
+            (
+                "Manual DZD",
+                "admin_console:finance-dzd",
+                ("view_finance_summary",),
+                ("finance-dzd",),
+            ),
+            (
+                "Refunds & disputes",
+                "admin_console:finance-exceptions",
+                ("view_finance_summary",),
+                ("finance-exceptions", "refunds", "refund-detail", "refund-new"),
+            ),
+            (
+                "Reconciliation",
+                "admin_console:finance-reconciliation",
+                ("view_finance_summary",),
+                ("finance-reconciliation", "finance-rows"),
             ),
             (
                 "Payments",
                 "admin_console:payments",
                 ("view_payment_attempts", "view_payment_orders"),
-                ("payments", "refund-new"),
+                ("payments", "payment-detail"),
             ),
+            # Superseded while the control plane is on; the console's only way
+            # to a payout when it is off. See `FLAG_SUPERSEDED_ROUTES`.
             (
                 "Refunds",
                 "admin_console:refunds",
@@ -234,7 +266,25 @@ NAVIGATION = (
 #: answers 404, and an operator cannot tell that from a broken console. The
 #: view's own flag check remains the authority; this only keeps the shell
 #: honest about where it can actually go.
-FLAG_GATED_ROUTES = {"admin_console:finance-dashboard": "FINANCE_DASHBOARD_ENABLED"}
+FLAG_GATED_ROUTES = {
+    "admin_console:finance-dashboard": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:finance-payouts": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:finance-dzd": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:finance-exceptions": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:finance-reconciliation": "FINANCE_DASHBOARD_ENABLED",
+}
+
+#: The inverse, and the reason it exists. H5.2's five destinations front the raw
+#: payout, refund and ledger queues, so listing both while the flag is on would
+#: name the same work twice. But those queues are not part of the Finance
+#: control plane and must not disappear with it: when the flag is off they are
+#: the console's only route to a payout, and they come back.
+FLAG_SUPERSEDED_ROUTES = {
+    "admin_console:payouts": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:refunds": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:payout-accounts": "FINANCE_DASHBOARD_ENABLED",
+    "admin_console:ledger": "FINANCE_DASHBOARD_ENABLED",
+}
 
 
 def _may_reach(user, capabilities: tuple[str, ...]) -> bool:
@@ -249,7 +299,10 @@ def _may_reach(user, capabilities: tuple[str, ...]) -> bool:
 
 def _is_enabled(route: str) -> bool:
     flag = FLAG_GATED_ROUTES.get(route)
-    return flag is None or bool(getattr(settings, flag, False))
+    if flag is not None and not getattr(settings, flag, False):
+        return False
+    superseded = FLAG_SUPERSEDED_ROUTES.get(route)
+    return superseded is None or not getattr(settings, superseded, False)
 
 
 def _navigation_sections(user):

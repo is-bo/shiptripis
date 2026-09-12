@@ -22,6 +22,35 @@ from apps.finance.payout_manual_profiles import reveal_profile, review_profile
 from apps.finance.payout_evidence import upload_evidence, read_evidence
 from .console_manual_presenter import manual_view
 
+def _queue_return(request):
+    """Where "back" goes, when the operator arrived from the H5.2 dinar queue.
+
+    H5.2 asks that finishing one payout leaves an operator able to carry on
+    rather than re-navigating from the top. The cohort travels as a query
+    parameter and is validated against the queue's own four keys before it is
+    turned into a URL — an arbitrary `?next=` echoed back as a link would be an
+    open redirect on the one screen in this product that must not have one.
+
+    There is deliberately no "next waiting payout" control. Chaining straight
+    into the following transfer is exactly how a person sends the right amount
+    to the wrong Traveler, and H4.1's guarantee is that each payout is selected,
+    reviewed and attested on its own.
+    """
+
+    from django.urls import reverse
+
+    from .finance_operations import DZD_COHORTS
+
+    cohort = request.GET.get("cohort", "")
+    if cohort not in {key for key, *_ in DZD_COHORTS}:
+        return None
+    label = next(row[1] for row in DZD_COHORTS if row[0] == cohort)
+    return {
+        "url": f"{reverse('admin_console:finance-dzd')}?cohort={cohort}",
+        "label": label,
+    }
+
+
 #: What each command is called when it is refused. The domain's own sentence is
 #: appended to this, because "Prepare transfer was refused" and "An operator
 #: already owns this instruction" answer different halves of the question.
@@ -310,6 +339,7 @@ def manual_detail(request, payout):
             "title": f"Manual DZD payout {payout.pk}",
             "manual": view,
             "revealed": revealed,
+            "queue": _queue_return(request),
         },
     )
     response["Cache-Control"] = "no-store, private"

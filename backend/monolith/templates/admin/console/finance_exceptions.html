@@ -1,0 +1,89 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  Refunds, holds and disputes: the things that went sideways.
+
+  H5.1 rendered refunds as seven equally-weighted tiles and holds and disputes
+  as four more, which told an operator how many of each existed and nothing
+  about who was supposed to do something. Every row here names the owner of the
+  next action and links to the surface where that action is taken, because a
+  Finance hold, a ShipTrip dispute and a provider dispute are three different
+  events with three different owners and only one of them is Finance's to clear.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; Refunds &amp; disputes</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops">
+  {% include "admin/console/_finance_head.html" %}
+
+  {% if not errors and not unavailable %}
+
+  <section class="st-zone" aria-labelledby="blocks-title">
+    <div class="st-zone-head">
+      <h2 id="blocks-title">Why a payout is blocked</h2>
+      <a class="st-zone-link" href="{{ disputes_url }}">All disputes</a>
+    </div>
+    {% if blocks_open %}
+    <ul class="st-exceptions">
+      {% for row in blocks %}
+      <li class="st-exception is-{{ row.tone }}">
+        <a href="{{ row.url }}">
+          <span class="st-exception-count">{{ row.value.count }}</span>
+          <span class="st-exception-body">
+            <strong>{{ row.label }}</strong>
+            <span>{{ row.says }}</span>
+          </span>
+          <span class="st-exception-side">
+            <span class="st-money{% if not row.value.available %} st-unknown{% endif %}">{{ row.value.text }}</span>
+            <span class="st-exception-owner">{{ row.owner }} acts next</span>
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="st-calm"><span aria-hidden="true">&#10003;</span> No payout is held or disputed in the {{ scope.mode_label }} environment.</p>
+    {% endif %}
+
+    {% if recover and recover.count %}
+    <p class="st-zone-note">Provider disputes to recover: <strong class="st-money{% if not recover.available %} st-unknown{% endif %}">{{ recover.text }}</strong> across {{ recover.count }}.
+      {% if not recover.available %}The canonical amount is only known where the provider reported one, and an unknown amount stays unknown rather than being counted as zero.{% endif %}</p>
+    {% endif %}
+  </section>
+
+  <section class="st-zone" aria-labelledby="refunds-title">
+    <div class="st-zone-head">
+      <h2 id="refunds-title">Refunds</h2>
+      <a class="st-zone-link" href="{{ refunds_url }}">Open the refund queue</a>
+    </div>
+    {% if refunds %}
+    <ul class="st-exceptions">
+      {% for row in refunds %}
+      <li class="st-exception is-{{ row.tone }}">
+        <div>
+          <span class="st-exception-count">{{ row.value.count }}</span>
+          <span class="st-exception-body">
+            <strong>{{ row.label }}</strong>
+            <span>{{ row.says }}</span>
+          </span>
+          <span class="st-exception-side">
+            <span class="st-money{% if not row.value.available %} st-unknown{% endif %}">{{ row.value.text }}</span>
+            <span class="st-exception-owner">{{ row.owner }}{% if row.owner != '—' %} acts next{% endif %}</span>
+          </span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="st-calm"><span aria-hidden="true">&#10003;</span> No refund activity in this scope.</p>
+    {% endif %}
+    <p class="st-zone-note">A refund is raised and settled on the refund queue, and a payment that arrived without being applied is resolved from <a href="{{ payments_url }}">Payments</a>. Nothing on this page moves money.</p>
+  </section>
+
+  <footer class="st-finops-foot">
+    <p>Read at {{ as_of }}. Refund amounts are canonical euros. Only refunds finalised against applied funding are subtracted from funded volume, and they are subtracted once &mdash; the reconciliation page carries that comparison.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% comment %}
+  One queue of payouts.
+
+  This is a list, not a table, and that is a decision rather than a shortcut. A
+  seven-column table is the right shape for the drilldown, whose reader is
+  reconciling and wants columns to compare down; it is the wrong shape for a
+  work queue, whose reader is looking for the next thing to do and who on a
+  phone got a 720px-wide table inside a 311px column. As a list each payout is
+  one card that reads correctly linearly, and CSS aligns those cards into
+  columns from tablet width up — so the desktop reader still gets the scannable
+  grid, and nothing ever scrolls sideways.
+
+  Every reference and every amount comes from the H5 drilldown. `age` and
+  `blocker` are the two operational facts H5 does not publish; neither is money.
+{% endcomment %}
+<div class="st-rows-wrap">
+  {% if group.queue.rows %}
+  <div class="st-rows-head" aria-hidden="true">
+    <span>Payout</span>
+    <span>Deal &middot; Traveler</span>
+    <span class="is-numeric">{% if manual %}Send exactly{% else %}Owed{% endif %}</span>
+    <span>Waiting</span>
+    <span>Status</span>
+  </div>
+  <ul class="st-rows">
+    {% for row in group.queue.rows %}
+    <li class="st-row{% if row.blocker or row.markers %} is-flagged{% endif %}">
+      <span class="st-row-ref" title="{{ row.payout }}">
+        {% if row.url %}<a href="{{ row.url }}">{{ row.payout|slice:":8" }}</a>{% else %}{{ row.payout|slice:":8" }}{% endif %}
+      </span>
+      <span class="st-row-who">
+        <span class="st-row-deal">{{ row.deal }}</span>
+        <span class="st-row-trav">{{ row.traveler }}</span>
+      </span>
+      <span class="st-row-money">
+        {% if manual and row.dzd %}
+          <span class="st-money st-row-lead">{{ row.dzd }}</span>
+          <span class="st-row-basis">{{ row.eur }} canonical</span>
+        {% else %}
+          <span class="st-money st-row-lead">{{ row.eur }}</span>
+          {% if not manual %}<span class="st-row-basis">{{ row.method }}</span>{% endif %}
+        {% endif %}
+      </span>
+      <span class="st-row-age">{% if row.age %}{{ row.age }}{% else %}&mdash;{% endif %}</span>
+      <span class="st-row-state">
+        <span class="st-chip st-mute">{{ row.stage }}</span>
+        {% for label, tone in row.markers %}<span class="st-chip st-{{ tone }}">{{ label }}</span>{% endfor %}
+        {% if row.blocker %}<span class="st-row-blocker">{{ row.blocker }}</span>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if group.queue.more %}
+  <p class="st-rows-more">Showing the first 50. <a href="{{ group.rows_url }}">Open every row behind this stage</a>.</p>
+  {% endif %}
+  {% else %}
+  <p class="st-rows-empty"><span aria-hidden="true">&#10003;</span> Nothing is {{ group.label|lower }} right now.</p>
+  {% endif %}
+</div>

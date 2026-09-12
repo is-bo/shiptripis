@@ -2,13 +2,31 @@ from django.urls import path
 
 from . import console_views as views
 from .finance_control_plane import finance_control_plane
-from .finance_dashboard import finance_dashboard, finance_rows
+from .finance_dashboard import finance_rows
+from .finance_operations import (
+    finance_dzd,
+    finance_exceptions,
+    finance_overview,
+    finance_payouts,
+    finance_reconciliation,
+)
 
 app_name = "admin_console"
 
 urlpatterns = [
     path("finance/control-plane/", finance_control_plane, name="finance-control-plane"),
-    path("finance/dashboard/", finance_dashboard, name="finance-dashboard"),
+    # `finance-dashboard` stays the name of the Finance landing page through the
+    # H5.2 redesign. The route is what the feature flag, the navigation and
+    # every existing bookmark address; what changed is the page behind it.
+    path("finance/dashboard/", finance_overview, name="finance-dashboard"),
+    path("finance/payouts-hub/", finance_payouts, name="finance-payouts"),
+    path("finance/manual-dzd/", finance_dzd, name="finance-dzd"),
+    path("finance/exceptions/", finance_exceptions, name="finance-exceptions"),
+    path(
+        "finance/reconciliation/",
+        finance_reconciliation,
+        name="finance-reconciliation",
+    ),
     path("finance/dashboard/rows/", finance_rows, name="finance-rows"),
     path("", views.overview, name="overview"),
     path("users/", views.users, name="users"),

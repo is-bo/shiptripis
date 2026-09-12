@@ -1,0 +1,60 @@
+{% comment %}
+  The band every Finance page opens with: what page this is, whether the money
+  can be trusted, and what is in scope.
+
+  Health is one line here and never a table. H5's six comparisons are the right
+  answer to "prove this reconciles" and the wrong answer to "can I start work",
+  so the verdict travels with the operator on every page and the evidence lives
+  on the reconciliation surface one click away. A mismatch is the one state
+  allowed to break out of the line and become a banner, because a total nobody
+  can trust is worse than no total.
+{% endcomment %}
+<header class="st-finops-head">
+  <div class="st-finops-title">
+    <div>
+      <p class="st-eyebrow">{{ eyebrow }}</p>
+      <h1>{{ title }}</h1>
+    </div>
+    <div class="st-finops-meta">
+      <span class="st-chip {% if scope.mode == 'live' %}st-bad{% elif scope.mode == 'test' %}st-info{% else %}st-wait{% endif %}">{{ scope.mode_label }}</span>
+      {% if scope.range_text %}<span class="st-finops-range">{{ scope.range_text }}</span>{% endif %}
+      {% if health %}
+      <a class="st-pulse is-{{ health.tone }}" href="{{ health.url }}">
+        <span class="st-pulse-mark" aria-hidden="true">{% if health.ok %}&#10003;{% else %}!{% endif %}</span>
+        <span>{{ health.title }}</span>
+      </a>
+      {% endif %}
+      <a class="button st-button-quiet" href="{{ scope.refresh_url }}">Refresh</a>
+    </div>
+  </div>
+
+  {% include "admin/console/_finance_scope.html" %}
+</header>
+
+{% if health.serious %}
+<div class="st-alert st-alert-bad" role="alert">
+  <strong>{{ health.title }}.</strong>
+  <span>{{ health.says }} Treat every figure on this page as unverified until this is resolved.
+    {% if health.disagreeing %}Disagreeing: {% for row in health.disagreeing %}{{ row }}{% if not forloop.last %}; {% endif %}{% endfor %}.{% endif %}
+    <a href="{{ health.url }}">Open the reconciliation detail</a>.</span>
+</div>
+{% endif %}
+
+{% if errors %}
+<div class="st-alert st-alert-bad" role="alert">
+  <strong>These filters could not be used.</strong>
+  <span>{% for error in errors %}{{ error }}{% if not forloop.last %} {% endif %}{% endfor %}
+    <a href="{{ scope.reset_url }}">Start again from the default view</a>. Nothing was reported, so no figure on screen is stale.</span>
+</div>
+{% endif %}
+
+{% if unavailable %}
+<div class="st-alert st-alert-bad" role="alert">
+  <strong>The Finance snapshot is temporarily unavailable.</strong>
+  <span>The reporting query did not finish. Narrow the period and try again; no financial state was changed.</span>
+</div>
+{% endif %}
+
+{% if in_legacy_mode %}
+<div class="st-readonly-note"><span><strong>This is the legacy / unknown cohort.</strong> These rows were never recorded as TEST or LIVE. They belong to neither TEST nor LIVE and are reported separately on purpose, so no figure here is part of either environment's totals.</span></div>
+{% endif %}

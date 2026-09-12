@@ -1,0 +1,200 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  The audit surface. Every Level-3 thing H5.1 put on the operator's homepage is
+  here, complete: all six comparisons with their differences and mismatched-row
+  counts, ledger conservation, the data issues, the conditional warnings, the
+  provenance, the exclusive liability buckets, the same liability by rail and
+  funding source, provider attribution, the metric dictionary and the stated
+  limitations of the snapshot.
+
+  Nothing was weakened to move it. The register stays technical on purpose,
+  because the reader here is a Finance lead, a CFO, an auditor or an engineer
+  in the middle of an investigation — not someone trying to settle a transfer
+  before lunch. It is the one Finance page where a wide table is the right
+  answer, and its tables keep bounded horizontal scrolling on a phone rather
+  than pretending to be cards.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; Reconciliation</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops st-finaudit">
+  {% include "admin/console/_finance_head.html" %}
+
+  {% if not errors and not unavailable %}
+
+  <div class="st-integrity is-{{ verdict.tone }}" role="status">
+    <div>
+      <strong>{{ verdict.title }}</strong>
+      <p>{{ verdict.summary }}</p>
+    </div>
+  </div>
+
+  <section class="st-zone" aria-labelledby="comparisons-title">
+    <div class="st-zone-head"><h2 id="comparisons-title">The six comparisons</h2></div>
+    <p class="st-zone-says">Each comparison checks a reported figure against an independent record. A difference of zero with no mismatched rows means the two agree exactly.</p>
+    <section class="st-table-card">
+      <div class="st-table-scroll">
+        <table class="st-data-table">
+          <thead>
+            <tr>
+              <th scope="col">Comparison</th>
+              <th scope="col" class="is-numeric">Reported</th>
+              <th scope="col" class="is-numeric">Independent record</th>
+              <th scope="col" class="is-numeric">Difference</th>
+              <th scope="col" class="is-numeric">Rows that disagree</th>
+              <th scope="col">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in comparisons %}
+            <tr>
+              <td>{{ row.label }}<small class="st-stage-help">{{ row.help }}</small></td>
+              <td class="is-numeric"><span class="st-money">{{ row.reported }}</span></td>
+              <td class="is-numeric"><span class="st-money">{{ row.authority }}</span></td>
+              <td class="is-numeric"><span class="st-money{% if not row.agrees %} st-tone-bad{% endif %}">{{ row.difference }}</span></td>
+              <td class="is-numeric">{{ row.row_mismatches }}</td>
+              <td>{% if row.agrees %}<span class="st-chip st-ok">Agrees</span>{% else %}<span class="st-chip st-bad">Disagrees</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="st-grid st-grid-2 st-fin-gap">
+      <section class="st-card">
+        <p class="st-eyebrow">Conservation</p>
+        <h2>Ledger balance</h2>
+        <ul class="st-reading-list">
+          <li>
+            <div><strong>Transactions that do not balance</strong><small>Every leg of every selected transaction must sum to zero.</small></div>
+            <span class="st-chip {% if unbalanced %}st-bad{% else %}st-ok{% endif %}">{{ unbalanced }}</span>
+          </li>
+          {% for issue in data_issues %}
+          <li><div><strong>{{ issue.label }}</strong></div><span class="st-chip st-attn">{{ issue.count }}</span></li>
+          {% empty %}
+          <li><div><strong>No record-level data issues</strong><small>Timestamps and settlement evidence are present on every row that needs them.</small></div><span class="st-chip st-ok">0</span></li>
+          {% endfor %}
+        </ul>
+      </section>
+      <section class="st-card">
+        <p class="st-eyebrow">Stated limits</p>
+        <h2>What this reconciliation does not prove</h2>
+        {% if warnings %}
+        <ul class="st-reading-list">{% for warning in warnings %}<li><div><strong>{{ warning }}</strong></div></li>{% endfor %}</ul>
+        {% else %}
+        <p>No conditional warning applies to this scope.</p>
+        {% endif %}
+        <dl class="st-facts st-fin-gap-sm">
+          <div><dt>Revenue basis</dt><dd>{{ revenue_basis }}</dd></div>
+          <div><dt>Provider cash</dt><dd>{{ provider_cash }}</dd></div>
+          <div><dt>Ledger rows attributed from an agreeing pair</dt><dd>{{ attributed_legacy_entries }}</dd></div>
+          {% for row in provenance %}<div><dt>{{ row.label }}</dt><dd>{{ row.entry_count }} entries &middot; {{ row.status }}</dd></div>{% endfor %}
+        </dl>
+      </section>
+    </div>
+  </section>
+
+  {% if buckets %}
+  <section class="st-zone" aria-labelledby="buckets-title">
+    <div class="st-zone-head"><h2 id="buckets-title">Outstanding liability, by state</h2></div>
+    <p class="st-zone-says">One outstanding obligation appears in exactly one bucket, and the buckets add up to the outstanding total. Connected-account funds and bank transit describe where that same money sits and are never added to it.</p>
+    <section class="st-table-card">
+      <div class="st-table-scroll">
+        <table class="st-data-table">
+          <thead><tr><th scope="col">State</th><th scope="col" class="is-numeric">Payouts</th><th scope="col" class="is-numeric">Amount</th></tr></thead>
+          <tbody>
+            {% for row in buckets %}
+            <tr>
+              <td>{{ row.label }}<small class="st-stage-help">{{ row.help }}</small></td>
+              <td class="is-numeric">{% if row.value.count %}{{ row.value.count }}{% else %}&mdash;{% endif %}</td>
+              <td class="is-numeric"><span class="st-money{% if row.tone %} st-tone-{{ row.tone }}{% endif %}{% if not row.value.available %} st-unknown{% endif %}">{{ row.value.text }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+  {% endif %}
+
+  {% if split %}
+  <section class="st-zone" aria-labelledby="split-title">
+    <div class="st-zone-head"><h2 id="split-title">The same liability, by rail and funding source</h2></div>
+    <section class="st-table-card">
+      <div class="st-table-scroll">
+        <table class="st-data-table">
+          <thead>
+            <tr>
+              <th scope="col">Rail</th><th scope="col">State</th><th scope="col">Funding source</th>
+              <th scope="col" class="is-numeric">Payouts</th><th scope="col" class="is-numeric">Canonical EUR</th><th scope="col" class="is-numeric">Frozen settlement</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in split %}
+            <tr>
+              <td>{{ row.rail }}</td><td>{{ row.bucket }}</td><td>{{ row.funding }}</td>
+              <td class="is-numeric">{{ row.value.count }}</td>
+              <td class="is-numeric"><span class="st-money">{{ row.value.text }}</span></td>
+              <td class="is-numeric">{% if row.is_manual %}<span class="st-money{% if not row.value.dzd_text %} st-unknown{% endif %}">{{ row.value.dzd_text|default:"Not recorded" }}</span>{% if row.value.dzd_missing %}<small>{{ row.value.dzd_missing }} without a stored amount</small>{% endif %}{% else %}<span class="st-unknown">Not applicable</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">Nothing is outstanding in this scope.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+  {% endif %}
+
+  {% if providers %}
+  <section class="st-zone" aria-labelledby="providers-title">
+    <div class="st-zone-head"><h2 id="providers-title">Exposure by provider</h2></div>
+    <p class="st-zone-says">Cash, refunds and reservations are attributed to the provider that actually took the money. {{ snapshot.provider_semantics }}</p>
+    <div class="st-provider-grid">
+      {% for provider in providers %}
+      <section class="st-card st-provider" aria-labelledby="provider-{{ provider.provider }}-title">
+        <h2 id="provider-{{ provider.provider }}-title">{{ provider.label }}</h2>
+        <dl>
+          {% for row in provider.metrics %}<dt>{{ row.label }}</dt><dd class="{% if not row.value.available %}st-unknown{% endif %}">{{ row.value.text }}</dd>{% endfor %}
+        </dl>
+        <p class="st-provider-balance">{% if provider.balance_available %}Provider-reported balance: {{ provider.balance_text }}{% else %}<strong>{{ provider.balance_text }}.</strong> ShipTrip makes no balance request to this provider, so nothing here is a claim about what the provider is holding.{% endif %}</p>
+      </section>
+      {% endfor %}
+    </div>
+    <p class="st-fin-note">Provider costs and fees: <strong>{{ provider_costs_text }}</strong>. ShipTrip stores no authoritative fee data for either provider, and this page will not estimate one from an assumed percentage.
+      Per-category earned figures (delivery versus Boost) are {% if revenue_categories_available %}available{% else %}<strong>not available</strong>{% endif %}. {{ revenue_categories_reason }}</p>
+  </section>
+  {% endif %}
+
+  {% if definitions %}
+  <details class="st-card st-disclosure">
+    <summary><strong>Metric dictionary</strong> &mdash; what each figure counts, and what it deliberately leaves out</summary>
+    <div class="st-table-scroll st-fin-gap-sm">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Metric</th><th scope="col">Definition</th><th scope="col">Excludes</th><th scope="col">Counted on</th></tr></thead>
+        <tbody>
+          {% for row in definitions %}<tr><td>{{ row.label }}</td><td>{{ row.definition }}</td><td>{{ row.exclusion }}</td><td>{{ row.time_basis }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
+  <footer class="st-finops-foot">
+    <p>Read at {{ snapshot.as_of }} under one consistent database snapshot &middot; contract {{ snapshot.version }} &middot; reporting timezone {{ snapshot.timezone }} &middot; balances are {{ snapshot.balance_basis }}, not reconstructed as at a past date. Period selection changes flows only.</p>
+    {% if snapshot.limitations %}
+    <p><strong>Stated limitations of this data:</strong></p>
+    <ul>{% for limitation in snapshot.limitations %}<li>{{ limitation }}</li>{% endfor %}</ul>
+    {% endif %}
+    <p>Every total on this page and on every Finance page covers the <strong>{{ scope.mode_label }}</strong> environment only.
+      Historical rows whose environment was never recorded belong to neither TEST nor LIVE and are reported separately on purpose &mdash;
+      <a href="{{ legacy_url }}">open the legacy / unknown cohort</a>. H5 publishes no residual count for them, so this disclosure names the cohort rather than inventing a number for it.</p>
+    <p>This page is read-only. Payouts, refunds, transfers and holds are acted on from their own authorised screens.</p>
+  </footer>
+  {% endif %}
+</main>
+{% endblock %}

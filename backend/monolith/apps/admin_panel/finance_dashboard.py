@@ -1,4 +1,9 @@
-"""The Finance control-plane dashboard (H5.1): presentation over H5, only.
+"""H5 drilldown rows, and the primitives every Finance surface shares.
+
+H5.2 moved the Finance landing page, the queues, the exceptions and the
+reconciliation detail into `finance_operations`. What stays here is the one
+page this module still owns — the exact rows behind a single H5 metric — and
+the scope, formatting and access primitives that page shares with them.
 
 Everything on these two pages is a rendering of what
 `apps.finance.control_plane` returned. This module chooses which of H5's values
@@ -21,7 +26,6 @@ Three rules hold the boundary:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -37,7 +41,6 @@ from apps.admin_panel import finance_dashboard_labels as words
 from apps.core.admin_display import format_eur
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
-from apps.finance.control_plane.snapshot import build_snapshot
 from apps.finance.models import Payout
 
 from .console_presenters import decimal_micros, format_minor_amount
@@ -58,19 +61,6 @@ SCOPE_FIELDS = (
     "operation",
     "search",
 )
-
-#: The two readings of H5's `time_basis`. A period figure is a flow inside the
-#: selected range; a current figure is a balance as at the snapshot, and H5
-#: states plainly that the period selector does not touch those. H5's own
-#: `time_basis` string stays authoritative and is printed in full in the metric
-#: dictionary; it names database columns, which is the wrong register for a
-#: tile, so a tile carries this two-way reading of it instead.
-PERIOD = "period"
-CURRENT = "current"
-BASIS_LABELS = {
-    PERIOD: "In the selected period",
-    CURRENT: "Current balance, whatever period is selected",
-}
 
 #: Metrics H5 exposes as a contributing-row query. `net_funded` is absent on
 #: purpose: H5 composes it from two components and drills through those.
@@ -178,44 +168,6 @@ def value(entry, metric=""):
             else "Partial"
         )
     return result
-
-
-@dataclass(frozen=True)
-class Kpi:
-    """One H5 metric as it appears on the page."""
-
-    metric: str
-    label: str
-    #: A short line the KPI cannot be read correctly without. H5's own
-    #: definition sentence is rendered underneath it.
-    note: str = ""
-    #: Whether the figure moves with the period selector. See `BASIS_LABELS`.
-    basis: str = PERIOD
-    lead: bool = False
-    tone: str = ""
-
-
-def _kpi(snapshot, spec, links):
-    metrics = snapshot["metrics"]
-    if spec.metric not in metrics:
-        return None
-    definition = snapshot["definitions"].get(spec.metric) or {}
-    return {
-        "key": spec.metric,
-        "label": spec.label,
-        "note": spec.note,
-        "definition": definition.get("definition", ""),
-        "time_basis": definition.get("time_basis", ""),
-        "basis": BASIS_LABELS[spec.basis],
-        "value": value(metrics[spec.metric], spec.metric),
-        "url": links(spec.metric) if spec.metric not in _NON_DRILLABLE else "",
-        "lead": spec.lead,
-        "tone": spec.tone,
-    }
-
-
-def _group(snapshot, specs, links):
-    return [row for row in (_kpi(snapshot, spec, links) for spec in specs) if row]
 
 
 # ---------------------------------------------------------------------------
@@ -353,377 +305,8 @@ def _operation_choices():
     return tuple(rows)
 
 
-def _range_text(scope):
-    if scope is None:
-        return ""
-    # `Scope` stores a half-open range; the last included day is the day before
-    # its exclusive end, which is the day an operator actually selected.
-    from datetime import timedelta
-
-    first = scope.start.date()
-    last = (scope.end - timedelta(days=1)).date()
-    if first == last:
-        return first.strftime("%d %b %Y")
-    return f"{first.strftime('%d %b %Y')} – {last.strftime('%d %b %Y')}"
-
-
-# ---------------------------------------------------------------------------
-# Snapshot view model
-# ---------------------------------------------------------------------------
-
-FUNDED = (
-    Kpi(
-        "gross_funded",
-        "Gross funded volume",
-        note="Money processed through ShipTrip. This is not ShipTrip's income.",
-        lead=True,
-    ),
-    Kpi(
-        "net_funded",
-        "Net funded volume",
-        note="Gross funded, less refunds finalised in this period.",
-    ),
-    Kpi("deposits_collected", "Posting deposits collected"),
-    Kpi("boost_funded", "Boost funded"),
-)
-
-EARNINGS = (
-    Kpi(
-        "recognized_revenue",
-        "Recognised ShipTrip revenue",
-        note="What ShipTrip has actually earned in this period.",
-        lead=True,
-    ),
-    Kpi(
-        "pending_earnings",
-        "Pending platform earnings",
-        note="Allocated to ShipTrip, with no final earning evidence yet.",
-        basis=CURRENT,
-    ),
-)
-
-OBLIGATIONS = (
-    Kpi(
-        "traveler_outstanding",
-        "Outstanding Traveler liability",
-        note="Owed to Travelers right now. Never ShipTrip income.",
-        basis=CURRENT,
-        lead=True,
-        tone="attn",
-    ),
-    Kpi(
-        "payouts_settled",
-        "Paid to Travelers",
-        note="Historical flow in this period. Not part of the outstanding total above.",
-    ),
-    Kpi("payout_returns", "Payouts returned by the bank"),
-)
-
-LOCATION = (
-    Kpi(
-        "connected_funds",
-        "At connected accounts",
-        note="ShipTrip's euros sitting at Travelers' connected accounts. Not yet paid out.",
-        basis=CURRENT,
-    ),
-    Kpi(
-        "bank_in_transit",
-        "Bank payout in transit",
-        note="Left the connected balance, outcome not yet known.",
-        basis=CURRENT,
-    ),
-    Kpi(
-        "externally_committed",
-        "Externally committed",
-        note="Overlaps the buckets above. Never added to the liability total.",
-        basis=CURRENT,
-    ),
-    Kpi("source_reserved", "Source funding reserved", basis=CURRENT),
-)
-
-REFUNDS = (
-    Kpi(
-        "refunds_outstanding",
-        "Outstanding refunds",
-        note="Pending and processing together. Money ShipTrip still owes back.",
-        basis=CURRENT,
-        lead=True,
-        tone="attn",
-    ),
-    Kpi("refunds_requested", "Requested", basis=CURRENT),
-    Kpi("refunds_processing", "Processing", basis=CURRENT),
-    Kpi("refunds_finalized", "Finalised in this period"),
-    Kpi(
-        "refunds_applied",
-        "Finalised against applied funding",
-        note="The only refunds subtracted from funded volume, and subtracted once.",
-    ),
-    Kpi(
-        "refunds_failed",
-        "Failed execution",
-        note="Entitlement unresolved. A person has to decide these.",
-        basis=CURRENT,
-        tone="attn",
-    ),
-    Kpi(
-        "deposits_refunded",
-        "Posting deposits refunded",
-        note="The posting-deposit share of the finalised refunds above, not an extra amount.",
-    ),
-)
-
-RISK = (
-    Kpi(
-        "user_disputed_payouts",
-        "Payouts frozen by a ShipTrip dispute",
-        note="Opened inside ShipTrip. Payout is frozen while it is open.",
-        basis=CURRENT,
-        lead=True,
-    ),
-    Kpi("held_payouts", "Payouts under a Finance hold", basis=CURRENT),
-    Kpi(
-        "provider_disputed_payouts",
-        "Payouts touched by a provider dispute",
-        note="Raised at the card network, against the money that funded the Deal.",
-        basis=CURRENT,
-    ),
-    Kpi(
-        "provider_disputes",
-        "Provider disputes to recover",
-        note="Canonical amount only where it is known. Unknown stays unknown.",
-        basis=CURRENT,
-        tone="attn",
-    ),
-)
-
-DEPOSITS = (
-    Kpi(
-        "deposits_held",
-        "Deposits still held",
-        note="Collected from Senders and not yet credited, refunded or forfeited.",
-        basis=CURRENT,
-    ),
-    Kpi(
-        "deposits_credited",
-        "Deposits credited into Deals",
-        note="A deposit moving into its Deal. No new money arrives here.",
-    ),
-)
-
-#: The three amounts the page exists to keep apart. Money that moved through
-#: ShipTrip, money ShipTrip earned, and money ShipTrip owes are routinely read
-#: as one figure; naming all three at the top, in words, is the cheapest place
-#: to stop that.
-HEADLINE = (
-    (
-        "gross_funded",
-        "Money processed",
-        "Funded through ShipTrip in this period, before refunds. This is volume, not income.",
-        False,
-    ),
-    (
-        "recognized_revenue",
-        "ShipTrip earned",
-        "Platform revenue recognised in this period, against final earning evidence.",
-        True,
-    ),
-    (
-        "traveler_outstanding",
-        "Owed to Travelers",
-        "Outstanding right now, across every state. This money is never ShipTrip's.",
-        False,
-    ),
-)
-
-
-def _headline(snapshot, links):
-    metrics = snapshot["metrics"]
-    return [
-        {
-            "key": key,
-            "label": label,
-            "says": says,
-            "lead": lead,
-            "value": value(metrics[key], key),
-            "url": links(key),
-        }
-        for key, label, says, lead in HEADLINE
-        if key in metrics
-    ]
-
-
-def _rail_sections(snapshot, links):
-    """`rail_operations`, one section per rail, in lifecycle order."""
-
-    orders = {
-        "stripe_eur": words.STRIPE_STAGE_ORDER,
-        "manual_dzd": words.MANUAL_STAGE_ORDER,
-    }
-    grouped = {}
-    for row in snapshot["rail_operations"]:
-        grouped.setdefault(row["rail"], []).append(row)
-    sections = [
-        _rail_section(rail, grouped.pop(rail, []), orders[rail], links)
-        for rail in ("stripe_eur", "manual_dzd")
-    ]
-    # An unclassified or unrecognised rail is an anomaly, not a queue: it is
-    # shown when it holds something and stays out of the way when it does not.
-    sections.extend(
-        _rail_section(rail, rows, (), links)
-        for rail, rows in grouped.items()
-        if rows
-    )
-    return sections
-
-
-def _rail_section(rail, rows, order, links):
-    ranking = {stage: index for index, stage in enumerate(order)}
-    rows = sorted(rows, key=lambda row: ranking.get(row["operation_stage"], len(order)))
-    return {
-        "rail": rail,
-        "label": words.RAILS.get(rail) or words.humanise(rail),
-        "help": words.RAIL_HELP.get(rail, ""),
-        "is_manual": rail == "manual_dzd",
-        "stages": [
-            {
-                "stage": row["operation_stage"],
-                "label": words.STAGE_LABELS.get(row["operation_stage"])
-                or words.humanise(row["operation_stage"]),
-                "help": words.STAGE_HELP.get(row["operation_stage"], ""),
-                "value": value(row, "payout_operations"),
-                "url": links(
-                    "payout_operations",
-                    rail=rail,
-                    operation=row["operation_stage"],
-                ),
-            }
-            for row in rows
-        ],
-    }
-
-
-def _liability_buckets(snapshot, links):
-    metrics = snapshot["metrics"]
-    rows = []
-    for bucket in words.LIABILITY_ORDER:
-        key = f"liability_{bucket}"
-        if key not in metrics:
-            continue
-        rows.append(
-            {
-                "bucket": bucket,
-                "label": words.LIABILITY_LABELS.get(bucket) or words.humanise(bucket),
-                "help": words.LIABILITY_HELP.get(bucket, ""),
-                "value": value(metrics[key], key),
-                "url": links(key),
-                "tone": "bad" if bucket == "inconsistent" else "",
-            }
-        )
-    return rows
-
-
-def _liability_split(snapshot):
-    """`payouts`: the same outstanding payable, by rail and funding source."""
-
-    return [
-        {
-            "rail": words.RAILS.get(row["rail"]) or words.humanise(row["rail"]),
-            "bucket": words.LIABILITY_LABELS.get(row["bucket"])
-            or words.humanise(row["bucket"]),
-            "funding": words.FUNDING_MIX.get(row["funding_mix"])
-            or words.humanise(row["funding_mix"]),
-            "is_manual": row["rail"] == "manual_dzd",
-            "value": value(row, "traveler_outstanding"),
-        }
-        for row in snapshot["payouts"]
-    ]
-
-
-def _providers(snapshot, params):
-    dashboard = reverse("admin_console:finance-dashboard")
-    rows = []
-    for provider, block in snapshot["providers"].items():
-        balance = block.get("balance") or {}
-        rows.append(
-            {
-                "provider": provider,
-                "label": words.PROVIDERS.get(provider) or words.humanise(provider),
-                "metrics": [
-                    {"label": label, "value": value(block[key], key)}
-                    for key, label in (
-                        ("gross_funded", "Funded through this provider"),
-                        ("refunds_outstanding", "Refunds outstanding"),
-                        ("refunds_finalized", "Refunds finalised in this period"),
-                        ("source_reserved", "Funding reserved against payouts"),
-                    )
-                    if key in block
-                ],
-                # H5 makes no provider balance request and asserts no wallet
-                # figure. Rendering "€0" here would be a material lie.
-                "balance_available": balance.get("status") == "available",
-                "balance_text": (
-                    format_eur(balance.get("amount"))
-                    if balance.get("status") == "available"
-                    else "Provider-reported balance unavailable"
-                ),
-                "scope_url": f"{dashboard}?{_query(params, provider=provider)}",
-            }
-        )
-    return rows
-
-
-def _integrity(snapshot):
-    integrity = snapshot["integrity"]
-    title, tone, summary = words.INTEGRITY_STATES.get(
-        integrity["status"], (words.humanise(integrity["status"]), "mute", "")
-    )
-    comparisons = [
-        {
-            "key": key,
-            "label": words.COMPARISON_LABELS.get(key) or words.humanise(key),
-            "help": words.COMPARISON_HELP.get(key, ""),
-            "reported": format_eur(row["reported_eur_cents"]),
-            "authority": format_eur(row["authority_eur_cents"]),
-            "difference": format_eur(row["difference_eur_cents"]),
-            "row_mismatches": row["row_mismatches"],
-            "agrees": not row["difference_eur_cents"] and not row["row_mismatches"],
-        }
-        for key, row in integrity["comparisons"].items()
-    ]
-    issues = [
-        {"label": words.DATA_ISSUE_LABELS.get(key) or words.humanise(key), "count": count}
-        for key, count in integrity["data_issues"].items()
-        if count
-    ]
-    provenance = [
-        {"label": words.humanise(key), **row}
-        for key, row in (integrity.get("provenance") or {}).items()
-    ]
-    return {
-        "status": integrity["status"],
-        "title": title,
-        "tone": tone,
-        "summary": summary,
-        "comparisons": comparisons,
-        "unbalanced": integrity["unbalanced_transaction_count"],
-        "warnings": [
-            words.WARNING_LABELS.get(code) or words.humanise(code)
-            for code in integrity["warnings"]
-        ],
-        "data_issues": issues,
-        "attributed_legacy_entries": integrity.get(
-            "source_attributed_legacy_entry_count", 0
-        ),
-        "provenance": provenance,
-        "revenue_basis": words.humanise(integrity.get("revenue_basis", "")),
-        "provider_cash": words.humanise(
-            integrity.get("provider_cash_reconciliation", "")
-        ),
-    }
-
-
 def _read_at(value):
-    """The snapshot timestamp in the reporting timezone an operator works in."""
+    """A snapshot timestamp in the reporting timezone an operator works in."""
 
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -737,53 +320,18 @@ def _read_at(value):
     return moment.strftime("%d %b %Y, %H:%M ") + REPORTING_TIMEZONE.split("/")[-1]
 
 
-def build_view(snapshot, params, scope):
-    links = _link_factory(params)
-    dashboard = reverse("admin_console:finance-dashboard")
-    provider_costs = snapshot.get("provider_costs") or {}
-    categories = snapshot.get("revenue_categories") or {}
-    return {
-        "snapshot": {
-            "as_of": _read_at(snapshot["as_of"]),
-            "version": snapshot["definition_version"],
-            "timezone": snapshot["reporting_timezone"],
-            "balance_basis": snapshot["balance_basis"],
-            "provider_semantics": snapshot["provider_filter_semantics"],
-            "limitations": snapshot["limitations"],
-        },
-        "headline": _headline(snapshot, links),
-        "funded": _group(snapshot, FUNDED, links),
-        "earnings": _group(snapshot, EARNINGS, links),
-        "obligations": _group(snapshot, OBLIGATIONS, links),
-        "location": _group(snapshot, LOCATION, links),
-        "refunds": _group(snapshot, REFUNDS, links),
-        "risk": _group(snapshot, RISK, links),
-        "deposits": _group(snapshot, DEPOSITS, links),
-        "buckets": _liability_buckets(snapshot, links),
-        "liability_split": _liability_split(snapshot),
-        "rails": _rail_sections(snapshot, links),
-        "providers": _providers(snapshot, params),
-        "provider_costs_available": provider_costs.get("status") == "available",
-        "provider_costs_text": (
-            format_eur(provider_costs.get("amount_eur_cents"))
-            if provider_costs.get("status") == "available"
-            else "Not available"
-        ),
-        "revenue_categories_available": categories.get("status") == "available",
-        "revenue_categories_reason": categories.get("reason", ""),
-        "integrity": _integrity(snapshot),
-        "definitions": sorted(
-            (
-                {"key": key, "label": row["name"], **row}
-                for key, row in snapshot["definitions"].items()
-            ),
-            key=lambda row: row["label"],
-        ),
-        "legacy_url": f"{dashboard}?{_query(params, mode='legacy_unknown')}",
-        "in_legacy_mode": scope.mode == "legacy_unknown",
-        "refresh_url": f"{dashboard}?{_query(params)}",
-        "reset_url": dashboard,
-    }
+def _range_text(scope):
+    if scope is None:
+        return ""
+    # `Scope` stores a half-open range; the last included day is the day before
+    # its exclusive end, which is the day an operator actually selected.
+    from datetime import timedelta
+
+    first = scope.start.date()
+    last = (scope.end - timedelta(days=1)).date()
+    if first == last:
+        return first.strftime("%d %b %Y")
+    return f"{first.strftime('%d %b %Y')} – {last.strftime('%d %b %Y')}"
 
 
 # ---------------------------------------------------------------------------
@@ -1014,42 +562,6 @@ def _page_context(request, params, scope=None):
         "rows_url": reverse("admin_console:finance-rows"),
         "reset_url": reverse("admin_console:finance-dashboard"),
     }
-
-
-@never_cache
-@staff_member_required
-@require_GET
-def finance_dashboard(request):
-    """One bounded snapshot per view. No polling, no per-KPI request."""
-
-    _guard(request)
-    params = scope_params(request)
-    try:
-        scope = Scope.parse(params)
-    except ValidationError as exc:
-        return _render(
-            request,
-            "admin/console/finance_dashboard.html",
-            {**_page_context(request, params), "errors": list(exc.messages)},
-            status=400,
-        )
-    try:
-        snapshot = build_snapshot(scope)
-    except OperationalError:
-        return _render(
-            request,
-            "admin/console/finance_dashboard.html",
-            {**_page_context(request, params, scope), "unavailable": True},
-            status=503,
-        )
-    return _render(
-        request,
-        "admin/console/finance_dashboard.html",
-        {
-            **_page_context(request, params, scope),
-            **build_view(snapshot, params, scope),
-        },
-    )
 
 
 @never_cache

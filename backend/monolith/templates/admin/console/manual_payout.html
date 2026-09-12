@@ -23,7 +23,7 @@ skips any of them.
   <script src="{% static 'shiptrip/payout.js' %}" defer></script>
 {% endblock %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:payouts' %}">Payouts</a> &rsaquo; {{ title }}</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; {% if queue %}<a href="{{ queue.url }}">Manual DZD &middot; {{ queue.label }}</a>{% else %}<a href="{% url 'admin_console:payouts' %}">Payouts</a>{% endif %} &rsaquo; {{ title }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console st-narrow st-manual">
@@ -40,6 +40,15 @@ skips any of them.
   </header>
 
   <p class="st-state-meaning">{{ manual.state.meaning }}</p>
+
+  {% for step in manual.steps %}{% if step.state == "current" %}
+  <div class="st-next-step">
+    <p class="st-eyebrow">Your next step</p>
+    <h2>{{ step.title }}</h2>
+    <p>{{ step.detail }}</p>
+    <a href="#st-transfer-head">Go to it</a>
+  </div>
+  {% endif %}{% endfor %}
 
   {% if not manual.execution_enabled %}
   <div class="st-alert st-alert-info" role="status">
@@ -421,6 +430,11 @@ skips any of them.
   {% comment %}The evidence lightbox. Empty until a "View proof" or "View
   receipt" link is used, so no document is fetched by simply loading the page.
   `showModal` gives the focus trap and the Escape key for free.{% endcomment %}
+  {% if queue %}
+  <p class="st-queue-return"><a href="{{ queue.url }}">&larr; Back to Manual DZD &middot; {{ queue.label }}</a>
+    <span>Each payout is claimed, reviewed and attested on its own. There is no bulk send and no "next payout" shortcut.</span></p>
+  {% endif %}
+
   <dialog class="st-evidence-dialog" id="st-evidence-dialog" aria-labelledby="st-evidence-dialog-title">
     <div class="st-evidence-dialog-head">
       <h2 id="st-evidence-dialog-title">Evidence</h2>
