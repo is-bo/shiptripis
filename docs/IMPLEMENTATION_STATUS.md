@@ -1,5 +1,127 @@
 # ShipTrip V1 Implementation Status
 
+## Phase I1A — Journey timing, early arrival and the payout-floor contract (2026-09-12)
+
+**I1A PASS.** The hard half of I1: post-delivery lifecycle semantics, a funded
+arrival snapshot, an anti-abuse payout floor, the early-arrival request and
+confirmation flow, the active-Sending fix and the sender's route projection. The
+frozen contract for Gemini's I1B work is
+[the I1A journey-timing contract](PHASE_I1A_JOURNEY_TIMING_CONTRACT.md).
+
+Three facts that looked alike are now separate and stay separate: **the traveler
+arrived**, **the parcel was delivered**, **the payout may be released**. A
+confirmed early arrival does not deliver a parcel, does not release a delivery
+code, does not start protection and does not pay anybody.
+
+**Funded arrival snapshot.** Funding freezes the arrival basis inside the funding
+transaction, beside the Phase 4 policy snapshot it already wrote.
+`Deal.funded_scheduled_arrival_floor_at` holds the instant and
+`Deal.arrival_snapshot` its provenance, policy version, timezone context,
+Journey/leg basis, materiality threshold and the ordered carrying route. The
+instant resolves most-specific-first from the accepted Match's own
+`compatibility_snapshot["delivery_at"]` — the interpolated arrival the
+compatibility decision was actually taken against — then the allocated legs'
+latest `arrive_at`, then the matched end leg's. Nothing in the arrival or payout
+path reads a Journey row after funding, so a leg time that moves under a live Deal
+cannot move the floor, the route or the payout timing. A Journey edit is already
+refused while a Deal exists; the snapshot is the wall that holds if one ever is
+not.
+
+**Payout floor.** Eligibility becomes
+`max(delivery_confirmed_at + protection_window, funded_scheduled_arrival_floor_at)`,
+read from two stored columns and recomputed from neither, with
+`Payout.eligibility_basis` naming which gate bound. On-time and late deliveries
+behave exactly as before — the full 48 hours from the actual delivery. A delivery
+days earlier than the funded schedule no longer pays out days early. The release
+gate closes the Deal out when protection expires and holds only the payout,
+because the delivery contract is finished at that point; no `block_reason` is set,
+because a Deal waiting on its own schedule is not the traveler's problem to fix.
+The durable obligation is rescheduled to the exact floor instant rather than
+retried on a generic backoff, so a five-day floor costs one wake-up and not
+hundreds.
+
+**Early arrival.** Materially early is one server-owned threshold — six hours —
+snapshotted per Deal so a later change cannot reinterpret a running one. The
+traveler reports; the sender confirms or declines; nothing self-confirms and an
+answer cannot be reversed. `DealArrivalReport` is the audit row, with partial
+unique indexes making one open claim and one confirmed claim per Deal a database
+guarantee, so a retried POST resolves to the row the first attempt created.
+Confirmation stamps `Deal.arrival_confirmed_at` and touches nothing else.
+
+**Delivery-code security unchanged.** `traveler_can_view_delivery_code` is still
+stated and still false, the 30-minute post-pickup buffer still applies, and a
+confirmed early arrival reveals nothing.
+
+**Active Sending.** `activity_state` (active / completed / cancelled) is decided
+by the server on both the list row and the detail payload, with a matching
+`?activity=` filter on `GET /api/deals`. `delivery_confirmed_at` rather than the
+status column decides active vs completed, because `disputed` overwrites the
+status and a dispute can be opened either side of a delivery; a refund outranks
+the delivery fact. A delivered Deal leaves active Sending while its payout stays
+fully readable in the payout projection.
+
+**Sender route.** `deal.route` serves the ordered legs that carry this parcel,
+from the frozen snapshot, with canonical places and scheduled times and nothing
+else — no polyline, route metadata, airport metadata, proof, measured distance,
+duration, capacity or flight number. Pre-funding surfaces are untouched and the
+route rules are unchanged.
+
+Three notification channels (`deal.arrival_reported`, `deal.arrival_confirmed`,
+`deal.arrival_declined`), one inbox row and one push each through deterministic
+idempotency keys, payloads carrying resource ids only. No new email template.
+
+**Migration** `deals.0008_phase_i1a_journey_timing` is additive: three nullable
+Deal columns, one table, four `DealEvent` kinds. Its backfill recovers a floor for
+in-flight pre-I1A Deals from the immutable Match snapshot only, never from mutable
+leg rows, and only where no release decision has been taken — so it cannot move an
+already-eligible payout and cannot make any payout eligible earlier. Where nothing
+is recoverable the floor stays null and the snapshot records `unavailable`; no
+timestamp is invented, and a null floor reproduces the pre-I1A rule exactly.
+
+Review corrected three pre-I1A finance fixtures that fabricated a delivery 72
+hours in the past while leaving the funded arrival eight hours in the future.
+Nothing read that column before, so the contradiction was invisible; the arrival
+floor read it and correctly refused those releases. The fixtures now describe a
+possible world rather than the gate being weakened. **Operational consequence: any
+deliberate clock-shift of a Deal — an H7-style rehearsal control, a support fix —
+must move `funded_scheduled_arrival_floor_at` with the other six lifecycle
+timestamps.** `apps.deals.tests.phase4_factories.rewind_deal` already does.
+
+The focused suite passes 63 tests on PostgreSQL, covering the snapshot and its
+provenance, a Journey edit after funding, all four worked payout cases, the
+material-early threshold, both idempotency paths, authorization for both parties
+and an outsider, route order and privacy, delivery-code secrecy after a confirmed
+arrival, the Finance hold still blocking, and the migration's own data step. The
+full backend suite passes 1,873 with 34 skipped, including the H6A page-length
+query-count guard. All six required CI jobs are green on
+`4d8d715a5a051994c3ff0141ddc2041b52cf486a`, which is now `main` and is deployed as
+`v1.0.0-rc.26+4d8d715` (Railway deployment
+`cc9ecd21-3e70-4d32-b5e1-282913e03d4a`, SUCCESS). `/healthz` and `/readyz` return
+200 with migrations current, `deals.0008_phase_i1a_journey_timing` applied, and
+gunicorn, the kyc gRPC listener, the four Go HTTP services, the FCM consumer, the
+finance worker and the reservation releaser all started with no error line. The
+three arrival routes answer 401 rather than 404 on the deployed service. Stripe
+TEST, Chargily TEST, `PAYOUT_DZD_EXECUTION_ENABLED` false, Finance dashboard
+enabled, email disabled.
+
+No money was moved for this phase. I1A created no Stripe or Chargily operation,
+no Transfer, no bank payout and no dinar settlement: H7 already proved money
+movement, and the release gate this phase changed can only refuse earlier than it
+used to, never pay sooner. **The post-deployment H5 integrity snapshot was not
+taken**: it lives behind an operator login on `/admin/finance/control-plane/`,
+the production database has no public proxy, and signing in with a password is
+outside what this session does. That is an access limitation, not a clean result —
+the owner should open that page and confirm `integrity = ok` with every difference
+at €0.00. What can be said without it: the migration writes only
+`funded_scheduled_arrival_floor_at` and `arrival_snapshot` on Deal rows, touches
+no `Payment*`, `Payout*` or `Ledger*` table, and creates no ledger entry, so there
+is no mechanism in this change by which a financial total could move.
+
+No LIVE Stripe or Chargily operation, no real DZD transfer, and no H8 work. The
+H7 identity-attestation MINOR remains separately tracked as a pre-H8 issue and was
+deliberately not touched here. No BLOCKER and no MAJOR finding. I1B and H8 were
+not started.
+
 ## Phase 8F-H7 — Full TEST payout rehearsal and release validation (2026-09-11)
 
 **H7 PASS.** A controlled end-to-end TEST rehearsal of the whole payout system on
