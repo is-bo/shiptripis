@@ -4311,4 +4311,119 @@ class LEn extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'Method needs attention';
+
+  @override
+  String get payoutReasonScheduledArrivalPending => 'Scheduled arrival pending';
+
+  @override
+  String get deliveryPayoutScheduledArrivalPendingExplainer =>
+      'The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.';
+
+  @override
+  String get earlyArrivalAction => 'I arrived early';
+
+  @override
+  String get earlyArrivalConfirmSheetTitle => 'Report early arrival';
+
+  @override
+  String get earlyArrivalConfirmSheetBody =>
+      'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows ShipTrip protection rules.';
+
+  @override
+  String get earlyArrivalWaitingSenderTitle =>
+      'Waiting for Sender confirmation';
+
+  @override
+  String get earlyArrivalWaitingSenderBody =>
+      'You reported your early arrival. The sender has been notified to confirm it. Handover and delivery remain separate.';
+
+  @override
+  String get earlyArrivalSenderNoticeTitle =>
+      'Traveler says they arrived early';
+
+  @override
+  String get earlyArrivalSenderNoticeBody =>
+      'The traveler reported early arrival for this delivery. Confirming arrival acknowledges their presence; parcel delivery and payout protection remain separate.';
+
+  @override
+  String get earlyArrivalConfirmAction => 'Confirm arrival';
+
+  @override
+  String get earlyArrivalDeclineAction => 'Decline';
+
+  @override
+  String get earlyArrivalConfirmedTitle => 'Arrival confirmed';
+
+  @override
+  String get earlyArrivalConfirmedBody =>
+      'Early arrival is confirmed. Parcel delivery and 48-hour protection will begin only after the delivery code is verified.';
+
+  @override
+  String get earlyArrivalDeclinedTitle => 'Early arrival not confirmed';
+
+  @override
+  String get earlyArrivalDeclinedBody =>
+      'The early arrival report was not confirmed. Delivery will proceed according to the scheduled route.';
+
+  @override
+  String get earlyArrivalScheduledArrivalLabel =>
+      'Scheduled arrival for this delivery';
+
+  @override
+  String get earlyArrivalReportedTimeLabel => 'Reported arrival';
+
+  @override
+  String get earlyArrivalEarlyByLabel => 'Early by';
+
+  @override
+  String get earlyArrivalPayoutFloorExplanation =>
+      'Arriving early does not make the payout available earlier than the protected payout date for this delivery.';
+
+  @override
+  String get earlyArrivalPayoutProtectedGateLabel => 'Payout eligible from';
+
+  @override
+  String get routeTitle => 'Route';
+
+  @override
+  String get routeFlightMode => 'Flight';
+
+  @override
+  String get routeDriveMode => 'Drive';
+
+  @override
+  String get routeDepartureLabel => 'Departure';
+
+  @override
+  String get routeArrivalLabel => 'Arrival';
+
+  @override
+  String get routeCarryingLegsOnly => 'Carrying route for this delivery';
+
+  @override
+  String get notificationArrivalReported => 'Traveler arrived early';
+
+  @override
+  String get notificationArrivalReportedBody =>
+      'Open ShipTrip to confirm the early arrival.';
+
+  @override
+  String get notificationArrivalConfirmed => 'Early arrival confirmed';
+
+  @override
+  String get notificationArrivalConfirmedBody =>
+      'The sender confirmed your arrival. Delivery is still to come.';
+
+  @override
+  String get notificationArrivalDeclined => 'Early arrival not confirmed';
+
+  @override
+  String get notificationArrivalDeclinedBody =>
+      'Open ShipTrip to review the delivery.';
+
+  @override
+  String get routeBasisSnapshot => 'Frozen at booking';
+
+  @override
+  String get routeBasisLive => 'Live journey';
 }

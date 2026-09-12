@@ -843,6 +843,7 @@ class DealRepository {
   /// Paginated, 20 per page.
   Future<List<Deal>> list({
     DealStatus? status,
+    ActivityState? activity,
     int page = 1,
     CancelToken? cancelToken,
   }) async {
@@ -850,6 +851,8 @@ class DealRepository {
       '/api/deals',
       query: {
         if (status != null) 'status': dealStatusWire(status),
+        if (activity != null && activity != ActivityState.unknown)
+          'activity': activity.wire,
         if (page > 1) 'page': page,
       },
       cancelToken: cancelToken,
@@ -863,10 +866,18 @@ class DealRepository {
   /// Exact server-side count for a filtered Deal set. Unlike [list], this
   /// keeps the paginated envelope's authoritative `count` instead of
   /// inferring activity from the first 20 rows.
-  Future<int> count({DealStatus? status, CancelToken? cancelToken}) async {
+  Future<int> count({
+    DealStatus? status,
+    ActivityState? activity,
+    CancelToken? cancelToken,
+  }) async {
     final page = await _api.getObject(
       '/api/deals',
-      query: {if (status != null) 'status': dealStatusWire(status)},
+      query: {
+        if (status != null) 'status': dealStatusWire(status),
+        if (activity != null && activity != ActivityState.unknown)
+          'activity': activity.wire,
+      },
       cancelToken: cancelToken,
     );
     final count = readInt(page['count']);
@@ -946,6 +957,54 @@ class DealRepository {
         Map<String, dynamic>.from(body['deal'] as Map? ?? const {}),
       ),
       outcome: CancellationOutcome.fromJson(body),
+    );
+  }
+
+  /// The traveler's "I arrived early". Idempotent.
+  Future<
+    ({Deal deal, int arrivalReportId, String arrivalReportStatus, bool changed})
+  >
+  reportEarlyArrival(int dealId) async {
+    final body = await _api.postObject('/api/deals/$dealId/arrival/report');
+    return (
+      deal: Deal.fromJson(
+        Map<String, dynamic>.from(body['deal'] as Map? ?? const {}),
+      ),
+      arrivalReportId: readInt(body['arrival_report_id']) ?? 0,
+      arrivalReportStatus: readText(body['arrival_report_status']),
+      changed: readBool(body['changed'], fallback: true),
+    );
+  }
+
+  /// The sender's early arrival confirmation. Idempotent.
+  Future<
+    ({Deal deal, int arrivalReportId, String arrivalReportStatus, bool changed})
+  >
+  confirmEarlyArrival(int dealId) async {
+    final body = await _api.postObject('/api/deals/$dealId/arrival/confirm');
+    return (
+      deal: Deal.fromJson(
+        Map<String, dynamic>.from(body['deal'] as Map? ?? const {}),
+      ),
+      arrivalReportId: readInt(body['arrival_report_id']) ?? 0,
+      arrivalReportStatus: readText(body['arrival_report_status']),
+      changed: readBool(body['changed'], fallback: true),
+    );
+  }
+
+  /// The sender's early arrival decline.
+  Future<
+    ({Deal deal, int arrivalReportId, String arrivalReportStatus, bool changed})
+  >
+  declineEarlyArrival(int dealId) async {
+    final body = await _api.postObject('/api/deals/$dealId/arrival/decline');
+    return (
+      deal: Deal.fromJson(
+        Map<String, dynamic>.from(body['deal'] as Map? ?? const {}),
+      ),
+      arrivalReportId: readInt(body['arrival_report_id']) ?? 0,
+      arrivalReportStatus: readText(body['arrival_report_status']),
+      changed: readBool(body['changed'], fallback: true),
     );
   }
 }

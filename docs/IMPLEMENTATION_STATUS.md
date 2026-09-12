@@ -1,5 +1,19 @@
 # ShipTrip V1 Implementation Status
 
+## Phase I1B — Early Arrival, Route Visibility & Delivery Lifecycle Mobile UX (2026-09-12)
+
+**I1B PASS.** The Flutter/mobile half of Phase I1 completes the user-facing implementation of Early Arrival, Route Visibility, and Delivery Lifecycle separation. Authoritative documentation: [the I1B mobile UX specification](PHASE_I1B_JOURNEY_TIMING_MOBILE_UX.md).
+
+- **Traveler Early Arrival Reporting Flow**: Affordance enabled strictly from server permissions (`deal.arrival.report_available == true`). Confirmation modal details early arrival scope and presents the explicit anti-abuse payout floor consequence (`earlyArrivalPayoutFloorExplanation`). POST `/api/deals/<id>/arrival/report` is dispatched idempotently. Pending state displays "Waiting for Sender confirmation".
+- **Sender Review & Decisions**: High-visibility banner alerts sender of traveler's early arrival. Actions "Confirm arrival" (`POST /api/deals/<id>/arrival/confirm`) and "Decline" (`POST /api/deals/<id>/arrival/decline`) update state idempotently. Clear banners reflect confirmed or declined arrival without confusing arrival with delivery.
+- **Strict Separation of Arrival & Delivery Security**: Traveler never receives or views delivery code (`traveler_can_view_delivery_code == false`). 30-minute post-pickup delivery code buffer remains locked and uncompromised.
+- **Route Timeline**: Renders ordered carrying legs using the design system `RouteLine` component with departure and arrival timestamps, mode badges (FLIGHT/DRIVE), and frozen snapshot basis indicator (`funded_snapshot` -> "Frozen at booking").
+- **Authoritative Server-Side Activity Lists**: Active and History deliveries lists use `activeDealsProvider` (`GET /api/deals?activity=active`) and `historyDealsProvider` (`GET /api/deals?activity=completed`). Delivered deals immediately depart Active Sending and reside in History.
+- **Protection & Payout Floor Presentation**: Renders scheduled arrival floor and payout eligible instant from `protection.payout_floor` and explains that arriving early does not expedite payout release.
+- **Notifications & Deep-Linking**: Handles channels `deal.arrival_reported`, `deal.arrival_confirmed`, and `deal.arrival_declined` routing to `OpenDeal(dealId)`.
+- **Trilingual Localization & RTL Layout**: Fully localized in English, French, and Arabic. Zero RenderFlex overflows across small, standard, and large device viewports in Arabic RTL.
+- **Verification**: 12/12 Phase I1B automated tests passing, 16/16 Phase H6B tests passing, 0 analyzer issues, formatting checked.
+
 ## Phase I1A — Journey timing, early arrival and the payout-floor contract (2026-09-12)
 
 **I1A PASS.** The hard half of I1: post-delivery lifecycle semantics, a funded

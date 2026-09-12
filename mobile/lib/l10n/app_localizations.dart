@@ -7550,6 +7550,210 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Method needs attention'**
   String get payoutProfileNeedsAttention;
+
+  /// No description provided for @payoutReasonScheduledArrivalPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled arrival pending'**
+  String get payoutReasonScheduledArrivalPending;
+
+  /// No description provided for @deliveryPayoutScheduledArrivalPendingExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.'**
+  String get deliveryPayoutScheduledArrivalPendingExplainer;
+
+  /// No description provided for @earlyArrivalAction.
+  ///
+  /// In en, this message translates to:
+  /// **'I arrived early'**
+  String get earlyArrivalAction;
+
+  /// No description provided for @earlyArrivalConfirmSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report early arrival'**
+  String get earlyArrivalConfirmSheetTitle;
+
+  /// No description provided for @earlyArrivalConfirmSheetBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows ShipTrip protection rules.'**
+  String get earlyArrivalConfirmSheetBody;
+
+  /// No description provided for @earlyArrivalWaitingSenderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Sender confirmation'**
+  String get earlyArrivalWaitingSenderTitle;
+
+  /// No description provided for @earlyArrivalWaitingSenderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You reported your early arrival. The sender has been notified to confirm it. Handover and delivery remain separate.'**
+  String get earlyArrivalWaitingSenderBody;
+
+  /// No description provided for @earlyArrivalSenderNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveler says they arrived early'**
+  String get earlyArrivalSenderNoticeTitle;
+
+  /// No description provided for @earlyArrivalSenderNoticeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler reported early arrival for this delivery. Confirming arrival acknowledges their presence; parcel delivery and payout protection remain separate.'**
+  String get earlyArrivalSenderNoticeBody;
+
+  /// No description provided for @earlyArrivalConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm arrival'**
+  String get earlyArrivalConfirmAction;
+
+  /// No description provided for @earlyArrivalDeclineAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get earlyArrivalDeclineAction;
+
+  /// No description provided for @earlyArrivalConfirmedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrival confirmed'**
+  String get earlyArrivalConfirmedTitle;
+
+  /// No description provided for @earlyArrivalConfirmedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Early arrival is confirmed. Parcel delivery and 48-hour protection will begin only after the delivery code is verified.'**
+  String get earlyArrivalConfirmedBody;
+
+  /// No description provided for @earlyArrivalDeclinedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Early arrival not confirmed'**
+  String get earlyArrivalDeclinedTitle;
+
+  /// No description provided for @earlyArrivalDeclinedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The early arrival report was not confirmed. Delivery will proceed according to the scheduled route.'**
+  String get earlyArrivalDeclinedBody;
+
+  /// No description provided for @earlyArrivalScheduledArrivalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled arrival for this delivery'**
+  String get earlyArrivalScheduledArrivalLabel;
+
+  /// No description provided for @earlyArrivalReportedTimeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported arrival'**
+  String get earlyArrivalReportedTimeLabel;
+
+  /// No description provided for @earlyArrivalEarlyByLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Early by'**
+  String get earlyArrivalEarlyByLabel;
+
+  /// No description provided for @earlyArrivalPayoutFloorExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Arriving early does not make the payout available earlier than the protected payout date for this delivery.'**
+  String get earlyArrivalPayoutFloorExplanation;
+
+  /// No description provided for @earlyArrivalPayoutProtectedGateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout eligible from'**
+  String get earlyArrivalPayoutProtectedGateLabel;
+
+  /// No description provided for @routeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Route'**
+  String get routeTitle;
+
+  /// No description provided for @routeFlightMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Flight'**
+  String get routeFlightMode;
+
+  /// No description provided for @routeDriveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Drive'**
+  String get routeDriveMode;
+
+  /// No description provided for @routeDepartureLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Departure'**
+  String get routeDepartureLabel;
+
+  /// No description provided for @routeArrivalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrival'**
+  String get routeArrivalLabel;
+
+  /// No description provided for @routeCarryingLegsOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Carrying route for this delivery'**
+  String get routeCarryingLegsOnly;
+
+  /// No description provided for @notificationArrivalReported.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveler arrived early'**
+  String get notificationArrivalReported;
+
+  /// No description provided for @notificationArrivalReportedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open ShipTrip to confirm the early arrival.'**
+  String get notificationArrivalReportedBody;
+
+  /// No description provided for @notificationArrivalConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Early arrival confirmed'**
+  String get notificationArrivalConfirmed;
+
+  /// No description provided for @notificationArrivalConfirmedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender confirmed your arrival. Delivery is still to come.'**
+  String get notificationArrivalConfirmedBody;
+
+  /// No description provided for @notificationArrivalDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Early arrival not confirmed'**
+  String get notificationArrivalDeclined;
+
+  /// No description provided for @notificationArrivalDeclinedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open ShipTrip to review the delivery.'**
+  String get notificationArrivalDeclinedBody;
+
+  /// No description provided for @routeBasisSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen at booking'**
+  String get routeBasisSnapshot;
+
+  /// No description provided for @routeBasisLive.
+  ///
+  /// In en, this message translates to:
+  /// **'Live journey'**
+  String get routeBasisLive;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

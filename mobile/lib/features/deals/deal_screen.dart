@@ -29,11 +29,14 @@ import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
+import '../../data/repositories.dart';
 import '../../design/components/codes.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/route.dart';
+import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/components/timeline.dart';
 import '../../design/layout/app_scaffold.dart';
@@ -93,7 +96,13 @@ class DealScreen extends ConsumerWidget {
 
                 _Urgent(deal: data, isSender: isSender),
 
+                if (isSender) _SenderEarlyArrivalNotice(deal: data),
+
+                _ArrivalSection(deal: data, isSender: isSender),
+
                 _PostPickupWaiting(deal: data, isSender: isSender),
+
+                _RouteSection(route: data.route),
 
                 SectionHeader(title: l.timelineTitle),
                 LifecycleTimeline(
@@ -281,6 +290,362 @@ class _PostPickupWaiting extends ConsumerWidget {
         onAvailable: availableAt == null
             ? null
             : () => ref.invalidate(dealDetailProvider(deal.id)),
+      ),
+    );
+  }
+}
+
+class _SenderEarlyArrivalNotice extends ConsumerStatefulWidget {
+  const _SenderEarlyArrivalNotice({required this.deal});
+
+  final Deal deal;
+
+  @override
+  ConsumerState<_SenderEarlyArrivalNotice> createState() =>
+      _SenderEarlyArrivalNoticeState();
+}
+
+class _SenderEarlyArrivalNoticeState
+    extends ConsumerState<_SenderEarlyArrivalNotice> {
+  bool _submitting = false;
+
+  Future<void> _confirm() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final repo = ref.read(dealRepositoryProvider);
+      await repo.confirmEarlyArrival(widget.deal.id);
+      if (mounted) {
+        AppSnack.success(context, L.of(context).earlyArrivalConfirmedTitle);
+      }
+      ref.invalidate(dealDetailProvider(widget.deal.id));
+      ref.invalidate(activeDealsProvider);
+    } catch (err) {
+      if (mounted) {
+        AppSnack.failure(context, err);
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _decline() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final repo = ref.read(dealRepositoryProvider);
+      await repo.declineEarlyArrival(widget.deal.id);
+      if (mounted) {
+        AppSnack.success(context, L.of(context).earlyArrivalDeclinedTitle);
+      }
+      ref.invalidate(dealDetailProvider(widget.deal.id));
+      ref.invalidate(activeDealsProvider);
+    } catch (err) {
+      if (mounted) {
+        AppSnack.failure(context, err);
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final arrival = widget.deal.arrival;
+    if (arrival == null || !arrival.isPendingConfirmation) {
+      return const SizedBox.shrink();
+    }
+
+    final l = L.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: AppCard(
+        accent: StatusTone.action,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.flight_land_rounded,
+                  color: context.colors.attention,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    l.earlyArrivalSenderNoticeTitle,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              l.earlyArrivalSenderNoticeBody,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpace.lg),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton(
+                    label: l.earlyArrivalConfirmAction,
+                    variant: AppButtonVariant.primary,
+                    isLoading: _submitting,
+                    onPressed: _submitting ? null : _confirm,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: AppButton(
+                    label: l.earlyArrivalDeclineAction,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: _submitting ? null : _decline,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrivalSection extends ConsumerStatefulWidget {
+  const _ArrivalSection({required this.deal, required this.isSender});
+
+  final Deal deal;
+  final bool isSender;
+
+  @override
+  ConsumerState<_ArrivalSection> createState() => _ArrivalSectionState();
+}
+
+class _ArrivalSectionState extends ConsumerState<_ArrivalSection> {
+  bool _submitting = false;
+
+  Future<void> _reportEarlyArrival() async {
+    if (_submitting) return;
+    final l = L.of(context);
+
+    final confirmed = await confirmAction(
+      context,
+      title: l.earlyArrivalConfirmSheetTitle,
+      body: l.earlyArrivalConfirmSheetBody,
+      confirmLabel: l.earlyArrivalAction,
+      cancelLabel: l.actionCancel,
+      consequence: InfoNotice(
+        message: l.earlyArrivalPayoutFloorExplanation,
+        tone: StatusTone.neutral,
+        icon: Icons.shield_outlined,
+      ),
+    );
+
+    if (!confirmed || !mounted) return;
+
+    setState(() => _submitting = true);
+    try {
+      final repo = ref.read(dealRepositoryProvider);
+      await repo.reportEarlyArrival(widget.deal.id);
+      if (mounted) {
+        AppSnack.success(context, l.earlyArrivalWaitingSenderTitle);
+      }
+      ref.invalidate(dealDetailProvider(widget.deal.id));
+      ref.invalidate(activeDealsProvider);
+    } catch (err) {
+      if (mounted) {
+        AppSnack.failure(context, err);
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final arrival = widget.deal.arrival;
+    final isSender = widget.isSender;
+
+    // 1. Traveler can report early arrival
+    if (!isSender && (arrival?.canReportEarlyArrival ?? false)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.flight_land_rounded, color: context.colors.brand),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text(
+                      l.earlyArrivalAction,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Text(
+                l.earlyArrivalConfirmSheetBody,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: context.colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              AppButton(
+                label: l.earlyArrivalAction,
+                variant: AppButtonVariant.secondary,
+                isLoading: _submitting,
+                onPressed: _submitting ? null : _reportEarlyArrival,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. Traveler waiting for sender confirmation
+    if (!isSender && (arrival?.isPendingConfirmation ?? false)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: InfoNotice(
+          title: l.earlyArrivalWaitingSenderTitle,
+          message: l.earlyArrivalWaitingSenderBody,
+          tone: StatusTone.waiting,
+          icon: Icons.hourglass_top_rounded,
+        ),
+      );
+    }
+
+    // 3. Arrival confirmed (if parcel handover not yet confirmed)
+    if ((arrival?.isConfirmed ?? false) &&
+        widget.deal.deliveryConfirmedAt == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: InfoNotice(
+          title: l.earlyArrivalConfirmedTitle,
+          message: l.earlyArrivalConfirmedBody,
+          tone: StatusTone.good,
+          icon: Icons.check_circle_outline_rounded,
+        ),
+      );
+    }
+
+    // 4. Arrival declined (if parcel handover not yet confirmed)
+    if ((arrival?.isDeclined ?? false) &&
+        widget.deal.deliveryConfirmedAt == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: InfoNotice(
+          title: l.earlyArrivalDeclinedTitle,
+          message: l.earlyArrivalDeclinedBody,
+          tone: StatusTone.neutral,
+          icon: Icons.info_outline_rounded,
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class _RouteSection extends StatelessWidget {
+  const _RouteSection({required this.route});
+
+  final DealRoute? route;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = route;
+    if (r == null || r.legs.isEmpty) return const SizedBox.shrink();
+
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final legs = r.legs;
+
+    final stops = <RouteStop>[];
+    final segments = <RouteSegment>[];
+
+    final firstOrigin = legs.first.origin;
+    stops.add(
+      RouteStop(
+        label: (firstOrigin?.displayLabel.isNotEmpty ?? false)
+            ? firstOrigin!.displayLabel
+            : (firstOrigin?.name ?? '—'),
+        detail:
+            (firstOrigin?.isAirport ?? false) && firstOrigin?.iataCode != null
+            ? firstOrigin!.iataCode
+            : firstOrigin?.parentName,
+        timeLabel: legs.first.departAt != null
+            ? LocaleFormats.dateTime(locale, legs.first.departAt!)
+            : null,
+      ),
+    );
+
+    for (var i = 0; i < legs.length; i++) {
+      final leg = legs[i];
+      final modeLabel = switch (leg.mode) {
+        TransportMode.flight => l.routeFlightMode,
+        TransportMode.drive => l.routeDriveMode,
+        TransportMode.unknown => l.routeTitle,
+      };
+
+      segments.add(RouteSegment(mode: leg.mode, modeLabel: modeLabel));
+
+      final dest = leg.destination;
+      stops.add(
+        RouteStop(
+          label: (dest?.displayLabel.isNotEmpty ?? false)
+              ? dest!.displayLabel
+              : (dest?.name ?? '—'),
+          detail: (dest?.isAirport ?? false) && dest?.iataCode != null
+              ? dest!.iataCode
+              : dest?.parentName,
+          timeLabel: leg.arriveAt != null
+              ? LocaleFormats.dateTime(locale, leg.arriveAt!)
+              : null,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: l.routeTitle),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (r.basis == DealRouteBasis.fundedSnapshot) ...[
+                  StatusPill(
+                    label: l.routeBasisSnapshot,
+                    tone: StatusTone.neutral,
+                    icon: Icons.lock_outline_rounded,
+                    compact: true,
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                ] else if (r.basis == DealRouteBasis.liveJourney) ...[
+                  StatusPill(
+                    label: l.routeBasisLive,
+                    tone: StatusTone.neutral,
+                    icon: Icons.alt_route_rounded,
+                    compact: true,
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                ],
+                RouteLine(stops: stops, segments: segments),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -510,11 +875,17 @@ class _ProtectionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final locale = Localizations.localeOf(context);
     final protection = deal.protection;
     final endsAt = protection?.protectionEndsAt ?? deal.protectionEndsAt;
     if (endsAt == null) return const SizedBox.shrink();
 
     final payout = protection?.payout;
+    final payoutFloor = protection?.payoutFloor;
+    final scheduledArrivalFloor =
+        payoutFloor?.fundedScheduledArrivalFloorAt ??
+        deal.fundedScheduledArrivalFloorAt;
+    final payoutEligibleFrom = payoutFloor?.payoutEligibleFrom;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.xl),
@@ -529,16 +900,10 @@ class _ProtectionSection extends StatelessWidget {
                 Text(
                   isSender
                       ? l.protectionSenderBody(
-                          LocaleFormats.dateTime(
-                            Localizations.localeOf(context),
-                            endsAt,
-                          ),
+                          LocaleFormats.dateTime(locale, endsAt),
                         )
                       : l.protectionTravelerBody(
-                          LocaleFormats.dateTime(
-                            Localizations.localeOf(context),
-                            endsAt,
-                          ),
+                          LocaleFormats.dateTime(locale, endsAt),
                         ),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: context.colors.textSecondary,
@@ -552,6 +917,34 @@ class _ProtectionSection extends StatelessWidget {
                     l.protectionEnded,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                if (scheduledArrivalFloor != null) ...[
+                  const SizedBox(height: AppSpace.md),
+                  Text(
+                    '${l.earlyArrivalScheduledArrivalLabel}: ${LocaleFormats.dateTime(locale, scheduledArrivalFloor)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+                if (payoutEligibleFrom != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    '${l.earlyArrivalPayoutProtectedGateLabel}: ${LocaleFormats.dateTime(locale, payoutEligibleFrom)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+                if (scheduledArrivalFloor != null ||
+                    (deal.arrival?.isConfirmed ?? false) ||
+                    (deal.arrival?.isPendingConfirmation ?? false)) ...[
+                  const SizedBox(height: AppSpace.md),
+                  InfoNotice(
+                    message: l.earlyArrivalPayoutFloorExplanation,
+                    tone: StatusTone.neutral,
+                    icon: Icons.shield_outlined,
+                  ),
+                ],
                 if (payout != null && !isSender) ...[
                   const SizedBox(height: AppSpace.lg),
                   Builder(

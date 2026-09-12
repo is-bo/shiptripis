@@ -188,6 +188,38 @@ final dealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
   (ref) => _projectLiveQuery(ref, _dealsQuery(_watchAccountId(ref))),
 );
 
+final _activeDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
+  ref,
+  accountId,
+) async {
+  final repo = ref.watch(dealRepositoryProvider);
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.deals(),
+    () => repo.list(activity: ActivityState.active),
+  );
+});
+final activeDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
+  (ref) => _projectLiveQuery(ref, _activeDealsQuery(_watchAccountId(ref))),
+);
+
+final _historyDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
+  ref,
+  accountId,
+) async {
+  final repo = ref.watch(dealRepositoryProvider);
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.deals(),
+    () => repo.list(activity: ActivityState.completed),
+  );
+});
+final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
+  (ref) => _projectLiveQuery(ref, _historyDealsQuery(_watchAccountId(ref))),
+);
+
 final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
   ref,
   accountId,
@@ -590,6 +622,8 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
 void refreshVolatileState(WidgetRef ref) {
   ref
     ..invalidate(dealsProvider)
+    ..invalidate(activeDealsProvider)
+    ..invalidate(historyDealsProvider)
     ..invalidate(completedDealsCountProvider)
     ..invalidate(dealDetailProvider)
     ..invalidate(matchesProvider)

@@ -146,6 +146,7 @@ class NotificationsScreen extends ConsumerWidget {
       case OpenMatch(:final matchId):
         context.openNegotiation(matchId);
       case OpenDeal(:final dealId):
+        ref.invalidate(dealDetailProvider(dealId));
         context.openDeal(dealId);
       case OpenRequest(:final requestId):
         context.openRequest(requestId);
@@ -321,6 +322,18 @@ class _Row extends StatelessWidget {
       NotificationChannel.dealCancelled => (
         l.notificationDelivery,
         Icons.local_shipping_rounded,
+      ),
+      NotificationChannel.dealArrivalReported => (
+        l.notificationArrivalReported,
+        Icons.flight_land_rounded,
+      ),
+      NotificationChannel.dealArrivalConfirmed => (
+        l.notificationArrivalConfirmed,
+        Icons.check_circle_outline_rounded,
+      ),
+      NotificationChannel.dealArrivalDeclined => (
+        l.notificationArrivalDeclined,
+        Icons.info_outline_rounded,
       ),
       NotificationChannel.tripCreated ||
       NotificationChannel.tripUpdated ||

@@ -4347,4 +4347,122 @@ class LFr extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'Moyen de versement à vérifier';
+
+  @override
+  String get payoutReasonScheduledArrivalPending =>
+      'En attente de la date d\'arrivée prévue';
+
+  @override
+  String get deliveryPayoutScheduledArrivalPendingExplainer =>
+      'La protection de livraison de 48h est terminée, mais le versement reste retenu jusqu\'à la date d\'arrivée prévue convenue lors du financement.';
+
+  @override
+  String get earlyArrivalAction => 'Je suis arrivé en avance';
+
+  @override
+  String get earlyArrivalConfirmSheetTitle => 'Signaler une arrivée anticipée';
+
+  @override
+  String get earlyArrivalConfirmSheetBody =>
+      'Cette action informe l\'expéditeur de votre arrivée avant l\'horaire prévu. Elle ne confirme pas la livraison du colis. L\'expéditeur doit confirmer votre arrivée et le calendrier de versement reste soumis aux règles de protection ShipTrip.';
+
+  @override
+  String get earlyArrivalWaitingSenderTitle =>
+      'En attente de confirmation de l\'expéditeur';
+
+  @override
+  String get earlyArrivalWaitingSenderBody =>
+      'Vous avez signalé votre arrivée anticipée. L\'expéditeur a été invité à la confirmer. La remise et la livraison restent distinctes.';
+
+  @override
+  String get earlyArrivalSenderNoticeTitle =>
+      'Le voyageur indique être arrivé en avance';
+
+  @override
+  String get earlyArrivalSenderNoticeBody =>
+      'Le voyageur a signalé son arrivée anticipée pour cette livraison. Confirmer l\'arrivée atteste de sa présence ; la livraison du colis et la protection du versement restent distinctes.';
+
+  @override
+  String get earlyArrivalConfirmAction => 'Confirmer l\'arrivée';
+
+  @override
+  String get earlyArrivalDeclineAction => 'Refuser';
+
+  @override
+  String get earlyArrivalConfirmedTitle => 'Arrivée confirmée';
+
+  @override
+  String get earlyArrivalConfirmedBody =>
+      'L\'arrivée anticipée est confirmée. La livraison du colis et la protection de 48h ne débuteront qu\'après vérification du code de livraison.';
+
+  @override
+  String get earlyArrivalDeclinedTitle => 'Arrivée anticipée non confirmée';
+
+  @override
+  String get earlyArrivalDeclinedBody =>
+      'Le signalement d\'arrivée anticipée n\'a pas été confirmé. La livraison se poursuivra selon l\'itinéraire prévu.';
+
+  @override
+  String get earlyArrivalScheduledArrivalLabel =>
+      'Arrivée prévue pour cette livraison';
+
+  @override
+  String get earlyArrivalReportedTimeLabel => 'Arrivée signalée';
+
+  @override
+  String get earlyArrivalEarlyByLabel => 'En avance de';
+
+  @override
+  String get earlyArrivalPayoutFloorExplanation =>
+      'Arriver en avance ne rend pas le versement disponible plus tôt que la date de protection prévue pour cette livraison.';
+
+  @override
+  String get earlyArrivalPayoutProtectedGateLabel =>
+      'Versement éligible à partir du';
+
+  @override
+  String get routeTitle => 'Itinéraire';
+
+  @override
+  String get routeFlightMode => 'Vol';
+
+  @override
+  String get routeDriveMode => 'Trajet routier';
+
+  @override
+  String get routeDepartureLabel => 'Départ';
+
+  @override
+  String get routeArrivalLabel => 'Arrivée';
+
+  @override
+  String get routeCarryingLegsOnly =>
+      'Itinéraire de transport pour cette livraison';
+
+  @override
+  String get notificationArrivalReported => 'Le voyageur est arrivé en avance';
+
+  @override
+  String get notificationArrivalReportedBody =>
+      'Ouvrez ShipTrip pour confirmer l\'arrivée anticipée.';
+
+  @override
+  String get notificationArrivalConfirmed => 'Arrivée anticipée confirmée';
+
+  @override
+  String get notificationArrivalConfirmedBody =>
+      'L\'expéditeur a confirmé votre arrivée. La livraison reste à venir.';
+
+  @override
+  String get notificationArrivalDeclined => 'Arrivée anticipée non confirmée';
+
+  @override
+  String get notificationArrivalDeclinedBody =>
+      'Ouvrez ShipTrip pour consulter la livraison.';
+
+  @override
+  String get routeBasisSnapshot => 'Figé à la réservation';
+
+  @override
+  String get routeBasisLive => 'Trajet en direct';
 }

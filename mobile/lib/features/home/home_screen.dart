@@ -370,21 +370,25 @@ class _InProgressSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
-    final deals = ref.watch(dealsProvider);
+    final deals = ref.watch(activeDealsProvider);
 
     if (account == null) return const SizedBox.shrink();
 
     return AsyncView<List<Deal>>(
       value: deals,
-      onRetry: () => ref.invalidate(dealsProvider),
+      onRetry: () => ref.invalidate(activeDealsProvider),
       loading: () => const SkeletonCardList(count: 2),
       error: (error) => InlineFailure(
         error: error,
-        onRetry: () => ref.invalidate(dealsProvider),
+        onRetry: () => ref.invalidate(activeDealsProvider),
       ),
       data: (all) {
         final active = all
-            .where((d) => !d.status.isFinished)
+            .where(
+              (d) =>
+                  d.activityState == ActivityState.unknown ||
+                  d.activityState == ActivityState.active,
+            )
             .toList(growable: false);
         if (active.isEmpty) return const SizedBox.shrink();
 

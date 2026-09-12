@@ -322,6 +322,8 @@ class PayoutMobile {
     this.sentAt,
     this.paidAt,
     this.destinationScope,
+    this.fundedScheduledArrivalFloorAt,
+    this.earliestReleaseAt,
   });
 
   factory PayoutMobile.fromJson(Map<String, dynamic> json) {
@@ -353,6 +355,10 @@ class PayoutMobile {
       sentAt: readDate(json['sent_at']),
       paidAt: readDate(json['paid_at']),
       destinationScope: readString(json['destination_scope']),
+      fundedScheduledArrivalFloorAt: readDate(
+        json['funded_scheduled_arrival_floor_at'],
+      ),
+      earliestReleaseAt: readDate(json['earliest_release_at']),
     );
   }
 
@@ -381,6 +387,8 @@ class PayoutMobile {
   final DateTime? sentAt;
   final DateTime? paidAt;
   final String? destinationScope;
+  final DateTime? fundedScheduledArrivalFloorAt;
+  final DateTime? earliestReleaseAt;
 
   Money get canonicalEurAmount => Money.eurCents(amountEurCents);
 

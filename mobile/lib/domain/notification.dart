@@ -37,6 +37,9 @@ enum NotificationChannel {
   flightProofStatusChanged,
   dealUpdated,
   dealCancelled,
+  dealArrivalReported,
+  dealArrivalConfirmed,
+  dealArrivalDeclined,
   disputeOpened,
   disputeResolved,
   payoutStatusChanged,
@@ -65,6 +68,9 @@ enum NotificationChannel {
     'flight_proof.status_changed' => flightProofStatusChanged,
     'deal.updated' => dealUpdated,
     'deal.cancelled' => dealCancelled,
+    'deal.arrival_reported' => dealArrivalReported,
+    'deal.arrival_confirmed' => dealArrivalConfirmed,
+    'deal.arrival_declined' => dealArrivalDeclined,
     'dispute.opened' => disputeOpened,
     'dispute.resolved' => disputeResolved,
     'payout.status_changed' => payoutStatusChanged,
@@ -233,7 +239,10 @@ class AppNotification {
     NotificationChannel.deliveryCodeAvailable ||
     NotificationChannel.deliveryConfirmed ||
     NotificationChannel.dealUpdated ||
-    NotificationChannel.dealCancelled => switch (dealId) {
+    NotificationChannel.dealCancelled ||
+    NotificationChannel.dealArrivalReported ||
+    NotificationChannel.dealArrivalConfirmed ||
+    NotificationChannel.dealArrivalDeclined => switch (dealId) {
       final int id => OpenDeal(id),
       _ => null,
     },

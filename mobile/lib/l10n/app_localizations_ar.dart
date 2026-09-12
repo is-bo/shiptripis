@@ -4323,4 +4323,117 @@ class LAr extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'يلزم التحقق من وسيلة التحويل';
+
+  @override
+  String get payoutReasonScheduledArrivalPending =>
+      'بانتظار حلول موعد الوصول المجدول';
+
+  @override
+  String get deliveryPayoutScheduledArrivalPendingExplainer =>
+      'انتهت فترة حماية التسليم (48 ساعة)، لكن التحويل يظل معلقاً حتى موعد الوصول المجدول المتفق عليه عند تمويل الطلب.';
+
+  @override
+  String get earlyArrivalAction => 'وصلتُ مبكراً';
+
+  @override
+  String get earlyArrivalConfirmSheetTitle => 'إبلاغ عن وصول مبكر';
+
+  @override
+  String get earlyArrivalConfirmSheetBody =>
+      'يُخطر هذا الإجراء المرسل بوصولك قبل الموعد المجدول. هذا الإجراء لا يؤكد تسليم الطرد. يجب على المرسل تأكيد وصولك، ويظل موعد صرف المستحقات خاضعاً لقواعد الحماية في شيب تريب.';
+
+  @override
+  String get earlyArrivalWaitingSenderTitle => 'بانتظار تأكيد المرسل';
+
+  @override
+  String get earlyArrivalWaitingSenderBody =>
+      'أبلغتَ عن وصولك المبكر. تم إخطار المرسل لتأكيد الوصول. يبقى تسليم الطرد إجراءً منفصلاً.';
+
+  @override
+  String get earlyArrivalSenderNoticeTitle => 'أفاد المسافر بأنه وصل مبكراً';
+
+  @override
+  String get earlyArrivalSenderNoticeBody =>
+      'أبلغ المسافر عن وصوله مبكراً لهذه الشحنة. تأكيد الوصول يقر بوجوده فقط؛ ويبقى تسليم الطرد وحماية المستحقات إجراءً منفصلاً.';
+
+  @override
+  String get earlyArrivalConfirmAction => 'تأكيد الوصول';
+
+  @override
+  String get earlyArrivalDeclineAction => 'رفض';
+
+  @override
+  String get earlyArrivalConfirmedTitle => 'تم تأكيد الوصول';
+
+  @override
+  String get earlyArrivalConfirmedBody =>
+      'تم تأكيد الوصول المبكر. سيبدأ تسليم الطرد وفترة الحماية (48 ساعة) فقط بعد التحقق من رمز التسليم.';
+
+  @override
+  String get earlyArrivalDeclinedTitle => 'لم يتم تأكيد الوصول المبكر';
+
+  @override
+  String get earlyArrivalDeclinedBody =>
+      'لم يتم تأكيد تقرير الوصول المبكر. سيستمر التسليم وفق المسار المجدول.';
+
+  @override
+  String get earlyArrivalScheduledArrivalLabel =>
+      'موعد الوصول المجدول لهذه الشحنة';
+
+  @override
+  String get earlyArrivalReportedTimeLabel => 'وقت الإبلاغ عن الوصول';
+
+  @override
+  String get earlyArrivalEarlyByLabel => 'مبكراً بمقدار';
+
+  @override
+  String get earlyArrivalPayoutFloorExplanation =>
+      'الوصول المبكر لا يجعل المستحقات متاحة قبل تاريخ انتهاء فترة الحماية المحددة لهذه الشحنة.';
+
+  @override
+  String get earlyArrivalPayoutProtectedGateLabel => 'التحويل متاح ابتداءً من';
+
+  @override
+  String get routeTitle => 'المسار';
+
+  @override
+  String get routeFlightMode => 'رحلة طيران';
+
+  @override
+  String get routeDriveMode => 'مسار بري';
+
+  @override
+  String get routeDepartureLabel => 'المغادرة';
+
+  @override
+  String get routeArrivalLabel => 'الوصول';
+
+  @override
+  String get routeCarryingLegsOnly => 'مسار النقل لهذه الشحنة';
+
+  @override
+  String get notificationArrivalReported => 'وصل المسافر مبكراً';
+
+  @override
+  String get notificationArrivalReportedBody =>
+      'افتح شيب تريب لتأكيد الوصول المبكر.';
+
+  @override
+  String get notificationArrivalConfirmed => 'تم تأكيد الوصول المبكر';
+
+  @override
+  String get notificationArrivalConfirmedBody =>
+      'أكد المرسل وصولك. تسليم الطرد ما زال معلقاً.';
+
+  @override
+  String get notificationArrivalDeclined => 'لم يتم تأكيد الوصول المبكر';
+
+  @override
+  String get notificationArrivalDeclinedBody => 'افتح شيب تريب لمراجعة الشحنة.';
+
+  @override
+  String get routeBasisSnapshot => 'المسار المحجوز';
+
+  @override
+  String get routeBasisLive => 'المسار المباشر';
 }

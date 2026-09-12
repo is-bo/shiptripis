@@ -56,7 +56,10 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
     final role = ref.watch(roleContextProvider);
-    final deals = ref.watch(dealsProvider);
+    final deals = switch (_filter) {
+      _Filter.active || _Filter.awaitingYou => ref.watch(activeDealsProvider),
+      _Filter.history => ref.watch(historyDealsProvider),
+    };
     final attention = ref.watch(attentionProvider);
 
     if (account == null) return const AppScaffold(body: SkeletonCardList());
@@ -75,7 +78,11 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
         onRefresh: () async => refreshVolatileState(ref),
         child: AsyncView<List<Deal>>(
           value: deals,
-          onRetry: () => ref.invalidate(dealsProvider),
+          onRetry: () => switch (_filter) {
+            _Filter.active ||
+            _Filter.awaitingYou => ref.invalidate(activeDealsProvider),
+            _Filter.history => ref.invalidate(historyDealsProvider),
+          },
           loading: () => ListView(
             padding: AppScrollPadding.page(context),
             children: const [SkeletonCardList()],
@@ -148,13 +155,26 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
   List<Deal> _apply(List<Deal> all, Set<int> attentionDealIds) =>
       switch (_filter) {
         _Filter.active =>
-          all.where((d) => !d.status.isFinished).toList(growable: false),
+          all
+              .where(
+                (d) =>
+                    d.activityState == ActivityState.unknown ||
+                    d.activityState == ActivityState.active,
+              )
+              .toList(growable: false),
         _Filter.awaitingYou =>
           all
               .where((d) => attentionDealIds.contains(d.id))
               .toList(growable: false),
         _Filter.history =>
-          all.where((d) => d.status.isFinished).toList(growable: false),
+          all
+              .where(
+                (d) =>
+                    d.activityState == ActivityState.unknown ||
+                    d.activityState == ActivityState.completed ||
+                    d.activityState == ActivityState.cancelled,
+              )
+              .toList(growable: false),
       };
 
   Widget _emptyFor(BuildContext context, _Filter filter) {
