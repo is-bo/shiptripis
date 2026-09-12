@@ -164,13 +164,27 @@ def rating_window(deal: Deal) -> timedelta:
 # --- funding ------------------------------------------------------------------
 
 
-def snapshot_on_funding(deal: Deal, *, agreed_pickup_at: datetime | None) -> None:
+def snapshot_on_funding(
+    deal: Deal,
+    *,
+    agreed_pickup_at: datetime | None,
+    match=None,
+    journey=None,
+    journey_legs=(),
+    allocations=(),
+    at: datetime | None = None,
+) -> None:
     """Freeze the Deal's remaining timeline rules at the moment money lands.
 
     Called from `fund_deal`, inside the funding transaction. After this the Deal
     stops reading live business settings: a revision published tomorrow cannot
     shorten today's safety buffer, move today's protection deadline or change
     the cancellation compensation a party has already been quoted.
+
+    Phase I1A adds the arrival basis to the same freeze, for the same reason and
+    with one more: the arrival instant is also the anti-abuse floor under payout
+    eligibility, so it must be a fact about this Deal rather than a fact about
+    whatever the traveler's Journey rows say later.
     """
 
     from apps.core.business_settings import NoActiveBusinessSettings
@@ -188,6 +202,19 @@ def snapshot_on_funding(deal: Deal, *, agreed_pickup_at: datetime | None) -> Non
         )
         deal.lifecycle_policy = {}
     deal.agreed_pickup_at = agreed_pickup_at
+
+    from .arrival import build_funding_snapshot
+
+    floor, snapshot = build_funding_snapshot(
+        deal=deal,
+        match=match,
+        journey=journey,
+        journey_legs=tuple(journey_legs),
+        allocations=tuple(allocations),
+        at=at or timezone.now(),
+    )
+    deal.funded_scheduled_arrival_floor_at = floor
+    deal.arrival_snapshot = snapshot
 
 
 def resolve_agreed_pickup_at(*, deal: Deal, match, journey_legs) -> datetime | None:
@@ -492,6 +519,129 @@ def apply_completed(
     return TransitionResult(deal.pk, deal.status, True)
 
 
+# --- early arrival ------------------------------------------------------------
+#
+# Neither transition here touches `Deal.status`. That is the point: the state
+# machine at the top of this module describes where the *parcel* is, and an
+# arrival report does not move a parcel. A confirmed early arrival is recorded
+# beside the machine, not inside it, so the delivery-code gate, the protection
+# window, the cancellation policy and the payout floor all behave exactly as
+# they did before anybody said "I arrived".
+
+
+def apply_early_arrival_reported(
+    aggregate: LockedLifecycleAggregate, *, actor_id: int, at: datetime | None = None
+):
+    """Record the traveler's claim. One row, one event, no status change.
+
+    The caller has already established that the claim is allowed. This writes
+    it, with the server's clock and the Deal's own frozen basis, so nothing a
+    client sent decides how early the arrival is.
+    """
+
+    from .arrival import arrival_basis, material_threshold
+    from .models import DealArrivalReport
+
+    deal = aggregate.deal
+    at = at or timezone.now()
+    scheduled = deal.funded_scheduled_arrival_floor_at
+    if scheduled is None:
+        raise DealLifecycleError(
+            "This delivery has no funded arrival schedule.",
+            code="arrival_basis_missing",
+        )
+    early_by = int((scheduled - at).total_seconds())
+    if early_by <= 0:
+        raise DealLifecycleError(
+            "The funded arrival schedule has already passed.",
+            code="not_materially_early",
+        )
+    report = DealArrivalReport.objects.create(
+        deal=deal,
+        reported_by_id=actor_id,
+        reported_at=at,
+        reported_deal_status=deal.status,
+        scheduled_arrival_at=scheduled,
+        early_by_seconds=early_by,
+        threshold_seconds=material_threshold(deal),
+        basis=arrival_basis(deal),
+    )
+    record_event(
+        deal,
+        DealEvent.Kind.EARLY_ARRIVAL_REPORTED,
+        {
+            "arrival_report_id": report.pk,
+            "arrival_state": DealArrivalReport.Status.PENDING_CONFIRMATION,
+            "reported_at": at.isoformat(),
+            "scheduled_arrival_at": scheduled.isoformat(),
+            "early_by_seconds": early_by,
+            "threshold_seconds": int(report.threshold_seconds),
+            "basis": report.basis,
+        },
+        actor_id=actor_id,
+    )
+    return report
+
+
+def apply_early_arrival_decision(
+    aggregate: LockedLifecycleAggregate,
+    *,
+    report,
+    actor_id: int,
+    confirm: bool,
+    at: datetime | None = None,
+):
+    """Record the sender's answer.
+
+    A confirmation stamps `Deal.arrival_confirmed_at`, and that is the only Deal
+    column it writes. It deliberately does **not** write
+    `delivery_confirmed_at`, does not start a protection window, does not release
+    a delivery code and cannot move
+    `funded_scheduled_arrival_floor_at` -- which is a funding-time column with no
+    writer after funding at all. A traveler who is genuinely, confirmedly early
+    still waits for the floor.
+    """
+
+    from .models import DealArrivalReport
+
+    deal = aggregate.deal
+    at = at or timezone.now()
+    report.status = (
+        DealArrivalReport.Status.CONFIRMED
+        if confirm
+        else DealArrivalReport.Status.DECLINED
+    )
+    report.decided_by_id = actor_id
+    report.decided_at = at
+    report.save(update_fields=["status", "decided_by", "decided_at", "updated_at"])
+    if confirm and deal.arrival_confirmed_at is None:
+        deal.arrival_confirmed_at = at
+        deal.save(update_fields=["arrival_confirmed_at", "updated_at"])
+    record_event(
+        deal,
+        (
+            DealEvent.Kind.EARLY_ARRIVAL_CONFIRMED
+            if confirm
+            else DealEvent.Kind.EARLY_ARRIVAL_DECLINED
+        ),
+        {
+            "arrival_report_id": report.pk,
+            "arrival_state": report.status,
+            "decided_at": at.isoformat(),
+            "arrival_confirmed_at": (
+                deal.arrival_confirmed_at.isoformat()
+                if confirm and deal.arrival_confirmed_at
+                else None
+            ),
+            # Restated on every confirmation, in the record both parties read.
+            "starts_protection_window": False,
+            "releases_delivery_code": False,
+        },
+        actor_id=actor_id,
+    )
+    return report
+
+
 # --- durable obligations ------------------------------------------------------
 
 
@@ -514,8 +664,24 @@ def schedule_delivery_code_release(deal: Deal) -> None:
 
 
 def schedule_protection_expiry(deal: Deal) -> None:
+    """Arm the release decision at the instant it can first be taken.
+
+    Not at `protection_ends_at` but at the *authoritative* gate --
+    `max(protection_ends_at, funded_scheduled_arrival_floor_at)`. On an ordinary
+    delivery the two are the same instant. On a genuinely early one the floor can
+    be days later, and scheduling at the protection deadline would wake a job
+    that can only answer "not yet", over and over, for those days.
+
+    The obligation keeps its identity (`protection_expiry:<deal>`), so this is a
+    reschedule rather than a second promise: `schedule_job` moves a pending row's
+    `run_at` and leaves everything else alone. The handler still refuses to act
+    early, so the schedule remains an optimisation and never the authority.
+    """
+
     from apps.finance.models import ScheduledJob
     from apps.finance.services import schedule_job
+
+    from .arrival import payout_release_gate_at
 
     if deal.protection_ends_at is None:
         raise DealLifecycleError(
@@ -525,7 +691,7 @@ def schedule_protection_expiry(deal: Deal) -> None:
     schedule_job(
         kind=ScheduledJob.Kind.PROTECTION_EXPIRY,
         key=f"protection_expiry:{deal.pk}",
-        run_at=deal.protection_ends_at,
+        run_at=payout_release_gate_at(deal) or deal.protection_ends_at,
         payload={"deal_id": deal.pk},
         max_attempts=24,
     )

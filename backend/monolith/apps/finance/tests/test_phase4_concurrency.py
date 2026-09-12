@@ -185,6 +185,14 @@ class Phase4ConcurrencyTestCase(TransactionTestCase):
         )
         deal.refresh_from_db()
         assert deal.status == Deal.Status.PROTECTION_WINDOW
+        # I1A: this delivers at the wall clock, hours before the journey's own
+        # scheduled arrival, so the arrival floor would hold the payout for
+        # reasons none of these race tests are about. Move the floor into the
+        # past, exactly as the stored buffer instants above were moved.
+        Deal.objects.filter(pk=deal.pk).update(
+            funded_scheduled_arrival_floor_at=timezone.now() - timedelta(seconds=1)
+        )
+        deal.refresh_from_db()
         return scenario
 
     # -- thread plumbing ------------------------------------------------------

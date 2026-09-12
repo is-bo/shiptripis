@@ -105,6 +105,12 @@ LIFECYCLE_TIMESTAMP_FIELDS = (
     "rating_window_ends_at",
     "completed_at",
     "cancelled_at",
+    # Phase I1A. Both are Deal columns, so a list row carries them for free and
+    # cannot disagree with the detail payload. `arrival_confirmed_at` is an
+    # arrival, never a delivery: `delivery_confirmed_at` above is the only
+    # timestamp that starts protection or gates a payout.
+    "funded_scheduled_arrival_floor_at",
+    "arrival_confirmed_at",
 )
 
 
@@ -113,6 +119,7 @@ class DealSummarySerializer(serializers.ModelSerializer):
 
     terms = DealTermsSnapshotSerializer(read_only=True)
     leg_allocations = DealLegAllocationSerializer(many=True, read_only=True)
+    activity_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Deal
@@ -125,6 +132,7 @@ class DealSummarySerializer(serializers.ModelSerializer):
             "sender_id",
             "traveler_id",
             "status",
+            "activity_state",
             "is_legacy",
             "cancellation_reason",
             *LIFECYCLE_TIMESTAMP_FIELDS,
@@ -134,6 +142,19 @@ class DealSummarySerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_activity_state(self, deal: Deal) -> str:
+        """Whether this Deal is still a live shipment. Server-owned.
+
+        The client used to answer this from `status` alone and got it wrong for
+        every delivered Deal, because `delivery_confirmed` and
+        `protection_window` are not finished statuses. `apps.deals.activity`
+        owns the rule now, and the list endpoint filters on the same one.
+        """
+
+        from .activity import activity_state
+
+        return activity_state(deal)
 
 
 class DealSerializer(serializers.ModelSerializer):
@@ -157,6 +178,9 @@ class DealSerializer(serializers.ModelSerializer):
     ratings = serializers.SerializerMethodField()
     cancellation = serializers.SerializerMethodField()
     no_show = serializers.SerializerMethodField()
+    activity_state = serializers.SerializerMethodField()
+    arrival = serializers.SerializerMethodField()
+    route = serializers.SerializerMethodField()
 
     class Meta:
         model = Deal
@@ -169,6 +193,7 @@ class DealSerializer(serializers.ModelSerializer):
             "sender_id",
             "traveler_id",
             "status",
+            "activity_state",
             "is_legacy",
             "cancellation_reason",
             *LIFECYCLE_TIMESTAMP_FIELDS,
@@ -183,6 +208,8 @@ class DealSerializer(serializers.ModelSerializer):
             "ratings",
             "cancellation",
             "no_show",
+            "arrival",
+            "route",
             "created_at",
             "updated_at",
         )
@@ -226,10 +253,16 @@ class DealSerializer(serializers.ModelSerializer):
         neither number is something the client should be deriving.
         """
 
+        from .arrival import payout_floor_projection
+
         payout = getattr(deal, "payout", None)
         return {
             "protection_ends_at": deal.protection_ends_at,
             "delivery_confirmed_at": deal.delivery_confirmed_at,
+            # Phase I1A: the second constraint on payout timing, and which of
+            # the two is binding. The client renders `payout_eligible_from`; it
+            # never takes the later of two instants itself.
+            "payout_floor": payout_floor_projection(deal=deal),
             "payout": (
                 None
                 if payout is None
@@ -314,6 +347,37 @@ class DealSerializer(serializers.ModelSerializer):
             "recorded_at": deal.no_show_recorded_at,
             "note": deal.no_show_note,
         }
+
+
+    def get_activity_state(self, deal: Deal) -> str:
+        from .activity import activity_state
+
+        return activity_state(deal)
+
+    def get_arrival(self, deal: Deal) -> dict:
+        """The journey-timing contract: arrival state and what may be done now.
+
+        Server-derived throughout. The client is told whether the arrival is
+        materially early, not how earliness is measured; and it is told which
+        actions exist, not the conditions behind them.
+        """
+
+        from .arrival import arrival_projection
+
+        return arrival_projection(deal=deal, viewer_id=self._viewer_id())
+
+    def get_route(self, deal: Deal) -> dict | None:
+        """The funded carrying route, for a Deal party only.
+
+        `None` before funding and for anybody who is not a party. See
+        `apps.deals.route` for exactly what is and is not in it.
+        """
+
+        from .route import funded_route
+
+        return funded_route(
+            deal=deal, viewer_id=self._viewer_id(), is_staff=self._is_staff()
+        )
 
 
 class DealRecipientWriteSerializer(serializers.Serializer):

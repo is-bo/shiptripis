@@ -13,6 +13,7 @@ in this order::
     -> Deal
     -> DealLegAllocation (journey leg, id)
     -> DealRecipient
+    -> DealArrivalReport (ascending id)
     -> DealHandoverCode (ascending id)
     -> Dispute (ascending id)
     -> Rating (ascending id)
@@ -89,6 +90,14 @@ the new edges acyclic:
 * Cancellation, dispute resolution and payout release all reach finance rows
   only after the whole domain aggregate is held, exactly as Phase 3B's payment
   reconciliation does.
+
+**Phase I1A placement.** `DealArrivalReport` is Deal-owned child data and sits
+with `DealRecipient`, before handover codes. An early-arrival report and a
+delivery confirmation can be submitted in the same second by the same traveler;
+both enter through `lock_deal_lifecycle`, so the second one blocks on the Deal
+row and then reads the first one's committed state. Nothing in the arrival path
+reaches a finance row at all -- the payout floor is a Deal column frozen at
+funding -- so it adds no new edge into the money graph.
 """
 
 from __future__ import annotations
@@ -128,6 +137,11 @@ class LockedLifecycleAggregate:
     handover_codes: tuple[object, ...]
     disputes: tuple[object, ...]
     ratings: tuple[object, ...]
+    #: Phase I1A early-arrival claims, ascending id. Locked with the rest of
+    #: the aggregate rather than by each caller, so the traveler's report, the
+    #: sender's confirmation, delivery confirmation and the payout release gate
+    #: all approach this row from the one documented direction.
+    arrival_reports: tuple[object, ...] = ()
 
     @property
     def deal(self):
@@ -144,6 +158,24 @@ class LockedLifecycleAggregate:
 
         for row in self.disputes:
             if row.status in Dispute.ACTIVE_STATUSES:
+                return row
+        return None
+
+    def open_arrival_report(self):
+        """The one early-arrival claim still awaiting the sender, if any."""
+
+        from apps.deals.models import DealArrivalReport
+
+        for row in self.arrival_reports:
+            if row.status in DealArrivalReport.OPEN_STATUSES:
+                return row
+        return None
+
+    def confirmed_arrival_report(self):
+        from apps.deals.models import DealArrivalReport
+
+        for row in self.arrival_reports:
+            if row.status == DealArrivalReport.Status.CONFIRMED:
                 return row
         return None
 
@@ -263,7 +295,7 @@ def lock_deal_lifecycle(deal_id: int) -> LockedLifecycleAggregate:
     transaction arrives second sees the first one's committed rows.
     """
 
-    from apps.deals.models import DealRecipient
+    from apps.deals.models import DealArrivalReport, DealRecipient
     from apps.disputes.models import Dispute
     from apps.handover.models import DealHandoverCode
     from apps.ratings.models import Rating
@@ -273,6 +305,11 @@ def lock_deal_lifecycle(deal_id: int) -> LockedLifecycleAggregate:
         DealRecipient.objects.select_for_update(no_key=True)
         .filter(deal_id=deal_id)
         .first()
+    )
+    arrival_reports = tuple(
+        DealArrivalReport.objects.select_for_update(no_key=True)
+        .filter(deal_id=deal_id)
+        .order_by("pk")
     )
     handover_codes = tuple(
         DealHandoverCode.objects.select_for_update(no_key=True)
@@ -295,6 +332,7 @@ def lock_deal_lifecycle(deal_id: int) -> LockedLifecycleAggregate:
         handover_codes=handover_codes,
         disputes=disputes,
         ratings=ratings,
+        arrival_reports=arrival_reports,
     )
 
 

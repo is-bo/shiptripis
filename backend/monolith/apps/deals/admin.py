@@ -4,6 +4,7 @@ from apps.core.admin_display import status
 
 from .models import (
     Deal,
+    DealArrivalReport,
     DealEvent,
     DealLegAllocation,
     DealRecipient,
@@ -40,6 +41,22 @@ class DealLegAllocationInline(admin.TabularInline):
     readonly_fields = [field.name for field in DealLegAllocation._meta.fields]
 
 
+class DealArrivalReportInline(admin.TabularInline):
+    """Early-arrival claims, read-only.
+
+    An operator resolving a dispute needs to see who claimed to have arrived
+    when, and what the sender answered. Nobody edits one here: a claim and its
+    decision are written by `apps.deals.arrival` under the lifecycle lock, with
+    a timeline event and a notification, and a second writer would make the
+    audit record untrustworthy.
+    """
+
+    model = DealArrivalReport
+    extra = 0
+    can_delete = False
+    readonly_fields = [field.name for field in DealArrivalReport._meta.fields]
+
+
 class DealEventInline(admin.TabularInline):
     model = DealEvent
     extra = 0
@@ -59,6 +76,8 @@ class DealAdmin(admin.ModelAdmin):
         "pickup_confirmed_at",
         "delivery_confirmed_at",
         "protection_ends_at",
+        "funded_scheduled_arrival_floor_at",
+        "arrival_confirmed_at",
         "created_at",
     )
     status_chip = status("status", "Status")
@@ -71,6 +90,7 @@ class DealAdmin(admin.ModelAdmin):
         DealTermsInline,
         DealRecipientInline,
         DealLegAllocationInline,
+        DealArrivalReportInline,
         DealEventInline,
     )
 

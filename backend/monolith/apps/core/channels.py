@@ -46,6 +46,12 @@ FLIGHT_PROOF_STATUS_CHANGED = "flight_proof.status_changed"
 DEAL_CANCELLED = "deal.cancelled"
 # Neutral in-app refresh; deliberately ineligible for FCM display.
 DEAL_UPDATED = "deal.updated"
+#: Phase I1A journey timing. Three distinct facts, three channels: a client
+#: that sees `deal.arrival_confirmed` may legitimately render "the traveler is
+#: here", and that must never travel on a channel a mere report also uses.
+DEAL_ARRIVAL_REPORTED = "deal.arrival_reported"
+DEAL_ARRIVAL_CONFIRMED = "deal.arrival_confirmed"
+DEAL_ARRIVAL_DECLINED = "deal.arrival_declined"
 DISPUTE_OPENED = "dispute.opened"
 DISPUTE_RESOLVED = "dispute.resolved"
 PAYOUT_STATUS_CHANGED = "payout.status_changed"

@@ -294,6 +294,11 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
         agreed_pickup_at=lifecycle.resolve_agreed_pickup_at(
             deal=deal, match=match, journey_legs=aggregate.journey_legs
         ),
+        match=match,
+        journey=aggregate.journey,
+        journey_legs=aggregate.journey_legs,
+        allocations=aggregate.allocations,
+        at=now,
     )
     deal.status = Deal.Status.FUNDED
     deal.funded_at = now
@@ -303,6 +308,8 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
             "funded_at",
             "lifecycle_policy",
             "agreed_pickup_at",
+            "funded_scheduled_arrival_floor_at",
+            "arrival_snapshot",
             "updated_at",
         ]
     )
@@ -319,6 +326,28 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
             "status": deal.status,
             "reason": "payment_order_covered",
             "payment_order_id": order_id,
+        },
+    )
+    # The arrival basis is part of what these two parties agreed to when the
+    # money moved, so it is stated on the record they both read rather than
+    # living only in a column. `basis` names which Journey fact produced it.
+    DealEvent.objects.create(
+        deal=deal,
+        kind=DealEvent.Kind.ARRIVAL_SNAPSHOT_FROZEN,
+        payload={
+            "basis": (deal.arrival_snapshot or {}).get("basis", ""),
+            "scheduled_arrival_at": (
+                deal.funded_scheduled_arrival_floor_at.isoformat()
+                if deal.funded_scheduled_arrival_floor_at
+                else None
+            ),
+            "arrival_leg_id": (deal.arrival_snapshot or {}).get("arrival_leg_id"),
+            "arrival_policy_version": (deal.arrival_snapshot or {}).get(
+                "policy_version", ""
+            ),
+            "threshold_seconds": (deal.arrival_snapshot or {}).get(
+                "material_early_threshold_seconds"
+            ),
         },
     )
     redis_bus.publish_after_commit(

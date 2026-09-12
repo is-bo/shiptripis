@@ -76,6 +76,13 @@ def rewind_deal(deal: Deal, delta: timedelta) -> Deal:
         "delivery_confirmed_at",
         "protection_ends_at",
         "rating_window_ends_at",
+        # Phase I1A. The funded arrival basis is one of this Deal's stored
+        # deadlines, so simulating the passage of time has to move it with the
+        # rest of them. Leaving it behind would not be "48 hours later" -- it
+        # would be a Deal delivered 48 hours before it was scheduled to arrive,
+        # which is a different scenario and one the arrival floor deliberately
+        # holds back.
+        "funded_scheduled_arrival_floor_at",
     ]
     updates = {}
     for name in fields:

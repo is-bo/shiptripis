@@ -431,6 +431,13 @@ def build_stripe_payout(
         delivery_code_available_at=now - timedelta(hours=95),
         delivery_code_released_at=now - timedelta(hours=95),
         delivery_confirmed_at=now - timedelta(hours=72),
+        # I1A: the funded arrival basis is one of this Deal's stored deadlines,
+        # so a fabricated past delivery has to bring it along. Left at the
+        # future instant `build_scenario` created, this Deal would describe a
+        # parcel delivered three days before its journey was due to arrive --
+        # the very-early case the arrival floor exists to hold back, which is
+        # not what any test below is about.
+        funded_scheduled_arrival_floor_at=now - timedelta(hours=73),
         protection_ends_at=(
             now - timedelta(hours=24) if protection_expired else now + timedelta(hours=24)
         ),

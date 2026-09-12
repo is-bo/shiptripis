@@ -127,6 +127,10 @@ def build_manual(prefix="h4"):
         delivery_code_available_at=now - timedelta(hours=95),
         delivery_code_released_at=now - timedelta(hours=95),
         delivery_confirmed_at=now - timedelta(hours=72),
+        # I1A: the funded arrival has to be in the past too, or this is a Deal
+        # delivered before its journey was scheduled to arrive and the arrival
+        # floor correctly refuses to release it.
+        funded_scheduled_arrival_floor_at=now - timedelta(hours=73),
         protection_ends_at=now - timedelta(hours=24),
     )
     from apps.finance.payout_release import evaluate_payout_release

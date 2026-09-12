@@ -95,6 +95,24 @@ class Deal(models.Model):
     rating_window_ends_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    # --- Phase I1A journey timing ------------------------------------------
+    #
+    # The arrival basis this Deal was funded against, frozen at funding from
+    # the accepted Match's own compatibility snapshot (or the matched legs).
+    # It is the anti-abuse floor for payout eligibility: a Deal delivered
+    # earlier than its funded schedule still cannot pay out before this
+    # instant. Journey rows stay mutable in principle; this column does not
+    # read them again after funding, so an edit cannot move it.
+    funded_scheduled_arrival_floor_at = models.DateTimeField(null=True, blank=True)
+    #: Provenance for the instant above plus the funded ordered route. Written
+    #: once, at funding, and never rewritten. `apps.deals.arrival` documents
+    #: every key.
+    arrival_snapshot = models.JSONField(default=dict, blank=True)
+    #: When the *sender* confirmed the traveler's early-arrival report. It is
+    #: emphatically not a delivery: no protection window starts here, no
+    #: payout becomes eligible, and the delivery code stays where it was.
+    arrival_confirmed_at = models.DateTimeField(null=True, blank=True)
+
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancelled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -200,6 +218,26 @@ class Deal(models.Model):
                     )
                 ),
                 name="deals_no_show_requires_actor",
+            ),
+            # An arrival confirmation is only meaningful for a funded Deal, and
+            # the floor only exists once funding froze it. Neither implies a
+            # delivery: there is deliberately no constraint tying
+            # `arrival_confirmed_at` to `delivery_confirmed_at` in either
+            # direction, because a parcel may be delivered without an early
+            # arrival ever being reported, and an early arrival may be
+            # confirmed days before the recipient is available.
+            models.CheckConstraint(
+                condition=(
+                    Q(arrival_confirmed_at__isnull=True) | Q(funded_at__isnull=False)
+                ),
+                name="deals_arrival_requires_funding",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(funded_scheduled_arrival_floor_at__isnull=True)
+                    | Q(funded_at__isnull=False)
+                ),
+                name="deals_arrival_floor_requires_funding",
             ),
         ]
         indexes = [
@@ -361,6 +399,23 @@ class DealEvent(models.Model):
             "Recipient delivery-code notification dispatched",
         )
         DELIVERY_CONFIRMED = "delivery_confirmed", "Delivery confirmed"
+        # --- Phase I1A journey timing ---
+        ARRIVAL_SNAPSHOT_FROZEN = (
+            "arrival_snapshot_frozen",
+            "Funded arrival basis frozen",
+        )
+        EARLY_ARRIVAL_REPORTED = (
+            "early_arrival_reported",
+            "Traveler reported an early arrival",
+        )
+        EARLY_ARRIVAL_CONFIRMED = (
+            "early_arrival_confirmed",
+            "Sender confirmed the early arrival",
+        )
+        EARLY_ARRIVAL_DECLINED = (
+            "early_arrival_declined",
+            "Sender declined the early arrival",
+        )
         # --- Phase 4 protection, payout and disputes ---
         PROTECTION_STARTED = "protection_started", "Protection window started"
         PROTECTION_EXPIRED = "protection_expired", "Protection window expired"
@@ -543,3 +598,125 @@ class DealRecipient(models.Model):
 
     def __str__(self) -> str:
         return f"Recipient for Deal#{self.deal_id}"
+
+
+class DealArrivalReport(models.Model):
+    """One auditable "I arrived early" claim and the sender's answer to it.
+
+    Three things about this table are deliberate.
+
+    **The traveler never writes an arrival time.** They assert a fact about
+    *now*; the server stamps `reported_at` from its own clock and copies the
+    funded basis it was measured against out of the Deal's frozen snapshot. A
+    client cannot backdate an arrival, cannot choose the schedule it is early
+    against, and cannot decide that it qualifies.
+
+    **The sender's confirmation is a separate row state, not a second table.**
+    A report is the whole conversation: who claimed, when, against which basis,
+    by how much, and what the counterparty decided. A dispute reads one row.
+
+    **Confirmation is not delivery and does not touch money.** Nothing here
+    releases a delivery code, starts a protection window, or moves payout
+    eligibility. `Deal.funded_scheduled_arrival_floor_at` is frozen at funding
+    and this table cannot reach it.
+    """
+
+    class Status(models.TextChoices):
+        PENDING_CONFIRMATION = "pending_confirmation", "Awaiting sender confirmation"
+        CONFIRMED = "confirmed", "Confirmed by the sender"
+        DECLINED = "declined", "Declined by the sender"
+
+    #: Statuses in which the sender still owes an answer.
+    OPEN_STATUSES = ("pending_confirmation",)
+
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.PROTECT,
+        related_name="arrival_reports",
+    )
+    reported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="deal_arrivals_reported",
+    )
+    reported_at = models.DateTimeField()
+    #: The Deal status at the moment of the claim. A later transition must not
+    #: be able to rewrite what state the parcel was in when it was made.
+    reported_deal_status = models.CharField(max_length=24)
+    #: Copied from `Deal.funded_scheduled_arrival_floor_at`, so the row proves
+    #: which basis the earliness was measured against even if a future phase
+    #: introduces a second basis.
+    scheduled_arrival_at = models.DateTimeField()
+    #: `scheduled_arrival_at - reported_at`, in whole seconds. Always positive:
+    #: the service refuses a report that is not materially early.
+    early_by_seconds = models.PositiveIntegerField()
+    #: The materiality threshold in force for this Deal when the claim was made.
+    threshold_seconds = models.PositiveIntegerField()
+    basis = models.CharField(max_length=48)
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.PENDING_CONFIRMATION,
+        db_index=True,
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="deal_arrivals_decided",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "deals_arrival_report"
+        ordering = ["-reported_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["deal", "-reported_at"], name="deals_arrival_deal_idx"
+            ),
+            models.Index(fields=["status", "-reported_at"], name="deals_arrival_open_idx"),
+        ]
+        constraints = [
+            # One open claim per Deal. This is what makes a duplicated request
+            # -- a retried POST, two taps, two devices -- resolve to the row the
+            # first attempt created instead of a second pending claim the sender
+            # would have to answer twice.
+            models.UniqueConstraint(
+                fields=["deal"],
+                condition=Q(status="pending_confirmation"),
+                name="deals_arrival_one_open_per_deal",
+            ),
+            # And one confirmed claim per Deal, ever. An arrival is a single
+            # physical event; a second confirmation would make
+            # `Deal.arrival_confirmed_at` ambiguous.
+            models.UniqueConstraint(
+                fields=["deal"],
+                condition=Q(status="confirmed"),
+                name="deals_arrival_one_confirmed_per_deal",
+            ),
+            models.CheckConstraint(
+                condition=Q(early_by_seconds__gt=0),
+                name="deals_arrival_positive_earliness",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        status="pending_confirmation",
+                        decided_by__isnull=True,
+                        decided_at__isnull=True,
+                    )
+                    | Q(
+                        status__in=["confirmed", "declined"],
+                        decided_by__isnull=False,
+                        decided_at__isnull=False,
+                    )
+                ),
+                name="deals_arrival_decision_complete",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Deal#{self.deal_id} arrival report #{self.pk} ({self.status})"

@@ -27,6 +27,7 @@ import logging
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status as http
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -35,6 +36,8 @@ from rest_framework.views import APIView
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.phase4_policy import InvalidPhase4Policy
 
+from .activity import ACTIVITY_STATES, activity_q
+from .arrival import ArrivalError, decide_early_arrival, report_early_arrival
 from .cancellation import CancellationError, cancel_funded_deal, quote_cancellation
 from .lifecycle import DealLifecycleError, PRE_PICKUP_STATUSES
 from .models import Deal, DealLegAllocation
@@ -61,7 +64,14 @@ def _deal_error_response(exc: Exception) -> Response:
 
     if isinstance(exc, RecipientError) and exc.code == "not_authorized":
         status_code = http.HTTP_403_FORBIDDEN
-    elif isinstance(exc, (RecipientError, CancellationError, DealLifecycleError)):
+    elif isinstance(exc, ArrivalError) and exc.code in ("not_traveler", "not_sender"):
+        # An arrival action attempted by the wrong party is an authorization
+        # failure, not a state conflict, and is answered as one. It says which
+        # party may act and nothing about the Deal's internals.
+        status_code = http.HTTP_403_FORBIDDEN
+    elif isinstance(
+        exc, (RecipientError, CancellationError, DealLifecycleError, ArrivalError)
+    ):
         status_code = http.HTTP_409_CONFLICT
     elif isinstance(exc, SettlementError):
         status_code = http.HTTP_409_CONFLICT
@@ -103,12 +113,26 @@ def _party_deals(user_id: int):
 def _detail_deals(user_id: int):
     """The detail queryset: the list one plus everything the rich projection reads."""
 
-    return _party_deals(user_id).select_related(
-        "recipient", "payout", "sender", "traveler"
-    ).prefetch_related("events")
+    return (
+        _party_deals(user_id)
+        .select_related("recipient", "payout", "sender", "traveler")
+        .prefetch_related("events", "arrival_reports")
+    )
 
 
 class DealListView(generics.ListAPIView):
+    """The party's Deals, optionally narrowed to one activity bucket.
+
+    `?activity=active|completed|cancelled` is the fix for delivered Deals
+    lingering under active "Sending". The client asks for a bucket by name and
+    the server decides which Deals are in it, using the same rule
+    `activity_state` reports on every row -- so a list filtered to `active`
+    and a row that says `completed` cannot both be right.
+
+    `?status=` is retained unchanged for the screens that genuinely want one
+    lifecycle status.
+    """
+
     serializer_class = DealSummarySerializer
     permission_classes = (IsAuthenticated,)
 
@@ -116,6 +140,19 @@ class DealListView(generics.ListAPIView):
         queryset = _party_deals(self.request.user.id)
         if requested_status := self.request.query_params.get("status"):
             queryset = queryset.filter(status=requested_status)
+        activity = self.request.query_params.get("activity")
+        if activity:
+            if activity not in ACTIVITY_STATES:
+                raise ValidationError(
+                    {
+                        "activity": (
+                            "Unknown activity filter. Expected one of: "
+                            + ", ".join(ACTIVITY_STATES)
+                            + "."
+                        )
+                    }
+                )
+            queryset = queryset.filter(activity_q(activity))
         return queryset
 
 
@@ -271,5 +308,56 @@ class DealCancelView(APIView):
                 "mode": "after_funding",
                 "settlement": quote.as_dict(),
                 "changed": True,
+            }
+        )
+
+
+class DealArrivalView(APIView):
+    """Report, confirm or decline a materially early arrival.
+
+    One resource, three verbs' worth of intent, and the server decides who may
+    do which. The traveler reports; the sender answers. Neither can perform the
+    other's action, and neither learns anything new about the other's secrets by
+    trying.
+
+    Every response is the Deal detail projection, so the client re-renders from
+    one authoritative document rather than patching its own state from a
+    success code. `changed` says whether this call was the one that moved
+    anything: a retried report or a repeated confirmation answers 200 with
+    `changed: false` rather than an error, because a dropped response must not
+    look like a failure to the person who tapped the button.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    #: URL suffix -> what it means. Declared rather than branched on a body
+    #: field, so an action is never chosen by client-supplied data.
+    ACTIONS = ("report", "confirm", "decline")
+
+    def post(self, request: Request, pk: int, action: str) -> Response:
+        get_object_or_404(_party_deals(request.user.id), pk=pk)
+        if action not in self.ACTIONS:
+            return Response(
+                {"code": "unknown_arrival_action", "detail": "Unsupported action."},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+        try:
+            if action == "report":
+                result = report_early_arrival(deal_id=pk, actor_id=request.user.id)
+            else:
+                result = decide_early_arrival(
+                    deal_id=pk,
+                    actor_id=request.user.id,
+                    confirm=action == "confirm",
+                )
+        except (ArrivalError, DealLifecycleError) as exc:
+            return _deal_error_response(exc)
+        deal = get_object_or_404(_detail_deals(request.user.id), pk=pk)
+        return Response(
+            {
+                "deal": DealSerializer(deal, context={"request": request}).data,
+                "arrival_report_id": result.report_id,
+                "arrival_report_status": result.status,
+                "changed": result.changed,
             }
         )

@@ -2,14 +2,27 @@
 
 Phase 3 built a payout record that could not be released, and made that
 structural with `fin_payout_release_requires_eligibility`. This is the key, and
-it is deliberately the only one. Four conditions must all hold, checked together
+it is deliberately the only one. Five conditions must all hold, checked together
 under one lock:
 
 1. delivery was confirmed by a verified delivery code,
 2. the stored `protection_ends_at` has passed,
-3. no dispute on the Deal is active,
-4. the money reconciles -- the balance obligation is paid, and nothing is being
+3. the Deal's funded arrival floor has passed (Phase I1A),
+4. no dispute on the Deal is active,
+5. the money reconciles -- the balance obligation is paid, and nothing is being
    refunded out from under it.
+
+**Condition 3, and why it is not the same as condition 2.** Protection runs
+forward from the *actual* delivery, so an earlier delivery is an earlier payout.
+That is correct for an honest early delivery of a day or two and wrong at the
+extreme: a traveler who convinces the platform that a fifteen-day carriage
+finished on day one would collect on day three, with the sender given no real
+chance to notice. `Deal.funded_scheduled_arrival_floor_at` -- frozen at funding
+from the arrival these two parties actually agreed to -- is the brake. The gate
+instant is `max` of the two, computed by
+`apps.deals.arrival.payout_release_gate_at`, which reads two stored columns and
+recomputes neither. A Deal funded before I1A has a null floor and the `max`
+reduces to condition 2 exactly, which is the behaviour it already had.
 
 **The race this is built around.** The protection timer expiring and a sender
 opening a dispute are two writers competing for the same money at the same
@@ -209,6 +222,32 @@ def evaluate_payout_release(
         )
         if payout is None:
             return "no_payout"
+
+        # The arrival floor. Checked with the Payout row already held, so the
+        # deferral below writes `next_action_at` and the ScheduledJob in the
+        # canonical order and never acquires a finance row after a job row.
+        #
+        # The Deal itself is closed out here: its delivery contract finished when
+        # protection expired, and holding a delivered shipment open for days
+        # because its *payout* is deliberately waiting would misreport it. The
+        # payout keeps its own lifecycle, which is what that separation is for.
+        from apps.deals.arrival import payout_release_gate_at
+
+        gate = payout_release_gate_at(deal)
+        if gate is not None and at < gate:
+            if payout.next_action_at != gate:
+                payout.next_action_at = gate
+                payout.save(update_fields=["next_action_at", "updated_at"])
+            _close_out(aggregate, reason=reason, at=at)
+            lifecycle.schedule_protection_expiry(deal)
+            logger.info(
+                "finance.payout_release_arrival_floor deal=%s payout=%s gate=%s",
+                deal.pk,
+                payout.pk,
+                gate.isoformat(),
+            )
+            return "scheduled_arrival_floor_open"
+
         if payout.block_reason == "legacy_instruction_required":
             _close_out(aggregate, reason=reason, at=at)
             return "legacy_instruction_required"
@@ -248,8 +287,12 @@ def evaluate_payout_release(
                 previous = payout.status
                 payout.status = target
                 payout.eligible_at = payout.eligible_at or at
+                from apps.deals.arrival import payout_release_gate_basis
+
                 payout.eligibility_basis = (
-                    payout.eligibility_basis or "delivery_protection"
+                    payout.eligibility_basis
+                    or payout_release_gate_basis(deal)
+                    or "delivery_protection"
                 )
                 payout.save(
                     update_fields=[
@@ -288,6 +331,16 @@ def evaluate_payout_release(
         payout.status = Payout.Status.ELIGIBLE
         payout.eligible_at = at
         payout.scheduled_for = at
+        # Which of the two gates this release actually waited for. Recorded on
+        # the legacy row as well as the snapshot one, so an audit of a payout
+        # never has to infer it from timestamps.
+        from apps.deals.arrival import payout_release_gate_basis
+
+        payout.eligibility_basis = (
+            payout.eligibility_basis
+            or payout_release_gate_basis(deal)
+            or "delivery_protection"
+        )
         payout.notes = (
             f"Released: protection window closed at "
             f"{deal.protection_ends_at.isoformat()} with no active dispute."
@@ -297,6 +350,7 @@ def evaluate_payout_release(
                 "status",
                 "eligible_at",
                 "scheduled_for",
+                "eligibility_basis",
                 "notes",
                 "updated_at",
             ]

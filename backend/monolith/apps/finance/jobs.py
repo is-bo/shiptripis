@@ -392,6 +392,7 @@ def handle_payout_release_check(payload: dict) -> str:
         "delivery_not_confirmed",
         "protection_not_armed",
         "protection_open",
+        "scheduled_arrival_floor_open",
     }:
         # Armed at funding, when nobody knows when delivery will happen, this
         # job's first fire lands 48 hours later -- usually while the parcel is
@@ -399,8 +400,35 @@ def handle_payout_release_check(payload: dict) -> str:
         # discharged and retire the safety net before it could ever help, which
         # is the whole reason it exists. Retry instead, like every other
         # early-fire handler here.
-        raise JobDeferred("Payout is not releasable yet.", code=f"payout_{result}"[:64])
+        raise JobDeferred(
+            "Payout is not releasable yet.",
+            code=f"payout_{result}"[:64],
+            delay=_release_gate_delay(payout.deal_id),
+        )
     return result
+
+
+def _release_gate_delay(deal_id: int) -> timedelta | None:
+    """How long until this Deal's payout gate can actually answer.
+
+    Deterministic where the Deal knows the instant: the protection deadline, or
+    the funded arrival floor when that is later. A genuinely early delivery can
+    put the floor days out, and a generic backoff would take the whole lifecycle
+    aggregate every few minutes for those days to be told "not yet" each time.
+
+    `None` means "no instant is known" -- delivery has not been confirmed at all
+    -- and `JobDeferred` then applies its own six-hour default.
+    """
+
+    from apps.deals.arrival import payout_release_gate_at
+
+    deal = Deal.objects.filter(pk=deal_id).first()
+    if deal is None:
+        return None
+    gate = payout_release_gate_at(deal)
+    if gate is None:
+        return None
+    return max(gate - timezone.now(), timedelta(seconds=30)) + timedelta(seconds=1)
 
 
 # --- Phase 4 lifecycle handlers ----------------------------------------------
@@ -462,13 +490,17 @@ def handle_protection_expiry(payload: dict) -> str:
     result = evaluate_payout_release(
         deal_id=deal_id, reason="protection_window_expired"
     )
-    if result == "protection_open":
-        # Fired early. Retry rather than record a decision that has not been
-        # earned yet.
+    if result in {"protection_open", "scheduled_arrival_floor_open"}:
+        # Fired before the gate. Retry rather than record a decision that has
+        # not been earned yet -- and retry at the instant the gate opens, not on
+        # a generic timer. `scheduled_arrival_floor_open` in particular can be
+        # days away on a genuinely early delivery, and the release service has
+        # already moved this job's `run_at` to the exact floor; the deferral
+        # below agrees with it instead of overriding it with a shorter one.
         raise JobDeferred(
-            "The protection window has not closed yet.",
-            code="protection_open",
-            delay=timedelta(minutes=15),
+            "The payout release gate has not opened yet.",
+            code=result,
+            delay=_release_gate_delay(deal_id) or timedelta(minutes=15),
         )
     return result
 

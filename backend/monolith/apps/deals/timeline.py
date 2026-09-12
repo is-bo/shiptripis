@@ -51,6 +51,21 @@ PARTY_VISIBLE_PAYLOAD_KEYS = frozenset(
         "released_at",
         "delivery_confirmed_at",
         "message_id",
+        # Phase I1A journey timing. Every entry is an identifier, an integer
+        # number of seconds, a status token or an ISO instant. `basis` is a
+        # closed set of server-chosen tokens, not free text.
+        "arrival_report_id",
+        "arrival_state",
+        "reported_at",
+        "scheduled_arrival_at",
+        "early_by_seconds",
+        "threshold_seconds",
+        "decided_at",
+        "arrival_confirmed_at",
+        "arrival_leg_id",
+        "arrival_policy_version",
+        "starts_protection_window",
+        "releases_delivery_code",
         # protection and payout
         "protection_ends_at",
         "protection_window_seconds",

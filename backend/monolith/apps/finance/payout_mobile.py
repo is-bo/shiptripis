@@ -224,6 +224,12 @@ def payout_status(payout, *, at=None, context=None):
     at = at or timezone.now()
     deal = payout.deal
     protection_active = bool(deal.protection_ends_at and at < deal.protection_ends_at)
+    # Phase I1A. Both instants are Deal columns already loaded with the payout,
+    # so this costs no query and the H6A page-length guard still holds.
+    from apps.deals.arrival import payout_release_gate_at
+
+    gate = payout_release_gate_at(deal)
+    arrival_floor_pending = bool(gate and at < gate and not protection_active)
     state, reason = "awaiting_delivery", None
     if deal.delivery_confirmed_at:
         state = "protection_active" if protection_active else "release_pending"
@@ -262,6 +268,13 @@ def payout_status(payout, *, at=None, context=None):
         state, reason = "needs_attention", "payout_on_hold"
     elif protection_active:
         state, reason = "protection_active", "protection_active"
+    elif arrival_floor_pending:
+        # Protection has closed but this Deal was delivered materially earlier
+        # than the schedule it was funded against, so the release gate is the
+        # arrival floor. Reported as its own reason rather than as an extended
+        # protection window, because calling a schedule floor "protection" would
+        # misdescribe both.
+        state, reason = "release_pending", "scheduled_arrival_pending"
     elif payout.status == "processing" or (bank and bank[0] == "processing"):
         state = "processing"
     elif payout.status in ("eligible", "scheduled", "blocked"):
@@ -295,6 +308,8 @@ def payout_status(payout, *, at=None, context=None):
             "fx_rate_micros": payout.fx_rate_micros if payout.payout_currency == "DZD" else None,
             "state": payout.status, "display_state": state, "message_key": f"payout.{state}",
             "protection_active": protection_active, "protection_ends_at": deal.protection_ends_at,
+            "funded_scheduled_arrival_floor_at": deal.funded_scheduled_arrival_floor_at,
+            "earliest_release_at": gate,
             "server_time": at, "eligible_at": payout.eligible_at,
             "blocking_reason": reason, "available_actions": list(dict.fromkeys(actions)),
             "updated_at": payout.updated_at, "sent_at": payout.sent_at, "paid_at": payout.paid_at,

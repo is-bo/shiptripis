@@ -256,6 +256,61 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("تم إلغاء التوصيل", "افتح ShipTrip لمراجعة الإلغاء."),
         },
     ),
+    # Phase I1A. Essential: an early arrival needs an answer from the sender
+    # before a recipient can be arranged, and the traveler is waiting on that
+    # answer. The payloads carry deal/match/parcel/journey ids and nothing else,
+    # so no schedule, place or route detail can reach a lock screen.
+    "deal.arrival_reported": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": (
+                "Traveler arrived early",
+                "Open ShipTrip to confirm the early arrival.",
+            ),
+            "fr": (
+                "Le voyageur est arrivé en avance",
+                "Ouvrez ShipTrip pour confirmer l'arrivée anticipée.",
+            ),
+            "ar": ("وصل المسافر مبكرًا", "افتح ShipTrip لتأكيد الوصول المبكر."),
+        },
+    ),
+    "deal.arrival_confirmed": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": (
+                "Early arrival confirmed",
+                "The sender confirmed your arrival. Delivery is still to come.",
+            ),
+            "fr": (
+                "Arrivée anticipée confirmée",
+                "L'expéditeur a confirmé votre arrivée. La livraison reste à faire.",
+            ),
+            "ar": (
+                "تم تأكيد الوصول المبكر",
+                "أكد المُرسل وصولك. لم يتم التسليم بعد.",
+            ),
+        },
+    ),
+    "deal.arrival_declined": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": (
+                "Early arrival not confirmed",
+                "Open ShipTrip to review the delivery.",
+            ),
+            "fr": (
+                "Arrivée anticipée non confirmée",
+                "Ouvrez ShipTrip pour consulter la livraison.",
+            ),
+            "ar": ("لم يتم تأكيد الوصول المبكر", "افتح ShipTrip لمراجعة عملية التسليم."),
+        },
+    ),
     "dispute.opened": (
         "essential",
         "deliveries",
