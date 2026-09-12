@@ -55,6 +55,8 @@ One primary reason is returned deterministically:
 Profile/setup blockers are visible before delivery or protection expiry. Mobile
 retains its temporal `protection_active` and `scheduled_arrival_pending` reasons
 when there is no actionable blocker. Those normal waits are not Finance attention.
+Connected-balance deferral is informational in Finance; mobile keeps a null blocker
+for that normal wait so existing clients do not render their generic attention copy.
 No new identity-specific reason code is necessary.
 
 No bank details, CCP/RIP, masks, legal names, evidence references, identity documents,

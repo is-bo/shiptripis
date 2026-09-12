@@ -339,7 +339,9 @@ def payout_status(payout, *, at=None, context=None):
     elif payout.status in ("eligible", "scheduled", "blocked"):
         state = "ready"
     if not reason:
-        reason = attention["block_reason"]
+        # Finance can describe a normal provider wait without asking for action.
+        # Older mobile clients render unknown blockers as "needs attention".
+        reason = attention["block_reason"] if attention["needs_attention"] else None
     if state == "needs_attention" and reason in ("payout_setup_required", "payout_profile_needs_attention"):
         # Current setup can differ from this funded destination. Do not promise
         # that editing the current method will repair a historical instruction.

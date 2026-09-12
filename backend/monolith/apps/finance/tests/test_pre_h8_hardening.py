@@ -43,7 +43,7 @@ def projection(payout, reason, owner=None, attention=True):
         reason, attention, owner,
     )
     mobile = payout_status(payouts_for(payout.traveler).get(pk=payout.pk))
-    assert mobile["blocking_reason"] == reason
+    assert mobile["blocking_reason"] == (reason if attention else None)
     for secret in ("acct_", "ba_", "po_", "ccp", "'rip", "encrypted", "requirement_codes",
                    "private-marker", "object_key", "identity_attestation", "QA Synthetic"):
         assert secret not in str(row)

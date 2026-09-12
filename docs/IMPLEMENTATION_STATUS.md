@@ -29,6 +29,11 @@ The existing local PostgreSQL cluster first required restart after an interrupte
 shutdown; stale reusable fixtures then required one fresh task-specific test DB.
 Those setup failures are not counted as passing tests. Final consolidated run:
 1564.42 seconds; the full Django suite was not run locally.
+Final mobile-copy compatibility review found that the existing client treats an
+unknown blocking code as attention. Connected-balance deferral therefore remains
+informational in Finance and null in mobile's blocker field. Its focused PostgreSQL
+regression passed separately (1 test, 6.38 seconds); the changed files passed Ruff.
+The earlier CI dispatch was superseded so the release gate covers this correction.
 
 CI, exact main/deployment identifiers, runtime flags and the single deployed
 read-only H5 reconciliation are recorded in the task's release report. No provider
