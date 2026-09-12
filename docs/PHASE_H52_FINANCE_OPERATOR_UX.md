@@ -252,6 +252,13 @@ the list items into columns from 1080px up, so a desktop reader gets the
 scannable grid a table would have given them; below 760px each payout becomes a
 card. Nothing on an operational page scrolls sideways.
 
+The scope bar wraps rather than switching layout at a breakpoint. Its first
+implementation was a single-row grid with a phone override at 760px, which left
+768px — the most common tablet width — in the gap between the two: the bar laid
+out at 1315px inside a 663px column and the page scrolled sideways. It is now a
+flex row whose controls neither grow nor shrink, so it falls to a second line
+whenever the controls stop fitting, at any width, with no breakpoint involved.
+
 The reconciliation page keeps wide tables with bounded horizontal scrolling,
 because comparing down a column is exactly what its reader is doing.
 
