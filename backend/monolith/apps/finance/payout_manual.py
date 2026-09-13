@@ -36,21 +36,29 @@ def authorize(actor):
 
 
 def _gate(payout, balance):
+    from config.settings.payments import payment_mode
+    from .mode_safety import require_object_mode
     from .payout_manual_profiles import approved_profile
     from .models import TravelerPayoutMethod
 
+    require_object_mode(payout.provider_mode)
     if (
         not payout.snapshot_version
         or payout.method != "manual"
         or payout.payout_currency != "DZD"
-        or payout.provider_mode != "test"
+        or payout.provider_mode != payment_mode(settings)
     ):
-        raise ValidationError("A versioned TEST manual DZD payout is required.")
+        raise ValidationError("A versioned manual DZD payout in this payment environment is required.")
     if payout.block_reason or payout.amount_eur_cents <= 0 or not payout.eligible_at:
         raise ValidationError("Payout is not eligible.")
     if payout.status not in ("eligible", "scheduled", "processing", "sent"):
         raise ValidationError("Payout state prevents progression.")
     deal = payout.deal
+    from apps.deals.arrival import payout_release_gate_at
+
+    gate = payout_release_gate_at(deal)
+    if gate is not None and timezone.now() < gate:
+        raise ValidationError("The funded arrival floor is still open.")
     if (
         not deal.delivery_confirmed_at
         or not deal.protection_ends_at
@@ -231,6 +239,9 @@ def begin(*, actor, payout_id, sequence):
 def release(*, actor, payout_id, sequence):
     authorize(actor)
     payout, _, _ = _lock_payout_aggregate(payout_id)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(payout.provider_mode)
     attempt = _attempt(payout, actor, sequence)
     if attempt.status != "prepared" or attempt.committed_at:
         raise ValidationError("Committed instructions require recovery review.")

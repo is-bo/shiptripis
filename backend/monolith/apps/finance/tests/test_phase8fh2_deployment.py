@@ -90,7 +90,13 @@ class TestDisabledDeployment:
                 "payouts_enabled": True,
             }
         )
-        assert "TEST only" in message
+        assert "PAYMENTS_ENVIRONMENT" in message
+
+    def test_live_payout_execution_requires_matching_explicit_intent(self):
+        validate_connect_configuration(**{
+            **VALID, "expected_mode": "live", "stripe_secret_key": "sk_live_x",
+            "payouts_enabled": True, "payment_environment": "live",
+        })
 
     def test_test_payout_execution_is_accepted_alongside_connect(self):
         validate_connect_configuration(**{**VALID, "payouts_enabled": True})
@@ -219,7 +225,7 @@ class TestProductionBoot:
             STRIPE_WEBHOOK_SECRET="whsec_x",
         )
         assert result.returncode != 0
-        assert "TEST only" in result.stderr
+        assert "PAYMENTS_ENVIRONMENT" in result.stderr
 
     def test_a_complete_test_configuration_boots(self):
         result = boot_production(
@@ -227,7 +233,7 @@ class TestProductionBoot:
             STRIPE_CONNECT_ENABLED="true",
             STRIPE_CONNECT_EXPECTED_MODE="test",
             STRIPE_CONNECT_PLATFORM_ACCOUNT_ID="acct_1TESTplatform",
-            STRIPE_CONNECT_WEBHOOK_SECRET="whsec_x",
+            STRIPE_CONNECT_WEBHOOK_SECRET="whsec_connect",
             STRIPE_CONNECT_ALLOWED_COUNTRIES="FR",
             STRIPE_CONNECT_ONBOARDING_RETURN_URL=f"{BASE}/payouts/stripe/return",
             STRIPE_CONNECT_ONBOARDING_REFRESH_URL=f"{BASE}/payouts/stripe/refresh",

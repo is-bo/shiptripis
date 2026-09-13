@@ -1040,6 +1040,9 @@ def start_checkout(
 
     with transaction.atomic():
         order = _order_for_update(order_id)
+        from .mode_safety import require_order_mode
+
+        require_order_mode(order)
         if not order.is_collectable:
             raise OrderNotCollectable(
                 "This obligation is no longer collecting payment.",
@@ -1219,6 +1222,9 @@ def recover_checkout_attempt(*, attempt_id: int) -> str:
     order = attempt.order
     success_url, failure_url, webhook_url = _checkout_urls(order, attempt.provider)
     gateway = get_gateway(attempt.provider)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(attempt.provider_mode)
     result = gateway.create_checkout(
         CheckoutRequest(
             reference=str(order.public_reference),
@@ -1466,6 +1472,11 @@ def process_provider_event(*, event_id: int) -> str:
         )
 
     from .payout_provider_events import PLATFORM_PAYOUT_EVENTS, handle_platform_event
+    from .mode_safety import event_mode_allowed
+
+    if record.provider in ("stripe", "chargily") and not event_mode_allowed(record.payload):
+        _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.IGNORED, "mode_isolated")
+        return "mode_isolated"
 
     if record.event_type in PLATFORM_PAYOUT_EVENTS:
         # Transfers, refunds, disputes and platform liquidity. These are payout
@@ -1688,6 +1699,11 @@ def reconcile_attempt(
     order = locked.order
     attempt = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
 
+    from .mode_safety import require_object_mode, require_order_mode
+
+    require_object_mode(attempt.provider_mode)
+    require_order_mode(order)
+
     if attempt.guest_link_id and guest_email and attempt.guest_email != guest_email:
         attempt.guest_email = guest_email[:254]
         attempt.save(update_fields=["guest_email", "updated_at"])
@@ -1901,7 +1917,11 @@ def request_refund(
     key = idempotency_key or f"refund:attempt:{attempt_id}:{reason}"
 
     existing = PaymentRefund.objects.filter(idempotency_key=key).first()
+    from .mode_safety import require_object_mode
+
+    require_object_mode(PaymentAttempt.objects.values_list("provider_mode", flat=True).get(pk=attempt_id))
     if existing is not None:
+        require_object_mode(existing.provider_mode)
         if existing.status == PaymentRefund.Status.FAILED:
             PaymentRefund.objects.filter(pk=existing.pk).update(
                 status=PaymentRefund.Status.PENDING,
@@ -2043,6 +2063,9 @@ def _settle_refund_with_provider(*, refund_id: int) -> str:
 
     with transaction.atomic():
         row = PaymentRefund.objects.select_for_update(no_key=True).get(pk=refund_id)
+        from .mode_safety import require_object_mode
+
+        require_object_mode(row.provider_mode)
         if row.status == PaymentRefund.Status.SUCCEEDED:
             return "already_succeeded"
         if row.status == PaymentRefund.Status.FAILED:
@@ -2351,6 +2374,9 @@ def settle_refund_manually(
     refund = PaymentRefund.objects.filter(pk=refund_id).first()
     if refund is None:
         raise RefundNotPermitted("No such refund.")
+    from .mode_safety import require_object_mode
+
+    require_object_mode(refund.provider_mode)
     if refund.status == PaymentRefund.Status.SUCCEEDED:
         return refund
     if refund.status not in (
@@ -2853,6 +2879,9 @@ def complete_manual_payout(
     """
 
     payout = Payout.objects.select_for_update(no_key=True).get(pk=payout_id)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(payout.provider_mode)
     if payout.snapshot_version:
         raise PayoutNotReleasable(
             "Versioned payouts require the future receipt/provider execution service."

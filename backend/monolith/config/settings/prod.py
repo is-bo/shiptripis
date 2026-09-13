@@ -258,6 +258,7 @@ try:
         public_base_url=PAYMENTS_PUBLIC_BASE_URL,  # noqa: F405
         stripe_secret_key=STRIPE_SECRET_KEY,  # noqa: F405
         payouts_enabled=STRIPE_CONNECT_PAYOUTS_ENABLED,  # noqa: F405
+        payment_environment=PAYMENTS_ENVIRONMENT,  # noqa: F405
         non_stripe_funding_enabled=(
             STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED  # noqa: F405
         ),
@@ -309,6 +310,12 @@ if TRANSACTIONAL_EMAIL_ENABLED:  # noqa: F405
         raise RuntimeError(
             "Sender.net requires SMTP username/password and TLS when email is enabled."
         )
+
+
+from types import SimpleNamespace  # noqa: E402
+from .payments import validate_payment_configuration  # noqa: E402
+
+validate_payment_configuration(SimpleNamespace(**globals()))
 
 
 class _JsonFormatter(logging.Formatter):

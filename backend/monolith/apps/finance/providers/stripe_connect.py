@@ -435,6 +435,9 @@ class StripeConnectGateway:
         return MODE_UNKNOWN
 
     def _require_configured(self) -> None:
+        from ..mode_safety import require_provider_mode
+
+        require_provider_mode(self.credential_mode())
         if not self.secret_key:
             raise ProviderNotConfigured("STRIPE_SECRET_KEY is not configured.")
         if not self.platform_account_id:
@@ -454,6 +457,10 @@ class StripeConnectGateway:
         stripe_account: str = "",
     ) -> ProviderResponse:
         self._require_configured()
+        if self.credential_mode() == "live" and method.upper() == "POST" and path in ("/v1/transfers", "/v1/payouts"):
+            # Re-read the platform before issuing LIVE money instructions. This
+            # GET recurses only into the transport, never into this POST guard.
+            self.platform_identity()
         headers = {
             "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/x-www-form-urlencoded",
@@ -578,6 +585,10 @@ class StripeConnectGateway:
                 "configured for.",
                 provider_code="platform_account_mismatch",
             )
+        if self.credential_mode() == "live" and not all(
+            body.get(key) is True for key in ("details_submitted", "charges_enabled", "payouts_enabled")
+        ):
+            raise ProviderUnavailable("Stripe platform activation is incomplete.", provider_code="platform_not_ready")
         return PlatformIdentity(
             account_id=account_id,
             country=str(body.get("country") or "").upper(),

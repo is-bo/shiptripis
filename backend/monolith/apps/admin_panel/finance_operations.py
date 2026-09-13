@@ -662,7 +662,7 @@ def _drilldown_url(params, *, stage, rail=None):
     return f"{_url('finance-rows')}?{_scope_only(params, **overrides).urlencode()}"
 
 
-def _activity(limit=6):
+def _activity(limit=6, *, mode="test"):
     """The last few finance actions, from the console's own immutable log.
 
     If the log cannot be read the feed is omitted rather than faked; it is
@@ -671,9 +671,20 @@ def _activity(limit=6):
 
     try:
         from .models import AdminAuditLog
+        from django.db.models import CharField, Exists, OuterRef, Q
+        from django.db.models.functions import Cast
+        from apps.finance.models import PaymentRefund, Payout
+
+        def targets(model):
+            return model.objects.filter(provider_mode=mode).annotate(
+                audit_id=Cast("pk", CharField())
+            ).filter(audit_id=OuterRef("target_id"))
 
         entries = list(
             AdminAuditLog.objects.filter(action__in=tuple(ACTIVITY))
+            .annotate(payout_in_mode=Exists(targets(Payout)), refund_in_mode=Exists(targets(PaymentRefund)))
+            .filter(Q(target_type="finance.payout", payout_in_mode=True)
+                    | Q(target_type="finance.paymentrefund", refund_in_mode=True))
             .exclude(action__in=ACTIVITY_EXCLUDED)
             .select_related("actor")
             .order_by("-created_at")[:limit]
@@ -706,7 +717,25 @@ def build_overview(snapshot, params, scope, *, user):
     exceptions_url = _url("finance-exceptions")
 
     attention = []
+    payout_attention = snapshot.get("payout_attention")
+    owner_words = {
+        "traveler": ("Traveler action required", "Traveler"),
+        "finance": ("Finance review required", "Finance"),
+        "provider": ("Provider action required", "Provider"),
+        None: ("Payout review required", ""),
+    }
+    for group in (payout_attention or {}).get("groups", []):
+        label, owner = owner_words[group["attention_owner"]]
+        attention.append({
+            "label": label, "owner": owner, "count": group["count"],
+            "says": "Review the payout's next required action.", "tone": "bad", "amount": "",
+            "url": f"{_url('finance-rows')}?{_link(params, metric='payout_attention', operation='', page='')}",
+        })
     for spec in ATTENTION:
+        # Payout groups above are exclusive. Refund executions are independent
+        # issues and never added to the unique payout headline.
+        if spec["key"] != "refunds_failed":
+            continue
         if "metric" in spec:
             entry = metrics.get(spec["metric"])
             if entry is None:
@@ -742,7 +771,8 @@ def build_overview(snapshot, params, scope, *, user):
     )
     return {
         "attention": attention,
-        "attention_total": sum(row["count"] for row in attention),
+        "attention_total": payout_attention["count"] if payout_attention is not None else None,
+        "attention_available": payout_attention is not None and payout_attention.get("status") == "available",
         "dzd": {
             "cohorts": dzd,
             "waiting": next((row for row in dzd if row["key"] == "waiting"), None),
@@ -767,7 +797,7 @@ def build_overview(snapshot, params, scope, *, user):
             for key, label, says in HEADLINE
             if key in metrics
         ],
-        "activity": _activity(),
+        "activity": _activity(mode=params.get("mode", "test")),
         "payouts_url": payouts_url,
         "exceptions_url": exceptions_url,
         "reconciliation_url": _url("finance-reconciliation"),

@@ -434,6 +434,7 @@ PAYMENTS_LEGACY_MUTATIONS_ENABLED = env.bool(
 # when it is on, and nothing anywhere falls back to mock when a real provider
 # is misconfigured — a missing credential fails the checkout instead.
 PAYMENTS_ALLOW_MOCK_PROVIDER = env.bool("PAYMENTS_ALLOW_MOCK_PROVIDER", default=False)
+PAYMENTS_ENVIRONMENT = env.str("PAYMENTS_ENVIRONMENT", default="test")
 PAYMENTS_PUBLIC_BASE_URL = env.str("PAYMENTS_PUBLIC_BASE_URL", default="")
 
 # --- V1 handover codes ---

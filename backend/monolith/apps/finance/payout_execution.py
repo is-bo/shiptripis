@@ -470,6 +470,9 @@ def _assert_dispatchable(payout) -> None:
     out" is a question an operator has to be able to answer precisely.
     """
 
+    from .mode_safety import require_object_mode
+
+    require_object_mode(payout.provider_mode)
     if not payout.snapshot_version:
         raise PayoutBlocked("Legacy payout requires reviewed migration.", code="legacy")
     if payout.method != "stripe_transfer" or payout.payout_currency != "EUR":
@@ -511,6 +514,11 @@ def _assert_dispatchable(payout) -> None:
             code="protection_open",
             delay=deal.protection_ends_at - timezone.now(),
         )
+    from apps.deals.arrival import payout_release_gate_at
+
+    gate = payout_release_gate_at(deal)
+    if gate is not None and timezone.now() < gate:
+        raise PayoutDeferred("The funded arrival floor is still open.", code="scheduled_arrival_floor_open", delay=gate - timezone.now())
     if active_holds(payout).exists():
         raise PayoutBlocked("A Finance hold is active.", code="finance_hold_active")
     from apps.disputes.models import Dispute
@@ -1349,6 +1357,9 @@ def admin_retry_bank_payout(*, actor, payout_id: int, expected_state_version: in
     require_capabilities(actor, "retry_payouts", "view_payouts")
     with transaction.atomic():
         payout, _, _ = _lock_payout_aggregate(payout_id)
+        from .mode_safety import require_object_mode
+
+        require_object_mode(payout.provider_mode)
         if payout.state_version != expected_state_version:
             raise PayoutBlocked(
                 "This payout changed while the page was open.", code="state_conflict"

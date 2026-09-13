@@ -17,6 +17,7 @@ from django.contrib import messages
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 
 from apps.finance import payout_manual
+from apps.finance.providers import ProviderConfigurationInvalid
 from apps.finance.payout_profiles import require_capabilities
 from apps.finance.payout_manual_profiles import reveal_profile, review_profile
 from apps.finance.payout_evidence import upload_evidence, read_evidence
@@ -328,7 +329,7 @@ def manual_detail(request, payout):
                 "That request was malformed and was not applied. Reload the page "
                 "and try again.",
             )
-        except (ValidationError, PermissionDenied) as exc:
+        except (ValidationError, PermissionDenied, ProviderConfigurationInvalid) as exc:
             _refuse(request, action, exc)
     payout.refresh_from_db()
     view = manual_view(payout, user=request.user, revealed=revealed)
@@ -338,6 +339,7 @@ def manual_detail(request, payout):
         {
             "title": f"Manual DZD payout {payout.pk}",
             "manual": view,
+            "payment_environment": payout.provider_mode,
             "revealed": revealed,
             "queue": _queue_return(request),
         },

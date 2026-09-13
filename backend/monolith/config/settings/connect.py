@@ -100,6 +100,7 @@ def validate_connect_configuration(
     stripe_secret_key: str,
     payouts_enabled: bool = False,
     non_stripe_funding_enabled: bool = False,
+    payment_environment: str = "test",
 ) -> None:
     """Refuse a Connect configuration that could act on the wrong rail.
 
@@ -121,17 +122,17 @@ def validate_connect_configuration(
         # H3 implements automatic EUR execution, so this flag is no longer
         # refused outright. What it still refuses is the two configurations
         # that would make it dangerous: execution without the onboarding and
-        # readiness layer it depends on, and execution against real money,
-        # which is H8's decision and not this release's.
+        # readiness layer it depends on, and execution without H8A's explicit
+        # deployment payment intent. Setting that intent belongs to H8B.
         if not enabled:
             raise ConnectConfigurationError(
                 "STRIPE_CONNECT_PAYOUTS_ENABLED requires STRIPE_CONNECT_ENABLED; "
                 "payout execution cannot run without Connect onboarding."
             )
-        if expected_mode != "test":
+        if expected_mode not in VALID_MODES or expected_mode != payment_environment:
             raise ConnectConfigurationError(
-                "STRIPE_CONNECT_PAYOUTS_ENABLED is authorised for TEST only in "
-                "this release; live payout execution is a separate gate."
+                "STRIPE_CONNECT_PAYOUTS_ENABLED requires matching explicit "
+                "PAYMENTS_ENVIRONMENT; TEST is the default."
             )
     if non_stripe_funding_enabled:
         raise ConnectConfigurationError(
@@ -209,6 +210,7 @@ def validate_from_settings(settings_module) -> None:
         public_base_url=str(value("PAYMENTS_PUBLIC_BASE_URL", "") or ""),
         stripe_secret_key=str(value("STRIPE_SECRET_KEY", "") or ""),
         payouts_enabled=bool(value("STRIPE_CONNECT_PAYOUTS_ENABLED", False)),
+        payment_environment=value("PAYMENTS_ENVIRONMENT", "test"),
         non_stripe_funding_enabled=bool(
             value("STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED", False)
         ),

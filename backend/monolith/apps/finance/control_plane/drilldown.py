@@ -3,6 +3,7 @@
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
+from dataclasses import replace
 
 from .definitions import VERSION
 from .queries import Queries
@@ -20,7 +21,12 @@ def drilldown(scope, *, metric, page=1, page_size=50):
         )
     with consistent_read():
         as_of = timezone.now()
-        query = Queries(scope, as_of=as_of).metrics().get(metric)
+        queries = Queries(scope, as_of=as_of)
+        query = queries.metrics().get("payout_operations" if metric == "payout_attention" else metric)
+        if metric == "payout_attention":
+            from .attention import attention_projection
+
+            query = replace(query, rows=query.rows.filter(pk__in=attention_projection(queries.payouts)))
         if query is None:
             raise ValidationError(
                 "Unknown metric; net funded drills through its two components."

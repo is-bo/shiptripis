@@ -290,7 +290,7 @@ def test_a_raised_state_is_drawn_more_strongly_and_names_its_owner(world):
     hold(payout, "h52-hold")
     markup = main(get(signed_in(s.admin), OVERVIEW))
 
-    assert "Payouts under a Finance hold" in markup
+    assert "Finance review required" in markup
     assert "Nothing needs Finance right now" not in markup
     # Severity is a class, not a paragraph of the same beige as paid history.
     assert re.search(r'class="st-attn is-(attn|bad)"', markup)

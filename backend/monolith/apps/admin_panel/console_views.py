@@ -2589,6 +2589,7 @@ def payout_detail(request, pk: int):
 def _payout_recovery_action(request, payout: Payout, action: str):
     """The three H3 recovery actions, each gated on its own capability."""
 
+    from apps.finance.providers import ProviderConfigurationInvalid
     from apps.finance.payout_execution import (
         PayoutExecutionError,
         admin_flag_unresolved_operation,
@@ -2622,7 +2623,7 @@ def _payout_recovery_action(request, payout: Payout, action: str):
                 request,
                 "A Finance hold was opened. The reservation is unchanged.",
             )
-    except (PayoutExecutionError, PermissionDenied, ValidationError) as exc:
+    except (PayoutExecutionError, PermissionDenied, ValidationError, ProviderConfigurationInvalid) as exc:
         _operation_error(request, "Payout recovery", exc)
     return redirect("admin_console:payout-detail", pk=payout.pk)
 

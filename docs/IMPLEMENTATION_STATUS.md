@@ -1,5 +1,49 @@
 # ShipTrip V1 Implementation Status
 
+## H8A — Production readiness implementation checkpoint (2026-09-13)
+
+Implementation on `codex/phase-h8a-production-readiness`, starting from
+`7c67093e88ac9b89386674384158fddeb7147605`. Authoritative phase record and
+sequential H8B contract: [H8A production readiness](PHASE_H8A_PRODUCTION_READINESS.md).
+**Awaiting Gemini verification; not yet merged, deployed or certified.**
+
+- Overview consumes the common safe payout blocker projection through a new H5
+  snapshot aggregate and paginated attention drilldown. Headline counts unique
+  payouts, groups the authoritative nullable owner, includes setup before delivery,
+  and keeps failed refunds separate. No sensitive destination data or invented money
+  totals. Bounded classification reports unavailable rather than partial totals.
+- `PAYMENTS_ENVIRONMENT=test|live` is explicit deployment money intent, default TEST.
+  Production refuses mixed/unknown key modes, contradictory Connect expectations,
+  API origins/signing-secret configuration, or LIVE without frozen payout profiles
+  and email. All three provider transports enforce intent before I/O. Finance defaults
+  to this mode, with explicit TEST/legacy audit scopes retained.
+- Historical attempts, credits/Boost, refunds, payouts and connected accounts cannot
+  be reused across deployment modes. Signed webhook and polling evidence must carry
+  the correct boolean mode. Financial detail screens label mode. Existing replay,
+  permissions, locking, claim and evidence rules remain authoritative.
+- Final EUR/DZD execution rechecks the funded arrival floor. LIVE Stripe money POSTs
+  first verify platform identity/activation. Existing payout execution flags and
+  business authorization remain required. Manual DZD's old TEST literal now compares
+  deployment mode; its flag stays false in H8A. LIVE DZD deal funding is refused while
+  its execution path is disabled.
+- Mobile release startup now requires an explicit HTTPS API/KYC origin. The previous
+  statement that `API_BASE_URL` had no fallback was incorrect: debug retains the
+  emulator default, release does not. WebSocket derivation remains unchanged.
+- Read-only Railway audit confirmed release `v1.0.0-rc.29+7c67093`, both providers
+  TEST, Finance enabled, DZD false, email false, FCM enabled. SMTP configuration is
+  empty/unverified. Runtime policy enables Stripe, Chargily/new checkouts and auto
+  Stripe payouts. **77 pending email obligations** require review before H8B email
+  activation; no messages were sent/cancelled. No provider request or Railway mutation.
+
+Schema/migration/backfill: **NO**. Focused Python checks complete in seconds, including
+guard/production-entrypoint tests, a PostgreSQL blocker/webhook/history regression,
+synthetic LIVE-labelled DZD claim/flag regression, arrival-floor check, Ruff and one
+Flutter release-origin test. Three-file Flutter analysis passed in 34.9 seconds;
+broader mobile verification is delegated. Broad Finance/payment/auth/I1 compatibility, migration/
+schema checks and any full Django run belong to Gemini. CI runs after Gemini passes;
+merge/cleanup, TEST deployment and one deployed H5 integrity snapshot remain pending.
+H8B and H8C are not executed. No LIVE provider call or real-money transaction occurred.
+
 ## Pre-H8 — Finance blocker visibility and frozen DZD identity (2026-09-12)
 
 Implemented on `codex/pre-h8-finance-identity-hardening`, starting from

@@ -674,6 +674,9 @@ def reconcile_payout(payout_id: int, *, gateway=None) -> str:
     finding out what the existing ones did.
     """
 
+    from .mode_safety import require_object_mode
+
+    require_object_mode(Payout.objects.values_list("provider_mode", flat=True).get(pk=payout_id))
     gateway = gateway or get_connect_gateway()
     notes = []
     operations = (

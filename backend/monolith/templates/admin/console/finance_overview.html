@@ -28,9 +28,10 @@
   <section class="st-zone" aria-labelledby="attention-title">
     <div class="st-zone-head">
       <h2 id="attention-title">Needs attention</h2>
-      {% if attention %}<span class="st-zone-count is-bad">{{ attention_total }}</span>{% endif %}
+      {% if attention_available and attention_total %}<span class="st-zone-count is-bad">{{ attention_total }} payout{{ attention_total|pluralize }}</span>{% endif %}
     </div>
 
+    {% if not attention_available %}<p class="st-calm">Payout attention is unavailable. Review the payout queue.</p>{% endif %}
     {% if attention %}
     <ul class="st-attn-list">
       {% for row in attention %}
@@ -43,14 +44,14 @@
           </span>
           <span class="st-attn-side">
             {% if row.amount %}<span class="st-money">{{ row.amount }}</span>{% endif %}
-            <span class="st-attn-owner">{{ row.owner }} acts</span>
+            {% if row.owner %}<span class="st-attn-owner">{{ row.owner }} acts</span>{% endif %}
           </span>
         </a>
       </li>
       {% endfor %}
     </ul>
-    {% else %}
-    <p class="st-calm"><span aria-hidden="true">&#10003;</span> Nothing needs Finance right now. No blocked or returned payouts, no holds, no disputes and no failed refunds in the {{ scope.mode_label }} environment.</p>
+    {% elif attention_available %}
+    <p class="st-calm"><span aria-hidden="true">&#10003;</span> Nothing needs Finance right now. No payouts need action and no refunds failed in the {{ scope.mode_label }} environment.</p>
     {% endif %}
   </section>
 

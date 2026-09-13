@@ -150,6 +150,10 @@ def _parse(raw_body: bytes, headers: dict) -> dict:
 def _classification(event: dict) -> tuple:
     """Decide what this endpoint is allowed to do with one verified event."""
 
+    from .mode_safety import event_mode_allowed
+
+    if not event_mode_allowed(event):
+        return "ignored", "mode_isolated"
     account_id = str(event.get("account") or "")
     event_type = str(event.get("type") or "")
     if not account_id:

@@ -176,35 +176,10 @@ def value(entry, metric=""):
 
 
 def default_mode():
-    """The environment's own provider mode, so the page never guesses TEST.
+    """Operational default follows explicit deployment intent, never a key swap."""
+    from config.settings.payments import payment_mode
 
-    H5 requires an explicit mode and offers no default, because reporting the
-    wrong environment's money is worse than refusing. The configured
-    credentials already answer the question; if they do not, the page opens on
-    the sandbox rather than on a claim about real money.
-    """
-
-    try:
-        from apps.finance.policy import phase3_policy
-        from apps.finance.providers import (
-            MODE_LIVE,
-            MODE_TEST,
-            PaymentProvider,
-            available_providers,
-        )
-
-        modes = {
-            row.credential_mode
-            for row in available_providers(phase3_policy())
-            if row.provider in (PaymentProvider.STRIPE, PaymentProvider.CHARGILY)
-        }
-        if MODE_LIVE in modes:
-            return "live"
-        if MODE_TEST in modes:
-            return "test"
-    except Exception:  # pragma: no cover - configuration probing must not 500
-        pass
-    return "test"
+    return payment_mode(settings)
 
 
 def scope_params(request, **overrides):
@@ -438,7 +413,7 @@ def build_rows(result, params, *, user):
     # zero, so their bucket is not a statement about liability at all — and
     # "Processing or externally committed" beside a stage of "Paid" reads as a
     # contradiction. The stage is the authoritative column there.
-    liability_bucket = result["metric"] != "payout_operations"
+    liability_bucket = result["metric"] not in ("payout_operations", "payout_attention")
     fields, rows = [], []
     for raw in result["rows"]:
         row = dict(raw)

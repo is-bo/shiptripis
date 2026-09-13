@@ -5,9 +5,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'app/app.dart';
 import 'core/format/locale_formats.dart';
+import 'core/env/app_config.dart';
 import 'core/push/push_messaging.dart';
 
 Future<void> main() async {
+  AppConfig.validate();
   WidgetsFlutterBinding.ensureInitialized();
 
   // Edge-to-edge, per Material 3 and the iOS safe-area contract. The bars are

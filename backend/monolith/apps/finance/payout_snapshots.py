@@ -73,6 +73,16 @@ def preflight(*, order, provider, policy):
     method = choose_method(methods, provider)
     if method is None:
         raise FinanceError("Payout preference required before funding.")
+    from .mode_safety import enforced, require_object_mode
+    from config.settings.payments import payment_mode
+
+    if enforced() and method.currency == "EUR":
+        version = method.current_version
+        if not version or not version.stripe_account:
+            raise FinanceError("A payout account for this payment environment is required.")
+        require_object_mode(version.stripe_account.provider_mode)
+    if payment_mode(settings) == "live" and method.currency == "DZD" and not settings.PAYOUT_DZD_EXECUTION_ENABLED:
+        raise FinanceError("Manual DZD settlement is disabled; this route cannot accept LIVE funding.")
     if method.currency == "EUR" and provider != "stripe":
         raise FinanceError("This payout requires Stripe funding.")
     if method.currency == "EUR":
@@ -99,11 +109,12 @@ def source_order_ids(order):
     ids = [order.pk]
     if order.credit_source_id and order.credited_eur_cents:
         ids.append(order.credit_source_id)
-    ids.extend(
-        BoostPurchase.objects.filter(deal_id=order.deal_id)
-        .order_by("pk")
-        .values_list("payment_order_id", flat=True)
-    )
+    if order.deal_id:
+        ids.extend(
+            BoostPurchase.objects.filter(deal_id=order.deal_id)
+            .order_by("pk")
+            .values_list("payment_order_id", flat=True)
+        )
     return [pk for pk in ids if pk is not None]
 
 

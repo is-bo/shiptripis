@@ -531,6 +531,9 @@ def refresh_account(account: StripePayoutAccount, *, gateway=None):
     it never changes a payout currency and never invents a ready account.
     """
 
+    from .mode_safety import require_object_mode
+
+    require_object_mode(account.provider_mode)
     gateway = gateway or get_connect_gateway()
     observed_at = timezone.now()
     snapshot = gateway.retrieve_account(account.provider_account_id)

@@ -31,6 +31,7 @@ skips any of them.
     <div>
       <p class="st-eyebrow">Manual DZD transfer &middot; money going to a Traveler</p>
       <h1>{{ manual.amounts.eur_cents|eur }}</h1>
+      <p><strong>{{ payment_environment|upper }}</strong> financial record. Confirm this environment before any action.</p>
       <p>Reward for Deal {{ manual.deal_id }}, owed to {{ manual.traveler.name }} &middot; {{ manual.traveler.email }}</p>
     </div>
     <div class="st-page-aside">

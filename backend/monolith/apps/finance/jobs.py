@@ -282,10 +282,17 @@ def handle_provider_reconcile(payload: dict) -> str:
             )
     try:
         gateway = get_gateway(attempt.provider)
+        from .mode_safety import require_object_mode
+
+        require_object_mode(attempt.provider_mode)
         snapshot = gateway.fetch_attempt(
             provider_session_id=attempt.provider_session_id,
             provider_payment_id=attempt.provider_payment_id,
         )
+        from .mode_safety import event_mode_allowed
+
+        if attempt.provider in ("stripe", "chargily") and not event_mode_allowed(snapshot.raw):
+            raise PermanentJobError("Provider returned another or unknown payment mode.", code="provider_mode_mismatch")
     except ProviderUnavailable as exc:
         raise RetryableJobError(
             "Provider reconciliation is temporarily unavailable.", code=exc.code

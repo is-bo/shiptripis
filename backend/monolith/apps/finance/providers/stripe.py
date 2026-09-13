@@ -213,9 +213,19 @@ class StripeGateway:
             return ""  # Not configured at all — a different, earlier answer.
         if self.credential_mode() == MODE_UNKNOWN:
             return "stripe_credential_unidentified"
+        from ..mode_safety import require_provider_mode
+        from .base import ProviderConfigurationInvalid
+
+        try:
+            require_provider_mode(self.credential_mode())
+        except ProviderConfigurationInvalid:
+            return "payment_environment_mismatch"
         return ""
 
     def _require_configured(self) -> None:
+        from ..mode_safety import require_provider_mode
+
+        require_provider_mode(self.credential_mode())
         if not self.secret_key:
             raise ProviderNotConfigured("STRIPE_SECRET_KEY is not configured.")
         if not self.webhook_secret:

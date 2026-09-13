@@ -49,6 +49,15 @@ class Definition:
 
 
 DEFINITIONS = {
+    "payout_attention": Definition(
+        "Payouts needing action",
+        "Unique payouts with needs_attention from the shared payout_attention projection.",
+        "Bound destination readiness, bank allocation, disputes and holds",
+        "One primary safe blocker and nullable owner per payout, including setup before delivery.",
+        "Normal delivery/protection and balance waiting; no addition of overlapping hold/dispute counts.",
+        "Current snapshot; bounded to 5,000 payouts per scope, otherwise narrow filters.",
+        "The same authoritative projection supplies the Overview count and this drilldown.",
+    ),
     "payout_operations": Definition(
         "Payout operation records",
         "Current non-cancelled Payout awards, including settled records.",

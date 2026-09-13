@@ -9,6 +9,7 @@
     <div>
       <p class="st-eyebrow">{% if kind == 'refund' %}Money going back to a Sender{% else %}Money going to a Traveler{% endif %}</p>
       <h1>{{ record.amount_eur_cents|eur }}</h1>
+      <p><strong>{{ record.provider_mode|upper }}</strong> financial record. Confirm this environment before any action.</p>
       <p>{% if kind == 'refund' %}Refund against order {{ record.order.public_reference }}{% else %}Reward for Deal {{ record.deal_id }}, owed to {{ record.traveler.email }}{% endif %}</p>
     </div>
     <div class="st-page-aside">

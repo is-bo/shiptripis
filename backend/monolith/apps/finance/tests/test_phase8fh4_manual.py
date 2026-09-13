@@ -65,7 +65,7 @@ def configured_h4():
         yield objects
 
 
-def build_manual(prefix="h4", *, delivered=True):
+def build_manual(prefix="h4", *, delivered=True, provider_mode="test"):
     with override_settings(PAYOUT_PROFILES_ENABLED=False):
         s = build_scenario(prefix=prefix)
         s.accept(reward_eur_cents=6000)
@@ -101,7 +101,7 @@ def build_manual(prefix="h4", *, delivered=True):
     capture = PaymentAttempt.objects.create(
         order=order,
         provider="chargily",
-        provider_mode="test",
+        provider_mode=provider_mode,
         amount_eur_cents=amount,
         payment_currency="DZD",
         provider_amount_minor=amount * 260 // 100,

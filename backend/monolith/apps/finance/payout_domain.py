@@ -250,6 +250,9 @@ def revise_amount_locked(
 def confirm_instruction(*, actor, payout_id, new_version_id, expected_state_version):
     require_profiles()
     seed = Payout.objects.get(pk=payout_id)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(seed.provider_mode)
     from .payout_profiles import _traveler
 
     actor = _traveler(actor)
@@ -294,6 +297,9 @@ def amend_instruction(
 ):
     require_capabilities(actor, "review_payout_profiles", "view_payout_sensitive")
     seed = Payout.objects.get(pk=payout_id)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(seed.provider_mode)
     lock_deal_lifecycle(seed.deal_id)
     payout = Payout.objects.select_for_update(no_key=True).get(pk=payout_id)
     from .payout_profiles import _traveler
@@ -530,6 +536,9 @@ def clear_hold(*, actor, hold_id, expected_generation):
     payout_seed = Payout.objects.get(pk=seed.payout_id)
     lock_deal_lifecycle(payout_seed.deal_id)
     payout = Payout.objects.select_for_update(no_key=True).get(pk=seed.payout_id)
+    from .mode_safety import require_object_mode
+
+    require_object_mode(payout.provider_mode)
     hold = FinanceHold.objects.select_for_update(no_key=True).get(pk=hold_id)
     if hold.generation != expected_generation:
         raise ValidationError("Hold generation conflict.")

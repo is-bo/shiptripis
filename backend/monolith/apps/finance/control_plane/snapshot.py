@@ -8,6 +8,7 @@ from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from .definitions import VERSION, definitions
+from .attention import snapshot_attention
 from .queries import MetricQuery, Queries
 from .reconciliation import reconcile
 
@@ -140,6 +141,7 @@ def build_snapshot(scope):
             "definitions": definitions(),
             "payouts": payout_groups(queries),
             "rail_operations": operational_groups(queries),
+            "payout_attention": snapshot_attention(queries.payouts),
             "providers": providers,
             "integrity": reconcile(queries, metrics),
             "provider_costs": {"status": "unavailable", "amount_eur_cents": None},

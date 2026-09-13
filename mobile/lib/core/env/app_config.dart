@@ -5,6 +5,8 @@
 /// only ever opens a URL the server handed it.
 library;
 
+import 'package:flutter/foundation.dart';
+
 abstract final class AppConfig {
   /// Gateway origin.
   ///
@@ -15,7 +17,7 @@ abstract final class AppConfig {
   /// `10.0.2.2` is the Android emulator's route to the host machine.
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080',
+    defaultValue: kReleaseMode ? '' : 'http://10.0.2.2:8080',
   );
 
   /// Origin of the Go KYC service, which is a separate deployment with its own
@@ -53,6 +55,32 @@ abstract final class AppConfig {
 
   static const requestTimeout = Duration(seconds: 20);
   static const connectTimeout = Duration(seconds: 12);
+
+  /// A release must name its deployment. Assertions are disabled in release,
+  /// so reject invalid configuration explicitly before any service starts.
+  static void validate({bool release = kReleaseMode}) {
+    if (!release) return;
+    validateReleaseOrigin(apiBaseUrl);
+    validateReleaseOrigin(kycBaseUrl);
+  }
+
+  static void validateReleaseOrigin(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        (uri.path.isNotEmpty && uri.path != '/') ||
+        {'localhost', '127.0.0.1', '10.0.2.2', '::1'}.contains(uri.host) ||
+        uri.host.endsWith('.invalid') ||
+        uri.host.endsWith('.test')) {
+      throw StateError(
+        'Release builds require an explicit HTTPS API/KYC origin.',
+      );
+    }
+  }
 
   /// WebSocket origin derived from [apiBaseUrl].
   static String get wsBaseUrl {
