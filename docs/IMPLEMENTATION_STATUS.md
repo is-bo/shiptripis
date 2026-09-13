@@ -5,7 +5,26 @@
 Implementation on `codex/phase-h8a-production-readiness`, starting from
 `7c67093e88ac9b89386674384158fddeb7147605`. Authoritative phase record and
 sequential H8B contract: [H8A production readiness](PHASE_H8A_PRODUCTION_READINESS.md).
-**Gemini verification complete; final CI and TEST release pending.**
+**H8A PASS — Gemini verification, CI and TEST release complete.**
+
+Reviewed/deployed SHA: `4ec23a17a41a150ba5afe58d410ed5c3d6722631`.
+CI [34755880830](https://github.com/is-bo/shiptripis/actions/runs/34755880830)
+passed all six jobs, including **1,936 Django passes / 34 intentional legacy skips**.
+Main was fast-forwarded and the phase branch deleted locally/remotely. Deployment
+`a400f0d4-e4cd-4b85-9817-35ab03f79e35` is **SUCCESS**, release
+`v1.0.0-rc.30+4ec23a1`. Health/readiness both **200**, zero pending migrations,
+all expected worker/service processes present. The single read-only H5 snapshot at
+`2026-09-13T12:38:18.505573+00:00` is **ok**: funding/liability/revenue/refund
+differences and all row mismatches zero; ledger net and unbalanced transaction count
+zero. Ten deployed source hashes match the exact reviewed Git archive.
+
+Stripe and Chargily remain **TEST**, Finance enabled, DZD execution **false**,
+email **false**. Only release ID and explicit `PAYMENTS_ENVIRONMENT=test` changed.
+No LIVE operation or provider-dashboard change. H8B may start as a separate phase;
+LIVE provider/email activation, backlog review, TEST obligation reconciliation and
+DZD/mobile operational prerequisites remain mandatory. Completion documentation is
+a later docs-only main commit and does not change the deployed runtime.
+Full 53-item result: [H8A release report](PHASE_H8A_RELEASE_REPORT.md).
 
 Gemini verified `34bff5bc8859c7336111f312a88564b4c62af019`: full PostgreSQL suite
 **1,932 passed / 3 failed / 34 intentional legacy skips**, all 528 Flutter tests

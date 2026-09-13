@@ -4,8 +4,14 @@ Starting main: `7c67093e88ac9b89386674384158fddeb7147605`.
 Branch: `codex/phase-h8a-production-readiness`.
 Starting deployed release: `v1.0.0-rc.29+7c67093`.
 
-**Implementation checkpoint, not production certification.** Gemini broad verification,
-CI, merge, TEST deployment and deployed H5 acceptance remain pending. H8A performs
+**H8A PASS: readiness controls released to TEST.** Gemini verification and all six
+CI jobs passed; reviewed SHA `4ec23a17a41a150ba5afe58d410ed5c3d6722631` was
+merged and deployed as `v1.0.0-rc.30+4ec23a1`. Deployment
+`a400f0d4-e4cd-4b85-9817-35ab03f79e35` is SUCCESS; health/readiness 200,
+migrations current and all expected processes present. One read-only H5 snapshot
+reports `ok`, zero financial differences/row mismatches and balanced ledger.
+See [the complete release report](PHASE_H8A_RELEASE_REPORT.md).
+This does not certify LIVE activation. H8A performs
 no LIVE provider call, checkout, transfer, payout, refund, real DZD settlement,
 provider-dashboard change or external email. Local tests use synthetic keys and
 synthetic records, including LIVE-labelled fixtures with network refused/mocked.
@@ -554,8 +560,8 @@ No PASS claim is made before those gates.
 
 Remaining prerequisites:
 
-* **BLOCKER (release):** Gemini report, CI, reviewed main, TEST deployment health,
-  migrations/workers and H5 zero differences/row mismatches/balanced ledger.
+* **Release gates closed:** Gemini report, CI, reviewed main, TEST deployment health,
+  migrations/workers and H5 zero differences/row mismatches/balanced ledger all passed.
 * **BLOCKER (H8B activation):** real LIVE provider activation and secrets/endpoints;
   email sender/SMTP verification and explicit disposition of the 77 pending messages;
   frozen TEST work/commitments reviewed; coherent stopped-service cutover bundle.
