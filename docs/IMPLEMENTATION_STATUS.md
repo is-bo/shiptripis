@@ -1,5 +1,55 @@
 # ShipTrip V1 Implementation Status
 
+## H8B — Controlled production cutover (2026-09-13)
+
+**H8B FAIL — halted at the H8A step-2 backup gate. No LIVE activation, no runtime
+or configuration change.** Full record:
+[H8B production cutover](PHASE_H8B_PRODUCTION_CUTOVER.md).
+
+Starting main `67c0241cce4823586edb1fbe3a9dd068fe68a9e8`; runtime baseline
+`4ec23a1` / `v1.0.0-rc.30+4ec23a1` unchanged. Every H8B action was a read. No
+Railway variable was written, no deployment triggered, no business-settings
+revision created, no outbox message cancelled, no provider dashboard changed and
+no real-money operation performed. `PAYMENTS_ENVIRONMENT` stays `test`, Stripe and
+Chargily stay TEST, email stays disabled, DZD execution stays `false`.
+
+Pre-cutover H5 **PASS**: `mode=test` and `mode=live` both `ok`, all
+funding/liability/revenue/refund differences and row mismatches zero, ledger
+balanced, `payout_attention` 0. LIVE scope is entirely empty.
+`mode=legacy_unknown` carries its two disclosed warnings with zero differences.
+
+Five blockers, all infrastructure/provider/operational — no runtime-code defect:
+
+1. **Backup/recovery.** The production Postgres volume has **zero backups and no
+   schedule**, and both Railway backup mutations return `Not Authorized` on a HOBBY
+   workspace with `customer.state INACTIVE` and `isTrialing true`. Recovery is
+   currently impossible. H8A places this before the TEST work freeze, so the freeze
+   was correctly not executed.
+2. **Email backlog.** 77 pending, all `attempts 0` and all past due, so enabling
+   email releases every one at once. 73 target RFC-reserved undeliverable domains;
+   **4 target real addresses**, including an 8-day-old secret-bearing
+   `recipient_delivery_code` to a real recipient with no account. Owner data-policy
+   decision required; nothing was cancelled.
+3. **Email provider.** SMTP host/username/password/from all empty, sending domain
+   unverified. LIVE startup requires email, so a LIVE boot would refuse.
+4. **Stripe LIVE platform.** `acct_1TLWM93aixfgmaTz` reports `details_submitted`,
+   `charges_enabled` and `payouts_enabled` all **false** with empty capabilities —
+   never activated. H8A's pre-transfer guard would defer every payout.
+5. **Chargily LIVE / DZD process.** Merchant activation needs dashboard access, and
+   no approved manual DZD fulfilment process exists, so DZD execution stays false.
+
+Also outstanding: TEST payout 4 (`ca7be06e…`, 6,000 EUR cents) sits in `processing`
+at stage `connected_funds` awaiting a TEST Connect `payout.paid`. Replacing the
+Connect signing secret before it settles would strand it permanently.
+
+TEST endpoint record captured for the eventual H8A §9.11 overlap close: platform
+`we_1UAYk83aixfgmaTzEQr2WKS0` (16 events) and Connect
+`we_1UDSGx3aixfgmaTzPxCXmtOB` (11 events), both `2026-03-25.dahlia` and both
+matching the H8A event sets exactly, plus one already-disabled stale endpoint on
+the superseded origin. Mobile release origin handling and FCM project alignment
+verified by inspection.
+
+
 ## H8A — Production readiness implementation checkpoint (2026-09-13)
 
 Implementation on `codex/phase-h8a-production-readiness`, starting from
