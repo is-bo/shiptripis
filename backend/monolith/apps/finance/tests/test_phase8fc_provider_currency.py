@@ -328,15 +328,21 @@ class ChargilyEnvironmentContractTests(TestCase):
         assert gateway.credential_mode() == MODE_UNKNOWN
         assert gateway.configuration_problem() == "chargily_environment_unidentified"
 
-    def test_agreeing_halves_are_accepted(self):
+    def test_agreeing_halves_and_explicit_payment_intent_are_accepted(self):
         for key, base, mode in (
             ("test_sk_x", TEST_API_BASE, "test"),
             ("live_sk_x", LIVE_API_BASE, "live"),
         ):
-            with self.subTest(mode=mode):
+            with self.subTest(mode=mode), override_settings(PAYMENTS_ENVIRONMENT=mode):
                 gateway = ChargilyGateway(secret_key=key, api_base=base)
                 assert gateway.credential_mode() == mode
                 assert gateway.configuration_problem() == ""
+
+    def test_live_credentials_require_explicit_live_payment_intent(self):
+        with override_settings(PAYMENTS_ENVIRONMENT="test"):
+            gateway = ChargilyGateway(secret_key="live_sk_x", api_base=LIVE_API_BASE)
+            assert gateway.credential_mode() == "live"
+            assert gateway.configuration_problem() == "payment_environment_mismatch"
 
     def test_an_unrecognised_key_prefix_is_never_guessed_into_test(self):
         gateway = ChargilyGateway(secret_key="sk_mystery", api_base=TEST_API_BASE)

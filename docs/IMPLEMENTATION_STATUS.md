@@ -5,7 +5,21 @@
 Implementation on `codex/phase-h8a-production-readiness`, starting from
 `7c67093e88ac9b89386674384158fddeb7147605`. Authoritative phase record and
 sequential H8B contract: [H8A production readiness](PHASE_H8A_PRODUCTION_READINESS.md).
-**Awaiting Gemini verification; not yet merged, deployed or certified.**
+**Gemini round 1 reviewed; scoped round 2 pending. Not yet merged, deployed or certified.**
+
+Gemini verified `34bff5bc8859c7336111f312a88564b4c62af019`: full PostgreSQL suite
+**1,932 passed / 3 failed / 34 intentional legacy skips**, all 528 Flutter tests
+passed, analysis/Ruff clean, 74 migrations applied and no model/contract changes.
+Two failures were stale expectations (LIVE key now requires explicit intent;
+Overview now groups the authoritative nullable blocker owner). The third required a specific
+ledger index name despite equivalent selective indexes and passed in isolation.
+The follow-up updates those tests, adds explicit unintended-LIVE rejection, and
+checks actual indexed ledger conditions rather than a single planner choice.
+No runtime code changes. Local schema comparison confirms identical SQL: the only
+dump difference was optional boundary `\\restrict`/`\\unrestrict` wrappers and their
+spacing, not schema drift. The committed schema and canonical CI gate remain intact.
+Gemini round 2 is scoped to the affected Finance compatibility modules and schema
+comparison; the full 32-minute Django suite and unchanged mobile suite need no repeat.
 
 - Overview consumes the common safe payout blocker projection through a new H5
   snapshot aggregate and paginated attention drilldown. Headline counts unique

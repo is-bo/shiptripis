@@ -844,18 +844,41 @@ def test_user_dispute_is_separate_and_postgres_plan_uses_existing_indexes(world)
             # On a ten-row test table a sequential scan is the planner's
             # rational choice, so an unqualified EXPLAIN here measures how much
             # data happened to precede this test in the same database rather
-            # than anything about the query. Ask the planner the question this
-            # gate actually cares about — given the choice, can the scoped
-            # payout query be served by an index H5 found already present? —
-            # and the answer stops moving with the suite's running order.
+            # than indexed query support. Check that the scoped payout query
+            # can use one of the ledger indexes already present.
+            # Accept either selective deal/account ledger index: statistics can
+            # change the chosen index without changing indexed query support.
             cursor.execute("SET LOCAL enable_seqscan = off")
+            constraints = connection.introspection.get_constraints(
+                cursor, LedgerEntry._meta.db_table
+            )
+            ledger_indexes = {
+                name: info["columns"][0]
+                for name, info in constraints.items()
+                if info["index"] and info["columns"]
+                and info["columns"][0] in ("deal_id", "account")
+            }
         plan = json.loads(
             Queries(scope(search=str(payout.public_reference)), as_of=timezone.now())
             .payouts.values("pk", "payable")
             .explain(format="JSON", analyze=True)
         )
     assert plan[0]["Plan"]["Actual Rows"] == 1
-    assert "fin_ledger_deal_idx" in json.dumps(plan)
+    def nodes(node):
+        yield node
+        for child in node.get("Plans", []):
+            yield from nodes(child)
+
+    index_access = [
+        (node.get("Index Name"), node.get("Index Cond", ""))
+        for node in nodes(plan[0]["Plan"])
+        if node.get("Index Name") in ledger_indexes
+    ]
+    # A named index appearing anywhere is insufficient: the ledger scan must
+    # constrain its indexed leading column, rather than scan an entire index.
+    assert any(
+        ledger_indexes[name] in condition for name, condition in index_access
+    ), {"ledger_indexes": ledger_indexes, "index_access": index_access, "plan": plan}
     assert "QA private reason" not in str(
         drilldown(scope(), metric="user_disputed_payouts")
     )

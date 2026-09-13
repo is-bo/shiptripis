@@ -339,7 +339,13 @@ def test_holds_and_disputes_are_counted_separately(world):
     assert "Provider dispute" in page and "Finance / Risk acts next" in page
     assert "ShipTrip dispute" not in page
     assert format_eur(snapshot["metrics"]["held_payouts"]["amount_eur_cents"]) in page
-    assert "Payouts under a Finance hold" in overview
+    # The shared blocker precedence selects the dispute ahead of the hold.
+    # Its owner is intentionally unknown; Overview must not invent Finance.
+    assert "Payout review required" in overview
+    assert snapshot["payout_attention"]["count"] == 1
+    assert snapshot["payout_attention"]["groups"] == [
+        {"attention_owner": None, "count": 1}
+    ]
 
 
 # ---------------------------------------------------------------------------

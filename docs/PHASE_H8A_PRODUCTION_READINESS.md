@@ -438,6 +438,50 @@ reconciliation and eventual bank outcome. Decide costs and consent before execut
 
 ## 12. Verification and remaining gates
 
+### Gemini round 1 and corrective verification
+
+Gemini verified exact implementation `34bff5bc8859c7336111f312a88564b4c62af019`
+with a clean source tree. Full PostgreSQL Django: **1,932 passed, 3 failed, 34 skipped**
+in 1,910.857 seconds. All skips explicitly cover retired matching/airport-pair writes.
+All new H8A tests, PRE-H8 tests, H2/H3/H4/H6/H7, payment/auth/handover/notification
+coverage passed. Flutter: **528 passed**, full analysis clean. Ruff and formatting
+clean. All 74 migrations applied; model and contract diffs empty.
+
+Codex reviewed each failure:
+
+* Chargily's old two-mode acceptance fixture omitted explicit LIVE intent. Update
+  the accepted fixture to set matching intent, plus assert LIVE credentials remain
+  refused under TEST intent. Do not relax the runtime guard.
+* H5.1 Overview asserted the previous hold label. The shared classifier selects the
+  concurrent dispute ahead of the hold and intentionally leaves its owner null.
+  Assert `Payout review required` and exactly one payout in that nullable owner
+  group. The Exceptions page still distinguishes Finance holds and provider
+  disputes with their operational owners; Overview must not invent an owner.
+* The PostgreSQL plan test asserted `fin_ledger_deal_idx` by name and passed on
+  Gemini's isolated rerun. The corrected check discovers existing ledger indexes
+  whose leading column is deal/account, walks the executed plan and requires an
+  actual condition on that indexed column. An unconditioned full index scan does
+  not pass. Keep the correct row result and dispute privacy assertions.
+
+The reported schema diff contained only pg_dump's boundary `\\restrict` and
+`\\unrestrict` commands plus adjacent blank lines. A fresh local read-only dump
+compares identically after narrowly removing those optional boundary wrappers and
+normalizing version comments. No SQL or arbitrary whitespace is removed; no
+committed schema or CI normalization change is needed. This is dump format
+variation, not a missing Django migration.
+
+This corrective commit changes tests/documentation only. Scoped Gemini round 2
+will cover the affected provider-currency, H5 and H5.1 modules plus repeat schema
+comparison; it does not invalidate the other passing full-suite or mobile evidence.
+CI, merge and TEST deployment remain gated on that report. Latest local corrective
+checks: Chargily contract class **6 passed / 1.42s**, H5 plan regression **1 passed /
+8.82s**, H5.1 hold/dispute Overview **1 passed / 15.19s** (existing URLField warning),
+targeted Ruff and whitespace clean. The first label-only H5.1 correction failed;
+tracing shared dispute-before-hold precedence established the required null owner,
+which the final passing test now asserts. No broad suite was run by Codex.
+
+### Focused implementation checks
+
 Fast checks run by Codex: new mode/transport/Overview tests, selected pure Connect
 configuration tests, production entrypoint smoke/refusal, one PostgreSQL blocker/
 duplicate/owner/drilldown/signed-webhook/history regression, one synthetic LIVE DZD
