@@ -5,7 +5,7 @@
 Implementation on `codex/phase-h8a-production-readiness`, starting from
 `7c67093e88ac9b89386674384158fddeb7147605`. Authoritative phase record and
 sequential H8B contract: [H8A production readiness](PHASE_H8A_PRODUCTION_READINESS.md).
-**Gemini rounds 1–2 reviewed; currency-module round 3 pending. Not yet merged, deployed or certified.**
+**Gemini verification complete; final CI and TEST release pending.**
 
 Gemini verified `34bff5bc8859c7336111f312a88564b4c62af019`: full PostgreSQL suite
 **1,932 passed / 3 failed / 34 intentional legacy skips**, all 528 Flutter tests
@@ -31,6 +31,11 @@ their own class-transaction policy with the existing Finance fixture helper. Two
 previous failures passed locally in 2.46 seconds. This is test setup only; runtime,
 schema and Railway remain unchanged. Round 3 reruns only the 34-test currency module;
 the passing H5/H5.1 batch and other round 1 evidence remain valid.
+
+Round 3 verified `c3a4e23ae28d0ba7dce8c4c2c49dfa14e11ba5cb`: **34 passed /
+0 failed / 0 skipped** on the reused PostgreSQL database; all 16 fixture failures
+are resolved. Ruff and whitespace are clean. The three original round 1 failures
+are now covered by passing scoped verification. No full-suite rerun is claimed.
 
 - Overview consumes the common safe payout blocker projection through a new H5
   snapshot aggregate and paginated attention drilldown. Headline counts unique

@@ -503,6 +503,19 @@ passed locally in **2.46 seconds**, with the existing URLField warning. Gemini r
 repeat of the eight-minute H5 batch, full Django suite, schema migration or Flutter
 suite is needed. CI and release remain pending that scoped report.
 
+### Gemini round 3 and release gate
+
+Gemini verified `c3a4e23ae28d0ba7dce8c4c2c49dfa14e11ba5cb`: all **34 currency
+tests passed**, zero failures/skips, in 5.443 seconds command time on the reused
+PostgreSQL database. All 16 missing-policy failures are resolved. The explicit
+LIVE-intent acceptance/rejection checks, Ruff and whitespace pass. Source remained
+clean; no provider, message, CI or deployment operations were performed by Gemini.
+
+Codex accepts the cumulative verification: round 1 broad Django/mobile evidence,
+round 2 H5/H5.1 and schema results, and round 3 currency results. All identified
+failures have passing scoped verification. The full suite was not repeated after
+test-only corrections. Final GitHub CI and the TEST release checks follow.
+
 ### Original implementation checks
 
 Fast checks run by Codex: new mode/transport/Overview tests, selected pure Connect
