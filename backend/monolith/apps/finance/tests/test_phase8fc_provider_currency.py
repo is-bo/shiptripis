@@ -102,7 +102,18 @@ def _policy(*, new_checkouts: bool = True, **provider_flags):
     )
 
 
-class SettlementCurrencyIsTheRailsTests(TestCase):
+class PolicyTestCase(TestCase):
+    """Own the policy fixture even when --reuse-db follows a table flush."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from .test_phase8fh3_concurrency import _seed_settings
+
+        _seed_settings()
+
+
+class SettlementCurrencyIsTheRailsTests(PolicyTestCase):
     """Stripe settles EUR, Chargily settles DZD, and neither is negotiable."""
 
     def test_each_rail_publishes_its_own_settlement_currency(self):
@@ -235,7 +246,7 @@ class SettlementCurrencyIsTheRailsTests(TestCase):
 
 
 @override_settings(**STRIPE_TEST, **CHARGILY_TEST)
-class ProviderOptionsCarryAmountsTests(TestCase):
+class ProviderOptionsCarryAmountsTests(PolicyTestCase):
     """Each rail row says what that rail charges — the whole UI repair."""
 
     def test_a_rail_row_carries_its_own_amount_and_currency(self):
@@ -356,7 +367,7 @@ class ChargilyEnvironmentContractTests(TestCase):
 
 
 @override_settings(**CHARGILY_MISMATCHED, **STRIPE_TEST)
-class MisconfiguredRailCannotTransactTests(TestCase):
+class MisconfiguredRailCannotTransactTests(PolicyTestCase):
     """The owner enabled Chargily while its environment was unknown."""
 
     def test_it_is_not_reported_as_available(self):
@@ -483,7 +494,7 @@ class ProviderAuthFailuresAreNotGenericTests(TestCase):
 
 
 @override_settings(**STRIPE_TEST, **CHARGILY_TEST)
-class CheckoutContractRefusesAClientCurrencyTests(TestCase):
+class CheckoutContractRefusesAClientCurrencyTests(PolicyTestCase):
     """A stale or hostile client cannot request Stripe-in-dinars."""
 
     def setUp(self):
@@ -532,7 +543,7 @@ class CheckoutContractRefusesAClientCurrencyTests(TestCase):
         assert charged.amount_minor == self.order.outstanding_eur_cents
 
 
-class HostedCheckoutReturnTests(TestCase):
+class HostedCheckoutReturnTests(PolicyTestCase):
     """Where a provider sends the payer back after a hosted checkout.
 
     `_checkout_urls` has always built this URL and nothing served it, so a
@@ -588,7 +599,7 @@ class HostedCheckoutReturnTests(TestCase):
 
 
 @override_settings(**STRIPE_TEST, **CHARGILY_TEST)
-class FrozenFxSnapshotTests(TestCase):
+class FrozenFxSnapshotTests(PolicyTestCase):
     """Changing the admin rate must not move an attempt that already exists."""
 
     def setUp(self):
@@ -658,7 +669,7 @@ class FrozenFxSnapshotTests(TestCase):
 
 
 @override_settings(**STRIPE_TEST, **CHARGILY_MISMATCHED)
-class GuestPayerRailsTests(TestCase):
+class GuestPayerRailsTests(PolicyTestCase):
     """Guest payment keeps Stripe and never gains Chargily by accident."""
 
     def test_chargily_declares_it_cannot_take_a_third_party_payment(self):

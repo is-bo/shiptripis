@@ -5,7 +5,7 @@
 Implementation on `codex/phase-h8a-production-readiness`, starting from
 `7c67093e88ac9b89386674384158fddeb7147605`. Authoritative phase record and
 sequential H8B contract: [H8A production readiness](PHASE_H8A_PRODUCTION_READINESS.md).
-**Gemini round 1 reviewed; scoped round 2 pending. Not yet merged, deployed or certified.**
+**Gemini rounds 1–2 reviewed; currency-module round 3 pending. Not yet merged, deployed or certified.**
 
 Gemini verified `34bff5bc8859c7336111f312a88564b4c62af019`: full PostgreSQL suite
 **1,932 passed / 3 failed / 34 intentional legacy skips**, all 528 Flutter tests
@@ -20,6 +20,17 @@ dump difference was optional boundary `\\restrict`/`\\unrestrict` wrappers and t
 spacing, not schema drift. The committed schema and canonical CI gate remain intact.
 Gemini round 2 is scoped to the affected Finance compatibility modules and schema
 comparison; the full 32-minute Django suite and unchanged mobile suite need no repeat.
+
+Round 2 verified `8888d59369c5b9450b2a021fc56045d9041880a8`: all 56 H5/H5.1
+tests passed, as did the corrected Chargily contracts; schema SQL, migration checks
+and Ruff were clean. Total **74 passed / 16 failed**: the older currency module
+implicitly depended on migration-seeded business settings, absent after round 1's
+transactional tests flushed the reused database. Codex's reuse-only verifier prompt
+exposed that fixture dependency. Policy-dependent currency test classes now seed
+their own class-transaction policy with the existing Finance fixture helper. Two
+previous failures passed locally in 2.46 seconds. This is test setup only; runtime,
+schema and Railway remain unchanged. Round 3 reruns only the 34-test currency module;
+the passing H5/H5.1 batch and other round 1 evidence remain valid.
 
 - Overview consumes the common safe payout blocker projection through a new H5
   snapshot aggregate and paginated attention drilldown. Headline counts unique

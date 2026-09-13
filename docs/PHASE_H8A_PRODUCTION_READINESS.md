@@ -480,7 +480,30 @@ targeted Ruff and whitespace clean. The first label-only H5.1 correction failed;
 tracing shared dispute-before-hold precedence established the required null owner,
 which the final passing test now asserts. No broad suite was run by Codex.
 
-### Focused implementation checks
+### Gemini round 2 and currency fixture isolation
+
+Gemini verified `8888d59369c5b9450b2a021fc56045d9041880a8` with clean source:
+**74 passed / 16 failed** in 488.508 seconds. All **28 H5 + 28 H5.1** tests passed,
+including the index condition, nullable-owner Overview and Exceptions regressions.
+The corrected Chargily intent acceptance/rejection tests also passed. Migration
+checks, strict SQL comparison (zero-byte residual diff), Ruff and whitespace passed.
+
+All 16 failures were in the older currency module and raised
+`NoActiveBusinessSettings` before their assertions. Round 1's transactional tests
+had flushed the reused test database; these TestCase classes implicitly relied on
+data migrations having seeded its policy. Codex's reuse-only prompt exposed the
+dependency. The remedy is confined to test setup: policy-dependent classes now
+inherit a `PolicyTestCase` that calls the existing Finance `_seed_settings` helper
+inside `setUpTestData`. Each class owns its fixture and rollback; production code,
+business configuration, schema and previous passing tests are unchanged.
+
+Two formerly failing targeted checks (settlement policy and mocked Stripe checkout)
+passed locally in **2.46 seconds**, with the existing URLField warning. Gemini round
+3 reruns only the **34-test provider-currency module** on the reused database. No
+repeat of the eight-minute H5 batch, full Django suite, schema migration or Flutter
+suite is needed. CI and release remain pending that scoped report.
+
+### Original implementation checks
 
 Fast checks run by Codex: new mode/transport/Overview tests, selected pure Connect
 configuration tests, production entrypoint smoke/refusal, one PostgreSQL blocker/
