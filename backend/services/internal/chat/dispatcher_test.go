@@ -100,11 +100,12 @@ func TestDispatchChatMessageNew_RoutesToTargets(t *testing.T) {
 	// Canonical envelope: event_id + ts + targets + the raw chat payload
 	// Django publishes via redis_bus.publish_after_commit.
 	payload := chatEnvelope(t, "evt-1", []int64{42}, map[string]any{
-		"ts":         "2026-05-22T12:00:00Z",
-		"message_id": 100,
-		"thread_id":  7,
-		"sender_id":  99,
-		"body":       "hello",
+		"ts":                "2026-05-22T12:00:00Z",
+		"message_id":        100,
+		"thread_id":         7,
+		"sender_id":         99,
+		"body":              "hello",
+		"client_message_id": "bc8b7d87-3a8c-4a93-9396-c70807302ed9",
 	})
 
 	d.dispatchChatMessageNew(channelChatMessageNew, payload)
@@ -134,6 +135,9 @@ func TestDispatchChatMessageNew_RoutesToTargets(t *testing.T) {
 	}
 	if roundTrip["message_id"] != float64(100) || roundTrip["thread_id"] != float64(7) || roundTrip["body"] != "hello" {
 		t.Errorf("envelope payload roundtrip mismatch: %+v", roundTrip)
+	}
+	if roundTrip["client_message_id"] != "bc8b7d87-3a8c-4a93-9396-c70807302ed9" {
+		t.Fatal("client retry identity was lost in the websocket envelope")
 	}
 
 	// markDelivered is dispatched in a goroutine; poll briefly.

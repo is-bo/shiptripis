@@ -152,8 +152,8 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
       );
 
       // 2. Resolve expected revision from current profile summary if any.
-      final summary = ref.read(payoutMethodsProvider).value;
-      final expectedRev = summary?.revisionFor('DZD') ?? 0;
+      final summary = await repo.payoutMethods();
+      final expectedRev = summary.revisionFor('DZD');
 
       // 3. Submit profile with exactly 6 product values.
       await repo.submitDzdProfile(

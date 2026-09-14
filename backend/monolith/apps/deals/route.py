@@ -35,7 +35,6 @@ from .arrival import parse_instant
 from .models import Deal
 
 BASIS_FUNDED_SNAPSHOT = "funded_snapshot"
-BASIS_LIVE_JOURNEY = "live_journey"
 
 
 def funded_route(*, deal: Deal, viewer_id: int | None, is_staff: bool = False):
@@ -46,12 +45,11 @@ def funded_route(*, deal: Deal, viewer_id: int | None, is_staff: bool = False):
     accurate: it is the route the money was taken against, not whatever the
     Journey rows say today.
 
-    A Deal funded before I1A has no route snapshot. It falls back to the live
-    allocated legs, and says so in `basis`, so a client is never told a live read
-    is a frozen one.
+    A Deal funded before I1A without historical route evidence returns None.
+    Current allocated legs cannot establish what the booked route was.
     """
 
-    if viewer_id not in (deal.sender_id, deal.traveler_id) and not is_staff:
+    if viewer_id not in (deal.sender_id, deal.traveler_id):
         return None
     if deal.funded_at is None:
         return None
@@ -65,19 +63,9 @@ def funded_route(*, deal: Deal, viewer_id: int | None, is_staff: bool = False):
             "journey_id": deal.journey_id,
             "legs": [_snapshot_leg(row, deal) for row in legs],
         }
-    return _live_route(deal)
-
-
-def _live_route(deal: Deal) -> dict:
-    allocations = sorted(
-        deal.leg_allocations.all(),
-        key=lambda row: (row.journey_leg.position, row.journey_leg_id),
-    )
-    return {
-        "basis": BASIS_LIVE_JOURNEY,
-        "journey_id": deal.journey_id,
-        "legs": [_live_leg(row.journey_leg) for row in allocations],
-    }
+    # Current Journey rows are not historical evidence. Pre-I1 bookings without
+    # a frozen route are honestly unavailable, even if allocations still exist.
+    return None
 
 
 def _snapshot_leg(row: dict, deal: Deal) -> dict:
@@ -99,21 +87,6 @@ def _snapshot_leg(row: dict, deal: Deal) -> dict:
         ),
         "depart_at": parse_instant(depart) if isinstance(depart, str) else None,
         "arrive_at": parse_instant(arrive) if isinstance(arrive, str) else None,
-        "carries_parcel": True,
-    }
-
-
-def _live_leg(leg) -> dict:
-    return {
-        "leg_id": leg.pk,
-        "position": int(leg.position),
-        "mode": leg.mode,
-        "origin": _place_summary(leg.origin_place) or _location_summary(leg.origin),
-        "destination": (
-            _place_summary(leg.destination_place) or _location_summary(leg.destination)
-        ),
-        "depart_at": leg.depart_at,
-        "arrive_at": leg.arrive_at,
         "carries_parcel": True,
     }
 

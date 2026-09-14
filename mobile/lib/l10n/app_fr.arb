@@ -1,5 +1,7 @@
 {
   "@@locale": "fr",
+  "payoutLegalCountryTitle": "Pays du compte de versement",
+  "payoutLegalCountryBody": "Sélectionnez le pays légal de votre compte Stripe pour consentir à la configuration. Si votre pays ne figure pas dans la liste, utilisez les versements DZD.",
   "appName": "ShipTrip",
   "actionContinue": "Continuer",
   "actionCancel": "Annuler",

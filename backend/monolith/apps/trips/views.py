@@ -302,7 +302,8 @@ class JourneyListCreateView(APIView):
         return super().get_throttles()
 
     def get(self, request: Request) -> Response:
-        queryset = _journey_queryset().filter(traveler=request.user)
+        from .lifecycle import with_lifecycle
+        queryset = with_lifecycle(_journey_queryset().filter(traveler=request.user))
         status_filter = request.query_params.get("status")
         if status_filter:
             allowed_statuses = {choice for choice, _ in Journey.Status.choices}
@@ -311,7 +312,7 @@ class JourneyListCreateView(APIView):
                     {"detail": "Unknown journey status."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            queryset = queryset.filter(status=status_filter)
+            queryset = queryset.filter(lifecycle_status=status_filter)
         return Response(
             JourneySerializer(
                 queryset[:100],
@@ -366,9 +367,9 @@ class JourneySearchView(APIView):
             .alias(has_approved_proof=Exists(approved_proof))
             .filter(has_approved_proof=False)
         )
+        from .lifecycle import discoverable
         queryset = (
-            _public_journey_queryset()
-            .filter(status=Journey.Status.ACTIVE)
+            discoverable(_public_journey_queryset())
             .exclude(traveler=request.user)
             .alias(
                 has_legs=Exists(leg_scope),
@@ -443,11 +444,14 @@ class JourneyDetailView(APIView):
         # coarse Location serialization and private proof fields redacted.
         journey = get_object_or_404(
             _journey_queryset().filter(
-                Q(traveler=request.user) | Q(status=Journey.Status.ACTIVE)
+                Q(traveler=request.user) | Q(status__in=[Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS])
             ),
             pk=pk,
         )
         if journey.traveler_id != request.user.id:
+            from .lifecycle import discoverable
+            if not discoverable(Journey.objects.filter(pk=journey.pk)).exists():
+                raise Http404("Journey is not currently matchable.")
             try:
                 validate_journey_verification_gates(journey)
             except JourneyDomainError as exc:

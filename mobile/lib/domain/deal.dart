@@ -733,6 +733,8 @@ class Deal {
     this.arrivalConfirmedAt,
     this.arrival,
     this.route,
+    this.availableActions = const [],
+    this.serverTime,
     this.createdAt,
     this.updatedAt,
   });
@@ -787,6 +789,10 @@ class Deal {
     payoutSummary: PayoutMobile.maybe(json['payout_summary']),
     arrival: DealArrivalInfo.maybe(json['arrival']),
     route: DealRoute.maybe(json['route']),
+    availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false),
+    serverTime: readDate(json['server_time']),
     createdAt: readDate(json['created_at']),
     updatedAt: readDate(json['updated_at']),
   );
@@ -846,6 +852,8 @@ class Deal {
   final PayoutMobile? payoutSummary;
   final DealArrivalInfo? arrival;
   final DealRoute? route;
+  final List<String> availableActions;
+  final DateTime? serverTime;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;

@@ -134,11 +134,11 @@ class ChatSendTests(APITestCase):
         assert r.data["id"] == msg.id
         assert r.data["sender_id"] == self.sender.id
         assert r.data["body"] == "on my way"
-        # published once, to the traveler (the OTHER member), on chat.message.new
+        # Both members receive the persisted event; only the other gets an inbox row.
         assert pub.call_count == 1
         args, kwargs = pub.call_args
         assert args[0] == "chat.message.new"
-        assert kwargs["targets"] == [self.traveler.id]
+        assert kwargs["targets"] == [self.traveler.id, self.sender.id]
         assert args[1]["message_id"] == msg.id
         assert args[1]["match_id"] == self.match.id
         assert args[1]["sender_id"] == self.sender.id
@@ -152,7 +152,7 @@ class ChatSendTests(APITestCase):
             )
         assert r.status_code == 201, r.data
         _, kwargs = pub.call_args
-        assert kwargs["targets"] == [self.sender.id]
+        assert kwargs["targets"] == [self.sender.id, self.traveler.id]
 
     def test_empty_body_rejected(self):
         _pay(self.offer, self.sender)

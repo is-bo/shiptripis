@@ -1,5 +1,26 @@
 # ShipTrip V1 Implementation Status
 
+## J1 — Lifecycle, payout setup and realtime foundations (2026-09-14)
+
+**Implementation checkpoint; verification/release pending.** Branch
+`codex/j1-lifecycle-payout-realtime`, starting `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
+[J1 evidence and contracts](PHASE_J1_LIFECYCLE_PAYOUT_REALTIME.md).
+
+Adds explicit EUR legal-country selection/fresh payout revisions/nested Stripe
+decoding, query-derived Journey expiry, server dispute actions/rating state,
+honest historical route unavailability, transactional notification inbox/retry
+jobs with active/read/resolved/History semantics, and chat UUID retries/sender
+echoes. Existing active/Home filtering and frozen funding remain authoritative.
+Two additive migrations and SQL schema export; no financial-routing rewrite.
+
+Focused PostgreSQL, Flutter and Go checks pass. Deployed TEST diagnosis confirms
+missing-country EUR/Both errors, three elapsed stored-active Journeys, no active
+push devices, valid FCM project alignment, HTTP 200 and both WS handshakes 101.
+Blanket DZD/device Home/route/chat reproduction remains unresolved; do not call
+the full phase PASS from source/widget tests. Gemini, CI, merge, TEST deployment
+and post-deploy H5 reconciliation remain required. No LIVE operation or runtime
+configuration change; DZD execution remains false. J2 has not begun.
+
 ## H8B — Controlled production cutover (2026-09-13)
 
 **H8B FAIL — halted at the H8A step-2 backup gate. No LIVE activation, no runtime

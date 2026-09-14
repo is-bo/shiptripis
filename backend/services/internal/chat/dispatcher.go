@@ -192,7 +192,7 @@ func (d *Dispatcher) dispatch(msg redisbus.Message) {
 // dispatchChatMessageNew fans the raw chat.message.new payload to every
 // target's local sockets, identically to notification's generic path. The
 // recipient is whoever Django listed in targets:[uid,...] — for a 1:1
-// thread that's the other member; the relay never inspects message_id /
+// thread J1 includes sender and recipient; the relay never inspects message_id /
 // thread_id / body (the client does).
 func (d *Dispatcher) dispatchChatMessageNew(channel string, raw []byte) {
 	var env targetsEnvelope

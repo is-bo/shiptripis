@@ -9,6 +9,13 @@ class LAr extends L {
   LAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get payoutLegalCountryTitle => 'بلد حساب التحويل';
+
+  @override
+  String get payoutLegalCountryBody =>
+      'اختر البلد القانوني لحساب Stripe للموافقة على الإعداد. إذا لم يكن بلدك مدرجًا، استخدم التحويلات بالدينار الجزائري.';
+
+  @override
   String get appName => 'ShipTrip';
 
   @override

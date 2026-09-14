@@ -5,10 +5,9 @@ CLAUDE.md G6 — Redis publish ALWAYS after commit:
     Direct calls inside a transaction body are forbidden — they leak
     ghost events on rollback.
 
-CLAUDE.md G6b — Detection-only outbox (V1):
-    Every successful publish also INSERTs a `PublishedEvent` row. A daily
-    cron compares undelivered rows against Redis delivery receipts and alerts
-    on mismatches.
+J1 — Targeted events persist inbox and retry obligations in the business
+    transaction. Transport runs after commit, with the existing durable DB
+    worker recovering failures. PublishedEvent remains the delivery audit.
 
 The Go side (chat / notif services) consumes these channels via Redis
 pub/sub and writes `SET delivered:<event_id>:<user_id> 1 EX 60` on receipt;
@@ -54,6 +53,7 @@ def _payload_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+@transaction.atomic
 def publish_after_commit(
     channel: str,
     payload: dict[str, Any],
@@ -87,14 +87,16 @@ def publish_after_commit(
     serialized = json.dumps(enriched, separators=(",", ":"))
     digest = _payload_hash(enriched)
 
-    if idempotency_key:
-        # Critical callers opt in: inbox obligation commits with the business
+    if target_ids:
+        # The inbox obligation commits with the business
         # fact, not in the crash-prone after-commit delivery callback. Existing
         # uniqueness handles replay and concurrent callers without new tables.
         from apps.notifications.models import Notification
 
         created_targets = []
         for uid in target_ids:
+            if channel == "chat.message.new" and uid == payload.get("sender_id"):
+                continue
             _, created = Notification.objects.get_or_create(
                 recipient_id=uid, event_id=event_id,
                 defaults={"channel": channel, "payload": enriched},
@@ -103,7 +105,14 @@ def publish_after_commit(
                 created_targets.append(uid)
         if not created_targets:
             return event_id
-        target_ids = created_targets
+        from datetime import timedelta
+        from apps.finance.services import schedule_job
+        from apps.notifications.transport import dispatch_promptly
+
+        schedule_job(kind="notification_dispatch", key=f"notification:{event_id}",
+                     run_at=timezone.now() + timedelta(seconds=30), payload={"event_id": event_id})
+        transaction.on_commit(lambda: dispatch_promptly(event_id))
+        return event_id
 
     def _fire() -> None:
         try:
@@ -119,55 +128,6 @@ def publish_after_commit(
                 event_id,
             )
             return
-        # Persist a per-recipient inbox row for every target user. This is the
-        # source of truth the mobile inbox reads on cold start; the live WS
-        # fan-out via Go is a same-event mirror, not a replacement. We
-        # deliberately swallow errors here so a notification-write failure
-        # does NOT stop the live Redis publish below.
-        if target_ids:
-            try:
-                from apps.notifications.models import (  # noqa: WPS433 (late import)
-                    Notification,
-                )
-
-                Notification.objects.bulk_create(
-                    [
-                        Notification(
-                            recipient_id=int(uid),
-                            channel=channel,
-                            event_id=event_id,
-                            payload=enriched,
-                        )
-                        for uid in target_ids
-                    ],
-                    ignore_conflicts=True,  # (recipient, event_id) is unique
-                )
-            except Exception:
-                logger.exception(
-                    "redis_bus: failed to persist inbox rows for %s/%s",
-                    channel,
-                    event_id,
-                )
-            try:
-                from apps.notifications.push import (  # noqa: WPS433 (late import)
-                    enqueue_fcm_for_event,
-                )
-
-                enqueue_fcm_for_event(
-                    channel=channel,
-                    event_id=event_id,
-                    payload=enriched,
-                    targets=target_ids,
-                )
-            except Exception:
-                # Push is a secondary delivery channel. Redis/FCM readiness
-                # must never retroactively fail the committed business action,
-                # and payload/token material must never enter this log line.
-                logger.exception(
-                    "redis_bus: failed to enqueue push for %s/%s",
-                    channel,
-                    event_id,
-                )
         try:
             get_client().publish(channel, serialized)
         except redis.RedisError:

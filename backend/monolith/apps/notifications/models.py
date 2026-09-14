@@ -12,7 +12,8 @@ class Notification(models.Model):
     """Persisted, per-recipient notification.
 
     Written by `apps.core.redis_bus.publish_after_commit` for every user id in
-    the `targets` list, in the same `on_commit` step that publishes to Redis.
+    the `targets` list, in the business transaction (excluding chat sender
+    echoes). A durable job retries transport after commit.
     The Go WS dispatcher fans the same payload live; this row is the
     persistent inbox the mobile client reads on cold start and after
     backgrounding.

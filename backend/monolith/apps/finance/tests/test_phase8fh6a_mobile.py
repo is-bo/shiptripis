@@ -34,6 +34,14 @@ pytestmark = pytest.mark.django_db
 def setup(settings):
     with override_settings(**{**H2, **H3_SETTINGS}):
         from django.core.cache import cache
+        from django.apps import apps
+        from django.db import connection
+        from importlib import import_module
+        from types import SimpleNamespace
+        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
+        _seed_phase4_settings()
+        import_module("apps.admin_panel.migrations.0002_seed_roles").seed_roles(apps, None)
+        import_module("apps.admin_panel.migrations.0005_seed_payout_capabilities").seed(apps, SimpleNamespace(connection=connection))
         cache.clear()
         yield
 
@@ -94,6 +102,20 @@ def test_preference_preserves_funded_history():
     revision = client.get("/api/payouts/methods").data["revisions"]["EUR"]
     assert preference(client, "dzd_only", eur=revision).status_code == 200
     assert Payout.objects.filter(pk=payout.pk).values().get() == before
+
+
+def test_j1_setup_notification_uses_funded_instruction_not_current_preference():
+    from apps.notifications.resolution import resolved_notifications
+    s, payout, _, _ = build_stripe_payout(prefix="j1notify")
+    payout.block_reason = "payout_setup_required"
+    payout.save(update_fields=["block_reason"])
+    notify_payout_state(payout, "setup_required")
+    row = Notification.objects.get(recipient=s.traveler, channel="payout.status_changed", payload__event="setup_required")
+    assert not resolved_notifications(s.traveler).get(pk=row.pk).resolved
+    # Only clearing the bound execution gate resolves this event.
+    payout.block_reason = ""
+    payout.save(update_fields=["block_reason"])
+    assert resolved_notifications(s.traveler).get(pk=row.pk).resolved
 
 
 @pytest.mark.parametrize("changes, expected", [

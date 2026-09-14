@@ -1303,7 +1303,7 @@ class PaymentRepository {
     return (
       onboardingUrl: readText(body['onboarding_url']),
       expiresAt: readDate(body['expires_at']),
-      method: EurPayoutMethod.maybe(body['method']),
+      method: EurPayoutMethod.maybe(readObject(body['method'])?['mobile']),
     );
   }
 
@@ -1322,7 +1322,7 @@ class PaymentRepository {
       '/api/payouts/methods/stripe/refresh',
       body: const {},
     );
-    return EurPayoutMethod.maybe(body['method']);
+    return EurPayoutMethod.maybe(readObject(body['method'])?['mobile']);
   }
 
   /// Upload crossed-cheque proof image.
@@ -1557,6 +1557,7 @@ class NotificationRepository {
 
   Future<NotificationPage> page({
     int page = 1,
+    String bucket = 'active',
     bool unreadOnly = false,
     String? channel,
     CancelToken? cancelToken,
@@ -1564,6 +1565,7 @@ class NotificationRepository {
     await _api.getObject(
       '/api/notifications',
       query: {
+        'bucket': bucket,
         if (page > 1) 'page': page,
         if (unreadOnly) 'unread': '1',
         'channel': ?channel,
@@ -1702,11 +1704,12 @@ class ChatRepository {
   Future<ChatMessage> send({
     required int matchId,
     required String body,
+    String? clientMessageId,
     CancelToken? cancelToken,
   }) async => ChatMessage.fromJson(
     await _api.postObject(
       '/api/matches/$matchId/chat/messages',
-      body: {'body': body},
+      body: {'body': body, 'client_message_id': ?clientMessageId},
       cancelToken: cancelToken,
     ),
   );

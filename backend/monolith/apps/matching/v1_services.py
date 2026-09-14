@@ -580,7 +580,7 @@ def _create_sender_offer_locked(
         raise LegacyContractNotSupported(
             "Legacy delivery requests cannot enter the V1 flow."
         )
-    if journey_row.status != Journey.Status.ACTIVE:
+    if journey_row.status not in (Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS):
         raise JourneyNotActive("The journey is not active.")
     if journey_row.traveler_id == sender.id:
         raise OfferAuthorizationError("A sender cannot propose to their own journey.")
@@ -941,7 +941,7 @@ def _accept_offer_locked(
         .select_related("traveler")
         .get(pk=match.journey_id)
     )
-    if journey.status != Journey.Status.ACTIVE:
+    if journey.status not in (Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS):
         raise JourneyNotActive("The journey is no longer active.")
 
     locked_legs = _lock_journey_legs(journey)

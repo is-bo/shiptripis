@@ -240,12 +240,29 @@ final completedDealsCountProvider = Provider.autoDispose<AsyncValue<int>>(
 final _dealDetailQuery = FutureProvider.autoDispose
     .family<Deal, _AccountArgument<int>>((ref, key) async {
       final repo = ref.watch(dealRepositoryProvider);
-      return _liveRead(
+      final deal = await _liveRead(
         ref,
         key.accountId,
         LiveResource.deal(key.argument),
         () => repo.byId(key.argument),
       );
+      // One-shot refresh at a server deadline; this does not decide whether
+      // an action is permitted and does not poll.
+      final now = deal.serverTime ?? DateTime.now();
+      final deadlines =
+          [
+              deal.protectionEndsAt,
+              deal.ratings?.reviewWindowEndsAt,
+            ].whereType<DateTime>().where((date) => date.isAfter(now)).toList()
+            ..sort();
+      if (deadlines.isNotEmpty) {
+        final timer = Timer(
+          deadlines.first.difference(now) + const Duration(seconds: 1),
+          ref.invalidateSelf,
+        );
+        ref.onDispose(timer.cancel);
+      }
+      return deal;
     });
 final dealDetailProvider = Provider.autoDispose.family<AsyncValue<Deal>, int>((
   ref,

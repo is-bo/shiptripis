@@ -73,20 +73,53 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
     }
   }
 
+  Future<String?> _legalCountry(PayoutMethodsSummary summary) async {
+    final existing = summary.eur?.country;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final l = L.of(context);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(l.payoutLegalCountryTitle),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(AppSpace.md),
+            child: Text(l.payoutLegalCountryBody),
+          ),
+          for (final country in summary.eur?.supportedCountries ?? <String>[])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(ctx).pop(country),
+              child: Text(country == 'FR' ? l.countryNameFrance : country),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l.actionCancel),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _updatePreference(PayoutPreference newPref) async {
     if (_isActionBusy) return;
     setState(() => _isActionBusy = true);
     final l = L.of(context);
     try {
-      final summary = ref.read(payoutMethodsProvider).value;
-      final eurRev = summary?.revisionFor('EUR') ?? 0;
-      final dzdRev = summary?.revisionFor('DZD') ?? 0;
+      final summary = await ref.read(paymentRepositoryProvider).payoutMethods();
+      if (!mounted) return;
+      final country = newPref == PayoutPreference.dzdOnly
+          ? null
+          : await _legalCountry(summary);
+      if (newPref != PayoutPreference.dzdOnly && country == null) return;
+      final eurRev = summary.revisionFor('EUR');
+      final dzdRev = summary.revisionFor('DZD');
       await ref
           .read(paymentRepositoryProvider)
           .updatePayoutPreference(
             preference: newPref,
             eurRevision: eurRev,
             dzdRevision: dzdRev,
+            country: country,
           );
       if (!mounted) return;
       ref.invalidate(payoutMethodsProvider);
@@ -108,7 +141,22 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
       if (action == 'configure_eur' ||
           action == 'setup_eur' ||
           action == 'resume_eur_setup') {
-        final result = await repo.startStripeOnboarding();
+        final summary = await repo.payoutMethods();
+        if (!mounted) return;
+        final country = await _legalCountry(summary);
+        if (country == null) return;
+        if (summary.preference != PayoutPreference.eurOnly &&
+            summary.preference != PayoutPreference.both) {
+          await repo.updatePayoutPreference(
+            preference: summary.preference == PayoutPreference.dzdOnly
+                ? PayoutPreference.both
+                : PayoutPreference.eurOnly,
+            eurRevision: summary.revisionFor('EUR'),
+            dzdRevision: summary.revisionFor('DZD'),
+            country: country,
+          );
+        }
+        final result = await repo.startStripeOnboarding(country: country);
         final url = result.onboardingUrl;
         if (url.isNotEmpty) {
           final uri = Uri.parse(url);
@@ -171,7 +219,7 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
               padding: AppScrollPadding.page(context),
               children: [
                 _PreferenceCard(
-                  current: summary.preference ?? PayoutPreference.both,
+                  current: summary.preference,
                   isBusy: _isActionBusy,
                   onSelect: _updatePreference,
                 ),
@@ -218,7 +266,7 @@ class _PreferenceCard extends StatelessWidget {
     required this.onSelect,
   });
 
-  final PayoutPreference current;
+  final PayoutPreference? current;
   final bool isBusy;
   final ValueChanged<PayoutPreference> onSelect;
 
@@ -294,7 +342,7 @@ class _PreferenceRadioOption extends StatelessWidget {
   final String title;
   final String? subtitle;
   final PayoutPreference value;
-  final PayoutPreference groupValue;
+  final PayoutPreference? groupValue;
   final bool enabled;
   final ValueChanged<PayoutPreference> onChanged;
 

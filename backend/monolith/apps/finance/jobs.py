@@ -703,7 +703,16 @@ def handle_payout_sweep(payload: dict) -> str:
     )[:255]
 
 
+def handle_notification_dispatch(payload):
+    from apps.notifications.transport import dispatch_event
+    try:
+        return dispatch_event(payload)
+    except Exception:
+        raise RetryableJobError("Notification transport unavailable.", code="notification_transport_unavailable") from None
+
+
 HANDLERS = {
+    ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
     ScheduledJob.Kind.PAYMENT_GRACE_RELEASE: handle_payment_grace_release,
     ScheduledJob.Kind.ATTEMPT_EXPIRY: handle_attempt_expiry,

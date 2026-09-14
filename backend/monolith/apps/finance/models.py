@@ -1349,6 +1349,7 @@ class ScheduledJob(models.Model):
         RATING_REVEAL = "rating_reveal", "Rating reveal"
         BOOST_EXPIRY = "boost_expiry", "Boost expiry"
         OUTBOUND_MESSAGE = "outbound_message", "Outbound message dispatch"
+        NOTIFICATION_DISPATCH = "notification_dispatch", "Notification dispatch"
         # --- Phase 8F-H3 automatic EUR payout execution ---
         PAYOUT_EXECUTE = "payout_execute", "Payout execution"
         PAYOUT_RECONCILE = "payout_reconcile", "Payout reconciliation"

@@ -9,6 +9,13 @@ class LFr extends L {
   LFr([String locale = 'fr']) : super(locale);
 
   @override
+  String get payoutLegalCountryTitle => 'Pays du compte de versement';
+
+  @override
+  String get payoutLegalCountryBody =>
+      'Sélectionnez le pays légal de votre compte Stripe pour consentir à la configuration. Si votre pays ne figure pas dans la liste, utilisez les versements DZD.';
+
+  @override
   String get appName => 'ShipTrip';
 
   @override

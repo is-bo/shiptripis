@@ -181,6 +181,16 @@ class DealSerializer(serializers.ModelSerializer):
     activity_state = serializers.SerializerMethodField()
     arrival = serializers.SerializerMethodField()
     route = serializers.SerializerMethodField()
+    available_actions = serializers.SerializerMethodField()
+    server_time = serializers.SerializerMethodField()
+
+    def get_server_time(self, deal):
+        from django.utils import timezone
+        return timezone.now()
+
+    def get_available_actions(self, deal):
+        from apps.disputes.services import can_open_dispute
+        return ["open_dispute"] if can_open_dispute(deal=deal, viewer_id=self._viewer_id()) else []
 
     class Meta:
         model = Deal
@@ -210,6 +220,8 @@ class DealSerializer(serializers.ModelSerializer):
             "no_show",
             "arrival",
             "route",
+            "available_actions",
+            "server_time",
             "created_at",
             "updated_at",
         )

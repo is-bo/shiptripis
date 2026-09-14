@@ -262,6 +262,16 @@ class ChatMessagesView(ListAPIView, APIView):
         s = ChatSendSerializer(data=request.data)
         s.is_valid(raise_exception=True)
 
+        client_id = s.validated_data.get("client_message_id")
+        if client_id:
+            previous = ChatMessage.objects.filter(
+                match=match, sender=request.user, client_message_id=client_id,
+            ).first()
+            if previous:
+                if previous.body != s.validated_data["body"]:
+                    return Response({"code": "chat_idempotency_conflict"}, status=409)
+                return Response(ChatMessageSerializer(previous).data, status=200)
+
         other_id = (
             match.traveler_id
             if request.user.id == match.sender_id
@@ -272,6 +282,7 @@ class ChatMessagesView(ListAPIView, APIView):
             match=match,
             sender=request.user,
             body=s.validated_data["body"],
+            client_message_id=client_id,
         )
         redis_bus.publish_after_commit(
             channels.CHAT_MESSAGE_NEW,
@@ -281,8 +292,9 @@ class ChatMessagesView(ListAPIView, APIView):
                 "sender_id": request.user.id,
                 "body": msg.body,
                 "created_at": msg.created_at.isoformat(),
+                "client_message_id": str(client_id) if client_id else None,
             },
-            targets=[other_id],
+            targets=[other_id, request.user.id],
         )
 
         return Response(

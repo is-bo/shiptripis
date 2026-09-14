@@ -171,6 +171,29 @@ def _window_end(deal: Deal) -> datetime | None:
     return deal.delivery_confirmed_at + lifecycle.rating_window(deal)
 
 
+def with_review_deadline(queryset):
+    """SQL equivalent of the frozen deadline, including pre-column Deals."""
+    from datetime import timedelta
+    from django.db.models import BigIntegerField, Case, CharField, DateTimeField, ExpressionWrapper, F, JSONField, Value, When
+    from django.db.models.fields.json import KeyTextTransform
+    from django.db.models.functions import Cast, Coalesce
+
+    key = "rating_review_window_seconds"
+    parsed = Case(
+        When(**{f"lifecycle_policy__{key}__regex": r"^[0-9]{1,10}$"},
+             then=Cast(KeyTextTransform(key, "lifecycle_policy"), BigIntegerField())),
+        default=Value(None), output_field=BigIntegerField(),
+    )
+    # JSON numbers only: a numeric string or bool is not a policy integer.
+    seconds = Case(
+        When(**{f"lifecycle_policy__{key}": Cast(Cast(parsed, CharField()), JSONField())}, then=parsed),
+        default=Value(1_209_600), output_field=BigIntegerField(),
+    )
+    legacy = ExpressionWrapper(F("delivery_confirmed_at") + seconds * Value(timedelta(seconds=1)),
+                               output_field=DateTimeField())
+    return queryset.alias(review_deadline=Coalesce("rating_window_ends_at", legacy))
+
+
 def _assert_window_open(deal: Deal, *, at: datetime) -> datetime:
     """The state gate, returning the window the new row is frozen against."""
 
@@ -423,6 +446,13 @@ def rating_state(
         "window_open": window_open,
         "can_rate": bool(viewer_role is not None and window_open and mine is None),
         "submitted": mine is not None,
+        "state": (
+            "revealed" if mine is not None and is_revealed(mine, deal=deal, at=at)
+            else "submitted_waiting" if mine is not None
+            else "available" if viewer_role and window_open
+            else "expired" if window_end and at >= window_end
+            else "unavailable"
+        ),
         "counterparty_submitted": (
             counterpart is not None if viewer_role else len(by_role) >= 2
         ),

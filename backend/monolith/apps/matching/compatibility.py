@@ -522,7 +522,7 @@ def evaluate_compatibility(
         and delivery_request.status == ParcelRequest.Status.OPEN
     )
     check("request_active", request_active)
-    check("journey_active", journey.status == Journey.Status.ACTIVE)
+    check("journey_active", journey.status in (Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS))
     accounts_eligible = all(
         (
             delivery_request.sender.is_active,

@@ -1236,7 +1236,7 @@ class SenderRouteProjectionTests(TestCase):
             funded_route(deal=scenario.deal, viewer_id=scenario.outsider.pk) is None
         )
 
-    def test_a_legacy_deal_without_a_snapshot_falls_back_and_says_so(self):
+    def test_a_legacy_deal_without_a_snapshot_returns_unavailable(self):
         from apps.deals.route import funded_route
 
         scenario = fund_scenario(self.client, prefix="i1a-route-legacy")
@@ -1245,8 +1245,7 @@ class SenderRouteProjectionTests(TestCase):
         deal.refresh_from_db()
 
         route = funded_route(deal=deal, viewer_id=deal.sender_id)
-        assert route["basis"] == "live_journey"
-        assert route["legs"]
+        assert route is None
 
 
 class HistoricalDealTests(TestCase):

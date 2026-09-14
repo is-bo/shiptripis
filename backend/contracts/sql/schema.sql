@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
-
 -- Dumped from database version 16.2
 -- Dumped by pg_dump version 16.2
 
@@ -590,7 +588,8 @@ CREATE TABLE public.chat_message (
     created_at timestamp with time zone NOT NULL,
     read_at timestamp with time zone,
     match_id bigint NOT NULL,
-    sender_id bigint NOT NULL
+    sender_id bigint NOT NULL,
+    client_message_id uuid
 );
 
 
@@ -3950,6 +3949,14 @@ ALTER TABLE ONLY public.boosts_purchase
 
 ALTER TABLE ONLY public.chat_message
     ADD CONSTRAINT chat_message_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chat_message chat_sender_client_message_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_message
+    ADD CONSTRAINT chat_sender_client_message_uniq UNIQUE (match_id, sender_id, client_message_id);
 
 
 --
@@ -11268,6 +11275,4 @@ ALTER TABLE ONLY public.wallet_withdrawal
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
 

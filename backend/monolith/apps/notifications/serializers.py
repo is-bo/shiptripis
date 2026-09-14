@@ -4,6 +4,7 @@ from .models import Notification, NotificationPreference, PushDevice
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    resolved = serializers.BooleanField(read_only=True, default=False)
     class Meta:
         model = Notification
         fields = (
@@ -12,6 +13,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             "event_id",
             "payload",
             "read_at",
+            "resolved",
             "created_at",
         )
         read_only_fields = fields

@@ -1,5 +1,7 @@
 {
   "@@locale": "ar",
+  "payoutLegalCountryTitle": "بلد حساب التحويل",
+  "payoutLegalCountryBody": "اختر البلد القانوني لحساب Stripe للموافقة على الإعداد. إذا لم يكن بلدك مدرجًا، استخدم التحويلات بالدينار الجزائري.",
   "appName": "ShipTrip",
   "actionContinue": "متابعة",
   "actionCancel": "إلغاء",

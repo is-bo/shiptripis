@@ -61,6 +61,18 @@ class DzdInput(StrictInput):
     proof_reference = serializers.UUIDField(write_only=True)
     consent_policy = serializers.CharField(max_length=64)
 
+    def validate(self, attrs):
+        from .sensitive_data import normalize_digits
+        errors = {}
+        for field, minimum, maximum in (("ccp_number", 1, 20), ("ccp_key", 2, 2), ("rip", 20, 20)):
+            try:
+                attrs[field] = normalize_digits(attrs[field], minimum=minimum, maximum=maximum)
+            except DomainError:
+                errors[field] = [f"Expected {minimum} to {maximum} digits."]
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
 
 class MobilePreferenceInput(StrictInput):
     preference = serializers.ChoiceField(choices=["eur_only", "dzd_only", "both"])

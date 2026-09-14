@@ -48,7 +48,7 @@ def eur_method(method):
                 actions.append("manage_eur")
             if state == "setup_required" and method.enabled:
                 actions.append("resume_eur_setup")
-        elif not account and (not method or method.enabled):
+        elif not account:
             actions.append("configure_eur")
     return {"state": state, "ready": state == "ready", "blocking_reason": reason or None,
             "available_actions": actions, "country": country or None,

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -81,7 +82,6 @@ class ChatThreadController extends ChangeNotifier {
   bool _loadingOlder = false;
   bool _hasMoreOlder = false;
   int _unresolvedSends = 0;
-  int _localCounter = 0;
   int _reconcileCursor = 0;
   Object? _initialError;
   Object? _backgroundError;
@@ -332,7 +332,7 @@ class ChatThreadController extends ChangeNotifier {
       return Future<Object?>.value(null);
     }
     final pending = PendingChatMessage(
-      localId: 'chat-$accountId-$matchId-${_localCounter++}',
+      localId: _newMessageId(),
       body: body,
       createdAt: DateTime.now(),
     );
@@ -366,6 +366,7 @@ class ChatThreadController extends ChangeNotifier {
       final acknowledged = await _repository.send(
         matchId: matchId,
         body: pending.body,
+        clientMessageId: pending.localId,
         cancelToken: token,
       );
       if (!_active || token.isCancelled) return null;
@@ -409,6 +410,15 @@ class ChatThreadController extends ChangeNotifier {
     if (_unresolvedSends > 0) _unresolvedSends--;
   }
 
+  static String _newMessageId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
   void _flushDeferredPages() {
     for (final page in _deferredPages) {
       _merge(page.messages);
@@ -420,6 +430,11 @@ class ChatThreadController extends ChangeNotifier {
     for (final message in incoming) {
       if (message.id > 0 && message.matchId == matchId) {
         _delivered[message.id] = message;
+        if (message.senderId == accountId && message.clientMessageId != null) {
+          _pending.removeWhere(
+            (pending) => pending.localId == message.clientMessageId,
+          );
+        }
       }
     }
   }

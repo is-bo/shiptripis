@@ -26,44 +26,62 @@ import '../../domain/notification.dart';
 import '../../l10n/app_localizations.dart';
 
 final _notificationsQuery = FutureProvider.autoDispose
-    .family<NotificationPage, int?>((ref, accountId) async {
+    .family<NotificationPage, ({int? accountId, bool history})>((
+      ref,
+      key,
+    ) async {
       final unsubscribe = ref
           .read(liveUpdatesProvider)
           .register(const LiveResource.notifications(), ref.invalidateSelf);
       ref.onDispose(unsubscribe);
       final repo = ref.watch(notificationRepositoryProvider);
-      final result = await repo.page();
-      if (ref.read(accountProvider)?.id != accountId) {
+      final result = await repo.page(
+        bucket: key.history ? 'history' : 'active',
+      );
+      if (ref.read(accountProvider)?.id != key.accountId) {
         throw StateError('Discarded an inbox read from an older session.');
       }
       return result;
     });
-final _notificationsProvider =
-    Provider.autoDispose<AsyncValue<NotificationPage>>((ref) {
+final _notificationsProvider = Provider.autoDispose
+    .family<AsyncValue<NotificationPage>, bool>((ref, history) {
       final accountId = ref.watch(
         accountProvider.select((account) => account?.id),
       );
-      final query = _notificationsQuery(accountId);
+      final query = _notificationsQuery((
+        accountId: accountId,
+        history: history,
+      ));
       // ignore: experimental_member_use
       ref.onManualInvalidation(() => ref.invalidate(query));
       return ref.watch(query);
     });
 
 class NotificationsScreen extends ConsumerWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, this.history = false});
+  final bool history;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final page = ref.watch(_notificationsProvider);
+    final page = ref.watch(_notificationsProvider(history));
     final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
 
     return AppScaffold(
       topBar: AppTopBar(
-        title: l.notificationsTitle,
-        subtitle: l.notificationsUnreadCount(unread),
+        title: history ? l.deliveriesFilterHistory : l.notificationsTitle,
         showBack: true,
         actions: [
+          if (!history)
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: l.deliveriesFilterHistory,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsScreen(history: true),
+                ),
+              ),
+            ),
           if (unread > 0)
             TextButton(
               onPressed: () => _markAllRead(context, ref),

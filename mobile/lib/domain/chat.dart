@@ -124,6 +124,7 @@ class ChatMessage {
     required this.body,
     this.createdAt,
     this.readAt,
+    this.clientMessageId,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
@@ -133,6 +134,7 @@ class ChatMessage {
     body: readText(json['body']),
     createdAt: readDate(json['created_at']),
     readAt: readDate(json['read_at']),
+    clientMessageId: readString(json['client_message_id']),
   );
 
   final int id;
@@ -141,6 +143,7 @@ class ChatMessage {
   final String body;
   final DateTime? createdAt;
   final DateTime? readAt;
+  final String? clientMessageId;
 
   bool isMine(int viewerId) => senderId == viewerId;
 }

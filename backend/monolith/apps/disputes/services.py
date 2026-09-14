@@ -220,6 +220,20 @@ def _assert_dispute_window_open(deal: Deal, *, at: datetime) -> None:
     )
 
 
+def can_open_dispute(*, deal: Deal, viewer_id: int | None, at=None) -> bool:
+    """Read projection of the same party, window and prior-dispute gates."""
+    if not _party_role(deal, viewer_id):
+        return False
+    try:
+        _assert_dispute_window_open(deal, at=at or timezone.now())
+    except DisputeError:
+        return False
+    return not deal.disputes.filter(status__in=[
+        Dispute.Status.OPEN, Dispute.Status.AWAITING_EVIDENCE,
+        Dispute.Status.UNDER_REVIEW, Dispute.Status.RESOLVED,
+    ]).exists()
+
+
 def _assert_already_resolved(aggregate: LockedLifecycleAggregate) -> None:
     """Refuse a party's second dispute once one has already been decided.
 

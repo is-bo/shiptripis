@@ -99,6 +99,18 @@ abstract class L {
     Locale('fr'),
   ];
 
+  /// No description provided for @payoutLegalCountryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout account country'**
+  String get payoutLegalCountryTitle;
+
+  /// No description provided for @payoutLegalCountryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.'**
+  String get payoutLegalCountryBody;
+
   /// No description provided for @appName.
   ///
   /// In en, this message translates to:

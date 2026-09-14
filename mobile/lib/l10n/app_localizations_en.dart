@@ -9,6 +9,13 @@ class LEn extends L {
   LEn([String locale = 'en']) : super(locale);
 
   @override
+  String get payoutLegalCountryTitle => 'Payout account country';
+
+  @override
+  String get payoutLegalCountryBody =>
+      'Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.';
+
+  @override
   String get appName => 'ShipTrip';
 
   @override

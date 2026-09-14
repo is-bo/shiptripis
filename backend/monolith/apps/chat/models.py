@@ -7,8 +7,9 @@ class ChatMessage(models.Model):
 
     Django owns persistence + the write path. On create the send view
     publishes `chat.message.new` via `redis_bus.publish_after_commit` with
-    `targets=[other_member_uid]`; the Go chat-service fans the same payload
-    to the recipient's live WebSocket (it never writes this table itself).
+    both participant IDs; the Go chat-service fans the persisted receipt
+    to their live WebSockets (it never writes this table itself). Only the
+    counterparty receives a notification inbox row or push.
 
     The thread is implicit: `(match, ordered by id)`. There is no
     separate `chat_thread` table in V1 — a Match already scopes exactly the
@@ -33,11 +34,18 @@ class ChatMessage(models.Model):
         related_name="chat_messages",
     )
     body = models.TextField(max_length=2000)
+    client_message_id = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     read_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         db_table = "chat_message"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("match", "sender", "client_message_id"),
+                name="chat_sender_client_message_uniq",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=("match", "created_at"),

@@ -1031,7 +1031,9 @@ class _RatingSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionHeader(title: l.ratingTitle),
+          SectionHeader(
+            title: ratings.submitted ? l.ratingSubmittedTitle : l.ratingTitle,
+          ),
           if (ratings.canRate && !ratings.submitted)
             InfoNotice(
               message: isSender ? l.ratingSenderPrompt : l.ratingTravelerPrompt,
@@ -1074,11 +1076,7 @@ class _SecondaryActions extends StatelessWidget {
 
     // Disputes open at pickup and close with the protection window. The server
     // owns that window; this only asks whether we are inside it.
-    final canDispute =
-        deal.pickupConfirmedAt != null &&
-        !deal.hasActiveDispute &&
-        (deal.protectionEndsAt == null ||
-            deal.protectionEndsAt!.isAfter(DateTime.now()));
+    final canDispute = deal.availableActions.contains('open_dispute');
 
     return Column(
       children: [

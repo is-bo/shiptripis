@@ -14,6 +14,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
             "match_id",
             "sender_id",
             "body",
+            "client_message_id",
             "created_at",
             "read_at",
         )
@@ -24,6 +25,7 @@ class ChatSendSerializer(serializers.Serializer):
     """Validate an inbound message. `body` is trimmed; empty is rejected."""
 
     body = serializers.CharField(max_length=2000, trim_whitespace=True)
+    client_message_id = serializers.UUIDField(required=False)
 
 
 class ChatThreadSerializer(serializers.Serializer):

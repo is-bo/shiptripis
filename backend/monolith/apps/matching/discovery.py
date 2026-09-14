@@ -408,10 +408,10 @@ def compatible_journeys_for_request(
                 destination__airport_id__isnull=False,
             )
         )
+    from apps.trips.lifecycle import discoverable
     queryset = (
-        _matching_journey_queryset(at=at)
+        discoverable(_matching_journey_queryset(at=at), at=at)
         .filter(
-            status=Journey.Status.ACTIVE,
             traveler__is_active=True,
             traveler__is_banned=False,
             has_current_kyc_value=True,

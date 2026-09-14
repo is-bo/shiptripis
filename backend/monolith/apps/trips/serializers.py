@@ -751,6 +751,14 @@ class JourneyLegSerializer(serializers.ModelSerializer):
 
 
 class JourneySerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+
+    def get_status(self, obj):
+        from .lifecycle import with_lifecycle
+        if hasattr(obj, "lifecycle_status"):
+            return obj.lifecycle_status
+        return with_lifecycle(Journey.objects.filter(pk=obj.pk)).values_list("lifecycle_status", flat=True).get()
+
     traveler_id = serializers.IntegerField(read_only=True)
     traveler_name = serializers.CharField(source="traveler.full_name", read_only=True)
     start_location = PublicLocationSerializer(read_only=True)
