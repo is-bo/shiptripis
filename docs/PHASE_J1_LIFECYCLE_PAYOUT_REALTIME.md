@@ -189,6 +189,29 @@ to the user-run Gemini verifier at an immutable SHA, with no source changes.
 
 ## Remaining release gates and J3 work
 
+### GitHub verification at cc55084 and schema-export correction
+
+The user authorized CI and Android Actions to cover unavailable local verifier
+prerequisites. At `cc55084b1c056a01f77a5082194be6ae83c3ae65`,
+[CI run 34894741388](https://github.com/is-bo/shiptripis/actions/runs/34894741388)
+passed Django (**1,946 passed / 34 skipped**, 1,526 seconds), Flutter, Go
+race/unit, real-Redis integration and production/static checks. Schema drift
+alone failed. The complete SQL diff consists of missing paired `\restrict` /
+`\unrestrict` wrapper lines and their blank separators; generated Go changes
+were correctly ignored version comments. The older local exporter omitted
+wrappers present in CI's newer pg_dump. Restore the pair already present before
+J1, preserving every SQL statement and the existing strict CI normalization.
+No runtime, model, migration, or mobile change is needed. Verify the corrected
+normalized export against the complete CI diff, then rerun CI. Passing broad
+test and APK evidence remains applicable; no new Gemini broad run is needed.
+
+[Android run 34894794431](https://github.com/is-bo/shiptripis/actions/runs/34894794431)
+passed analysis, tests, profile compilation, AOT/debug-payload checks, signature
+verification and artifact upload. Artifact `10368810330` is
+`shiptrip-j1-test-cc55084-cc55084-profile-arm64`, built for the current TEST API
+origin. This proves build/installability checks, not real-device acceptance.
+No merge or TEST deployment has occurred. No LIVE operation or DZD execution.
+
 ### Gemini round 2 and final test-contract correction
 
 At `ee863827eda317b75e5ccbafc4d2b3eb87b25173`, the fresh database seed preflight

@@ -2,6 +2,8 @@
 -- PostgreSQL database dump
 --
 
+\restrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
+
 -- Dumped from database version 16.2
 -- Dumped by pg_dump version 16.2
 
@@ -11275,4 +11277,6 @@ ALTER TABLE ONLY public.wallet_withdrawal
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict 1QaaFWYDRe9UoFz85mvL9WZWCdBzkQMXDvsnOGw4NevVp16ZViey90zPQdo36lk
 

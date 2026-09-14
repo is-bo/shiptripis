@@ -6,18 +6,27 @@
 `codex/j1-lifecycle-payout-realtime`, starting `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
 [J1 evidence and contracts](PHASE_J1_LIFECYCLE_PAYOUT_REALTIME.md).
 
+CI at `cc55084` completed: **1,946 Django passed / 34 skipped**, Flutter,
+Go race/unit, real-Redis integration and production/static checks passed.
+Only schema comparison failed: the local dump omitted the `\restrict` /
+`\unrestrict` wrappers retained by CI's newer pg_dump. Restored the existing
+paired export wrappers; SQL and runtime are unchanged. CI rerun is required.
+The TEST ARM64 profile APK build passed and its artifact is available from
+[Android run 34894794431](https://github.com/is-bo/shiptripis/actions/runs/34894794431).
+Merge, TEST deployment and device acceptance remain pending.
+
 Gemini round 1 at `11e07d6`: ten J1 tests passed, but full Django failed on a
 depleted reused seed database and Flutter had one timer-lifecycle regression.
 The timer cancellation and H6A missing-policy fixture are corrected with focused
 tests. A fresh dedicated PostgreSQL full run remains required; race/Redis and
-APK checks were blocked by local prerequisites. CI/deployment remain untriggered.
+APK checks were blocked by local prerequisites at that checkpoint.
 
 Round 2 at `ee86382`: fresh PostgreSQL **1,944 passed / 2 failed / 34 skipped**;
 all **57 affected Flutter tests passed**. Both remaining failures were stale
 live-event test expectations: transactional inbox timing and payment-vs-Deal
 resource payloads. The corrected live-event module now passes **9/9 (4.66s)**,
-with no runtime change. Preserve broad passing evidence; Go race/Redis and APK
-prerequisites remain pending before release acceptance.
+with no runtime change. Subsequent CI/Android results above resolve the local
+Go race/Redis and APK prerequisite blockers.
 
 Adds explicit EUR legal-country selection/fresh payout revisions/nested Stripe
 decoding, query-derived Journey expiry, server dispute actions/rating state,
