@@ -256,11 +256,28 @@ final _dealDetailQuery = FutureProvider.autoDispose
             ].whereType<DateTime>().where((date) => date.isAfter(now)).toList()
             ..sort();
       if (deadlines.isNotEmpty) {
-        final timer = Timer(
-          deadlines.first.difference(now) + const Duration(seconds: 1),
-          ref.invalidateSelf,
-        );
-        ref.onDispose(timer.cancel);
+        final delay =
+            deadlines.first.difference(now) + const Duration(seconds: 1);
+        final elapsed = Stopwatch()..start();
+        Timer? timer;
+        void arm() {
+          timer?.cancel();
+          final remaining = delay - elapsed.elapsed;
+          timer = Timer(
+            remaining.isNegative ? Duration.zero : remaining,
+            ref.invalidateSelf,
+          );
+        }
+
+        arm();
+        // Stop as soon as the screen stops listening, before auto-dispose's
+        // grace period. Reattaching keeps the original deadline, not a new wait.
+        ref.onCancel(() => timer?.cancel());
+        ref.onResume(arm);
+        ref.onDispose(() {
+          timer?.cancel();
+          elapsed.stop();
+        });
       }
       return deal;
     });

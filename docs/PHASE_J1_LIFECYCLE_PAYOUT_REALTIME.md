@@ -189,6 +189,44 @@ to the user-run Gemini verifier at an immutable SHA, with no source changes.
 
 ## Remaining release gates and J3 work
 
+### Gemini round 1 and corrections
+
+User-returned verifier report for `11e07d699776a0b657524cbf16d30234b6f90d5a`:
+source clean; migration/schema/Ruff/Flutter analysis passed; ten J1 backend
+contracts passed; H8A 29/29, PRE-H8 21/21 and core Redis bus 16/16 passed.
+Full Django: 1,115 passed, 774 failed, 61 errors, 34 skipped (1,616.15s).
+Full Flutter: 529 passed, one failed (49.25s). Go build/vet and ten chat tests
+passed; race/Redis integration and the Android APK were blocked by missing local
+toolchains/infrastructure. These are failures/blockers, not a green Gemini gate.
+
+The failed Flutter handover test reproduced locally. Contrary to the report's
+suggested explanation, the shared harness already registers container disposal.
+The timer survived until Riverpod's deferred provider disposal/test teardown.
+The correction cancels at the last-listener cancellation, rearms at the original
+server deadline when a listener returns, and still cancels at disposal. A
+monotonic elapsed duration prevents reattachment from extending the deadline.
+No provider mutation occurs inside Riverpod lifecycle callbacks. The formerly
+failing test passes; a new widget regression also proves one authoritative
+refresh removes the dispute action and leaves no subsequent refresh.
+
+The H6A failure is independently confirmed: its self-seeded Phase 4 fixture
+lacked `boost.minimum_amount_eur_cents`. The fixture now applies the existing
+boost-economics migration seed as J1's fixture already does. This changes test
+setup only; it adds no J2 product behavior. Five focused H6A preference,
+authorization and frozen-notification tests pass (4.55s); targeted Dart analysis
+and Ruff pass.
+
+A read-only check found **zero** business-settings rows, airports and auth groups
+in reused `shiptrip_h8a_verify`; migrated `shiptrip_h8a_schema_verify` contains
+6, 18 and 5 respectively. The full-suite instruction to reuse that depleted
+database was a verifier setup error. Do not add per-test global reseeding that
+could mask isolation bugs. Round 2 must start one fresh, dedicated local test
+database from migrations, check seed presence before running, and preserve the
+existing database. The XML supports widespread seed-related failures, but it
+does not prove every failure disappears on a fresh database; that remains a
+required full PostgreSQL verification. Existing passing evidence need not be
+repeated unless the correction invalidates it.
+
 Gemini verification, CI, merge/main synchronization, branch cleanup, TEST
 deployment/migrations/workers, health/ready probes and read-only H5 integrity /
 zero-difference reconciliation are **pending**, not PASS. No CI run was triggered

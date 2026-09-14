@@ -6,6 +6,12 @@
 `codex/j1-lifecycle-payout-realtime`, starting `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
 [J1 evidence and contracts](PHASE_J1_LIFECYCLE_PAYOUT_REALTIME.md).
 
+Gemini round 1 at `11e07d6`: ten J1 tests passed, but full Django failed on a
+depleted reused seed database and Flutter had one timer-lifecycle regression.
+The timer cancellation and H6A missing-policy fixture are corrected with focused
+tests. A fresh dedicated PostgreSQL full run remains required; race/Redis and
+APK checks were blocked by local prerequisites. CI/deployment remain untriggered.
+
 Adds explicit EUR legal-country selection/fresh payout revisions/nested Stripe
 decoding, query-derived Journey expiry, server dispute actions/rating state,
 honest historical route unavailability, transactional notification inbox/retry

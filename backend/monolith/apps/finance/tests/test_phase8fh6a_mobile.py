@@ -40,6 +40,7 @@ def setup(settings):
         from types import SimpleNamespace
         from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
         _seed_phase4_settings()
+        import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(apps, None)
         import_module("apps.admin_panel.migrations.0002_seed_roles").seed_roles(apps, None)
         import_module("apps.admin_panel.migrations.0005_seed_payout_capabilities").seed(apps, SimpleNamespace(connection=connection))
         cache.clear()
