@@ -2,15 +2,22 @@
 
 ## J1 — Lifecycle, payout setup and realtime foundations (2026-09-14)
 
-**Implementation checkpoint; verification/release pending.** Branch
+**Verification passed; TEST release pending.** Branch
 `codex/j1-lifecycle-payout-realtime`, starting `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
 [J1 evidence and contracts](PHASE_J1_LIFECYCLE_PAYOUT_REALTIME.md).
+
+Final [CI run 34898155599](https://github.com/is-bo/shiptripis/actions/runs/34898155599)
+passed all six jobs at `9c1f7b7df5e037ad1aecdac08cc1ede3d74f60b5`, including
+schema drift. The release checkpoint adds documentation only, preserving that
+verified runtime and the passing `cc55084` Android artifact. Main promotion and
+TEST deployment follow; deployed contracts, H5 and device acceptance are still
+required. This is not yet a full J1 PASS.
 
 CI at `cc55084` completed: **1,946 Django passed / 34 skipped**, Flutter,
 Go race/unit, real-Redis integration and production/static checks passed.
 Only schema comparison failed: the local dump omitted the `\restrict` /
 `\unrestrict` wrappers retained by CI's newer pg_dump. Restored the existing
-paired export wrappers; SQL and runtime are unchanged. CI rerun is required.
+paired export wrappers; SQL and runtime are unchanged. The final CI above passes.
 The TEST ARM64 profile APK build passed and its artifact is available from
 [Android run 34894794431](https://github.com/is-bo/shiptripis/actions/runs/34894794431).
 Merge, TEST deployment and device acceptance remain pending.
@@ -18,7 +25,7 @@ Merge, TEST deployment and device acceptance remain pending.
 Gemini round 1 at `11e07d6`: ten J1 tests passed, but full Django failed on a
 depleted reused seed database and Flutter had one timer-lifecycle regression.
 The timer cancellation and H6A missing-policy fixture are corrected with focused
-tests. A fresh dedicated PostgreSQL full run remains required; race/Redis and
+tests. A fresh dedicated PostgreSQL full run was required; race/Redis and
 APK checks were blocked by local prerequisites at that checkpoint.
 
 Round 2 at `ee86382`: fresh PostgreSQL **1,944 passed / 2 failed / 34 skipped**;
@@ -39,7 +46,7 @@ Focused PostgreSQL, Flutter and Go checks pass. Deployed TEST diagnosis confirms
 missing-country EUR/Both errors, three elapsed stored-active Journeys, no active
 push devices, valid FCM project alignment, HTTP 200 and both WS handshakes 101.
 Blanket DZD/device Home/route/chat reproduction remains unresolved; do not call
-the full phase PASS from source/widget tests. Gemini, CI, merge, TEST deployment
+the full phase PASS from source/widget tests. Merge, TEST deployment
 and post-deploy H5 reconciliation remain required. No LIVE operation or runtime
 configuration change; DZD execution remains false. J2 has not begun.
 

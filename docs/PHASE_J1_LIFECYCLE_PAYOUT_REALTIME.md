@@ -189,6 +189,18 @@ to the user-run Gemini verifier at an immutable SHA, with no source changes.
 
 ## Remaining release gates and J3 work
 
+### Final CI and release checkpoint
+
+[CI run 34898155599](https://github.com/is-bo/shiptripis/actions/runs/34898155599)
+is **SUCCESS** at `9c1f7b7df5e037ad1aecdac08cc1ede3d74f60b5`: all six jobs
+passed, including the corrected schema gate. Results were retrieved only after
+the user reported completion. The release checkpoint changes documentation only;
+the tested runtime, migrations, contracts and mobile sources remain identical.
+Its `[skip ci]` commit follows the existing documentation/promotion precedent;
+no additional workflow is needed for unchanged code. Main promotion, exact-main
+archive TEST deployment, post-deploy contracts and one read-only H5 snapshot
+follow. Full device acceptance remains separate and cannot be inferred from CI.
+
 ### GitHub verification at cc55084 and schema-export correction
 
 The user authorized CI and Android Actions to cover unavailable local verifier
