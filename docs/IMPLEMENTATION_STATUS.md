@@ -12,6 +12,13 @@ The timer cancellation and H6A missing-policy fixture are corrected with focused
 tests. A fresh dedicated PostgreSQL full run remains required; race/Redis and
 APK checks were blocked by local prerequisites. CI/deployment remain untriggered.
 
+Round 2 at `ee86382`: fresh PostgreSQL **1,944 passed / 2 failed / 34 skipped**;
+all **57 affected Flutter tests passed**. Both remaining failures were stale
+live-event test expectations: transactional inbox timing and payment-vs-Deal
+resource payloads. The corrected live-event module now passes **9/9 (4.66s)**,
+with no runtime change. Preserve broad passing evidence; Go race/Redis and APK
+prerequisites remain pending before release acceptance.
+
 Adds explicit EUR legal-country selection/fresh payout revisions/nested Stripe
 decoding, query-derived Journey expiry, server dispute actions/rating state,
 honest historical route unavailability, transactional notification inbox/retry

@@ -40,6 +40,15 @@ from apps.parcels.services import cancel_delivery_request
 
 
 class LivePublicationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # TransactionTestCase runs can deplete a reused database's seeds.
+        from importlib import import_module
+        from django.apps import apps
+        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
+        _seed_phase4_settings()
+        import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(apps, None)
+
     def setUp(self):
         enable_mock_rail()
         self.redis = patch("apps.core.redis_bus.get_client").start()
@@ -64,7 +73,9 @@ class LivePublicationTests(TestCase):
         scenario = build_scenario(prefix="f4-offer")
         with self.captureOnCommitCallbacks(execute=True):
             offer = scenario.propose()
-            assert self._rows("offer.created") == []
+            self._assert_parties(self._rows("offer.created"), scenario)
+            self.redis.return_value.publish.assert_not_called()
+        self.redis.return_value.publish.assert_called_once()
         rows = self._rows("offer.created")
         self._assert_parties(rows, scenario)
         assert rows[0].payload["match_id"] == offer.match_id
@@ -218,7 +229,17 @@ class LivePublicationTests(TestCase):
             assert "recipient@example.invalid" not in serialized
             assert scenario.pickup_code not in serialized
             assert scenario.delivery_code not in serialized
-            self._assert_deal_ids(row.payload, scenario.deal)
+            if row.channel == "payment.captured" and "attempt_id" in row.payload:
+                # Funding's inbox row now exists before its on_commit callback.
+                # Payments identify the order/request; Deal lifecycle events
+                # identify the match/parcel/journey. Both refetch contracts stay
+                # authoritative without expanding payment payloads for a test.
+                assert row.payload["deal_id"] == scenario.deal.pk
+                assert row.payload["request_id"] == scenario.delivery_request.pk
+                assert row.payload["payment_order_id"] == scenario.base.balance_order().pk
+                assert row.recipient_id == scenario.sender.pk
+            else:
+                self._assert_deal_ids(row.payload, scenario.deal)
 
     def test_dispute_open_and_resolve_publish_the_same_safe_aggregate_ids(self):
         scenario = delivered_scenario(self.client, prefix="f4-dispute")

@@ -189,6 +189,38 @@ to the user-run Gemini verifier at an immutable SHA, with no source changes.
 
 ## Remaining release gates and J3 work
 
+### Gemini round 2 and final test-contract correction
+
+At `ee863827eda317b75e5ccbafc4d2b3eb87b25173`, the fresh database seed preflight
+passed (6 settings, 18 airports, 5 groups). Full PostgreSQL: **1,944 passed,
+2 failed, 34 skipped, 0 errors**, 1,998.83 seconds. All **57 affected Flutter
+tests passed** in 12.01 seconds, including the timer regression. The H6A policy
+fixture correction passed. Prior schema, Go build/vet/chat and other uninvalidated
+PASS evidence is preserved. Go race/Redis integration and Android APK remain
+blocked by the previously reported local prerequisites.
+
+Both remaining failures were in `LivePublicationTests`. The proposal test
+incorrectly expected an empty inbox before on-commit callbacks. It now requires
+the transactional inbox rows immediately while asserting Redis is untouched
+until callbacks execute. The existing rollback/replay checks remain.
+
+The handover test's failing row was **`payment.captured`**, not a payout setup or
+payout-status event as the verifier suggested. Funding now leaves its inbox rows
+visible even though its callback was outside the test's capture block. The
+attempt receipt uses `payment_resources` (order, Deal, request; owner recipient),
+while the funded-Deal event and later lifecycle/payout events use `deal_resources`
+(Deal, match, parcel, Journey). The corrected test verifies both actual contracts
+and retains secret-exclusion checks across every row. No runtime publisher or
+financial behavior changed to satisfy the assertion.
+
+The class now seeds its own existing Phase 4/boost policy for isolated execution
+on the flushed reused database. All **nine tests pass locally in 4.66 seconds**.
+Only the test module and documentation change after round 2; another broad
+Django/Flutter rerun is not justified by this correction. This combines the
+verifier's 1,944 passing tests with the corrected targeted evidence; it is not
+a claim that a new full run occurred. CI and remaining prerequisite gates still
+need execution, and no release/deployment has occurred.
+
 ### Gemini round 1 and corrections
 
 User-returned verifier report for `11e07d699776a0b657524cbf16d30234b6f90d5a`:
