@@ -2,7 +2,7 @@
 
 ## J2 — Pricing, flexible deposit, universal guest payer and Boost economics (2026-09-15)
 
-**J2 — local verification complete; CI, merge and TEST deployment pending.** Branch `claude/j2-pricing-deposit-guest-boost`, from
+**J2 PASS — all six CI jobs green, merged to main, TEST release verified.** Branch `claude/j2-pricing-deposit-guest-boost`, from
 J1.3 `aa92cd7`. [Contract, economics and the J3 mobile surface](PHASE_J2_PRICING_DEPOSIT_GUEST_BOOST.md).
 
 **Three prices, named apart.** A sender now sees the enforced minimum, ShipTrip's
@@ -104,6 +104,35 @@ and the Payout row is stamped `legacy_unknown`, which places it outside H5's
 mode scope and makes the two Traveler comparisons read zero against a live
 ledger liability. That is pre-H3 legacy behaviour and predates J2; the
 regression runs with profiles on so its comparisons are real ones.
+
+CI [35032771625](https://github.com/is-bo/shiptripis/actions/runs/35032771625)
+passed at `0cd4e25e2997c251f50f26b239f2851a2db6cafb` with **all six jobs green**,
+including **2,036 Django passes / 34 skips** and the schema drift gate — the same
+counts as the local run. An earlier run, `35030148804`, failed schema drift on a
+single missing trailing blank line in the dump; the local regeneration script was
+corrected to match CI's `pg_dump` and the commit amended before merge. Main was
+fast-forwarded to `0cd4e25`, pushed, and verified identical to `origin/main`; the
+phase branch was deleted locally and remotely.
+
+Deployment `de71a0fe-ede3-4450-b15b-e1d7c80af36c` **SUCCESS**, release
+`v1.0.0-rc.34+0cd4e25`. Public `/healthz` and `/readyz` both **200**, the latter
+reporting `database ok`, `migrations ok`, `rate_limit_cache ok`. All four J2
+migrations applied in order — `boosts.0003`, `parcels.0010`, `core.0010`,
+`deals.0009` — and every expected process started: django-web, django-grpc,
+gateway, reservation-releaser, finance-jobs, chat, notification, kyc, email, with
+no error-level log entries. `RELEASE_ID` was the only variable changed.
+
+The new public surface was checked on TEST: `/pay/guest/<token>` with an unknown
+token renders the uniform trilingual "no longer valid" page at **404**, revealing
+nothing about whether that obligation exists. `/api/boosts/policy`,
+`/api/parcels/pricing-quote` and `/api/admin/health/deep` all answer **401**
+unauthenticated, as intended.
+
+**Access limitation.** The H5 gate that ran is the synthetic one, in CI and
+locally. Reading the *live* TEST control plane's integrity block additionally
+requires an operator login, which this session does not hold; that check is
+outstanding rather than passed, and is reported as unavailable rather than
+inferred.
 
 **TEST only.** Stripe TEST, Chargily TEST, `PAYMENTS_ENVIRONMENT=test` and DZD execution false
 throughout. No LIVE activation, no real-money operation, no production cutover
