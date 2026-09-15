@@ -491,12 +491,14 @@ the queue flat at ten profiles and under fourteen queries, its page bounded,
 paging that repeats no row and clamps a nonsense page number, and the attention
 count in exactly one query.
 
-**Backend — `apps/deals/tests/test_phase_j12_route_and_reads.py` (11).**
+**Backend — `apps/deals/tests/test_phase_j12_route_and_reads.py` (12).**
 The canonical funded route: legs really carrying no `Location` rows, funding
 freezing a canonical route, every stop named in order with modes and times, the
 withheld set intact, the historical empty-route case returning `None` while its
-allocations still exist, a non-party refused, and the Traveler's own view. Plus
-the read bounds: the four endpoints a user opens, a deal list flat at five
+allocations still exist, a non-party refused, and the Traveler's own view. The
+discovery seam that actually broke is pinned from the server side too: a covered
+leg's exact key set, the legacy pair present and empty, the place pair carrying
+the label, and no geometry in either. Plus the read bounds: the four endpoints a user opens, a deal list flat at five
 Deals, discovery flat at ten journeys, and discovery bounded by the policy
 result limit.
 

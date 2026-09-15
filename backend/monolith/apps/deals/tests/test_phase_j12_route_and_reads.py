@@ -254,6 +254,72 @@ class ReadCostTests(CanonicalOfferFixture, TestCase):
         assert many_queries == one_queries
         assert one_queries <= 10, one_queries
 
+    def test_a_covered_leg_names_both_endpoint_shapes_and_fills_the_canonical_one(self):
+        """The contract that actually broke.
+
+        A covered leg carries endpoints under two key pairs and exactly one is
+        populated. On a canonical journey — which is every V1 journey — the
+        legacy `origin`/`destination` pair is null and the place pair holds the
+        data. The client read only the first pair, so Find Travelers drew a
+        route line of unlabelled dots.
+
+        Both halves of that seam are pinned: this asserts the server still
+        sends what the decoder reads, and `mobile/test/phase_j12_test.dart`
+        asserts the decoder still reads what the server sends.
+        """
+
+        from apps.core.models import BusinessSettingsVersion
+        from apps.matching.discovery import compatible_journeys_for_request
+        from apps.matching.policy import Phase2Policy
+
+        policy = Phase2Policy.from_settings(
+            BusinessSettingsVersion.objects.get(
+                status=BusinessSettingsVersion.Status.ACTIVE
+            )
+        )
+        fresh = self._request(self.paris, self.jijel, title="Contract")
+        candidate = compatible_journeys_for_request(
+            delivery_request=fresh, policy=policy
+        )[0].as_public_dict(include_recommendation=True)
+
+        legs = candidate["compatibility"]["covered_legs"]
+        assert legs
+        for leg in legs:
+            assert set(leg) == {
+                "journey_leg_id",
+                "position",
+                "mode",
+                "origin",
+                "destination",
+                "origin_place",
+                "destination_place",
+                "depart_at",
+                "arrive_at",
+            }
+            # Canonical journey: the legacy pair is present and empty, and the
+            # place pair is what carries the label.
+            assert leg["origin"] is None and leg["destination"] is None
+            for place in (leg["origin_place"], leg["destination_place"]):
+                assert place is not None
+                assert place["display_label"]
+                assert set(place) == {
+                    "id",
+                    "name",
+                    "display_label",
+                    "place_type",
+                    "country_code",
+                    "iata_code",
+                    "matching_locality_id",
+                }
+                # Pre-funding disclosure: a place summary carries no geometry.
+                assert "latitude" not in place and "longitude" not in place
+
+        # The journey block's own endpoints resolve the same way, so the card's
+        # fallback summary is not empty either.
+        journey = candidate["journey"]
+        assert journey["start_place"]["display_label"]
+        assert journey["destination_place"]["display_label"]
+
     def test_discovery_is_bounded_by_the_policy_result_limit(self):
         from apps.core.models import BusinessSettingsVersion
         from apps.matching.discovery import compatible_journeys_for_request
