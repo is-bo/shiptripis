@@ -5997,6 +5997,24 @@ abstract class L {
   /// **'Rating saved'**
   String get ratingSubmittedTitle;
 
+  /// No description provided for @ratingClosedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating closed'**
+  String get ratingClosedTitle;
+
+  /// No description provided for @ratingTheirsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Their rating'**
+  String get ratingTheirsTitle;
+
+  /// No description provided for @ratingRevealedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You have both rated, so your ratings are now visible to each other.'**
+  String get ratingRevealedNote;
+
   /// Top bar of the pickup handover screen. Neutral: the same screen serves both parties.
   ///
   /// In en, this message translates to:
@@ -7688,6 +7706,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Route'**
   String get routeTitle;
+
+  /// No description provided for @routeUnavailableFunded.
+  ///
+  /// In en, this message translates to:
+  /// **'The travel route was not recorded for this delivery.'**
+  String get routeUnavailableFunded;
+
+  /// No description provided for @routeUnavailableBeforeFunding.
+  ///
+  /// In en, this message translates to:
+  /// **'The travel route appears here once the delivery is funded.'**
+  String get routeUnavailableBeforeFunding;
 
   /// No description provided for @routeFlightMode.
   ///

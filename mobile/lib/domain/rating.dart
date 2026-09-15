@@ -72,9 +72,35 @@ class Rating {
   final bool isMine;
 }
 
+/// The server's authoritative rating lifecycle for one viewer.
+///
+/// J1 made this explicit because the booleans could not express it: `expired`
+/// and `unavailable` both read as "window closed", and `revealed` had no
+/// representation at all, so a fully-revealed rating rendered an empty panel.
+/// An older deployment that omits the field parses as [unknown], and callers
+/// fall back to the booleans rather than losing the section.
+enum RatingLifecycleState {
+  available,
+  submittedWaiting,
+  revealed,
+  expired,
+  unavailable,
+  unknown;
+
+  static RatingLifecycleState parse(String? raw) => switch (raw) {
+    'available' => available,
+    'submitted_waiting' => submittedWaiting,
+    'revealed' => revealed,
+    'expired' => expired,
+    'unavailable' => unavailable,
+    _ => unknown,
+  };
+}
+
 /// `GET /api/deals/<id>/ratings`, and the `ratings` block on a Deal.
 class RatingState {
   const RatingState({
+    required this.state,
     required this.dealId,
     required this.windowOpen,
     required this.canRate,
@@ -93,6 +119,7 @@ class RatingState {
     final json = readObject(raw);
     if (json == null) return null;
     return RatingState(
+      state: RatingLifecycleState.parse(readString(json['state'])),
       dealId: readInt(json['deal_id']) ?? 0,
       dealStatusRaw: readString(json['deal_status']),
       viewerRole: readString(json['viewer_role']),
@@ -109,6 +136,10 @@ class RatingState {
       ).map(Rating.fromJson).toList(growable: false),
     );
   }
+
+  /// The server's lifecycle state. [RatingLifecycleState.unknown] means the
+  /// deployment predates the field; use the boolean fallbacks below.
+  final RatingLifecycleState state;
 
   final int dealId;
   final String? dealStatusRaw;
@@ -158,4 +189,44 @@ class RatingState {
   /// They rated first. Prompting is now worth doing — it unlocks both.
   bool get counterpartyIsWaiting =>
       !submitted && counterpartySubmitted && canRate;
+
+  /// The viewer still owes a rating and may leave one.
+  bool get isActionable => switch (state) {
+    RatingLifecycleState.available => true,
+    RatingLifecycleState.unknown => windowOpen && canRate && !submitted,
+    _ => false,
+  };
+
+  /// The viewer has rated and is waiting on the counterpart.
+  bool get isAwaitingCounterparty => switch (state) {
+    RatingLifecycleState.submittedWaiting => true,
+    RatingLifecycleState.unknown => awaitingCounterparty,
+    _ => false,
+  };
+
+  /// Both ratings are open. Only in this state may the counterpart's rating be
+  /// shown — the blind period is a product rule, not a presentation detail.
+  bool get isRevealed => switch (state) {
+    RatingLifecycleState.revealed => true,
+    RatingLifecycleState.unknown => submitted && bothSidesSubmitted,
+    _ => false,
+  };
+
+  /// The window closed without the viewer rating.
+  bool get isExpired => switch (state) {
+    RatingLifecycleState.expired => true,
+    RatingLifecycleState.unknown => !windowOpen && !submitted,
+    _ => false,
+  };
+
+  /// Nothing to say: not a party, or no rating was ever possible.
+  bool get isUnavailable => state == RatingLifecycleState.unavailable;
+
+  /// The counterpart's rating, and only once the server says it is revealed.
+  Rating? get revealedCounterpartRating {
+    if (!isRevealed) return null;
+    final rating = theirs;
+    if (rating == null || !rating.isRevealed) return null;
+    return rating;
+  }
 }

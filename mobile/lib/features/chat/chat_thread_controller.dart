@@ -32,7 +32,13 @@ final chatThreadControllerProvider = ChangeNotifierProvider.autoDispose
         registerLive: (callback) => ref
             .read(liveUpdatesProvider)
             .register(LiveResource.chat(matchId), callback),
-        invalidateThreads: () => ref.invalidate(chatThreadsProvider),
+        // Reading a conversation resolves its chat notifications server-side,
+        // so the bell has to be re-read with the thread list. Chat is the
+        // highest-volume channel; refreshing only the list is what left the
+        // badge counting messages the user had already read.
+        invalidateThreads: () => ref
+          ..invalidate(chatThreadsProvider)
+          ..invalidate(unreadNotificationsProvider),
       );
     });
 
@@ -320,15 +326,24 @@ class ChatThreadController extends ChangeNotifier {
     }
   }
 
+  /// Whether [send] would take this message rather than silently drop it.
+  ///
+  /// Synchronous and side-effect free, so a caller can check it in the same
+  /// turn it sends and only then clear its composer. [send] refuses when the
+  /// conversation is not sendable, and a caller that clears regardless
+  /// destroys the user's typed text with nothing on screen to explain it.
+  bool canAcceptSend(String rawBody) =>
+      _active &&
+      accountId != null &&
+      rawBody.trim().isNotEmpty &&
+      !isSending &&
+      canSend;
+
   /// Inserts the pending bubble synchronously, before the returned future can
   /// yield to HTTP. The result is the error to present, or null on success.
   Future<Object?> send(String rawBody) {
     final body = rawBody.trim();
-    if (!_active ||
-        accountId == null ||
-        body.isEmpty ||
-        isSending ||
-        !canSend) {
+    if (!canAcceptSend(rawBody)) {
       return Future<Object?>.value(null);
     }
     final pending = PendingChatMessage(

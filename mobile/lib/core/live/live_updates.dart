@@ -240,6 +240,15 @@ Set<LiveResource> resourcesForLiveEvent(
     'flight_proof.status_changed',
     'deal.updated',
     'deal.cancelled',
+    // I1A journey timing publishes three distinct arrival facts on three
+    // channels (apps/core/channels.py). None of them was listed here, so every
+    // arrival report, confirmation and decline was dropped before it could
+    // refresh the deal or the bell — over the socket and over push alike.
+    // They need no branch of their own: the `deal.` case below already
+    // reconciles the deal, its match and its payment.
+    'deal.arrival_reported',
+    'deal.arrival_confirmed',
+    'deal.arrival_declined',
     'dispute.opened',
     'dispute.resolved',
     'payout.status_changed',

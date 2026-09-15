@@ -198,13 +198,13 @@ class _Outcome extends StatelessWidget {
 
 /// Cancellation is not available. The refusal code says why, and each reason
 /// has a different next step.
-class _Refused extends StatelessWidget {
+class _Refused extends ConsumerWidget {
   const _Refused({required this.quote});
 
   final CancellationQuote quote;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
 
     final body = switch (quote.refusalCode) {
@@ -214,8 +214,18 @@ class _Refused extends StatelessWidget {
       _ => l.staleDealClosed,
     };
 
-    final isAfterPickup =
-        quote.refusalCode == 'cancellation_not_available_after_pickup';
+    // After pickup a dispute may still be the way out — but only when the
+    // server says so. Offering it from the refusal code alone ignored the
+    // window and any dispute already on file, so a completed, protection-
+    // expired delivery still showed "Open a dispute".
+    final canDispute =
+        quote.refusalCode == 'cancellation_not_available_after_pickup' &&
+        (ref
+                .watch(dealDetailProvider(quote.dealId))
+                .value
+                ?.availableActions
+                .contains('open_dispute') ??
+            false);
 
     return ListView(
       padding: AppScrollPadding.page(context),
@@ -224,9 +234,8 @@ class _Refused extends StatelessWidget {
           title: l.cancelNotAllowedTitle,
           body: body,
           icon: Icons.block_rounded,
-          // After pickup there is still a route: a dispute.
-          actionLabel: isAfterPickup ? l.disputeOpenTitle : null,
-          onAction: isAfterPickup
+          actionLabel: canDispute ? l.disputeOpenTitle : null,
+          onAction: canDispute
               ? () => context.openDisputeForm(quote.dealId)
               : null,
         ),

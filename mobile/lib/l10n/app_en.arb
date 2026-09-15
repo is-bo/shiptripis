@@ -1644,6 +1644,9 @@
   "dealTravelerPaymentFunded": "The sender's payment is confirmed and protected.",
   "ratingBlindNote": "Neither of you sees the other's rating until you've both left one, or the window closes.",
   "ratingSubmittedTitle": "Rating saved",
+  "ratingClosedTitle": "Rating closed",
+  "ratingTheirsTitle": "Their rating",
+  "ratingRevealedNote": "You have both rated, so your ratings are now visible to each other.",
   "pickupTitle": "Pickup",
   "@pickupTitle": {
     "description": "Top bar of the pickup handover screen. Neutral: the same screen serves both parties."
@@ -2212,6 +2215,8 @@
   "earlyArrivalPayoutFloorExplanation": "Arriving early does not make the payout available earlier than the protected payout date for this delivery.",
   "earlyArrivalPayoutProtectedGateLabel": "Payout eligible from",
   "routeTitle": "Route",
+  "routeUnavailableFunded": "The travel route was not recorded for this delivery.",
+  "routeUnavailableBeforeFunding": "The travel route appears here once the delivery is funded.",
   "routeFlightMode": "Flight",
   "routeDriveMode": "Drive",
   "routeDepartureLabel": "Departure",

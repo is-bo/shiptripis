@@ -142,18 +142,30 @@ class _DisputeOpenScreenState extends ConsumerState<DisputeOpenScreen> {
             child: SkeletonDetail(),
           ),
           data: (data) {
-            // Both gates are the server's, and both are knowable before the
-            // user writes a paragraph they cannot submit.
-            if (data.pickupConfirmedAt == null) {
-              return AppEmptyState(
-                title: l.disputeNotAvailableTitle,
-                body: l.disputeNotAvailableBody,
-                icon: Icons.schedule_rounded,
-              );
-            }
-
-            final endsAt = data.protectionEndsAt;
-            if (endsAt != null && endsAt.isBefore(DateTime.now())) {
+            // The server decides whether a new dispute may be opened: it owns
+            // the party check, the window and the prior-dispute rule together.
+            // Re-deriving any of that here was wrong in both directions — a
+            // *resolved* dispute passed the old `isActive` check, so the user
+            // wrote a paragraph and only then learned it could not be filed,
+            // and a client clock disagreed with the server about the deadline.
+            if (!data.availableActions.contains('open_dispute')) {
+              final existing = data.dispute;
+              if (existing != null) {
+                return AppEmptyState(
+                  title: disputeStatusCopy(context, existing.status).label,
+                  body: l.disputeExistingOpenedBody,
+                  icon: Icons.gavel_rounded,
+                  actionLabel: l.disputeViewAction,
+                  onAction: () => context.openDispute(existing.id),
+                );
+              }
+              if (data.pickupConfirmedAt == null) {
+                return AppEmptyState(
+                  title: l.disputeNotAvailableTitle,
+                  body: l.disputeNotAvailableBody,
+                  icon: Icons.schedule_rounded,
+                );
+              }
               return AppEmptyState(
                 title: l.disputeWindowClosedTitle,
                 body: l.disputeWindowClosedBody,
@@ -162,16 +174,9 @@ class _DisputeOpenScreenState extends ConsumerState<DisputeOpenScreen> {
               );
             }
 
-            final existing = data.dispute;
-            if (existing != null && existing.isActive) {
-              return AppEmptyState(
-                title: disputeStatusCopy(context, existing.status).label,
-                body: l.disputeExistingOpenedBody,
-                icon: Icons.gavel_rounded,
-                actionLabel: l.disputeViewAction,
-                onAction: () => context.openDispute(existing.id),
-              );
-            }
+            // Informational only: the deadline is shown, never used to decide
+            // whether the form may be filed.
+            final endsAt = data.protectionEndsAt;
 
             return Form(
               key: _formKey,

@@ -3424,6 +3424,16 @@ class LEn extends L {
   String get ratingSubmittedTitle => 'Rating saved';
 
   @override
+  String get ratingClosedTitle => 'Rating closed';
+
+  @override
+  String get ratingTheirsTitle => 'Their rating';
+
+  @override
+  String get ratingRevealedNote =>
+      'You have both rated, so your ratings are now visible to each other.';
+
+  @override
   String get pickupTitle => 'Pickup';
 
   @override
@@ -4391,6 +4401,14 @@ class LEn extends L {
 
   @override
   String get routeTitle => 'Route';
+
+  @override
+  String get routeUnavailableFunded =>
+      'The travel route was not recorded for this delivery.';
+
+  @override
+  String get routeUnavailableBeforeFunding =>
+      'The travel route appears here once the delivery is funded.';
 
   @override
   String get routeFlightMode => 'Flight';

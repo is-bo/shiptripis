@@ -3451,6 +3451,16 @@ class LFr extends L {
   String get ratingSubmittedTitle => 'Évaluation enregistrée';
 
   @override
+  String get ratingClosedTitle => 'Évaluation close';
+
+  @override
+  String get ratingTheirsTitle => 'Son évaluation';
+
+  @override
+  String get ratingRevealedNote =>
+      'Vous vous êtes évalués tous les deux : vos évaluations sont désormais visibles.';
+
+  @override
   String get pickupTitle => 'Remise';
 
   @override
@@ -4429,6 +4439,14 @@ class LFr extends L {
 
   @override
   String get routeTitle => 'Itinéraire';
+
+  @override
+  String get routeUnavailableFunded =>
+      'L’itinéraire de voyage n’a pas été enregistré pour cette livraison.';
+
+  @override
+  String get routeUnavailableBeforeFunding =>
+      'L’itinéraire de voyage apparaît ici une fois la livraison financée.';
 
   @override
   String get routeFlightMode => 'Vol';

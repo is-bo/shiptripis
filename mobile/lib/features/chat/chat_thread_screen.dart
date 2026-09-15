@@ -79,6 +79,11 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     final controller = ref.read(chatThreadControllerProvider(widget.matchId));
     if (body.isEmpty || controller.isSending) return;
 
+    // Clear only once the controller has actually taken the message. It
+    // silently refuses when the conversation is not (or no longer) sendable,
+    // and clearing regardless threw the user's typed text away with nothing on
+    // screen to show for it.
+    if (!controller.canAcceptSend(body)) return;
     final result = controller.send(body);
     _composer.clear();
     _scrollToBottom();

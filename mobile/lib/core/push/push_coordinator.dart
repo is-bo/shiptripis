@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/router.dart';
 import '../../data/repositories.dart';
@@ -138,14 +139,33 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   Future<void> _restoreMessagingState() async {
     if (!_messaging.available) return;
-    final permission = await _messaging.permission();
-    state = state.copyWith(permission: permission);
+    // Nothing awaits this, so an escaping exception used to be invisible: the
+    // permission stayed `unavailable` for the whole app run, which closes the
+    // registration gate below permanently, and the cold-start tap was lost
+    // with it. Each step now fails on its own terms.
+    try {
+      final permission = await _messaging.permission();
+      state = state.copyWith(permission: permission);
+    } on Object {
+      state = state.copyWith(registration: PushRegistrationState.failed);
+    }
+
+    // The launch notification is read before registration is awaited. It used
+    // to sit behind a full registerDevice round trip, so opening the app from
+    // a notification stalled on the network before navigating.
+    try {
+      final initial = await _messaging.initialMessage();
+      if (initial != null) _openMessage(initial);
+    } on Object {
+      // A lost launch message is not worth failing registration for; the
+      // inbox remains the authoritative list.
+    }
+
+    final permission = state.permission;
     if (permission == PushPermission.authorized ||
         permission == PushPermission.provisional) {
       await _syncRegistration();
     }
-    final initial = await _messaging.initialMessage();
-    if (initial != null) _openMessage(initial);
   }
 
   void _sessionChanged(SessionState session) {
@@ -221,11 +241,23 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   void _reconcileCurrentScope() {
     final router = ref.read(routerProvider);
-    _live.reconcileScope(
-      liveResourcesForLocation(
-        router.routerDelegate.currentConfiguration.uri.toString(),
-      ),
-    );
+    _live.reconcileScope(liveResourcesForLocation(_currentLocation(router)));
+  }
+
+  /// The location actually on screen, including imperatively pushed routes.
+  ///
+  /// Every in-app detail route is reached with `pushNamed`, and go_router keeps
+  /// the *base* uri across a push: `RouteMatchList.copyWith` carries the old
+  /// uri forward, so `currentConfiguration.uri` still reads `/chat` while
+  /// `/chat/thread/7` is on screen. Reconciling that base location resolved to
+  /// no resources at all, which is why an open conversation — and every other
+  /// pushed detail screen — got no catch-up on resume or on socket reconnect,
+  /// and had to be left and reopened before a missed message appeared.
+  static String _currentLocation(GoRouter router) {
+    final configuration = router.routerDelegate.currentConfiguration;
+    if (configuration.matches.isEmpty) return configuration.uri.toString();
+    final matched = configuration.last.matchedLocation;
+    return matched.isEmpty ? configuration.uri.toString() : matched;
   }
 
   Future<void> _syncRegistration({
@@ -345,6 +377,11 @@ class PushCoordinator extends Notifier<PushRuntimeState>
           ref
               .read(notificationRepositoryProvider)
               .markRead(notificationId)
+              // Opening from a push marked the row read and then refreshed
+              // nothing, so the bell and the inbox kept counting it. Reconcile
+              // the scope we just navigated to, which re-reads the badge, the
+              // inbox and the destination itself.
+              .then((_) => _reconcileCurrentScope())
               .catchError((Object _) {}),
         );
       }

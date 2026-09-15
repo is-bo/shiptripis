@@ -3442,6 +3442,16 @@ class LAr extends L {
   String get ratingSubmittedTitle => 'تم حفظ التقييم';
 
   @override
+  String get ratingClosedTitle => 'انتهت مدة التقييم';
+
+  @override
+  String get ratingTheirsTitle => 'تقييم الطرف الآخر';
+
+  @override
+  String get ratingRevealedNote =>
+      'لقد قيّمتما بعضكما، لذلك أصبح التقييمان ظاهرين لكليكما.';
+
+  @override
   String get pickupTitle => 'الاستلام';
 
   @override
@@ -4402,6 +4412,13 @@ class LAr extends L {
 
   @override
   String get routeTitle => 'المسار';
+
+  @override
+  String get routeUnavailableFunded => 'لم يُسجّل مسار السفر لهذه الشحنة.';
+
+  @override
+  String get routeUnavailableBeforeFunding =>
+      'يظهر مسار السفر هنا بعد تمويل الشحنة.';
 
   @override
   String get routeFlightMode => 'رحلة طيران';

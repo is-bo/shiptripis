@@ -327,6 +327,7 @@ class _RequestsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final requests = ref.watch(myRequestsProvider);
+    final settled = ref.watch(settledRequestIdsProvider);
 
     return AsyncView<List<DeliveryRequest>>(
       value: requests,
@@ -337,8 +338,15 @@ class _RequestsSection extends ConsumerWidget {
         onRetry: () => ref.invalidate(myRequestsProvider),
       ),
       data: (all) {
+        // A matched request keeps its `matched` status for the whole life of
+        // the delivery, so finishing is read from the linked Deal's activity
+        // state rather than from the request's own status.
         final rows = all
-            .where((r) => r.status.isFinished == showFinished)
+            .where(
+              (r) =>
+                  (r.status.isFinished || settled.contains(r.id)) ==
+                  showFinished,
+            )
             .toList(growable: false);
         if (rows.isEmpty) return const SizedBox.shrink();
 

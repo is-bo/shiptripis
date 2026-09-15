@@ -209,16 +209,56 @@ final _historyDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
   accountId,
 ) async {
   final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(
-    ref,
-    accountId,
-    const LiveResource.deals(),
-    () => repo.list(activity: ActivityState.completed),
-  );
+  return _liveRead(ref, accountId, const LiveResource.deals(), () async {
+    // History is everything the server no longer counts as active, which is
+    // two server buckets, not one. Asking only for `completed` left every
+    // cancelled or refunded delivery fetched by no provider at all and so
+    // invisible in every list on the client.
+    final buckets = await Future.wait([
+      repo.list(activity: ActivityState.completed),
+      repo.list(activity: ActivityState.cancelled),
+    ]);
+    final byId = <int, Deal>{};
+    for (final bucket in buckets) {
+      for (final deal in bucket) {
+        byId[deal.id] = deal;
+      }
+    }
+    return byId.values.toList(growable: false)
+      ..sort((a, b) => b.id.compareTo(a.id));
+  });
 });
 final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
   (ref) => _projectLiveQuery(ref, _historyDealsQuery(_watchAccountId(ref))),
 );
+
+/// Delivery requests whose shipment the server no longer counts as active.
+///
+/// `ParcelRequest.status` is not a lifecycle signal for a matched shipment: the
+/// backend advances it to `matched` when a Deal is created and never moves it
+/// again, so `delivered` and `completed` are choices no row ever reaches. A
+/// sender's own request therefore stays "live" forever by its own status, which
+/// is why finished deliveries kept sitting in Home and never reached History.
+///
+/// The Deal is the authority. Every Deal row already carries the server-derived
+/// `activity_state` and its `delivery_request_id`, so settlement is read from
+/// there rather than re-derived locally. An unloaded or failed deal list yields
+/// an empty set, which degrades to the previous behaviour rather than hiding a
+/// shipment that may still be running.
+final settledRequestIdsProvider = Provider.autoDispose<Set<int>>((ref) {
+  final deals = ref.watch(dealsProvider).value;
+  if (deals == null || deals.isEmpty) return const <int>{};
+  final settled = <int>{};
+  for (final deal in deals) {
+    final requestId = deal.deliveryRequestId;
+    if (requestId == null) continue;
+    if (deal.activityState == ActivityState.completed ||
+        deal.activityState == ActivityState.cancelled) {
+      settled.add(requestId);
+    }
+  }
+  return settled;
+});
 
 final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
   ref,
@@ -362,12 +402,35 @@ final _unreadNotificationsQuery = FutureProvider.autoDispose.family<int, int?>((
     ref,
     accountId,
     const LiveResource.unread(),
-    repo.unreadCount,
+    repo.activeCount,
   );
 });
+
+/// The bell count — notifications that still need attention, not unread ones.
 final unreadNotificationsProvider = Provider.autoDispose<AsyncValue<int>>(
   (ref) =>
       _projectLiveQuery(ref, _unreadNotificationsQuery(_watchAccountId(ref))),
+);
+
+final _unreadActiveNotificationsQuery = FutureProvider.autoDispose
+    .family<int, int?>((ref, accountId) async {
+      final repo = ref.watch(notificationRepositoryProvider);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.unread(),
+        repo.unreadActiveCount,
+      );
+    });
+
+/// Active notifications the user has not opened. Gates "Mark all read", which
+/// the badge total must not: a fully-read inbox can still be full of live
+/// actions, and offering to mark them read there does nothing the user can see.
+final unreadActiveNotificationsProvider = Provider.autoDispose<AsyncValue<int>>(
+  (ref) => _projectLiveQuery(
+    ref,
+    _unreadActiveNotificationsQuery(_watchAccountId(ref)),
+  ),
 );
 
 final _payoutsQuery = FutureProvider.autoDispose.family<List<Payout>, int?>((

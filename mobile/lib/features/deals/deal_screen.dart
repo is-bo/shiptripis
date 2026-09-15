@@ -43,6 +43,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
 import '../../domain/money_perspective.dart';
+import '../../domain/rating.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 
@@ -102,7 +103,10 @@ class DealScreen extends ConsumerWidget {
 
                 _PostPickupWaiting(deal: data, isSender: isSender),
 
-                _RouteSection(route: data.route),
+                _RouteSection(
+                  route: data.route,
+                  isFunded: data.fundedAt != null,
+                ),
 
                 SectionHeader(title: l.timelineTitle),
                 LifecycleTimeline(
@@ -556,16 +560,42 @@ class _ArrivalSectionState extends ConsumerState<_ArrivalSection> {
 }
 
 class _RouteSection extends StatelessWidget {
-  const _RouteSection({required this.route});
+  const _RouteSection({required this.route, required this.isFunded});
 
   final DealRoute? route;
+
+  /// Whether the delivery is funded. A route is frozen at funding, so before
+  /// that there is nothing to show yet — which is a different fact from a
+  /// funded delivery that has no recorded route.
+  final bool isFunded;
 
   @override
   Widget build(BuildContext context) {
     final r = route;
-    if (r == null || r.legs.isEmpty) return const SizedBox.shrink();
-
     final l = L.of(context);
+
+    // An absent route used to render nothing at all, which is indistinguishable
+    // from the app failing to draw a route the server did send. Deliveries
+    // funded before route snapshots existed legitimately have none, and they
+    // now say so rather than leaving a silent gap in the screen.
+    if (r == null || r.legs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(title: l.routeTitle),
+            InfoNotice(
+              message: isFunded
+                  ? l.routeUnavailableFunded
+                  : l.routeUnavailableBeforeFunding,
+              icon: Icons.alt_route_rounded,
+            ),
+          ],
+        ),
+      );
+    }
+
     final locale = Localizations.localeOf(context);
     final legs = r.legs;
 
@@ -1024,37 +1054,138 @@ class _RatingSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final ratings = deal.ratings;
-    if (ratings == null || !ratings.windowOpen) return const SizedBox.shrink();
+    if (ratings == null || ratings.isUnavailable) {
+      return const SizedBox.shrink();
+    }
+
+    // Driven by the server's rating state, not by re-deriving one from the
+    // booleans. Only `available` may offer the rate action: once the viewer has
+    // rated, the section goes passive instead of continuing to ask. The
+    // section also outlives `window_open` so a revealed rating stays readable.
+    final revealed = ratings.revealedCounterpartRating;
+    final body = switch (ratings) {
+      _ when ratings.isActionable => InfoNotice(
+        message: ratings.counterpartySubmitted
+            ? l.ratingHiddenUntilBoth
+            : (isSender ? l.ratingSenderPrompt : l.ratingTravelerPrompt),
+        tone: StatusTone.action,
+        icon: ratings.counterpartySubmitted
+            ? Icons.visibility_off_outlined
+            : Icons.star_outline_rounded,
+        actionLabel: l.dealActionRate,
+        onAction: () => context.openRate(deal.id),
+      ),
+      _ when ratings.isAwaitingCounterparty => InfoNotice(
+        message: l.ratingWaitingForOther,
+        icon: Icons.hourglass_top_rounded,
+      ),
+      _ when ratings.isRevealed => _RevealedRating(rating: revealed),
+      _ when ratings.isExpired => InfoNotice(
+        message: l.ratingWindowClosed,
+        icon: Icons.schedule_rounded,
+      ),
+      _ => null,
+    };
+    if (body == null) return const SizedBox.shrink();
+
+    final title = switch (ratings) {
+      _ when ratings.isActionable => l.ratingTitle,
+      _ when ratings.isExpired => l.ratingClosedTitle,
+      _ => l.ratingSubmittedTitle,
+    };
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionHeader(
-            title: ratings.submitted ? l.ratingSubmittedTitle : l.ratingTitle,
+          SectionHeader(title: title),
+          body,
+        ],
+      ),
+    );
+  }
+}
+
+/// The counterpart's rating, shown only after the server reveals it.
+///
+/// [rating] is null when the reveal period passed without the counterpart
+/// rating at all — there is genuinely nothing to show, and inventing an empty
+/// score would read as a bad review.
+class _RevealedRating extends StatelessWidget {
+  const _RevealedRating({required this.rating});
+
+  final Rating? rating;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final text = Theme.of(context).textTheme;
+    final c = context.colors;
+    final value = rating;
+
+    if (value == null) {
+      return InfoNotice(
+        message: l.ratingWaitingForOther,
+        icon: Icons.hourglass_top_rounded,
+      );
+    }
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star_rounded, size: 20, color: c.brand),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Text(
+                  l.ratingTheirsTitle,
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(
+                l.ratingScoreLabel(value.score),
+                style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
-          if (ratings.canRate && !ratings.submitted)
-            InfoNotice(
-              message: isSender ? l.ratingSenderPrompt : l.ratingTravelerPrompt,
-              tone: StatusTone.action,
-              icon: Icons.star_outline_rounded,
-              actionLabel: l.dealActionRate,
-              onAction: () => context.openRate(deal.id),
-            )
-          else if (ratings.awaitingCounterparty)
-            InfoNotice(
-              message: l.ratingWaitingForOther,
-              icon: Icons.hourglass_top_rounded,
-            )
-          else if (ratings.counterpartyIsWaiting)
-            InfoNotice(
-              message: l.ratingHiddenUntilBoth,
-              tone: StatusTone.action,
-              icon: Icons.visibility_off_outlined,
-              actionLabel: l.dealActionRate,
-              onAction: () => context.openRate(deal.id),
+          if (value.tags.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                // Server-authored vocabulary, rendered as given — the same
+                // treatment the ratings list uses.
+                for (final tag in value.tags)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.md,
+                      vertical: AppSpace.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.neutralSoft,
+                      borderRadius: AppRadius.rPill,
+                    ),
+                    child: Text(
+                      tag.replaceAll('_', ' '),
+                      style: text.bodySmall,
+                    ),
+                  ),
+              ],
             ),
+          ],
+          if ((value.comment ?? '').isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text(value.comment!, style: text.bodyMedium),
+          ],
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            l.ratingRevealedNote,
+            style: text.bodySmall?.copyWith(color: c.textSecondary),
+          ),
         ],
       ),
     );

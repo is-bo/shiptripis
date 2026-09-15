@@ -65,7 +65,11 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final page = ref.watch(_notificationsProvider(history));
-    final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
+    // "Mark all read" is about unread rows, not about the bell total: the
+    // badge counts live actions, so gating on it offered the button when
+    // everything had already been read and pressing it changed nothing.
+    final unreadActive =
+        ref.watch(unreadActiveNotificationsProvider).value ?? 0;
 
     return AppScaffold(
       topBar: AppTopBar(
@@ -82,7 +86,7 @@ class NotificationsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          if (unread > 0)
+          if (!history && unreadActive > 0)
             TextButton(
               onPressed: () => _markAllRead(context, ref),
               child: Text(l.notificationsMarkAllRead),
@@ -93,7 +97,8 @@ class NotificationsScreen extends ConsumerWidget {
         onRefresh: () async {
           ref
             ..invalidate(_notificationsProvider)
-            ..invalidate(unreadNotificationsProvider);
+            ..invalidate(unreadNotificationsProvider)
+            ..invalidate(unreadActiveNotificationsProvider);
         },
         child: AsyncView<NotificationPage>(
           value: page,
@@ -143,7 +148,8 @@ class NotificationsScreen extends ConsumerWidget {
     if (!context.mounted) return;
     ref
       ..invalidate(_notificationsProvider)
-      ..invalidate(unreadNotificationsProvider);
+      ..invalidate(unreadNotificationsProvider)
+      ..invalidate(unreadActiveNotificationsProvider);
   }
 
   Future<void> _open(
@@ -195,7 +201,15 @@ class NotificationsScreen extends ConsumerWidget {
     ref
         .read(notificationRepositoryProvider)
         .markRead(id)
-        .then((_) => ref.invalidate(unreadNotificationsProvider))
+        .then((_) {
+          // Reading can resolve the underlying action, which moves the row out
+          // of Active and into History. Refreshing only the badge left the list
+          // showing a row the server no longer counts as active, styled unread.
+          ref
+            ..invalidate(unreadNotificationsProvider)
+            ..invalidate(unreadActiveNotificationsProvider)
+            ..invalidate(_notificationsProvider);
+        })
         .catchError((Object _) {});
   }
 }

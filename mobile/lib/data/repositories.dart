@@ -1574,13 +1574,32 @@ class NotificationRepository {
     ),
   );
 
-  Future<int> unreadCount({CancelToken? cancelToken}) async {
-    final body = await _api.getObject(
-      '/api/notifications/unread-count',
-      cancelToken: cancelToken,
-    );
-    return (body['unread'] as num?)?.toInt() ?? 0;
+  /// The bell count: notifications that still need attention.
+  ///
+  /// J1 separated `resolved` from `read_at`, so the badge counts *active*
+  /// rows, not unread ones: a read action that still needs doing keeps
+  /// counting, and an unread notification whose action is already resolved
+  /// does not. The server exposes that as `active`, and keeps aliasing it onto
+  /// the legacy `unread` key for installed clients — prefer the explicit name
+  /// and fall back so an older deployment still answers.
+  Future<int> activeCount({CancelToken? cancelToken}) async {
+    final body = await _badgeCounts(cancelToken: cancelToken);
+    return (body['active'] as num?)?.toInt() ??
+        (body['unread'] as num?)?.toInt() ??
+        0;
   }
+
+  /// Active notifications the user has not opened yet.
+  ///
+  /// Only this number justifies offering "Mark all read"; the badge total does
+  /// not, because a fully-read inbox can still be full of live actions.
+  Future<int> unreadActiveCount({CancelToken? cancelToken}) async {
+    final body = await _badgeCounts(cancelToken: cancelToken);
+    return (body['unread_active'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<Map<String, dynamic>> _badgeCounts({CancelToken? cancelToken}) => _api
+      .getObject('/api/notifications/unread-count', cancelToken: cancelToken);
 
   Future<void> markAllRead() => _api.postVoid('/api/notifications/read-all');
 
