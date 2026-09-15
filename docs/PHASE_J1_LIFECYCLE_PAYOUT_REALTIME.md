@@ -1,6 +1,8 @@
 # J1 — Lifecycle correctness, payout setup and realtime foundations
 
-Implementation checkpoint, 2026-09-14. **Not released; Gemini verification, CI and TEST deployment remain gates.**
+Implemented 2026-09-14; TEST release deployed 2026-09-15. **Backend release gates
+passed; full J1 acceptance remains incomplete pending device/realtime proof.**
+See the [58-item release report](PHASE_J1_RELEASE_REPORT.md) for final evidence.
 
 Starting main: `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
 Branch: `codex/j1-lifecycle-payout-realtime`.
@@ -13,8 +15,10 @@ current TEST origin. An obsolete APK is not an established explanation.
 Read-only deployed checks used the existing Railway ShipTrip service, release
 `v1.0.0-rc.30+4ec23a1`, deployment `a400f0d4-e4cd-4b85-9817-35ab03f79e35`.
 The environment is named `production` in Railway but `PAYMENTS_ENVIRONMENT=test`.
-No deployment, provider account creation, bank execution, financial transaction,
-LIVE activation or environment change was performed. Local payment providers,
+At that diagnostic checkpoint, no deployment, provider account creation, bank
+execution, financial transaction, LIVE activation or environment change was
+performed. Subsequent TEST deployment and hosted-link validation are recorded
+in the release report. Local payment providers,
 bank documents and settlement tests are synthetic fixtures only.
 
 | Reported issue | Established evidence | Implementation / remaining proof |
@@ -294,12 +298,11 @@ does not prove every failure disappears on a fresh database; that remains a
 required full PostgreSQL verification. Existing passing evidence need not be
 repeated unless the correction invalidates it.
 
-Gemini verification, CI, merge/main synchronization, branch cleanup, TEST
-deployment/migrations/workers, health/ready probes and read-only H5 integrity /
-zero-difference reconciliation are **pending**, not PASS. No CI run was triggered
-at this checkpoint. After Gemini passes, trigger CI once, record its link and
-stop for the user's result; do not poll. Deployment must keep Stripe/Chargily
-TEST and DZD execution false.
+At the original checkpoint, Gemini verification, CI, merge/main synchronization,
+branch cleanup, deployment and H5 were pending. The subsequent release report
+records successful CI, main promotion, TEST deployment, migration/process checks,
+health/readiness and H5 reconciliation. Device acceptance below remains open.
+Stripe/Chargily remain TEST and DZD execution remains false.
 
 BLOCKER for release acceptance: reproduce the reported blanket DZD failure,
 stale Home/active route rendering and chat behavior on the installed device;

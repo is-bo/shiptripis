@@ -2,16 +2,38 @@
 
 ## J1 — Lifecycle, payout setup and realtime foundations (2026-09-14)
 
-**Verification passed; TEST release pending.** Branch
+**TEST release deployed (2026-09-15); device acceptance pending.** Branch
 `codex/j1-lifecycle-payout-realtime`, starting `f68731f4203a05fb5e64a7bdad3aa0a80b530bae`.
 [J1 evidence and contracts](PHASE_J1_LIFECYCLE_PAYOUT_REALTIME.md).
+
+[58-item release report](PHASE_J1_RELEASE_REPORT.md). Reviewed runtime `9c1f7b7`;
+main/archive release `5ea3a4c04f563a4503b4dd96a5a81fafbd8acbd4` adds docs only.
+Main synchronized and phase branch deleted locally/remotely. Deployment
+`40a8a568-7ac1-4994-b923-f36cc7ae67a6` **SUCCESS**,
+`v1.0.0-rc.31+5ea3a4c`; health/ready **200**, zero pending migrations, all ten
+expected processes present, 21 source hashes match the exact uploaded archive.
+One H5 snapshot at `2026-09-15T00:15:45.520133+00:00`: integrity **ok**, every
+comparison difference/row mismatch zero, global ledger balanced. One existing
+TEST payout needs attention; integrity has no warnings.
+
+Deployed EUR/DZD/Both preference rollback/readback checks pass for six synthetic
+Both users. Eight payout/DZD reads return 200; public authenticated HTTP also
+passes. Existing synthetic Stripe TEST account: hosted onboarding **201**,
+refresh **200**, no-store preserved. Three elapsed stored-active Journeys are
+projected completed and excluded from discovery; seven completed Deals are
+excluded from Active. Detail returns one frozen route and seven honest historical
+null routes. Notification bucket/badge counts and unread resolved History pass.
+Both WebSocket handshakes **101**. No eligible funded synthetic chat pair exists;
+end-to-end deployed send/echo remains unproven. Zero active push devices means
+actual registration/receipt and original phone UI regressions remain blockers.
+**Full J1 acceptance FAIL/incomplete; J2 readiness NO.** Stripe/Chargily TEST,
+DZD execution false, email disabled; no real-money operation or LIVE activation.
 
 Final [CI run 34898155599](https://github.com/is-bo/shiptripis/actions/runs/34898155599)
 passed all six jobs at `9c1f7b7df5e037ad1aecdac08cc1ede3d74f60b5`, including
 schema drift. The release checkpoint adds documentation only, preserving that
-verified runtime and the passing `cc55084` Android artifact. Main promotion and
-TEST deployment follow; deployed contracts, H5 and device acceptance are still
-required. This is not yet a full J1 PASS.
+verified runtime and the passing `cc55084` Android artifact. Deployed contracts
+and H5 now pass as recorded above; device acceptance remains required.
 
 CI at `cc55084` completed: **1,946 Django passed / 34 skipped**, Flutter,
 Go race/unit, real-Redis integration and production/static checks passed.
@@ -20,7 +42,7 @@ Only schema comparison failed: the local dump omitted the `\restrict` /
 paired export wrappers; SQL and runtime are unchanged. The final CI above passes.
 The TEST ARM64 profile APK build passed and its artifact is available from
 [Android run 34894794431](https://github.com/is-bo/shiptripis/actions/runs/34894794431).
-Merge, TEST deployment and device acceptance remain pending.
+Device acceptance remains pending.
 
 Gemini round 1 at `11e07d6`: ten J1 tests passed, but full Django failed on a
 depleted reused seed database and Flutter had one timer-lifecycle regression.
@@ -46,9 +68,9 @@ Focused PostgreSQL, Flutter and Go checks pass. Deployed TEST diagnosis confirms
 missing-country EUR/Both errors, three elapsed stored-active Journeys, no active
 push devices, valid FCM project alignment, HTTP 200 and both WS handshakes 101.
 Blanket DZD/device Home/route/chat reproduction remains unresolved; do not call
-the full phase PASS from source/widget tests. Merge, TEST deployment
-and post-deploy H5 reconciliation remain required. No LIVE operation or runtime
-configuration change; DZD execution remains false. J2 has not begun.
+the full phase PASS from source/widget tests. Release/H5 are complete as above.
+Only the release ID changed in runtime configuration; DZD execution remains
+false. J2 has not begun.
 
 ## H8B — Controlled production cutover (2026-09-13)
 
