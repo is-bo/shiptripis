@@ -52,6 +52,7 @@ from apps.finance.services import (
 from apps.locations.models import AirportLocalityMapping
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest
+from .lifecycle import with_lifecycle
 from .serializers import (
     DeliveryV1CreateSerializer,
     ParcelMediaSerializer,
@@ -168,7 +169,7 @@ def _read_queryset():
         relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
         locality__active=True,
     ).select_related("locality", "locality__parent")
-    return ParcelRequest.objects.select_related(
+    return with_lifecycle(ParcelRequest.objects.all()).select_related(
         "origin",
         "destination",
         "sender",
@@ -215,7 +216,7 @@ class ParcelListView(APIView):
             kind=ParcelRequest.Kind.DELIVERY,
         )
         if s := request.query_params.get("status"):
-            qs = qs.filter(status=s)
+            qs = qs.filter(lifecycle_status=s)
         if k := request.query_params.get("kind"):
             qs = qs.filter(kind=k)
         return Response(_serialize(qs[:100], request, many=True).data)

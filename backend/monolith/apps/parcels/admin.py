@@ -1,6 +1,29 @@
 from django.contrib import admin
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
+from .lifecycle import with_lifecycle
+
+
+class RequestStatusFilter(admin.SimpleListFilter):
+    title = "status"
+    parameter_name = "status"
+
+    def lookups(self, request, model_admin):
+        return ParcelRequest.Status.choices
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(lifecycle_status=self.value())
+        return queryset
+
+
+class RequestLifecycleAdminMixin:
+    def get_queryset(self, request):
+        return with_lifecycle(super().get_queryset(request))
+
+    @admin.display(description="Status", ordering="lifecycle_status")
+    def request_status(self, obj):
+        return ParcelRequest.Status(obj.lifecycle_status).label
 
 
 class ParcelMediaInline(admin.TabularInline):
@@ -34,7 +57,7 @@ class ParcelMediaInline(admin.TabularInline):
 
 
 @admin.register(ParcelRequest)
-class ParcelRequestAdmin(admin.ModelAdmin):
+class ParcelRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "kind",
@@ -42,10 +65,10 @@ class ParcelRequestAdmin(admin.ModelAdmin):
         "origin",
         "destination",
         "weight_kg",
-        "status",
+        "request_status",
         "created_at",
     )
-    list_filter = ("kind", "status", "origin", "destination")
+    list_filter = ("kind", RequestStatusFilter, "origin", "destination")
     search_fields = ("sender__email", "id")
     autocomplete_fields = ("sender", "origin", "destination")
     date_hierarchy = "created_at"
@@ -73,7 +96,7 @@ class ParcelRequestAdmin(admin.ModelAdmin):
 
 
 @admin.register(DeliveryRequest)
-class DeliveryRequestAdmin(admin.ModelAdmin):
+class DeliveryRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "sender",
@@ -84,9 +107,9 @@ class DeliveryRequestAdmin(admin.ModelAdmin):
         "delivery_location",
         "base_amount_dzd",
         "traveler_reward_eur_cents",
-        "status",
+        "request_status",
     )
-    list_filter = ("schema_version", "status")
+    list_filter = ("schema_version", RequestStatusFilter)
     search_fields = ("sender__email", "title")
     autocomplete_fields = (
         "sender",

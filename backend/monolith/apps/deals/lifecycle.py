@@ -119,6 +119,9 @@ def _set_status(
 ) -> None:
     deal.status = status
     deal.save(update_fields=["status", "updated_at", *(extra_fields or [])])
+    from apps.parcels.lifecycle import sync_request_status
+
+    sync_request_status(deal)
     record_event(
         deal,
         DealEvent.Kind.STATUS_CHANGED,

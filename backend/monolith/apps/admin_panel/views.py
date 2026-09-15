@@ -536,8 +536,10 @@ class AdminRequestListView(APIView):
     permission_classes = (CanViewRequests,)
 
     def get(self, request):
+        from apps.parcels.lifecycle import with_lifecycle
+
         queryset = _status_filter(
-            DeliveryRequest.objects.select_related(
+            with_lifecycle(DeliveryRequest.objects.all()).select_related(
                 "sender",
                 "pickup_location",
                 "delivery_location",
@@ -545,6 +547,7 @@ class AdminRequestListView(APIView):
                 "delivery_place",
             ).order_by("-created_at"),
             request,
+            field="lifecycle_status",
         )
         queryset = _search(
             queryset,

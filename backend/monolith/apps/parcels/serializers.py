@@ -359,6 +359,7 @@ class ProductCreateSerializer(_ParcelBase):
 class ParcelRequestSerializer(serializers.ModelSerializer):
     """Read serializer — picks subtype-specific fields off the concrete row."""
 
+    status = serializers.SerializerMethodField()
     sender_id = serializers.IntegerField(source="sender.id", read_only=True)
     target_traveler_id = serializers.IntegerField(read_only=True, allow_null=True)
     origin = AirportSerializer(read_only=True)
@@ -441,6 +442,15 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_status(self, obj: ParcelRequest) -> str:
+        if hasattr(obj, "lifecycle_status"):
+            return obj.lifecycle_status
+        from .lifecycle import with_lifecycle
+
+        return with_lifecycle(ParcelRequest.objects.filter(pk=obj.pk)).values_list(
+            "lifecycle_status", flat=True
+        ).get()
 
     def get_item_photo_media_id(self, obj: ParcelRequest) -> int | None:
         """The primary item photo, named rather than left to be searched for.

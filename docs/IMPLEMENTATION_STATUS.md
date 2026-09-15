@@ -1,5 +1,25 @@
 # ShipTrip V1 Implementation Status
 
+## J1.3 — ParcelRequest lifecycle alignment (2026-09-15)
+
+**Implemented; Gemini regression verification, CI and TEST release pending.**
+Branch `codex/j13-parcel-request-lifecycle`.
+[Mapping, historical behavior and release gates](PHASE_J13_PARCEL_REQUEST_LIFECYCLE.md).
+
+Deal pickup/delivery/completion/dispute transitions now persist request progress
+in the same locked transaction. Delivery immediately means DELIVERED; the
+existing Deal completion decision means COMPLETED independently of payout or
+ratings. Cancellation/refund precedence and unfunded reservation reopening remain
+intact. Shared SQL projection fixes historical API/admin list reads and status
+filters without rewriting historical rows. Raw unannotated historical fields
+remain stored values. No migration or mobile change.
+
+Ten focused PostgreSQL tests pass (6.61s), Ruff passes, migration dry-run reports
+no changes. Broader verification is handed to the user-run read-only Gemini
+verifier at the pushed exact SHA. CI must start only after clean results and
+must not be polled. No merge/deployment/health claim yet; TEST only, no LIVE
+operation, no Finance H5 work. **J1.3 release acceptance incomplete; J2 NO.**
+
 ## J1.1 — Real-app acceptance closure and mobile reliability (2026-09-15)
 
 **Flutter-only. No backend runtime change and no deployment.** Branch

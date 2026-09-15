@@ -186,6 +186,7 @@ class AdminFlightProofSerializer(serializers.ModelSerializer):
 
 
 class AdminRequestSerializer(serializers.ModelSerializer):
+    status = serializers.CharField(source="lifecycle_status", read_only=True)
     sender_email = serializers.EmailField(source="sender.email", read_only=True)
     sender_name = serializers.CharField(source="sender.full_name", read_only=True)
     pickup_public_label = serializers.CharField(
