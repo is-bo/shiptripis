@@ -2,7 +2,7 @@
 
 ## J1.3 — ParcelRequest lifecycle alignment (2026-09-15)
 
-**Implemented; Gemini and all six CI jobs passed. TEST release pending.**
+**J1.3 PASS — Gemini, all six CI jobs and TEST release checks passed.**
 Branch `codex/j13-parcel-request-lifecycle`.
 [Mapping, historical behavior and release gates](PHASE_J13_PARCEL_REQUEST_LIFECYCLE.md).
 
@@ -22,9 +22,18 @@ and log agree with the returned report. This checkpoint adds documentation only.
 CI [35004301377](https://github.com/is-bo/shiptripis/actions/runs/35004301377)
 passed at `96a2d9a667aa9a1913e1b2f9ea6693a4e38ae305`, including **1,984 Django
 passes / 34 skips** and schema drift. Retrieved after user-confirmed completion.
-The release checkpoint adds docs only. No deployment/health claim yet;
-TEST only, no LIVE
-operation, no Finance H5 work. **J1.3 release acceptance incomplete; J2 NO.**
+Deployed main `8f4026ccc1dc812e03a4502e6bd24729eac5e83d` adds docs only after
+CI. Deployment `1c858eb7-fba3-4b88-883c-f61486a40f72` **SUCCESS**, release
+`v1.0.0-rc.33+8f4026c`. Public health/ready **200**, zero pending migrations,
+all ten expected process types present; seven runtime file hashes match the
+archive. Seven historical stored-MATCHED requests project COMPLETED correctly
+without rewriting data. Main pushed; phase branch removed locally/remotely.
+Final completion evidence changes documentation only.
+
+Runtime confirms Stripe/Chargily TEST, DZD execution false, email disabled;
+only RELEASE_ID changed. No LIVE operation or Finance H5 work. No J1.3 blockers
+remain; prior device/FCM and LIVE cutover prerequisites retain their separate
+status. **Request lifecycle ready for J2; J2 has not started.**
 
 ## J1.1 — Real-app acceptance closure and mobile reliability (2026-09-15)
 

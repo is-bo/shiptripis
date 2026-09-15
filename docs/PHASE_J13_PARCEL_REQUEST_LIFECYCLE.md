@@ -1,7 +1,7 @@
 # J1.3 — ParcelRequest lifecycle alignment
 
-Implementation checkpoint, 2026-09-15. **Gemini regression verification passed;
-CI passed; TEST deployment verification pending. J2 has not started.**
+Completed 2026-09-15. **Gemini, CI and TEST release checks passed.
+J1.3 PASS. J2 has not started.**
 
 Starting main: `32da931a8ae3ccb0187e96e0fd5c4af9d51e3721`.
 Branch: `codex/j13-parcel-request-lifecycle`.
@@ -123,19 +123,47 @@ passed all six jobs at `96a2d9a667aa9a1913e1b2f9ea6693a4e38ae305`.
 Results were read only after the user reported completion. Full Django:
 **1,984 passed, 34 skipped**; schema drift, Flutter, Go race/unit, real-Redis
 integration and production/static checks passed. This release checkpoint adds
-documentation only, preserving the CI-verified source. TEST deployment and
-post-release checks are the remaining gate.
-No current J1.3 healthz/readyz/worker/release result is claimed.
+documentation only, preserving the CI-verified source.
 
-TEST only: no deployed runtime/configuration change, no LIVE action. Eventual
-release must preserve PAYMENTS_ENVIRONMENT=test, Stripe TEST, Chargily TEST,
-and DZD execution false. No browser, subagents, mobile changes, H5 work or J2.
+## Completed TEST release
 
-Remaining BLOCKER: TEST release verification pending. No known implementation
-MAJOR findings after focused review. MINOR: existing URLField deprecation and
-the documented raw historical-field limitation.
+Main was fast-forwarded and pushed to
+`8f4026ccc1dc812e03a4502e6bd24729eac5e83d`; the phase branch was deleted locally
+and remotely. A clean Git archive of that SHA was uploaded to the existing
+ShipTrip Railway service. The final release-evidence commit changes docs only.
 
-**J1.3 FAIL — release acceptance incomplete at this checkpoint.**
+Deployment `1c858eb7-fba3-4b88-883c-f61486a40f72` reached **SUCCESS**.
+Release: `v1.0.0-rc.33+8f4026c`. Railway's environment is named `production`,
+but application payments remain TEST.
 
-**Ready for J2? NO**
+* Public `/healthz`: **200**, correct release. The initial workstation request
+  timed out at 20 seconds; a bounded retry passed.
+* Public `/readyz`: **200**, correct release; database, migrations and rate-limit
+  cache all `ok`.
+* Remote migration graph: **zero pending migrations**.
+* All ten expected process types present: Gunicorn, Caddy, Redis, finance worker,
+  reservation releaser, Django KYC gRPC and Go chat/notification/KYC/email.
+* SHA-256 hashes of all seven changed runtime files match the exact uploaded
+  archive, including Windows archive newline conversion.
+* A read-only database transaction found seven stored-MATCHED historical
+  requests correctly projecting COMPLETED; all seven serializer samples agree.
+  Two awaiting-deposit, two cancelled and three open requests retain their states.
+  No historical row was rewritten and no payment or lifecycle event was created
+  by the release probes.
+
+Only `RELEASE_ID` changed in service configuration; other variables were compared
+before/after. Runtime confirms PAYMENTS_ENVIRONMENT=test, Stripe TEST,
+STRIPE_CONNECT_EXPECTED_MODE=test, Chargily TEST, DZD execution false and email
+disabled. No LIVE operation, browser, subagents, mobile change, Finance H5 work
+or J2 work. Ignored evidence: `.tmp/j13-upload.json`, `.tmp/j13-deployed.json`,
+`.tmp/j13-public-health.json` and `.tmp/j13-public-health-retry.json`.
+
+Remaining J1.3 BLOCKER: none. MAJOR: none known. MINOR: existing deprecation
+warnings and the documented raw historical-field limitation. Prior device/FCM
+acceptance and LIVE cutover prerequisites are outside this bounded phase and
+are not certified by it. The request lifecycle prerequisite is ready for J2.
+
+**J1.3 PASS**
+
+**Ready for J2? YES — request lifecycle boundary; J2 not started.**
 
