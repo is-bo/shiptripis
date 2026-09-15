@@ -66,7 +66,11 @@ plane publishes no figure for it — so it carries a count and no amount, and it
 costs exactly one indexed query on top of a page that already costs ninety.
 
 **The queue** — `admin_console:payout-reviews`, a Finance destination in the
-console navigation. Four buckets, and the distinction between them is the point:
+console navigation. Four buckets, decided in SQL from each profile's latest
+review so the page filters, counts and pages by them in the database: four
+counts in one `GROUP BY`, then one page of twenty-five rows. Thirteen queries
+whether the queue holds one profile or ten thousand. The distinction between the
+buckets is the point:
 
 | Bucket | Meaning | Whose move |
 |---|---|---|
@@ -141,6 +145,19 @@ Traveler's card can tell one refusal from the other:
 | Approve | `ready` | *(empty)* |
 | Needs correction | `needs_review` | `profile_correction_required` |
 | Reject | `needs_review` | `profile_rejected` |
+
+**Approval touches no funded destination.** The only thing an approval does
+beyond appending its review row is re-run `evaluate_payout_release` for Deals
+whose payout is frozen on that same revision — the identical call H4.1's Approve
+control already makes, and one that decides *release timing* and nothing else.
+It cannot reach `Payout.active_instruction_version`, `dzd_profile_revision` or
+any amount; a funded instruction stays bound to the profile revision frozen at
+funding, and the queue page says so.
+
+**Nothing needs a manual refresh.** Every one of these surfaces is server
+rendered per request, so the attention count, the bucket counts and the queue
+are computed from current rows on each load, and a decision redirects and
+re-renders. There is no client-held copy of any of it to go stale.
 
 Preserved and re-verified: Finance/Super capability gating on every route and on
 the command; immutable profile revisions (three decisions leave the revision's
@@ -330,8 +347,13 @@ Part B and J4/J5 — but its cost is not.
 
 **Infrastructure shows no pressure.** Over six hours the service averaged
 0.0069 vCPU and peaked at 0.0897; memory sat between 0.55 and 0.65 GB with no
-restarts and no cold starts. This is not a resourcing problem and nothing was
-over-provisioned to make it go away.
+restarts and no cold starts. Database connections are persistent with health
+checks (`CONN_MAX_AGE=60`, `CONN_HEALTH_CHECKS=True`), so a request does not pay
+a new connection per call and a stale one is discarded rather than used; Redis
+is the container's own loopback instance serving the Go chat, notification and
+email workers and the KYC limiter, and none of it is on an app request path.
+This is not a resourcing problem and nothing was over-provisioned to make it go
+away.
 
 **The one genuinely slow server surface is the Finance control plane, and it is
 operator-only.** Each of the five Finance destinations builds a full H5 snapshot
@@ -457,16 +479,17 @@ in for that.
 
 ## Tests
 
-**Backend — `apps/finance/tests/test_phase_j12_finance_route_performance.py` (14).**
+**Backend — `apps/finance/tests/test_phase_j12_finance_route_performance.py` (16).**
 Queue visibility and the attention count; the waiting/correction split; all
 three decisions with their reason codes, immutability and history; no decision
 offered *or accepted* without an attested identity; the name-difference
 downgrade and its explicit acceptance; Ops, Support and Trust refused on all
 three routes and on a posted decision; Super Admin admitted; masked-by-default
 and audited reveal; the cheque route scoped to its own profile; the Traveler's
-state after each outcome carrying no reviewer identity; and two cost bounds —
-the queue flat at ten profiles under twelve queries, and the attention count in
-exactly one query.
+state after each outcome carrying no reviewer identity; and the cost bounds —
+the queue flat at ten profiles and under fourteen queries, its page bounded,
+paging that repeats no row and clamps a nonsense page number, and the attention
+count in exactly one query.
 
 **Backend — `apps/deals/tests/test_phase_j12_route_and_reads.py` (11).**
 The canonical funded route: legs really carrying no `Location` rows, funding

@@ -480,6 +480,48 @@ def test_the_queue_pages_rather_than_rendering_everything(configured_h4):  # noq
 
 
 @pytest.mark.django_db
+def test_the_queue_and_the_detail_agree_about_which_bucket_a_profile_is_in(
+    configured_h4,  # noqa: F811
+):
+    """The bucket is derived twice — once in SQL, once in memory — so pin them.
+
+    The queue filters, counts and pages in the database; the detail page starts
+    from one profile whose reviews it has already loaded and answers in Python.
+    A drift between the two would put a profile in one bucket on the list and
+    another on its own page, which is the kind of disagreement nobody reports
+    and everybody stops trusting.
+    """
+
+    from apps.admin_panel.console_payout_reviews import (
+        _bucket,
+        reviewable_methods,
+    )
+
+    scenario, profile = build_profile("j12-agree")
+
+    def compare():
+        method = reviewable_methods().get(pk=profile.method_id)
+        profile.refresh_from_db()
+        return method.bucket, _bucket(list(profile.reviews.order_by("pk")))
+
+    sql, memory = compare()
+    assert sql == memory == "waiting"
+
+    for decision, expected in (
+        ("needs_attention", "correction"),
+        ("rejected", "rejected"),
+        ("approved", "approved"),
+    ):
+        review_profile(
+            actor=scenario.admin,
+            reference=profile.public_reference,
+            decision=decision,
+        )
+        sql, memory = compare()
+        assert sql == memory == expected, decision
+
+
+@pytest.mark.django_db
 def test_the_overview_attention_count_is_one_indexed_query(configured_h4):  # noqa: F811
     build_profile("j12-count")
     with CaptureQueriesContext(connection) as captured:
