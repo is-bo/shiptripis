@@ -2,7 +2,7 @@
 
 ## J1.3 — ParcelRequest lifecycle alignment (2026-09-15)
 
-**Implemented; Gemini regression verification, CI and TEST release pending.**
+**Implemented; Gemini regression verification passed. CI and TEST release pending.**
 Branch `codex/j13-parcel-request-lifecycle`.
 [Mapping, historical behavior and release gates](PHASE_J13_PARCEL_REQUEST_LIFECYCLE.md).
 
@@ -15,9 +15,12 @@ filters without rewriting historical rows. Raw unannotated historical fields
 remain stored values. No migration or mobile change.
 
 Ten focused PostgreSQL tests pass (6.61s), Ruff passes, migration dry-run reports
-no changes. Broader verification is handed to the user-run read-only Gemini
-verifier at the pushed exact SHA. CI must start only after clean results and
-must not be polled. No merge/deployment/health claim yet; TEST only, no LIVE
+no changes. Gemini verified `75f82314555fef9e8a404482143fcef607fd754b` on a fresh
+local PostgreSQL database: **535 passed, 24 skipped, zero failures/errors in
+331.51s**; migration seeds passed and tracked files remained clean. Saved XML
+and log agree with the returned report. This checkpoint adds documentation only.
+CI is the next gate and must not be polled. No merge/deployment/health claim yet;
+TEST only, no LIVE
 operation, no Finance H5 work. **J1.3 release acceptance incomplete; J2 NO.**
 
 ## J1.1 — Real-app acceptance closure and mobile reliability (2026-09-15)

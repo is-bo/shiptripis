@@ -1,7 +1,7 @@
 # J1.3 — ParcelRequest lifecycle alignment
 
-Implementation checkpoint, 2026-09-15. **Release acceptance pending Gemini,
-CI, merge and TEST deployment. J2 has not started.**
+Implementation checkpoint, 2026-09-15. **Gemini regression verification passed;
+release acceptance pending CI, merge and TEST deployment. J2 has not started.**
 
 Starting main: `32da931a8ae3ccb0187e96e0fd5c4af9d51e3721`.
 Branch: `codex/j13-parcel-request-lifecycle`.
@@ -108,10 +108,17 @@ setup failures. The final run has only the existing Django URLField deprecation.
 Ruff checks pass; migration dry-run reports **No changes detected**; diff
 whitespace check passes. No schema/sqlc contract regeneration is required.
 
-Broader Deal/request/matching/handover/dispute/funding regression verification
-must run through the user-operated Gemini verifier at the pushed exact SHA.
-Gemini changes no tracked files and fixes nothing. Do not trigger CI until those
-results return clean. After triggering CI, report its link and stop without
+Gemini verified exact implementation SHA
+`75f82314555fef9e8a404482143fcef607fd754b`: **535 passed, 24 skipped, zero
+failures/errors in 331.51 seconds**. The saved JUnit XML and execution log agree
+with the returned report. Skips cover retired legacy matching writes. A fresh
+local `shiptrip_j13_75f8231_verify` PostgreSQL database was created and migrated;
+initial settings, airport and permission-group seed checks passed. Zero tracked
+changes, no fixes, no provider calls and no deployed database access were
+reported. Evidence: ignored `.tmp/j13-gemini-regressions.xml` and
+`.tmp/j13-gemini-regressions.log`. This verification checkpoint changes docs only.
+
+CI is now the next gate. After triggering CI, report its link and stop without
 waiting or polling. Merge, branch cleanup and TEST deployment remain pending.
 No current J1.3 healthz/readyz/worker/release result is claimed.
 
@@ -119,7 +126,7 @@ TEST only: no deployed runtime/configuration change, no LIVE action. Eventual
 release must preserve PAYMENTS_ENVIRONMENT=test, Stripe TEST, Chargily TEST,
 and DZD execution false. No browser, subagents, mobile changes, H5 work or J2.
 
-Remaining BLOCKER: verification/release gates pending. No known implementation
+Remaining BLOCKER: CI/release gates pending. No known implementation
 MAJOR findings after focused review. MINOR: existing URLField deprecation and
 the documented raw historical-field limitation.
 
