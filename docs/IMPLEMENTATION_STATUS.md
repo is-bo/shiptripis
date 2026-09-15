@@ -1,5 +1,69 @@
 # ShipTrip V1 Implementation Status
 
+## J1.1 — Real-app acceptance closure and mobile reliability (2026-09-15)
+
+**Flutter-only. No backend runtime change and no deployment.** Branch
+`claude/j11-mobile-acceptance`, starting
+`25cf5028d5a1a220f12ccd161495e54675a8ae69`. Deployed TEST runtime unchanged at
+`v1.0.0-rc.31+5ea3a4c`; the J1 backend and CI evidence therefore still stands.
+[J1.1 evidence](PHASE_J11_MOBILE_ACCEPTANCE.md).
+
+Verified by running the **real client**, not a stub: there is no Android SDK or
+device on this workstation, so the app was built for web in profile mode from
+the same `lib/` and driven in a browser against a local Django server running
+this repository's code, configured with the deployed TEST payout flags and **no
+provider secret**. Sign-in, Home, Deliveries, Chat, Profile and Payout methods
+were exercised by hand.
+
+The payout symptom reproduced in that app and was fixed there: *Set up EUR
+payouts* returned `409 stripe_connect_unavailable` and the app answered with a
+red snackbar reading only **"Refresh"** — the fallback in `staleMessage` is the
+Refresh *action label*, and none of the six payout refusal codes was mapped, so
+every distinct failure looked identical. All six now carry a real sentence in
+en/fr/ar; the same 409 now explains itself and leaves the page usable. The page
+was never collapsing: Riverpod carries the previous value through a failed
+refresh. The EUR card's country row was also labelled "Switch role".
+
+Home's stale shipments trace to a backend gap: `ParcelRequest.status` stops at
+`matched` and no non-test path ever assigns `IN_TRANSIT`/`DELIVERED`/
+`COMPLETED`. Home and Deliveries now read settlement from the linked Deal's
+authoritative `activity_state` via `settledRequestIdsProvider`; History also
+fetches the `cancelled` bucket, which no provider had been requesting at all.
+Advancing the parcel lifecycle itself is **Requires Astra backend phase**.
+
+An absent route rendered nothing, indistinguishable from a failed render; it now
+distinguishes "not recorded for this delivery" from "appears once funded".
+Ratings decode the J1 `state` field instead of guessing from booleans, so a
+submitted or expired rating stops asking and `revealed` renders the counterpart
+rating under the double-blind rule. Two further dispute CTAs — the cancel screen
+and the dispute form itself — still inferred permission from lifecycle and a
+client clock, and a *resolved* dispute passed the old gate; both now read
+`available_actions`.
+
+Chat's "leave and reopen" symptom was resume/reconnect reconciling go_router's
+**base** uri, which stays `/chat` while `/chat/thread/<id>` is pushed, so the
+open conversation — and every pushed detail route — got no catch-up. The
+composer also cleared when the controller refused the message.
+
+Device registration is not broken: the contract matches exactly and the four
+Firebase variables are configured. It is gated on a permission the app only ever
+requests from Profile → Notifications, so a reinstall never registers until the
+owner grants it there; sign-out deactivates the device, which explains both
+inactive rows. That rule was not overridden. Fixed instead: push state
+restoration no longer loses the permission and the launch notification to one
+unhandled exception, the three `deal.arrival_*` channels were missing from the
+client allowlist and were dropped outright, the bell now reads `active` with
+"Mark all read" gated on `unread_active`, and four stale-badge paths refresh.
+
+544 Flutter tests pass, analyze and format clean, with
+`mobile/test/phase_j11_acceptance_test.dart` pinning each symptom to the server
+fact that settles it. Stripe/Chargily TEST, DZD execution false, no LIVE or
+real-money operation, no J2 work.
+
+Push receipt and deep links, live two-device chat receipt, and Android rendering
+remain owner device checks — the web harness runs the real Dart code but has no
+FCM and no `dart:io` socket.
+
 ## J1 — Lifecycle, payout setup and realtime foundations (2026-09-14)
 
 **TEST release deployed (2026-09-15); device acceptance pending.** Branch
