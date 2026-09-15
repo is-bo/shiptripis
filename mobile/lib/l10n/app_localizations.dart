@@ -105,6 +105,12 @@ abstract class L {
   /// **'Payout account country'**
   String get payoutLegalCountryTitle;
 
+  /// No description provided for @payoutLegalCountryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get payoutLegalCountryLabel;
+
   /// No description provided for @payoutLegalCountryBody.
   ///
   /// In en, this message translates to:

@@ -12,6 +12,9 @@ class LAr extends L {
   String get payoutLegalCountryTitle => 'بلد حساب التحويل';
 
   @override
+  String get payoutLegalCountryLabel => 'البلد';
+
+  @override
   String get payoutLegalCountryBody =>
       'اختر البلد القانوني لحساب Stripe للموافقة على الإعداد. إذا لم يكن بلدك مدرجًا، استخدم التحويلات بالدينار الجزائري.';
 

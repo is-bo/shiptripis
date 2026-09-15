@@ -1,6 +1,7 @@
 {
   "@@locale": "en",
   "payoutLegalCountryTitle": "Payout account country",
+  "payoutLegalCountryLabel": "Country",
   "payoutLegalCountryBody": "Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.",
   "appName": "ShipTrip",
   "actionContinue": "Continue",

@@ -460,7 +460,7 @@ class _EurCard extends StatelessWidget {
             DetailRow(
               // This row names the account's legal country, not a role. It was
               // labelled "Switch role" on the live page.
-              label: l.payoutLegalCountryTitle,
+              label: l.payoutLegalCountryLabel,
               value: Text(
                 eur.country!.toUpperCase(),
                 style: text.bodySmall?.copyWith(color: c.textTertiary),

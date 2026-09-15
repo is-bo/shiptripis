@@ -12,6 +12,9 @@ class LEn extends L {
   String get payoutLegalCountryTitle => 'Payout account country';
 
   @override
+  String get payoutLegalCountryLabel => 'Country';
+
+  @override
   String get payoutLegalCountryBody =>
       'Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.';
 
