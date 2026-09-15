@@ -68,6 +68,15 @@
         </li>
         {% endfor %}
       </ul>
+      {% if page_obj.paginator.num_pages > 1 %}
+      <nav class="st-pagination" aria-label="Pagination">
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &middot; {{ page_obj.paginator.count }} profile{{ page_obj.paginator.count|pluralize }}</span>
+        <span class="st-inline-actions">
+          {% if page_obj.has_previous %}<a href="?bucket={{ selected }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+          {% if page_obj.has_next %}<a href="?bucket={{ selected }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+        </span>
+      </nav>
+      {% endif %}
       {% else %}
       <p class="st-rows-empty"><span aria-hidden="true">&#10003;</span> Nothing is {{ selected_label|lower }}.</p>
       {% endif %}

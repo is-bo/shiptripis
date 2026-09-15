@@ -418,13 +418,16 @@ def test_the_traveler_sees_a_safe_distinct_state_for_each_outcome(
 
 
 @pytest.mark.django_db
-def test_the_review_queue_stays_cheap_as_it_fills(configured_h4):  # noqa: F811
+def test_the_review_queue_stays_cheap_and_bounded_as_it_fills(configured_h4):  # noqa: F811
     """A queue is opened far more often than it is acted on.
 
-    The bound is generous — it is a regression guard, not a target — but it is
-    flat: ten submissions must not cost ten times one submission. The Finance
-    dashboard beside it costs roughly ninety queries for a full control-plane
-    snapshot, and this page must not become that.
+    Two properties, not one. **Flat**: ten submissions must not cost ten times
+    one submission — that is the N+1 guard. **Bounded**: the rows on the page
+    are a page, so the work does not grow with the queue at all. The bucket a
+    profile is in is decided in SQL for exactly that reason; deriving it in a
+    loop would mean reading every DZD payout method ever submitted to render
+    twenty rows. The Finance dashboard beside this page costs roughly ninety
+    queries for one control-plane snapshot, and this page must not become that.
     """
 
     scenario, _ = build_profile("j12-cost-0")
@@ -438,13 +441,42 @@ def test_the_review_queue_stays_cheap_as_it_fills(configured_h4):  # noqa: F811
     for index in range(1, 10):
         build_profile(f"j12-cost-{index}")
     with CaptureQueriesContext(connection) as ten:
-        assert client.get(url).status_code == 200
+        response = client.get(url)
+    assert response.status_code == 200
 
-    assert len(one.captured_queries) <= 12, len(one.captured_queries)
-    assert len(ten.captured_queries) <= 12, len(ten.captured_queries)
-    # Flat, not merely small: this is the N+1 guard.
+    # Generous on purpose: this is a regression guard, not a target. Session,
+    # user and two permission reads are Django's; the page itself is the four
+    # bucket counts in one GROUP BY, the paginator's COUNT, the page of rows,
+    # the reviews prefetch and the two identity reads.
+    assert len(one.captured_queries) <= 14, len(one.captured_queries)
     assert len(ten.captured_queries) == len(one.captured_queries)
     assert awaiting_review_count() == 10
+
+    # Bounded: a page holds a page, and the rest is reachable rather than
+    # rendered.
+    page = response.context["page_obj"]
+    assert page.paginator.per_page <= 25
+    assert len(page.object_list) <= page.paginator.per_page
+
+
+@pytest.mark.django_db
+def test_the_queue_pages_rather_than_rendering_everything(configured_h4):  # noqa: F811
+    from apps.admin_panel.console_payout_reviews import queue_page
+
+    scenario, _ = build_profile("j12-page-0")
+    for index in range(1, 4):
+        build_profile(f"j12-page-{index}")
+
+    first = queue_page("waiting", page_number=1, page_size=2)
+    second = queue_page("waiting", page_number=2, page_size=2)
+    assert first.paginator.count == 4
+    assert len(first.object_list) == 2 and len(second.object_list) == 2
+    # No row appears on two pages, and the order is stable.
+    assert not {m.pk for m in first.object_list} & {m.pk for m in second.object_list}
+
+    # An out-of-range or nonsense page is answered, not raised.
+    assert queue_page("waiting", page_number="99", page_size=2).number == 2
+    assert queue_page("waiting", page_number="not-a-number", page_size=2).number == 1
 
 
 @pytest.mark.django_db

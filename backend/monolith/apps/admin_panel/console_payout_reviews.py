@@ -32,7 +32,9 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Exists, OuterRef, Prefetch
+from django.core.paginator import Paginator
+from django.db.models import Case, Count, OuterRef, Prefetch, Subquery, Value, When
+from django.db.models.fields import CharField
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -182,6 +184,29 @@ def _reviews_prefetch():
     )
 
 
+#: Which bucket a profile falls in, decided in SQL from the latest review.
+#:
+#: The bucket has to exist in the database rather than in Python, because it is
+#: what the page filters, counts and pages by. Deriving it in a loop would mean
+#: reading every DZD payout method ever submitted to render one page of twenty
+#: — fine today, and exactly the shape of slowness this phase went looking for.
+_LATEST_REVIEW = Subquery(
+    PayoutProfileReview.objects.filter(
+        profile_id=OuterRef("current_version__dzd_profile_revision_id")
+    )
+    .order_by("-pk")
+    .values("status")[:1]
+)
+
+_BUCKET = Case(
+    When(latest_review="approved", then=Value("approved")),
+    When(latest_review="needs_attention", then=Value("correction")),
+    When(latest_review="rejected", then=Value("rejected")),
+    default=Value("waiting"),
+    output_field=CharField(),
+)
+
+
 def reviewable_methods():
     """Every DZD method whose *current* version carries a profile revision.
 
@@ -191,11 +216,18 @@ def reviewable_methods():
     decision with no effect.
     """
 
-    return (
-        TravelerPayoutMethod.objects.filter(
-            currency="DZD",
-            current_version__dzd_profile_revision__isnull=False,
-        )
+    return TravelerPayoutMethod.objects.filter(
+        currency="DZD",
+        current_version__dzd_profile_revision__isnull=False,
+    ).annotate(latest_review=_LATEST_REVIEW, bucket=_BUCKET)
+
+
+def queue_page(bucket, *, page_number, page_size=25):
+    """One page of one bucket, with everything a row needs already joined."""
+
+    rows = (
+        reviewable_methods()
+        .filter(bucket=bucket)
         .select_related(
             "traveler",
             "current_version",
@@ -203,7 +235,18 @@ def reviewable_methods():
             "current_version__dzd_profile_revision__evidence",
         )
         .prefetch_related(_reviews_prefetch())
+        .order_by("-current_version__created_at", "-pk")
     )
+    return Paginator(rows, page_size).get_page(page_number)
+
+
+def bucket_counts() -> dict:
+    """All four counts in one GROUP BY, whatever the queue holds."""
+
+    counts = {key: 0 for key, *_ in BUCKETS}
+    for row in reviewable_methods().values("bucket").annotate(total=Count("pk")):
+        counts[row["bucket"]] = row["total"]
+    return counts
 
 
 def awaiting_review_count() -> int:
@@ -215,21 +258,18 @@ def awaiting_review_count() -> int:
     is not counted here; it is still one click away in the queue.
     """
 
-    reviewed = PayoutProfileReview.objects.filter(
-        profile_id=OuterRef("current_version__dzd_profile_revision_id")
-    )
-    return (
-        TravelerPayoutMethod.objects.filter(
-            currency="DZD",
-            current_version__dzd_profile_revision__isnull=False,
-        )
-        .annotate(has_review=Exists(reviewed))
-        .filter(has_review=False)
-        .count()
-    )
+    return reviewable_methods().filter(bucket="waiting").count()
 
 
 def _bucket(reviews):
+    """The same four buckets as `_BUCKET`, for the detail page.
+
+    The detail page starts from one profile revision whose reviews it has
+    already loaded, so it answers this in memory rather than re-deriving it in
+    SQL. The two must agree; the mapping is stated once here and once in
+    `_BUCKET`, and the review-state test asserts both.
+    """
+
     if not reviews:
         return "waiting"
     return {
@@ -284,7 +324,7 @@ def _evidence_state(profile):
     }
 
 
-def queue_rows(methods, *, bucket=""):
+def queue_rows(methods):
     """The safe queue projection. No account value appears here, masked or not."""
 
     methods = list(methods)
@@ -293,9 +333,7 @@ def queue_rows(methods, *, bucket=""):
     for method in methods:
         profile = method.current_version.dzd_profile_revision
         reviews = list(profile.reviews.all())
-        key = _bucket(reviews)
-        if bucket and key != bucket:
-            continue
+        key = method.bucket
         latest = reviews[-1] if reviews else None
         assignment = assignments.get(method.traveler_id)
         rows.append(
@@ -330,13 +368,6 @@ def queue_rows(methods, *, bucket=""):
             }
         )
     return rows
-
-
-def bucket_counts(methods):
-    counts = {key: 0 for key, *_ in BUCKETS}
-    for method in methods:
-        counts[_bucket(list(method.current_version.dzd_profile_revision.reviews.all()))] += 1
-    return counts
 
 
 @sensitive_variables()
@@ -483,12 +514,11 @@ def payout_reviews(request):
     from .console_views import _render
 
     require_capabilities(request.user, "review_payout_profiles")
-    methods = list(reviewable_methods().order_by("-current_version__created_at", "-pk"))
-    counts = bucket_counts(methods)
+    counts = bucket_counts()
     requested = request.GET.get("bucket", "")
     if requested not in counts:
         requested = "waiting"
-    rows = queue_rows(methods, bucket=requested)
+    page = queue_page(requested, page_number=request.GET.get("page"))
     return _render(
         request,
         "admin/console/payout_reviews.html",
@@ -505,10 +535,11 @@ def payout_reviews(request):
                 }
                 for key, label, says, tone in BUCKETS
             ],
-            "rows": rows,
+            "rows": queue_rows(page.object_list),
+            "page_obj": page,
             "selected": requested,
             "selected_label": next(b[1] for b in BUCKETS if b[0] == requested),
-            "total": len(methods),
+            "total": sum(counts.values()),
         },
     )
 
