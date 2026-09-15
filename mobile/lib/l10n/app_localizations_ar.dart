@@ -344,6 +344,30 @@ class LAr extends L {
   String get staleDealClosed => 'تم إغلاق هذا التوصيل.';
 
   @override
+  String get stalePayoutProfileInvalid =>
+      'تغيّرت بيانات الدفع الخاصة بك أثناء وجودك في هذه الصفحة. اسحب للأسفل للتحديث ثم أعد المحاولة.';
+
+  @override
+  String get stalePayoutCountryUnsupported =>
+      'الدفع باليورو غير متاح بعد في هذا البلد. اختر بلدًا آخر أو استخدم الدفع بالدينار.';
+
+  @override
+  String get staleStripeConnectUnavailable =>
+      'إعداد الدفع باليورو غير متاح مؤقتًا. لم تتغيّر بياناتك — حاول مجددًا بعد قليل.';
+
+  @override
+  String get staleStripeConnectProviderError =>
+      'تعذّر على Stripe إتمام الطلب. لم يتم تغيير أي شيء؛ حاول مجددًا بعد قليل.';
+
+  @override
+  String get stalePayoutSetupInvalid =>
+      'تعذّر إكمال إعداد الدفع. تحقّق من البيانات ثم أعد المحاولة.';
+
+  @override
+  String get stalePayoutEvidenceUnavailable =>
+      'المستند المُرسل لم يعد متاحًا. يرجى رفع الشيك المسطّر من جديد.';
+
+  @override
   String get staleOfferExpired => 'لم يعد هذا العرض متاحًا.';
 
   @override

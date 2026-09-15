@@ -350,6 +350,30 @@ class LEn extends L {
   String get staleDealClosed => 'This delivery is closed.';
 
   @override
+  String get stalePayoutProfileInvalid =>
+      'Your payout details changed while you were on this page. Pull down to refresh, then try again.';
+
+  @override
+  String get stalePayoutCountryUnsupported =>
+      'EUR payouts are not available in that country yet. Choose another country, or use DZD payouts.';
+
+  @override
+  String get staleStripeConnectUnavailable =>
+      'EUR payout setup is temporarily unavailable. Your details are unchanged — please try again shortly.';
+
+  @override
+  String get staleStripeConnectProviderError =>
+      'Stripe could not complete the request. Nothing was changed; please try again shortly.';
+
+  @override
+  String get stalePayoutSetupInvalid =>
+      'That payout setup could not be completed. Check the details and try again.';
+
+  @override
+  String get stalePayoutEvidenceUnavailable =>
+      'The uploaded document is no longer available. Please upload the crossed cheque again.';
+
+  @override
   String get staleOfferExpired => 'This offer is no longer available.';
 
   @override

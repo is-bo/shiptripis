@@ -458,7 +458,9 @@ class _EurCard extends StatelessWidget {
           if (eur.country != null && eur.country!.isNotEmpty) ...[
             const SizedBox(height: AppSpace.md),
             DetailRow(
-              label: l.roleSwitchLabel,
+              // This row names the account's legal country, not a role. It was
+              // labelled "Switch role" on the live page.
+              label: l.payoutLegalCountryTitle,
               value: Text(
                 eur.country!.toUpperCase(),
                 style: text.bodySmall?.copyWith(color: c.textTertiary),

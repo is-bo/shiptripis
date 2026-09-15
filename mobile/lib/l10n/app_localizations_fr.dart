@@ -351,6 +351,30 @@ class LFr extends L {
   String get staleDealClosed => 'Cette livraison est clôturée.';
 
   @override
+  String get stalePayoutProfileInvalid =>
+      'Vos informations de paiement ont changé pendant que vous étiez sur cette page. Tirez vers le bas pour actualiser, puis réessayez.';
+
+  @override
+  String get stalePayoutCountryUnsupported =>
+      'Les paiements en EUR ne sont pas encore disponibles dans ce pays. Choisissez un autre pays ou utilisez les paiements en DZD.';
+
+  @override
+  String get staleStripeConnectUnavailable =>
+      'La configuration des paiements en EUR est momentanément indisponible. Vos informations sont inchangées — réessayez dans un instant.';
+
+  @override
+  String get staleStripeConnectProviderError =>
+      'Stripe n’a pas pu traiter la demande. Rien n’a été modifié ; réessayez dans un instant.';
+
+  @override
+  String get stalePayoutSetupInvalid =>
+      'Cette configuration de paiement n’a pas pu être finalisée. Vérifiez les informations et réessayez.';
+
+  @override
+  String get stalePayoutEvidenceUnavailable =>
+      'Le document envoyé n’est plus disponible. Veuillez téléverser de nouveau le chèque barré.';
+
+  @override
   String get staleOfferExpired => 'Cette offre n’est plus disponible.';
 
   @override

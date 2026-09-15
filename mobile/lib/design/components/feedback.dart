@@ -191,6 +191,16 @@ String staleMessage(BuildContext context, ApiErrorCode code) {
     'invalid_reservation_grace' => l.staleReservationExpired,
     'deal_closed' => l.staleDealClosed,
     'offer_expired' => l.staleOfferExpired,
+    // Payout refusals. Every one of these used to fall through to the default
+    // below, so the whole Payout methods page answered every failure with the
+    // single word "Refresh" — the same message whichever action failed and
+    // whatever the server actually objected to.
+    'payout_profile_invalid' => l.stalePayoutProfileInvalid,
+    'payout_country_unsupported' => l.stalePayoutCountryUnsupported,
+    'stripe_connect_unavailable' => l.staleStripeConnectUnavailable,
+    'stripe_connect_provider_error' => l.staleStripeConnectProviderError,
+    'payout_setup_invalid' => l.stalePayoutSetupInvalid,
+    'payout_evidence_unavailable' => l.stalePayoutEvidenceUnavailable,
     _ => l.staleRefreshAction,
   };
 }

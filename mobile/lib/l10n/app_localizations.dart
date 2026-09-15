@@ -729,6 +729,42 @@ abstract class L {
   /// **'This delivery is closed.'**
   String get staleDealClosed;
 
+  /// No description provided for @stalePayoutProfileInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Your payout details changed while you were on this page. Pull down to refresh, then try again.'**
+  String get stalePayoutProfileInvalid;
+
+  /// No description provided for @stalePayoutCountryUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'EUR payouts are not available in that country yet. Choose another country, or use DZD payouts.'**
+  String get stalePayoutCountryUnsupported;
+
+  /// No description provided for @staleStripeConnectUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'EUR payout setup is temporarily unavailable. Your details are unchanged — please try again shortly.'**
+  String get staleStripeConnectUnavailable;
+
+  /// No description provided for @staleStripeConnectProviderError.
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe could not complete the request. Nothing was changed; please try again shortly.'**
+  String get staleStripeConnectProviderError;
+
+  /// No description provided for @stalePayoutSetupInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'That payout setup could not be completed. Check the details and try again.'**
+  String get stalePayoutSetupInvalid;
+
+  /// No description provided for @stalePayoutEvidenceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The uploaded document is no longer available. Please upload the crossed cheque again.'**
+  String get stalePayoutEvidenceUnavailable;
+
   /// No description provided for @staleOfferExpired.
   ///
   /// In en, this message translates to:
