@@ -257,3 +257,41 @@ submitted" rule; the dispute CTA following `available_actions`; both route-absen
 states; the arrival channels reaching the deal; the badge reading `active` and
 `unread_active`; and every payout refusal code rendering a real sentence instead
 of "Refresh".
+
+## Known bound on the Home fix
+
+`settledRequestIdsProvider` reads the unfiltered deal list, which the repository
+fetches one page at a time (20 rows). An account with more than twenty deals
+could still show a settled shipment whose Deal falls outside page one. That is a
+pagination bound, not a state bug, and it disappears once the backend advances
+`ParcelRequest.status` properly.
+
+## Owner acceptance checklist
+
+Install the J1.1 APK **after uninstalling the previous QA build** — profile APKs
+are signed with a per-run debug key, so an upgrade install fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+Report each line as **PASS** or **FAIL** with a screenshot.
+
+1. **Turn notifications on first.** Profile → Notifications → *Enable
+   notifications*, and accept the Android prompt. This is required: nothing else
+   in the app asks for it, and no push can arrive until it is granted. Say what
+   that screen shows you.
+2. **Payout methods.** Profile → Payout methods. The page loads; selecting EUR
+   only, DZD only and Both each sticks; nothing gets stuck spinning. If anything
+   fails, it should now say *why* in a full sentence — screenshot that sentence.
+3. **EUR Stripe TEST onboarding.** *Set up EUR payouts* opens Stripe's hosted
+   TEST page; returning to ShipTrip updates the card. Use Stripe TEST data only.
+4. **DZD setup.** *Set up DZD payouts* opens the form (first name, last name,
+   CCP account, CCP key, RIP, crossed-cheque photo — and no NIP).
+5. **Home.** A delivered delivery is no longer in the Home sending list, and it
+   does appear under Deliveries → History.
+6. **Route.** Open a funded delivery: stops, FLIGHT/DRIVE and times render. Open
+   an old one: it should say the route was not recorded — not show a blank gap.
+7. **Dispute and rating.** No "Open a dispute" on a delivery whose window has
+   closed. After you rate, the prompt stops asking and shows "Rating saved".
+8. **Push.** With the app closed, trigger a notification; tap it; check it opens
+   the right screen and that the bell count changes.
+9. **Chat.** Send a message: it must appear immediately. If a second account is
+   available, confirm the other side receives it without reopening the thread.
