@@ -1,7 +1,7 @@
 # J1.3 — ParcelRequest lifecycle alignment
 
 Implementation checkpoint, 2026-09-15. **Gemini regression verification passed;
-release acceptance pending CI, merge and TEST deployment. J2 has not started.**
+CI passed; TEST deployment verification pending. J2 has not started.**
 
 Starting main: `32da931a8ae3ccb0187e96e0fd5c4af9d51e3721`.
 Branch: `codex/j13-parcel-request-lifecycle`.
@@ -118,15 +118,20 @@ changes, no fixes, no provider calls and no deployed database access were
 reported. Evidence: ignored `.tmp/j13-gemini-regressions.xml` and
 `.tmp/j13-gemini-regressions.log`. This verification checkpoint changes docs only.
 
-CI is now the next gate. After triggering CI, report its link and stop without
-waiting or polling. Merge, branch cleanup and TEST deployment remain pending.
+CI [35004301377](https://github.com/is-bo/shiptripis/actions/runs/35004301377)
+passed all six jobs at `96a2d9a667aa9a1913e1b2f9ea6693a4e38ae305`.
+Results were read only after the user reported completion. Full Django:
+**1,984 passed, 34 skipped**; schema drift, Flutter, Go race/unit, real-Redis
+integration and production/static checks passed. This release checkpoint adds
+documentation only, preserving the CI-verified source. TEST deployment and
+post-release checks are the remaining gate.
 No current J1.3 healthz/readyz/worker/release result is claimed.
 
 TEST only: no deployed runtime/configuration change, no LIVE action. Eventual
 release must preserve PAYMENTS_ENVIRONMENT=test, Stripe TEST, Chargily TEST,
 and DZD execution false. No browser, subagents, mobile changes, H5 work or J2.
 
-Remaining BLOCKER: CI/release gates pending. No known implementation
+Remaining BLOCKER: TEST release verification pending. No known implementation
 MAJOR findings after focused review. MINOR: existing URLField deprecation and
 the documented raw historical-field limitation.
 

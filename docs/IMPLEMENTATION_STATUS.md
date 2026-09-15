@@ -2,7 +2,7 @@
 
 ## J1.3 — ParcelRequest lifecycle alignment (2026-09-15)
 
-**Implemented; Gemini regression verification passed. CI and TEST release pending.**
+**Implemented; Gemini and all six CI jobs passed. TEST release pending.**
 Branch `codex/j13-parcel-request-lifecycle`.
 [Mapping, historical behavior and release gates](PHASE_J13_PARCEL_REQUEST_LIFECYCLE.md).
 
@@ -19,7 +19,10 @@ no changes. Gemini verified `75f82314555fef9e8a404482143fcef607fd754b` on a fres
 local PostgreSQL database: **535 passed, 24 skipped, zero failures/errors in
 331.51s**; migration seeds passed and tracked files remained clean. Saved XML
 and log agree with the returned report. This checkpoint adds documentation only.
-CI is the next gate and must not be polled. No merge/deployment/health claim yet;
+CI [35004301377](https://github.com/is-bo/shiptripis/actions/runs/35004301377)
+passed at `96a2d9a667aa9a1913e1b2f9ea6693a4e38ae305`, including **1,984 Django
+passes / 34 skips** and schema drift. Retrieved after user-confirmed completion.
+The release checkpoint adds docs only. No deployment/health claim yet;
 TEST only, no LIVE
 operation, no Finance H5 work. **J1.3 release acceptance incomplete; J2 NO.**
 
