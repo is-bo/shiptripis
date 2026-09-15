@@ -6402,3 +6402,18 @@ plane's 85–100 queries per page come from re-evaluating the same deeply
 correlated payout base for every metric. Making it fast means materialising that
 base once per snapshot, which is a restructuring of financially authoritative
 reporting and was out of this phase's ownership.
+
+**J1.2 release.** CI run 34986331440: all six jobs SUCCESS at
+`54cee3af23495c2955d48c06609d482dbad53f64`. Main fast-forwarded to that commit
+and the phase branch deleted. Deployment `77e1f07a-5dd5-412e-b9e9-ede261adb189`,
+release `v1.0.0-rc.32+54cee3a`, SUCCESS from a clean `git archive` of the exact
+reviewed SHA. `/healthz` and `/readyz` both 200 with that release, database,
+migrations and rate-limit cache all `ok`, every child process started and the
+new review route gated behind the login page. No migration and no schema change
+shipped. Stripe TEST, Chargily TEST, `PAYOUT_DZD_EXECUTION_ENABLED` false and
+`EMAIL_ENABLED` false, all unchanged; `RELEASE_ID` was the only variable
+touched. The deployed H5 read-only snapshot was **not** run — it needs an
+operator session this environment does not have — and is recorded as not run
+rather than assumed; the local finance suite (1041 tests, including the H5
+control plane and its reconciliation gates) and CI's Django job both passed on
+this exact code.

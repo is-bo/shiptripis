@@ -557,6 +557,44 @@ no Boost redesign, no Boost commission and no request reward economics.
 
 ---
 
+## Release
+
+CI run [34986331440](https://github.com/is-bo/shiptripis/actions/runs/34986331440):
+all six jobs SUCCESS at `54cee3af23495c2955d48c06609d482dbad53f64`. Main was
+fast-forwarded to that commit and the phase branch deleted locally and remotely.
+
+Deployment `77e1f07a-5dd5-412e-b9e9-ede261adb189`, release
+`v1.0.0-rc.32+54cee3a`, SUCCESS. A clean `git archive` of the exact reviewed SHA
+was uploaded, so nothing outside the repository entered the image.
+
+* `/healthz` 200, `v1.0.0-rc.32+54cee3a`.
+* `/readyz` 200, `v1.0.0-rc.32+54cee3a`, database `ok`, migrations `ok`,
+  rate-limit cache `ok`.
+* Every child process started: redis, django-web (gunicorn), django-grpc,
+  reservation-releaser, finance-jobs, and the Go chat, notification, KYC and
+  email workers, then the Caddy gateway — *ShipTrip is ready*.
+* `/admin/finance/payout-reviews/` answers an anonymous request with a redirect
+  to the login page, so the new route is deployed and gated.
+* Provider configuration unchanged: `PAYMENTS_ENVIRONMENT=test`, a Stripe
+  `sk_test_` secret with `STRIPE_CONNECT_EXPECTED_MODE=test`, Chargily on its
+  `/test/api/v2` base with a `test_sk_` secret, `PAYOUT_DZD_EXECUTION_ENABLED`
+  false and `EMAIL_ENABLED` false. `RELEASE_ID` is the only variable this phase
+  changed.
+
+**Not obtained: the deployed H5 read-only snapshot.** It is reachable only
+through `/admin/finance/reconciliation/`, which needs an operator session that
+this environment does not have, and there is no unauthenticated or command-line
+route to it. It is therefore reported as *not run* rather than assumed. What
+stands beside that gap: no migration and no schema change shipped, no accounting
+code was touched, and the full local finance suite — 1041 tests across
+`apps/finance` and `apps/admin_panel` on PostgreSQL, including the H5 control
+plane and its reconciliation gates — passed on this exact code, as did CI's own
+Django job. An operator can close it by opening that page and confirming
+integrity `ok` with all six differences, the row mismatches and the unbalanced
+transaction count at zero.
+
+---
+
 ## Owner acceptance checklist
 
 1. **Finance → Overview.** *Payout methods awaiting review* appears under Needs
