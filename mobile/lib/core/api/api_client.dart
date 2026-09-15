@@ -236,6 +236,7 @@ class ApiClient {
     int retries = 0,
   }) async {
     final identityGeneration = _tokens.identityGeneration;
+    final budget = Stopwatch()..start();
     var attempt = 0;
     while (true) {
       try {
@@ -255,6 +256,10 @@ class ApiClient {
         final failure = ApiException.from(error, stack);
         final canRetry =
             attempt < retries &&
+            // A retry that starts after the budget is spent cannot finish
+            // inside it. Stopping here is what bounds the whole read rather
+            // than only each attempt of it.
+            budget.elapsed < AppConfig.requestBudget &&
             (failure.kind == ApiFailureKind.offline ||
                 failure.kind == ApiFailureKind.timeout);
         if (!canRetry) throw failure;

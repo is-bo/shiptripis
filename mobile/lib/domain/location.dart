@@ -108,12 +108,45 @@ class AppLocation {
     airportIata: readString(json['iata']),
   );
 
-  /// Parses either shape found under a single key.
+  /// Builds a location from the **canonical place summary** the matching and
+  /// discovery APIs send.
+  ///
+  /// That shape is a third thing again: `{id, name, display_label, place_type,
+  /// country_code, iata_code, matching_locality_id}` — no `public_label`, no
+  /// `city`, no coordinates at all. Parsed as an ordinary location every one of
+  /// those labels came out empty, which is why a canonical journey's covered
+  /// legs rendered as unlabelled dots on a route line. Nothing is invented
+  /// here: the catalogue's own display label is the public label, because a
+  /// canonical place *is* public geography.
+  factory AppLocation.fromPlaceJson(Map<String, dynamic> json) {
+    final label = readText(json['display_label']).isNotEmpty
+        ? readText(json['display_label'])
+        : readText(json['name']);
+    return AppLocation(
+      id: readInt(json['id']) ?? 0,
+      kind: readText(json['place_type']) == 'airport'
+          ? LocationKind.airport
+          : LocationKind.city,
+      publicLabel: label,
+      city: readText(json['name']),
+      region: '',
+      countryCode: readText(json['country_code']),
+      precision: LocationPrecision.city,
+      coordinatesTrusted: true,
+      airportIata: readString(json['iata_code']),
+      canonicalPlaceId: readInt(json['id']),
+    );
+  }
+
+  /// Parses any of the three shapes found under a single key.
   static AppLocation? maybe(Object? raw) {
     final json = readObject(raw);
     if (json == null) return null;
     if (json.containsKey('iata') && !json.containsKey('public_label')) {
       return AppLocation.fromAirportJson(json);
+    }
+    if (json.containsKey('place_type') && !json.containsKey('public_label')) {
+      return AppLocation.fromPlaceJson(json);
     }
     return AppLocation.fromJson(json);
   }

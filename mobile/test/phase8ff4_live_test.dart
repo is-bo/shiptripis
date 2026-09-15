@@ -366,11 +366,18 @@ void main() {
       expect(socket.starts, 2);
       expect(socket.stops, greaterThanOrEqualTo(2));
 
+      // The second socket connecting asks for the *same* catch-up the resume
+      // already performed. Inside the settle window that is not a second round
+      // trip: the app used to refetch every mounted collection once per
+      // reconnect, which is why one foreground produced three identical bursts
+      // of `/api/deals`, `/api/matches`, `/api/parcels` and the bell.
       socket.connected('/ws/notifications');
       await tester.pump(const Duration(milliseconds: 100));
-      expect(currentDeal, 2);
-      expect(mountedCollection, 2);
+      expect(currentDeal, 1);
+      expect(mountedCollection, 1);
       expect(hiddenDeal, 0);
+
+
     },
   );
 }

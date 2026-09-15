@@ -6324,3 +6324,81 @@ and "Liability bucket: Processing or externally committed" at the same time.
 The bucket and that marker are now withheld on `payout_operations` only, where
 the stage is authoritative, and both remain on every liability drilldown. The
 backend was not changed. Test count is 28.
+
+## Phase J1.2 — Finance payout approval, route reliability and API performance (2026-09-15)
+
+Starting main `b193cc0`, branch `claude/j12-finance-route-performance`. Closes
+the three foundation problems left open by the J1.1 device acceptance. Full
+detail in `docs/PHASE_J12_FINANCE_ROUTE_PERFORMANCE.md`.
+
+**DZD payout approval.** The decision has existed since H4; what was missing was
+every surface around it. Every existing screen starts from a `Payout`, so a
+Traveler who submitted a CCP account and a crossed cheque without a funded
+delivery appeared in no queue and no count; only `approve` was reachable from
+the console; and the identity attestation that `review_profile` requires had no
+console route at all, so even that one control would have refused. New:
+`admin_console:payout-reviews` with four buckets (waiting / correction requested
+/ rejected / approved), a detail page carrying the identity context and name
+comparison, masked bank data with H4.1's audited five-minute reveal, the crossed
+cheque through a route scoped to its own profile, an append-only decision
+history, and Approve / Needs correction / Reject. Finance can assign an identity
+review to a Trust reviewer from the same page. The Finance Overview carries a
+persistent *Payout methods awaiting review — N* item under Needs attention that
+opens the queue in one click, at a cost of one indexed query.
+
+`review_profile` gained an explicit `decision` argument over the three
+`PayoutProfileReview` statuses it already writes; `approve=True/False` is
+retained unchanged for the H4 API. No second state machine, no migration, no
+change to `approved_profile`, to any gate, or to payout accounting. A refused
+profile now leaves a distinct safe reason — `profile_correction_required` versus
+`profile_rejected` — so the Traveler's card says whether to resubmit or to use a
+different account, in all three languages, with no reviewer note.
+
+**Funded route.** The server was already correct. A canonical CDG → ALG → Jijel
+journey was funded through the real mock rail and `GET /api/deals/<id>` returned
+`basis=funded_snapshot` with ordered legs, named stops, modes and times, and the
+withheld set intact — the first evidence of the I1A contract over canonical
+geography rather than legacy `Location` rows. The Deals the owner was opening
+carry `arrival_snapshot["route"] == []` from the I1A backfill, so `funded_route`
+correctly returns `None` and J1.1's "route wasn't recorded" notice is the right
+and final answer for them. No route is fabricated.
+
+**Find Travelers route — a real client defect, fixed.** A covered leg carries
+two endpoint key pairs and only one is populated; every V1 journey is canonical,
+so `origin`/`destination` are null on every leg and `origin_place`/
+`destination_place` hold the data. The client read only the first pair, and
+`AppLocation` could not parse a canonical place summary at all, so the
+journey-level fallback was empty too — hence a route line of unlabelled dots.
+`AppLocation.fromPlaceJson` plus fallbacks on `CoveredLeg`, `CandidateJourney`
+and `CandidateRequest`. No server change. The J4/J5 redesign is not started.
+
+**Latency.** Measured both from Railway HTTP logs on the deployed TEST runtime
+and from local query counts. No app endpoint is slow: 1–16 queries each, 5–170 ms
+in production, flat as data grows, no N+1. Candidate discovery is 5 queries at
+1, 10 and 40 candidates. Infrastructure shows no pressure (0.0069 vCPU average,
+0.65 GB, no restarts). Railway's p95/p99 of 8.7 s and 110 s are entirely
+long-lived `/ws/chat` and `/ws/notifications` connections, not slow responses.
+The only genuinely slow server surface is the Finance control plane at 85–100
+queries and 4–6 s per page, which is operator-only and by design.
+
+What the owner experienced is client-side: one foreground fired the same six
+endpoints three times within two seconds (resume, chat socket connect and
+notification socket connect each reconcile every mounted collection), and a
+stalled read could hold a screen for three 20-second attempts plus backoff.
+Fixed without raising any timeout: a catch-up now settles for five seconds and
+only re-fires resources the previous one did not cover, and a read carries a
+30-second total budget across its retries. A cancelled request no longer renders
+as a server fault, and the timeout sentence says the screen kept its data.
+
+**Verification.** 14 backend Finance tests, 11 backend route/read-cost tests, 17
+mobile tests; the full mobile suite passes at 561. Browser QA ran the real
+console against real PostgreSQL rows with five synthetic profiles and covered
+the attention count, the queue, the detail, all three decisions, the audited
+reveal, the cheque, the identity assignment, the Ops refusal and a 465px
+viewport; one presentation defect was found and fixed there.
+
+**Handed to the backend — Requires Astra backend phase.** The Finance control
+plane's 85–100 queries per page come from re-evaluating the same deeply
+correlated payout base for every metric. Making it fast means materialising that
+base once per snapshot, which is a restructuring of financially authoritative
+reporting and was out of this phase's ownership.

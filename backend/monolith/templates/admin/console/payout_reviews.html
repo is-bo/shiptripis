@@ -1,0 +1,81 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  Payout methods waiting on a person.
+
+  Four buckets, and only the first one is Finance's move. That distinction is
+  the whole point of the page: a profile sent back for correction and a profile
+  nobody has looked at are both "not approved", and treating them as one number
+  is how a Traveler waits a week for a decision that was never queued.
+
+  No account value appears on this page — not the CCP number, not the RIP, not
+  the last four of either. A list is read over shoulders and screenshotted into
+  chat; the destination lives on the one screen that audits every look at it.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; Payout method reviews</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-finops">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Finance &middot; Traveler payout destinations</p>
+      <h1>Payout method reviews</h1>
+      <p>Algerian CCP accounts submitted with a crossed cheque. A Traveler cannot be paid in dinars until one of these is approved, and approving one binds nothing that is already funded.</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-mute">{{ total }} submitted profile{{ total|pluralize }}</span>
+    </div>
+  </header>
+
+  <nav class="st-cohorts" aria-label="Review queues">
+    {% for bucket in buckets %}
+    <a href="?bucket={{ bucket.key }}" class="st-cohort{% if bucket.selected %} is-current{% endif %}{% if bucket.count and bucket.tone %} is-{{ bucket.tone }}{% endif %}"{% if bucket.selected %} aria-current="true"{% endif %}>
+      <span class="st-cohort-label">{{ bucket.label }}</span>
+      <span class="st-cohort-count">{{ bucket.count }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="st-zone" aria-labelledby="st-bucket-title">
+    <div class="st-zone-head"><h2 id="st-bucket-title">{{ selected_label }}</h2></div>
+    {% for bucket in buckets %}{% if bucket.selected %}<p class="st-zone-says">{{ bucket.says }}</p>{% endif %}{% endfor %}
+
+    <div class="st-rows-wrap">
+      {% if rows %}
+      <div class="st-rows-head" aria-hidden="true">
+        <span>Traveler</span>
+        <span>Revision</span>
+        <span>Submitted</span>
+        <span>Cheque</span>
+        <span>Status</span>
+      </div>
+      <ul class="st-rows">
+        {% for row in rows %}
+        <li class="st-row{% if row.blocked or not row.evidence.present %} is-flagged{% endif %}">
+          <span class="st-row-who">
+            <span class="st-row-deal"><a href="{% url 'admin_console:payout-review-detail' row.reference %}">{{ row.traveler.name }}</a></span>
+            <span class="st-row-trav">{{ row.traveler.email }}</span>
+          </span>
+          <span class="st-row-ref">#{{ row.revision }} <span class="st-row-basis">method v{{ row.method_version }}</span></span>
+          <span class="st-row-age">{{ row.submitted_at|date:"d M Y, H:i"|default:"&mdash;" }}</span>
+          <span class="st-row-state"><span class="st-chip st-{{ row.evidence.tone }}">{{ row.evidence.label }}</span></span>
+          <span class="st-row-state">
+            <span class="st-chip st-{{ row.bucket_tone }}">{{ row.bucket_label }}</span>
+            {% if row.blocked %}<span class="st-row-blocker">Identity not attested{% if row.identity_reviewer %} &middot; assigned to {{ row.identity_reviewer }}{% endif %}</span>{% endif %}
+            {% if row.decided_by %}<span class="st-row-basis">{{ row.decided_by }} &middot; {{ row.decided_at|date:"d M Y" }}{% if row.reason and row.reason != "consistent" %} &middot; name {{ row.reason }}{% endif %}</span>{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="st-rows-empty"><span aria-hidden="true">&#10003;</span> Nothing is {{ selected_label|lower }}.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <footer class="st-finops-foot">
+    <p>Approving a payout method makes it usable as a destination for payouts funded <em>after</em> the approval. It never repoints a payout that is already funded &mdash; those are bound to the profile revision frozen at funding, and are settled from the payout's own screen. Every decision recorded here is immutable and is kept on the profile's history.</p>
+  </footer>
+</main>
+{% endblock %}

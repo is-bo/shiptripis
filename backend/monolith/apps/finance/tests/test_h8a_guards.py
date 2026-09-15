@@ -177,6 +177,11 @@ def test_finance_defaults_to_intent_and_preserves_explicit_audit_scope():
         )
 
 
+# J1.2 put one model read on the Overview: the count of payout methods waiting
+# on a reviewer, which H5 publishes no figure for. The assertions below are
+# unchanged — an empty database contributes no such row, so the headline still
+# holds exactly the four payout owner groups plus refunds.
+@pytest.mark.django_db
 def test_overview_unique_headline_owner_groups_and_independent_refunds():
     from apps.admin_panel.finance_operations import build_overview
 

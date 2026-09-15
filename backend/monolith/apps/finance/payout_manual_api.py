@@ -13,7 +13,7 @@ from .payout_evidence import (
     CHEQUE_LABELS,
     RECEIPT_LABELS,
 )
-from .payout_manual_profiles import reveal_profile, review_profile
+from .payout_manual_profiles import REVIEW_DECISIONS, reveal_profile, review_profile
 from . import payout_manual
 
 
@@ -71,8 +71,24 @@ class RevealView(ProfileView):
 
 
 class ReviewInput(StrictInput):
-    approve = serializers.BooleanField()
+    """`approve` stays the H4 contract; `decision` names the third outcome.
+
+    Exactly one of the two is accepted, so a caller can never send an
+    `approve` that disagrees with a `decision`.
+    """
+
+    approve = serializers.BooleanField(required=False)
+    decision = serializers.ChoiceField(
+        choices=sorted(REVIEW_DECISIONS), required=False
+    )
     accept_name_difference = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        if ("approve" in attrs) == ("decision" in attrs):
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Send exactly one of approve or decision."]}
+            )
+        return attrs
 
 
 class ReviewView(ProfileView):

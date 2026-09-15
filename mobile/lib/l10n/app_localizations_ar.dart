@@ -244,7 +244,8 @@ class LAr extends L {
   String get stateTimeoutTitle => 'استغرق هذا وقتًا طويلاً';
 
   @override
-  String get stateTimeoutBody => 'لم يستجب الخادم في الوقت المحدد.';
+  String get stateTimeoutBody =>
+      'لم يستجب الخادم في الوقت المحدد. لم يُفقد أي شيء — أعد المحاولة.';
 
   @override
   String get stateServerErrorTitle => 'حدث خطأ من جانبنا';
@@ -4151,6 +4152,14 @@ class LAr extends L {
   @override
   String get payoutDzdNeedsAttentionBody =>
       'يلزم التحقق من ملف التحويل أو تحديثه.';
+
+  @override
+  String get payoutDzdRejectedBody =>
+      'لم يُقبل حساب CCP هذا للمدفوعات. أرسل حساباً آخر باسمك.';
+
+  @override
+  String get payoutDzdCorrectionBody =>
+      'تحتاج بيانات الدفع إلى تصحيح. أعد إرسالها مع صورة واضحة للشيك المُسطَّر كاملاً.';
 
   @override
   String get payoutDzdInactiveBody =>

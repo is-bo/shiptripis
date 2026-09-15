@@ -79,12 +79,22 @@ class CoveredLeg {
     this.arriveAt,
   });
 
+  /// A covered leg carries its endpoints under **two** key pairs and only one
+  /// of them is ever populated. `origin`/`destination` hold the legacy
+  /// user-owned `Location` rows; `origin_place`/`destination_place` hold the
+  /// canonical catalogue `Place`. Every V1 journey is canonical, so on the live
+  /// contract the first pair is null on every leg — reading only that pair is
+  /// what made Find Travelers draw a route line of blank stops.
   factory CoveredLeg.fromJson(Map<String, dynamic> json) => CoveredLeg(
     journeyLegId: readInt(json['journey_leg_id']) ?? 0,
     position: readInt(json['position']) ?? 0,
     mode: TransportMode.parse(json['mode']),
-    origin: AppLocation.maybe(json['origin']),
-    destination: AppLocation.maybe(json['destination']),
+    origin:
+        AppLocation.maybe(json['origin']) ??
+        AppLocation.maybe(json['origin_place']),
+    destination:
+        AppLocation.maybe(json['destination']) ??
+        AppLocation.maybe(json['destination_place']),
     departAt: readDate(json['depart_at']),
     arriveAt: readDate(json['arrive_at']),
   );
@@ -292,8 +302,12 @@ class CandidateRequest {
     return CandidateRequest(
       id: readInt(json['id']) ?? 0,
       senderId: readInt(json['sender_id']) ?? 0,
-      pickup: AppLocation.maybe(json['pickup']),
-      delivery: AppLocation.maybe(json['delivery']),
+      pickup:
+          AppLocation.maybe(json['pickup']) ??
+          AppLocation.maybe(json['pickup_place']),
+      delivery:
+          AppLocation.maybe(json['delivery']) ??
+          AppLocation.maybe(json['delivery_place']),
       actualWeightKg: readDouble(json['actual_weight_kg']),
       readyWindowStart: readDate(json['ready_window_start']),
       readyWindowEnd: readDate(json['ready_window_end']),
@@ -337,8 +351,15 @@ class CandidateJourney {
     return CandidateJourney(
       id: readInt(json['id']) ?? 0,
       travelerId: readInt(json['traveler_id']) ?? 0,
-      startLocation: AppLocation.maybe(json['start_location']),
-      destinationLocation: AppLocation.maybe(json['destination_location']),
+      // Same two-shape rule as a covered leg: the server fills
+      // `start_location` with a canonical place summary when the journey has no
+      // legacy Location, and sends the place under its own key as well.
+      startLocation:
+          AppLocation.maybe(json['start_location']) ??
+          AppLocation.maybe(json['start_place']),
+      destinationLocation:
+          AppLocation.maybe(json['destination_location']) ??
+          AppLocation.maybe(json['destination_place']),
       firstDeparture: readDate(json['first_departure']),
       startLegId: readInt(json['start_leg_id']),
       endLegId: readInt(json['end_leg_id']),

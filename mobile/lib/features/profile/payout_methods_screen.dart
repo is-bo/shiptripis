@@ -540,7 +540,16 @@ class _DzdCard extends StatelessWidget {
       DzdPayoutState.setupRequired => l.payoutDzdSetupRequiredBody,
       DzdPayoutState.pendingReview => l.payoutDzdPendingReviewBody,
       DzdPayoutState.ready => l.payoutDzdReadyBody,
-      DzdPayoutState.needsAttention => l.payoutDzdNeedsAttentionBody,
+      // J1.2. The server records three different refusals under one state, and
+      // "requires verification or an update" told a Traveler nothing about
+      // which of them happened. `review_state` is the reviewer's own recorded
+      // decision — a machine code, never their notes — so the card can say
+      // whether to resubmit or to use a different account.
+      DzdPayoutState.needsAttention => switch (profile?.reviewState) {
+        'needs_attention' => l.payoutDzdCorrectionBody,
+        'rejected' => l.payoutDzdRejectedBody,
+        _ => l.payoutDzdNeedsAttentionBody,
+      },
       DzdPayoutState.inactive => l.payoutDzdInactiveBody,
       DzdPayoutState.unknown => l.stateUnexpectedTitle,
     };

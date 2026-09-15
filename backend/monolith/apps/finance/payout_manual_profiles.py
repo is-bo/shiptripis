@@ -85,11 +85,44 @@ def _valid_identity(identity, traveler_id):
     )
 
 
+#: The three outcomes a reviewer can record, and the safe reason code each one
+#: leaves on the method. These are the *existing* `PayoutProfileReview` statuses
+#: — H4 already reached all three — so naming them here makes the middle one
+#: deliberately reachable rather than only arriving as a downgraded approval.
+#: There is no second state machine: `approved_profile` still asks the same
+#: question of the same latest review row.
+REVIEW_DECISIONS = {
+    "approved": "",
+    "needs_attention": "profile_correction_required",
+    "rejected": "profile_rejected",
+}
+
+
 @transaction.atomic
-def review_profile(*, actor, reference, approve, accept_name_difference=False):
+def review_profile(
+    *, actor, reference, approve=None, accept_name_difference=False, decision=None
+):
+    """Record one reviewer decision against one immutable profile revision.
+
+    `decision` is the explicit form and takes precedence: `approved`,
+    `needs_attention` (the Traveler is asked to correct and resubmit) or
+    `rejected`. `approve=True/False` is retained for the H4 API and maps onto
+    `approved`/`rejected` unchanged, so no existing caller changes behaviour.
+
+    Approving a profile whose account-holder name does not match the attested
+    identity still requires `accept_name_difference`; without it the decision is
+    recorded as `needs_attention` exactly as before.
+    """
+
     require_capabilities(
         actor, "review_payout_profiles", "view_payout_sensitive", "view_payout_evidence"
     )
+    if decision is None:
+        if approve is None:
+            raise ValidationError("A review decision is required.")
+        decision = "approved" if approve else "rejected"
+    if decision not in REVIEW_DECISIONS:
+        raise ValidationError("Unknown payout profile review decision.")
     profile = DzdPayoutProfileRevision.objects.get(public_reference=reference)
     method = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
         pk=profile.method_id
@@ -112,9 +145,9 @@ def review_profile(*, actor, reference, approve, accept_name_difference=False):
         and identity.kyc_submission.expires_at <= timezone.now()
     ):
         raise ValidationError("Current attested identity required.")
-    status = "approved" if approve else "rejected"
+    status = decision
     if (
-        approve
+        status == "approved"
         and result["classification"] != "consistent"
         and not accept_name_difference
     ):
@@ -129,7 +162,10 @@ def review_profile(*, actor, reference, approve, accept_name_difference=False):
     if method.current_version.dzd_profile_revision_id == profile.pk:
         previous_status = method.status
         method.status = "ready" if status == "approved" else "needs_review"
-        method.status_reason = "" if status == "approved" else "profile_review_required"
+        # A refused profile says *which* refusal it was, so the Traveler's card
+        # can tell "send us a corrected cheque" apart from "this account was
+        # refused". Neither code carries a reviewer's note.
+        method.status_reason = REVIEW_DECISIONS[status]
         method.save(update_fields=["status", "status_reason"])
         if previous_status != method.status:
             from .payout_reconciliation import notify_profile_state

@@ -158,9 +158,16 @@ FailureCopy describeFailure(BuildContext context, Object? error) {
       icon: Icons.info_outline_rounded,
       tone: StatusTone.waiting,
     ),
-    ApiFailureKind.server ||
-    ApiFailureKind.malformed ||
+    // A cancelled request is the app's own doing — the screen was left, or a
+    // newer read replaced this one. Reporting it as "something went wrong on
+    // the server" blames the wrong party and invites a pointless retry.
     ApiFailureKind.cancelled => FailureCopy(
+      title: l.stateTimeoutTitle,
+      body: l.stateTimeoutBody,
+      icon: Icons.schedule_rounded,
+      tone: StatusTone.waiting,
+    ),
+    ApiFailureKind.server || ApiFailureKind.malformed => FailureCopy(
       title: l.stateServerErrorTitle,
       body: l.stateServerErrorBody,
       icon: Icons.cloud_off_rounded,

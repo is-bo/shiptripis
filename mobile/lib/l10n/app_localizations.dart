@@ -552,7 +552,7 @@ abstract class L {
   /// No description provided for @stateTimeoutBody.
   ///
   /// In en, this message translates to:
-  /// **'The server didn\'t answer in time.'**
+  /// **'The server didn’t answer in time. Nothing was lost — try again.'**
   String get stateTimeoutBody;
 
   /// No description provided for @stateServerErrorTitle.
@@ -7220,6 +7220,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Your payout profile requires verification or an update.'**
   String get payoutDzdNeedsAttentionBody;
+
+  /// No description provided for @payoutDzdRejectedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This CCP account was not accepted for payouts. Submit a different account in your own name.'**
+  String get payoutDzdRejectedBody;
+
+  /// No description provided for @payoutDzdCorrectionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your payout details need a correction. Submit them again with a clear photo of the whole crossed cheque.'**
+  String get payoutDzdCorrectionBody;
 
   /// No description provided for @payoutDzdInactiveBody.
   ///

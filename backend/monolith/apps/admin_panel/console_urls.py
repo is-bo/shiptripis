@@ -1,6 +1,12 @@
 from django.urls import path
 
 from . import console_views as views
+from .console_payout_reviews import (
+    payout_review_detail,
+    payout_review_evidence,
+    payout_reviews,
+)
+from .console_views import capability_required
 from .finance_control_plane import finance_control_plane
 from .finance_dashboard import finance_rows
 from .finance_operations import (
@@ -89,6 +95,24 @@ urlpatterns = [
         "finance/payout-accounts/",
         views.payout_accounts,
         name="payout-accounts",
+    ),
+    # The DZD payout-method review queue. Finance and Super only: the guard is
+    # the same named capability the domain command checks, so the page and the
+    # decision behind it cannot disagree about who may act.
+    path(
+        "finance/payout-reviews/",
+        capability_required("review_payout_profiles")(payout_reviews),
+        name="payout-reviews",
+    ),
+    path(
+        "finance/payout-reviews/<uuid:reference>/",
+        capability_required("review_payout_profiles")(payout_review_detail),
+        name="payout-review-detail",
+    ),
+    path(
+        "finance/payout-reviews/<uuid:reference>/cheque/",
+        capability_required("review_payout_profiles")(payout_review_evidence),
+        name="payout-review-evidence",
     ),
     path("finance/ledger/", views.ledger, name="ledger"),
     path("staff/", views.staff, name="staff"),

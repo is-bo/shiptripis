@@ -246,7 +246,8 @@ class LFr extends L {
   String get stateTimeoutTitle => 'Cela a pris trop de temps';
 
   @override
-  String get stateTimeoutBody => 'Le serveur n’a pas répondu à temps.';
+  String get stateTimeoutBody =>
+      'Le serveur n’a pas répondu à temps. Rien n’a été perdu — réessayez.';
 
   @override
   String get stateServerErrorTitle => 'Une erreur est survenue de notre côté';
@@ -4172,6 +4173,14 @@ class LFr extends L {
   @override
   String get payoutDzdNeedsAttentionBody =>
       'Votre profil de versement nécessite une vérification ou une mise à jour.';
+
+  @override
+  String get payoutDzdRejectedBody =>
+      'Ce compte CCP n’a pas été accepté pour les paiements. Envoyez un autre compte à votre nom.';
+
+  @override
+  String get payoutDzdCorrectionBody =>
+      'Vos coordonnées de paiement doivent être corrigées. Renvoyez-les avec une photo nette du chèque barré complet.';
 
   @override
   String get payoutDzdInactiveBody =>

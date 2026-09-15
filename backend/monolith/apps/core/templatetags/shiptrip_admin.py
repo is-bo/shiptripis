@@ -150,6 +150,18 @@ NAVIGATION = (
                 ("view_finance_summary",),
                 ("finance-dzd",),
             ),
+            # J1.2. A payout destination waiting on a person is Finance work
+            # that exists before any payout does, so it is a destination of its
+            # own rather than a control buried on a payout screen. It is not
+            # flag-gated: it reads payout-method rows directly and does not
+            # touch the H5 control plane, so it stays reachable even when the
+            # Finance dashboard flag is off.
+            (
+                "Payout method reviews",
+                "admin_console:payout-reviews",
+                ("review_payout_profiles",),
+                ("payout-reviews", "payout-review-detail", "payout-review-evidence"),
+            ),
             (
                 "Refunds & disputes",
                 "admin_console:finance-exceptions",

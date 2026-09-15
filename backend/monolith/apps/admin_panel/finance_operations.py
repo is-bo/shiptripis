@@ -761,6 +761,40 @@ def build_overview(snapshot, params, scope, *, user):
             }
         )
 
+    # Payout-method reviews are not an H5 metric and deliberately are not one:
+    # a submitted CCP profile is not money, it has no amount, and the control
+    # plane publishes no figure for it. It is here because it is the one thing
+    # on this page that is *only* solvable by a person, and because before J1.2
+    # a Traveler could submit a payout destination and nothing anywhere told
+    # Finance it existed.
+    #
+    # Two properties of that make it safe to put beside H5's figures. It costs
+    # one indexed query, and it runs *after* `build_snapshot` has returned — so
+    # it is outside the page's REPEATABLE READ snapshot and carries no amount,
+    # which is why it can be a count without claiming to have been read at the
+    # same instant as the money. It is also not environment-scoped, because a
+    # payout method is not a provider object and has no test/live mode; the row
+    # says nothing about an environment for the same reason.
+    from .console_payout_reviews import awaiting_review_count
+
+    if awaiting := awaiting_review_count():
+        attention.insert(
+            0,
+            {
+                "key": "payout_reviews",
+                "label": "Payout methods awaiting review",
+                "says": (
+                    "A Traveler submitted a CCP account and a crossed cheque. "
+                    "They cannot be paid in dinars until it is reviewed."
+                ),
+                "owner": "Finance",
+                "tone": "bad",
+                "count": awaiting,
+                "amount": "",
+                "url": _url("payout-reviews"),
+            },
+        )
+
     dzd = _cohorts(snapshot, DZD_COHORTS, rail="manual_dzd")
     stripe = _cohorts(snapshot, PAYOUT_COHORTS, rail="stripe_eur")
     # Blocked, held and disputed dinar payouts are in none of the four queue

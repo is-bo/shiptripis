@@ -246,7 +246,8 @@ class LEn extends L {
   String get stateTimeoutTitle => 'That took too long';
 
   @override
-  String get stateTimeoutBody => 'The server didn\'t answer in time.';
+  String get stateTimeoutBody =>
+      'The server didn’t answer in time. Nothing was lost — try again.';
 
   @override
   String get stateServerErrorTitle => 'Something went wrong on our side';
@@ -4137,6 +4138,14 @@ class LEn extends L {
   @override
   String get payoutDzdNeedsAttentionBody =>
       'Your payout profile requires verification or an update.';
+
+  @override
+  String get payoutDzdRejectedBody =>
+      'This CCP account was not accepted for payouts. Submit a different account in your own name.';
+
+  @override
+  String get payoutDzdCorrectionBody =>
+      'Your payout details need a correction. Submit them again with a clear photo of the whole crossed cheque.';
 
   @override
   String get payoutDzdInactiveBody =>

@@ -56,6 +56,23 @@ abstract final class AppConfig {
   static const requestTimeout = Duration(seconds: 20);
   static const connectTimeout = Duration(seconds: 12);
 
+  /// The longest a single read may take *including* its retries.
+  ///
+  /// Per-attempt timeouts stay where they are: they are sized for a phone on a
+  /// bad connection, and shortening them would turn a slow answer into a false
+  /// failure. What was unbounded is the sum. A read retries twice on a timeout,
+  /// so a stalled request could hold a screen for three 20-second attempts plus
+  /// backoff — around a minute — before the user was told anything, which is
+  /// exactly the "it just hangs" symptom. Measured server behaviour does not
+  /// justify waiting that long: on the deployed TEST runtime the authenticated
+  /// API answers in tens of milliseconds, and the p95 excluding long-lived
+  /// websocket connections is a fifth of a second.
+  ///
+  /// A read that has already spent this long is not retried again; the timeout
+  /// is reported, the screen keeps whatever it had, and the user can retry
+  /// deliberately.
+  static const requestBudget = Duration(seconds: 30);
+
   /// A release must name its deployment. Assertions are disabled in release,
   /// so reject invalid configuration explicitly before any service starts.
   static void validate({bool release = kReleaseMode}) {

@@ -1,0 +1,221 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% comment %}
+  One Traveler's payout destination, for the person deciding whether ShipTrip
+  will ever send money to it.
+
+  The order is the order of the decision: who is this, has anyone attested their
+  legal name, does the cheque show that name and that account, and only then the
+  three things a reviewer may record. The account values are masked until a
+  deliberate, audited reveal, exactly as they are on the manual payout screen —
+  the same `payout.js` runs both, so a reveal left open in an office clears
+  itself after five minutes.
+
+  There is no fourth control. A reviewer cannot edit a digit, cannot attach a
+  different cheque and cannot mark a payout paid from here; those belong to the
+  Traveler, to the Traveler, and to the payout's own state machine.
+{% endcomment %}
+
+{% block extrastyle %}{{ block.super }}
+  <script src="{% static 'shiptrip/payout.js' %}" defer></script>
+{% endblock %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:finance-dashboard' %}">Finance</a> &rsaquo; <a href="{% url 'admin_console:payout-reviews' %}">Payout method reviews</a> &rsaquo; Revision #{{ review.revision }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow st-manual">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Payout method review &middot; Algerian CCP</p>
+      <h1>{{ review.traveler.name }}</h1>
+      <p>{{ review.traveler.email }} &middot; profile revision&nbsp;#{{ review.revision }} of payout method version&nbsp;#{{ review.method.version }}</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ review.bucket_tone }}">{{ review.bucket_label }}</span>
+      <span class="st-page-ref">{{ review.reference|slice:":8" }}</span>
+    </div>
+  </header>
+
+  {% if not review.is_current %}
+  <div class="st-alert st-alert-info" role="status">
+    <strong>This is not the Traveler's current payout profile.</strong>
+    <span>They have submitted a newer revision since. Deciding this one changes nothing about where a future payout goes; it is kept readable because a funded payout may still be bound to it.</span>
+  </div>
+  {% endif %}
+
+  {% comment %}Identity first. Without an attested legal name the domain refuses
+  every decision, so saying it here — before the controls — is the difference
+  between an operator understanding the queue and an operator meeting an error.
+  {% endcomment %}
+  <section class="st-card st-identity" aria-labelledby="st-identity-head">
+    <p class="st-eyebrow">Identity</p>
+    <div class="st-card-head">
+      <div><h2 id="st-identity-head">Whose account this must be</h2></div>
+      <span class="st-chip st-{% if review.identity.attested %}ok{% else %}bad{% endif %}">{% if review.identity.attested %}Legal name attested{% else %}Not attested{% endif %}</span>
+    </div>
+
+    {% if review.identity.attested %}
+    <p>A reviewer has recorded this Traveler's legal name from their approved KYC. The server compared it against the account holder on this profile:</p>
+    <dl class="st-facts">
+      <div><dt>Name comparison</dt><dd><span class="st-chip st-{% if review.identity.comparison == 'consistent' %}ok{% else %}attn{% endif %}">{{ review.identity.comparison|default:"unavailable" }}</span></dd></div>
+      <div><dt>Traveler</dt><dd><a href="{% url 'admin_console:user-detail' review.traveler.id %}">Open user record</a></dd></div>
+    </dl>
+    {% if review.needs_name_acceptance %}
+    <div class="st-alert st-alert-attn" role="status">
+      <strong>The account holder does not match the attested name.</strong>
+      <span>Approving anyway requires the explicit acceptance on the decision form below, and that acceptance is recorded against you. If you are not certain, ask for a correction instead.</span>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="st-alert st-alert-bad" role="alert">
+      <strong>Nobody has attested this Traveler's legal name.</strong>
+      <span>No decision can be recorded until that happens &mdash; the server refuses approval and refusal alike, because both are statements about an identity that has not been established.</span>
+    </div>
+    {% if review.identity.assignment %}
+    <div class="st-readonly-note"><span><strong>An identity review is open with {{ review.identity.assignment.reviewer }}{% if review.identity.assignment.assigned_at %}, assigned {{ review.identity.assignment.assigned_at|date:"d M Y, H:i" }}{% endif %}.</strong> Once they record the attested name against this Traveler's KYC, the decision controls below become available.</span></div>
+    {% elif review.may.assign %}
+    <form method="post" class="st-form" data-once>{% csrf_token %}
+      <input type="hidden" name="action" value="assign">
+      <p class="st-eyebrow">Assign</p>
+      <p>Choose a reviewer who holds the identity-attestation capability. They read the Traveler's approved KYC and record the legal name; you are not shown that name here and do not need it.</p>
+      <div class="st-field">
+        <label for="st-reviewer">Identity reviewer</label>
+        <select name="reviewer" id="st-reviewer" required>
+          <option value="">Choose a reviewer…</option>
+          {% for person in reviewers %}<option value="{{ person.pk }}">{{ person.full_name|default:person.email }} &middot; {{ person.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="st-split-actions"><button type="submit">Assign identity review</button></div>
+    </form>
+    {% if not reviewers %}<p class="st-alert st-alert-attn" role="status"><strong>No operator currently holds the identity-attestation capability.</strong> <span>A Super Admin has to grant it before any DZD payout profile can be decided.</span></p>{% endif %}
+    {% endif %}
+    {% endif %}
+  </section>
+
+  {% comment %}The destination. Masked at rest; the full values exist only
+  inside one no-store response and are never rendered on a GET.{% endcomment %}
+  <section class="st-card" aria-labelledby="st-destination-head">
+    <p class="st-eyebrow">Destination</p>
+    <div class="st-card-head">
+      <div><h2 id="st-destination-head">The account being claimed</h2></div>
+      <span class="st-chip st-mute">Submitted {{ review.submitted_at|date:"d M Y, H:i"|default:"—" }}</span>
+    </div>
+    <dl class="st-facts">
+      <div><dt>CCP account</dt><dd class="st-masked">{{ review.masked.ccp }}</dd></div>
+      <div><dt>CCP key</dt><dd class="st-masked">{{ review.masked.key }}</dd></div>
+      <div><dt>RIP</dt><dd class="st-masked">{{ review.masked.rip }}</dd></div>
+      <div><dt>Payout method status</dt><dd>{{ review.method.status_label }}{% if review.method.reason_label %} &mdash; {{ review.method.reason_label }}{% endif %}<br><small><code>{{ review.method.status }}{% if review.method.status_reason %} &middot; {{ review.method.status_reason }}{% endif %}</code></small></dd></div>
+    </dl>
+
+    {% if review.revealed %}
+    <div class="st-reveal is-open" data-reveal-panel data-hide-after="300">
+      <div class="st-reveal-head">
+        <p class="st-eyebrow">Revealed &middot; this open was audited</p>
+        <form method="get" class="st-reveal-hide"><button class="button st-button-quiet" type="submit">Hide details</button></form>
+      </div>
+      <dl class="st-secret-list">
+        <div><dt>Account holder</dt><dd><span id="st-secret-name">{{ review.revealed.first_name }} {{ review.revealed.last_name }}</span>
+          <button type="button" class="st-copy" data-copy="st-secret-name" data-copy-label="account holder name" aria-label="Copy the account holder name">Copy</button></dd></div>
+        <div><dt>CCP account number</dt><dd><span id="st-secret-ccp" class="st-secret-value">{{ review.revealed.ccp_number }}</span>
+          <button type="button" class="st-copy" data-copy="st-secret-ccp" data-copy-label="CCP account number" aria-label="Copy the CCP account number">Copy</button></dd></div>
+        <div><dt>CCP key</dt><dd><span id="st-secret-key" class="st-secret-value">{{ review.revealed.ccp_key }}</span>
+          <button type="button" class="st-copy" data-copy="st-secret-key" data-copy-label="CCP key" aria-label="Copy the CCP key">Copy</button></dd></div>
+        <div><dt>RIP</dt><dd><span id="st-secret-rip" class="st-secret-value">{{ review.revealed.rip }}</span>
+          <button type="button" class="st-copy" data-copy="st-secret-rip" data-copy-label="RIP" aria-label="Copy the RIP">Copy</button></dd></div>
+      </dl>
+      <p class="st-muted" data-reveal-countdown>These details hide automatically after five minutes. Reveal them again if you need longer &mdash; each reveal is recorded against your account.</p>
+    </div>
+    {% elif review.may.reveal %}
+    <form method="post" class="st-reveal-ask" data-once>{% csrf_token %}
+      <div>
+        <strong>The account holder's name, CCP number, CCP key and RIP are hidden.</strong>
+        <span>Reveal them only to check them against the cheque. The reveal is recorded against your account, appears on this page only, and is never cached.</span>
+      </div>
+      <button name="action" value="reveal" type="submit">Reveal payout details</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="st-card" aria-labelledby="st-proof-head">
+    <p class="st-eyebrow">Traveler evidence</p>
+    <div class="st-card-head">
+      <div><h2 id="st-proof-head">Photo of the full crossed cheque</h2></div>
+      <span class="st-chip st-info">Every open is audited</span>
+    </div>
+    <p>The Traveler's own proof that the account above is theirs. It is not proof of any transfer, and it is the only document this review turns on.</p>
+    <ul class="st-label-set">
+      <li><span>FR</span><b lang="fr">{{ review.evidence.labels.fr }}</b></li>
+      <li><span>AR</span><b lang="ar" dir="rtl">{{ review.evidence.labels.ar }}</b></li>
+      <li><span>EN</span><b lang="en">{{ review.evidence.labels.en }}</b></li>
+    </ul>
+    {% if review.evidence.present and review.may.evidence %}
+    <div class="st-split-actions">
+      <a class="button" data-evidence data-evidence-title="Photo of the full crossed cheque" target="_blank" rel="noreferrer"
+         href="{% url 'admin_console:payout-review-evidence' review.reference %}">View the cheque</a>
+      <span class="st-spacer"></span>
+      <span class="st-muted">Uploaded {{ review.evidence.uploaded_at|date:"d M Y, H:i"|default:"—" }}</span>
+    </div>
+    {% elif not review.evidence.present %}
+    <p class="st-alert st-alert-bad" role="alert"><strong>{{ review.evidence.label }}.</strong> This profile cannot be approved. Ask the Traveler to submit their details again with a readable photo of the whole cheque.</p>
+    {% endif %}
+  </section>
+
+  {% comment %}The decision. Three outcomes, each one saying what it means for
+  the Traveler, because "reject" and "needs correction" feel similar to the
+  person clicking and are completely different to the person waiting.{% endcomment %}
+  {% if review.may.review %}
+  <section class="st-card st-decision-card" aria-labelledby="st-decide-head">
+    <p class="st-eyebrow">Record a decision</p>
+    <h2 id="st-decide-head">What happens to this payout method</h2>
+    <p>Open the cheque and check that the account holder, the CCP account and the key on it match what is above. Every decision is immutable: a later one is appended, and neither replaces the other.</p>
+
+    <form method="post" class="st-form st-decide" data-once>{% csrf_token %}
+      <input type="hidden" name="action" value="decide">
+      {% if review.needs_name_acceptance %}
+      <div class="st-check">
+        <input type="checkbox" name="accept_name_difference" id="st-accept-name">
+        <label for="st-accept-name">I reviewed and accept the attested name difference</label>
+      </div>
+      <p class="st-muted">Without this, an approval is recorded as <strong>needs correction</strong> instead &mdash; the server, not this page, makes that substitution.</p>
+      {% endif %}
+      <ul class="st-confirm-list">
+        {% for decision in decisions %}
+        <li><strong>{{ decision.label }}</strong> &mdash; {{ decision.says }}</li>
+        {% endfor %}
+      </ul>
+      <div class="st-split-actions">
+        {% for decision in decisions %}
+        <button name="decision" value="{{ decision.key }}" type="submit" class="{% if decision.tone == 'ok' %}st-button-ok{% elif decision.tone == 'bad' %}st-button-danger{% else %}st-button-quiet{% endif %}">{{ decision.label }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  </section>
+  {% elif review.identity.attested %}
+  <div class="st-readonly-note"><span><strong>No decision can be recorded.</strong> The crossed cheque is missing or incomplete, so there is nothing to review against.</span></div>
+  {% endif %}
+
+  <section class="st-card" aria-labelledby="st-history-head">
+    <p class="st-eyebrow">History</p>
+    <h2 id="st-history-head">Every decision recorded against this revision</h2>
+    {% if review.history %}
+    <ol class="st-timeline">
+      {% for row in review.history %}
+      <li>
+        <span class="st-chip st-{{ row.tone }}">{{ row.label }}</span>
+        <div>
+          <strong>{{ row.reviewer }}</strong>
+          <span>{{ row.at|date:"d M Y, H:i" }}{% if row.reason %} &middot; name check: {{ row.reason }}{% endif %}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="st-calm">Nothing has been decided yet. This profile is waiting for you.</p>
+    {% endif %}
+    <p class="st-muted">Reveals and cheque opens are recorded separately in the audit log and are deliberately not listed here: a review history that names who looked at whose bank details is surveillance, not review.</p>
+  </section>
+
+  <p class="st-queue-return"><a href="{% url 'admin_console:payout-reviews' %}">Back to the review queue</a></p>
+</main>
+{% endblock %}

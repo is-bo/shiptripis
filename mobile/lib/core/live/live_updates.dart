@@ -85,12 +85,40 @@ final liveUpdatesProvider = Provider<LiveUpdates>((ref) {
 });
 
 class LiveUpdates {
-  LiveUpdates({Duration coalesceFor = const Duration(milliseconds: 75)})
-    : _coalesceFor = coalesceFor;
+  LiveUpdates({
+    Duration coalesceFor = const Duration(milliseconds: 75),
+    Duration reconcileSettlesFor = const Duration(seconds: 5),
+    DateTime Function()? now,
+  }) : _coalesceFor = coalesceFor,
+       _reconcileSettlesFor = reconcileSettlesFor,
+       _now = now ?? DateTime.now;
 
   static const _dedupLimit = 128;
 
   final Duration _coalesceFor;
+
+  /// How long one catch-up covers for.
+  ///
+  /// Three things ask for a catch-up at almost the same instant — the app
+  /// resuming, the chat socket connecting, the notification socket connecting —
+  /// and each of them re-fires *every mounted collection*. On the deployed TEST
+  /// runtime that showed up as `/api/deals`, `/api/matches`, `/api/parcels`,
+  /// `/api/chat/threads` and the bell each being fetched three times inside two
+  /// seconds on every foreground, over a server running two workers. They are
+  /// not three different questions; they are the same question asked by three
+  /// callers who cannot see each other. The first one answers it.
+  ///
+  /// This bounds duplicate *catch-up* only. A real business event arriving over
+  /// the socket still goes through [ingest] and is never suppressed.
+  final Duration _reconcileSettlesFor;
+
+  /// Wall clock, injectable so the window can be exercised without waiting it
+  /// out. Deliberately not a [Timer]: a pending timer would outlive the widget
+  /// tree in every test that foregrounds the app, and a catch-up window has no
+  /// work of its own to do when it expires.
+  final DateTime Function() _now;
+  DateTime? _reconciledAt;
+  Set<LiveResource> _lastReconciled = const {};
   final Map<LiveResource, Set<VoidCallback>> _listeners = {};
   final LinkedHashMap<String, Set<LiveResource>> _seen = LinkedHashMap();
   final Set<LiveResource> _queued = {};
@@ -125,6 +153,8 @@ class LiveUpdates {
     _flushTimer = null;
     _queued.clear();
     _seen.clear();
+    _reconciledAt = null;
+    _lastReconciled = const {};
   }
 
   /// Normalizes either a Go WS envelope or Firebase data and queues only the
@@ -171,6 +201,21 @@ class LiveUpdates {
       for (final resource in _listeners.keys)
         if (resource.isCollection) resource,
     };
+    // Already covered: a catch-up for these same resources completed moments
+    // ago, so re-reading them would return what the screen is already showing.
+    // Anything *new* since — a detail route pushed after the last catch-up —
+    // still goes through, and so does any reconcile after the window.
+    final at = _now();
+    final settled = _reconciledAt;
+    if (settled != null && at.difference(settled) < _reconcileSettlesFor) {
+      final fresh = resources.difference(_lastReconciled);
+      if (fresh.isEmpty) return;
+      _lastReconciled = {..._lastReconciled, ...fresh};
+      _enqueue(fresh);
+      return;
+    }
+    _reconciledAt = at;
+    _lastReconciled = resources;
     _enqueue(resources);
   }
 
@@ -204,6 +249,7 @@ class LiveUpdates {
     _generation++;
     _flushTimer?.cancel();
     _flushTimer = null;
+    _reconciledAt = null;
     _queued.clear();
     _seen.clear();
     _listeners.clear();
