@@ -571,6 +571,20 @@ class Queries:
                 funding.filter(order__purpose="posting_deposit")
             ),
             "boost_funded": MetricQuery(funding.filter(order__purpose="boost")),
+            # J2 boosts carry no payment order of their own -- the amount and
+            # its commission ride inside the Deal balance -- so the funding
+            # split above cannot see them. This reads the recognition entry
+            # instead, which is why it is a commission figure rather than a
+            # funding one, and why it is reported apart from `boost_funded`
+            # rather than added to it. Both are display metrics; neither is a
+            # reconciliation input, and neither is an amount to add to gross.
+            "boost_commission": MetricQuery(
+                ledger.filter(
+                    account="platform_commission",
+                    transaction__key__startswith="deal_boost_allocation:",
+                ),
+                sign=-1,
+            ),
             "recognized_revenue": MetricQuery(
                 scope.period(
                     revenue.filter(recognition_at__isnull=False), "effective_at"

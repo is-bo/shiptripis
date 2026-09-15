@@ -126,12 +126,21 @@ class GuestTokenValidationTests(GuestPaymentTestCase):
         assert set(response.data) == {
             "amount_eur_cents",
             "currency",
+            "purpose",
             "description",
             "expires_at",
             "providers",
         }
         assert response.data["currency"] == "EUR"
         assert response.data["amount_eur_cents"] == self.order.outstanding_eur_cents
+        # `purpose` is the machine-readable form of what `description` already
+        # says in words -- which kind of payment this is. It carries no new
+        # disclosure, and it is one of a closed set of platform-defined values.
+        assert response.data["purpose"] in {
+            "posting_deposit",
+            "deal_balance",
+            "boost",
+        }
 
     def test_the_payload_names_no_person_place_or_parcel(self):
         response = self._get(self.token)
@@ -150,10 +159,11 @@ class GuestTokenValidationTests(GuestPaymentTestCase):
             assert str(secret) not in body, secret
 
         # Identifiers are absent structurally, not by substring luck: the
-        # payload has exactly five keys and none of them is an id.
+        # payload has exactly six keys and none of them is an id.
         assert set(response.data) == {
             "amount_eur_cents",
             "currency",
+            "purpose",
             "description",
             "expires_at",
             "providers",

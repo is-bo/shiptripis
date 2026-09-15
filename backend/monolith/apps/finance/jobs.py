@@ -158,6 +158,8 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             reason="request_expired_unmatched",
             locked_orders=locked_orders_by_id,
             delivery_request=graph.request,
+            # Expired unmatched: the unpaid J2 Boost expires with the request.
+            clear_intent=True,
         )
 
         order = next(

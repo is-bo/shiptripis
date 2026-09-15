@@ -167,6 +167,23 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
         min_value=1,
         max_value=100_000_000,
     )
+    #: J2. Extra reward the sender attaches to this request. Optional, defaults
+    #: to none, editable afterwards while the request stays unmatched. The band
+    #: is enforced by `apps.boosts.services` against the active settings
+    #: revision, not by a constant here.
+    boost_eur_cents = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        max_value=100_000_000,
+        default=0,
+    )
+    #: J2. The posting deposit the sender chose, if they chose one. Omitting it
+    #: takes the server's recommendation. Bounds are the server's.
+    posting_deposit_eur_cents = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=100_000_000,
+    )
     title = serializers.CharField(max_length=160, trim_whitespace=True)
     description = serializers.CharField(max_length=2000, trim_whitespace=True)
     category = serializers.ChoiceField(choices=ParcelRequest.ItemType.choices)
@@ -384,6 +401,8 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
     height_cm = serializers.SerializerMethodField()
     declared_value_eur_cents = serializers.SerializerMethodField()
     sender_proposed_reward_eur_cents = serializers.SerializerMethodField()
+    boost_eur_cents = serializers.SerializerMethodField()
+    total_offered_reward_eur_cents = serializers.SerializerMethodField()
     title = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
     handling_notes = serializers.SerializerMethodField()
@@ -426,6 +445,8 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "height_cm",
             "declared_value_eur_cents",
             "sender_proposed_reward_eur_cents",
+            "boost_eur_cents",
+            "total_offered_reward_eur_cents",
             "title",
             "category",
             "handling_notes",
@@ -577,6 +598,23 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
 
     def get_declared_value_eur_cents(self, obj: ParcelRequest) -> int | None:
         return self._delivery_value(obj, "declared_value_eur_cents")
+
+    def get_boost_eur_cents(self, obj: ParcelRequest) -> int:
+        """Extra reward the sender has attached to this request. J2."""
+
+        return int(self._delivery_value(obj, "boost_eur_cents") or 0)
+
+    def get_total_offered_reward_eur_cents(self, obj: ParcelRequest) -> int | None:
+        """Base reward plus Boost: the number a traveler is actually offered.
+
+        Computed here so no client adds up money. Null only when the request
+        carries no posted reward at all, which is a legacy row.
+        """
+
+        base = self._delivery_value(obj, "traveler_reward_eur_cents")
+        if base is None:
+            return None
+        return int(base) + int(self._delivery_value(obj, "boost_eur_cents") or 0)
 
     def get_sender_proposed_reward_eur_cents(self, obj: ParcelRequest) -> int | None:
         """Sender's posted intent only; Offer.traveler_reward_minor is agreed."""

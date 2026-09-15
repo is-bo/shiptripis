@@ -263,6 +263,29 @@ class DealTermsSnapshot(models.Model):
         EUR = "EUR", "Euro"
         DZD = "DZD", "Legacy Algerian dinar"
 
+    class BoostEconomics(models.TextChoices):
+        """Which Boost model this Deal's frozen numbers were computed under.
+
+        ``TRAVELER_SPLIT_V1``
+            The retired paid package. The sender paid the Boost separately and
+            it was *divided*: the Traveler received a majority share and
+            ShipTrip kept the remainder, so
+            `amount = traveler_bonus + platform_fee`.
+
+        ``ADDITIVE_COMMISSION_V2``
+            J2. The Boost is extra reward, so the Traveler receives all of it
+            and ShipTrip's commission is charged **on top**, exactly as the base
+            commission is charged on top of the base reward:
+            `traveler_bonus = amount` and `platform_fee = ceil(amount x rate)`.
+            The sender pays `amount + platform_fee` inside the Deal balance.
+
+        The two are never mixed on one Deal, and a v1 row is never
+        reinterpreted: what a buyer was quoted stays what they were quoted.
+        """
+
+        TRAVELER_SPLIT_V1 = "traveler_split_v1", "Traveler split V1"
+        ADDITIVE_COMMISSION_V2 = "additive_commission_v2", "Additive commission V2"
+
     deal = models.OneToOneField(
         Deal,
         on_delete=models.PROTECT,
@@ -276,6 +299,14 @@ class DealTermsSnapshot(models.Model):
     boost_amount_minor = models.PositiveBigIntegerField(default=0)
     boost_traveler_bonus_minor = models.PositiveBigIntegerField(default=0)
     boost_platform_fee_minor = models.PositiveBigIntegerField(default=0)
+    boost_economics_version = models.CharField(
+        max_length=24,
+        choices=BoostEconomics.choices,
+        default=BoostEconomics.TRAVELER_SPLIT_V1,
+    )
+    #: The Boost commission rate as it stood at the commitment boundary. A
+    #: later Admin change cannot reach back through this column.
+    boost_commission_rate_bps = models.PositiveSmallIntegerField(default=0)
     business_settings_version = models.ForeignKey(
         "core.BusinessSettingsVersion",
         on_delete=models.PROTECT,
@@ -302,12 +333,29 @@ class DealTermsSnapshot(models.Model):
                 ),
                 name="deals_terms_total_sum",
             ),
+            # One constraint per Boost model, because the two describe
+            # genuinely different arithmetic. A v1 row's Boost is divided; a
+            # v2 row's Boost goes to the Traveler whole with commission added.
             models.CheckConstraint(
-                condition=Q(
-                    boost_amount_minor=F("boost_traveler_bonus_minor")
-                    + F("boost_platform_fee_minor")
+                condition=(
+                    ~Q(boost_economics_version="traveler_split_v1")
+                    | Q(
+                        boost_amount_minor=F("boost_traveler_bonus_minor")
+                        + F("boost_platform_fee_minor")
+                    )
                 ),
                 name="deals_terms_boost_total_sum",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~Q(boost_economics_version="additive_commission_v2")
+                    | Q(boost_amount_minor=F("boost_traveler_bonus_minor"))
+                ),
+                name="deals_terms_boost_additive_bonus",
+            ),
+            models.CheckConstraint(
+                condition=Q(boost_commission_rate_bps__lte=10_000),
+                name="deals_terms_boost_commission_bps",
             ),
             models.CheckConstraint(
                 condition=(
@@ -331,6 +379,20 @@ class DealTermsSnapshot(models.Model):
                     )
                 }
             )
+        if self.boost_economics_version == self.BoostEconomics.ADDITIVE_COMMISSION_V2:
+            expected_boost_fee = (
+                int(self.boost_amount_minor) * int(self.boost_commission_rate_bps)
+                + 9_999
+            ) // 10_000
+            if int(self.boost_platform_fee_minor) != expected_boost_fee:
+                raise ValidationError(
+                    {
+                        "boost_platform_fee_minor": (
+                            "Boost commission must equal the ceiling of "
+                            "boost × boost rate / 10,000."
+                        )
+                    }
+                )
 
     def save(self, *args, **kwargs):
         if self.pk:
@@ -348,7 +410,17 @@ class DealTermsSnapshot(models.Model):
 
     @property
     def sender_total_with_boost_minor(self) -> int:
-        return int(self.sender_total_minor) + int(self.boost_amount_minor)
+        """Everything this Deal's sender owes, Boost and its commission included.
+
+        Under the retired split model the Boost commission came *out of* the
+        Boost, so the sender owed the Boost and nothing more. Under J2 it is
+        charged on top, so the sender owes both.
+        """
+
+        total = int(self.sender_total_minor) + int(self.boost_amount_minor)
+        if self.boost_economics_version == self.BoostEconomics.ADDITIVE_COMMISSION_V2:
+            total += int(self.boost_platform_fee_minor)
+        return total
 
 
 class DealEvent(models.Model):

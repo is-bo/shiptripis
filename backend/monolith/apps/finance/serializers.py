@@ -87,6 +87,60 @@ class PaymentRefundSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+def payment_settlement_payload(order: PaymentOrder) -> dict:
+    """What actually happened to this obligation, in one block.
+
+    J2 freezes this so J3 can build a real confirmation screen without asking
+    the server four more questions or doing arithmetic of its own. Every value
+    is server-computed and privacy-safe:
+
+    * `is_settled` is the authoritative answer to "did it go through" -- the
+      reconciled order status, never a client's return from a checkout page.
+    * `deposit_credited_eur_cents` is what a posting deposit discharged, so the
+      screen can say "your deposit covered this much" instead of looking like a
+      second charge.
+    * `paid_by` says `guest` or `self` without naming the guest. Who paid is the
+      owner's business; the guest's email is not, and never appears here.
+    * `next_step` is the one thing the sender does next, named by the server
+      because the server is what knows whether a Deal is now funded.
+    """
+
+    # `all()` so a prefetched order answers from its cache and an un-prefetched
+    # one costs exactly one query; the narrowing is done here either way.
+    applied = [
+        attempt
+        for attempt in order.attempts.all()
+        if attempt.status == PaymentAttempt.Status.SUCCEEDED
+        and not attempt.is_unapplied
+    ]
+    guest_paid = any(attempt.guest_link_id is not None for attempt in applied)
+    settled = order.status in (
+        PaymentOrder.Status.PAID,
+        PaymentOrder.Status.REFUND_PENDING,
+        PaymentOrder.Status.PARTIALLY_REFUNDED,
+        PaymentOrder.Status.REFUNDED,
+    )
+    if order.purpose == PaymentOrder.Purpose.POSTING_DEPOSIT:
+        next_step = "await_offers" if settled else "pay_posting_deposit"
+    else:
+        next_step = "await_pickup" if settled else "pay_deal_balance"
+    return {
+        "is_settled": settled,
+        "purpose": order.purpose,
+        "currency": "EUR",
+        "amount_eur_cents": int(order.amount_eur_cents),
+        "paid_eur_cents": int(order.paid_eur_cents),
+        "deposit_credited_eur_cents": int(order.credited_eur_cents),
+        "remaining_eur_cents": order.outstanding_eur_cents,
+        "refunded_eur_cents": int(order.refunded_eur_cents),
+        "deal_id": order.deal_id,
+        "delivery_request_id": order.delivery_request_id,
+        "paid_by": ("guest" if guest_paid else "self") if applied else None,
+        "next_step": next_step,
+        "paid_at": order.paid_at,
+    }
+
+
 class PaymentOrderSerializer(serializers.ModelSerializer):
     """The owner's view of one obligation.
 
@@ -102,6 +156,7 @@ class PaymentOrderSerializer(serializers.ModelSerializer):
     refunds = PaymentRefundSerializer(many=True, read_only=True)
     deal_id = serializers.IntegerField(read_only=True)
     delivery_request_id = serializers.IntegerField(read_only=True)
+    settlement = serializers.SerializerMethodField()
 
     class Meta:
         model = PaymentOrder
@@ -121,8 +176,12 @@ class PaymentOrderSerializer(serializers.ModelSerializer):
             "created_at",
             "attempts",
             "refunds",
+            "settlement",
         )
         read_only_fields = fields
+
+    def get_settlement(self, obj: PaymentOrder) -> dict:
+        return payment_settlement_payload(obj)
 
 
 class PaymentOrderSummarySerializer(serializers.ModelSerializer):
@@ -255,6 +314,23 @@ class CheckoutCreateSerializer(serializers.Serializer):
                 }
             )
         return attrs
+
+
+class PostingDepositCreateSerializer(serializers.Serializer):
+    """Optionally, the deposit the sender chose for themselves.
+
+    One integer or nothing. Omitting it accepts the server's recommendation;
+    supplying it is a choice the server then bounds -- below by the configured
+    floor, above by the obligation the deposit is being paid against. Neither
+    bound is expressed here, because both are properties of the request and the
+    active settings revision rather than of the wire format.
+    """
+
+    amount_eur_cents = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=100_000_000,
+    )
 
 
 class GuestLinkCreateSerializer(serializers.Serializer):

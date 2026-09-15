@@ -2965,6 +2965,12 @@ def _save_settings_revision(
     return revision
 
 
+def _percent_label(bps) -> str:
+    """Render basis points as a trimmed percentage for an operator to read."""
+
+    return f"{percent_from_bps(bps):.2f}".rstrip("0").rstrip(".") + "%"
+
+
 def _settings_initial(active):
     return {
         "pricing": {
@@ -2994,8 +3000,8 @@ def _settings_initial(active):
             )
         },
         "boost": {
-            "traveler_share_percent": percent_from_bps(
-                _dig(active.policy, "boost.traveler_share_bps")
+            "boost_commission_percent": percent_from_bps(
+                _dig(active.policy, "boost.commission_rate_bps")
             ),
         },
         "providers": {
@@ -3079,14 +3085,17 @@ def business_settings(request):
                 _save_settings_revision(
                     request,
                     path_updates={
-                        "boost.traveler_share_bps": boost_form.traveler_share_bps()
+                        "boost.commission_rate_bps": (
+                            boost_form.boost_commission_rate_bps()
+                        )
                     },
                     commission_rate_bps=None,
                     reason=boost_form.cleaned_data["reason"],
                 )
                 messages.success(
                     request,
-                    "The boost revenue split was saved as a new audited version.",
+                    "The boost commission was saved as a new audited version. "
+                    "It applies to future commitments only.",
                 )
                 return redirect("admin_console:settings")
             if action == "fx" and fx_form.is_valid():
@@ -3190,22 +3199,20 @@ def business_settings(request):
                 if row.label in protection_labels
             ],
             "boost_packages": boost_packages(active.policy),
+            # J2. The Traveler receives the whole boost; ShipTrip's commission
+            # is charged on top of it. The retired package's Traveler/platform
+            # split is not shown, because nothing new is sold under it.
             "boost_economics": {
                 "minimum": format_eur(
-                    _dig(active.policy, "boost.minimum_amount_eur_cents")
+                    _dig(active.policy, "boost.minimum_intent_eur_cents")
                 ),
-                "traveler_share": (
-                    f"{percent_from_bps(_dig(active.policy, 'boost.traveler_share_bps')):.2f}".rstrip(
-                        "0"
-                    ).rstrip(".")
-                    + "%"
+                "maximum": format_eur(
+                    _dig(active.policy, "boost.maximum_intent_eur_cents")
                 ),
-                "platform_share": (
-                    f"{percent_from_bps(10_000 - _dig(active.policy, 'boost.traveler_share_bps')):.2f}".rstrip(
-                        "0"
-                    ).rstrip(".")
-                    + "%"
+                "commission": _percent_label(
+                    _dig(active.policy, "boost.commission_rate_bps")
                 ),
+                "traveler_share": _percent_label(10_000),
             },
             "providers": _provider_rows(),
             "example": example,

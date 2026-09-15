@@ -210,6 +210,18 @@ for key, purpose in (
         "Subset of gross funded, not separate revenue.",
     )
 
+DEFINITIONS["boost_commission"] = Definition(
+    "Boost Commission",
+    "ShipTrip commission on the Boost portion of funded deliveries.",
+    "platform_commission ledger entries keyed deal_boost_allocation:",
+    "additive_commission_v2 boosts only",
+    "Retired paid visibility packages, whose platform share is inside "
+    "boost_funded instead. Not an amount to add to gross funded volume.",
+    "Ledger posting time; recognised with the Deal exactly as base commission is.",
+    "Subset of platform commission, reported apart so delivery commission and "
+    "Boost commission can be told from one another.",
+)
+
 for key, basis, description in (
     (
         "deposits_credited",

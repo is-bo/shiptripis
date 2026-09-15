@@ -1,17 +1,14 @@
-"""Read and write contracts for paid sender boosts.
+"""Read and write contracts for sender Boost.
 
 Two rules shape everything here.
 
-**The client proposes an amount; the server prices the economics.** A preview
-returns the authoritative Traveler/platform split and settings version. The
-purchase must echo that version, while the server validates the €5 minimum and
-recomputes every cent.
+**The client names an amount; the server prices it.** A request body carries one
+integer and nothing else. Bounds, the commission rate, the Traveler bonus and
+the sender's cost are all computed server-side and returned, so no client ever
+calculates a financial total and no client can propose one.
 
-**A purchase answer is a payment answer.** `BoostPurchaseSerializer` carries the
-linked `PaymentOrder`'s public reference and the amount still outstanding,
-because the next thing the client does is open the existing checkout route with
-them. It does not carry attempts, provider identifiers or anything else the
-finance API already owns.
+**The retired package is read-only.** `BoostPurchaseSerializer` still renders a
+historical `BoostPurchase` exactly as it was sold. Nothing writes one.
 """
 
 from __future__ import annotations
@@ -22,39 +19,23 @@ from .models import BoostPurchase
 from .services import MAX_EUR_CENTS
 
 
-class BoostPackageSerializer(serializers.Serializer):
-    """One admin-configured package, exactly as the server prices it."""
+class BoostIntentSerializer(serializers.Serializer):
+    """The whole request body: what the sender wants the Boost to be.
 
-    code = serializers.CharField(read_only=True)
-    label = serializers.CharField(read_only=True)
-    duration_seconds = serializers.IntegerField(read_only=True)
-    ranking_weight = serializers.IntegerField(read_only=True)
-    currency = serializers.CharField(read_only=True)
-
-
-class BoostPurchaseCreateSerializer(serializers.Serializer):
-    """The whole request body: which package.
-
-    An unknown code is refused by the service against the active revision
-    rather than by a choice list compiled into the image, because the packages
-    on offer are an operator decision that changes without a deploy.
+    Zero is valid and means "remove it". The band is enforced by the service
+    against the active settings revision rather than by a constant compiled into
+    the image, because the band is an operator decision that changes without a
+    deploy; the ceiling here is only the representation guard.
     """
 
-    package_code = serializers.CharField(max_length=32, trim_whitespace=True)
-    amount_eur_cents = serializers.IntegerField(min_value=1, max_value=MAX_EUR_CENTS)
-    preview_settings_version = serializers.IntegerField(min_value=1)
-
-
-class BoostPreviewSerializer(serializers.Serializer):
-    package_code = serializers.CharField(max_length=32, trim_whitespace=True)
-    amount_eur_cents = serializers.IntegerField(min_value=1, max_value=MAX_EUR_CENTS)
+    boost_eur_cents = serializers.IntegerField(min_value=0, max_value=MAX_EUR_CENTS)
 
 
 class BoostPurchaseSerializer(serializers.ModelSerializer):
-    """One purchase and the obligation the buyer must now settle.
+    """One historical paid visibility package, as it was sold.
 
-    Callers should `select_related("payment_order")`; the payment fields read
-    straight off it.
+    Retained for audit. Callers should `select_related("payment_order")`; the
+    payment fields read straight off it.
     """
 
     payment_order_reference = serializers.SerializerMethodField()

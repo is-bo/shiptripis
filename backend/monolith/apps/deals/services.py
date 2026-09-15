@@ -138,7 +138,25 @@ def release_pending_deal_reservation(
         reason=reason,
         locked_orders=locked_orders_by_id,
         delivery_request=request_row,
+        # Deliberately not `clear_intent`. The request is going back to the
+        # open pool, and an unpaid J2 Boost belongs to the request, not to the
+        # traveler who never funded it -- so it revives with the request. A
+        # Boost that *was* funded is already zero here: `fund_deal` cleared it.
     )
+    if (
+        request_row.status == ParcelRequest.Status.OPEN
+        and int(getattr(request_row, "boost_eur_cents", 0) or 0) > 0
+    ):
+        from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
+        from apps.boosts.services import record_boost_transition  # noqa: WPS433
+
+        # The amount does not change; the ranking columns are rebuilt and the
+        # revival is stated on the record rather than inferred from a gap.
+        record_boost_transition(
+            delivery_request=request_row,
+            reason=BoostIntentEvent.Reason.RELEASED_WITH_RESERVATION,
+            deal_id=deal.pk,
+        )
     redis_bus.publish_after_commit(
         channels.DEAL_UPDATED
         if reason == "payment_grace_expired"
@@ -249,6 +267,8 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
         "boost_amount_minor": int(terms.boost_amount_minor),
         "boost_traveler_bonus_minor": int(terms.boost_traveler_bonus_minor),
         "boost_platform_fee_minor": int(terms.boost_platform_fee_minor),
+        "boost_economics_version": terms.boost_economics_version,
+        "boost_commission_rate_bps": int(terms.boost_commission_rate_bps),
         "traveler_total_minor": terms.traveler_total_minor,
         "platform_total_minor": terms.platform_total_minor,
         "sender_total_with_boost_minor": terms.sender_total_with_boost_minor,
@@ -313,6 +333,25 @@ def fund_deal(*, deal_id: int, order_id: int) -> DealFundingResult:
             "updated_at",
         ]
     )
+
+    # The Boost has now been paid for. Clearing it from the request is what
+    # makes "a Boost already consumed can never revive" structural rather than
+    # a rule someone has to remember: an unfunded reservation release leaves the
+    # column alone and the amount returns to the open pool with the request,
+    # while everything past this line has nothing left to return. The frozen
+    # copy on `DealTermsSnapshot` remains the authority for this Deal's money.
+    request_row = aggregate.request_graph.request
+    if int(getattr(request_row, "boost_eur_cents", 0) or 0) > 0:
+        from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
+        from apps.boosts.services import record_boost_transition  # noqa: WPS433
+
+        record_boost_transition(
+            delivery_request=request_row,
+            reason=BoostIntentEvent.Reason.CONSUMED_BY_FUNDING,
+            amount_eur_cents=0,
+            deal_id=deal.pk,
+            commission_rate_bps=int(terms.boost_commission_rate_bps),
+        )
 
     # The sender's pickup code exists from the moment the money does. It is a
     # plain insert after the Deal in the lock order; a duplicate loses on

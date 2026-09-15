@@ -86,6 +86,15 @@ class CandidateEvaluation:
             "sender_proposed_reward_eur_cents": (
                 self.delivery_request.traveler_reward_eur_cents
             ),
+            # J2. A Boost is extra reward the sender has attached to this
+            # request, so it is part of the offer a traveler is looking at --
+            # not private commercial history. The total is computed here
+            # because no client should be adding up money.
+            "boost_eur_cents": int(self.delivery_request.boost_eur_cents or 0),
+            "total_offered_reward_eur_cents": (
+                int(self.delivery_request.traveler_reward_eur_cents or 0)
+                + int(self.delivery_request.boost_eur_cents or 0)
+            ),
         }
 
     def _journey_block(self, compatibility: dict) -> dict:

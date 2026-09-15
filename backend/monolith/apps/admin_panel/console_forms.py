@@ -183,15 +183,28 @@ class StaffAccessForm(ConsoleForm):
 
 
 class BoostEconomicsSettingsForm(ConsoleForm):
-    traveler_share_percent = forms.DecimalField(
-        min_value=Decimal("50.01"),
-        max_value=Decimal("99.99"),
+    """ShipTrip's commission on the Boost portion of a delivery.
+
+    Separate from the ordinary delivery commission on purpose: a Boost is the
+    sender's own extra reward, and the platform may price its cut of that
+    differently from its cut of the base reward. The two are never assumed
+    equal, and neither one is derived from the other.
+
+    Like every commercial input, a change here creates a new audited settings
+    revision and binds **future commitments only**. A Deal that already exists
+    carries the rate it was frozen with.
+    """
+
+    boost_commission_percent = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_value=Decimal("100"),
         max_digits=5,
         decimal_places=2,
-        label="Traveler share of each boost (%)",
+        label="ShipTrip commission on boosts (%)",
         help_text=(
-            "Must remain a strict majority. ShipTrip keeps the remainder; "
-            "the €5 minimum is fixed by the product contract."
+            "Charged on top of the boost, exactly as the delivery commission is "
+            "charged on top of the reward. The Traveler receives the whole "
+            "boost. Applies to future commitments only."
         ),
     )
     reason = forms.CharField(
@@ -203,11 +216,11 @@ class BoostEconomicsSettingsForm(ConsoleForm):
         label="Create and activate a new settings version for future boosts."
     )
 
-    def traveler_share_bps(self) -> int:
+    def boost_commission_rate_bps(self) -> int:
         return decimal_to_scaled_integer(
-            self.cleaned_data["traveler_share_percent"],
+            self.cleaned_data["boost_commission_percent"],
             100,
-            label="Traveler boost share",
+            label="Boost commission",
         )
 
 

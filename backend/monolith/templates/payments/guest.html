@@ -1,0 +1,160 @@
+{% comment %}
+The page a guest payer lands on from a shared link.
+
+Everything about it is shaped by one constraint: the person reading it is not a
+ShipTrip user and must not become one by opening it. So the page shows an
+amount, what the amount is for in the most generic terms the system can state,
+and an expiry -- and nothing else. No sender, no traveler, no recipient, no
+addresses, no parcel, no deal, no order reference. A payer who forwards this
+link forwards the ability to pay, not a receipt and not a record.
+
+The token is in the URL because it *is* the credential. The page never puts it
+in a query string, never logs it, and the server stores only its hash.
+
+An invalid, expired, revoked or already-paid link is answered the same way, in
+the same words: the link no longer works. Distinguishing them would let someone
+holding a guessed token learn which orders exist.
+
+Trilingual on one page because we do not know who is reading it: the guest
+arrived from a shared link and has no ShipTrip locale.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ShipTrip — payment request</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #faf7f2;
+      color: #1b1a18;
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      max-width: 32rem;
+      width: 100%;
+      background: #fff;
+      border: 1px solid #e7e1d8;
+      border-radius: 14px;
+      padding: 28px 26px;
+      box-shadow: 0 1px 2px rgba(27, 26, 24, .05);
+    }
+    .mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; border-radius: 10px;
+      background: #1b1a18; color: #faf7f2;
+      font-weight: 700; letter-spacing: .02em;
+    }
+    h1 { font-size: 1.25rem; margin: 18px 0 6px; }
+    p { margin: 0 0 14px; }
+    .lead { color: #46423c; }
+    .amount { font-size: 2rem; font-weight: 700; margin: 4px 0 2px; }
+    .meta { color: #8a8177; font-size: .9rem; margin: 0 0 18px; }
+    .sep { height: 1px; background: #e7e1d8; margin: 20px 0 16px; border: 0; }
+    section + section { margin-top: 14px; }
+    section p { margin: 0; color: #46423c; font-size: .95rem; }
+    section h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase;
+                 color: #8a8177; margin: 0 0 4px; font-weight: 600; }
+    form { margin: 0 0 12px; }
+    label { display: block; font-size: .9rem; color: #46423c; margin: 0 0 6px; }
+    input[type="email"], select {
+      width: 100%; padding: 10px 12px; margin: 0 0 14px;
+      border: 1px solid #d9d2c7; border-radius: 9px;
+      background: #fff; color: #1b1a18; font: inherit;
+    }
+    button {
+      width: 100%; padding: 12px 16px; border: 0; border-radius: 9px;
+      background: #1b1a18; color: #faf7f2; font: inherit; font-weight: 600;
+      cursor: pointer;
+    }
+    .note { color: #8a8177; font-size: .85rem; }
+    [dir="rtl"] { text-align: right; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #171614; color: #f2efe9; }
+      main { background: #201e1b; border-color: #34302b; }
+      .lead, section p, label { color: #c8c2b8; }
+      .mark { background: #f2efe9; color: #171614; }
+      input[type="email"], select { background: #171614; color: #f2efe9; border-color: #34302b; }
+      button { background: #f2efe9; color: #171614; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <span class="mark">ST</span>
+
+  {% if payable %}
+    <h1>Someone asked you to pay</h1>
+    <p class="amount">{{ amount_display }}</p>
+    <p class="meta">{{ description }}</p>
+    <p class="lead">
+      This link lets you pay this one amount. It gives you no ShipTrip account
+      and no access to the delivery it belongs to.
+    </p>
+
+    <form method="post" action="{{ checkout_action }}">
+      {% csrf_token %}
+      <label for="email">Email for your receipt</label>
+      <input type="email" id="email" name="email" autocomplete="email" required>
+      <label for="provider">Pay with</label>
+      <select id="provider" name="provider">
+        {% for option in providers %}
+          <option value="{{ option.provider }}">{{ option.label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Continue to payment</button>
+    </form>
+    <p class="note">This link stops working once the amount is paid, and expires on its own.</p>
+
+    <hr class="sep">
+    <section>
+      <h2>Français</h2>
+      <p>Ce lien permet de régler ce seul montant. Il ne donne aucun compte ShipTrip ni accès à la livraison concernée.</p>
+    </section>
+    <section dir="rtl" lang="ar">
+      <h2>العربية</h2>
+      <p>يتيح لك هذا الرابط دفع هذا المبلغ فقط. وهو لا يمنحك حساباً في ShipTrip ولا اطلاعاً على عملية التوصيل.</p>
+    </section>
+  {% elif temporarily_unavailable %}
+    <h1>Payments are unavailable right now</h1>
+    <p class="lead">
+      Your link is fine — we just cannot take a payment at this moment. Please
+      try again shortly. There is no need to ask for a new link.
+    </p>
+
+    <hr class="sep">
+    <section>
+      <h2>Français</h2>
+      <p>Votre lien est valable : nous ne pouvons simplement pas encaisser en ce moment. Réessayez dans un instant ; inutile de demander un nouveau lien.</p>
+    </section>
+    <section dir="rtl" lang="ar">
+      <h2>العربية</h2>
+      <p>رابطك صالح، لكن لا يمكننا استلام الدفع في الوقت الحالي. أعد المحاولة بعد قليل، ولا حاجة لطلب رابط جديد.</p>
+    </section>
+  {% else %}
+    <h1>This payment link no longer works</h1>
+    <p class="lead">
+      It may already have been paid, withdrawn by the person who sent it, or
+      simply expired. Ask them for a new one.
+    </p>
+
+    <hr class="sep">
+    <section>
+      <h2>Français</h2>
+      <p>Ce lien de paiement n’est plus valable. Il a peut-être déjà été réglé, retiré ou expiré. Demandez-en un nouveau.</p>
+    </section>
+    <section dir="rtl" lang="ar">
+      <h2>العربية</h2>
+      <p>لم يعد رابط الدفع هذا صالحاً. ربما تم الدفع أو سحب الرابط أو انتهت صلاحيته. اطلب رابطاً جديداً.</p>
+    </section>
+  {% endif %}
+</main>
+</body>
+</html>

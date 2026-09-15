@@ -3,6 +3,7 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from apps.core.health import healthz, readyz
+from apps.finance.guest_web import guest_payment_page
 from apps.finance.payout_account_api import (
     StripeOnboardingRefreshView,
     StripeOnboardingReturnView,
@@ -39,6 +40,15 @@ urlpatterns = [
         "pay/<uuid:reference>/return",
         TemplateView.as_view(template_name="payments/return.html"),
         name="payment-return",
+    ),
+    # The page behind a shared guest payment link. Without it the link an owner
+    # shares is a URL that answers JSON, which is not something anyone can be
+    # asked to forward to a relative. The token in the path is the only
+    # credential and buys exactly one capability: paying this one obligation.
+    path(
+        "pay/guest/<str:token>",
+        guest_payment_page,
+        name="payment-guest-page",
     ),
     # Where Stripe sends the Traveler's browser back from hosted Connect
     # onboarding. Server-owned URLs, allowlisted in settings and bound to a

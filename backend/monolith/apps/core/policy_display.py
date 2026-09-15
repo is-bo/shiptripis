@@ -183,6 +183,26 @@ def policy_rows(
             _micros(_dig(policy, "payments.chargily.eur_dzd_rate_micros")),
             "payments.chargily.eur_dzd_rate_micros",
         ),
+        PolicyRow(
+            "Boost commission",
+            _percent(_dig(policy, "boost.commission_rate_bps")),
+            "boost.commission_rate_bps",
+        ),
+        PolicyRow(
+            "Smallest boost",
+            _money(_dig(policy, "boost.minimum_intent_eur_cents")),
+            "boost.minimum_intent_eur_cents",
+        ),
+        PolicyRow(
+            "Largest boost",
+            _money(_dig(policy, "boost.maximum_intent_eur_cents")),
+            "boost.maximum_intent_eur_cents",
+        ),
+        PolicyRow(
+            "Smallest sender-chosen deposit",
+            _money(_dig(policy, "payments.posting_deposit.chosen_min_eur_cents")),
+            "payments.posting_deposit.chosen_min_eur_cents",
+        ),
     ]
 
     for label, path in (

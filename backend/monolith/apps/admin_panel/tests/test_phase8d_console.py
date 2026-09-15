@@ -497,7 +497,11 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         self.assertIn("DZD for €1", body)
         self.assertIn("Payout protection window", body)
         self.assertIn("Traveler receives", body)
-        self.assertIn("Minimum Sender amount", body)
+        # J2 renamed the boost panel: it prices a commission on extra reward,
+        # not a package with a minimum sender purchase.
+        self.assertIn("Boost commission", body)
+        self.assertIn("Smallest boost", body)
+        self.assertIn("ShipTrip commission on boosts", body)
         for secret_name in ("STRIPE_SECRET_KEY", "CHARGILY_API_KEY", "SMTP_PASSWORD"):
             self.assertNotIn(secret_name, body)
 
@@ -527,33 +531,41 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         self.assertTrue(fx.is_valid())
         self.assertEqual(fx.rate_micros(), 145_250_000)
 
-        minority = BoostEconomicsSettingsForm(
+        out_of_range = BoostEconomicsSettingsForm(
             data={
-                "traveler_share_percent": "50.00",
-                "reason": "invalid minority",
+                "boost_commission_percent": "101.00",
+                "reason": "above one hundred percent",
                 "confirm": "on",
             }
         )
-        self.assertFalse(minority.is_valid())
+        self.assertFalse(out_of_range.is_valid())
+        self.assertIn("boost_commission_percent", out_of_range.errors)
 
-    def test_boost_share_update_is_majority_versioned_and_audited(self):
+    def test_boost_commission_update_is_versioned_audited_and_forward_only(self):
+        """The Boost rate is its own setting, and it binds future deals only."""
+
         previous = BusinessSettingsVersion.objects.get(status="active")
         response = self.dispatch(
             "/admin/settings/",
             "post",
             {
                 "action": "boost_economics",
-                "traveler_share_percent": "82.35",
-                "reason": "New Traveler incentive",
+                "boost_commission_percent": "12.50",
+                "reason": "Lower the platform cut on boosts",
                 "confirm": "on",
             },
         )
         self.assertEqual(response.status_code, 302)
         active = BusinessSettingsVersion.objects.get(status="active")
         self.assertNotEqual(active.pk, previous.pk)
-        self.assertEqual(active.policy["boost"]["traveler_share_bps"], 8_235)
+        self.assertEqual(active.policy["boost"]["commission_rate_bps"], 1_250)
+        # Independent of the delivery commission: that one did not move.
+        self.assertEqual(active.commission_rate_bps, previous.commission_rate_bps)
+        # And the revision it replaced still says what it always said.
+        previous.refresh_from_db()
+        self.assertEqual(previous.policy["boost"]["commission_rate_bps"], 2_500)
         audit = AdminAuditLog.objects.get(action="settings.version_created")
-        self.assertEqual(audit.after["boost.traveler_share_bps"], 8_235)
+        self.assertEqual(audit.after["boost.commission_rate_bps"], 1_250)
 
     def test_manual_payout_respects_currency_units_and_rejects_fractional_dinars(self):
         data = {

@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .pricing_api import PricingQuoteDraftView, RequestPricingView
 from .views import (
     DeliveryCreateView,
     DeliveryQuoteView,
@@ -20,6 +21,13 @@ urlpatterns = [
         DeliveryQuoteView.as_view(),
         name="parcels-quote-delivery",
     ),
+    # Priced before anything is written, so the minimum and the recommendation
+    # are on screen before the sender chooses rather than after.
+    path(
+        "parcels/pricing-quote",
+        PricingQuoteDraftView.as_view(),
+        name="parcels-pricing-quote",
+    ),
     path("parcels/open", OpenParcelSearchView.as_view(), name="parcels-open-search"),
     # Ahead of `parcels/<int:pk>` only by being a literal; kept adjacent to the
     # other collection routes so the ordering is visible rather than lucky.
@@ -39,6 +47,11 @@ urlpatterns = [
     ),
     path("parcels/product", ProductCreateView.as_view(), name="parcels-product-create"),
     path("parcels/<int:pk>", ParcelDetailView.as_view(), name="parcels-detail"),
+    path(
+        "parcels/<int:pk>/pricing",
+        RequestPricingView.as_view(),
+        name="parcels-pricing",
+    ),
     path("parcels/<int:pk>/cancel", ParcelCancelView.as_view(), name="parcels-cancel"),
     path(
         "parcels/<int:pk>/media",

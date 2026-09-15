@@ -1008,12 +1008,64 @@ def _accept_offer_locked(
         traveler_id=match.traveler_id,
         status=Deal.Status.PAYMENT_REQUIRED,
     )
-    from apps.boosts.services import bind_paid_boosts_to_deal  # noqa: WPS433
+    # --- Boost freezes here, and only here --------------------------------
+    #
+    # This is the commitment boundary. Whichever Boost model applies, the
+    # amount and the rate are copied onto the Deal now, so a later Admin change
+    # to the Boost commission cannot reach a Deal that already exists.
+    #
+    # The two models are mutually exclusive by construction. A retired paid
+    # package was charged before J2 and binds here as it always did; a J2 reward
+    # Boost is unpaid and rides into the Deal balance below. A request cannot
+    # carry both, because `purchase_boost` is retired and no new purchase row
+    # can be created -- but if a historical paid package does bind, it wins and
+    # the J2 branch is not taken, so no cent is ever counted twice.
+    from apps.boosts.services import (  # noqa: WPS433
+        bind_paid_boosts_to_deal,
+        calculate_boost_reward,
+    )
+    from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
+    from apps.core.phase4_policy import phase4_policy as _phase4_policy  # noqa: WPS433
 
-    boost_terms = bind_paid_boosts_to_deal(
+    legacy_boost = bind_paid_boosts_to_deal(
         locked_purchases=request_boosts,
         deal=deal,
     )
+    boost_reward = None
+    if int(legacy_boost["amount_eur_cents"]) > 0:
+        boost_economics_version = DealTermsSnapshot.BoostEconomics.TRAVELER_SPLIT_V1
+        boost_amount = int(legacy_boost["amount_eur_cents"])
+        boost_traveler = int(legacy_boost["traveler_boost_eur_cents"])
+        boost_platform = int(legacy_boost["platform_boost_eur_cents"])
+        boost_rate_bps = 0
+        boost_snapshot = {**legacy_boost, "economics_version": "traveler_split_v1"}
+    else:
+        boost_economics_version = (
+            DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2
+        )
+        boost_intent = int(request_row.boost_eur_cents or 0)
+        # The Phase 4 policy is read only when there is a Boost to price. An
+        # offer negotiated under a revision that predates Phase 4 still accepts
+        # cleanly, exactly as it did before J2 -- and a request could not have
+        # acquired a Boost under such a revision in the first place, because
+        # `set_boost_intent` fails closed on one.
+        boost_reward = (
+            calculate_boost_reward(
+                amount_eur_cents=boost_intent, policy=_phase4_policy()
+            )
+            if boost_intent > 0
+            else None
+        )
+        boost_amount = boost_reward.amount_eur_cents if boost_reward else 0
+        boost_traveler = boost_reward.traveler_bonus_eur_cents if boost_reward else 0
+        boost_platform = boost_reward.platform_fee_eur_cents if boost_reward else 0
+        boost_rate_bps = boost_reward.commission_rate_bps if boost_reward else 0
+        boost_snapshot = (
+            boost_reward.as_dict()
+            if boost_reward
+            else {"economics_version": "additive_commission_v2", "boost_eur_cents": 0}
+        )
+
     DealTermsSnapshot.objects.create(
         deal=deal,
         currency=current.currency,
@@ -1021,14 +1073,16 @@ def _accept_offer_locked(
         commission_rate_bps=current.commission_rate_bps,
         platform_fee_minor=current.platform_fee_minor,
         sender_total_minor=current.sender_total_minor,
-        boost_amount_minor=boost_terms["amount_eur_cents"],
-        boost_traveler_bonus_minor=boost_terms["traveler_boost_eur_cents"],
-        boost_platform_fee_minor=boost_terms["platform_boost_eur_cents"],
+        boost_amount_minor=boost_amount,
+        boost_traveler_bonus_minor=boost_traveler,
+        boost_platform_fee_minor=boost_platform,
+        boost_economics_version=boost_economics_version,
+        boost_commission_rate_bps=boost_rate_bps,
         business_settings_version=current.business_settings_version,
         pricing_version=current.pricing_version,
         policy_snapshot={
             **current.terms_snapshot,
-            "boost_economics": boost_terms,
+            "boost_economics": boost_snapshot,
         },
         is_legacy=False,
     )
@@ -1091,9 +1145,20 @@ def _accept_offer_locked(
     # the payment happens, so an offer negotiated under an older revision still
     # accepts cleanly after a policy change.
     payment_policy = phase3_policy()
+    # The balance is what the sender owes *in total*: the agreed reward, its
+    # commission, and -- under J2 -- the Boost with its own commission. A J2
+    # Boost has no payment order of its own, so if it were left out of this
+    # number the Traveler would be promised a bonus nobody was ever charged
+    # for. A retired paid package contributes nothing here because its cash was
+    # collected before the Deal existed.
+    boost_due = 0
+    if boost_economics_version == (
+        DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2
+    ):
+        boost_due = boost_amount + boost_platform
     create_deal_balance_order(
         deal=deal,
-        sender_total_eur_cents=int(current.sender_total_minor),
+        sender_total_eur_cents=int(current.sender_total_minor) + boost_due,
         policy=payment_policy,
     )
     # Durable companion to the reservation sweep: the release obligation exists
@@ -1113,6 +1178,21 @@ def _accept_offer_locked(
     match.save(update_fields=["status", "updated_at"])
     request_row.status = ParcelRequest.Status.MATCHED
     request_row.save(update_fields=["status", "updated_at"])
+    if boost_reward is not None and boost_amount > 0:
+        from apps.boosts.services import record_boost_transition  # noqa: WPS433
+
+        # Recorded after the status flip so the audit row says what the request
+        # actually became. The amount itself does not move: it is the request's
+        # own and it stays there, so an unfunded release returns it to the open
+        # pool intact. What this row records is that it is no longer the
+        # sender's to change.
+        record_boost_transition(
+            delivery_request=request_row,
+            reason=BoostIntentEvent.Reason.FROZEN_INTO_DEAL,
+            deal_id=deal.pk,
+            actor_id=getattr(actor, "pk", None),
+            commission_rate_bps=boost_rate_bps,
+        )
     MatchEvent.objects.create(
         match=match,
         offer=current,

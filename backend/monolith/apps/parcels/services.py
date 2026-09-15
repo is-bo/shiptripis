@@ -113,6 +113,8 @@ def cancel_delivery_request(
         requested_by_id=actor_id,
         locked_orders=locked_orders_by_id,
         delivery_request=delivery,
+        # The request itself is ending, so its unpaid J2 Boost ends with it.
+        clear_intent=True,
     )
 
     deposit_orders = tuple(

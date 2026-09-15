@@ -37,7 +37,7 @@ import json
 import logging
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -142,6 +142,12 @@ class GuestLinkInvalid(FinanceError):
     code = "guest_link_invalid"
 
 
+class GuestCheckoutInProgress(FinanceError):
+    """The current link already has a payer partway through a checkout."""
+
+    code = "guest_checkout_in_progress"
+
+
 class RefundNotPermitted(FinanceError):
     code = "refund_not_permitted"
 
@@ -190,6 +196,24 @@ class PayoutNotReleasable(FinanceError):
 
 @dataclass(frozen=True, slots=True)
 class DepositQuote:
+    """The recommended posting deposit and the band a sender may choose in.
+
+    Three numbers, and they are not the same number:
+
+    ``amount_eur_cents``
+        What ShipTrip recommends: a tenth of the recommended sender total,
+        clamped into the recommendation band. It is the default, never a limit.
+    ``min_eur_cents``
+        The floor under a deposit the sender chooses. Enforced.
+    ``max_eur_cents``
+        The upper clamp on the *recommendation*, not on a chosen deposit. A
+        sender may deliberately pre-pay more than this.
+
+    ``maximum_chosen_eur_cents`` is the only real ceiling -- the obligation the
+    deposit is being paid against -- and it is filled in where the request's own
+    chosen reward and Boost are known.
+    """
+
     amount_eur_cents: int
     percent_bps: int
     min_eur_cents: int
@@ -197,8 +221,13 @@ class DepositQuote:
     estimated_sender_total_eur_cents: int
     clamped: str  # "" | "min" | "max"
     inputs: dict
+    chosen_eur_cents: int | None = None
+    maximum_chosen_eur_cents: int | None = None
 
     def as_dict(self) -> dict:
+        recommended = int(
+            self.inputs.get("recommended_deposit_eur_cents", self.amount_eur_cents)
+        )
         return {
             "amount_eur_cents": self.amount_eur_cents,
             "currency": "EUR",
@@ -207,7 +236,23 @@ class DepositQuote:
             "max_eur_cents": self.max_eur_cents,
             "estimated_sender_total_eur_cents": self.estimated_sender_total_eur_cents,
             "clamped": self.clamped,
+            # J2 names the three values apart, so no client has to infer which
+            # of the numbers above is the default and which is the limit.
+            "recommended_eur_cents": recommended,
+            "minimum_eur_cents": self.min_eur_cents,
+            "maximum_eur_cents": self.maximum_chosen_eur_cents,
+            "chosen_eur_cents": self.chosen_eur_cents,
+            "is_flexible": True,
         }
+
+    def with_bounds(
+        self, *, chosen_eur_cents: int | None, maximum_chosen_eur_cents: int | None
+    ) -> "DepositQuote":
+        return replace(
+            self,
+            chosen_eur_cents=chosen_eur_cents,
+            maximum_chosen_eur_cents=maximum_chosen_eur_cents,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,69 +487,51 @@ def quote_posting_deposit(
     delivery_request: DeliveryRequest,
     policy: Phase3Policy | None = None,
 ) -> DepositQuote:
-    """Compute the server-authoritative posting deposit for a request.
+    """Compute the recommended posting deposit, and the band around it.
 
-    `deposit = clamp(percent_bps of the recommended sender total, min, max)`.
+    `recommended = clamp(percent_bps of the recommended sender total, min, max)`.
 
     At posting time no journey is chosen, so there is no matched sub-route to
-    price against. The estimate uses the request's own straight-line pickup ->
-    delivery distance with no detour and no urgency premium, which is the
-    conservative reading: a real matched route is at least this long, so the
-    deposit never exceeds a tenth of what the sender will actually owe.
+    price against. `apps.matching.posting_pricing` supplies the route-free lower
+    bound -- the request's own straight-line pickup to delivery distance with no
+    detour and no urgency premium -- which is the conservative reading: a real
+    matched route is at least this long, so the recommendation never exceeds a
+    tenth of what the sender will actually owe.
+
+    The recommendation is built on the *recommended* sender total, not on the
+    sender's own chosen reward and deliberately not on their Boost. Boost is
+    optional extra reward; letting it move the default deposit would make a
+    suggestion the sender has not touched jump every time they nudge a slider.
+
+    ``minimum_eur_cents`` in the returned quote is the floor under a deposit the
+    sender chooses for themselves, which is a different number from the
+    recommendation's own lower clamp and is allowed to be smaller than it. There
+    is no corresponding ceiling: the only cap on a chosen deposit is the
+    obligation it is pre-paying, and that is checked where the order is created.
 
     The whole computation is server-side and its inputs are snapshotted onto the
     order, so a later settings change cannot alter what was charged.
     """
 
-    from apps.matching.pricing import calculate_pricing_quote
-    from apps.matching.policy import Phase2Policy
-    from apps.routing.geometry import GeoPoint, haversine_meters
+    from apps.matching.posting_pricing import quote_posting_price
+    from apps.matching.pricing import PricingError
 
     policy = policy or phase3_policy()
-    pricing_policy = Phase2Policy.from_settings(policy.settings_version)
 
-    if delivery_request.schema_version >= 3:
-        pickup = delivery_request.pickup_place
-        dropoff = delivery_request.delivery_place
-        estimate_method = "posting_deposit_estimate:canonical_place_great_circle"
-    else:
-        pickup = delivery_request.pickup_location
-        dropoff = delivery_request.delivery_location
-        estimate_method = "posting_deposit_estimate:great_circle"
-    if pickup is None or dropoff is None:
-        raise RequestNotDepositable("A V1 delivery request needs both route endpoints.")
-    if (
-        pickup.latitude is not None
-        and pickup.longitude is not None
-        and dropoff.latitude is not None
-        and dropoff.longitude is not None
-    ):
-        straight_line_meters = int(
-            haversine_meters(
-                GeoPoint(float(pickup.latitude), float(pickup.longitude)),
-                GeoPoint(float(dropoff.latitude), float(dropoff.longitude)),
-            )
+    if delivery_request.schema_version not in (2, 3):
+        raise RequestNotDepositable(
+            "Only V1 delivery requests carry a posting deposit."
         )
-    else:
-        # Many authoritative municipal catalogues do not publish centroids.
-        # Exact preferred pins are optional operational data, so they must not
-        # become a hidden prerequisite or pricing identity. The global pricing
-        # floor is the fail-safe posting estimate until a journey is matched.
-        straight_line_meters = 0
-        estimate_method = "posting_deposit_estimate:canonical_place_floor"
-    arrival_estimate = delivery_request.ready_window_end or timezone.now()
-    quote = calculate_pricing_quote(
-        delivery_request=delivery_request,
-        matched_distance_meters=max(0, straight_line_meters),
-        matched_distance_method=estimate_method,
-        added_distance_meters=0,
-        estimated_arrival_at=arrival_estimate,
-        policy=pricing_policy,
-    )
-    economics = calculate_offer_economics(
-        quote.recommended_reward_eur_cents, policy.settings_version
-    )
-    sender_total = int(economics["sender_total_minor"])
+    try:
+        price = quote_posting_price(
+            delivery_request=delivery_request,
+            chosen_reward_eur_cents=delivery_request.traveler_reward_eur_cents,
+            settings_version=policy.settings_version,
+        )
+    except PricingError as exc:
+        raise RequestNotDepositable(str(exc)) from exc
+
+    sender_total = int(price.recommended_economics["sender_total_minor"])
 
     deposit_policy = policy.posting_deposit
     raw = percentage_of(sender_total, bps=deposit_policy.percent_bps)
@@ -522,23 +549,107 @@ def quote_posting_deposit(
     return DepositQuote(
         amount_eur_cents=amount,
         percent_bps=deposit_policy.percent_bps,
-        min_eur_cents=deposit_policy.min_eur_cents,
+        min_eur_cents=deposit_policy.chosen_min_eur_cents,
         max_eur_cents=deposit_policy.max_eur_cents,
         estimated_sender_total_eur_cents=sender_total,
         clamped=clamped,
         inputs={
-            "estimate_method": estimate_method,
-            "estimate_distance_meters": max(0, straight_line_meters),
-            "recommended_reward_eur_cents": quote.recommended_reward_eur_cents,
+            "estimate_method": price.estimate.method,
+            "estimate_distance_meters": price.estimate.distance_meters,
+            "recommended_reward_eur_cents": price.recommended_reward_eur_cents,
             "recommended_sender_total_eur_cents": sender_total,
             "raw_percentage_eur_cents": raw,
             "clamped": clamped,
+            # J2. The recommendation is `amount_eur_cents`; these two describe
+            # what the sender may choose instead of it.
+            "recommended_deposit_eur_cents": amount,
+            "recommendation_min_eur_cents": deposit_policy.min_eur_cents,
+            "recommendation_max_eur_cents": deposit_policy.max_eur_cents,
+            "chosen_min_eur_cents": deposit_policy.chosen_min_eur_cents,
+            "minimum_reward_eur_cents": price.minimum_reward_eur_cents,
         },
     )
 
 
+def deposit_quote_payload(
+    *,
+    delivery_request: DeliveryRequest,
+    order: PaymentOrder | None,
+    policy: Phase3Policy | None = None,
+) -> dict:
+    """The deposit quote a sender sees: recommendation, floor and real ceiling.
+
+    An existing order is answered from its own frozen snapshot, so what somebody
+    was charged is never restated by a later settings revision. The obligation
+    ceiling is recomputed live, because it moves with the sender's chosen reward
+    and their Boost, and it is a limit on what they may *still* do rather than a
+    record of what they did.
+    """
+
+    policy = policy or phase3_policy()
+    if order is not None:
+        quote = posting_deposit_quote_from_order(order)
+    else:
+        quote = quote_posting_deposit(delivery_request=delivery_request, policy=policy)
+    try:
+        maximum = maximum_chosen_deposit(
+            delivery_request=delivery_request, policy=policy
+        )
+    except FinanceError:
+        maximum = None
+    return quote.with_bounds(
+        chosen_eur_cents=int(order.amount_eur_cents) if order is not None else None,
+        maximum_chosen_eur_cents=maximum,
+    ).as_dict()
+
+
+def maximum_chosen_deposit(
+    *,
+    delivery_request: DeliveryRequest,
+    policy: Phase3Policy,
+) -> int:
+    """The largest deposit this request's sender may pre-pay.
+
+    A deposit is money paid early against an obligation, so it can never exceed
+    that obligation: the sender's own chosen reward, its commission, and -- when
+    they have set one -- their Boost with its own commission. Pre-paying more
+    than the total would leave a credit with nothing to discharge, which is a
+    refund pretending to be a deposit.
+
+    The sender's chosen reward is the right basis here rather than the
+    recommendation, because the obligation they will actually owe is built from
+    what they chose.
+    """
+
+    from apps.boosts.services import calculate_boost_reward
+    from apps.core.phase4_policy import phase4_policy
+
+    chosen = int(delivery_request.traveler_reward_eur_cents or 0)
+    if chosen <= 0:
+        raise RequestNotDepositable("The request has no chosen reward.")
+    economics = calculate_offer_economics(chosen, policy.settings_version)
+    total = int(economics["sender_total_minor"])
+    boost = int(getattr(delivery_request, "boost_eur_cents", 0) or 0)
+    if boost > 0:
+        try:
+            reward = calculate_boost_reward(
+                amount_eur_cents=boost, policy=phase4_policy()
+            )
+        except Exception:  # noqa: BLE001 - a bad revision must not raise the cap
+            total += boost
+        else:
+            total += reward.sender_cost_eur_cents
+    return total
+
+
 def posting_deposit_quote_from_order(order: PaymentOrder) -> DepositQuote:
-    """Rebuild the guidance from the immutable order snapshot, not live policy."""
+    """Rebuild the guidance from the immutable order snapshot, not live policy.
+
+    This is what makes a historical deposit explain itself: the recommendation,
+    the band and the sender's own choice are read back from what was frozen when
+    the obligation was created, so a later settings revision cannot restate what
+    somebody was charged.
+    """
 
     snapshot = dict(order.terms_snapshot or {})
     deposit = snapshot.get("payments", {}).get("posting_deposit", {})
@@ -546,21 +657,63 @@ def posting_deposit_quote_from_order(order: PaymentOrder) -> DepositQuote:
     try:
         sender_total = int(inputs["recommended_sender_total_eur_cents"])
         percent_bps = int(deposit["percent_bps"])
-        minimum = int(deposit["min_eur_cents"])
+        recommendation_min = int(deposit["min_eur_cents"])
         maximum = int(deposit["max_eur_cents"])
     except (KeyError, TypeError, ValueError) as exc:
         raise RequestNotDepositable(
             "This deposit order has no reproducible guidance snapshot."
         ) from exc
+    # Orders created before J2 carry no chosen floor; theirs was the
+    # recommendation floor, which is what they were actually held to.
+    minimum = int(inputs.get("chosen_min_eur_cents", recommendation_min))
+    chosen = int(order.amount_eur_cents)
+    recommended = int(inputs.get("recommended_deposit_eur_cents", chosen))
+    obligation = inputs.get("remaining_after_deposit_eur_cents")
     return DepositQuote(
-        amount_eur_cents=int(order.amount_eur_cents),
+        amount_eur_cents=recommended,
         percent_bps=percent_bps,
         min_eur_cents=minimum,
         max_eur_cents=maximum,
         estimated_sender_total_eur_cents=sender_total,
         clamped=str(inputs.get("clamped", "")),
         inputs=dict(inputs),
+        chosen_eur_cents=chosen,
+        maximum_chosen_eur_cents=(
+            chosen + int(obligation) if isinstance(obligation, int) else None
+        ),
     )
+
+
+class DepositAmountInvalid(FinanceError):
+    """The sender chose a deposit outside what this request permits."""
+
+    code = "deposit_amount_invalid"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        minimum_eur_cents: int,
+        maximum_eur_cents: int,
+        code: str | None = None,
+    ):
+        super().__init__(message)
+        if code:
+            self.code = code
+        self.minimum_eur_cents = int(minimum_eur_cents)
+        self.maximum_eur_cents = int(maximum_eur_cents)
+
+    def details(self) -> dict:
+        return {
+            "minimum_eur_cents": self.minimum_eur_cents,
+            "maximum_eur_cents": self.maximum_eur_cents,
+        }
+
+
+class DepositCheckoutInProgress(FinanceError):
+    """A checkout is open for the current amount, so it cannot be repriced."""
+
+    code = "deposit_checkout_in_progress"
 
 
 @transaction.atomic
@@ -568,12 +721,24 @@ def ensure_posting_deposit_order(
     *,
     delivery_request: DeliveryRequest,
     policy: Phase3Policy | None = None,
+    chosen_amount_eur_cents: int | None = None,
 ) -> PaymentOrder:
-    """Create (or return) the posting-deposit obligation for a request.
+    """Create, return, or reprice the posting-deposit obligation for a request.
 
     Idempotent: the partial unique index guarantees at most one live deposit
     order per request, so a retried creation returns the existing row rather
     than pricing a second deposit.
+
+    `chosen_amount_eur_cents` is the sender's own figure (J2). It is bounded
+    below by `posting_deposit.chosen_min_eur_cents` and above by the obligation
+    it is pre-paying -- nothing else. The EUR 7 recommendation clamp is not a
+    limit on it: a sender who wants to pre-pay half the delivery may.
+
+    Repricing an existing order is allowed only while it is untouched: pending,
+    nothing captured, nothing credited, and no checkout attempt open. The open
+    attempt is the important one -- the provider was asked for a specific
+    amount, and changing the obligation underneath it would either collect the
+    wrong number or strand a session the sender is looking at.
     """
 
     policy = policy or phase3_policy()
@@ -586,6 +751,29 @@ def ensure_posting_deposit_order(
             "Only V1 delivery requests carry a posting deposit."
         )
 
+    quote = quote_posting_deposit(delivery_request=delivery_request, policy=policy)
+    amount = quote.amount_eur_cents
+    if chosen_amount_eur_cents is not None:
+        minimum = int(policy.posting_deposit.chosen_min_eur_cents)
+        maximum = maximum_chosen_deposit(
+            delivery_request=delivery_request, policy=policy
+        )
+        amount = int(chosen_amount_eur_cents)
+        if amount < minimum:
+            raise DepositAmountInvalid(
+                "That deposit is below the minimum.",
+                minimum_eur_cents=minimum,
+                maximum_eur_cents=maximum,
+                code="deposit_below_minimum",
+            )
+        if amount > maximum:
+            raise DepositAmountInvalid(
+                "A deposit cannot exceed the amount it is paid against.",
+                minimum_eur_cents=minimum,
+                maximum_eur_cents=maximum,
+                code="deposit_above_obligation",
+            )
+
     existing = (
         PaymentOrder.objects.select_for_update(no_key=True)
         .filter(
@@ -595,16 +783,60 @@ def ensure_posting_deposit_order(
         .exclude(status=PaymentOrder.Status.CANCELLED)
         .first()
     )
+    snapshot = policy.snapshot()
+    snapshot["posting_deposit_inputs"] = {
+        **quote.inputs,
+        "chosen_deposit_eur_cents": amount,
+        "chosen_by_sender": chosen_amount_eur_cents is not None,
+        "chosen_reward_eur_cents": int(
+            delivery_request.traveler_reward_eur_cents or 0
+        ),
+        "boost_eur_cents": int(getattr(delivery_request, "boost_eur_cents", 0) or 0),
+        "remaining_after_deposit_eur_cents": max(
+            0,
+            maximum_chosen_deposit(delivery_request=delivery_request, policy=policy)
+            - amount,
+        ),
+    }
     if existing is not None:
+        if int(existing.amount_eur_cents) == amount:
+            return existing
+        if chosen_amount_eur_cents is None:
+            # A recomputed recommendation never silently reprices an obligation
+            # the sender already has in front of them.
+            return existing
+        if (
+            existing.status != PaymentOrder.Status.PENDING
+            or int(existing.paid_eur_cents) > 0
+            or int(existing.credited_eur_cents) > 0
+        ):
+            raise OrderNotCollectable(
+                "This deposit can no longer be changed.",
+                order_status=existing.status,
+            )
+        if PaymentAttempt.objects.filter(
+            order_id=existing.pk, status__in=PaymentAttempt.OPEN_STATUSES
+        ).exists():
+            raise DepositCheckoutInProgress(
+                "Finish or abandon the open checkout before changing the deposit."
+            )
+        existing.amount_eur_cents = amount
+        existing.business_settings_version = policy.settings_version
+        existing.terms_snapshot = snapshot
+        existing.save(
+            update_fields=[
+                "amount_eur_cents",
+                "business_settings_version",
+                "terms_snapshot",
+                "updated_at",
+            ]
+        )
         return existing
 
-    quote = quote_posting_deposit(delivery_request=delivery_request, policy=policy)
-    snapshot = policy.snapshot()
-    snapshot["posting_deposit_inputs"] = quote.inputs
     return PaymentOrder.objects.create(
         owner_id=delivery_request.sender_id,
         purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
-        amount_eur_cents=quote.amount_eur_cents,
+        amount_eur_cents=amount,
         delivery_request_id=delivery_request.pk,
         business_settings_version=policy.settings_version,
         terms_snapshot=snapshot,
@@ -788,6 +1020,8 @@ def _fund_deal_if_covered(order: PaymentOrder) -> bool:
         )
         from apps.boosts.models import BoostPurchase
 
+        # Retired paid packages: their cash arrived on their own order and was
+        # attributed to this Deal at binding. Historical rows only.
         for boost in BoostPurchase.objects.filter(deal_id=order.deal_id).order_by("pk"):
             ledger.record_boost_allocation(
                 deal_id=order.deal_id,
@@ -796,6 +1030,21 @@ def _fund_deal_if_covered(order: PaymentOrder) -> bool:
                 traveler_id=result.traveler_id,
                 traveler_boost_eur_cents=int(boost.traveler_boost_eur_cents),
                 platform_boost_eur_cents=int(boost.platform_boost_eur_cents),
+            )
+        # J2: the Boost and its commission arrived inside this very order, so
+        # the held deal funds already contain them. Recognising them as a
+        # separate transaction rather than folding them into `deal_funding` is
+        # what lets H5 tell base delivery commission and Boost commission apart
+        # without either one going missing from the platform total.
+        if int(terms.get("boost_amount_minor") or 0) > 0 and terms.get(
+            "boost_economics_version"
+        ) == "additive_commission_v2":
+            ledger.record_deal_boost_allocation(
+                deal_id=order.deal_id,
+                order_id=order.pk,
+                traveler_id=result.traveler_id,
+                traveler_boost_eur_cents=int(terms["boost_traveler_bonus_minor"]),
+                platform_boost_eur_cents=int(terms["boost_platform_fee_minor"]),
             )
         ensure_payout_for_deal(
             deal_id=order.deal_id,
@@ -2631,6 +2880,26 @@ def cancel_deal_balance_orders(*, deal_id: int, reason: str) -> int:
 class IssuedGuestLink:
     link: GuestPaymentLink
     token: str
+    #: True when issuing this one retired a link the owner had already shared.
+    reissued: bool = False
+
+    @property
+    def url(self) -> str:
+        """The shareable address. Opaque token, no internal identifier in it."""
+
+        return guest_payment_url(self.token)
+
+
+def guest_payment_url(token: str) -> str:
+    """Where a guest payer goes. Server-generated, never assembled by a client.
+
+    The path carries the capability token and nothing else -- no order id, no
+    request id, no deal id, no party. Someone who receives a forwarded link
+    learns that an amount is owed and can pay it; they learn nothing about who
+    owes it, to whom, or for what parcel.
+    """
+
+    return f"{_public_base_url()}/pay/guest/{token}"
 
 
 def create_guest_link(
@@ -2645,7 +2914,20 @@ def create_guest_link(
 
     The plaintext token exists only in this return value. Only its SHA-256
     digest is stored, so a database read cannot reconstruct a working link, and
-    the token never appears in a log line.
+    the token never appears in a log line. That is also why tapping "have
+    someone else pay" twice cannot hand back the same link: the first token is
+    unrecoverable by design.
+
+    What it does instead is keep the *obligation* singular. A partial unique
+    index allows exactly one live link per order, issuing retires the previous
+    one, and `start_checkout` allows exactly one open attempt per order -- so a
+    second tap cannot create a second competing way to pay, only a replacement
+    for the first. Once the order is paid, every link to it stops resolving,
+    because `resolve_guest_link` refuses an order with nothing outstanding.
+
+    An open guest checkout blocks reissue: the person the owner already sent the
+    link to may be on the provider's page right now, and quietly invalidating
+    their session mid-payment is worse than telling the owner to wait.
     """
 
     policy = policy or phase3_policy()
@@ -2661,11 +2943,34 @@ def create_guest_link(
         if order.outstanding_eur_cents <= 0:
             raise NothingOutstanding("This order has nothing left to collect.")
 
+        now = timezone.now()
+        live = (
+            GuestPaymentLink.objects.select_for_update(no_key=True)
+            .filter(
+                order=order,
+                revoked_at__isnull=True,
+                consumed_at__isnull=True,
+                expires_at__gt=now,
+            )
+            .first()
+        )
+        if live is not None and PaymentAttempt.objects.filter(
+            order_id=order.pk,
+            guest_link_id=live.pk,
+            status__in=PaymentAttempt.OPEN_STATUSES,
+        ).exists():
+            raise GuestCheckoutInProgress(
+                "Someone is paying with the current link. Revoke it first to "
+                "replace it."
+            )
+
         # Issuing a new link retires the previous one, so exactly one capability
         # is live per order at any moment.
-        GuestPaymentLink.objects.filter(
-            order=order, revoked_at__isnull=True, consumed_at__isnull=True
-        ).update(revoked_at=timezone.now())
+        reissued = bool(
+            GuestPaymentLink.objects.filter(
+                order=order, revoked_at__isnull=True, consumed_at__isnull=True
+            ).update(revoked_at=now)
+        )
 
         token = secrets.token_urlsafe(GUEST_TOKEN_BYTES)
         from apps.core.languages import normalize_communication_language
@@ -2678,10 +2983,9 @@ def create_guest_link(
             communication_language=normalize_communication_language(
                 communication_language or getattr(order.owner, "preferred_language", "")
             ),
-            expires_at=timezone.now()
-            + timedelta(seconds=policy.guest_link_ttl_seconds),
+            expires_at=now + timedelta(seconds=policy.guest_link_ttl_seconds),
         )
-    return IssuedGuestLink(link=link, token=token)
+    return IssuedGuestLink(link=link, token=token, reissued=reissued)
 
 
 def resolve_guest_link(token: str) -> GuestPaymentLink:
@@ -2733,6 +3037,7 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
     return {
         "amount_eur_cents": order.outstanding_eur_cents,
         "currency": "EUR",
+        "purpose": order.purpose,
         "description": _checkout_description(order),
         "expires_at": link.expires_at.isoformat(),
         # Guest rails carry the same settlement preview as the signed-in

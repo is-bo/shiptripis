@@ -44,9 +44,20 @@ The seeded shape is::
       "max_active_per_request": 3,
       "minimum_amount_eur_cents": 500,
       "traveler_share_bps": 7500,
+      "commission_rate_bps": 2500,
+      "minimum_intent_eur_cents": 100,
+      "maximum_intent_eur_cents": 100000000,
+      "ranking_weight_step_eur_cents": 500,
+      "ranking_weight_max": 30,
       "packages": [{"code", "label", "duration_seconds",
                     "ranking_weight"}, ...]
     }
+
+`packages`, `traveler_share_bps` and `minimum_amount_eur_cents` describe the
+retired J1-era *paid visibility package*. They are still parsed so a historical
+`BoostPurchase` keeps explaining itself, and no new row is ever written with
+them. J2 Boost is the sender's own extra reward on the request, priced by
+`commission_rate_bps` and bounded by the `*_intent_*` keys.
 
 Every duration and money value parsed here is snapshotted onto the Deal (or the
 BoostPurchase) at the moment it first applies, so a later revision can never
@@ -167,10 +178,37 @@ class BoostPackage:
 
 @dataclass(frozen=True, slots=True)
 class BoostPolicy:
+    """Both Boost models: the retired paid package and the J2 sender reward.
+
+    `enabled`, `max_active_per_request`, `minimum_amount_eur_cents`,
+    `traveler_share_bps` and `packages` belong to the retired visibility
+    package. Nothing writes a new row with them; they are parsed so historical
+    purchases stay explicable and so a revision that predates J2 still loads.
+
+    The J2 fields describe the sender's editable extra reward:
+
+    ``commission_rate_bps``
+        ShipTrip's commission on the Boost portion, charged **on top** of it
+        exactly as the base commission is charged on top of the base reward.
+        Deliberately separate from `BusinessSettingsVersion.commission_rate_bps`
+        so the two can differ, and authoritative only for future commitments.
+    ``minimum_intent_eur_cents`` / ``maximum_intent_eur_cents``
+        The band a sender may choose inside. Zero is always allowed and means
+        "no Boost"; the minimum applies to any non-zero amount.
+    ``ranking_weight_step_eur_cents`` / ``ranking_weight_max``
+        How a Boost amount becomes ranking weight. Ranking is the only thing
+        the weight touches, and it is applied after hard compatibility.
+    """
+
     enabled: bool
     max_active_per_request: int
     minimum_amount_eur_cents: int
     traveler_share_bps: int
+    commission_rate_bps: int
+    minimum_intent_eur_cents: int
+    maximum_intent_eur_cents: int
+    ranking_weight_step_eur_cents: int
+    ranking_weight_max: int
     packages: tuple[BoostPackage, ...]
 
     def package(self, code: str) -> BoostPackage:
@@ -178,6 +216,15 @@ class BoostPolicy:
             if entry.code == code:
                 return entry
         raise InvalidPhase4Policy(f"Unknown boost package {code!r}.")
+
+    def ranking_weight_for(self, amount_eur_cents: int) -> int:
+        """Ranking weight for one Boost amount. Integer, bounded, monotonic."""
+
+        amount = int(amount_eur_cents)
+        if amount <= 0:
+            return 0
+        step = max(1, int(self.ranking_weight_step_eur_cents))
+        return max(1, min(self.ranking_weight_max, -(-amount // step)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,8 +439,55 @@ class Phase4Policy:
                 minimum=5_001,
                 maximum=9_999,
             ),
+            # J2. Defaulted rather than required so a revision created before
+            # J2 still parses: the fail-closed 503 exists for a *malformed*
+            # revision, and an older one that simply predates a key is not
+            # that. The default mirrors the seeded base commission.
+            commission_rate_bps=_int(
+                boost.get("commission_rate_bps", 2_500),
+                "boost.commission_rate_bps",
+                minimum=0,
+                maximum=10_000,
+            ),
+            minimum_intent_eur_cents=_int(
+                boost.get("minimum_intent_eur_cents", 100),
+                "boost.minimum_intent_eur_cents",
+                minimum=1,
+                maximum=100_000,
+            ),
+            maximum_intent_eur_cents=_int(
+                boost.get("maximum_intent_eur_cents", 100_000_000),
+                "boost.maximum_intent_eur_cents",
+                minimum=1,
+                # The same ceiling every other sender-chosen money field on a
+                # request carries. A larger number is a typo, not a Boost.
+                maximum=100_000_000,
+            ),
+            ranking_weight_step_eur_cents=_int(
+                boost.get("ranking_weight_step_eur_cents", 500),
+                "boost.ranking_weight_step_eur_cents",
+                minimum=1,
+                maximum=100_000,
+            ),
+            ranking_weight_max=_int(
+                boost.get("ranking_weight_max", 30),
+                "boost.ranking_weight_max",
+                minimum=1,
+                # `DeliveryRequest.ranking_boost_weight` is a PositiveSmallInt
+                # and `parcels_ranking_boost_pair` is absolute; a weight the
+                # column cannot hold is refused here, not at the INSERT.
+                maximum=100,
+            ),
             packages=tuple(packages),
         )
+        if (
+            boost_policy.minimum_intent_eur_cents
+            > boost_policy.maximum_intent_eur_cents
+        ):
+            raise InvalidPhase4Policy(
+                "Business setting 'boost.minimum_intent_eur_cents' cannot exceed "
+                "'boost.maximum_intent_eur_cents'."
+            )
 
         return cls(
             settings_version=settings_version,

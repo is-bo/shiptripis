@@ -665,19 +665,29 @@ def test_revenue_correction_keeps_original_period_and_final_settlement_evidence(
     assert today["integrity"]["status"] == "ok"
 
 
-def test_f1_boost_shares_are_funding_once_and_revenue_only_at_close():
-    from apps.boosts.services import purchase_boost
-    from apps.core.phase4_policy import phase4_policy
+def test_f1_boost_is_funded_once_and_recognised_only_at_close():
+    """A J2 Boost reconciles without confusing any existing H5 definition.
+
+    It has no payment order of its own, so it reaches H5 inside the Deal
+    balance: `gross_funded` counts it once, `traveler_outstanding` carries the
+    Traveler's bonus, and its commission sits in `pending_earnings` until the
+    Deal closes -- exactly like the base commission, and never twice.
+
+    `boost_commission` reports that commission apart from the delivery
+    commission, which is the one thing a merged `platform_commission` total
+    cannot answer. It is a display metric: it is not added to gross funded
+    volume and it is not a reconciliation input.
+    """
+
+    from apps.boosts.services import set_boost_intent
     from apps.finance.models import LedgerTransaction
 
     with override_settings(**H3_SETTINGS):
         s = build_scenario(prefix="h5boost")
-        purchase = purchase_boost(
+        set_boost_intent(
             delivery_request_id=s.delivery_request.pk,
             actor_id=s.sender.pk,
-            package_code="boost_24h",
             amount_eur_cents=777,
-            preview_settings_version=phase4_policy().settings_version.version,
         )
 
         def pay(order, label):
@@ -701,18 +711,28 @@ def test_f1_boost_shares_are_funding_once_and_revenue_only_at_close():
             )
             return amount
 
-        pay(purchase.payment_order, "h5boost-cash")
         s.accept(reward_eur_cents=2000)
+        # base 2000 + base commission 500 + boost 777 + boost commission 195
         balance_amount = pay(s.balance_order(), "h5boost-balance")
+        assert balance_amount == 3472
+
     payout = Payout.objects.get(deal=s.deal)
-    assert payout.amount_eur_cents == 2582
+    # The Traveler is owed the reward plus the whole boost.
+    assert payout.amount_eur_cents == 2777
     before = build_snapshot(scope())
-    assert cents(before, "gross_funded") == balance_amount + 777
-    assert cents(before, "boost_funded") == 777
-    assert cents(before, "pending_earnings") == balance_amount - 2000 + 195
+    # Counted once, and only from the balance capture.
+    assert cents(before, "gross_funded") == balance_amount
+    assert cents(before, "boost_funded") == 0
+    assert cents(before, "boost_commission") == 195
+    assert cents(before, "pending_earnings") == 500 + 195
     assert cents(before, "recognized_revenue") == 0
-    assert LedgerTransaction.objects.filter(kind="boost_binding").count() == 1
-    assert LedgerTransaction.objects.filter(kind="boost_allocation").count() == 1
+    assert LedgerTransaction.objects.filter(kind="boost_binding").count() == 0
+    assert (
+        LedgerTransaction.objects.filter(
+            key=f"deal_boost_allocation:deal:{s.deal.pk}"
+        ).count()
+        == 1
+    )
     # Immutable final-settlement event is valid earning evidence even when no
     # commission correction was needed and the Deal was not clean-completed.
     from apps.deals.models import DealEvent
@@ -721,7 +741,7 @@ def test_f1_boost_shares_are_funding_once_and_revenue_only_at_close():
         deal=s.deal, kind="dispute_resolved", payload={"synthetic": True}
     )
     after = build_snapshot(scope())
-    assert cents(after, "recognized_revenue") == balance_amount - 2000 + 195
+    assert cents(after, "recognized_revenue") == 500 + 195
     assert cents(after, "pending_earnings") == 0
     assert after["integrity"]["status"] == "ok"
 

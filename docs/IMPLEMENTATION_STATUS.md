@@ -1,5 +1,114 @@
 # ShipTrip V1 Implementation Status
 
+## J2 — Pricing, flexible deposit, universal guest payer and Boost economics (2026-09-15)
+
+**J2 — local verification complete; CI, merge and TEST deployment pending.** Branch `claude/j2-pricing-deposit-guest-boost`, from
+J1.3 `aa92cd7`. [Contract, economics and the J3 mobile surface](PHASE_J2_PRICING_DEPOSIT_GUEST_BOOST.md).
+
+**Three prices, named apart.** A sender now sees the enforced minimum, ShipTrip's
+recommendation and their own chosen reward as three distinct values, and sees
+them *before* choosing: `POST /api/parcels/pricing-quote` prices a draft without
+writing a row. Choosing below the recommendation is allowed and uncommented;
+choosing below the minimum is refused at creation with `price_below_minimum`,
+before a request or an order exists. The posting-time band is computed from the
+request's own great-circle route with no detour and no urgency premium — a
+deliberate lower bound, so the floor can never reject a price a real matched
+journey would have accepted. The matched re-validation in `v1_services` is
+unchanged and still binding.
+
+**The deposit became a choice.** The €3–€7 clamp now bounds only the
+*recommendation*. A sender may choose any amount from €3 up to the obligation it
+pre-pays — their chosen reward, its commission and their Boost with its own —
+with no artificial €7 ceiling. One live obligation per request throughout: a new
+choice reprices that order rather than creating a second, and only while it is
+untouched and has no checkout open. The deposit is still credited exactly once
+through the one-to-one `credit_source` link; a deposit equal to the full
+obligation funds the Deal with no second charge. Recommendation, floor, choice
+and remaining balance are all frozen onto the order for audit.
+
+**Guest payer, completed rather than rebuilt.** It already worked on any
+PaymentOrder through the same attempt, verification, ledger, funding and refund
+path; J2 adds the shareable `payment_link`, a real unauthenticated page at
+`/pay/guest/<token>` (the link previously answered raw JSON), a machine-readable
+`purpose`, and a refusal to replace a link while a payer is mid-checkout. The
+capability is still exactly one thing: paying one obligation. No Deal access, no
+chat, no delivery code, no counterparty. Duplicate funding was already
+structurally impossible — one live link, one open attempt, unabsorbable money
+recorded and refunded — and is now covered end to end for a guest/sender race.
+
+**Boost is extra reward, not a package.** The timed paid visibility product is
+retired: no purchase, no 24h window, no countdown, no separate payment order.
+A Boost is an editable EUR-cent amount on the request; the Traveler receives all
+of it and ShipTrip's commission is charged on top at a rate the Admin sets
+independently of the delivery commission. It lasts as long as the request can be
+matched, is editable up/down/away while unmatched, and freezes with the Deal the
+instant an offer is accepted — a sender cannot reduce compensation a Traveler
+already agreed to. Every change appends an immutable `BoostIntentEvent`.
+
+**The rematch question J1.3 left open is answered structurally.** `fund_deal`
+clears the request's Boost. An unfunded reservation release therefore returns an
+unpaid Boost to the open pool with its request, intact and editable again, while
+a Boost that was actually paid for is already zero and cannot revive onto a
+reopened request. A funded Deal's cancellation also makes the request terminal,
+so lifecycle and accounting provenance agree.
+
+**Accounting.** The Boost rides inside the Deal balance, so it funds, refunds,
+settles and reconciles through the same path as the reward it belongs to and no
+orphan Boost revenue can exist. Funding posts two transactions — base and Boost
+— both releasing from the same pooled deal liability, which nets to zero. They
+are kept apart so H5 can tell delivery commission from Boost commission; a new
+read-only `boost_commission` metric reports the split. H5 needed no change to
+its definitions: the Boost commission entry carries the same account, deal and
+recognition trigger as the base.
+
+**Historical data is not reinterpreted.** `BoostPurchase` rows keep the amount,
+split, package and settings version they were sold with; a payment in flight
+still reconciles, activates, expires and refunds. `DealTermsSnapshot` now records
+`boost_economics_version`, so a split-model Deal is never read as an additive
+one, and the sum constraint is conditional per model. The package catalogue,
+preview and purchase answer 410 with a pointer to the replacement rather than
+404. Migrations are additive.
+
+**Verification.** The full Django suite on PostgreSQL: **2,036 passed, 34 skipped, zero failures
+in 36m55s**. Ruff passes, `manage.py check` reports no issues and
+`makemigrations --check --dry-run` detects no changes. The schema contract was
+regenerated: the diff is the new `boosts_intent_event` table with its indexes
+and deferred foreign keys, `parcels_delivery.boost_eur_cents`, and the
+`DealTermsSnapshot` Boost columns. The single removal is the unconditional
+`deals_terms_boost_total_sum` check, replaced by a version-conditional pair so
+a `traveler_split_v1` row still has to sum and an `additive_commission_v2` row
+has to pay the Traveler the whole Boost.
+
+Two defects were found by the new tests and fixed rather than accommodated. A
+Boost posted together with a request recorded its first audit event as
+`chosen -> chosen`, because the row was written with the column already set;
+the request is now created at zero and moved by the same transition a later
+edit uses, so the trail opens on a real `0 -> chosen`. And lowering a Boost
+could strand an already-paid deposit above the obligation it pre-pays, which is
+now refused by name.
+
+`apps/finance/tests/test_j2_h5_regression.py` is the phase's financial gate. It
+builds a whole J2 delivery through production services on the Stripe TEST rail
+— chosen deposit, Boost, guest payer, funding, payout profile, settled Deal —
+and requires the H5 control plane's own reconciliation to return integrity
+`ok`, every comparison at a **zero difference with zero row mismatches**
+(funding, Traveler liability, revenue partition and refunds alike), **zero
+unbalanced ledger transactions** and no data issues. It also asserts the money:
+balance €35.00, deposit credited €10.00 exactly once, Boost €8.00 with €2.00
+commission charged on top, and the Traveler owed €28.00 — the reward plus the
+whole Boost.
+
+One observation is recorded because it is *not* a J2 effect: with
+`PAYOUT_PROFILES_ENABLED` off, `ensure_payout_for_deal` takes the legacy branch
+and the Payout row is stamped `legacy_unknown`, which places it outside H5's
+mode scope and makes the two Traveler comparisons read zero against a live
+ledger liability. That is pre-H3 legacy behaviour and predates J2; the
+regression runs with profiles on so its comparisons are real ones.
+
+**TEST only.** Stripe TEST, Chargily TEST, `PAYMENTS_ENVIRONMENT=test` and DZD execution false
+throughout. No LIVE activation, no real-money operation, no production cutover
+and no mobile work: J3 consumes the frozen J2 contract.
+
 ## J1.3 — ParcelRequest lifecycle alignment (2026-09-15)
 
 **J1.3 PASS — Gemini, all six CI jobs and TEST release checks passed.**

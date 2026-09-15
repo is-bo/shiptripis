@@ -1,39 +1,51 @@
-"""Paid sender boosts: economic preview, purchase, delivery binding and ranking.
+"""Sender Boost: the J2 reward intent, its economics, and the retired package.
 
-One rule outranks everything else in this module:
+One rule outranks everything else in this module and survives both models:
 
     a boost changes where a *compatible* request appears in a list.
     It never makes an incompatible request compatible.
 
 Nothing here reads or writes KYC, capacity, route eligibility, timing, safety or
-verification, and the only columns a purchase ever touches on a request are the
-two named in `RANKING_FIELDS`. `apps.matching.ranking` applies the resulting
+verification, and the only columns a boost ever touches on a request are the
+three named in `BOOST_FIELDS`. `apps.matching.ranking` applies the resulting
 weight as a capped points bonus *after* hard compatibility has already passed --
 it raises if asked to rank a candidate that failed -- so "a boost bought its way
 past a gate" is not a state this system can be argued into.
 
-Three further properties are structural rather than conventional:
+**J2 Boost is extra reward, not a purchase.** The sender names an amount; the
+Traveler receives all of it; ShipTrip's commission on it is charged on top, at a
+rate the Admin sets separately from the base commission. Four properties are
+structural:
 
-**Money activates a boost; a client never does.** `purchase_boost` creates a
-`PaymentOrder` and stops. Activation happens inside `reconcile_attempt`, from
-the authoritative provider event, exactly as deposit publication and Deal
-funding already do.
+*No timer.* A Boost lives exactly as long as the request is eligible to be
+matched. There is no Boost expiry, no countdown and no package window. The
+ranking pair's expiry is the request's own `deadline_at`, which is the instant
+the request stops being matchable anyway.
 
-**A paid boost that cannot be used is refunded, not stranded.** If the request
-stopped being boostable while the money was in flight -- matched, cancelled,
-expired, past its deadline -- the purchase is marked `unusable`, refunded in
-full and marked `refunded`. There is no branch that keeps the cash and no branch
-that activates a boost on a request that can no longer receive offers.
+*Editable until it is committed, immutable after.* `set_boost_intent` refuses
+on any status but `open` or `awaiting_deposit`, so the moment an offer is
+accepted the amount the Traveler was shown is the amount that binds. A sender
+cannot reduce Traveler compensation after commitment.
 
-**The ranking columns are derived, never incremented.** `recompute_request_boost`
-takes the maximum weight and the latest expiry across the currently active
-purchases and writes both, or clears both. Stacking three purchases therefore
-buys duration and redundancy, not an unbounded weight, and the pair can never
-drift out of the state `parcels_ranking_boost_pair` demands.
+*Frozen once, consumed once.* Acceptance copies the amount and the rate into
+`DealTermsSnapshot`; funding clears `boost_eur_cents` on the request. An unfunded
+reservation release therefore revives an unpaid Boost with the request, and a
+Boost the sender has actually paid can never revive onto a reopened one --
+because by then the column is zero. That is a structural answer to the rematch
+question, not a policy one.
 
-The buyer keeps what they were quoted: amount, Traveler/platform split,
-package, duration, weight and settings version are snapshotted. A later
-revision cannot rewrite a boost already sold.
+*Collected with the reward it belongs to.* There is no Boost payment order in
+J2. The amount and its commission ride inside the Deal balance, so the Boost
+funds, refunds, settles and reconciles through exactly the same path as the base
+reward, and no orphan Boost revenue can exist.
+
+**The retired package.** `BoostPurchase`, its payment order and its
+Traveler/platform split were the J1-era paid visibility product. Purchasing is
+gone -- the endpoint answers 410. Existing rows keep their snapshot, keep their
+ranking effect until they expire, and a payment already in flight still
+reconciles through `activate_paid_boost`. `recompute_request_boost` derives the
+request's ranking columns from whichever of the two is stronger, so the two
+models cannot fight over the same column.
 """
 
 from __future__ import annotations
@@ -47,18 +59,12 @@ from django.db.models import Max
 from django.utils import timezone
 
 from apps.core.financial_locks import lock_request_graph
-from apps.core.models import BusinessSettingsVersion
-from apps.core.phase4_policy import (
-    BoostPackage,
-    InvalidPhase4Policy,
-    Phase4Policy,
-    phase4_policy,
-)
+from apps.core.phase4_policy import Phase4Policy, phase4_policy
 from apps.finance.models import PaymentOrder, PaymentRefund, ScheduledJob
 from apps.finance.services import refund_order_in_full, schedule_job
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 
-from .models import BoostPurchase
+from .models import BoostIntentEvent, BoostPurchase
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +88,26 @@ class NotAuthorized(BoostError):
     code = "not_authorized"
 
 
+class BoostBelowPrepaidDeposit(BoostError):
+    """Lowering the Boost would leave a deposit pre-paying more than is owed."""
+
+    code = "boost_below_prepaid_deposit"
+
+
 #: The only columns a boost may ever write on a `DeliveryRequest`. Anything a
 #: future change wants to add here has to argue with the module docstring first.
+BOOST_FIELDS = ("boost_eur_cents", "ranking_boost_weight", "ranking_boost_expires_at")
+#: The two ranking columns alone, under the name earlier phases used.
 RANKING_FIELDS = ("ranking_boost_weight", "ranking_boost_expires_at")
+
+#: The request statuses in which a sender may still change their Boost. Both
+#: are pre-commitment: `awaiting_deposit` is the sender's own unpublished
+#: request, `open` is published and unmatched. Everything else is either
+#: committed to a Traveler or terminal.
+EDITABLE_STATUSES = (
+    ParcelRequest.Status.AWAITING_DEPOSIT,
+    ParcelRequest.Status.OPEN,
+)
 
 #: Statuses that are already decided. Activation is a no-op for all of them.
 _SETTLED_STATUSES = (
@@ -94,135 +117,236 @@ _SETTLED_STATUSES = (
     BoostPurchase.Status.UNUSABLE,
 )
 
-# PostgreSQL BIGINT storage ceiling. This is a representation guard, not a
-# product maximum: no business-policy cap is applied above the €5 minimum.
+# PostgreSQL BIGINT storage ceiling. A representation guard, not a product
+# limit: the product band is `boost.minimum_intent_eur_cents` to
+# `boost.maximum_intent_eur_cents` and lives in the settings revision.
 MAX_EUR_CENTS = 9_223_372_036_854_775_807
 
 
-# --- packages -----------------------------------------------------------------
-
-
-def list_packages(*, policy: Phase4Policy | None = None) -> list[dict]:
-    """The purchasable visibility windows and current economic guardrails."""
-
-    policy = policy or phase4_policy()
-    return [
-        {**package.snapshot(), "currency": "EUR"} for package in policy.boost.packages
-    ]
+# --- J2 boost economics -------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class BoostEconomics:
+class BoostReward:
+    """One Boost amount priced under the J2 additive-commission model.
+
+    The Traveler receives the whole Boost. ShipTrip's commission is charged on
+    top of it, so the sender pays `amount + platform_fee` -- structurally the
+    same shape as the base reward, where the sender pays reward + commission and
+    the Traveler is never quietly shorted what they agreed to carry for.
+    """
+
     amount_eur_cents: int
-    traveler_share_bps: int
-    traveler_boost_eur_cents: int
-    platform_boost_eur_cents: int
+    commission_rate_bps: int
+    traveler_bonus_eur_cents: int
+    platform_fee_eur_cents: int
+
+    @property
+    def sender_cost_eur_cents(self) -> int:
+        return self.amount_eur_cents + self.platform_fee_eur_cents
 
     def as_dict(self) -> dict:
         return {
-            "amount_eur_cents": self.amount_eur_cents,
-            "traveler_share_bps": self.traveler_share_bps,
-            "traveler_boost_eur_cents": self.traveler_boost_eur_cents,
-            "platform_boost_eur_cents": self.platform_boost_eur_cents,
-            "rounding_rule": "traveler_floor_platform_remainder",
+            "economics_version": "additive_commission_v2",
+            "currency": "EUR",
+            "boost_eur_cents": self.amount_eur_cents,
+            "boost_commission_rate_bps": self.commission_rate_bps,
+            "boost_traveler_bonus_eur_cents": self.traveler_bonus_eur_cents,
+            "boost_platform_fee_eur_cents": self.platform_fee_eur_cents,
+            "boost_sender_cost_eur_cents": self.sender_cost_eur_cents,
+            "rounding_rule": "platform_ceiling_traveler_receives_full_boost",
         }
 
 
-def calculate_boost_economics(
+def calculate_boost_reward(
     *, amount_eur_cents: int, policy: Phase4Policy
-) -> BoostEconomics:
-    """Split integer cents; Traveler receives floor(amount × bps / 10,000)."""
+) -> BoostReward:
+    """Price one Boost amount. Integer cents, ceiling to the platform.
+
+    Deliberately the same rounding rule as `calculate_offer_economics`: the fee
+    is `ceil(amount x rate / 10,000)` and the Traveler's side is never reduced
+    by a rounding decision. No float ever touches this arithmetic.
+    """
 
     amount = int(amount_eur_cents)
-    minimum = int(policy.boost.minimum_amount_eur_cents)
-    if amount < minimum:
+    if amount < 0:
         raise BoostError(
-            "The boost amount is below the minimum.",
-            code="boost_amount_below_minimum",
-            minimum_amount_eur_cents=minimum,
+            "A boost cannot be negative.", code="boost_amount_out_of_range"
         )
-    if amount > MAX_EUR_CENTS:
+    rate = int(policy.boost.commission_rate_bps)
+    if amount == 0:
+        return BoostReward(
+            amount_eur_cents=0,
+            commission_rate_bps=rate,
+            traveler_bonus_eur_cents=0,
+            platform_fee_eur_cents=0,
+        )
+    fee = (amount * rate + 9_999) // 10_000
+    return BoostReward(
+        amount_eur_cents=amount,
+        commission_rate_bps=rate,
+        traveler_bonus_eur_cents=amount,
+        platform_fee_eur_cents=fee,
+    )
+
+
+def validate_boost_amount(*, amount_eur_cents: int, policy: Phase4Policy) -> int:
+    """Refuse an amount outside the configured band. Zero is always allowed."""
+
+    amount = int(amount_eur_cents)
+    if amount < 0 or amount > MAX_EUR_CENTS:
         raise BoostError(
-            "The boost amount cannot be represented in EUR cents.",
+            "That boost amount cannot be represented in EUR cents.",
             code="boost_amount_out_of_range",
         )
-    share_bps = int(policy.boost.traveler_share_bps)
-    traveler = (amount * share_bps) // 10_000
-    return BoostEconomics(
-        amount_eur_cents=amount,
-        traveler_share_bps=share_bps,
-        traveler_boost_eur_cents=traveler,
-        platform_boost_eur_cents=amount - traveler,
-    )
-
-
-def preview_boost(*, package_code: str, amount_eur_cents: int) -> dict:
-    """Authoritative pre-commit preview of visibility and delivery economics."""
-
-    policy = phase4_policy()
-    if not policy.boost.enabled:
+    if amount == 0:
+        return 0
+    minimum = int(policy.boost.minimum_intent_eur_cents)
+    maximum = int(policy.boost.maximum_intent_eur_cents)
+    if amount < minimum:
         raise BoostError(
-            "Boosts are not available at the moment.", code="boost_disabled"
+            "That boost is below the minimum.",
+            code="boost_amount_below_minimum",
+            minimum_boost_eur_cents=minimum,
+            maximum_boost_eur_cents=maximum,
         )
-    package = _package(policy, package_code)
-    economics = calculate_boost_economics(
-        amount_eur_cents=amount_eur_cents, policy=policy
-    )
+    if amount > maximum:
+        raise BoostError(
+            "That boost is above the maximum.",
+            code="boost_amount_above_maximum",
+            minimum_boost_eur_cents=minimum,
+            maximum_boost_eur_cents=maximum,
+        )
+    return amount
+
+
+def boost_policy_payload(policy: Phase4Policy) -> dict:
+    """The bounds and the rate a client may show before the sender chooses."""
+
     return {
         "currency": "EUR",
+        "enabled": policy.boost.enabled,
+        "minimum_boost_eur_cents": policy.boost.minimum_intent_eur_cents,
+        "maximum_boost_eur_cents": policy.boost.maximum_intent_eur_cents,
+        "boost_commission_rate_bps": policy.boost.commission_rate_bps,
         "settings_version": policy.settings_version.version,
-        "minimum_amount_eur_cents": policy.boost.minimum_amount_eur_cents,
-        "package": package.snapshot(),
-        "visibility": {
-            "duration_seconds": package.duration_seconds,
-            "ranking_weight": package.ranking_weight,
-            "affects_compatibility": False,
-        },
-        **economics.as_dict(),
+        "affects_compatibility": False,
+        "has_expiry": False,
     }
 
 
-def _package(policy: Phase4Policy, code: str) -> BoostPackage:
-    """One package by code, refusing an unknown code as a client error.
+# --- J2 boost intent ----------------------------------------------------------
 
-    `BoostPolicy.package` raises `InvalidPhase4Policy`, which the API maps to a
-    fail-closed 503. That is the right answer for a malformed revision and the
-    wrong one for a client asking for a package that simply is not offered, so
-    the two are separated here.
+
+def _assert_editable(request, *, actor_id: int) -> None:
+    """Refuse every reason this request's Boost may not be changed right now."""
+
+    if request.sender_id != actor_id:
+        raise NotAuthorized("Only the sender may change their own request's boost.")
+    if request.schema_version not in (2, 3):
+        raise BoostError(
+            "Only V1 delivery requests carry a boost.",
+            code="boost_request_not_eligible",
+        )
+    if request.status not in EDITABLE_STATUSES:
+        # Includes every committed state. Once an offer is accepted the amount
+        # the Traveler was shown is the amount that binds, so no path here can
+        # reduce Traveler compensation after commitment.
+        raise BoostError(
+            "This request's boost is no longer editable.",
+            code="boost_request_not_active",
+            request_status=request.status,
+        )
+    if request.deadline_at is None or request.deadline_at <= timezone.now():
+        raise BoostError(
+            "This request has passed its deadline.",
+            code="boost_request_expired",
+        )
+
+
+def _assert_deposit_still_covered(request, *, amount_eur_cents: int) -> None:
+    """Refuse a Boost cut that would strand money already committed to a deposit.
+
+    A posting deposit is paid *against* a total: the sender's chosen reward, its
+    commission, and their Boost with its own. Lowering the Boost lowers that
+    total, and `apply_posting_deposit_credit` only ever credits
+    `min(deposit paid, balance owed)` -- so a deposit larger than the new total
+    would leave the difference discharging nothing, neither credited nor
+    refunded. That is real money quietly stuck, so the reduction is refused
+    instead.
+
+    The order is locked, and it is acquired after the request and its boost rows,
+    which is the canonical financial lock order.
     """
 
+    from apps.finance.services import maximum_chosen_deposit
+    from apps.finance.policy import phase3_policy
+
+    deposit = (
+        PaymentOrder.objects.select_for_update(no_key=True)
+        .filter(
+            delivery_request_id=request.pk,
+            purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
+        )
+        .exclude(status=PaymentOrder.Status.CANCELLED)
+        .order_by("pk")
+        .first()
+    )
+    if deposit is None:
+        return
+    committed = int(deposit.amount_eur_cents)
+    if committed <= 0:
+        return
+
+    # Evaluate the ceiling as it would be *after* the change.
+    previous = int(request.boost_eur_cents)
+    request.boost_eur_cents = amount_eur_cents
     try:
-        return policy.boost.package(code)
-    except InvalidPhase4Policy as exc:
-        raise BoostError(
-            "That boost package is not offered.",
-            code="boost_package_unknown",
-            package_code=str(code)[:32],
-            available=[package.code for package in policy.boost.packages],
-        ) from exc
+        ceiling = maximum_chosen_deposit(
+            delivery_request=request, policy=phase3_policy()
+        )
+    except Exception:  # noqa: BLE001 - a finance failure is not a boost refusal
+        return
+    finally:
+        request.boost_eur_cents = previous
+
+    if committed > ceiling:
+        raise BoostBelowPrepaidDeposit(
+            "Your posting deposit already covers more than that. Lower the "
+            "deposit first, or keep the boost at or above this amount.",
+            deposit_eur_cents=committed,
+            minimum_boost_eur_cents=int(amount_eur_cents) + (committed - ceiling),
+        )
 
 
-# --- purchase -----------------------------------------------------------------
+def _intent_reason(previous: int, amount: int) -> str:
+    if amount == 0:
+        return BoostIntentEvent.Reason.SENDER_REMOVED
+    if previous == 0:
+        return BoostIntentEvent.Reason.SENDER_SET
+    if amount > previous:
+        return BoostIntentEvent.Reason.SENDER_INCREASED
+    if amount < previous:
+        return BoostIntentEvent.Reason.SENDER_DECREASED
+    return BoostIntentEvent.Reason.SENDER_SET
 
 
-def purchase_boost(
+def set_boost_intent(
     *,
     delivery_request_id: int,
     actor_id: int,
-    package_code: str,
     amount_eur_cents: int,
-    preview_settings_version: int,
-) -> BoostPurchase:
-    """Buy one package for one open request, creating the payment obligation.
+) -> dict:
+    """Set, raise, lower or remove the sender's Boost on one open request.
 
-    Enters through `lock_request_graph`, which takes the request and then this
-    request's boost rows in the canonical order, so the slot count that decides
-    `boost_limit_reached` cannot be read stale while another purchase commits.
+    Enters through `lock_request_graph`, which takes the request row itself, so
+    a Traveler accepting an offer and a sender editing their Boost serialise on
+    the same row: whichever commits second reads the first one's state. An edit
+    that arrives after acceptance finds a `matched` request and is refused,
+    which is exactly the guarantee the frozen Deal terms depend on.
 
-    Returns with the boost still `pending_payment`. The client takes the linked
-    order's reference to the existing `/api/payments/orders/<reference>/checkout`
-    route; nothing here opens a second payment path, and returning from a
-    checkout page activates nothing.
+    Idempotent in the sense that matters: setting the amount it already holds
+    writes no event and touches no column.
     """
 
     policy = phase4_policy()
@@ -230,107 +354,108 @@ def purchase_boost(
         raise BoostError(
             "Boosts are not available at the moment.", code="boost_disabled"
         )
-    package = _package(policy, package_code)
-    if int(preview_settings_version) != int(policy.settings_version.version):
-        raise BoostError(
-            "Boost settings changed. Review the updated split before paying.",
-            code="boost_preview_stale",
-            settings_version=policy.settings_version.version,
-        )
-    economics = calculate_boost_economics(
-        amount_eur_cents=amount_eur_cents, policy=policy
-    )
+    amount = validate_boost_amount(amount_eur_cents=amount_eur_cents, policy=policy)
 
     with transaction.atomic():
-        locked_settings = BusinessSettingsVersion.objects.select_for_update(
-            no_key=True
-        ).get(pk=policy.settings_version.pk)
-        if locked_settings.status != BusinessSettingsVersion.Status.ACTIVE:
-            current_version = (
-                BusinessSettingsVersion.objects.filter(
-                    status=BusinessSettingsVersion.Status.ACTIVE
-                )
-                .values_list("version", flat=True)
-                .first()
-            )
-            raise BoostError(
-                "Boost settings changed. Review the updated split before paying.",
-                code="boost_preview_stale",
-                settings_version=current_version,
-            )
         try:
             graph = lock_request_graph(delivery_request_id, include_negotiation=False)
         except DeliveryRequest.DoesNotExist as exc:
-            # A legacy `ParcelRequest` or a `ProductRequest` id lands here. It
-            # is the same refusal as a schema_version 1 row: not boostable.
             raise BoostError(
-                "Only V1 delivery requests can be boosted.",
+                "Only V1 delivery requests carry a boost.",
                 code="boost_request_not_eligible",
             ) from exc
         request = graph.request
+        _assert_editable(request, actor_id=actor_id)
 
-        if request.sender_id != actor_id:
-            raise NotAuthorized("Only the sender may boost their own request.")
-        if request.schema_version not in (2, 3):
-            raise BoostError(
-                "Only V1 delivery requests can be boosted.",
-                code="boost_request_not_eligible",
-            )
-        if request.status != ParcelRequest.Status.OPEN:
-            raise BoostError(
-                "Only an open request can be boosted.",
-                code="boost_request_not_active",
-                request_status=request.status,
-            )
-        if request.deadline_at is None or request.deadline_at <= timezone.now():
-            raise BoostError(
-                "This request has passed its deadline.",
-                code="boost_request_expired",
-            )
+        previous = int(request.boost_eur_cents)
+        if previous == amount:
+            return boost_state(delivery_request=request, viewer_id=actor_id)
+        if amount < previous:
+            _assert_deposit_still_covered(request, amount_eur_cents=amount)
 
-        occupying = [
-            row
-            for row in graph.boost_purchases
-            if row.status in BoostPurchase.OCCUPYING_STATUSES
-        ]
-        if len(occupying) >= policy.boost.max_active_per_request:
-            raise BoostError(
-                "This request already holds as many boosts as it may.",
-                code="boost_limit_reached",
-                max_active_per_request=policy.boost.max_active_per_request,
-            )
-
-        snapshot = package.snapshot()
-        purchase = BoostPurchase.objects.create(
-            delivery_request=request,
-            buyer_id=actor_id,
-            package_code=package.code,
-            package_snapshot=snapshot,
-            duration_seconds=package.duration_seconds,
-            amount_eur_cents=economics.amount_eur_cents,
-            ranking_weight=package.ranking_weight,
-            economics_version=BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1,
-            traveler_share_bps=economics.traveler_share_bps,
-            traveler_boost_eur_cents=economics.traveler_boost_eur_cents,
-            platform_boost_eur_cents=economics.platform_boost_eur_cents,
-            business_settings_version=policy.settings_version,
-        )
-        order = PaymentOrder.objects.create(
-            owner_id=actor_id,
-            purpose=PaymentOrder.Purpose.BOOST,
-            amount_eur_cents=economics.amount_eur_cents,
+        reward = calculate_boost_reward(amount_eur_cents=amount, policy=policy)
+        # `QuerySet.update`, not `save`: `DeliveryRequest.save` runs
+        # `full_clean`, and a boost edit has no business failing because some
+        # unrelated field on a months-old request no longer validates.
+        DeliveryRequest.objects.filter(pk=request.pk).update(boost_eur_cents=amount)
+        request.boost_eur_cents = amount
+        recompute_request_boost(request, policy=policy)
+        BoostIntentEvent.objects.create(
             delivery_request_id=request.pk,
-            boost_reference=str(purchase.public_reference),
+            actor_id=actor_id,
+            reason=_intent_reason(previous, amount),
+            previous_eur_cents=previous,
+            amount_eur_cents=amount,
+            commission_rate_bps=reward.commission_rate_bps,
+            ranking_weight=int(request.ranking_boost_weight),
             business_settings_version=policy.settings_version,
-            terms_snapshot={
-                "boost_package": snapshot,
-                "boost_economics": economics.as_dict(),
-                "business_settings_version": policy.settings_version.version,
-            },
+            request_status=request.status,
         )
-        purchase.payment_order = order
-        purchase.save(update_fields=["payment_order", "updated_at"])
-    return purchase
+    return boost_state(delivery_request=request, viewer_id=actor_id)
+
+
+def record_boost_transition(
+    *,
+    delivery_request,
+    reason: str,
+    amount_eur_cents: int | None = None,
+    deal_id: int | None = None,
+    actor_id: int | None = None,
+    commission_rate_bps: int = 0,
+) -> None:
+    """Append one platform-driven Boost transition. Caller holds the request.
+
+    Used by the commitment, funding and closure boundaries. `amount_eur_cents`
+    is the value the column is being moved to; omit it to record the current
+    value without changing it, which is what a freeze does.
+    """
+
+    previous = int(delivery_request.boost_eur_cents)
+    amount = previous if amount_eur_cents is None else int(amount_eur_cents)
+    if amount != previous:
+        DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
+            boost_eur_cents=amount
+        )
+        delivery_request.boost_eur_cents = amount
+    # Unconditionally, even when the amount did not move. The ranking columns
+    # are derived, and a transition that leaves the amount alone can still
+    # change what it is worth -- a reservation release puts the request back in
+    # the pool, and the deadline it is paired with may have moved on since.
+    recompute_request_boost(delivery_request)
+    BoostIntentEvent.objects.create(
+        delivery_request_id=delivery_request.pk,
+        actor_id=actor_id,
+        deal_id=deal_id,
+        reason=reason,
+        previous_eur_cents=previous,
+        amount_eur_cents=amount,
+        commission_rate_bps=commission_rate_bps,
+        ranking_weight=int(delivery_request.ranking_boost_weight),
+        request_status=delivery_request.status,
+    )
+
+
+# --- the retired package ------------------------------------------------------
+
+
+class BoostPurchaseRetired(BoostError):
+    """The J1-era paid visibility package is no longer sold."""
+
+    code = "boost_package_retired"
+
+
+def purchase_boost(*args, **kwargs):
+    """Refuse. J2 replaced the paid package with the sender's reward Boost.
+
+    Kept as an explicit refusal rather than deleted: a caller that still reaches
+    for it gets a named answer instead of an `AttributeError`, and the
+    retirement stays visible where the old product lived.
+    """
+
+    del args, kwargs
+    raise BoostPurchaseRetired(
+        "Boost packages are retired. Set the request's boost reward instead."
+    )
 
 
 def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
@@ -388,8 +513,20 @@ def unwind_boosts(
     requested_by_id: int | None = None,
     locked_orders: dict[int, PaymentOrder] | None = None,
     delivery_request=None,
+    clear_intent: bool = False,
 ) -> int:
-    """Cancel unpaid boosts and refund paid boosts that cannot earn. Idempotent."""
+    """Close out a request's boosts. Idempotent.
+
+    Retired purchases are cancelled when unpaid and refunded in full when paid,
+    exactly as before -- a settled payment for something that can no longer earn
+    goes back.
+
+    `clear_intent` additionally zeroes the J2 reward Boost and records why. It
+    is set only where the *request itself* ends -- sender cancellation, expiry
+    unmatched -- and deliberately not where an unfunded reservation is released,
+    because there the request returns to the open pool and an unpaid Boost
+    belongs to it, not to the traveler who walked away.
+    """
 
     from apps.finance.services import cancel_order
 
@@ -450,8 +587,16 @@ def unwind_boosts(
         )
         cancel_order(order_id=purchase.payment_order_id, reason=reason[:64])
         changed += 1
-    if changed and delivery_request is not None:
-        recompute_request_boost(delivery_request, at=at)
+    if delivery_request is not None:
+        if clear_intent and int(delivery_request.boost_eur_cents or 0) > 0:
+            record_boost_transition(
+                delivery_request=delivery_request,
+                reason=BoostIntentEvent.Reason.REQUEST_CLOSED,
+                amount_eur_cents=0,
+                actor_id=requested_by_id,
+            )
+        elif changed or clear_intent:
+            recompute_request_boost(delivery_request, at=at)
     return changed
 
 
@@ -595,15 +740,28 @@ def expire_boost(*, purchase_id: int, at: datetime | None = None) -> str:
 
 
 def recompute_request_boost(
-    delivery_request: DeliveryRequest | None, *, at: datetime | None = None
+    delivery_request: DeliveryRequest | None,
+    *,
+    at: datetime | None = None,
+    policy: Phase4Policy | None = None,
 ) -> None:
-    """Derive the request's two ranking columns from its active purchases.
+    """Derive the request's two ranking columns from both Boost models.
 
-    Derived, never incremented: the weight is the maximum across the purchases
-    that are active right now and the expiry is the latest of theirs, so a
-    replayed activation, a double-counted refund or a lost expiry job cannot
-    accumulate a weight nobody bought. With none active both columns are
-    cleared together, which is what `parcels_ranking_boost_pair` requires.
+    Derived, never incremented. The weight is the larger of what the J2 reward
+    Boost is worth and what any still-active historical purchase bought, and the
+    expiry is the later of the request's own deadline and those purchases'. With
+    neither contributing, both columns are cleared together, which is what
+    `parcels_ranking_boost_pair` requires.
+
+    The J2 side deliberately has no expiry of its own: `deadline_at` is the
+    instant the request stops being matchable at all, so pairing the weight with
+    it is the honest way to say "this lasts as long as the request does" inside
+    a constraint that demands a pair. It is not a Boost timer, and no job
+    retires it.
+
+    Reading policy is optional so the closure and release paths can call this
+    while a settings revision is unparseable: without it the J2 weight falls
+    back to the last one recorded, which never invents a weight nobody chose.
 
     The write goes through `QuerySet.update` on purpose. `DeliveryRequest.save`
     calls `full_clean`, so saving the instance would re-validate the whole V1
@@ -614,19 +772,42 @@ def recompute_request_boost(
     if delivery_request is None:
         return
     at = at or timezone.now()
-    totals = BoostPurchase.objects.filter(
+
+    intent = int(delivery_request.boost_eur_cents or 0)
+    deadline = delivery_request.deadline_at
+    intent_weight = 0
+    if intent > 0 and deadline is not None and deadline > at:
+        if policy is None:
+            try:
+                policy = phase4_policy()
+            except Exception:  # noqa: BLE001 - a broken revision must not strand
+                policy = None
+        intent_weight = (
+            policy.boost.ranking_weight_for(intent)
+            if policy is not None
+            else int(delivery_request.ranking_boost_weight or 0)
+        )
+
+    legacy = BoostPurchase.objects.filter(
         delivery_request_id=delivery_request.pk,
         status=BoostPurchase.Status.ACTIVE,
         expires_at__gt=at,
     ).aggregate(weight=Max("ranking_weight"), expires_at=Max("expires_at"))
+    legacy_weight = int(legacy["weight"] or 0)
 
-    weight = int(totals["weight"] or 0)
-    expires_at = totals["expires_at"] if weight else None
+    weight = max(intent_weight, legacy_weight)
+    expires_at = None
+    if weight:
+        candidates = []
+        if intent_weight:
+            candidates.append(deadline)
+        if legacy_weight and legacy["expires_at"] is not None:
+            candidates.append(legacy["expires_at"])
+        expires_at = max(candidates) if candidates else None
     if weight and expires_at is None:
-        # Cannot happen while `boosts_active_requires_window` holds, but the
-        # pair constraint is absolute: an unpaired weight is dropped rather
-        # than written.
-        logger.error("boosts.active_without_expiry request=%s", delivery_request.pk)
+        # Cannot happen while both branches above hold, but the pair constraint
+        # is absolute: an unpaired weight is dropped rather than written.
+        logger.error("boosts.weight_without_expiry request=%s", delivery_request.pk)
         weight = 0
 
     DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
@@ -673,11 +854,18 @@ def _projection(purchase: BoostPurchase, *, at: datetime) -> dict:
 
 
 def boost_state(*, delivery_request: DeliveryRequest, viewer_id: int) -> dict:
-    """The boost history and current ranking effect for one request.
+    """This request's Boost: what it is now, what it costs, and its history.
 
-    Deliberately reads no policy: this is the owner's history view, and it must
-    keep working while the packages endpoint is failing closed on a settings
-    revision that cannot drive Phase 4.
+    The J2 reward block is what a client renders. Economics are priced here so
+    Flutter never computes a financial total: `boost_traveler_bonus_eur_cents`
+    is what the Traveler gains, `boost_platform_fee_eur_cents` is ShipTrip's
+    commission on the Boost, and `boost_sender_cost_eur_cents` is the two
+    together -- what the sender will actually owe for boosting.
+
+    Pricing degrades rather than failing: if the active revision cannot drive
+    Phase 4 the amount and the history are still returned, with `economics`
+    null and `can_edit` false. An owner must always be able to see what they
+    have committed to, even during a bad settings revision.
 
     `affects_compatibility` is stated explicitly and is always false. It is a
     contract the client can assert against and a line any future change would
@@ -685,19 +873,67 @@ def boost_state(*, delivery_request: DeliveryRequest, viewer_id: int) -> dict:
     """
 
     at = timezone.now()
+    amount = int(delivery_request.boost_eur_cents or 0)
+    is_owner = delivery_request.sender_id == viewer_id
+    editable_status = delivery_request.status in EDITABLE_STATUSES
+    deadline = delivery_request.deadline_at
+
+    economics: dict | None = None
+    policy_payload: dict | None = None
+    try:
+        policy = phase4_policy()
+    except Exception:  # noqa: BLE001 - history must survive a bad revision
+        policy = None
+    if policy is not None:
+        economics = calculate_boost_reward(
+            amount_eur_cents=amount, policy=policy
+        ).as_dict()
+        policy_payload = boost_policy_payload(policy)
+
     rows = list(
         BoostPurchase.objects.filter(delivery_request_id=delivery_request.pk)
         .select_related("payment_order")
         .order_by("-created_at", "-id")
     )
+    events = list(
+        BoostIntentEvent.objects.filter(
+            delivery_request_id=delivery_request.pk
+        ).order_by("-created_at", "-id")[:50]
+    )
     return {
         "delivery_request_id": delivery_request.pk,
         "request_status": delivery_request.status,
-        "is_owner": delivery_request.sender_id == viewer_id,
+        "is_owner": is_owner,
+        # The J2 reward Boost.
+        "boost_eur_cents": amount,
+        "economics": economics,
+        "policy": policy_payload,
+        "can_edit": bool(
+            is_owner
+            and editable_status
+            and deadline is not None
+            and deadline > at
+            and policy is not None
+            and policy.boost.enabled
+        ),
+        # Boost has no timer. It lasts exactly as long as the request can still
+        # be matched, which is what this instant is.
+        "eligible_until": deadline,
         "ranking_boost_active": delivery_request.is_ranking_boost_active(at=at),
         "ranking_boost_weight": int(delivery_request.ranking_boost_weight),
         "ranking_boost_expires_at": delivery_request.ranking_boost_expires_at,
         "affects_compatibility": False,
+        "history": [
+            {
+                "reason": row.reason,
+                "previous_eur_cents": int(row.previous_eur_cents),
+                "amount_eur_cents": int(row.amount_eur_cents),
+                "created_at": row.created_at,
+            }
+            for row in events
+        ],
+        # The retired paid package, retained for audit. Empty for every request
+        # created since J2.
         "active_count": sum(1 for row in rows if row.is_active(at=at)),
         "occupied_slots": sum(
             1 for row in rows if row.status in BoostPurchase.OCCUPYING_STATUSES

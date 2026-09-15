@@ -113,18 +113,20 @@
 
     <section class="st-card">
       <p class="st-eyebrow">Boosts</p>
-      <h2>Boost economics and visibility</h2>
+      <h2>Boost commission</h2>
+      <p class="st-keyvalues-note">A boost is extra reward the Sender adds to their own request. The Traveler receives all of it; ShipTrip&rsquo;s commission is charged on top, at the rate below, which is set independently of the delivery commission.</p>
       <div class="st-band">
-        <div><span>Minimum Sender amount</span><strong>{{ boost_economics.minimum }}</strong></div>
-        <div class="is-lead"><span>Traveler receives</span><strong>{{ boost_economics.traveler_share }}</strong></div>
-        <div><span>ShipTrip keeps</span><strong>{{ boost_economics.platform_share }}</strong></div>
+        <div><span>Smallest boost</span><strong>{{ boost_economics.minimum }}</strong></div>
+        <div><span>Largest boost</span><strong>{{ boost_economics.maximum }}</strong></div>
+        <div class="is-lead"><span>ShipTrip commission</span><strong>{{ boost_economics.commission }}</strong></div>
+        <div><span>Traveler receives</span><strong>{{ boost_economics.traveler_share }}</strong></div>
       </div>
       <form method="post" class="st-form">{% csrf_token %}
         <input type="hidden" name="action" value="boost_economics">
         {{ boost_form.as_p }}
-        {% if may_manage %}<div class="st-split-actions"><button type="submit">Save a new boost split</button></div>{% endif %}
+        {% if may_manage %}<div class="st-split-actions"><button type="submit">Save a new boost commission</button></div>{% endif %}
       </form>
-      <h3>Visibility packages</h3>
+      <h3>Retired visibility packages</h3>
       <table class="st-keyvalues">
         <thead><tr><th scope="col">Package</th><th scope="col">Duration</th><th scope="col">Ranking weight</th></tr></thead>
         <tbody>
@@ -132,7 +134,7 @@
           {% empty %}<tr><td colspan="3">No packages are configured.</td></tr>{% endfor %}
         </tbody>
       </table>
-      <p class="st-keyvalues-note">Each boost raises visibility and adds a protected bonus to the Traveler if the request reaches an earned delivery. It never overrides matching compatibility.</p>
+      <p class="st-keyvalues-note">Paid visibility packages are no longer sold. These rows stay so purchases made under them keep explaining themselves. A boost still raises a request&rsquo;s position among compatible candidates and still never overrides matching compatibility.</p>
     </section>
   </div>
 

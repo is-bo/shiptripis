@@ -14,6 +14,7 @@ The seeded shape is::
         "percent_bps": 1000,
         "min_eur_cents": 300,
         "max_eur_cents": 700,
+        "chosen_min_eur_cents": 300,
         "expiry_grace_seconds": 0
       },
       "providers": {
@@ -87,9 +88,23 @@ class PaymentTimingMode:
 
 @dataclass(frozen=True, slots=True)
 class PostingDepositPolicy:
+    """Two different numbers, deliberately not one.
+
+    ``percent_bps`` with ``min_eur_cents``/``max_eur_cents`` produces the
+    *recommendation*: a tenth of the recommended sender total, clamped into the
+    EUR 3-7 band. It is guidance, and the clamp is what keeps the suggestion
+    sensible at both ends of the price range.
+
+    ``chosen_min_eur_cents`` is the floor under a deposit the sender picks for
+    themselves (J2). There is deliberately no matching ceiling: a sender may
+    pre-pay any amount up to the obligation they are pre-paying against, and
+    the recommendation's EUR 7 clamp is not a limit on what they may choose.
+    """
+
     percent_bps: int
     min_eur_cents: int
     max_eur_cents: int
+    chosen_min_eur_cents: int
     expiry_grace_seconds: int
 
 
@@ -157,6 +172,23 @@ class Phase3Policy:
             max_eur_cents=_int(
                 deposit.get("max_eur_cents"),
                 "payments.posting_deposit.max_eur_cents",
+                minimum=1,
+                maximum=100_000,
+            ),
+            # Defaulted to the recommendation floor so a revision written
+            # before J2 keeps taking deposits at exactly the amount it always
+            # did, rather than failing closed on a key it never had.
+            chosen_min_eur_cents=_int(
+                deposit.get(
+                    "chosen_min_eur_cents",
+                    _int(
+                        deposit.get("min_eur_cents"),
+                        "payments.posting_deposit.min_eur_cents",
+                        minimum=1,
+                        maximum=100_000,
+                    ),
+                ),
+                "payments.posting_deposit.chosen_min_eur_cents",
                 minimum=1,
                 maximum=100_000,
             ),

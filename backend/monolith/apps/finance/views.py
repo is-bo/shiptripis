@@ -57,6 +57,7 @@ from .serializers import (
     PaymentAttemptSerializer,
     PaymentOrderSerializer,
     PaymentOrderSummarySerializer,
+    PostingDepositCreateSerializer,
     PayoutSerializer,
     RefundRequestSerializer,
 )
@@ -67,10 +68,9 @@ from .services import (
     chargily_display,
     create_guest_link,
     ensure_posting_deposit_order,
-    posting_deposit_quote_from_order,
+    deposit_quote_payload,
     guest_payment_view,
     provider_options,
-    quote_posting_deposit,
     request_refund,
     resolve_guest_link,
     settle_refund_manually,
@@ -292,10 +292,17 @@ class GuestLinkCreateView(APIView):
         return Response(
             {
                 "token": issued.token,
+                # The whole shareable address, built by the server. A client
+                # that assembled this itself would be a client that could get
+                # the host wrong and send a payer somewhere else.
+                "payment_link": issued.url,
                 "expires_at": issued.link.expires_at,
                 "amount_eur_cents": order.outstanding_eur_cents,
                 "currency": "EUR",
+                "purpose": order.purpose,
                 "communication_language": issued.link.communication_language,
+                # True when this replaced a link the owner had already sent.
+                "reissued": issued.reissued,
             },
             status=http.HTTP_201_CREATED,
         )
@@ -419,22 +426,30 @@ class PostingDepositView(APIView):
                 PaymentOrderSummarySerializer(order).data, order
             )
             try:
-                payload["quote"] = posting_deposit_quote_from_order(order).as_dict()
+                payload["quote"] = deposit_quote_payload(
+                    delivery_request=delivery_request, order=order, policy=policy
+                )
             except FinanceError as exc:
                 return _finance_error_response(exc)
             return Response(payload)
         if not policy.deposit_required:
             return Response(payload)
         try:
-            payload["quote"] = quote_posting_deposit(
-                delivery_request=delivery_request, policy=policy
-            ).as_dict()
+            payload["quote"] = deposit_quote_payload(
+                delivery_request=delivery_request, order=None, policy=policy
+            )
         except FinanceError as exc:
             return _finance_error_response(exc)
         return Response(payload)
 
     def post(self, request: Request, pk: int) -> Response:
-        """Create (or return) the deposit obligation for a request."""
+        """Create, return, or reprice the deposit obligation for a request.
+
+        The body may carry `amount_eur_cents`: the sender's own choice, which
+        the server bounds below by the configured floor and above by the
+        obligation it pre-pays. Omitting it takes the recommendation. A client
+        never invents either limit -- both come back in the quote.
+        """
 
         delivery_request = get_object_or_404(
             DeliveryRequest.objects.select_related(
@@ -446,14 +461,27 @@ class PostingDepositView(APIView):
             return _finance_error_response(
                 NotAuthorized("Only the sender may create this deposit.")
             )
+        serializer = PostingDepositCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
-            order = ensure_posting_deposit_order(delivery_request=delivery_request)
+            order = ensure_posting_deposit_order(
+                delivery_request=delivery_request,
+                chosen_amount_eur_cents=serializer.validated_data.get(
+                    "amount_eur_cents"
+                ),
+            )
         except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return _finance_error_response(exc)
-        return Response(
-            _with_payment_options(PaymentOrderSummarySerializer(order).data, order),
-            status=http.HTTP_201_CREATED,
+        payload = _with_payment_options(
+            PaymentOrderSummarySerializer(order).data, order
         )
+        try:
+            payload["quote"] = deposit_quote_payload(
+                delivery_request=delivery_request, order=order
+            )
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        return Response(payload, status=http.HTTP_201_CREATED)
 
 
 # --- deal balance ------------------------------------------------------------

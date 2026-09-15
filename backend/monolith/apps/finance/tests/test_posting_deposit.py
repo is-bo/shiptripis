@@ -124,9 +124,17 @@ class DepositFormulaTests(DepositTestCase):
             policy=self.scenario.policy,
         )
 
-        assert quote.inputs["estimate_method"].startswith("posting_deposit_estimate")
+        # The route estimate now comes from `apps.matching.posting_pricing`,
+        # which is the single implementation the sender-facing price quote uses
+        # too, so a deposit and a price can never be built on different routes.
+        assert quote.inputs["estimate_method"].startswith("posting_estimate")
         assert quote.inputs["estimate_distance_meters"] > 0
         assert quote.inputs["recommended_sender_total_eur_cents"] > 0
+        # J2: the recommendation and the floor under a sender's own choice are
+        # recorded as different numbers, because they are.
+        assert quote.inputs["recommended_deposit_eur_cents"] == quote.amount_eur_cents
+        assert quote.inputs["chosen_min_eur_cents"] == 300
+        assert quote.inputs["minimum_reward_eur_cents"] > 0
 
     def test_the_order_freezes_the_inputs_that_priced_it(self):
         order = ensure_posting_deposit_order(

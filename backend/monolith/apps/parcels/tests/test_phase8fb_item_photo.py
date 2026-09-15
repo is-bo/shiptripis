@@ -512,7 +512,16 @@ class OptionalDimensionsTests(_PhotoTestBase):
     def test_weight_bounds_are_unchanged(self, _publish):
         assert self.create(actual_weight_kg="0.00").status_code == 400
         assert self.create(actual_weight_kg="100.01").status_code == 400
-        assert self.create(actual_weight_kg="100.00").status_code == 201
+        # The heaviest allowed parcel also prices highest, and since J2 a
+        # reward below the server's minimum is refused. This test is about the
+        # weight bound, so it pays what 100 kg is actually worth.
+        assert (
+            self.create(
+                actual_weight_kg="100.00",
+                sender_proposed_reward_eur_cents=50_000,
+            ).status_code
+            == 201
+        )
 
     def test_the_model_refuses_a_partial_set_too(self, _publish):
         """The API is not the only writer, so the rule lives on the row.

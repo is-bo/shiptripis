@@ -252,10 +252,18 @@ class DeliveryRequest(ParcelRequest):
     )
     handling_notes = models.TextField(blank=True, default="", max_length=2000)
     fragile = models.BooleanField(default=False)
+    #: J2 Boost: extra reward the sender is willing to add to this request, in
+    #: canonical EUR cents. Editable while the request is unmatched, frozen
+    #: into `DealTermsSnapshot` at the commitment boundary, and cleared at
+    #: funding so an amount the sender has actually paid can never revive onto
+    #: a reopened request. Unpaid on its own: it is collected as part of the
+    #: Deal balance, never as a separate obligation.
+    boost_eur_cents = models.PositiveBigIntegerField(default=0)
     # Ranking hook only, and the only two columns a boost may ever write on a
-    # request. `apps.boosts` derives them from its active purchases; nothing
-    # about compatibility, capacity, KYC, timing or safety is reachable from
-    # here, which is what makes "boost never creates compatibility" structural.
+    # request. `apps.boosts` derives them from `boost_eur_cents` and from any
+    # still-active historical purchase; nothing about compatibility, capacity,
+    # KYC, timing or safety is reachable from here, which is what makes "boost
+    # never creates compatibility" structural.
     ranking_boost_weight = models.PositiveSmallIntegerField(default=0)
     ranking_boost_expires_at = models.DateTimeField(null=True, blank=True)
     description_is_accurate = models.BooleanField(default=False)

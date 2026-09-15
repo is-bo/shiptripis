@@ -35,6 +35,7 @@ from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
 from apps.core.business_settings import NoActiveBusinessSettings
+from apps.core.phase4_policy import InvalidPhase4Policy, phase4_policy
 from apps.core.storage import (
     ext_for_content_type,
     image_bytes_match_extension,
@@ -47,9 +48,18 @@ from apps.core.storage import (
 from apps.finance.policy import InvalidPaymentPolicy, phase3_policy
 from apps.finance.serializers import PaymentOrderSummarySerializer
 from apps.finance.services import (
+    FinanceError,
     ensure_posting_deposit_order,
 )
 from apps.locations.models import AirportLocalityMapping
+from apps.matching.policy import InvalidPhase2Policy
+from apps.matching.posting_pricing import (
+    PriceBelowPostingMinimum,
+    assert_chosen_price_allowed,
+    draft_request as posting_draft_request,
+    quote_posting_price,
+)
+from apps.matching.pricing import PricingError
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest
 from .lifecycle import with_lifecycle
@@ -298,6 +308,28 @@ class DeliveryCreateView(APIView):
         )
 
 
+class _DepositRefused(Exception):
+    """Carries a finance refusal out of the create transaction, rolling it back.
+
+    A request whose deposit cannot be priced or charged must not survive: it
+    would sit `awaiting_deposit` forever with nothing to pay. Raising inside the
+    atomic block unwinds the request, the photo attachment and the order
+    together, before anything has been published.
+    """
+
+    def __init__(self, cause: FinanceError):
+        super().__init__(str(cause))
+        self.cause = cause
+
+
+def _finance_refusal_response(exc: FinanceError) -> Response:
+    payload = {"code": getattr(exc, "code", "finance_error"), "detail": str(exc)}
+    details = getattr(exc, "details", None)
+    if callable(details):
+        payload.update(details())
+    return Response(payload, status=status.HTTP_400_BAD_REQUEST)
+
+
 class DeliveryV1CreateView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -334,6 +366,116 @@ class DeliveryV1CreateView(APIView):
             else ParcelRequest.Status.OPEN
         )
 
+        # The one price rule that binds: a chosen reward may sit anywhere the
+        # sender likes relative to the *recommendation*, above or below, but
+        # never below the platform minimum for this route and weight. It is
+        # checked here, against a draft, because the sender must be refused
+        # before a row exists -- and because a client cannot be trusted to have
+        # checked it, whatever the posting screen showed them.
+        try:
+            price_quote = quote_posting_price(
+                delivery_request=posting_draft_request(
+                    schema_version=3,
+                    pickup_place=pickup_place,
+                    delivery_place=delivery_place,
+                    pickup_location=pickup_location,
+                    delivery_location=delivery_location,
+                    actual_weight_kg=data["actual_weight_kg"],
+                    length_cm=data.get("length_cm"),
+                    width_cm=data.get("width_cm"),
+                    height_cm=data.get("height_cm"),
+                    ready_window_end=data["ready_window_end"],
+                    deadline_at=data["deadline_at"],
+                ),
+                chosen_reward_eur_cents=data["traveler_reward_eur_cents"],
+            )
+        except (PricingError, InvalidPhase2Policy) as exc:
+            return Response(
+                {
+                    "code": getattr(exc, "code", "pricing_unavailable"),
+                    "detail": str(exc),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        try:
+            assert_chosen_price_allowed(
+                quote=price_quote,
+                chosen_reward_eur_cents=data["traveler_reward_eur_cents"],
+            )
+        except PriceBelowPostingMinimum as exc:
+            return Response(
+                {
+                    "code": exc.code,
+                    "detail": str(exc),
+                    "sender_proposed_reward_eur_cents": [str(exc)],
+                    **exc.details(),
+                    "recommended_reward_eur_cents": (
+                        price_quote.recommended_reward_eur_cents
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # A Boost posted with the request is bounded by the same policy band as
+        # one set afterwards. The serializer's range is only the representation
+        # guard; the band is an operator decision that changes without a deploy,
+        # so it is enforced against the active revision here.
+        boost_eur_cents = int(data.get("boost_eur_cents") or 0)
+        if boost_eur_cents:
+            from apps.boosts.services import (  # noqa: WPS433 (one-way app deps)
+                BoostError,
+                validate_boost_amount,
+            )
+
+            try:
+                validate_boost_amount(
+                    amount_eur_cents=boost_eur_cents, policy=phase4_policy()
+                )
+            except BoostError as exc:
+                payload = {"code": exc.code, "detail": str(exc)}
+                payload.update(exc.details())
+                return Response(payload, status=status.HTTP_400_BAD_REQUEST)
+            except (NoActiveBusinessSettings, InvalidPhase4Policy) as exc:
+                return Response(
+                    {
+                        "code": getattr(exc, "code", "boost_policy_unavailable"),
+                        "detail": str(exc),
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        try:
+            return self._create(
+                request=request,
+                data=data,
+                pickup_place=pickup_place,
+                delivery_place=delivery_place,
+                pickup_location=pickup_location,
+                delivery_location=delivery_location,
+                payment_policy=payment_policy,
+                deposit_required=deposit_required,
+                initial_status=initial_status,
+                price_quote=price_quote,
+                boost_eur_cents=boost_eur_cents,
+            )
+        except _DepositRefused as refusal:
+            return _finance_refusal_response(refusal.cause)
+
+    def _create(
+        self,
+        *,
+        request: Request,
+        data: dict,
+        pickup_place,
+        delivery_place,
+        pickup_location,
+        delivery_location,
+        payment_policy,
+        deposit_required: bool,
+        initial_status: str,
+        price_quote,
+        boost_eur_cents: int,
+    ) -> Response:
         with transaction.atomic():
             # Re-read the staged photo under a row lock. The serializer
             # already checked that it is this sender's and unattached, but
@@ -363,6 +505,10 @@ class DeliveryV1CreateView(APIView):
                 )
             parcel = DeliveryRequest.objects.create(
                 sender=request.user,
+                # Deliberately zero here even when the sender posted a Boost:
+                # the transition below moves it, so the audit trail opens on
+                # the same 0 -> chosen row a Boost set a minute later writes.
+                boost_eur_cents=0,
                 kind=ParcelRequest.Kind.DELIVERY,
                 schema_version=3,
                 status=initial_status,
@@ -406,11 +552,39 @@ class DeliveryV1CreateView(APIView):
             photo.parcel_id = parcel.parcelrequest_ptr_id
             photo.save(update_fields=["parcel"])
 
+            if boost_eur_cents:
+                from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
+                from apps.boosts.services import (  # noqa: WPS433
+                    record_boost_transition,
+                )
+
+                # Derives the ranking columns and appends the first audit row,
+                # so a Boost posted with the request behaves in every way like
+                # one set a minute later -- including actually ranking once the
+                # deposit publishes the request.
+                record_boost_transition(
+                    delivery_request=parcel,
+                    reason=BoostIntentEvent.Reason.SENDER_SET,
+                    amount_eur_cents=boost_eur_cents,
+                    actor_id=request.user.id,
+                )
+
             deposit_order = None
             if deposit_required:
-                deposit_order = ensure_posting_deposit_order(
-                    delivery_request=parcel, policy=payment_policy
-                )
+                try:
+                    deposit_order = ensure_posting_deposit_order(
+                        delivery_request=parcel,
+                        policy=payment_policy,
+                        chosen_amount_eur_cents=data.get(
+                            "posting_deposit_eur_cents"
+                        ),
+                    )
+                except FinanceError as exc:
+                    # Raised inside the create transaction on purpose: a
+                    # deposit the sender cannot be charged means the request
+                    # should not exist either, and rolling both back is the
+                    # honest outcome. Nothing has been published yet.
+                    raise _DepositRefused(exc) from exc
             redis_bus.publish_after_commit(
                 channels.PARCEL_CREATED,
                 {
@@ -430,6 +604,7 @@ class DeliveryV1CreateView(APIView):
             if deposit_order is not None
             else None
         )
+        payload["pricing"] = price_quote.as_dict()
         return Response(payload, status=status.HTTP_201_CREATED)
 
 

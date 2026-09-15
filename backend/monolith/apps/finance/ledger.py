@@ -402,6 +402,64 @@ def record_boost_allocation(
     )
 
 
+def record_deal_boost_allocation(
+    *,
+    deal_id: int,
+    order_id: int,
+    traveler_id: int,
+    traveler_boost_eur_cents: int,
+    platform_boost_eur_cents: int,
+) -> PostResult:
+    """Recognise a J2 Boost and its commission out of the funded deal balance.
+
+    The Boost arrived inside the Deal's own balance order, so the held deal
+    funds already contain it. This releases exactly that portion and splits it
+    the way J2 defines: the Traveler receives the whole Boost as a bonus, and
+    ShipTrip's Boost commission -- a separately configured rate, charged on top
+    -- is recognised as platform revenue.
+
+    Kept as its own transaction rather than folded into `deal_funding` for one
+    reason: H5 has to be able to say how much of the platform's commission came
+    from delivery and how much from Boost, and a merged entry cannot answer
+    that. Keyed per Deal, so a replayed funding recognises it once.
+    """
+
+    total = int(traveler_boost_eur_cents) + int(platform_boost_eur_cents)
+    legs = [
+        Leg(
+            account=LedgerAccount.DEAL_FUNDS,
+            amount_eur_cents=total,
+            order_id=order_id,
+            deal_id=deal_id,
+            note="Boost reward released from funded deal balance",
+        ),
+        Leg(
+            account=LedgerAccount.TRAVELER_PAYABLE,
+            amount_eur_cents=-int(traveler_boost_eur_cents),
+            user_id=traveler_id,
+            order_id=order_id,
+            deal_id=deal_id,
+            note="Traveler boost bonus recognised",
+        ),
+    ]
+    if platform_boost_eur_cents:
+        legs.append(
+            Leg(
+                account=LedgerAccount.PLATFORM_COMMISSION,
+                amount_eur_cents=-int(platform_boost_eur_cents),
+                order_id=order_id,
+                deal_id=deal_id,
+                note="Platform boost commission recognised",
+            )
+        )
+    return post(
+        key=f"deal_boost_allocation:deal:{deal_id}",
+        kind=LedgerTransaction.Kind.BOOST_ALLOCATION,
+        note=f"Deal #{deal_id} boost reward allocated",
+        legs=legs,
+    )
+
+
 def record_refund(
     *,
     refund_id: int,

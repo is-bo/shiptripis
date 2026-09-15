@@ -86,6 +86,12 @@ CANONICAL_LOCK_MODULES = (
     "apps/finance/payout_manual_profiles.py",
     "apps/finance/payout_reconciliation.py",
     "apps/parcels/services.py",
+    # J2. `apps.boosts` reaches a PaymentOrder from the request graph in three
+    # places -- binding a historical purchase, unwinding one, and checking that
+    # a Boost cut does not strand a committed deposit -- so it is a canonical
+    # lock site and is held to the same mode as the rest of the graph.
+    "apps/boosts/services.py",
+    "apps/deals/services.py",
     "apps/disputes/services.py",
     "apps/trips/services.py",
     "apps/matching/v1_services.py",
