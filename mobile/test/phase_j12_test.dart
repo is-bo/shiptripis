@@ -229,65 +229,69 @@ void main() {
       tester,
     ) async {
       final backend = FakeBackend();
-      backend.on('GET', '/api/matches/compatible-journeys', FakeResponse(200, {
-        'count': 1,
-        'results': [
-          {
-            'delivery_request': {
-              'id': 5,
-              'sender_id': 42,
-              'pickup': null,
-              'delivery': null,
-              'pickup_place': {
-                'id': 1,
-                'name': 'Paris',
-                'display_label': 'Paris',
-                'place_type': 'locality',
-                'country_code': 'FR',
-                'iata_code': null,
+      backend.on(
+        'GET',
+        '/api/matches/compatible-journeys',
+        FakeResponse(200, {
+          'count': 1,
+          'results': [
+            {
+              'delivery_request': {
+                'id': 5,
+                'sender_id': 42,
+                'pickup': null,
+                'delivery': null,
+                'pickup_place': {
+                  'id': 1,
+                  'name': 'Paris',
+                  'display_label': 'Paris',
+                  'place_type': 'locality',
+                  'country_code': 'FR',
+                  'iata_code': null,
+                },
+                'delivery_place': {
+                  'id': 3,
+                  'name': 'Jijel',
+                  'display_label': 'Jijel',
+                  'place_type': 'locality',
+                  'country_code': 'DZ',
+                  'iata_code': null,
+                },
+                'actual_weight_kg': '2.00',
               },
-              'delivery_place': {
-                'id': 3,
-                'name': 'Jijel',
-                'display_label': 'Jijel',
-                'place_type': 'locality',
-                'country_code': 'DZ',
-                'iata_code': null,
+              'journey': {
+                'id': 12,
+                'traveler_id': 99,
+                'start_location': null,
+                'destination_location': null,
+                'first_departure': '2026-09-17T11:00:00Z',
+                'start_leg_id': 1,
+                'end_leg_id': 2,
+                'covered_legs': <Object>[],
               },
-              'actual_weight_kg': '2.00',
+              'compatibility': {
+                'compatible': true,
+                'rejection_codes': <String>[],
+                'covered_leg_ids': [1, 2],
+                'covered_legs': [
+                  canonicalLeg(),
+                  canonicalLeg(
+                    id: 2,
+                    position: 1,
+                    mode: 'DRIVE',
+                    originName: 'Houari Boumediene',
+                    originIata: 'ALG',
+                    destinationName: 'Jijel',
+                    destinationIata: null,
+                  ),
+                ],
+                'limitations': <String>[],
+              },
+              'pricing': null,
             },
-            'journey': {
-              'id': 12,
-              'traveler_id': 99,
-              'start_location': null,
-              'destination_location': null,
-              'first_departure': '2026-09-17T11:00:00Z',
-              'start_leg_id': 1,
-              'end_leg_id': 2,
-              'covered_legs': <Object>[],
-            },
-            'compatibility': {
-              'compatible': true,
-              'rejection_codes': <String>[],
-              'covered_leg_ids': [1, 2],
-              'covered_legs': [
-                canonicalLeg(),
-                canonicalLeg(
-                  id: 2,
-                  position: 1,
-                  mode: 'DRIVE',
-                  originName: 'Houari Boumediene',
-                  originIata: 'ALG',
-                  destinationName: 'Jijel',
-                  destinationIata: null,
-                ),
-              ],
-              'limitations': <String>[],
-            },
-            'pricing': null,
-          },
-        ],
-      }));
+          ],
+        }),
+      );
 
       await pumpRouted(
         tester,
@@ -321,43 +325,49 @@ void main() {
     Future<void> settle() =>
         Future<void>.delayed(const Duration(milliseconds: 20));
 
-    test('three catch-ups for one foreground cause one round of reads', () async {
-      final (:live, :advance) = build();
-      var deals = 0;
-      live.register(const LiveResource.deals(), () => deals++);
+    test(
+      'three catch-ups for one foreground cause one round of reads',
+      () async {
+        final (:live, :advance) = build();
+        var deals = 0;
+        live.register(const LiveResource.deals(), () => deals++);
 
-      // Resume, then the chat socket connects, then the notification socket.
-      // All three ask for the same catch-up within a second of each other.
-      live.reconcileScope(const []);
-      await settle();
-      advance(const Duration(milliseconds: 900));
-      live.reconcileScope(const []);
-      await settle();
-      advance(const Duration(milliseconds: 900));
-      live.reconcileScope(const []);
-      await settle();
+        // Resume, then the chat socket connects, then the notification socket.
+        // All three ask for the same catch-up within a second of each other.
+        live.reconcileScope(const []);
+        await settle();
+        advance(const Duration(milliseconds: 900));
+        live.reconcileScope(const []);
+        await settle();
+        advance(const Duration(milliseconds: 900));
+        live.reconcileScope(const []);
+        await settle();
 
-      expect(deals, 1);
-    });
+        expect(deals, 1);
+      },
+    );
 
-    test('a resource that was not covered still reconciles immediately', () async {
-      final (:live, :advance) = build();
-      var deals = 0;
-      var thread = 0;
-      live.register(const LiveResource.deals(), () => deals++);
-      live.register(const LiveResource.chat(7), () => thread++);
+    test(
+      'a resource that was not covered still reconciles immediately',
+      () async {
+        final (:live, :advance) = build();
+        var deals = 0;
+        var thread = 0;
+        live.register(const LiveResource.deals(), () => deals++);
+        live.register(const LiveResource.chat(7), () => thread++);
 
-      live.reconcileScope(const []);
-      await settle();
-      advance(const Duration(milliseconds: 100));
-      // The user pushed a chat thread after the first catch-up. That detail
-      // resource was in nobody's scope a moment ago, so it is not "covered".
-      live.reconcileScope(const [LiveResource.chat(7)]);
-      await settle();
+        live.reconcileScope(const []);
+        await settle();
+        advance(const Duration(milliseconds: 100));
+        // The user pushed a chat thread after the first catch-up. That detail
+        // resource was in nobody's scope a moment ago, so it is not "covered".
+        live.reconcileScope(const [LiveResource.chat(7)]);
+        await settle();
 
-      expect(deals, 1);
-      expect(thread, 1);
-    });
+        expect(deals, 1);
+        expect(thread, 1);
+      },
+    );
 
     test('a genuine reconnect after the window still catches up', () async {
       final (:live, :advance) = build();

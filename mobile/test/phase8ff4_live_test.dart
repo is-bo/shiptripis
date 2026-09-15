@@ -376,8 +376,6 @@ void main() {
       expect(currentDeal, 1);
       expect(mountedCollection, 1);
       expect(hiddenDeal, 0);
-
-
     },
   );
 }
