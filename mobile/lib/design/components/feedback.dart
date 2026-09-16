@@ -188,6 +188,8 @@ String staleMessage(BuildContext context, ApiErrorCode code) {
     'request_already_matched' => l.staleRequestAlreadyMatched,
     'journey_not_active' => l.staleJourneyNotActive,
     'offer_not_pending' => l.staleOfferNotPending,
+    'offer_economics_changed' ||
+    'offer_economics_confirmation_required' => l.staleOfferEconomicsChanged,
     'match_not_pending' => l.staleMatchNotPending,
     'capacity_exceeded' => l.staleCapacityExceeded,
     'reward_below_minimum' => l.staleRewardBelowMinimum,

@@ -4943,4 +4943,31 @@ class LEn extends L {
   String depositAboveMaximum(String amount) {
     return 'That\'s more than the whole amount of $amount';
   }
+
+  @override
+  String offerBoostIncludedTraveler(String amount) {
+    return 'Includes the sender\'s Boost of $amount. The total is locked in when you accept.';
+  }
+
+  @override
+  String offerBoostIncludedSender(String amount) {
+    return 'Includes your Boost of $amount, locked in when this offer is accepted. Changing your Boost before then updates this offer.';
+  }
+
+  @override
+  String offerSenderBoostAddedOnTop(String amount) {
+    return 'The sender\'s Boost of $amount is added on top of this.';
+  }
+
+  @override
+  String offerHistoryBaseReward(String title, String amount) {
+    return '$title: base reward $amount';
+  }
+
+  @override
+  String get moneyTotalExcludingBoost => 'Total before any Boost';
+
+  @override
+  String get staleOfferEconomicsChanged =>
+      'The amounts on this offer changed. Check the new figures before accepting.';
 }

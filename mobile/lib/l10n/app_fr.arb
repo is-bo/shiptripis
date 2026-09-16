@@ -1435,5 +1435,11 @@
   "deliveriesOpenOffersSection": "Offres en cours",
   "journeyPostNew": "Publier un trajet",
   "depositBelowMinimum": "L'acompte minimum est de {amount}",
-  "depositAboveMaximum": "C'est plus que le montant total de {amount}"
+  "depositAboveMaximum": "C'est plus que le montant total de {amount}",
+  "offerBoostIncludedTraveler": "Inclut le Boost de l’expéditeur de {amount}. Le total est fixé au moment où vous acceptez.",
+  "offerBoostIncludedSender": "Inclut votre Boost de {amount}, fixé lorsque cette offre est acceptée. Modifier votre Boost avant cela met à jour cette offre.",
+  "offerSenderBoostAddedOnTop": "Le Boost de l’expéditeur de {amount} vient s’ajouter à ce montant.",
+  "offerHistoryBaseReward": "{title} : rémunération de base {amount}",
+  "moneyTotalExcludingBoost": "Total hors Boost",
+  "staleOfferEconomicsChanged": "Les montants de cette offre ont changé. Vérifiez les nouveaux montants avant d’accepter."
 }

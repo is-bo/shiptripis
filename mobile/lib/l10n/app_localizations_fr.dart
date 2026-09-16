@@ -4987,4 +4987,31 @@ class LFr extends L {
   String depositAboveMaximum(String amount) {
     return 'C\'est plus que le montant total de $amount';
   }
+
+  @override
+  String offerBoostIncludedTraveler(String amount) {
+    return 'Inclut le Boost de l’expéditeur de $amount. Le total est fixé au moment où vous acceptez.';
+  }
+
+  @override
+  String offerBoostIncludedSender(String amount) {
+    return 'Inclut votre Boost de $amount, fixé lorsque cette offre est acceptée. Modifier votre Boost avant cela met à jour cette offre.';
+  }
+
+  @override
+  String offerSenderBoostAddedOnTop(String amount) {
+    return 'Le Boost de l’expéditeur de $amount vient s’ajouter à ce montant.';
+  }
+
+  @override
+  String offerHistoryBaseReward(String title, String amount) {
+    return '$title : rémunération de base $amount';
+  }
+
+  @override
+  String get moneyTotalExcludingBoost => 'Total hors Boost';
+
+  @override
+  String get staleOfferEconomicsChanged =>
+      'Les montants de cette offre ont changé. Vérifiez les nouveaux montants avant d’accepter.';
 }

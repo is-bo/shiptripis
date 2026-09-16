@@ -4952,4 +4952,31 @@ class LAr extends L {
   String depositAboveMaximum(String amount) {
     return 'هذا أكثر من المبلغ الكامل البالغ $amount';
   }
+
+  @override
+  String offerBoostIncludedTraveler(String amount) {
+    return 'يشمل تعزيز المُرسِل البالغ $amount. يُثبَّت المجموع عند قبولك.';
+  }
+
+  @override
+  String offerBoostIncludedSender(String amount) {
+    return 'يشمل تعزيزك البالغ $amount، ويُثبَّت عند قبول هذا العرض. تعديل التعزيز قبل ذلك يُحدِّث هذا العرض.';
+  }
+
+  @override
+  String offerSenderBoostAddedOnTop(String amount) {
+    return 'يُضاف تعزيز المُرسِل البالغ $amount فوق هذا المبلغ.';
+  }
+
+  @override
+  String offerHistoryBaseReward(String title, String amount) {
+    return '$title: المكافأة الأساسية $amount';
+  }
+
+  @override
+  String get moneyTotalExcludingBoost => 'المجموع قبل أي تعزيز';
+
+  @override
+  String get staleOfferEconomicsChanged =>
+      'تغيّرت مبالغ هذا العرض. راجع المبالغ الجديدة قبل القبول.';
 }

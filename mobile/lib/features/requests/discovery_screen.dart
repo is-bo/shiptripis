@@ -1577,6 +1577,14 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
     final canPropose = widget.candidate.proposal != null;
 
     final hasBoost = request != null && request.boostEurCents > 0;
+    // The Boost box states the server's own total for the request's chosen
+    // reward. It is shown only while the field still holds that reward: a
+    // different base would make its "Traveler receives" a number this offer
+    // will not carry, and adding the two here is not the client's to do. The
+    // submitted offer then publishes its own server total (J6.1).
+    final showsRequestTotal =
+        hasBoost &&
+        AppAmountField.centsOf(_reward) == request.chosenRewardEurCents;
     final minimumReward = economics?.minimumReward != null
         ? Money.eurCents(economics!.minimumReward!)
         : null;
@@ -1619,7 +1627,7 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
           const SizedBox(height: AppSpace.lg),
 
           // Additive Boost Breakdown (when boost is present)
-          if (hasBoost) ...[
+          if (showsRequestTotal) ...[
             Container(
               padding: const EdgeInsets.all(AppSpace.md),
               decoration: BoxDecoration(
@@ -1732,6 +1740,7 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
           _EconomicsBreakdown(
             economics: economics,
             entered: AppAmountField.centsOf(_reward),
+            hasBoost: hasBoost,
           ),
         ],
       ),
@@ -1740,10 +1749,19 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
 }
 
 class _EconomicsBreakdown extends StatelessWidget {
-  const _EconomicsBreakdown({required this.economics, required this.entered});
+  const _EconomicsBreakdown({
+    required this.economics,
+    required this.entered,
+    this.hasBoost = false,
+  });
 
   final CandidateEconomics? economics;
   final int? entered;
+
+  /// These blocks price the base reward only. With a Boost on the request,
+  /// "Traveler receives" and "You pay" would each understate the real figure,
+  /// so the lines are named as base amounts instead.
+  final bool hasBoost;
 
   @override
   Widget build(BuildContext context) {
@@ -1772,11 +1790,17 @@ class _EconomicsBreakdown extends StatelessWidget {
           : l.discoveryBreakdownNote,
       lines: [
         if (travelerReward != null)
-          MoneyLine(label: l.moneyTravelerReceives, amount: travelerReward),
+          MoneyLine(
+            label: hasBoost ? l.moneyBaseReward : l.moneyTravelerReceives,
+            amount: travelerReward,
+          ),
         if (platformFee != null)
           MoneyLine(label: l.moneyPlatformFee, amount: platformFee),
         if (senderTotal != null)
-          MoneyLine.total(label: l.moneyYouPay, amount: senderTotal),
+          MoneyLine.total(
+            label: hasBoost ? l.moneyTotalExcludingBoost : l.moneyYouPay,
+            amount: senderTotal,
+          ),
       ],
     );
   }

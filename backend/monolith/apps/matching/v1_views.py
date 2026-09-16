@@ -41,6 +41,7 @@ from .serializers import (
     CompatibleRequestsQuerySerializer,
     CounterOfferV1Serializer,
     FindTravelersQuerySerializer,
+    OfferAcceptV1Serializer,
     OfferSerializer,
     PricingQuoteV1Serializer,
     SenderProposeV1Serializer,
@@ -50,6 +51,7 @@ from .v1_services import (
     CapacityExceeded,
     InvalidLegRange,
     OfferAuthorizationError,
+    OfferEconomicsConfirmation,
     OfferStateError,
     V1OfferError,
     accept_offer,
@@ -218,16 +220,33 @@ class CounterOfferV1View(APIView):
 
 
 class OfferAcceptV1View(APIView):
+    """Accept an offer, committing exactly the totals the acceptor confirmed.
+
+    J6.1. The body echoes the totals the acceptor was shown -- both optional,
+    so a body-less call from an older client is still well formed. A supplied
+    total that no longer matches refuses with `offer_economics_changed`; an
+    offer that commits a Boost with no total confirmed at all refuses with
+    `offer_economics_confirmation_required`. Both are 409 and neither commits.
+    """
+
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request, pk: int) -> Response:
+        serializer = OfferAcceptV1Serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         pending_offer = get_object_or_404(
             Offer.objects.select_related("match__parcel"), pk=pk
         )
         if pending_offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT:
             return _product_retired_response()
         try:
-            accepted = accept_offer(pending_offer=pending_offer, actor=request.user)
+            accepted = accept_offer(
+                pending_offer=pending_offer,
+                actor=request.user,
+                confirmation=OfferEconomicsConfirmation(
+                    **serializer.validated_data
+                ),
+            )
         except (
             V1OfferError,
             IntegrityError,

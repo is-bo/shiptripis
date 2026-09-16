@@ -6840,3 +6840,67 @@ Not covered, and recorded as limitations rather than inferred: no physical devic
 or emulator, and no deployed Finance console operator session — that needs a login
 this environment does not hold, so those surfaces were reviewed as source and
 J1.2's browser QA remains the last real operator pass over them.
+
+## Phase J6.1 — Offer Boost financial projection (2026-09-16)
+
+Starting main `a94cb97`, branch `claude/j61-offer-boost-projection`. Closes the one
+MAJOR J6 handed to the backend. Full detail in
+`docs/PHASE_J61_OFFER_BOOST_PROJECTION.md`.
+
+**Root cause.** An `Offer` freezes the base economics and nothing else; the Boost
+lives on the request and was priced into `DealTermsSnapshot` only inside
+acceptance. So a Traveler deciding on a €30.00 base with a €5.00 Boost read "You
+receive €30.00", and the Sender read "You pay €37.50" when they owe €43.75. Behind
+it sat a silent race: acceptance froze the request's *current* Boost, so a sender
+edit between a Traveler's read and their accept changed the committed number with
+nothing to notice it.
+
+**The offer now publishes its Boost economics, under the Deal's own names.**
+`boost_amount_minor`, `boost_traveler_bonus_minor`, `boost_platform_fee_minor`,
+`traveler_total_minor`, `sender_total_with_boost_minor`, `boost_economics_version`
+and `boost_terms_status`. `traveler_reward_minor` and `sender_total_minor` keep
+their meaning — the base. A pending offer is `provisional`: the numbers are what
+accepting it now would commit, computed by building the unsaved
+`DealTermsSnapshot` acceptance writes and reading its own properties, so there is
+no second economics model. An accepted offer is `frozen` and reads its Deal's
+terms, never the request. A closed or legacy offer is `unavailable` and invents
+nothing. The Boost still freezes at acceptance and only there, as J2 defined.
+
+**Acceptance commits only what the acceptor confirmed.** `POST
+/api/offers/<id>/accept` takes the totals the user was shown; under the existing
+request lock, acceptance resolves the terms before the Deal exists and refuses
+with 409 `offer_economics_changed` on any difference, committing nothing. An offer
+carrying a Boost with no total confirmed refuses with
+`offer_economics_confirmation_required`, so a pre-J6.1 client cannot accept a
+number it rendered wrongly; with no Boost it still accepts as before.
+`resolve_committed_boost` is the extracted, behaviour-identical decision between a
+retired paid package and a J2 Boost, now shared by acceptance and projection.
+
+**Mobile.** The Traveler's hero is the total, with base and Boost beneath it and a
+one-line note that the total locks at acceptance; a zero-Boost offer renders
+exactly as before. The Sender reads the Deal screen's lines in the Deal screen's
+order. The dialog and the request carry the same totals; a refused race refreshes
+and says the amounts changed. Counter, history and the J5 propose sheet stop
+calling a base reward the whole reward, and the propose sheet's Boost total shows
+only while it describes the offer being sent. Six strings in EN/FR/AR.
+
+**Not changed.** Ledger, revenue recognition, funding totals, payout liability,
+refunds, Boost commission policy, deposits, matching, notifications, Stripe and
+Chargily configuration. No migration. Stripe TEST, Chargily TEST,
+`PAYOUTS_DZD_EXECUTION_ENABLED` false, no LIVE, no real money.
+
+**Remaining MINOR, recorded:** "ShipTrip boost share" is split-model wording on
+the Deal, payment and offer screens; the J4 envelope total ignores a retired paid
+package; a Boost edit does not push a live refresh to open negotiations (acceptance
+still refuses, so it is never silent).
+
+**Verification (local, before CI).** Full backend suite on embedded PostgreSQL:
+2,111 passed, 34 skipped, 0 failed, including the 12 new J6.1 tests; the J2 Boost,
+retired-package and H5 reconciliation regressions were re-run after the last edit
+and pass (72). A mutation check removed the confirmation call from acceptance and
+four race tests failed. `ruff` clean, `makemigrations --check` reports no changes.
+Full mobile suite 653 passed (637 before, +16 in
+`test/phase_j61_offer_boost_projection_test.dart`), `flutter analyze --fatal-infos`
+clean, `dart format` clean, `l10n_untranslated.json` empty. The Traveler and Sender
+offer screens were rendered to PNG in English and Arabic, Boost and zero Boost,
+and read.

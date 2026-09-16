@@ -11,6 +11,11 @@
 /// from the wire for V1 offers, and no live endpoint can accept or counter
 /// one, so the client renders them read-only and never as an actionable
 /// negotiation.
+///
+/// **An offer's reward is its base reward.** A sender's Boost is added on top,
+/// and the server publishes the totals that include it (J6.1) -- the same
+/// names a Deal's frozen terms use. The client reads those totals; it never
+/// adds a Boost to a reward itself.
 library;
 
 import '../core/money/money.dart';
@@ -40,6 +45,27 @@ enum OfferParty { sender, traveler, unknown }
 
 /// The actions the server says this viewer may take right now.
 enum OfferAction { accept, counter, decline, withdraw, unknown }
+
+/// Where an offer's Boost-inclusive totals come from.
+///
+/// [provisional]: a pending offer. The figures are what accepting it right now
+/// would commit; the sender's Boost is not frozen until acceptance, which
+/// refuses if they no longer match what the acceptor confirmed.
+/// [frozen]: an accepted offer, read from its Deal's immutable terms.
+/// [unavailable]: a closed or legacy offer. No Boost was ever recorded on it,
+/// so there is no total -- only the base reward.
+enum BoostTermsStatus {
+  provisional,
+  frozen,
+  unavailable,
+  unknown;
+
+  static BoostTermsStatus parse(Object? raw) => readEnum(
+    raw,
+    BoostTermsStatus.values,
+    fallback: BoostTermsStatus.unknown,
+  );
+}
 
 /// Which economics contract an offer was written under.
 enum EconomicsVersion {
@@ -75,6 +101,12 @@ class Offer {
     this.commissionRateBps,
     this.platformFee,
     this.senderTotal,
+    this.boostTermsStatus = BoostTermsStatus.unknown,
+    this.boostAmount,
+    this.boostTravelerBonus,
+    this.boostPlatformFee,
+    this.travelerTotal,
+    this.senderTotalWithBoost,
     this.pricingVersion,
     this.businessSettingsVersionId,
     this.termsPricing,
@@ -111,6 +143,16 @@ class Offer {
       commissionRateBps: readInt(json['commission_rate_bps']),
       platformFee: Money.eurCentsOrNull(json['platform_fee_minor']),
       senderTotal: Money.eurCentsOrNull(json['sender_total_minor']),
+      boostTermsStatus: BoostTermsStatus.parse(json['boost_terms_status']),
+      boostAmount: Money.eurCentsOrNull(json['boost_amount_minor']),
+      boostTravelerBonus: Money.eurCentsOrNull(
+        json['boost_traveler_bonus_minor'],
+      ),
+      boostPlatformFee: Money.eurCentsOrNull(json['boost_platform_fee_minor']),
+      travelerTotal: Money.eurCentsOrNull(json['traveler_total_minor']),
+      senderTotalWithBoost: Money.eurCentsOrNull(
+        json['sender_total_with_boost_minor'],
+      ),
       pricingVersion: readString(json['pricing_version']),
       businessSettingsVersionId: readInt(json['business_settings_version_id']),
       termsPricing: PricingQuote.maybe(terms?['pricing']),
@@ -153,17 +195,34 @@ class Offer {
   final EconomicsVersion economicsVersion;
   final String currency;
 
-  /// What the traveller is paid. Absent on a legacy DZD offer, whose money
-  /// fields the server does not serialise into the V1 shape.
+  /// The **base** reward negotiated on this offer, before any Boost. Absent on
+  /// a legacy DZD offer, whose money fields the server does not serialise into
+  /// the V1 shape.
   final Money? travelerReward;
 
   final int? commissionRateBps;
 
-  /// Added on top of the reward. Never a deduction from it.
+  /// Added on top of the base reward. Never a deduction from it.
   final Money? platformFee;
 
-  /// What the sender pays. Server-computed; never `reward + fee` in Dart.
+  /// Base reward plus base fee, before any Boost. Server-computed.
   final Money? senderTotal;
+
+  final BoostTermsStatus boostTermsStatus;
+
+  /// The sender's Boost, and the part of it the Traveler receives. Null when
+  /// [boostTermsStatus] is not provisional or frozen.
+  final Money? boostAmount;
+  final Money? boostTravelerBonus;
+
+  /// ShipTrip's commission on the Boost, charged to the sender.
+  final Money? boostPlatformFee;
+
+  /// What the Traveler is paid, Boost included. Server-computed.
+  final Money? travelerTotal;
+
+  /// What the sender owes, Boost and its commission included. Server-computed.
+  final Money? senderTotalWithBoost;
 
   final String? pricingVersion;
   final int? businessSettingsVersionId;
@@ -195,6 +254,12 @@ class Offer {
 
   bool get isV1 => economicsVersion == EconomicsVersion.v1Eur;
 
+  /// True when this offer's totals include a Boost the Traveler receives.
+  bool get hasBoost => boostTravelerBonus?.isPositive ?? false;
+
+  /// True when the server published Boost-inclusive totals for this offer.
+  bool get hasTotals => travelerTotal != null && senderTotalWithBoost != null;
+
   bool get canAccept => allowedActions.contains(OfferAction.accept);
   bool get canCounter => allowedActions.contains(OfferAction.counter);
   bool get canDecline => allowedActions.contains(OfferAction.decline);
@@ -206,13 +271,15 @@ class Offer {
 
   bool wasProposedBy(int userId) => proposerId == userId;
 
-  /// The primary amount for one party, selected from two server fields.
+  /// The primary amount for one party, selected from two server totals.
   ///
-  /// The negotiated reward and the sender total describe the same offer from
-  /// different economic sides. This method chooses; it never calculates.
+  /// Both include the Boost. There is deliberately no fallback to the base
+  /// reward: on an offer with a Boost that fallback is the very number that
+  /// understated what a Traveler was accepting. Null means "no total", and a
+  /// screen then labels whatever base figure it shows as the base.
   Money? amountFor(MoneyPerspective perspective) => switch (perspective) {
-    MoneyPerspective.sender => senderTotal,
-    MoneyPerspective.traveler => travelerReward,
+    MoneyPerspective.sender => senderTotalWithBoost,
+    MoneyPerspective.traveler => travelerTotal,
   };
 }
 

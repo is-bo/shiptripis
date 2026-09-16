@@ -458,6 +458,153 @@ def purchase_boost(*args, **kwargs):
     )
 
 
+def _bindable_paid_boosts(purchases) -> list[BoostPurchase]:
+    """Retired-package rows that bind to the next Deal once their order is paid."""
+
+    return [
+        row
+        for row in purchases
+        if row.deal_id is None
+        and row.economics_version == BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1
+        and row.status in (BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED)
+        and row.payment_order_id is not None
+    ]
+
+
+def _paid_boost_totals(bound) -> dict:
+    return {
+        "purchase_ids": [row.pk for row in bound],
+        "amount_eur_cents": sum(int(row.amount_eur_cents) for row in bound),
+        "traveler_boost_eur_cents": sum(
+            int(row.traveler_boost_eur_cents) for row in bound
+        ),
+        "platform_boost_eur_cents": sum(
+            int(row.platform_boost_eur_cents) for row in bound
+        ),
+    }
+
+
+def unbound_paid_boost_totals(purchases) -> dict:
+    """What `bind_paid_boosts_to_deal` would bind from these rows, bound nowhere.
+
+    Read-only: payment orders are read without a lock, because acceptance calls
+    this before the Deal exists and payment orders are only ever locked after
+    it. Acceptance compares this preview with what it actually binds and
+    refuses on any difference, so an order that turns paid in between cannot
+    change the terms under the figures a party confirmed.
+    """
+
+    candidates = _bindable_paid_boosts(purchases)
+    if not candidates:
+        return _paid_boost_totals([])
+    paid_order_ids = set(
+        PaymentOrder.objects.filter(
+            pk__in=sorted(row.payment_order_id for row in candidates),
+            status=PaymentOrder.Status.PAID,
+        ).values_list("pk", flat=True)
+    )
+    return _paid_boost_totals(
+        [row for row in candidates if row.payment_order_id in paid_order_ids]
+    )
+
+
+def unbound_paid_boost_totals_by_request(delivery_request_ids) -> dict[int, dict]:
+    """`unbound_paid_boost_totals` for many requests in one query."""
+
+    ids = sorted({int(pk) for pk in delivery_request_ids})
+    if not ids:
+        return {}
+    # The database filter only narrows the read; `_bindable_paid_boosts` below
+    # is still the rule, so this path cannot drift from what binding does.
+    rows = (
+        BoostPurchase.objects.filter(
+            delivery_request_id__in=ids,
+            deal__isnull=True,
+            economics_version=BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1,
+            status__in=(BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED),
+            payment_order__isnull=False,
+        )
+        .select_related("payment_order")
+        .order_by("pk")
+    )
+    bound: dict[int, list[BoostPurchase]] = {pk: [] for pk in ids}
+    for row in _bindable_paid_boosts(rows):
+        if row.payment_order.status == PaymentOrder.Status.PAID:
+            bound[row.delivery_request_id].append(row)
+    return {pk: _paid_boost_totals(rows_for) for pk, rows_for in bound.items()}
+
+
+@dataclass(frozen=True, slots=True)
+class CommittedBoost:
+    """The Boost an acceptance commits right now, under whichever model applies.
+
+    `resolve_committed_boost` is the only place that decides it. Acceptance
+    freezes its result into `DealTermsSnapshot`, and the Offer projection
+    publishes the same result before acceptance, so the two cannot disagree
+    about which model wins or what it costs.
+    """
+
+    economics_version: str
+    amount_eur_cents: int
+    traveler_bonus_eur_cents: int
+    platform_fee_eur_cents: int
+    commission_rate_bps: int
+    snapshot: dict
+    #: The J2 reward when one was priced; `None` for no Boost or a paid package.
+    reward: BoostReward | None
+
+
+def resolve_committed_boost(
+    *, paid_boost: dict, boost_intent_eur_cents: int, policy_loader=None
+) -> CommittedBoost:
+    """Decide the Boost terms a commitment freezes. Integer cents only.
+
+    The two models are mutually exclusive by construction. A retired paid
+    package was charged before J2 and binds as it always did; a J2 reward Boost
+    is unpaid and rides into the Deal balance. A request cannot carry both,
+    because `purchase_boost` is retired -- but if a historical paid package does
+    bind, it wins and the J2 branch is not taken, so no cent is counted twice.
+
+    The Phase 4 policy is read only when there is a J2 Boost to price. An offer
+    negotiated under a revision that predates Phase 4 still accepts cleanly,
+    and a request could not have acquired a Boost under such a revision in the
+    first place, because `set_boost_intent` fails closed on one.
+    """
+
+    from apps.deals.models import DealTermsSnapshot  # noqa: WPS433
+
+    if int(paid_boost["amount_eur_cents"]) > 0:
+        return CommittedBoost(
+            economics_version=DealTermsSnapshot.BoostEconomics.TRAVELER_SPLIT_V1,
+            amount_eur_cents=int(paid_boost["amount_eur_cents"]),
+            traveler_bonus_eur_cents=int(paid_boost["traveler_boost_eur_cents"]),
+            platform_fee_eur_cents=int(paid_boost["platform_boost_eur_cents"]),
+            commission_rate_bps=0,
+            snapshot={**paid_boost, "economics_version": "traveler_split_v1"},
+            reward=None,
+        )
+    intent = int(boost_intent_eur_cents or 0)
+    load_policy = policy_loader or phase4_policy
+    reward = (
+        calculate_boost_reward(amount_eur_cents=intent, policy=load_policy())
+        if intent > 0
+        else None
+    )
+    return CommittedBoost(
+        economics_version=DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2,
+        amount_eur_cents=reward.amount_eur_cents if reward else 0,
+        traveler_bonus_eur_cents=reward.traveler_bonus_eur_cents if reward else 0,
+        platform_fee_eur_cents=reward.platform_fee_eur_cents if reward else 0,
+        commission_rate_bps=reward.commission_rate_bps if reward else 0,
+        snapshot=(
+            reward.as_dict()
+            if reward
+            else {"economics_version": "additive_commission_v2", "boost_eur_cents": 0}
+        ),
+        reward=reward,
+    )
+
+
 def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
     """Freeze paid economic boosts into a Deal; caller holds request/boost rows.
 
@@ -465,14 +612,7 @@ def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
     canonical request -> boost -> journey -> deal -> payment order lock order.
     """
 
-    candidates = [
-        row
-        for row in locked_purchases
-        if row.deal_id is None
-        and row.economics_version == BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1
-        and row.status in (BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED)
-        and row.payment_order_id is not None
-    ]
+    candidates = _bindable_paid_boosts(locked_purchases)
     order_ids = sorted(row.payment_order_id for row in candidates)
     paid_order_ids = set(
         PaymentOrder.objects.select_for_update(no_key=True)
@@ -494,16 +634,7 @@ def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
                 purchase_id=row.pk,
                 amount_eur_cents=int(row.amount_eur_cents),
             )
-    return {
-        "purchase_ids": [row.pk for row in bound],
-        "amount_eur_cents": sum(int(row.amount_eur_cents) for row in bound),
-        "traveler_boost_eur_cents": sum(
-            int(row.traveler_boost_eur_cents) for row in bound
-        ),
-        "platform_boost_eur_cents": sum(
-            int(row.platform_boost_eur_cents) for row in bound
-        ),
-    }
+    return _paid_boost_totals(bound)
 
 
 def unwind_boosts(

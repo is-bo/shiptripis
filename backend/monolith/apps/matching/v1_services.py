@@ -29,6 +29,7 @@ from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .discovery import evaluate_candidate, phase2_policy
 from .models import Match, MatchEvent, Offer
+from .offer_economics import commitment_terms
 from .policy import Phase2Policy
 
 
@@ -149,6 +150,42 @@ class IncompatibleCandidate(OfferStateError):
     """
 
     code = "incompatible_candidate"
+
+
+class _OfferEconomicsRefusal(OfferStateError):
+    """Acceptance refused because the acceptor did not confirm what commits.
+
+    Carries the figures that would have committed, so a client can show them
+    at once; it re-reads the offer regardless.
+    """
+
+    def __init__(self, message: str, *, current: dict):
+        super().__init__(message)
+        self.current = dict(current)
+
+    def details(self) -> dict:
+        return {"current_economics": dict(self.current)}
+
+
+class OfferEconomicsChanged(_OfferEconomicsRefusal):
+    """The offer's committed economics moved after the acceptor was shown them.
+
+    The usual cause is the sender changing their Boost while the offer was open.
+    """
+
+    code = "offer_economics_changed"
+
+
+class OfferEconomicsConfirmationRequired(_OfferEconomicsRefusal):
+    """The offer commits a Boost, and the acceptor confirmed no total at all.
+
+    Only an API caller that echoes nothing back reaches this: a client written
+    before J6.1, which rendered the base reward as the whole reward. Refusing is
+    the safe answer, because that client showed a number that is not the one
+    that would bind.
+    """
+
+    code = "offer_economics_confirmation_required"
 
 
 class PriceBelowMinimum(OfferStateError):
@@ -291,6 +328,56 @@ class _FrozenRouteProvider:
 class AcceptedDeal:
     deal: Deal
     created: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OfferEconomicsConfirmation:
+    """The totals an acceptor was shown, checked again under the request lock.
+
+    J6.1. An Offer's Boost is not frozen until acceptance, so a pending offer
+    publishes what accepting it *now* would commit -- and the sender may still
+    change their Boost. The acceptor echoes the totals they read; acceptance
+    re-derives them from locked rows and refuses on any difference rather than
+    committing a number nobody confirmed. Either side of a race therefore ends
+    one of two ways: the Deal freezes exactly what was shown, or nothing
+    commits and the acceptor is shown the new figures.
+
+    A field left `None` is not compared. The API always passes an instance;
+    server-side callers with nothing on a screen pass none and are not checked.
+    """
+
+    traveler_total_minor: int | None = None
+    sender_total_with_boost_minor: int | None = None
+
+
+def _confirm_committed_economics(
+    terms: DealTermsSnapshot, confirmation: OfferEconomicsConfirmation | None
+) -> None:
+    if confirmation is None:
+        return
+    current = {
+        "boost_amount_minor": int(terms.boost_amount_minor),
+        "traveler_total_minor": terms.traveler_total_minor,
+        "sender_total_with_boost_minor": terms.sender_total_with_boost_minor,
+    }
+    shown = (
+        ("traveler_total_minor", confirmation.traveler_total_minor),
+        ("sender_total_with_boost_minor", confirmation.sender_total_with_boost_minor),
+    )
+    for field, value in shown:
+        if value is not None and int(value) != current[field]:
+            raise OfferEconomicsChanged(
+                "This offer's amounts changed. Review them before accepting.",
+                current=current,
+            )
+    has_boost = (
+        int(terms.boost_amount_minor) > 0 or int(terms.boost_traveler_bonus_minor) > 0
+    )
+    if has_boost and confirmation.traveler_total_minor is None:
+        raise OfferEconomicsConfirmationRequired(
+            "This offer includes a Boost. Confirm the total before accepting.",
+            current=current,
+        )
 
 
 def _v1_offer_values(
@@ -802,7 +889,12 @@ def _counter_offer_locked(
     return child
 
 
-def accept_offer(*, pending_offer: Offer, actor: User) -> AcceptedDeal:
+def accept_offer(
+    *,
+    pending_offer: Offer,
+    actor: User,
+    confirmation: OfferEconomicsConfirmation | None = None,
+) -> AcceptedDeal:
     current = Offer.objects.select_related(
         "match", "match__parcel", "business_settings_version"
     ).get(pk=pending_offer.pk)
@@ -818,6 +910,7 @@ def accept_offer(*, pending_offer: Offer, actor: User) -> AcceptedDeal:
             pending_offer_id=pending_offer.pk,
             actor=actor,
             replay_provider=None,
+            confirmation=confirmation,
         )
     if current.economics_version != Offer.EconomicsVersion.V1_EUR:
         raise LegacyContractNotSupported(
@@ -861,6 +954,7 @@ def accept_offer(*, pending_offer: Offer, actor: User) -> AcceptedDeal:
         pending_offer_id=pending_offer.pk,
         actor=actor,
         replay_provider=replay_provider,
+        confirmation=confirmation,
     )
 
 
@@ -870,6 +964,7 @@ def _accept_offer_locked(
     pending_offer_id: int,
     actor: User,
     replay_provider: RouteProvider | None,
+    confirmation: OfferEconomicsConfirmation | None = None,
 ) -> AcceptedDeal:
     snapshot = Offer.objects.values(
         "match_id", "match__parcel_id", "match__parcel__kind"
@@ -999,6 +1094,34 @@ def _accept_offer_locked(
                 journey_leg_ids=[leg.id],
             )
 
+    # --- Boost freezes here, and only here --------------------------------
+    #
+    # This is the commitment boundary. Whichever Boost model applies, the
+    # amount and the rate are copied onto the Deal now, so a later Admin change
+    # to the Boost commission cannot reach a Deal that already exists.
+    # `resolve_committed_boost` decides which model applies; see it for why the
+    # two can never both count.
+    #
+    # The terms are resolved *before* the Deal exists, from the rows this
+    # transaction holds locked, because the acceptor's confirmation has to be
+    # checked against exactly what will be written (J6.1). The Offer projection
+    # builds the same unsaved row through the same two functions, which is what
+    # makes "the figure shown" and "the figure frozen" one computation.
+    from apps.boosts.services import (  # noqa: WPS433
+        bind_paid_boosts_to_deal,
+        resolve_committed_boost,
+        unbound_paid_boost_totals,
+    )
+    from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
+
+    paid_boost = unbound_paid_boost_totals(request_boosts)
+    boost = resolve_committed_boost(
+        paid_boost=paid_boost,
+        boost_intent_eur_cents=request_row.boost_eur_cents,
+    )
+    terms = commitment_terms(current, boost)
+    _confirm_committed_economics(terms, confirmation)
+
     deal = Deal.objects.create(
         accepted_offer=current,
         match=match,
@@ -1008,84 +1131,24 @@ def _accept_offer_locked(
         traveler_id=match.traveler_id,
         status=Deal.Status.PAYMENT_REQUIRED,
     )
-    # --- Boost freezes here, and only here --------------------------------
-    #
-    # This is the commitment boundary. Whichever Boost model applies, the
-    # amount and the rate are copied onto the Deal now, so a later Admin change
-    # to the Boost commission cannot reach a Deal that already exists.
-    #
-    # The two models are mutually exclusive by construction. A retired paid
-    # package was charged before J2 and binds here as it always did; a J2 reward
-    # Boost is unpaid and rides into the Deal balance below. A request cannot
-    # carry both, because `purchase_boost` is retired and no new purchase row
-    # can be created -- but if a historical paid package does bind, it wins and
-    # the J2 branch is not taken, so no cent is ever counted twice.
-    from apps.boosts.services import (  # noqa: WPS433
-        bind_paid_boosts_to_deal,
-        calculate_boost_reward,
-    )
-    from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
-    from apps.core.phase4_policy import phase4_policy as _phase4_policy  # noqa: WPS433
-
-    legacy_boost = bind_paid_boosts_to_deal(
+    bound_boost = bind_paid_boosts_to_deal(
         locked_purchases=request_boosts,
         deal=deal,
     )
-    boost_reward = None
-    if int(legacy_boost["amount_eur_cents"]) > 0:
-        boost_economics_version = DealTermsSnapshot.BoostEconomics.TRAVELER_SPLIT_V1
-        boost_amount = int(legacy_boost["amount_eur_cents"])
-        boost_traveler = int(legacy_boost["traveler_boost_eur_cents"])
-        boost_platform = int(legacy_boost["platform_boost_eur_cents"])
-        boost_rate_bps = 0
-        boost_snapshot = {**legacy_boost, "economics_version": "traveler_split_v1"}
-    else:
-        boost_economics_version = (
-            DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2
+    if bound_boost != paid_boost:
+        # A retired package's order turned paid between the unlocked preview and
+        # the locked bind. Rare, but the confirmed figures no longer describe
+        # what would commit, so nothing commits.
+        raise OfferEconomicsChanged(
+            "This offer's amounts changed. Review them before accepting.",
+            current={
+                "boost_amount_minor": int(bound_boost["amount_eur_cents"]),
+                "traveler_total_minor": None,
+                "sender_total_with_boost_minor": None,
+            },
         )
-        boost_intent = int(request_row.boost_eur_cents or 0)
-        # The Phase 4 policy is read only when there is a Boost to price. An
-        # offer negotiated under a revision that predates Phase 4 still accepts
-        # cleanly, exactly as it did before J2 -- and a request could not have
-        # acquired a Boost under such a revision in the first place, because
-        # `set_boost_intent` fails closed on one.
-        boost_reward = (
-            calculate_boost_reward(
-                amount_eur_cents=boost_intent, policy=_phase4_policy()
-            )
-            if boost_intent > 0
-            else None
-        )
-        boost_amount = boost_reward.amount_eur_cents if boost_reward else 0
-        boost_traveler = boost_reward.traveler_bonus_eur_cents if boost_reward else 0
-        boost_platform = boost_reward.platform_fee_eur_cents if boost_reward else 0
-        boost_rate_bps = boost_reward.commission_rate_bps if boost_reward else 0
-        boost_snapshot = (
-            boost_reward.as_dict()
-            if boost_reward
-            else {"economics_version": "additive_commission_v2", "boost_eur_cents": 0}
-        )
-
-    DealTermsSnapshot.objects.create(
-        deal=deal,
-        currency=current.currency,
-        traveler_reward_minor=current.traveler_reward_minor,
-        commission_rate_bps=current.commission_rate_bps,
-        platform_fee_minor=current.platform_fee_minor,
-        sender_total_minor=current.sender_total_minor,
-        boost_amount_minor=boost_amount,
-        boost_traveler_bonus_minor=boost_traveler,
-        boost_platform_fee_minor=boost_platform,
-        boost_economics_version=boost_economics_version,
-        boost_commission_rate_bps=boost_rate_bps,
-        business_settings_version=current.business_settings_version,
-        pricing_version=current.pricing_version,
-        policy_snapshot={
-            **current.terms_snapshot,
-            "boost_economics": boost_snapshot,
-        },
-        is_legacy=False,
-    )
+    terms.deal = deal
+    terms.save(force_insert=True)
     now = timezone.now()
     grace_seconds = current.terms_snapshot.get("reservation", {}).get(
         "payment_grace_seconds",
@@ -1152,10 +1215,10 @@ def _accept_offer_locked(
     # for. A retired paid package contributes nothing here because its cash was
     # collected before the Deal existed.
     boost_due = 0
-    if boost_economics_version == (
+    if boost.economics_version == (
         DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2
     ):
-        boost_due = boost_amount + boost_platform
+        boost_due = boost.amount_eur_cents + boost.platform_fee_eur_cents
     create_deal_balance_order(
         deal=deal,
         sender_total_eur_cents=int(current.sender_total_minor) + boost_due,
@@ -1178,7 +1241,7 @@ def _accept_offer_locked(
     match.save(update_fields=["status", "updated_at"])
     request_row.status = ParcelRequest.Status.MATCHED
     request_row.save(update_fields=["status", "updated_at"])
-    if boost_reward is not None and boost_amount > 0:
+    if boost.reward is not None and boost.amount_eur_cents > 0:
         from apps.boosts.services import record_boost_transition  # noqa: WPS433
 
         # Recorded after the status flip so the audit row says what the request
@@ -1191,7 +1254,7 @@ def _accept_offer_locked(
             reason=BoostIntentEvent.Reason.FROZEN_INTO_DEAL,
             deal_id=deal.pk,
             actor_id=getattr(actor, "pk", None),
-            commission_rate_bps=boost_rate_bps,
+            commission_rate_bps=boost.commission_rate_bps,
         )
     MatchEvent.objects.create(
         match=match,

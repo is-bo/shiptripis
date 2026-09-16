@@ -1435,5 +1435,11 @@
   "deliveriesOpenOffersSection": "العروض الجارية",
   "journeyPostNew": "انشر رحلة",
   "depositBelowMinimum": "أقل عربون هو {amount}",
-  "depositAboveMaximum": "هذا أكثر من المبلغ الكامل البالغ {amount}"
+  "depositAboveMaximum": "هذا أكثر من المبلغ الكامل البالغ {amount}",
+  "offerBoostIncludedTraveler": "يشمل تعزيز المُرسِل البالغ {amount}. يُثبَّت المجموع عند قبولك.",
+  "offerBoostIncludedSender": "يشمل تعزيزك البالغ {amount}، ويُثبَّت عند قبول هذا العرض. تعديل التعزيز قبل ذلك يُحدِّث هذا العرض.",
+  "offerSenderBoostAddedOnTop": "يُضاف تعزيز المُرسِل البالغ {amount} فوق هذا المبلغ.",
+  "offerHistoryBaseReward": "{title}: المكافأة الأساسية {amount}",
+  "moneyTotalExcludingBoost": "المجموع قبل أي تعزيز",
+  "staleOfferEconomicsChanged": "تغيّرت مبالغ هذا العرض. راجع المبالغ الجديدة قبل القبول."
 }

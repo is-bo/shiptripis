@@ -19,6 +19,7 @@ import '../core/api/api_client.dart';
 import '../core/api/api_exception.dart';
 import '../core/api/error_codes.dart';
 import '../core/env/app_config.dart';
+import '../core/money/money.dart';
 import '../core/session/session.dart';
 import '../domain/boost.dart';
 import '../domain/cancellation.dart';
@@ -861,8 +862,24 @@ class MatchingRepository {
   ///
   /// Idempotent server-side: accepting an already-accepted offer returns the
   /// existing Deal rather than failing.
-  Future<Deal> accept(int offerId) async =>
-      Deal.fromJson(await _api.postObject('/api/offers/$offerId/accept'));
+  ///
+  /// The totals the user was shown go back with the request. A pending offer's
+  /// Boost is not frozen until acceptance, so the server re-derives both totals
+  /// under lock and refuses with `offer_economics_changed` if either moved —
+  /// the Deal can only ever freeze the numbers on the screen.
+  Future<Deal> accept(
+    int offerId, {
+    required Money? shownTravelerTotal,
+    required Money? shownSenderTotal,
+  }) async => Deal.fromJson(
+    await _api.postObject(
+      '/api/offers/$offerId/accept',
+      body: {
+        'traveler_total_minor': shownTravelerTotal?.minorUnits,
+        'sender_total_with_boost_minor': shownSenderTotal?.minorUnits,
+      },
+    ),
+  );
 
   Future<Offer> decline(int offerId) async =>
       Offer.fromJson(await _api.postObject('/api/offers/$offerId/decline'));

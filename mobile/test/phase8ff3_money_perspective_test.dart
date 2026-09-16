@@ -44,12 +44,34 @@ Map<String, dynamic> _offer({
   'commission_rate_bps': 1000,
   'platform_fee_minor': fee,
   'sender_total_minor': senderTotal,
+  // J6.1: a pending offer with no Boost, as the server now publishes it.
+  'boost_terms_status': 'provisional',
+  'boost_economics_version': 'additive_commission_v2',
+  'boost_amount_minor': 0,
+  'boost_traveler_bonus_minor': 0,
+  'boost_platform_fee_minor': 0,
+  'traveler_total_minor': reward,
+  'sender_total_with_boost_minor': senderTotal,
   'status': status,
   'note': '',
   'awaiting_party': awaitingParty,
   'awaiting_user_id': awaitingUserId,
   'allowed_actions': allowedActions,
 };
+
+/// A countered offer as the server publishes it: closed, so no Boost-inclusive
+/// totals, only the base economics frozen on the row.
+Map<String, dynamic> _countered(Map<String, dynamic> offer) =>
+    Map<String, dynamic>.from(offer)
+      ..['status'] = 'countered'
+      ..['allowed_actions'] = <String>[]
+      ..['boost_terms_status'] = 'unavailable'
+      ..['boost_economics_version'] = null
+      ..['boost_amount_minor'] = null
+      ..['boost_traveler_bonus_minor'] = null
+      ..['boost_platform_fee_minor'] = null
+      ..['traveler_total_minor'] = null
+      ..['sender_total_with_boost_minor'] = null;
 
 Map<String, dynamic> _match({
   required bool viewerIsSender,
@@ -138,9 +160,7 @@ FakeBackend _negotiationBackend({
   if (counterChangesOffer) {
     backend.handle('POST', '/api/offers/1/counter', (request) {
       expect(request.body, {'traveler_reward_eur_cents': 3000, 'note': ''});
-      final previous = Map<String, dynamic>.from(initialOffer)
-        ..['status'] = 'countered'
-        ..['allowed_actions'] = <String>[];
+      final previous = _countered(initialOffer);
       current = _offer(
         id: 2,
         parentOfferId: 1,
@@ -159,9 +179,7 @@ FakeBackend _negotiationBackend({
   } else if (senderCounterChangesOffer) {
     backend.handle('POST', '/api/offers/4/counter', (request) {
       expect(request.body, {'traveler_reward_eur_cents': 3200, 'note': ''});
-      final previous = Map<String, dynamic>.from(initialOffer)
-        ..['status'] = 'countered'
-        ..['allowed_actions'] = <String>[];
+      final previous = _countered(initialOffer);
       current = _offer(
         id: 5,
         parentOfferId: 4,
@@ -286,8 +304,14 @@ void main() {
         find.textContaining(Money.eurCents(3000).format(locale)),
         findsOneWidget,
       );
+      // The countered offer is closed, so its reward is named as the base.
       expect(
-        find.text(l.offerSenderOffers(Money.eurCents(2800).format(locale))),
+        find.text(
+          l.offerHistoryBaseReward(
+            l.offerSenderOfferTitle,
+            Money.eurCents(2800).format(locale),
+          ),
+        ),
         findsOneWidget,
       );
       expect(find.text(l.moneyYouPay), findsNothing);

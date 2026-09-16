@@ -2608,5 +2608,52 @@
         "type": "String"
       }
     }
+  },
+  "offerBoostIncludedTraveler": "Includes the sender's Boost of {amount}. The total is locked in when you accept.",
+  "@offerBoostIncludedTraveler": {
+    "description": "offerBoostIncludedTraveler",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerBoostIncludedSender": "Includes your Boost of {amount}, locked in when this offer is accepted. Changing your Boost before then updates this offer.",
+  "@offerBoostIncludedSender": {
+    "description": "offerBoostIncludedSender",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerSenderBoostAddedOnTop": "The sender's Boost of {amount} is added on top of this.",
+  "@offerSenderBoostAddedOnTop": {
+    "description": "offerSenderBoostAddedOnTop",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerHistoryBaseReward": "{title}: base reward {amount}",
+  "@offerHistoryBaseReward": {
+    "description": "offerHistoryBaseReward",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "moneyTotalExcludingBoost": "Total before any Boost",
+  "@moneyTotalExcludingBoost": {
+    "description": "moneyTotalExcludingBoost"
+  },
+  "staleOfferEconomicsChanged": "The amounts on this offer changed. Check the new figures before accepting.",
+  "@staleOfferEconomicsChanged": {
+    "description": "staleOfferEconomicsChanged"
   }
 }

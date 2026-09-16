@@ -14,6 +14,13 @@
 ///
 /// The sender proposes first in V1. A traveller therefore never sees a
 /// "propose" affordance here — only accept, counter or decline on what arrived.
+///
+/// ## Money (J6.1)
+///
+/// An offer's reward is its **base** reward; the sender's Boost is added on top.
+/// Every total here is a server field that already includes the Boost — this
+/// screen never adds the two. Accepting sends the totals the confirmation
+/// showed, and the server refuses if they are no longer what would commit.
 library;
 
 import 'package:flutter/material.dart';
@@ -93,7 +100,16 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
     if (!confirmed || !mounted) return;
 
     await _run(() async {
-      final deal = await ref.read(matchingRepositoryProvider).accept(offer.id);
+      // Exactly the totals on the screen and in the dialog. If the sender
+      // changed their Boost in the meantime the server refuses, the screen
+      // refreshes, and the user is told the amounts moved.
+      final deal = await ref
+          .read(matchingRepositoryProvider)
+          .accept(
+            offer.id,
+            shownTravelerTotal: offer.travelerTotal,
+            shownSenderTotal: offer.senderTotalWithBoost,
+          );
       if (!mounted) return;
       refreshVolatileState(ref);
       // The sender's next step is paying; the traveller's is waiting. Both
@@ -149,6 +165,7 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
       context,
       builder: (sheetContext) => _CounterSheet(
         current: offer.travelerReward,
+        boost: offer.hasBoost ? offer.boostTravelerBonus : null,
         perspective: perspective,
       ),
     );
@@ -312,10 +329,23 @@ class _CurrentOffer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final c = context.colors;
     final reward = offer.travelerReward;
     final fee = offer.platformFee;
-    final total = offer.senderTotal;
     final isSender = perspective.isSender;
+    final travelerTotal = offer.travelerTotal;
+    final senderTotal = offer.senderTotalWithBoost;
+    final boost = offer.boostTravelerBonus;
+    final hasBoost = offer.hasBoost;
+    // A pending offer's Boost is still the sender's to change. Say so, once,
+    // rather than let a figure move without explanation.
+    final provisionalBoostNote =
+        hasBoost && offer.boostTermsStatus == BoostTermsStatus.provisional
+        ? (isSender
+              ? l.offerBoostIncludedSender(boost!.format(locale))
+              : l.offerBoostIncludedTraveler(boost!.format(locale)))
+        : null;
 
     final mine = offer.wasProposedBy(viewerId);
     final heading = mine && offer.parentOfferId != null
@@ -364,23 +394,77 @@ class _CurrentOffer extends StatelessWidget {
 
         // Every figure is a server field. The sender gets the payment build-up;
         // the traveller gets the one amount they earn and no checkout framing.
+        // Both read the same lines, in the same order, as the Deal screen.
         if (isSender)
           MoneyBreakdown(
             title: l.moneyBreakdownTitle,
             explainer: l.moneyRewardNotReduced,
-            lines: [
-              if (reward != null)
-                MoneyLine(label: l.moneyTravelerReceives, amount: reward),
-              if (fee != null)
-                MoneyLine(label: l.moneyPlatformFee, amount: fee),
-              if (total != null)
-                MoneyLine.total(label: l.moneyYouPay, amount: total),
-            ],
+            lines: offer.hasTotals
+                ? [
+                    if (hasBoost) ...[
+                      if (reward != null)
+                        MoneyLine(label: l.moneyBaseReward, amount: reward),
+                      MoneyLine(label: l.moneyBoostBonus, amount: boost!),
+                      MoneyLine.total(
+                        label: l.moneyTravelerReceives,
+                        amount: travelerTotal!,
+                      ),
+                    ] else
+                      MoneyLine(
+                        label: l.moneyTravelerReceives,
+                        amount: travelerTotal!,
+                      ),
+                    if (fee != null)
+                      MoneyLine(label: l.moneyPlatformFee, amount: fee),
+                    if (offer.boostPlatformFee?.isPositive ?? false)
+                      MoneyLine(
+                        label: l.moneyPlatformBoostRevenue,
+                        amount: offer.boostPlatformFee!,
+                      ),
+                    MoneyLine.total(label: l.moneyYouPay, amount: senderTotal!),
+                  ]
+                // No total was published — a closed or legacy offer. What is
+                // left is the base economics, named as base.
+                : [
+                    if (reward != null)
+                      MoneyLine(label: l.moneyBaseReward, amount: reward),
+                    if (fee != null)
+                      MoneyLine(label: l.moneyPlatformFee, amount: fee),
+                    if (offer.senderTotal != null)
+                      MoneyLine.total(
+                        label: l.moneyTotalExcludingBoost,
+                        amount: offer.senderTotal!,
+                      ),
+                  ],
           )
-        else if (reward != null)
+        else if (travelerTotal != null) ...[
+          // The dominant number is what the traveller is actually paid.
           AppCard(
-            child: MoneyHero(amount: reward, label: l.moneyYouReceive),
+            child: MoneyHero(amount: travelerTotal, label: l.moneyYouReceive),
           ),
+          if (hasBoost && reward != null) ...[
+            const SizedBox(height: AppSpace.md),
+            MoneyBreakdown(
+              lines: [
+                MoneyLine(label: l.moneyBaseReward, amount: reward),
+                MoneyLine(label: l.moneyBoostBonus, amount: boost!),
+              ],
+            ),
+          ],
+        ] else if (reward != null)
+          AppCard(
+            child: MoneyHero(amount: reward, label: l.moneyBaseReward),
+          ),
+
+        if (provisionalBoostNote != null) ...[
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            provisionalBoostNote,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
+          ),
+        ],
 
         if (offer.note.isNotEmpty) ...[
           const SizedBox(height: AppSpace.lg),
@@ -477,23 +561,31 @@ class _History extends ConsumerWidget {
     required Locale locale,
   }) {
     final mine = offer.wasProposedBy(viewerId);
-    if (perspective.isSender) {
-      final amount = mine ? offer.senderTotal : offer.travelerReward;
-      if (amount == null) {
-        return mine ? l.offerYourOfferTitle : l.offerTravelerCounterTitle;
-      }
-      return mine
-          ? l.offerYouWouldPay(amount.format(locale))
-          : l.offerTravelerAsks(amount.format(locale));
-    }
+    final title = perspective.isSender
+        ? (mine ? l.offerYourOfferTitle : l.offerTravelerCounterTitle)
+        : (mine ? l.offerYourCounterTitle : l.offerSenderOfferTitle);
 
-    final amount = offer.travelerReward;
-    if (amount == null) {
-      return mine ? l.offerYourCounterTitle : l.offerSenderOfferTitle;
+    // A past offer was countered, declined, withdrawn or expired, so the server
+    // publishes no Boost-inclusive total for it — the Boost at the time was
+    // never recorded on it. Its reward is then shown as what it is: the base.
+    // Rendering it as "you would receive" is the understatement J6.1 removed.
+    final total = perspective.isSender
+        ? (mine ? offer.senderTotalWithBoost : offer.travelerTotal)
+        : offer.travelerTotal;
+    if (total == null) {
+      final base = offer.travelerReward;
+      return base == null
+          ? title
+          : l.offerHistoryBaseReward(title, base.format(locale));
+    }
+    if (perspective.isSender) {
+      return mine
+          ? l.offerYouWouldPay(total.format(locale))
+          : l.offerTravelerAsks(total.format(locale));
     }
     return mine
-        ? l.offerYouWouldReceive(amount.format(locale))
-        : l.offerSenderOffers(amount.format(locale));
+        ? l.offerYouWouldReceive(total.format(locale))
+        : l.offerSenderOffers(total.format(locale));
   }
 }
 
@@ -565,11 +657,18 @@ class _Actions extends ConsumerWidget {
 /// Shows the current figure for reference and nothing else — the minimum is
 /// the server's to enforce, and it says so with `reward_below_minimum` and the
 /// real floor if this one is too low.
+///
+/// The amount entered is always the **base** reward. With a Boost on the
+/// request, the field says so and names the Boost that is added on top, so
+/// nobody counters "€40" believing it is the whole payment.
 class _CounterSheet extends StatefulWidget {
-  const _CounterSheet({required this.perspective, this.current});
+  const _CounterSheet({required this.perspective, this.current, this.boost});
 
   final MoneyPerspective perspective;
   final Money? current;
+
+  /// The Boost the Traveler receives on top, when there is one.
+  final Money? boost;
 
   @override
   State<_CounterSheet> createState() => _CounterSheetState();
@@ -600,6 +699,8 @@ class _CounterSheetState extends State<_CounterSheet> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final boost = widget.boost;
     return AppSheet(
       title: l.offerCounter,
       subtitle: widget.perspective.isTraveler
@@ -607,9 +708,16 @@ class _CounterSheetState extends State<_CounterSheet> {
           : l.offerProposeExplainer,
       footer: AppButton(label: l.offerSendCounter, onPressed: _submit),
       child: AppAmountField(
-        label: widget.perspective.isTraveler
+        label: boost != null
+            ? l.offerBaseRewardLabel
+            : widget.perspective.isTraveler
             ? l.moneyYouReceive
             : l.offerRewardLabel,
+        helper: boost == null
+            ? null
+            : widget.perspective.isTraveler
+            ? l.offerSenderBoostAddedOnTop(boost.format(locale))
+            : l.offerBoostAddedOnTop(boost.format(locale)),
         controller: _amount,
         errorText: _error,
         onChanged: (_) {

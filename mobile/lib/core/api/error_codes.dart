@@ -117,6 +117,13 @@ class ApiErrorCode {
   static const matchLegRangeMissing = ApiErrorCode('match_leg_range_missing');
   static const offerNotPending = ApiErrorCode('offer_not_pending');
   static const offerEconomicsMissing = ApiErrorCode('offer_economics_missing');
+
+  /// J6.1. The offer's Boost-inclusive totals moved after the user read them,
+  /// or a Boost is included and no total was confirmed. Nothing committed.
+  static const offerEconomicsChanged = ApiErrorCode('offer_economics_changed');
+  static const offerEconomicsConfirmationRequired = ApiErrorCode(
+    'offer_economics_confirmation_required',
+  );
   static const rewardBelowMinimum = ApiErrorCode('reward_below_minimum');
   static const routeInputsChanged = ApiErrorCode('route_inputs_changed');
   static const routePreflightMissing = ApiErrorCode('route_preflight_missing');
@@ -310,6 +317,8 @@ class ApiErrorCode {
     'request_already_matched',
     'journey_not_active',
     'offer_not_pending',
+    'offer_economics_changed',
+    'offer_economics_confirmation_required',
     'match_not_pending',
     'capacity_exceeded',
     'flight_proof_not_approved',

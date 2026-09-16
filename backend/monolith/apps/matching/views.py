@@ -49,6 +49,7 @@ from apps.parcels.models import ParcelRequest
 from apps.trips.models import Trip
 
 from .models import Match, MatchEvent, Offer
+from .offer_economics import OfferEconomicsReader
 from .serializers import (
     CounterOfferSerializer,
     MatchSerializer,
@@ -161,7 +162,12 @@ def _match_read_queryset():
     ).prefetch_related(
         Prefetch(
             "offers",
-            queryset=Offer.objects.order_by("-created_at"),
+            # An accepted offer's Boost economics are read from its Deal's
+            # frozen terms (J6.1), so they are joined here rather than fetched
+            # once per row.
+            queryset=Offer.objects.select_related("deal__terms").order_by(
+                "-created_at"
+            ),
             to_attr="_ordered_offers",
         )
     )
@@ -184,9 +190,16 @@ class MatchListView(APIView):
             qs = qs.filter(sender=request.user) | qs.filter(traveler=request.user)
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
+        matches = list(qs.distinct()[:100])
+        # One read of the retired paid-package rows for every open negotiation
+        # on the page, instead of one per request as each offer is projected.
+        economics = OfferEconomicsReader()
+        economics.prime(matches)
         return Response(
             MatchSerializer(
-                qs.distinct()[:100], many=True, context={"request": request}
+                matches,
+                many=True,
+                context={"request": request, "offer_economics": economics},
             ).data
         )
 
@@ -527,12 +540,14 @@ class OfferListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request, pk: int) -> Response:
-        match = get_object_or_404(Match.objects.select_related("parcel"), pk=pk)
+        match = get_object_or_404(
+            Match.objects.select_related("parcel", "parcel__deliveryrequest"), pk=pk
+        )
         if not _is_party(match, request.user.id):
             return Response({"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN)
         if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
             return _product_retired_response()
-        offers = match.offers.all()
+        offers = match.offers.select_related("deal__terms")
         return Response(
             OfferSerializer(
                 offers, many=True, context={"request": request, "match": match}

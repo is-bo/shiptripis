@@ -13,6 +13,7 @@ from apps.parcels.models import ParcelRequest
 
 from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
 from .models import Match, MatchEvent, Offer
+from .offer_economics import OfferEconomicsReader
 from .public_contract import public_compatibility_payload, public_terms_snapshot
 
 
@@ -55,6 +56,16 @@ def allowed_offer_actions(offer: Offer, match: Match, *, user_id: int | None) ->
         actions.append("counter")
     actions.append("decline")
     return actions
+
+
+def offer_economics_reader(context: dict) -> OfferEconomicsReader:
+    """The one reader a whole response shares, created on first use."""
+
+    reader = context.get("offer_economics")
+    if reader is None:
+        reader = OfferEconomicsReader()
+        context["offer_economics"] = reader
+    return reader
 
 
 def awaiting_party(offer: Offer, match: Match) -> tuple[str | None, int | None]:
@@ -134,6 +145,15 @@ class OfferSerializer(serializers.ModelSerializer):
         if instance.economics_version == Offer.EconomicsVersion.V1_EUR:
             for field in LEGACY_DZD_FIELDS:
                 data.pop(field, None)
+        # J6.1. `traveler_reward_minor` and `sender_total_minor` stay exactly
+        # what they were -- the base economics frozen on this row. The Boost
+        # and the totals that include it are added beside them, under the
+        # names `DealTermsSnapshot` already uses. See `offer_economics`.
+        data.update(
+            offer_economics_reader(self.context).project(
+                instance, self._match(instance)
+            )
+        )
         return data
 
 
@@ -273,7 +293,10 @@ class MatchSerializer(serializers.ModelSerializer):
 
     def _offer_context(self, obj: Match) -> dict:
         # Reuse the already-loaded Match so the nested offer never re-queries
-        # it just to compute allowed_actions.
+        # it just to compute allowed_actions. The economics reader is created
+        # on this serializer's own context first, so every row of a list
+        # shares one reader rather than each nested offer starting a new one.
+        offer_economics_reader(self.context)
         return {**self.context, "match": obj}
 
     def get_latest_offer(self, obj: Match) -> dict | None:
@@ -353,6 +376,17 @@ class CounterOfferV1Serializer(serializers.Serializer):
         min_value=1, max_value=100_000_000
     )
     note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+
+
+class OfferAcceptV1Serializer(serializers.Serializer):
+    """The totals the acceptor was shown. J6.1; see `OfferEconomicsConfirmation`."""
+
+    traveler_total_minor = serializers.IntegerField(
+        min_value=0, required=False, allow_null=True
+    )
+    sender_total_with_boost_minor = serializers.IntegerField(
+        min_value=0, required=False, allow_null=True
+    )
 
 
 class PricingQuoteV1Serializer(serializers.Serializer):

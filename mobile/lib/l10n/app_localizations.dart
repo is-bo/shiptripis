@@ -8588,6 +8588,42 @@ abstract class L {
   /// In en, this message translates to:
   /// **'That\'s more than the whole amount of {amount}'**
   String depositAboveMaximum(String amount);
+
+  /// offerBoostIncludedTraveler
+  ///
+  /// In en, this message translates to:
+  /// **'Includes the sender\'s Boost of {amount}. The total is locked in when you accept.'**
+  String offerBoostIncludedTraveler(String amount);
+
+  /// offerBoostIncludedSender
+  ///
+  /// In en, this message translates to:
+  /// **'Includes your Boost of {amount}, locked in when this offer is accepted. Changing your Boost before then updates this offer.'**
+  String offerBoostIncludedSender(String amount);
+
+  /// offerSenderBoostAddedOnTop
+  ///
+  /// In en, this message translates to:
+  /// **'The sender\'s Boost of {amount} is added on top of this.'**
+  String offerSenderBoostAddedOnTop(String amount);
+
+  /// offerHistoryBaseReward
+  ///
+  /// In en, this message translates to:
+  /// **'{title}: base reward {amount}'**
+  String offerHistoryBaseReward(String title, String amount);
+
+  /// moneyTotalExcludingBoost
+  ///
+  /// In en, this message translates to:
+  /// **'Total before any Boost'**
+  String get moneyTotalExcludingBoost;
+
+  /// staleOfferEconomicsChanged
+  ///
+  /// In en, this message translates to:
+  /// **'The amounts on this offer changed. Check the new figures before accepting.'**
+  String get staleOfferEconomicsChanged;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {
