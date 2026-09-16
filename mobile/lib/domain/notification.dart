@@ -20,6 +20,7 @@ enum NotificationChannel {
   matchCreated,
   offerCreated,
   offerUpdated,
+  offerEconomicsChanged,
   offerAccepted,
   matchInTransit,
   matchCompleted,
@@ -51,6 +52,7 @@ enum NotificationChannel {
     'match.created' => matchCreated,
     'offer.created' => offerCreated,
     'offer.updated' => offerUpdated,
+    'offer.economics_changed' => offerEconomicsChanged,
     'offer.accepted' => offerAccepted,
     'match.in_transit' => matchInTransit,
     'match.completed' => matchCompleted,
@@ -195,7 +197,8 @@ class AppNotification {
     },
     NotificationChannel.matchCreated ||
     NotificationChannel.offerCreated ||
-    NotificationChannel.offerUpdated => switch (matchId) {
+    NotificationChannel.offerUpdated ||
+    NotificationChannel.offerEconomicsChanged => switch (matchId) {
       final int id => OpenMatch(id),
       _ => null,
     },

@@ -6936,3 +6936,66 @@ The byte size equals J6's APK — native libraries are page-aligned — so the b
 checked for content: `libapp.so` contains `offer_economics_changed`,
 `sender_total_with_boost_minor`, `boost_terms_status` and the API origin. Uninstall
 the J6 build first; profile APKs are signed with a per-run debug key.
+
+## Phase J6.2 — Boost terminology cleanup and offer live refresh (2026-09-16)
+
+Starting main `378e195`, branch `claude/j62-boost-copy-offer-refresh`. Closes two
+of J6.1's three MINOR findings. Full detail in
+`docs/PHASE_J62_BOOST_COPY_OFFER_REFRESH.md`.
+
+**Terminology.** "ShipTrip boost share" was the retired split model's name for
+money that, under J2, is a separate fee charged on top of a Boost the Traveler
+receives in full. It is now **Boost fee / Frais Boost / رسوم التعزيز** on the offer,
+Deal and payment screens (key `moneyPlatformBoostRevenue` renamed
+`moneyBoostFee`), and on the Boost screen, whose cost card had been using the
+delivery commission's name "ShipTrip fee" for the Boost's fee. French stopped
+calling one product two things: "Bonus de mise en avant" → "Bonus Boost", and the
+request's "Mettre en avant cette demande" button now matches the "Booster cette
+demande" screen it opens. No stored text, audit row or payload was rewritten.
+
+**Live refresh.** A Boost edit published nothing, so a Traveler with an offer open
+kept the old figure until a refresh or a refused accept. `set_boost_intent` now
+publishes `offer.economics_changed` on commit — identifiers only, one per pending
+V1 offer on a pending match for that request, to its Traveler only. It is resolved
+on arrival (no badge) and has no push spec (no FCM); the Go dispatcher relays it.
+On the phone it maps to exactly the open offer and the Open offers list. The
+negotiation screen registers for it only while its offer is `provisional`,
+re-reads `GET /api/matches/<id>` and never computes a figure; if a visible figure
+moved it shows "Offer updated. These are the latest amounts." as a live region.
+Closed, accepted and historical offers do not listen. The J6.1 acceptance refusal
+is unchanged and remains the guarantee. The offer heading became a full-width
+`Wrap` after real-font renders showed a long French status crushing the title at
+320 px and large text.
+
+**Performance.** No polling, no global refresh. One event → at most one detail read
+and one list read, coalesced and deduplicated by the existing `LiveUpdates`; the
+bell, badge, requests, journeys, deals and payments are not touched; J1.2 catch-up
+coalescing is unchanged.
+
+**Not changed.** Offer and acceptance calculation, J2 Boost rules, financial
+snapshots, commission, ledger, payouts, provider code, Deal lifecycle, J4 matching.
+No migration. Stripe TEST, Chargily TEST, `PAYOUT_DZD_EXECUTION_ENABLED` false, no
+LIVE, no real money.
+
+**Deferred.** The J4 envelope total still ignores a retired paid package — no
+authoritative historical field exists for a presentation-only fix.
+
+**Found while searching, pre-existing, handed on.** (1) MAJOR, backend contract +
+frontend: the request-creation price card with a Boost preset shows base + Boost
+as "Traveler receives" but the base-only total as "Total sender cost" (€37.50 for
+a €43.75 Deal); the draft quote publishes no Boost-inclusive sender total. Found by
+code reading, not reproduced on a device. (2) MINOR, backend: the Go notification
+dispatcher does not subscribe to the three `deal.arrival_*` channels, so those
+reach open screens only by push or resume.
+
+**Verification (local, before CI).** Full backend suite on embedded PostgreSQL:
+2,116 passed, 34 skipped, 0 failed (J6.1's 2,111 plus the 5 new tests in
+`apps/matching/tests/test_phase_j62_offer_economics_signal.py`), which includes the
+unchanged J2 Boost, retired-package, J6.1 projection and H5 regression suites.
+Go `build`, `vet` and `internal/notification` tests pass. `ruff` clean,
+`makemigrations --check` no changes. Full mobile suite 674 passed (653 before, +21
+in `test/phase_j62_boost_copy_offer_refresh_test.dart`), `flutter analyze
+--fatal-infos` clean, `dart format` clean, `l10n_untranslated.json` empty.
+Mutation checks: never subscribing fails six mobile tests; always subscribing fails
+both closed-offer tests. Offer and Boost screens rendered to PNG with real fonts in
+EN, FR and AR, including 320 px and 1.3× text, and read.

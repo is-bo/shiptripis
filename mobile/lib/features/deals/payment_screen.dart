@@ -216,7 +216,7 @@ class _Summary extends StatelessWidget {
                 ),
               if (state.platformBoostRevenue?.isPositive ?? false)
                 MoneyLine(
-                  label: l.moneyPlatformBoostRevenue,
+                  label: l.moneyBoostFee,
                   amount: state.platformBoostRevenue!,
                 ),
               if (state.senderTotalWithBoost != null)

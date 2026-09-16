@@ -664,7 +664,7 @@
   "ratingWindowClosed": "La période d’évaluation est terminée.",
   "ratingEmptyTitle": "Aucune évaluation pour le moment",
   "ratingEmptyBody": "Les évaluations apparaissent une fois la livraison terminée.",
-  "boostTitle": "Mettre en avant cette demande",
+  "boostTitle": "Booster cette demande",
   "boostExplainer": "Les voyageurs reçoivent 100 % du bonus Boost. Les demandes boostées apparaissent en tête des recherches.",
   "boostDoesNotGuarantee": "Elle ne change pas vos correspondances et ne garantit aucune livraison.",
   "boostChoosePackage": "Choisissez une mise en avant",
@@ -996,7 +996,7 @@
   "boostRankingTop": "En tête de liste",
   "boostDurationLabel": "Durée",
   "boostPriceLabel": "Prix",
-  "boostCompatibilityNote": "Seuls les voyageurs déjà compatibles avec votre colis le voient. Une mise en avant ne change pas qui sont ces voyageurs.",
+  "boostCompatibilityNote": "Seuls les voyageurs déjà compatibles avec votre colis le voient. Un Boost ne change pas qui sont ces voyageurs.",
   "boostActivatesOnPayment": "La mise en avant démarre une fois votre paiement confirmé, pas lorsque vous quittez la page de paiement.",
   "boostBuyAction": "Acheter cette mise en avant",
   "boostPayAction": "Payer cette mise en avant",
@@ -1013,8 +1013,8 @@
   "boostStatusUnusable": "Remboursée — la demande n’était plus éligible à la mise en avant",
   "boostStatusRefunded": "Remboursée",
   "moneyBaseReward": "Rémunération de base",
-  "moneyBoostBonus": "Bonus de mise en avant",
-  "moneyPlatformBoostRevenue": "Part de ShipTrip sur la mise en avant",
+  "moneyBoostBonus": "Bonus Boost",
+  "moneyBoostFee": "Frais Boost",
   "validationReadyWindowOrder": "Le créneau de disponibilité doit se terminer après son début",
   "validationWeightRange": "Saisissez un poids entre {min} et {max} kg",
   "dealStepAgreed": "Conditions convenues",
@@ -1441,5 +1441,6 @@
   "offerSenderBoostAddedOnTop": "Le Boost de l’expéditeur de {amount} vient s’ajouter à ce montant.",
   "offerHistoryBaseReward": "{title} : rémunération de base {amount}",
   "moneyTotalExcludingBoost": "Total hors Boost",
-  "staleOfferEconomicsChanged": "Les montants de cette offre ont changé. Vérifiez les nouveaux montants avant d’accepter."
+  "staleOfferEconomicsChanged": "Les montants de cette offre ont changé. Vérifiez les nouveaux montants avant d’accepter.",
+  "offerEconomicsUpdated": "Offre mise à jour. Ces montants sont les plus récents."
 }

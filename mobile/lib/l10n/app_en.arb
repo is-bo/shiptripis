@@ -1700,7 +1700,7 @@
   "boostStatusRefunded": "Refunded",
   "moneyBaseReward": "Base delivery reward",
   "moneyBoostBonus": "Boost bonus",
-  "moneyPlatformBoostRevenue": "ShipTrip boost share",
+  "moneyBoostFee": "Boost fee",
   "validationReadyWindowOrder": "The ready window has to end after it starts",
   "validationWeightRange": "Enter a weight between {min} and {max} kg",
   "@validationWeightRange": {
@@ -2655,5 +2655,9 @@
   "staleOfferEconomicsChanged": "The amounts on this offer changed. Check the new figures before accepting.",
   "@staleOfferEconomicsChanged": {
     "description": "staleOfferEconomicsChanged"
+  },
+  "offerEconomicsUpdated": "Offer updated. These are the latest amounts.",
+  "@offerEconomicsUpdated": {
+    "description": "Shown on an open offer when its amounts changed while the viewer was looking at it, for example because the sender changed their Boost."
   }
 }

@@ -55,9 +55,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
+from apps.core import channels, redis_bus
 from apps.core.financial_locks import lock_request_graph
 from apps.core.phase4_policy import Phase4Policy, phase4_policy
 from apps.finance.models import PaymentOrder, PaymentRefund, ScheduledJob
@@ -391,7 +392,53 @@ def set_boost_intent(
             business_settings_version=policy.settings_version,
             request_status=request.status,
         )
+        _signal_open_offer_economics(request)
     return boost_state(delivery_request=request, viewer_id=actor_id)
+
+
+def _signal_open_offer_economics(request) -> None:
+    """J6.2 -- tell each Traveler holding a pending offer that its money moved.
+
+    A pending offer's totals are provisional: they include whatever Boost the
+    request carries right now (J6.1), so this edit just changed them. Without a
+    signal, a Traveler with the offer already open kept reading the old figure
+    until they refreshed or their accept was refused.
+
+    A hint, not a figure. The payload is identifiers only; the client re-reads
+    the offer from the API that owns its numbers, and acceptance still refuses
+    stale totals with `offer_economics_changed` whether or not this arrives.
+
+    Scope is exactly the offers whose figures this edit moved: pending V1 offers
+    on pending matches for this request, unexpired. Closed and accepted offers
+    publish no provisional total, and a legacy DZD offer carries no Boost, so
+    none of those is told anything. The sender is not a target -- their own
+    save already refreshes their screens.
+
+    Called inside `set_boost_intent`'s transaction, so the publish is scheduled
+    on commit and a rolled-back edit signals nothing. The read takes no lock:
+    the request row is already held, and acceptance, which is the only writer
+    that could close one of these offers concurrently, serialises on it.
+    """
+
+    from apps.matching.models import Match, Offer  # noqa: WPS433
+
+    open_offers = (
+        Offer.objects.filter(
+            match__parcel_id=request.pk,
+            match__status=Match.Status.PENDING,
+            status=Offer.Status.PENDING,
+            economics_version=Offer.EconomicsVersion.V1_EUR,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+        .order_by("match_id", "pk")
+        .values_list("pk", "match_id", "match__traveler_id")
+    )
+    for offer_id, match_id, traveler_id in open_offers:
+        redis_bus.publish_after_commit(
+            channels.OFFER_ECONOMICS_CHANGED,
+            {"match_id": match_id, "offer_id": offer_id},
+            targets=[traveler_id],
+        )
 
 
 def record_boost_transition(

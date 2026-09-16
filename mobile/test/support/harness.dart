@@ -116,6 +116,7 @@ Future<void> pumpApp(
   ProviderContainer? container,
   double? keyboardInset,
   bool routed = false,
+  List<RouteBase> extraRoutes = const [],
 }) async {
   // `Override` is not nameable from Riverpod 3's public API, so a test that
   // needs stubbed providers builds its own container and hands it over.
@@ -169,6 +170,8 @@ Future<void> pumpApp(
                     builder: (_, _) => const Scaffold(body: SizedBox.shrink()),
                     routes: [GoRoute(path: 'screen', builder: (_, _) => child)],
                   ),
+                  // Destinations a screen under test navigates to by name.
+                  ...extraRoutes,
                 ],
               ),
             )

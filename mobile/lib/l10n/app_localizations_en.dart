@@ -3484,7 +3484,7 @@ class LEn extends L {
   String get moneyBoostBonus => 'Boost bonus';
 
   @override
-  String get moneyPlatformBoostRevenue => 'ShipTrip boost share';
+  String get moneyBoostFee => 'Boost fee';
 
   @override
   String get validationReadyWindowOrder =>
@@ -4970,4 +4970,8 @@ class LEn extends L {
   @override
   String get staleOfferEconomicsChanged =>
       'The amounts on this offer changed. Check the new figures before accepting.';
+
+  @override
+  String get offerEconomicsUpdated =>
+      'Offer updated. These are the latest amounts.';
 }

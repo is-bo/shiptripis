@@ -228,7 +228,7 @@ void main() {
       );
       // No checkout framing for the Traveler.
       expect(find.text(l.moneyYouPay), findsNothing);
-      expect(find.text(l.moneyPlatformBoostRevenue), findsNothing);
+      expect(find.text(l.moneyBoostFee), findsNothing);
     });
 
     testWidgets('a zero Boost stays exactly as clean as before', (
@@ -421,7 +421,7 @@ void main() {
       expect(find.text(l.moneyBoostBonus), findsOneWidget);
       expect(find.text(l.moneyTravelerReceives), findsOneWidget);
       expect(find.text(l.moneyPlatformFee), findsOneWidget);
-      expect(find.text(l.moneyPlatformBoostRevenue), findsOneWidget);
+      expect(find.text(l.moneyBoostFee), findsOneWidget);
       expect(find.text(l.moneyYouPay), findsOneWidget);
       // €30.00 + €5.00 = €35.00 for the Traveler, exactly as their own screen
       // says; €43.75 is everything the sender owes.
@@ -450,7 +450,7 @@ void main() {
       expect(find.text(l.moneyYouPay), findsOneWidget);
       expect(find.text(l.moneyBaseReward), findsNothing);
       expect(find.text(l.moneyBoostBonus), findsNothing);
-      expect(find.text(l.moneyPlatformBoostRevenue), findsNothing);
+      expect(find.text(l.moneyBoostFee), findsNothing);
       expect(find.textContaining('Boost'), findsNothing);
     });
 

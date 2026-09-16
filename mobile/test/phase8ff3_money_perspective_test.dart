@@ -509,7 +509,7 @@ void main() {
     expect(find.text(l.moneyTotalYouReceive), findsOneWidget);
     expect(find.text(l.moneyYouPay), findsNothing);
     expect(find.text(l.moneyPlatformFee), findsNothing);
-    expect(find.text(l.moneyPlatformBoostRevenue), findsNothing);
+    expect(find.text(l.moneyBoostFee), findsNothing);
     expect(find.textContaining('€37.50'), findsWidgets);
   });
 

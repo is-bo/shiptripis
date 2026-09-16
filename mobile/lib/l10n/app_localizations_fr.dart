@@ -2302,7 +2302,7 @@ class LFr extends L {
       'Les évaluations apparaissent une fois la livraison terminée.';
 
   @override
-  String get boostTitle => 'Mettre en avant cette demande';
+  String get boostTitle => 'Booster cette demande';
 
   @override
   String get boostExplainer =>
@@ -3440,7 +3440,7 @@ class LFr extends L {
 
   @override
   String get boostCompatibilityNote =>
-      'Seuls les voyageurs déjà compatibles avec votre colis le voient. Une mise en avant ne change pas qui sont ces voyageurs.';
+      'Seuls les voyageurs déjà compatibles avec votre colis le voient. Un Boost ne change pas qui sont ces voyageurs.';
 
   @override
   String get boostActivatesOnPayment =>
@@ -3507,11 +3507,10 @@ class LFr extends L {
   String get moneyBaseReward => 'Rémunération de base';
 
   @override
-  String get moneyBoostBonus => 'Bonus de mise en avant';
+  String get moneyBoostBonus => 'Bonus Boost';
 
   @override
-  String get moneyPlatformBoostRevenue =>
-      'Part de ShipTrip sur la mise en avant';
+  String get moneyBoostFee => 'Frais Boost';
 
   @override
   String get validationReadyWindowOrder =>
@@ -5014,4 +5013,8 @@ class LFr extends L {
   @override
   String get staleOfferEconomicsChanged =>
       'Les montants de cette offre ont changé. Vérifiez les nouveaux montants avant d’accepter.';
+
+  @override
+  String get offerEconomicsUpdated =>
+      'Offre mise à jour. Ces montants sont les plus récents.';
 }

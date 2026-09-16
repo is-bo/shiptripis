@@ -92,6 +92,6 @@ def resolved_notifications(user, *, at=None):
              then=Value(summary["eur"]["ready"])),
         When(channel="payout.status_changed", payload__event="profile_needs_attention", payload__currency="DZD",
              then=Value(summary["dzd"]["ready"])),
-        When(channel="deal.updated", then=Value(True)),
+        When(channel__in=["deal.updated", "offer.economics_changed"], then=Value(True)),
         default=Q(read_at__isnull=False), output_field=BooleanField(),
     ))

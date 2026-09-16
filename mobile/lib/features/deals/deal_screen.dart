@@ -806,7 +806,7 @@ class _MoneySection extends StatelessWidget {
               MoneyLine(label: l.moneyPlatformFee, amount: terms.platformFee!),
             if (isSender && (terms.boostPlatformFee?.isPositive ?? false))
               MoneyLine(
-                label: l.moneyPlatformBoostRevenue,
+                label: l.moneyBoostFee,
                 amount: terms.boostPlatformFee!,
               ),
             if (isSender && terms.senderTotalWithBoost != null)

@@ -23,6 +23,12 @@ MATCH_COMPLETED = "match.completed"
 OFFER_CREATED = "offer.created"
 OFFER_UPDATED = "offer.updated"  # countered / accepted / declined
 OFFER_ACCEPTED = "offer.accepted"
+#: J6.2. The sender changed their Boost under a pending offer, so the offer's
+#: provisional totals moved. A neutral refresh hint carrying identifiers only --
+#: never an amount -- so the client re-reads the offer from the API that owns
+#: the figures. Resolved on arrival and deliberately ineligible for FCM display:
+#: it moves no badge and wakes no phone.
+OFFER_ECONOMICS_CHANGED = "offer.economics_changed"
 
 # payments / wallet
 PAYMENT_CAPTURED = "payment.captured"

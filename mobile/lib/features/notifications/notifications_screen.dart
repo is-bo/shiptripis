@@ -313,6 +313,7 @@ class _Row extends StatelessWidget {
     return switch (channel) {
       NotificationChannel.offerCreated ||
       NotificationChannel.offerUpdated ||
+      NotificationChannel.offerEconomicsChanged ||
       NotificationChannel.offerAccepted => (
         l.notificationOffer,
         Icons.swap_horiz_rounded,

@@ -19,6 +19,11 @@ enum LiveResourceKind {
   match,
   matches,
   offers,
+
+  /// The provisional money on one match's pending offer (J6.2). Keyed by match
+  /// id. Only a screen showing a pending offer registers it, so a closed or
+  /// accepted negotiation never reacts to a Boost edit.
+  offerEconomics,
   request,
   requests,
   deposit,
@@ -45,6 +50,8 @@ class LiveResource {
   const LiveResource.matches() : this(LiveResourceKind.matches);
   const LiveResource.offers(int matchId)
     : this(LiveResourceKind.offers, matchId);
+  const LiveResource.offerEconomics(int matchId)
+    : this(LiveResourceKind.offerEconomics, matchId);
   const LiveResource.request(int id) : this(LiveResourceKind.request, id);
   const LiveResource.requests() : this(LiveResourceKind.requests);
   const LiveResource.deposit(int requestId)
@@ -275,6 +282,7 @@ Set<LiveResource> resourcesForLiveEvent(
     'offer.created',
     'offer.updated',
     'offer.accepted',
+    'offer.economics_changed',
     'payment.captured',
     'payment.failed',
     'payment.refunded',
@@ -315,8 +323,22 @@ Set<LiveResource> resourcesForLiveEvent(
     return parsed != null && parsed > 0 ? parsed : null;
   }
 
-  final dealId = positive('deal_id');
   final matchId = positive('match_id');
+
+  // J6.2: the sender changed their Boost under a pending offer. Nothing about
+  // whose turn it is moved, and the server resolves this row on arrival and
+  // sends no push, so neither the bell nor the badge has anything new to read.
+  // Only what shows that offer's money re-reads: the open pending offer, and
+  // the Open offers list whose rows print the total. Not requests, not
+  // journeys, not deals, not the inbox.
+  if (type == 'offer.economics_changed') {
+    return {
+      const LiveResource.matches(),
+      if (matchId != null) LiveResource.offerEconomics(matchId),
+    };
+  }
+
+  final dealId = positive('deal_id');
   final requestId = positive('request_id') ?? positive('parcel_id');
   final journeyId = positive('journey_id') ?? positive('trip_id');
   final disputeId = positive('dispute_id');

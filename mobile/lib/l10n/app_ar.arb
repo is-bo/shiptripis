@@ -1014,7 +1014,7 @@
   "boostStatusRefunded": "تم الاسترجاع",
   "moneyBaseReward": "مكافأة التوصيل الأساسية",
   "moneyBoostBonus": "مكافأة التعزيز",
-  "moneyPlatformBoostRevenue": "حصة ShipTrip من التعزيز",
+  "moneyBoostFee": "رسوم التعزيز",
   "validationReadyWindowOrder": "يجب أن تنتهي فترة الجاهزية بعد بدايتها",
   "validationWeightRange": "أدخل وزنًا بين {min} و{max} كغ",
   "dealStepAgreed": "تم الاتفاق على الشروط",
@@ -1441,5 +1441,6 @@
   "offerSenderBoostAddedOnTop": "يُضاف تعزيز المُرسِل البالغ {amount} فوق هذا المبلغ.",
   "offerHistoryBaseReward": "{title}: المكافأة الأساسية {amount}",
   "moneyTotalExcludingBoost": "المجموع قبل أي تعزيز",
-  "staleOfferEconomicsChanged": "تغيّرت مبالغ هذا العرض. راجع المبالغ الجديدة قبل القبول."
+  "staleOfferEconomicsChanged": "تغيّرت مبالغ هذا العرض. راجع المبالغ الجديدة قبل القبول.",
+  "offerEconomicsUpdated": "تم تحديث العرض. هذه أحدث المبالغ."
 }

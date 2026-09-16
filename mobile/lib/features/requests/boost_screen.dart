@@ -293,7 +293,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                       ),
                       if (feeCents != null)
                         DetailRow(
-                          label: l.pricingPlatformFee,
+                          label: l.moneyBoostFee,
                           value: Text(
                             Money.eurCents(feeCents).format(locale),
                             style: TextStyle(

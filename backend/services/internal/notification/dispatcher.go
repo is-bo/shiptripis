@@ -71,6 +71,8 @@ var subscribeChannels = []string{
 	"offer.created",
 	"offer.updated",
 	"offer.accepted",
+	// J6.2 neutral refresh: a pending offer's Boost-inclusive totals moved.
+	"offer.economics_changed",
 	// payments
 	"payment.captured",
 	"payment.refunded",

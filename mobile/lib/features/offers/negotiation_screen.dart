@@ -21,6 +21,16 @@
 /// Every total here is a server field that already includes the Boost — this
 /// screen never adds the two. Accepting sends the totals the confirmation
 /// showed, and the server refuses if they are no longer what would commit.
+///
+/// ## Live money (J6.2)
+///
+/// While the offer on screen is pending, its totals are provisional: the sender
+/// can still change their Boost. The server then sends
+/// `offer.economics_changed`, which carries no amount, and this screen re-reads
+/// the offer over HTTP — it never adjusts a figure itself. If the figures it
+/// rendered moved, one quiet line says so. A closed or accepted offer does not
+/// listen at all. The acceptance refusal above stays the guarantee; this only
+/// shortens the time a stale figure is on screen.
 library;
 
 import 'package:flutter/material.dart';
@@ -30,6 +40,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/live/live_updates.dart';
 import '../../core/money/money.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
@@ -60,6 +71,75 @@ class NegotiationScreen extends ConsumerStatefulWidget {
 
 class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
   bool _busy = false;
+
+  /// Held only while the offer on screen is provisional.
+  LiveUnsubscribe? _economicsSubscription;
+
+  /// The offer this screen last rendered, and the figures it showed for it.
+  ({int offerId, _ShownFigures figures})? _lastShown;
+
+  /// The offer whose figures changed while it was on screen.
+  int? _updatedOfferId;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual<AsyncValue<Match>>(
+      matchDetailProvider(widget.matchId),
+      (_, next) => _onMatch(next),
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _economicsSubscription?.call();
+    super.dispose();
+  }
+
+  void _onMatch(AsyncValue<Match> next) {
+    final match = next.value;
+    if (match == null) return;
+    final offer = match.latestOffer;
+    // `provisional` is the server saying these figures can still move. Nothing
+    // else can move them, so nothing else listens.
+    _followEconomics(
+      offer != null && offer.boostTermsStatus == BoostTermsStatus.provisional,
+    );
+
+    final account = ref.read(accountProvider);
+    final perspective = account == null
+        ? null
+        : match.moneyPerspectiveFor(account.id);
+    if (offer == null || perspective == null) return;
+    final figures = _shownFigures(offer, perspective);
+    final previous = _lastShown;
+    _lastShown = (offerId: offer.id, figures: figures);
+    // Same offer, different money: say so. A new offer (a counter) has its
+    // own heading and needs no "updated" line.
+    if (previous != null &&
+        previous.offerId == offer.id &&
+        previous.figures != figures &&
+        mounted) {
+      setState(() => _updatedOfferId = offer.id);
+    }
+  }
+
+  void _followEconomics(bool follow) {
+    if (follow == (_economicsSubscription != null)) return;
+    if (!follow) {
+      _economicsSubscription!();
+      _economicsSubscription = null;
+      return;
+    }
+    _economicsSubscription = ref.read(liveUpdatesProvider).register(
+      LiveResource.offerEconomics(widget.matchId),
+      () {
+        // A hint, not a figure: re-read the offer that owns the numbers.
+        if (mounted) ref.invalidate(matchDetailProvider(widget.matchId));
+      },
+    );
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
@@ -227,6 +307,7 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
                     offer: current,
                     viewerId: account.id,
                     perspective: perspective,
+                    updated: _updatedOfferId == current.id,
                   ),
                   const SizedBox(height: AppSpace.xl),
                 ],
@@ -315,16 +396,35 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// The money a viewer is actually shown for one offer, in minor units.
+///
+/// Compared, never computed: it is how the screen notices that a re-read
+/// changed what it had on display. A record, so equality is by value. The
+/// sender-only figures are left out for a Traveler, who is not told the offer
+/// updated because a number they never see moved.
+typedef _ShownFigures = (int?, int?, int?, int?);
+
+_ShownFigures _shownFigures(Offer offer, MoneyPerspective perspective) => (
+  offer.travelerTotal?.minorUnits,
+  offer.boostTravelerBonus?.minorUnits,
+  perspective.isSender ? offer.boostPlatformFee?.minorUnits : null,
+  perspective.isSender ? offer.senderTotalWithBoost?.minorUnits : null,
+);
+
 class _CurrentOffer extends StatelessWidget {
   const _CurrentOffer({
     required this.offer,
     required this.viewerId,
     required this.perspective,
+    this.updated = false,
   });
 
   final Offer offer;
   final int viewerId;
   final MoneyPerspective perspective;
+
+  /// The figures changed while this offer was on screen.
+  final bool updated;
 
   @override
   Widget build(BuildContext context) {
@@ -370,27 +470,47 @@ class _CurrentOffer extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                heading,
-                style: Theme.of(context).textTheme.titleSmall,
+        // A Wrap, not a Row: "En attente du voyageur" beside "Votre offre" does
+        // not fit a 320 px phone at larger text sizes, and a fixed-width pill
+        // next to an Expanded title crushes the title to nothing. When both
+        // fit they sit at opposite ends exactly as before; when they do not,
+        // the pill takes its own line instead of truncating either. Full width,
+        // or a Wrap in a start-aligned Column shrinks to its children and
+        // there is no space to put between them.
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
+            children: [
+              Text(heading, style: Theme.of(context).textTheme.titleSmall),
+              StatusPill(
+                label: awaitingLabel,
+                tone: offer.isAwaiting(viewerId)
+                    ? StatusTone.action
+                    : offerStatusCopy(context, offer.status).tone,
+                icon: offer.isAwaiting(viewerId)
+                    ? Icons.reply_rounded
+                    : offerStatusCopy(context, offer.status).icon,
+                compact: true,
               ),
-            ),
-            StatusPill(
-              label: awaitingLabel,
-              tone: offer.isAwaiting(viewerId)
-                  ? StatusTone.action
-                  : offerStatusCopy(context, offer.status).tone,
-              icon: offer.isAwaiting(viewerId)
-                  ? Icons.reply_rounded
-                  : offerStatusCopy(context, offer.status).icon,
-              compact: true,
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: AppSpace.lg),
+
+        // Quiet, in place, and announced: the values below already are the new
+        // ones. No dialog, no navigation, nothing accepted on anyone's behalf.
+        if (updated) ...[
+          InfoNotice(
+            message: l.offerEconomicsUpdated,
+            tone: StatusTone.progress,
+            icon: Icons.update_rounded,
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
 
         // Every figure is a server field. The sender gets the payment build-up;
         // the traveller gets the one amount they earn and no checkout framing.
@@ -418,7 +538,7 @@ class _CurrentOffer extends StatelessWidget {
                       MoneyLine(label: l.moneyPlatformFee, amount: fee),
                     if (offer.boostPlatformFee?.isPositive ?? false)
                       MoneyLine(
-                        label: l.moneyPlatformBoostRevenue,
+                        label: l.moneyBoostFee,
                         amount: offer.boostPlatformFee!,
                       ),
                     MoneyLine.total(label: l.moneyYouPay, amount: senderTotal!),

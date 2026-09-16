@@ -6057,11 +6057,11 @@ abstract class L {
   /// **'Boost bonus'**
   String get moneyBoostBonus;
 
-  /// No description provided for @moneyPlatformBoostRevenue.
+  /// No description provided for @moneyBoostFee.
   ///
   /// In en, this message translates to:
-  /// **'ShipTrip boost share'**
-  String get moneyPlatformBoostRevenue;
+  /// **'Boost fee'**
+  String get moneyBoostFee;
 
   /// No description provided for @validationReadyWindowOrder.
   ///
@@ -8624,6 +8624,12 @@ abstract class L {
   /// In en, this message translates to:
   /// **'The amounts on this offer changed. Check the new figures before accepting.'**
   String get staleOfferEconomicsChanged;
+
+  /// Shown on an open offer when its amounts changed while the viewer was looking at it, for example because the sender changed their Boost.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer updated. These are the latest amounts.'**
+  String get offerEconomicsUpdated;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

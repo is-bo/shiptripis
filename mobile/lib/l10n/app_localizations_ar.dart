@@ -3504,7 +3504,7 @@ class LAr extends L {
   String get moneyBoostBonus => 'مكافأة التعزيز';
 
   @override
-  String get moneyPlatformBoostRevenue => 'حصة ShipTrip من التعزيز';
+  String get moneyBoostFee => 'رسوم التعزيز';
 
   @override
   String get validationReadyWindowOrder =>
@@ -4979,4 +4979,7 @@ class LAr extends L {
   @override
   String get staleOfferEconomicsChanged =>
       'تغيّرت مبالغ هذا العرض. راجع المبالغ الجديدة قبل القبول.';
+
+  @override
+  String get offerEconomicsUpdated => 'تم تحديث العرض. هذه أحدث المبالغ.';
 }
