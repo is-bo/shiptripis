@@ -6999,3 +6999,38 @@ in `test/phase_j62_boost_copy_offer_refresh_test.dart`), `flutter analyze
 Mutation checks: never subscribing fails six mobile tests; always subscribing fails
 both closed-offer tests. Offer and Boost screens rendered to PNG with real fonts in
 EN, FR and AR, including 320 px and 1.3× text, and read.
+
+**J6.2 release.** Branch CI run `35109564146` green on
+`1103ae3d595d9d7367c6748f94a57d72f58bd62b`, all six jobs; main fast-forwarded to
+that exact SHA and pushed, local `main` equal to `origin/main`, phase branch
+deleted locally and remotely. Push CI run `35113473606` green on the same SHA, all
+six jobs.
+
+TEST Railway deployment `90c75ccb-5cc1-41e3-b64d-e5737a3c0678` **SUCCESS**, release
+`v1.0.0-rc.37+1103ae3`, uploaded from a `git archive` of that SHA taken with
+`core.autocrlf=false`; the four changed runtime files and
+`backend/railway/Dockerfile` were byte-compared against their blobs. `/healthz` 200
+and `/readyz` 200 on the new release, with database, migrations and rate-limit cache
+`ok`; "No migrations to apply"; all processes started, and the notification service
+logged "dispatcher subscribed" with the new channel in its list. One gRPC
+`too_many_pings` GoAway line also appears on the J6.1 deployment and is not new.
+Unauthenticated `GET /api/matches`, `/api/matches/1`, `/api/parcels/1/boost` and
+`/api/notifications/unread-count` answer 401, with a 404 control. Railway variables
+compared before and after: 116 each, only `RELEASE_ID` changed.
+`PAYMENTS_ENVIRONMENT=test`, Stripe `sk_test_`, `STRIPE_CONNECT_EXPECTED_MODE=test`,
+Chargily `/test/api/v2`, `PAYOUT_DZD_EXECUTION_ENABLED=false`,
+`PAYMENTS_ALLOW_MOCK_PROVIDER=false`. The probes were unauthenticated reads; no row
+was created or modified on the deployed database, no provider object was created,
+no LIVE or real-money operation ran. The live signal itself was not exercised
+against the deployed runtime: that needs two signed-in TEST accounts and a pending
+offer, which this environment does not hold.
+
+QA APK `shiptrip-v1.0.0-rc.37-1103ae3-profile-arm64.apk` from build run
+`35113520336` on the same SHA, SHA-256
+`8e3a59fd121bc8da3ded5db5d3bf087c7b078541538065cca51ae34a9fea8f83` (CI's
+`SHA256SUMS.txt`, recomputed after download and matching), 36,589,441 bytes,
+profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
+`libapp.so` contains `offer.economics_changed`, "Frais Boost", "Offer updated. These
+are the latest amounts.", the Arabic Boost fee and update line, and the API origin,
+and no longer contains "ShipTrip boost share". Uninstall the J6.1 build first;
+profile APKs are signed with a per-run debug key.
