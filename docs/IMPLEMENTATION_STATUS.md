@@ -1,5 +1,24 @@
 # ShipTrip V1 Implementation Status
 
+## J5 — Find Travelers Mobile Redesign (2026-09-16)
+
+**J5 PASS — 24 new mobile tests, full mobile suite 618 green, 0 analysis issues, 0 schema changes.** Branch `gemini/j5-find-travelers-ui`, from J4. [The dense route-first UI, trust badges, state separation and responsive layouts](PHASE_J5_FIND_TRAVELERS_UI.md).
+
+**Dense, route-first candidate card replacing 540dp legacy card.**
+The legacy Discovery card measured ~540dp and barely fit 1.2 cards on a 390×844 display. The J5 card measures ~155dp, displaying 3 to 4 visible, scannable cards on screen simultaneously. The layout prioritizes the inline route, departure timing, and route fit at the top, traveler identity and trust signals in the middle, and suggested pricing with the primary Propose action at the bottom.
+
+**`InlineRoute` with airport facets, continuation indicators, and RTL mirror support.**
+Visualizes journey stops (`Paris · CDG → Algiers · ALG → Jijel`). Supports `continuesBefore` (`… →`) and `continuesAfter` (`→ …`). In RTL (Arabic), arrows flip direction (`←`) and the layout flows from right to left, preserving the true semantic journey sequence (Stop 0 → Stop 1 → Stop 2).
+
+**Honest trust signals and rating state.**
+Travelers display first name and avatar (with initials fallback). Identity-verified travelers display a verified badge. Completed deliveries are displayed when > 0. Verified ratings display star and numeric score; unrated travelers display a "New" badge with no fabricated rating score.
+
+**Match reasons bottom sheet with strict J4 backend codes.**
+Displays match explanation mapping frozen J4 backend codes (`picks_up_in`, `arrives_in`, `direct_leg`, `transfers`, `whole_trip_matches`, `arrives_before_deadline`, `has_room_for`, `flight_proof_approved`, `identity_verified`). Safely falls back or ignores unknown future codes without crashing. Distinguishes route match reasons from trust signals (verified identity and flight ticket verification).
+
+**Distinct zero-candidate and ineligible states without Boost CTA.**
+Ineligible states (`awaitingDeposit`, `alreadyMatched`, `closed`, `inProgress`) provide appropriate recovery actions without dead ends. The `no_candidates` state provides Back and Refresh actions and strictly omits any "Boost request" CTA, honoring the invariant that Boost never creates compatibility or alters traveler candidate order.
+
 ## J4 — Find Travelers contract, match explanation and discovery architecture (2026-09-16)
 
 **J4 PASS — 63 new backend tests, 22 new mobile tests, full mobile suite 594
