@@ -45,10 +45,10 @@ import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
 
-final _requestPricingProvider =
-    FutureProvider.autoDispose.family<RequestPricing, int>((ref, id) async {
-  return ref.watch(requestRepositoryProvider).requestPricing(id);
-});
+final _requestPricingProvider = FutureProvider.autoDispose
+    .family<RequestPricing, int>((ref, id) async {
+      return ref.watch(requestRepositoryProvider).requestPricing(id);
+    });
 
 class RequestDetailScreen extends ConsumerStatefulWidget {
   const RequestDetailScreen({required this.requestId, super.key});
@@ -347,7 +347,10 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
 
         Builder(
           builder: (context) {
-            final pricing = ref.watch(_requestPricingProvider(request.id)).asData?.value;
+            final pricing = ref
+                .watch(_requestPricingProvider(request.id))
+                .asData
+                ?.value;
             final boostAmount = pricing?.boost.amount ?? request.boostEur;
             final isBoosted = boostAmount != null && boostAmount.isPositive;
             final canEditBoost = pricing?.actions.canEditBoost ?? false;
@@ -384,19 +387,25 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                         const SizedBox(height: AppSpace.xs),
                         Text(
                           l.boostExplainer,
-                          style: text.bodySmall?.copyWith(color: c.textSecondary),
+                          style: text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
                         ),
                         const SizedBox(height: AppSpace.md),
                       ] else ...[
                         Text(
                           l.boostExplainer,
-                          style: text.bodySmall?.copyWith(color: c.textSecondary),
+                          style: text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
                         ),
                         const SizedBox(height: AppSpace.md),
                       ],
                       if (canEditBoost)
                         AppButton(
-                          label: isBoosted ? l.boostEditAction : l.boostSectionTitle,
+                          label: isBoosted
+                              ? l.boostEditAction
+                              : l.boostSectionTitle,
                           variant: isBoosted
                               ? AppButtonVariant.secondary
                               : AppButtonVariant.primary,
@@ -409,7 +418,9 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                       else if (isBoosted)
                         Text(
                           l.boostNotEditable,
-                          style: text.bodySmall?.copyWith(color: c.textTertiary),
+                          style: text.bodySmall?.copyWith(
+                            color: c.textTertiary,
+                          ),
                         ),
                     ],
                   ),

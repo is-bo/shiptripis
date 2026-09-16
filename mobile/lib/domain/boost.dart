@@ -317,7 +317,9 @@ class BoostIntentHistoryEvent {
   factory BoostIntentHistoryEvent.fromJson(Map<String, dynamic> json) =>
       BoostIntentHistoryEvent(
         reason: readText(json['reason']),
-        previousAmount: Money.eurCents(readInt(json['previous_eur_cents']) ?? 0),
+        previousAmount: Money.eurCents(
+          readInt(json['previous_eur_cents']) ?? 0,
+        ),
         amount: Money.eurCents(readInt(json['amount_eur_cents']) ?? 0),
         createdAt: readDate(json['created_at']) ?? DateTime.now(),
       );

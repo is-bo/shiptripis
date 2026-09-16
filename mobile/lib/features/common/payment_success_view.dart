@@ -44,28 +44,31 @@ class PaymentSuccessView extends StatelessWidget {
 
     final activeSettlement = settlement ?? order.settlement;
     final paidAmount = activeSettlement?.paid ?? order.paid;
-    final depositCredited = activeSettlement?.depositCredited ?? order.depositCredit;
+    final depositCredited =
+        activeSettlement?.depositCredited ?? order.depositCredit;
     final remainingDue = activeSettlement?.remaining ?? order.outstanding;
     final paidByGuest = activeSettlement?.paidBy == 'guest';
-    final isDeposit = order.purpose == PaymentPurpose.postingDeposit ||
+    final isDeposit =
+        order.purpose == PaymentPurpose.postingDeposit ||
         activeSettlement?.purpose == PaymentPurpose.postingDeposit;
 
-    final nextStep = activeSettlement?.nextStep ??
+    final nextStep =
+        activeSettlement?.nextStep ??
         (isDeposit
             ? PaymentSettlementNextStep.awaitOffers
             : PaymentSettlementNextStep.awaitPickup);
 
     final nextStepBody = switch (nextStep) {
-      PaymentSettlementNextStep.awaitOffers =>
-        l.paymentSuccessDepositNextBody,
-      PaymentSettlementNextStep.awaitPickup =>
-        l.paymentSuccessDealNextBody,
-      _ => isDeposit
-          ? l.paymentSuccessDepositNextBody
-          : l.paymentSuccessDealNextBody,
+      PaymentSettlementNextStep.awaitOffers => l.paymentSuccessDepositNextBody,
+      PaymentSettlementNextStep.awaitPickup => l.paymentSuccessDealNextBody,
+      _ =>
+        isDeposit
+            ? l.paymentSuccessDepositNextBody
+            : l.paymentSuccessDealNextBody,
     };
 
-    final buttonLabel = primaryActionLabel ??
+    final buttonLabel =
+        primaryActionLabel ??
         (isDeposit
             ? l.paymentSuccessViewRequestAction
             : l.paymentSuccessViewDeliveryAction);
@@ -75,11 +78,7 @@ class PaymentSuccessView extends StatelessWidget {
       children: [
         const SizedBox(height: AppSpace.lg),
         Center(
-          child: WaxSeal(
-            glyph: '✓',
-            diameter: 68,
-            color: c.attentionVivid,
-          ),
+          child: WaxSeal(glyph: '✓', diameter: 68, color: c.attentionVivid),
         ),
         const SizedBox(height: AppSpace.md),
         Center(
@@ -175,9 +174,9 @@ class PaymentSuccessView extends StatelessWidget {
                 const SizedBox(height: AppSpace.xs),
                 Text(
                   LocaleFormats.dateTime(locale, order.paidAt!),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: c.textTertiary,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
                 ),
               ],
             ],
@@ -192,11 +191,7 @@ class PaymentSuccessView extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 20,
-                    color: c.brand,
-                  ),
+                  Icon(Icons.info_outline_rounded, size: 20, color: c.brand),
                   const SizedBox(width: AppSpace.xs),
                   Expanded(
                     child: Text(
@@ -225,7 +220,9 @@ class PaymentSuccessView extends StatelessWidget {
           AppButton(
             label: buttonLabel,
             onPressed: onPrimaryAction,
-            icon: isDeposit ? Icons.explore_rounded : Icons.local_shipping_outlined,
+            icon: isDeposit
+                ? Icons.explore_rounded
+                : Icons.local_shipping_outlined,
           ),
       ],
     );

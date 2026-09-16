@@ -24,82 +24,81 @@ PaymentOrder _mockOrder({
   Money? paid,
   Money? outstanding,
   PaymentSettlement? settlement,
-}) =>
-    PaymentOrder(
-      publicReference: ref,
-      purpose: purpose,
-      status: status,
-      currency: 'EUR',
-      attempts: const [],
-      refunds: const [],
-      providers: const [],
-      paid: paid,
-      outstanding: outstanding,
-      settlement: settlement,
-    );
+}) => PaymentOrder(
+  publicReference: ref,
+  purpose: purpose,
+  status: status,
+  currency: 'EUR',
+  attempts: const [],
+  refunds: const [],
+  providers: const [],
+  paid: paid,
+  outstanding: outstanding,
+  settlement: settlement,
+);
 
 void main() {
   group('J3 Domain Models & Backend Contract Parsing', () {
-    test('PostingPricingQuote parses full J2 backend economics and actions', () {
-      final json = {
-        'currency': 'EUR',
-        'minimum_reward_eur_cents': 2000,
-        'recommended_reward_eur_cents': 2800,
-        'chosen_reward_eur_cents': 3000,
-        'minimum_economics': {
-          'traveler_reward_eur_cents': 2000,
-          'platform_fee_eur_cents': 500,
-          'sender_total_eur_cents': 2500,
-        },
-        'recommended_economics': {
-          'traveler_reward_eur_cents': 2800,
-          'platform_fee_eur_cents': 700,
-          'sender_total_eur_cents': 3500,
-        },
-        'chosen_economics': {
-          'traveler_reward_eur_cents': 3000,
-          'platform_fee_eur_cents': 750,
-          'sender_total_eur_cents': 3750,
-        },
-        'deposit': {
-          'percent_bps': 1000,
-          'recommended_eur_cents': 350,
-          'min_eur_cents': 300,
-          'max_eur_cents': 700,
-          'clamped': 'none',
-        },
-        'boost': {
-          'boost_eur_cents': 500,
-          'traveler_boost_eur_cents': 500,
-          'platform_fee_eur_cents': 125,
-          'sender_total_boost_eur_cents': 625,
-        },
-        'actions': {
-          'can_edit_reward': true,
-          'can_edit_boost': true,
-        },
-      };
+    test(
+      'PostingPricingQuote parses full J2 backend economics and actions',
+      () {
+        final json = {
+          'currency': 'EUR',
+          'minimum_reward_eur_cents': 2000,
+          'recommended_reward_eur_cents': 2800,
+          'chosen_reward_eur_cents': 3000,
+          'minimum_economics': {
+            'traveler_reward_eur_cents': 2000,
+            'platform_fee_eur_cents': 500,
+            'sender_total_eur_cents': 2500,
+          },
+          'recommended_economics': {
+            'traveler_reward_eur_cents': 2800,
+            'platform_fee_eur_cents': 700,
+            'sender_total_eur_cents': 3500,
+          },
+          'chosen_economics': {
+            'traveler_reward_eur_cents': 3000,
+            'platform_fee_eur_cents': 750,
+            'sender_total_eur_cents': 3750,
+          },
+          'deposit': {
+            'percent_bps': 1000,
+            'recommended_eur_cents': 350,
+            'min_eur_cents': 300,
+            'max_eur_cents': 700,
+            'clamped': 'none',
+          },
+          'boost': {
+            'boost_eur_cents': 500,
+            'traveler_boost_eur_cents': 500,
+            'platform_fee_eur_cents': 125,
+            'sender_total_boost_eur_cents': 625,
+          },
+          'actions': {'can_edit_reward': true, 'can_edit_boost': true},
+        };
 
-      final quote = PostingPricingQuote.fromJson(json);
+        final quote = PostingPricingQuote.fromJson(json);
 
-      expect(quote.currency, 'EUR');
-      expect(quote.minimumReward, Money.eurCents(2000));
-      expect(quote.recommendedReward, Money.eurCents(2800));
-      expect(quote.chosenReward, Money.eurCents(3000));
+        expect(quote.currency, 'EUR');
+        expect(quote.minimumReward, Money.eurCents(2000));
+        expect(quote.recommendedReward, Money.eurCents(2800));
+        expect(quote.chosenReward, Money.eurCents(3000));
 
-      expect(quote.minimumEconomics.senderTotal, Money.eurCents(2500));
-      expect(quote.recommendedEconomics.senderTotal, Money.eurCents(3500));
-      expect(quote.chosenEconomics?.senderTotal, Money.eurCents(3750));
+        expect(quote.minimumEconomics.senderTotal, Money.eurCents(2500));
+        expect(quote.recommendedEconomics.senderTotal, Money.eurCents(3500));
+        expect(quote.chosenEconomics?.senderTotal, Money.eurCents(3750));
 
-      expect(quote.deposit.recommendedDeposit, Money.eurCents(350));
-      expect(quote.deposit.minimumDeposit, Money.eurCents(300));
-      expect(quote.deposit.maximumDeposit, Money.eurCents(700));
+        expect(quote.deposit.recommendedDeposit, Money.eurCents(350));
+        expect(quote.deposit.minimumDeposit, Money.eurCents(300));
+        expect(quote.deposit.maximumDeposit, Money.eurCents(700));
 
-      expect(quote.boost.amount, Money.eurCents(500));
-      expect(quote.boost.travelerReward, Money.eurCents(500));
-      expect(quote.boost.commissionFee, Money.eurCents(125));
-      expect(quote.boost.senderTotal, Money.eurCents(625));
-    });
+        expect(quote.boost.amount, Money.eurCents(500));
+        expect(quote.boost.travelerReward, Money.eurCents(500));
+        expect(quote.boost.commissionFee, Money.eurCents(125));
+        expect(quote.boost.senderTotal, Money.eurCents(625));
+      },
+    );
 
     test('RequestPricing parses actions and deposit guidance', () {
       final json = {
@@ -251,7 +250,9 @@ void main() {
       );
     }
 
-    testWidgets('Arabic payment success keeps RTL directionality', (tester) async {
+    testWidgets('Arabic payment success keeps RTL directionality', (
+      tester,
+    ) async {
       final settlement = PaymentSettlement(
         isSettled: true,
         purpose: PaymentPurpose.dealBalance,
@@ -361,7 +362,8 @@ void main() {
               'token': 'token_xyz_456',
               'currency': 'EUR',
               'communication_language': 'en',
-              'payment_link': 'https://test.shiptrip.app/guest-pay/token_xyz_456',
+              'payment_link':
+                  'https://test.shiptrip.app/guest-pay/token_xyz_456',
               'expires_at': '2026-09-20T12:00:00Z',
               'reissued': false,
             }),
@@ -373,7 +375,8 @@ void main() {
               'token': 'token_xyz_456',
               'currency': 'EUR',
               'communication_language': 'en',
-              'payment_link': 'https://test.shiptrip.app/guest-pay/token_xyz_456',
+              'payment_link':
+                  'https://test.shiptrip.app/guest-pay/token_xyz_456',
               'expires_at': '2026-09-20T12:00:00Z',
               'reissued': false,
             }),
@@ -388,9 +391,7 @@ void main() {
 
         await pumpApp(
           tester,
-          Scaffold(
-            body: GuestPaymentSheet(order: order),
-          ),
+          Scaffold(body: GuestPaymentSheet(order: order)),
           container: containerFor(backend),
           locale: const Locale('en'),
         );

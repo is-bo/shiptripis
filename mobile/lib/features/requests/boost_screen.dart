@@ -85,10 +85,9 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
     });
 
     try {
-      await ref.read(boostRepositoryProvider).setBoost(
-            requestId: widget.requestId,
-            amountEurCents: cents,
-          );
+      await ref
+          .read(boostRepositoryProvider)
+          .setBoost(requestId: widget.requestId, amountEurCents: cents);
       if (!mounted) return;
       ref.invalidate(_boostStateProvider(widget.requestId));
       refreshVolatileState(ref);
@@ -140,15 +139,15 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                       Text(
                         l.boostSectionTitle,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: AppSpace.xs),
                       Text(
                         l.boostExplainer,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: context.colors.textSecondary,
-                            ),
+                          color: context.colors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: AppSpace.sm),
                       Row(
@@ -162,10 +161,10 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                           Expanded(
                             child: Text(
                               l.boostCompatibilityNote,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: context.colors.textSecondary),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: context.colors.textSecondary,
+                                  ),
                             ),
                           ),
                         ],
@@ -241,7 +240,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                   controller: _amountController,
                   enabled: canEdit,
                   onChanged: (text) {
-                    final cents = AppAmountField.centsOf(_amountController) ?? 0;
+                    final cents =
+                        AppAmountField.centsOf(_amountController) ?? 0;
                     setState(() => _chosenCents = cents);
                   },
                 ),
@@ -255,8 +255,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                       Text(
                         l.depositRemainingBalance,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: AppSpace.sm),
                       DetailRow(
@@ -278,7 +278,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                         label: l.pricingTotalSenderCost,
                         value: Text(
                           Money.eurCents(totalCents).format(locale),
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: context.colors.brand,
                               ),
@@ -288,8 +289,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                       Text(
                         l.depositFullDepositNotice,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: context.colors.textTertiary,
-                            ),
+                          color: context.colors.textTertiary,
+                        ),
                       ),
                     ],
                   ),
@@ -321,21 +322,21 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                                 ),
                                 const SizedBox(height: AppSpace.xxs),
                                 Text(
-                                  MaterialLocalizations.of(context)
-                                      .formatFullDate(ev.createdAt),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(color: context.colors.textTertiary),
+                                  MaterialLocalizations.of(
+                                    context,
+                                  ).formatFullDate(ev.createdAt),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: context.colors.textTertiary,
+                                      ),
                                 ),
                               ],
                             ),
                           ),
                           Text(
                             ev.amount.format(locale),
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),

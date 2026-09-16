@@ -483,8 +483,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           final rewardCents = AppAmountField.centsOf(_reward) ?? 0;
           final minCents = _pricingQuote!.minimumReward.minorUnits;
           if (rewardCents < minCents) {
-            problems['sender_proposed_reward_eur_cents'] =
-                l.pricingBelowMinimumError(
+            problems['sender_proposed_reward_eur_cents'] = l
+                .pricingBelowMinimumError(
                   _pricingQuote!.minimumReward.format(
                     Localizations.localeOf(context),
                   ),
@@ -871,18 +871,20 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
     final currentRewardCents = AppAmountField.centsOf(_reward);
 
     try {
-      final quote = await ref.read(requestRepositoryProvider).quotePricingDraft(
-        pickupPlaceId: pickup.id,
-        deliveryPlaceId: delivery.id,
-        actualWeightKg: weight,
-        lengthCm: parseDecimalInput(_length.text),
-        widthCm: parseDecimalInput(_width.text),
-        heightCm: parseDecimalInput(_height.text),
-        readyWindowEnd: readyEnd,
-        deadlineAt: deadline,
-        chosenRewardEurCents: currentRewardCents,
-        boostEurCents: _chosenBoostCents > 0 ? _chosenBoostCents : null,
-      );
+      final quote = await ref
+          .read(requestRepositoryProvider)
+          .quotePricingDraft(
+            pickupPlaceId: pickup.id,
+            deliveryPlaceId: delivery.id,
+            actualWeightKg: weight,
+            lengthCm: parseDecimalInput(_length.text),
+            widthCm: parseDecimalInput(_width.text),
+            heightCm: parseDecimalInput(_height.text),
+            readyWindowEnd: readyEnd,
+            deadlineAt: deadline,
+            chosenRewardEurCents: currentRewardCents,
+            boostEurCents: _chosenBoostCents > 0 ? _chosenBoostCents : null,
+          );
       if (!mounted) return;
       setState(() {
         _pricingQuote = quote;
@@ -908,7 +910,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   }
 
   void _adjustReward(int deltaCents) {
-    final currentCents = AppAmountField.centsOf(_reward) ??
+    final currentCents =
+        AppAmountField.centsOf(_reward) ??
         _pricingQuote?.recommendedReward.minorUnits ??
         1000;
     final minCents = _pricingQuote?.minimumReward.minorUnits ?? 50;
@@ -1730,16 +1733,16 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                             children: [
                               Text(
                                 l.pricingMinimumLabel,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: context.colors.textSecondary,
-                                ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: context.colors.textSecondary,
+                                    ),
                               ),
                               const SizedBox(height: AppSpace.xs),
                               Text(
                                 _pricingQuote!.minimumReward.format(locale),
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -1752,25 +1755,29 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                           decoration: BoxDecoration(
                             color: context.colors.surfaceSunken,
                             borderRadius: AppRadius.rMd,
-                            border: Border.all(color: context.colors.hairlineStrong),
+                            border: Border.all(
+                              color: context.colors.hairlineStrong,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 l.pricingRecommendedLabel,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: context.colors.brand,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: context.colors.brand,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                               const SizedBox(height: AppSpace.xs),
                               Text(
                                 _pricingQuote!.recommendedReward.format(locale),
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: context.colors.brand,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: context.colors.brand,
+                                    ),
                               ),
                             ],
                           ),
@@ -1844,9 +1851,9 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             children: [
               Text(
                 l.boostSectionTitle,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: AppSpace.xs),
               Text(
@@ -1914,14 +1921,18 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                     DetailRow(
                       label: l.pricingPlatformFee,
                       value: Text(
-                        _pricingQuote!.effectiveEconomics.platformFee.format(locale),
+                        _pricingQuote!.effectiveEconomics.platformFee.format(
+                          locale,
+                        ),
                       ),
                     ),
                     const Divider(),
                     DetailRow(
                       label: l.pricingTotalSenderCost,
                       value: Text(
-                        _pricingQuote!.effectiveEconomics.senderTotal.format(locale),
+                        _pricingQuote!.effectiveEconomics.senderTotal.format(
+                          locale,
+                        ),
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: context.colors.brand,
@@ -1932,7 +1943,9 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                     DetailRow(
                       label: l.depositSectionTitle,
                       value: Text(
-                        _pricingQuote!.deposit.recommendedDeposit.format(locale),
+                        _pricingQuote!.deposit.recommendedDeposit.format(
+                          locale,
+                        ),
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ),

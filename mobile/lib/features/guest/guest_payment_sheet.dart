@@ -23,11 +23,7 @@ import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
 
 class GuestPaymentSheet extends ConsumerStatefulWidget {
-  const GuestPaymentSheet({
-    required this.order,
-    this.onSettled,
-    super.key,
-  });
+  const GuestPaymentSheet({required this.order, this.onSettled, super.key});
 
   final PaymentOrder order;
   final VoidCallback? onSettled;
@@ -39,10 +35,8 @@ class GuestPaymentSheet extends ConsumerStatefulWidget {
   }) {
     return showAppSheet<void>(
       context,
-      builder: (sheetContext) => GuestPaymentSheet(
-        order: order,
-        onSettled: onSettled,
-      ),
+      builder: (sheetContext) =>
+          GuestPaymentSheet(order: order, onSettled: onSettled),
     );
   }
 
@@ -203,9 +197,9 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
         children: [
           Text(
             l.guestPaymentDescription,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: c.textSecondary,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: AppSpace.md),
 
@@ -245,9 +239,9 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                       l.guestPaymentExpires(
                         LocaleFormats.dateTime(locale, _link!.expiresAt!),
                       ),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: c.textTertiary,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
                     ),
                   ],
                   const SizedBox(height: AppSpace.md),
@@ -266,10 +260,11 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                         Expanded(
                           child: Text(
                             _link!.paymentLink ?? _link!.token,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontFamily: 'monospace',
-                              color: c.textSecondary,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  color: c.textSecondary,
+                                ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -277,7 +272,8 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                         IconButton(
                           icon: const Icon(Icons.copy_rounded, size: 18),
                           tooltip: l.guestPaymentCopyButton,
-                          onPressed: () => _copyUrl(_link!.paymentLink ?? _link!.token),
+                          onPressed: () =>
+                              _copyUrl(_link!.paymentLink ?? _link!.token),
                         ),
                       ],
                     ),
@@ -293,7 +289,8 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                   child: AppButton(
                     label: l.guestPaymentShareButton,
                     icon: Icons.share_rounded,
-                    onPressed: () => _shareUrl(_link!.paymentLink ?? _link!.token),
+                    onPressed: () =>
+                        _shareUrl(_link!.paymentLink ?? _link!.token),
                   ),
                 ),
                 const SizedBox(width: AppSpace.sm),

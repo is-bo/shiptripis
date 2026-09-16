@@ -548,7 +548,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
           semanticHint: l.paymentOpeningProvider,
           onPressed: () => _checkout(selected),
         ),
-        if (order != null && order.status.isCollectable && chosen.supportsGuestPayment) ...[
+        if (order != null &&
+            order.status.isCollectable &&
+            chosen.supportsGuestPayment) ...[
           const SizedBox(height: AppSpace.sm),
           Center(
             child: AppButton(

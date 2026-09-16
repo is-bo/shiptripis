@@ -1289,9 +1289,7 @@ class PaymentRepository {
   }) async => PaymentOrder.fromJson(
     await _api.postObject(
       '/api/parcels/$requestId/posting-deposit',
-      body: {
-        'amount_eur_cents': ?amountEurCents,
-      },
+      body: {'amount_eur_cents': ?amountEurCents},
     ),
   );
 

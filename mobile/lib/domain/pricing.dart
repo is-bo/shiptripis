@@ -62,15 +62,17 @@ class PostingDepositQuote {
     final currency = readText(json['currency']).isEmpty
         ? 'EUR'
         : readText(json['currency']);
-    final rec = readInt(json['recommended_eur_cents']) ??
+    final rec =
+        readInt(json['recommended_eur_cents']) ??
         readInt(json['rec_eur_cents']) ??
         300;
-    final min = readInt(json['minimum_eur_cents']) ??
+    final min =
+        readInt(json['minimum_eur_cents']) ??
         readInt(json['min_eur_cents']) ??
         readInt(json['chosen_min_eur_cents']) ??
         300;
-    final maxCents = readInt(json['maximum_eur_cents']) ??
-        readInt(json['max_eur_cents']);
+    final maxCents =
+        readInt(json['maximum_eur_cents']) ?? readInt(json['max_eur_cents']);
     final chosenCents = readInt(json['chosen_eur_cents']);
     final paidCents = readInt(json['paid_eur_cents']);
     final outstandingCents = readInt(json['outstanding_eur_cents']);

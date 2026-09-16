@@ -427,30 +427,29 @@ class PaymentSettlement {
     this.paidAt,
   });
 
-  factory PaymentSettlement.fromJson(Map<String, dynamic> json) =>
-      PaymentSettlement(
-        isSettled: readBool(json['is_settled']),
-        purpose: readEnum(
-          json['purpose'],
-          PaymentPurpose.values,
-          fallback: PaymentPurpose.unknown,
-        ),
-        currency: readText(json['currency']).isEmpty
-            ? 'EUR'
-            : readText(json['currency']),
-        amount: Money.eurCentsOrNull(json['amount_eur_cents']),
-        paid: Money.eurCentsOrNull(json['paid_eur_cents']),
-        depositCredited: Money.eurCentsOrNull(
-          json['deposit_credited_eur_cents'],
-        ),
-        remaining: Money.eurCentsOrNull(json['remaining_eur_cents']),
-        refunded: Money.eurCentsOrNull(json['refunded_eur_cents']),
-        paidBy: readString(json['paid_by']),
-        nextStep: PaymentSettlementNextStep.parse(readString(json['next_step'])),
-        dealId: readInt(json['deal_id']),
-        deliveryRequestId: readInt(json['delivery_request_id']),
-        paidAt: readDate(json['paid_at']),
-      );
+  factory PaymentSettlement.fromJson(
+    Map<String, dynamic> json,
+  ) => PaymentSettlement(
+    isSettled: readBool(json['is_settled']),
+    purpose: readEnum(
+      json['purpose'],
+      PaymentPurpose.values,
+      fallback: PaymentPurpose.unknown,
+    ),
+    currency: readText(json['currency']).isEmpty
+        ? 'EUR'
+        : readText(json['currency']),
+    amount: Money.eurCentsOrNull(json['amount_eur_cents']),
+    paid: Money.eurCentsOrNull(json['paid_eur_cents']),
+    depositCredited: Money.eurCentsOrNull(json['deposit_credited_eur_cents']),
+    remaining: Money.eurCentsOrNull(json['remaining_eur_cents']),
+    refunded: Money.eurCentsOrNull(json['refunded_eur_cents']),
+    paidBy: readString(json['paid_by']),
+    nextStep: PaymentSettlementNextStep.parse(readString(json['next_step'])),
+    dealId: readInt(json['deal_id']),
+    deliveryRequestId: readInt(json['delivery_request_id']),
+    paidAt: readDate(json['paid_at']),
+  );
 
   final bool isSettled;
   final PaymentPurpose purpose;
@@ -661,7 +660,9 @@ class DepositQuote {
         json['estimated_sender_total_eur_cents'],
       ),
       clamped: readText(json['clamped']),
-      isFlexible: json['is_flexible'] == null ? true : readBool(json['is_flexible']),
+      isFlexible: json['is_flexible'] == null
+          ? true
+          : readBool(json['is_flexible']),
     );
   }
 
