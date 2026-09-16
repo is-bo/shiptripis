@@ -143,7 +143,7 @@ This screen gets the Boost economics right — `pricingTravelerReceives` is fed
 `boost.totalOfferedReward`, i.e. base + Boost. The standalone Boost screen did
 not, which is what made the asymmetry worth chasing.
 
-### Boost — five MAJOR, two MINOR, all fixed
+### Boost — six MAJOR, two MINOR, all fixed
 
 The breakdown card made four false statements about money on one screen:
 
@@ -201,7 +201,7 @@ The full-deposit copy passes the check it was asked for: "Your current amount is
 paid in full. If you increase the reward or Boost later, an additional balance
 may be due." It does not imply no further balance can ever arise.
 
-### Guest payer — three MAJOR, two MINOR, all fixed
+### Guest payer — three MAJOR, two MINOR, all fixed (and one I caused)
 
 The sheet labelled the amount **still owed** "Paid" (`paymentStatusPaid`), which
 is the worst kind of wrong on a money screen. It now reads "Amount due" and
@@ -537,6 +537,12 @@ sun-button hero on Home and the parchment receipt all land.
 
 ## 4. Severity ledger
 
+The list below groups related defects onto one line where they are one mistake —
+"Offer history" and "Add a leg" are both Deliveries copy, the two route-fit and
+ineligible fabrications are both the client naming a verdict the server did not
+give — so it is shorter than the sum of the per-area headers above. Every item in
+those headers is here.
+
 **BLOCKER — 1 found, 1 fixed.** Directional glyphs double-mirrored in Arabic.
 
 **MAJOR — 20 found, 19 fixed, 1 reported to the backend.**
@@ -569,6 +575,14 @@ Plus, counted within the above areas and all fixed: unknown `route_fit` renamed
 awaiting-deposit CTA reading "Continue"; a custom deposit outside bounds with no
 inline validation; every candidate card announcing the page title to a screen
 reader.
+
+**One regression caused by this phase, caught and fixed before the build.** The
+guest-payer backoff re-armed its timer unconditionally, and cancelling a timer
+inside its own callback does nothing — so a settled order kept being read every
+twenty seconds and `onSettled`, which invalidates providers, fired on every one.
+The change meant to cut request amplification reintroduced it. A `_settled` flag
+ends the loop; a test pumps eight ceiling intervals past settlement and asserts
+one call and at most two reads.
 
 **MINOR — 16 found, 7 fixed, 9 deferred.**
 
@@ -651,6 +665,32 @@ no variable was written. API origin used for the build:
 No Railway deployment was made in this phase; J6 changed mobile code plus three
 presentation labels on one operator template, and the labels ship with whatever
 deployment comes next.
+
+---
+
+## 6a. TEST APK
+
+J6 changed mobile code, so a fresh QA build was made from the merged SHA.
+
+| | |
+|---|---|
+| Filename | `shiptrip-v1.0.0-build.1-d49a384-profile-arm64.apk` |
+| Artifact | run [35059844722](https://github.com/is-bo/shiptripis/actions/runs/35059844722), artifact `shiptrip-v1.0.0-build.1-d49a384-profile-arm64` |
+| SHA-256 | `f34cd4c252b8d8abdc9e91a6e8c6f23083a3ebcc4a4f8b4c9c128ea0cd299a5c` |
+| Size | 36,589,313 bytes (34.9 MiB) |
+| Git SHA | `d49a384` — main |
+| API origin | `https://shiptrip-production-f7f7.up.railway.app` |
+| Build mode | profile, arm64 |
+
+The checksum is CI's own `SHA256SUMS.txt`, recomputed locally after download and
+matching. `release_id` was deliberately left unset so the label defaults from the
+pubspec version, as J5 did — labelling a mobile-only build `rc.36` would imply a
+backend release that does not exist; the deployed TEST runtime is still
+`v1.0.0-rc.35+9614db6`.
+
+Profile APKs are signed with the CI runner's auto-generated debug key, which
+differs on every run, so **the J5 build must be uninstalled first** or Android
+answers `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
 
 ---
 

@@ -6820,6 +6820,22 @@ deferred with reasons. 637 mobile tests pass (618 before, +19 in
 `PAYOUT_DZD_EXECUTION_ENABLED` false, no LIVE, no real money, no Railway
 deployment.
 
+**J6 release.** Branch CI run `35057276153` green on
+`31e89ac`; main fast-forwarded to `d49a384` and CI run `35059817489` green on that
+exact SHA, all six jobs. Phase branch deleted locally and remotely. No Railway
+deployment: J6 changed mobile code plus three presentation labels on one operator
+template, and those ship with whatever deployment comes next — the deployed TEST
+runtime is unchanged at `v1.0.0-rc.35+9614db6`.
+
+QA APK `shiptrip-v1.0.0-build.1-d49a384-profile-arm64.apk` from build run
+`35059844722`, SHA-256
+`f34cd4c252b8d8abdc9e91a6e8c6f23083a3ebcc4a4f8b4c9c128ea0cd299a5c` (CI's own
+`SHA256SUMS.txt`, recomputed after download and matching), 36,589,313 bytes,
+profile/arm64, built against
+`https://shiptrip-production-f7f7.up.railway.app`. `release_id` was left unset so
+the label defaults from the pubspec, as J5 did — labelling a mobile-only build
+`rc.36` would imply a backend release that does not exist.
+
 Not covered, and recorded as limitations rather than inferred: no physical device
 or emulator, and no deployed Finance console operator session — that needs a login
 this environment does not hold, so those surfaces were reviewed as source and
