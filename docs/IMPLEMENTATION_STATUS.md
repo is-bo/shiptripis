@@ -6904,3 +6904,35 @@ Full mobile suite 653 passed (637 before, +16 in
 clean, `dart format` clean, `l10n_untranslated.json` empty. The Traveler and Sender
 offer screens were rendered to PNG in English and Arabic, Boost and zero Boost,
 and read.
+
+**J6.1 release.** Branch CI run `35095380115` green on
+`31f8f40752ec5c235e026b0d49e40dc18d1e5132`, all six jobs; main fast-forwarded to
+that exact SHA and pushed, local `main` equal to `origin/main`, phase branch
+deleted locally and remotely. Push CI run `35097634293` green on the same SHA, all six jobs.
+
+TEST Railway deployment `eae6f929-5208-4c78-ac49-4412ec8c84ea` **SUCCESS**, release
+`v1.0.0-rc.36+31f8f40`, uploaded from a `git archive` of that SHA taken with
+`core.autocrlf=false` so the upload carries the repository's exact bytes (the six
+changed runtime files and the Dockerfile were byte-compared against their blobs).
+This deployment also ships J6's three operator-template labels. `/healthz` 200 and
+`/readyz` 200 on the new release, with database, migrations and rate-limit cache
+`ok`; "No migrations to apply"; all ten processes started (Redis, Gunicorn, KYC
+gRPC, reservation releaser, finance worker, Go chat, notification with FCM, KYC,
+email — disabled by `EMAIL_ENABLED=false` — and the Caddy gateway). Unauthenticated
+`POST /api/offers/1/accept` and `GET /api/matches` answer 401, with a 404 control.
+Railway variables compared before and after: 116 each, only `RELEASE_ID` changed.
+`PAYMENTS_ENVIRONMENT=test`, Stripe `sk_test_`, `STRIPE_CONNECT_EXPECTED_MODE=test`,
+Chargily `/test/api/v2`, `PAYOUT_DZD_EXECUTION_ENABLED=false`,
+`PAYMENTS_ALLOW_MOCK_PROVIDER=false`. The probes were unauthenticated reads; no row
+was created or modified on the deployed database, no provider object was created,
+no LIVE or real-money operation ran.
+
+QA APK `shiptrip-v1.0.0-rc.36-31f8f40-profile-arm64.apk` from build run
+`35097732112` on the same SHA, SHA-256
+`7449764591225bc0ef70886e2e0a98433585c519ba99121ef02d9582d4669aca` (CI's
+`SHA256SUMS.txt`, recomputed after download and matching), 36,589,313 bytes,
+profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
+The byte size equals J6's APK — native libraries are page-aligned — so the build was
+checked for content: `libapp.so` contains `offer_economics_changed`,
+`sender_total_with_boost_minor`, `boost_terms_status` and the API origin. Uninstall
+the J6 build first; profile APKs are signed with a per-run debug key.

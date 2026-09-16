@@ -313,7 +313,19 @@ zero-Boost; Sender base-only offer; propose sheet total visibility; propose shee
 base-only labels. `test/phase8ff3_money_perspective_test.dart` fixtures updated to
 the J6.1 wire shape.
 
-Suite totals, CI and release are recorded in `docs/IMPLEMENTATION_STATUS.md`.
+**Totals.** Full backend suite 2,111 passed, 34 skipped, 0 failed; full mobile
+suite 653 passed; `ruff`, `flutter analyze --fatal-infos`, `dart format` clean; no
+migration.
+
+**CI and release.** Branch CI `35095380115` and main push CI `35097634293`, both
+green on `31f8f40`, all six jobs. TEST Railway deployment
+`eae6f929-5208-4c78-ac49-4412ec8c84ea` SUCCESS as `v1.0.0-rc.36+31f8f40`: healthz
+200, readyz 200 with migrations `ok`, no migrations applied, all ten processes up,
+only `RELEASE_ID` changed. APK `shiptrip-v1.0.0-rc.36-31f8f40-profile-arm64.apk`,
+build run `35097732112`, SHA-256
+`7449764591225bc0ef70886e2e0a98433585c519ba99121ef02d9582d4669aca`, 36,589,313
+bytes, API origin `https://shiptrip-production-f7f7.up.railway.app`. Detail in
+`docs/IMPLEMENTATION_STATUS.md`.
 
 ## 11. Findings
 
