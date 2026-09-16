@@ -48,13 +48,13 @@
     }
   },
   "roleSender": "Sending",
-  "roleTraveler": "Travelling",
+  "roleTraveler": "Traveling",
   "roleSwitchLabel": "Switch role",
   "roleSwitchTitle": "What are you doing today?",
-  "roleSenderDescription": "Send a parcel with a traveller",
+  "roleSenderDescription": "Send a parcel with a traveler",
   "roleTravelerDescription": "Carry parcels on a trip you're taking",
   "roleSwitchedToSender": "Switched to sending",
-  "roleSwitchedToTraveler": "Switched to travelling",
+  "roleSwitchedToTraveler": "Switched to traveling",
   "authSignIn": "Sign in",
   "authSignUp": "Create account",
   "authSignOut": "Sign out",
@@ -115,7 +115,7 @@
   "staleTitle": "This has changed",
   "staleRefreshAction": "Refresh",
   "staleRequestNotOpen": "This request isn't open any more.",
-  "staleRequestAlreadyMatched": "This request has already been matched with a traveller.",
+  "staleRequestAlreadyMatched": "This request has already been matched with a traveler.",
   "staleJourneyNotActive": "This journey isn't active any more.",
   "staleOfferNotPending": "This offer has already been answered.",
   "staleMatchNotPending": "This match isn't waiting on anyone any more.",
@@ -146,7 +146,7 @@
   "moneyYouReceive": "You receive",
   "moneyYourEarnings": "Your earnings",
   "moneyTotalYouReceive": "Total you receive",
-  "moneyTravelerReceives": "Traveller receives",
+  "moneyTravelerReceives": "Traveler receives",
   "moneyPlatformFee": "ShipTrip fee",
   "moneyMinimumReward": "Minimum reward",
   "moneyRecommendedReward": "ShipTrip suggests",
@@ -156,9 +156,9 @@
   "moneyDepositPaid": "Deposit already paid",
   "moneyRemainingToPay": "Remaining to pay",
   "moneyRefundToYou": "Refund to you",
-  "moneyTravelerCompensation": "Traveller compensation",
+  "moneyTravelerCompensation": "Traveler compensation",
   "moneyBreakdownTitle": "How this adds up",
-  "moneyRewardNotReduced": "The traveller receives this full amount. The ShipTrip fee is added on top, not taken out of it.",
+  "moneyRewardNotReduced": "The traveler receives this full amount. The ShipTrip fee is added on top, not taken out of it.",
   "moneyDepositNotExtra": "This is credited towards your final payment. It isn't an extra fee.",
   "moneyAmountCharged": "You'll be charged",
   "moneyExchangeRate": "Rate: €1 = {rate} DA",
@@ -180,7 +180,7 @@
   "homeRecentActivity": "Recent activity",
   "homeNothingNeedsYou": "Nothing needs you right now",
   "homeEmptySenderTitle": "Nothing on the way yet",
-  "homeEmptySenderBody": "Post what you want to send and travellers heading that way will see it.",
+  "homeEmptySenderBody": "Post what you want to send and travelers heading that way will see it.",
   "homeEmptyTravelerTitle": "No journeys yet",
   "homeEmptyTravelerBody": "Add the trip you're taking and we'll show you parcels along your route.",
   "deliveriesTitle": "Deliveries",
@@ -197,7 +197,7 @@
   "deliveriesEmptyAwaitingTitle": "You're all caught up",
   "deliveriesEmptyAwaitingBody": "Nothing is waiting on you.",
   "requestStatusAwaitingDeposit": "Deposit needed",
-  "requestStatusOpen": "Finding a traveller",
+  "requestStatusOpen": "Finding a traveler",
   "requestStatusMatched": "Matched",
   "requestStatusInTransit": "On the way",
   "requestStatusDelivered": "Delivered",
@@ -228,14 +228,14 @@
   "requestStepReview": "Review",
   "requestPickupLocation": "Pickup from",
   "requestDeliveryLocation": "Deliver to",
-  "requestPickupHint": "Where the traveller collects the parcel",
+  "requestPickupHint": "Where the traveler collects the parcel",
   "requestDeliveryHint": "Where the parcel is handed to the recipient",
   "requestReadyFrom": "Ready from",
   "requestDeadline": "Must arrive by",
   "requestTitle": "What are you sending?",
   "requestTitleHint": "Documents, medicine, clothes…",
   "requestDescription": "Description",
-  "requestDescriptionHint": "Describe it accurately. This is what the traveller agrees to carry.",
+  "requestDescriptionHint": "Describe it accurately. This is what the traveler agrees to carry.",
   "requestCategory": "Category",
   "requestWeight": "Weight",
   "requestWeightUnit": "kg",
@@ -250,7 +250,7 @@
   "requestPhotosHelp": "Photos protect both of you if there's a dispute later.",
   "requestAddPhoto": "Add photo",
   "requestHandlingNotes": "Handling notes",
-  "requestHandlingNotesHint": "Anything the traveller should know",
+  "requestHandlingNotesHint": "Anything the traveler should know",
   "requestFragile": "Fragile",
   "requestAcknowledgementsTitle": "Before you post this",
   "requestAckDescriptionAccurate": "My description of this parcel is accurate",
@@ -262,9 +262,9 @@
   "requestSizeExplainer": "Size matters as much as weight. We charge on whichever is greater.",
   "requestCreated": "Posted",
   "depositTitle": "Publish your request",
-  "depositExplainer": "Pay a small deposit to publish this request to travellers.",
+  "depositExplainer": "Paid now to list your request. 100% credited toward your final delivery payment.",
   "depositAmount": "Deposit",
-  "depositCreditedNote": "It's credited towards your final payment when a traveller accepts.",
+  "depositCreditedNote": "It's credited towards your final payment when a traveler accepts.",
   "depositRefundNote": "If nobody takes it, or you cancel before accepting an offer, you get it back in full.",
   "depositGuidanceTitle": "Deposit guidance",
   "depositSuggestedTotal": "ShipTrip suggested total",
@@ -275,7 +275,7 @@
   "depositPending": "Confirming your deposit…",
   "depositPendingBody": "We're waiting for your payment provider to confirm. This usually takes a few seconds.",
   "depositPaidTitle": "Published",
-  "depositPaidBody": "Travellers heading your way can see this now.",
+  "depositPaidBody": "Travelers heading your way can see this now.",
   "journeyTitle": "Journey",
   "journeyCreateTitle": "Add a journey",
   "journeyOverallRoute": "Where are you going?",
@@ -326,7 +326,7 @@
   "journeyEmptyLegsTitle": "Add your first leg",
   "journeyEmptyLegsBody": "A journey is made of legs. Paris to Algiers by plane, then Algiers to Jijel by road.",
   "journeyRouteShape": "Your route",
-  "journeyModeLabel": "How you're travelling",
+  "journeyModeLabel": "How you're traveling",
   "journeyLegStartsAt": "Starts at",
   "journeyLegEndsAt": "Ends at",
   "journeyLegEndPlaceholder": "Choose where this leg ends",
@@ -494,7 +494,7 @@
   },
   "kycTitle": "Identity check",
   "kycWhyTitle": "Why we ask",
-  "kycWhyBody": "Senders are handing a stranger something that matters to them. Verifying travellers is what makes that reasonable.",
+  "kycWhyBody": "Senders are handing a stranger something that matters to them. Verifying travelers is what makes that reasonable.",
   "kycStatusNotStarted": "Not started",
   "kycStatusInProgress": "In progress",
   "kycStatusPending": "Being reviewed",
@@ -512,9 +512,9 @@
   "kycFrontImage": "Front of document",
   "kycBackImage": "Back of document",
   "kycSelfie": "Selfie",
-  "discoveryTravelersTitle": "Travellers for this parcel",
+  "discoveryTravelersTitle": "Travelers for this parcel",
   "discoveryRequestsTitle": "Parcels along your route",
-  "discoveryEmptyTravelersTitle": "No travellers yet",
+  "discoveryEmptyTravelersTitle": "No travelers yet",
   "discoveryEmptyTravelersBody": "Nobody is going your way right now. We'll notify you when someone is.",
   "discoveryEmptyRequestsTitle": "No parcels yet",
   "discoveryEmptyRequestsBody": "Nothing matches your journey right now. We'll notify you when something does.",
@@ -526,10 +526,10 @@
   "findTravelersNewTraveller": "New",
   "findTravelersViewTrip": "View trip",
   "findTravelersWhyThisFits": "Why this trip fits",
-  "findTravelersEmptyTitle": "No travellers going your way yet",
+  "findTravelersEmptyTitle": "No travelers going your way yet",
   "findTravelersEmptyBody": "Your request stays active. We’ll tell you as soon as somebody posts a trip along your route.",
   "findTravelersIneligibleAwaitingDeposit": "Pay the posting deposit to publish this request.",
-  "findTravelersIneligibleAlreadyMatched": "This parcel already has a traveller.",
+  "findTravelersIneligibleAlreadyMatched": "This parcel already has a traveler.",
   "findTravelersIneligibleClosed": "This request is closed.",
   "findTravelersIneligibleInProgress": "This parcel is already on its way.",
   "findTravelersTripContinues": "Trip continues",
@@ -539,7 +539,7 @@
   "findTravelersFlightProofApproved": "Flight ticket verified",
   "findTravelersSortBestMatch": "Best match",
   "findTravelersSortSoonest": "Soonest trip",
-  "findTravelersShowMore": "Show more travellers",
+  "findTravelersShowMore": "Show more travelers",
   "findTravelersStop": "{city} · {iata}",
   "@findTravelersStop": {
     "description": "A route stop reached by air: the city first, the airport code beside it. Airports are a facet of a stop, never a stop of their own.",
@@ -615,9 +615,9 @@
   "discoveryDetourSmall": "Barely a detour",
   "discoveryDetourModerate": "Small detour",
   "discoveryDetourLarge": "Noticeable detour",
-  "discoveryVerifiedTraveler": "Verified traveller",
+  "discoveryVerifiedTraveler": "Verified traveler",
   "discoveryBoosted": "Boosted",
-  "discoveryBoostedExplainer": "The sender paid to be seen by more travellers. It doesn't change whether you're a match.",
+  "discoveryBoostedExplainer": "The sender paid to be seen by more travelers. It doesn't change whether you're a match.",
   "discoveryRatingCount": "{rating} ({count})",
   "@discoveryRatingCount": {
     "placeholders": {
@@ -631,8 +631,8 @@
   },
   "discoveryNoRatingsYet": "No ratings yet",
   "offerProposeTitle": "Make an offer",
-  "offerProposeExplainer": "You choose what the traveller earns. They can accept, decline, or come back with a different amount.",
-  "offerRewardLabel": "Traveller's reward",
+  "offerProposeExplainer": "You choose what the traveler earns. They can accept, decline, or come back with a different amount.",
+  "offerRewardLabel": "Traveler's reward",
   "offerUseRecommended": "Use suggested",
   "offerSend": "Send offer",
   "offerSendCounter": "Send counter-offer",
@@ -640,7 +640,7 @@
   "offerAccept": "Accept",
   "offerDecline": "Decline",
   "offerWithdraw": "Withdraw",
-  "offerAwaitingTraveler": "Waiting for the traveller",
+  "offerAwaitingTraveler": "Waiting for the traveler",
   "offerAwaitingSender": "Waiting for the sender",
   "offerAwaitingYou": "Your move",
   "offerYouProposed": "You offered {amount}",
@@ -695,7 +695,7 @@
   },
   "offerCounterTravelerExplainer": "Choose how much you receive for this delivery. The sender can accept, decline, or counter again.",
   "offerYourOfferTitle": "Your offer",
-  "offerTravelerCounterTitle": "Traveller's counter-offer",
+  "offerTravelerCounterTitle": "Traveler's counter-offer",
   "offerYourCounterTitle": "Your counter-offer",
   "offerSenderOfferTitle": "Sender's offer",
   "offerYouWouldPay": "You would pay {amount}",
@@ -706,7 +706,7 @@
       }
     }
   },
-  "offerTravelerAsks": "Traveller asks {amount}",
+  "offerTravelerAsks": "Traveler asks {amount}",
   "@offerTravelerAsks": {
     "placeholders": {
       "amount": {
@@ -847,7 +847,7 @@
   "guestPayInvalidTitle": "This link isn't valid",
   "guestPayInvalidBody": "It may have expired, been cancelled, or already been paid.",
   "recipientTitle": "Who's receiving this?",
-  "recipientExplainer": "We email the delivery code to the recipient. The traveller can only complete the delivery if the recipient gives them that code.",
+  "recipientExplainer": "We email the delivery code to the recipient. The traveler can only complete the delivery if the recipient gives them that code.",
   "recipientName": "Recipient's name",
   "recipientEmail": "Recipient's email",
   "recipientEmailHelp": "The delivery code is sent here. Make sure it's right.",
@@ -861,7 +861,7 @@
   "recipientRequiredBody": "Add the recipient before pickup so we can send them the delivery code.",
   "recipientRecordedForTraveler": "The sender has provided the recipient's details.",
   "pickupSenderTitle": "Pickup code",
-  "pickupSenderExplainer": "Give this code to the traveller only when you're physically handing over the parcel. It's how they confirm they have it.",
+  "pickupSenderExplainer": "Give this code to the traveler only when you're physically handing over the parcel. It's how they confirm they have it.",
   "pickupSenderReveal": "Show pickup code",
   "pickupSenderWarning": "Don't send this code in a message. Say it in person, at handover.",
   "pickupTravelerTitle": "Confirm pickup",
@@ -871,7 +871,7 @@
   "pickupConfirmedTitle": "Pickup confirmed",
   "pickupConfirmedBody": "You're carrying this parcel now.",
   "pickupAwaitingTitle": "Waiting for pickup",
-  "pickupAwaitingSenderBody": "The traveller will ask for your pickup code when you meet.",
+  "pickupAwaitingSenderBody": "The traveler will ask for your pickup code when you meet.",
   "pickupAwaitingTravelerBody": "Meet the sender and ask for their pickup code.",
   "deliveryTravelerTitle": "Confirm delivery",
   "deliveryTravelerExplainer": "Ask the recipient for the code that was emailed to them.",
@@ -902,7 +902,7 @@
     }
   },
   "deliveryCodeReveal": "Show delivery code",
-  "deliveryCodeSenderWarning": "The recipient gives this to the traveller at the door. Only share it with the recipient.",
+  "deliveryCodeSenderWarning": "The recipient gives this to the traveler at the door. Only share it with the recipient.",
   "deliveryCodeTravelerNever": "Only the recipient has this code. Ask them for it when you arrive.",
   "codeAttemptsRemaining": "{count, plural, =1{1 attempt left} other{{count} attempts left}}",
   "@codeAttemptsRemaining": {
@@ -970,7 +970,7 @@
   "payoutEmptyTitle": "No payouts yet",
   "payoutEmptyBody": "Complete a delivery and your earnings appear here.",
   "disputeOpenTitle": "Open a dispute",
-  "disputeOpenExplainer": "Tell us what went wrong. Opening a dispute puts the traveller's payout on hold while we look into it.",
+  "disputeOpenExplainer": "Tell us what went wrong. Opening a dispute puts the traveler's payout on hold while we look into it.",
   "disputeCategory": "What happened?",
   "disputeDescription": "Describe the problem",
   "disputeDescriptionHint": "What you expected, and what actually happened",
@@ -1007,7 +1007,7 @@
   "disputeEvidenceLimitReached": "You've added the maximum number of items.",
   "disputeResolutionTitle": "Outcome",
   "disputeResolutionRefunded": "Refunded to the sender",
-  "disputeResolutionTravelerPaid": "Paid to the traveller",
+  "disputeResolutionTravelerPaid": "Paid to the traveler",
   "disputeResolutionPartial": "Split between both sides",
   "disputeWindowClosedTitle": "The dispute window has closed",
   "disputeWindowClosedBody": "Disputes can be opened for 48 hours after delivery. Contact support if you still need help.",
@@ -1017,14 +1017,14 @@
   "cancelConfirmAction": "Cancel delivery",
   "cancelKeepAction": "Keep it",
   "cancelFullRefund": "You'll be refunded in full.",
-  "cancelWithCompensation": "Because it's close to pickup, the traveller is compensated for holding the space.",
+  "cancelWithCompensation": "Because it's close to pickup, the traveler is compensated for holding the space.",
   "cancelNotAllowedTitle": "This can't be cancelled here",
   "cancelAfterPickupBody": "The parcel has already been picked up. If something's wrong, open a dispute instead.",
   "cancelOutcomeTitle": "What happens",
   "cancelCancelledTitle": "Cancelled",
   "cancelRefundOnWay": "Your refund is on the way.",
   "ratingTitle": "How did it go?",
-  "ratingSenderPrompt": "Rate the traveller",
+  "ratingSenderPrompt": "Rate the traveler",
   "ratingTravelerPrompt": "Rate the sender",
   "ratingScoreLabel": "{score} out of 5",
   "@ratingScoreLabel": {
@@ -1044,12 +1044,18 @@
   "ratingEmptyTitle": "No ratings yet",
   "ratingEmptyBody": "Ratings appear after a delivery is completed.",
   "boostTitle": "Boost this request",
-  "boostExplainer": "A boost puts your request higher in the list for travellers who already match it.",
+  "boostExplainer": "Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.",
   "boostDoesNotGuarantee": "It doesn't change who you match with, and it doesn't guarantee a delivery.",
   "boostChoosePackage": "Choose a boost",
   "boostAmountLabel": "Boost amount",
   "boostAmountHelper": "Minimum {amount}. You can choose any higher amount.",
-  "@boostAmountHelper": {"placeholders": {"amount": {"type": "String"}}},
+  "@boostAmountHelper": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "boostPreviewTitle": "Review before paying",
   "boostSenderPays": "You pay",
   "boostTravelerGets": "Traveler gets if delivered",
@@ -1255,7 +1261,7 @@
   "locationConfirmPoint": "Use this point",
   "locationSaved": "Saved places",
   "locationPrivacyBeforeFunding": "Only the city is shared until the delivery is paid for.",
-  "locationPrivacyAfterFunding": "Full address shared with the traveller.",
+  "locationPrivacyAfterFunding": "Full address shared with the traveler.",
   "locationHiddenUntilFunded": "Exact address available after payment",
   "locationSearchEmptyTitle": "No results",
   "locationSearchEmptyBody": "Try a different spelling, or pick the point on the map.",
@@ -1289,7 +1295,7 @@
       }
     }
   },
-  "locationPreferredExplainer": "Travellers are matched on {place}. A preferred point only says where you would rather meet inside it.",
+  "locationPreferredExplainer": "Travelers are matched on {place}. A preferred point only says where you would rather meet inside it.",
   "@locationPreferredExplainer": {
     "placeholders": {
       "place": {
@@ -1479,11 +1485,11 @@
   "weightChargeableVolumetric": "Priced on size, not weight",
   "weightChargeableActual": "Priced on weight",
   "homeVerifyIdentityTitle": "Verify your identity",
-  "homeVerifyIdentityBody": "Travellers must be verified before a journey can go live.",
+  "homeVerifyIdentityBody": "Travelers must be verified before a journey can go live.",
   "homeAttentionOfferAwaiting": "An offer is waiting for your answer",
   "homeAttentionFunding": "Pay to confirm this delivery",
   "homeAttentionRecipient": "Add who receives the parcel",
-  "homeAttentionRevealPickup": "Show the pickup code to your traveller",
+  "homeAttentionRevealPickup": "Show the pickup code to your traveler",
   "homeAttentionSubmitPickup": "Enter the pickup code",
   "homeAttentionRevealDelivery": "The delivery code is ready",
   "homeAttentionSubmitDelivery": "Enter the delivery code",
@@ -1526,7 +1532,7 @@
     }
   },
   "onboardingSendTitle": "Send something home",
-  "onboardingSendBody": "Post what you want delivered. Travellers already heading that way can carry it, and you agree the price between you.",
+  "onboardingSendBody": "Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.",
   "onboardingCarryTitle": "Earn on a trip you're already taking",
   "onboardingCarryBody": "Add your journey, and we'll show you parcels that fit your route and your spare kilos.",
   "onboardingSafeTitle": "The money waits until it arrives",
@@ -1601,7 +1607,7 @@
   "paymentOrderClosedBody": "This payment was closed or refunded, so no new checkout can be opened.",
   "requestReadyUntil": "Ready until",
   "requestReadyWindow": "Ready window",
-  "requestReadyWindowHelp": "The stretch of time a traveller could collect it. Give a window, not a minute.",
+  "requestReadyWindowHelp": "The stretch of time a traveler could collect it. Give a window, not a minute.",
   "requestDeadlineHelp": "The latest it can arrive. This has to be after your ready window closes.",
   "requestWeightHelp": "Between 0.01 and 100 kg.",
   "requestDimensionsHelp": "Optional. Enter all three, or leave all three empty.",
@@ -1612,8 +1618,8 @@
   "requestCategoryClothing": "Clothing",
   "requestCategoryOther": "Something else",
   "requestProposedReward": "What you propose to pay",
-  "requestProposedRewardHelp": "A starting point, not a price. Travellers can accept it or come back with a different amount.",
-  "requestRewardIsIntent": "This is what you proposed. The price is settled when a traveller accepts an offer.",
+  "requestProposedRewardHelp": "A starting point, not a price. Travelers can accept it or come back with a different amount.",
+  "requestRewardIsIntent": "This is what you proposed. The price is settled when a traveler accepts an offer.",
   "requestReviewTitle": "Check this over",
   "requestAckAllRequired": "Confirm all five before you post.",
   "requestPostAction": "Post this request",
@@ -1621,16 +1627,16 @@
   "requestParcelSection": "The parcel",
   "requestTimingSection": "Timing",
   "requestRouteSection": "Route",
-  "requestMatchesSection": "Travellers you've approached",
+  "requestMatchesSection": "Travelers you've approached",
   "requestNoMatchesYet": "You haven't proposed to anyone yet.",
-  "requestAwaitingDepositNotice": "Travellers can't see this yet. Pay the deposit to publish it.",
-  "requestFindTravelers": "Find travellers",
+  "requestAwaitingDepositNotice": "Travelers can't see this yet. Pay the deposit to publish it.",
+  "requestFindTravelers": "Find travelers",
   "requestPayDepositAction": "Pay deposit",
   "requestCancelAction": "Cancel request",
   "requestCancelConfirmTitle": "Cancel this request?",
-  "requestCancelConfirmBody": "It stops being visible to travellers. Any deposit you paid comes back to you.",
+  "requestCancelConfirmBody": "It stops being visible to travelers. Any deposit you paid comes back to you.",
   "requestCancelled": "Request cancelled",
-  "requestCancelNotCancellableBody": "A traveller is already matched with this request, so it can't be cancelled here.",
+  "requestCancelNotCancellableBody": "A traveler is already matched with this request, so it can't be cancelled here.",
   "requestCancelViaDealBody": "This request has become a delivery. Cancel it from the delivery instead.",
   "requestPhotoCount": "{count, plural, =0{No photos} =1{1 photo} other{{count} photos}}",
   "@requestPhotoCount": {
@@ -1642,20 +1648,20 @@
   },
   "requestNotFragile": "Standard handling",
   "requestFragileYes": "Handle with care",
-  "requestTargetedNotice": "You addressed this request to one traveller. Nobody else can see it.",
+  "requestTargetedNotice": "You addressed this request to one traveler. Nobody else can see it.",
   "depositNotRequiredTitle": "No deposit needed",
   "depositNotRequiredBody": "This request publishes without one. There is nothing to pay here.",
   "depositClampedMin": "This is the smallest deposit we take.",
   "depositClampedMax": "This is the largest deposit we take, whatever the parcel is worth.",
   "discoveryMatchedDistance": "Distance carried",
-  "discoveryDetourLabel": "Detour for the traveller",
+  "discoveryDetourLabel": "Detour for the traveler",
   "discoveryFirstDeparture": "Leaves",
   "discoveryProposeBlocked": "We can't work out which part of this journey fits your parcel. Refresh and try again.",
   "discoveryVolumetricExplainer": "This parcel is bulkier than it is heavy, so its size sets the price.",
   "discoveryBreakdownNote": "This is how the suggested amount adds up. Offer something different and the total moves with it.",
   "discoveryProposalSent": "Offer sent",
-  "discoveryLegRangeMoved": "This traveller's route changed while you were looking. We've refreshed it.",
-  "discoveryIncompatibleCount": "{count, plural, =1{This traveller no longer fits your parcel, for 1 reason.} other{This traveller no longer fits your parcel, for {count} reasons.}}",
+  "discoveryLegRangeMoved": "This traveler's route changed while you were looking. We've refreshed it.",
+  "discoveryIncompatibleCount": "{count, plural, =1{This traveler no longer fits your parcel, for 1 reason.} other{This traveler no longer fits your parcel, for {count} reasons.}}",
   "@discoveryIncompatibleCount": {
     "placeholders": {
       "count": {
@@ -1669,7 +1675,7 @@
   "boostRankingTop": "Top of the list",
   "boostDurationLabel": "Runs for",
   "boostPriceLabel": "Price",
-  "boostCompatibilityNote": "Only travellers who already match your parcel ever see it. A boost doesn't change who those travellers are.",
+  "boostCompatibilityNote": "Only travelers who already match your parcel ever see it. A boost doesn't change who those travelers are.",
   "boostActivatesOnPayment": "The boost starts once your payment is confirmed, not when you leave the checkout page.",
   "boostBuyAction": "Buy this boost",
   "boostPayAction": "Pay for this boost",
@@ -1748,7 +1754,7 @@
   "@pickupNextTitle": {
     "description": "Section header shown once pickup is confirmed."
   },
-  "pickupConfirmedSenderNext": "The delivery code is now available to your recipient. Only they can pass it to the traveller.",
+  "pickupConfirmedSenderNext": "The delivery code is now available to your recipient. Only they can pass it to the traveler.",
   "@pickupConfirmedSenderNext": {
     "description": "Sender copy after pickup is confirmed."
   },
@@ -1796,7 +1802,7 @@
   "@deliveryTitle": {
     "description": "Top bar of the delivery handover screen. Neutral: the same screen serves both parties."
   },
-  "deliverySenderExplainer": "The recipient receives this code by email. They read it to the traveller at the door, and that is what confirms the delivery.",
+  "deliverySenderExplainer": "The recipient receives this code by email. They read it to the traveler at the door, and that is what confirms the delivery.",
   "@deliverySenderExplainer": {
     "description": "Sender explainer on the delivery screen."
   },
@@ -1856,7 +1862,7 @@
   "@disputeExistingOpenedBody": {
     "description": "Shown when the idempotent open endpoint returned an existing dispute."
   },
-  "disputeFreezesPayoutTitle": "The traveller's payout goes on hold",
+  "disputeFreezesPayoutTitle": "The traveler's payout goes on hold",
   "@disputeFreezesPayoutTitle": {
     "description": "Notice title on the dispute form."
   },
@@ -1904,7 +1910,7 @@
   "@disputeOpenedBySender": {
     "description": "Value for opened_by_role = sender."
   },
-  "disputeOpenedByTraveler": "The traveller",
+  "disputeOpenedByTraveler": "The traveler",
   "@disputeOpenedByTraveler": {
     "description": "Value for opened_by_role = traveler."
   },
@@ -2066,8 +2072,8 @@
   "paymentOpenProvider": "Continue payment",
   "guestPayPoweredBy": "Paid securely through ShipTrip",
   "onboardingEyebrow": "Welcome",
-  "onboardingHeadline": "Send anything,\nthe travellers\ndo the rest.",
-  "onboardingBody": "A peer-to-peer corridor between Algeria and France. Travellers carry, senders save, and the money is held until it arrives.",
+  "onboardingHeadline": "Send anything,\nthe travelers\ndo the rest.",
+  "onboardingBody": "A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.",
   "onboardingStamp": "EST. 2026 · ALG ↔ FR",
   "onboardingTrust": "ID verified · Payment held · Priced in euros",
   "onboardingRouteFrom": "ALGIERS",
@@ -2089,7 +2095,7 @@
   "benefitsChapterOneEyebrow": "Chapter I · The post",
   "benefitsChapterOneTitle": "Send anywhere,\nfor a fraction.",
   "benefitsChapterOneAccent": "Envoyez vers la France, l’Algérie, et plus loin.",
-  "benefitsChapterOneBody": "Travellers carry your parcel as part of their luggage. You pay a sliver of express shipping.",
+  "benefitsChapterOneBody": "Travelers carry your parcel as part of their luggage. You pay a sliver of express shipping.",
   "benefitsChapterOneStamp": "Par avion",
   "benefitsChapterTwoEyebrow": "Chapter II · The suitcase",
   "benefitsChapterTwoTitle": "Earn while\nyou travel.",
@@ -2125,7 +2131,7 @@
   "authVerifySubhead": "Enter the six-digit code we emailed you. It's the last step.",
   "onboardingGetStartedShort": "Get started",
   "requestItemPhoto": "Photo of the item",
-  "requestItemPhotoHelp": "Add a clear photo of what you're sending. Travellers decide from this.",
+  "requestItemPhotoHelp": "Add a clear photo of what you're sending. Travelers decide from this.",
   "requestItemPhotoChoose": "Choose a photo",
   "requestItemPhotoFromGallery": "From gallery",
   "requestItemPhotoTakePhoto": "Take a photo",
@@ -2140,7 +2146,7 @@
   "requestItemPhotoUploadFailed": "The photo didn't upload. It's still selected — try again.",
   "requestItemPhotoStorageUnavailable": "Photo storage is unavailable right now. Try again in a moment.",
   "requestItemPhotoExpired": "That photo is no longer available. Add it again.",
-  "requestItemPhotoPrivacy": "Only travellers who can see this request can see the photo.",
+  "requestItemPhotoPrivacy": "Only travelers who can see this request can see the photo.",
   "fieldOptional": "Optional",
   "requestDimensionsOptionalHelp": "Optional. Leave empty if you haven't measured it — or enter all three.",
   "requestDimensionsPartialFix": "Enter length, width and height together, or clear all three.",
@@ -2333,7 +2339,9 @@
   "pricingBelowMinimumError": "Offer must be at least {amount}",
   "@pricingBelowMinimumError": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "pricingTravelerReceives": "Traveler receives",
@@ -2342,31 +2350,62 @@
   "pricingIncrement50c": "Increase by 50 cents",
   "pricingDecrement50c": "Decrease by 50 cents",
   "depositSectionTitle": "Posting deposit",
-  "depositExplainer": "Paid now to list your request. 100% credited toward your final delivery payment.",
   "depositPresetMin": "Minimum ({amount})",
-  "@depositPresetMin": { "placeholders": { "amount": { "type": "String" } } },
+  "@depositPresetMin": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "depositPresetRecommended": "Recommended ({amount})",
-  "@depositPresetRecommended": { "placeholders": { "amount": { "type": "String" } } },
+  "@depositPresetRecommended": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "depositPresetFull": "Pay in full ({amount})",
-  "@depositPresetFull": { "placeholders": { "amount": { "type": "String" } } },
+  "@depositPresetFull": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "depositPresetCustom": "Custom",
   "depositFullDepositNotice": "Your current amount is paid in full. If you increase the reward or Boost later, an additional balance may be due.",
   "depositRemainingBalance": "Remaining balance at delivery",
   "depositCustomAmountLabel": "Custom deposit amount",
   "boostSectionTitle": "Boost this request",
-  "boostExplainer": "Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.",
   "boostPresetNone": "No Boost (€0)",
   "boostPreset5": "+€5",
   "boostPreset10": "+€10",
   "boostPresetCustom": "Custom",
   "boostCustomAmountLabel": "Custom Boost amount",
   "boostCurrentActive": "Active Boost: {amount}",
-  "@boostCurrentActive": { "placeholders": { "amount": { "type": "String" } } },
+  "@boostCurrentActive": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "boostEditAction": "Change Boost",
   "boostRemoveAction": "Remove Boost",
   "boostHistoryTitle": "Boost history",
   "boostHistoryChanged": "Changed from {from} to {to}",
-  "@boostHistoryChanged": { "placeholders": { "from": { "type": "String" }, "to": { "type": "String" } } },
+  "@boostHistoryChanged": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
   "boostNotEditable": "Boost cannot be edited once an offer has been accepted or the request has expired.",
   "guestPaymentTitle": "Have someone else pay",
   "guestPaymentDescription": "Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.",
@@ -2374,7 +2413,13 @@
   "guestPaymentCopyButton": "Copy link",
   "guestPaymentCopied": "Payment link copied to clipboard",
   "guestPaymentExpires": "Link expires on {expiry}",
-  "@guestPaymentExpires": { "placeholders": { "expiry": { "type": "String" } } },
+  "@guestPaymentExpires": {
+    "placeholders": {
+      "expiry": {
+        "type": "String"
+      }
+    }
+  },
   "guestPaymentRevokeAction": "Revoke link",
   "guestPaymentRevokeConfirmTitle": "Revoke guest payment link?",
   "guestPaymentRevokeConfirmBody": "Anyone holding this link will no longer be able to pay. You can generate a new link at any time.",
@@ -2399,5 +2444,169 @@
   "notificationPayoutReadyTitle": "Payout ready",
   "notificationPayoutReadyBody": "Your delivery payout is ready for transfer.",
   "notificationPayoutSentTitle": "Payout sent",
-  "notificationPayoutSentBody": "Your payout has been transferred successfully."
+  "notificationPayoutSentBody": "Your payout has been transferred successfully.",
+  "boostBreakdownTitle": "What the Boost costs",
+  "@boostBreakdownTitle": {
+    "description": "boostBreakdownTitle"
+  },
+  "boostTravelerBonusLabel": "Added to the Traveler reward",
+  "@boostTravelerBonusLabel": {
+    "description": "boostTravelerBonusLabel"
+  },
+  "boostYourCostLabel": "You pay for the Boost",
+  "@boostYourCostLabel": {
+    "description": "boostYourCostLabel"
+  },
+  "boostAddsOnTop": "The Boost is added on top of the delivery reward you already offered. Base reward + Boost is what the Traveler receives.",
+  "@boostAddsOnTop": {
+    "description": "boostAddsOnTop"
+  },
+  "boostEstimateNotice": "An estimate until you save. ShipTrip confirms the final amounts.",
+  "@boostEstimateNotice": {
+    "description": "boostEstimateNotice"
+  },
+  "boostAmountAboveMaximum": "The most you can Boost is {amount}",
+  "@boostAmountAboveMaximum": {
+    "description": "boostAmountAboveMaximum",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "boostHistoryReasonSenderSet": "You added a Boost",
+  "@boostHistoryReasonSenderSet": {
+    "description": "boostHistoryReasonSenderSet"
+  },
+  "boostHistoryReasonSenderIncreased": "You raised the Boost",
+  "@boostHistoryReasonSenderIncreased": {
+    "description": "boostHistoryReasonSenderIncreased"
+  },
+  "boostHistoryReasonSenderDecreased": "You lowered the Boost",
+  "@boostHistoryReasonSenderDecreased": {
+    "description": "boostHistoryReasonSenderDecreased"
+  },
+  "boostHistoryReasonSenderRemoved": "You removed the Boost",
+  "@boostHistoryReasonSenderRemoved": {
+    "description": "boostHistoryReasonSenderRemoved"
+  },
+  "boostHistoryReasonFrozen": "Locked in when the delivery was agreed",
+  "@boostHistoryReasonFrozen": {
+    "description": "boostHistoryReasonFrozen"
+  },
+  "boostHistoryReasonConsumed": "Included in the delivery payment",
+  "@boostHistoryReasonConsumed": {
+    "description": "boostHistoryReasonConsumed"
+  },
+  "boostHistoryReasonReleased": "Released when the match fell through",
+  "@boostHistoryReasonReleased": {
+    "description": "boostHistoryReasonReleased"
+  },
+  "boostHistoryReasonRequestClosed": "Ended with the request",
+  "@boostHistoryReasonRequestClosed": {
+    "description": "boostHistoryReasonRequestClosed"
+  },
+  "boostHistoryReasonOther": "Boost updated",
+  "@boostHistoryReasonOther": {
+    "description": "boostHistoryReasonOther"
+  },
+  "guestPaymentAmountDue": "Amount due",
+  "@guestPaymentAmountDue": {
+    "description": "guestPaymentAmountDue"
+  },
+  "guestPaymentLinkFailed": "We couldn't create a payment link. Try again.",
+  "@guestPaymentLinkFailed": {
+    "description": "guestPaymentLinkFailed"
+  },
+  "paymentSuccessPayerYou": "You",
+  "@paymentSuccessPayerYou": {
+    "description": "paymentSuccessPayerYou"
+  },
+  "paymentSuccessPayerGuest": "Someone else",
+  "@paymentSuccessPayerGuest": {
+    "description": "paymentSuccessPayerGuest"
+  },
+  "paymentSuccessPaidByLabel": "Paid by",
+  "@paymentSuccessPaidByLabel": {
+    "description": "paymentSuccessPaidByLabel"
+  },
+  "findTravelersCount": "{count, plural, =1{1 traveler} other{{count} travelers}}",
+  "@findTravelersCount": {
+    "description": "findTravelersCount",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "compact"
+      }
+    }
+  },
+  "findTravelersIneligibleUnknown": "This request can't be matched right now.",
+  "@findTravelersIneligibleUnknown": {
+    "description": "findTravelersIneligibleUnknown"
+  },
+  "findTravelersPayDeposit": "Pay deposit",
+  "@findTravelersPayDeposit": {
+    "description": "findTravelersPayDeposit"
+  },
+  "findTravelersDepartureLabel": "Departs {when}",
+  "@findTravelersDepartureLabel": {
+    "description": "findTravelersDepartureLabel",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersArrivalLabel": "Arrives {when}",
+  "@findTravelersArrivalLabel": {
+    "description": "findTravelersArrivalLabel",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersTrustTitle": "Checks ShipTrip has done",
+  "@findTravelersTrustTitle": {
+    "description": "findTravelersTrustTitle"
+  },
+  "offerBaseRewardLabel": "Base delivery reward",
+  "@offerBaseRewardLabel": {
+    "description": "offerBaseRewardLabel"
+  },
+  "offerBoostAddedOnTop": "Your Boost of {amount} is added on top of this.",
+  "@offerBoostAddedOnTop": {
+    "description": "offerBoostAddedOnTop",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "deliveriesOpenOffersSection": "Open offers",
+  "@deliveriesOpenOffersSection": {
+    "description": "deliveriesOpenOffersSection"
+  },
+  "journeyPostNew": "Post a trip",
+  "@journeyPostNew": {
+    "description": "journeyPostNew"
+  },
+  "depositBelowMinimum": "The smallest deposit is {amount}",
+  "@depositBelowMinimum": {
+    "description": "depositBelowMinimum",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "depositAboveMaximum": "That's more than the whole amount of {amount}",
+  "@depositAboveMaximum": {
+    "description": "depositAboveMaximum",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

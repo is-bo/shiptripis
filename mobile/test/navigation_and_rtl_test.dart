@@ -171,10 +171,23 @@ void main() {
         locale: const Locale('ar'),
       );
 
-      // Pointing forward in Arabic means pointing left. A hard-coded
-      // `arrow_forward` would send the eye back to the origin.
-      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+      // Pointing forward in Arabic means pointing left, and this glyph carries
+      // `matchTextDirection`, so Flutter mirrors it under an RTL Directionality
+      // and it already points left. Naming `arrow_back` here — which the app
+      // used to do — mirrors a second time and sends the eye back to the
+      // origin, which is why this test asserts the *rendered* direction and not
+      // just which constant was named.
+      expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+      final arrow = tester.widget<Icon>(
+        find.byIcon(Icons.arrow_forward_rounded),
+      );
+      expect(arrow.icon!.matchTextDirection, isTrue);
+      expect(
+        Directionality.of(
+          tester.element(find.byIcon(Icons.arrow_forward_rounded)),
+        ),
+        TextDirection.rtl,
+      );
     });
 
     testWidgets('the same arrow points the other way in English', (

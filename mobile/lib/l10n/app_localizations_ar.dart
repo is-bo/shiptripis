@@ -4824,4 +4824,132 @@ class LAr extends L {
 
   @override
   String get notificationPayoutSentBody => 'تم تحويل مستحقاتك بنجاح.';
+
+  @override
+  String get boostBreakdownTitle => 'تكلفة التعزيز';
+
+  @override
+  String get boostTravelerBonusLabel => 'يُضاف إلى مكافأة المسافر';
+
+  @override
+  String get boostYourCostLabel => 'تدفع مقابل التعزيز';
+
+  @override
+  String get boostAddsOnTop =>
+      'يُضاف التعزيز فوق مكافأة التوصيل التي عرضتها بالفعل. مكافأة أساسية + تعزيز هو ما يستلمه المسافر.';
+
+  @override
+  String get boostEstimateNotice =>
+      'تقدير حتى تحفظ. تؤكّد ShipTrip المبالغ النهائية.';
+
+  @override
+  String boostAmountAboveMaximum(String amount) {
+    return 'أقصى تعزيز ممكن هو $amount';
+  }
+
+  @override
+  String get boostHistoryReasonSenderSet => 'أضفت تعزيزًا';
+
+  @override
+  String get boostHistoryReasonSenderIncreased => 'رفعت قيمة التعزيز';
+
+  @override
+  String get boostHistoryReasonSenderDecreased => 'خفّضت قيمة التعزيز';
+
+  @override
+  String get boostHistoryReasonSenderRemoved => 'أزلت التعزيز';
+
+  @override
+  String get boostHistoryReasonFrozen => 'تم تثبيته عند الاتفاق على التوصيل';
+
+  @override
+  String get boostHistoryReasonConsumed => 'مُدرج في دفعة التوصيل';
+
+  @override
+  String get boostHistoryReasonReleased => 'أُعيد عندما لم تكتمل المطابقة';
+
+  @override
+  String get boostHistoryReasonRequestClosed => 'انتهى بانتهاء الطلب';
+
+  @override
+  String get boostHistoryReasonOther => 'تم تحديث التعزيز';
+
+  @override
+  String get guestPaymentAmountDue => 'المبلغ المستحق';
+
+  @override
+  String get guestPaymentLinkFailed => 'تعذّر إنشاء رابط الدفع. حاول مرة أخرى.';
+
+  @override
+  String get paymentSuccessPayerYou => 'أنت';
+
+  @override
+  String get paymentSuccessPayerGuest => 'شخص آخر';
+
+  @override
+  String get paymentSuccessPaidByLabel => 'دُفع بواسطة';
+
+  @override
+  String findTravelersCount(int count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString مسافر',
+      many: '$countString مسافرًا',
+      few: '$countString مسافرين',
+      two: 'مسافران',
+      one: 'مسافر واحد',
+      zero: 'لا مسافرين',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get findTravelersIneligibleUnknown =>
+      'لا يمكن مطابقة هذا الطلب في الوقت الحالي.';
+
+  @override
+  String get findTravelersPayDeposit => 'ادفع العربون';
+
+  @override
+  String findTravelersDepartureLabel(String when) {
+    return 'المغادرة $when';
+  }
+
+  @override
+  String findTravelersArrivalLabel(String when) {
+    return 'الوصول $when';
+  }
+
+  @override
+  String get findTravelersTrustTitle => 'عمليات تحقق أجرتها ShipTrip';
+
+  @override
+  String get offerBaseRewardLabel => 'مكافأة التوصيل الأساسية';
+
+  @override
+  String offerBoostAddedOnTop(String amount) {
+    return 'يُضاف تعزيزك البالغ $amount فوق هذا المبلغ.';
+  }
+
+  @override
+  String get deliveriesOpenOffersSection => 'العروض الجارية';
+
+  @override
+  String get journeyPostNew => 'انشر رحلة';
+
+  @override
+  String depositBelowMinimum(String amount) {
+    return 'أقل عربون هو $amount';
+  }
+
+  @override
+  String depositAboveMaximum(String amount) {
+    return 'هذا أكثر من المبلغ الكامل البالغ $amount';
+  }
 }

@@ -299,9 +299,21 @@ void main() {
           locale: const Locale('ar'),
         );
 
-        // In RTL, the mirrored arrow points back (leftwards) so Stop 0 on the right flows to Stop 1 on the left
-        expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-        expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+        // Stop 0 sits on the right in RTL and the arrow has to point left, at
+        // Stop 1. `arrow_forward_rounded` carries `matchTextDirection`, so
+        // Flutter mirrors it and it renders leftwards; naming `arrow_back`
+        // would mirror twice and point straight back at the origin.
+        expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+        final arrow = tester.widget<Icon>(
+          find.byIcon(Icons.arrow_forward_rounded),
+        );
+        expect(arrow.icon!.matchTextDirection, isTrue);
+        expect(
+          Directionality.of(
+            tester.element(find.byIcon(Icons.arrow_forward_rounded)),
+          ),
+          TextDirection.rtl,
+        );
       },
     );
   });
@@ -574,7 +586,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Must show no candidates copy
-      expect(find.text('No travellers going your way yet'), findsOneWidget);
+      expect(find.text('No travelers going your way yet'), findsOneWidget);
       // Safe CTAs must be present
       expect(find.text('Back'), findsOneWidget);
       expect(find.text('Refresh'), findsOneWidget);
@@ -586,7 +598,7 @@ void main() {
       );
     });
 
-    testWidgets('ineligible state awaitingDeposit offers Continue CTA', (
+    testWidgets('ineligible state awaitingDeposit names the payment', (
       tester,
     ) async {
       final repo = FakeMatchingRepository(
@@ -615,7 +627,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Publish your request'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
+      // The button opens the deposit checkout. "Continue" named the flow the
+      // sender was in rather than the thing they have to do, so the sender who
+      // did not read the body could not tell that money was next.
+      expect(find.text('Continue'), findsNothing);
+      expect(find.text('Pay deposit'), findsOneWidget);
     });
 
     testWidgets('ineligible state alreadyMatched offers Back CTA', (
@@ -646,7 +662,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('This parcel already has a traveller.'), findsOneWidget);
+      expect(find.text('This parcel already has a traveler.'), findsOneWidget);
       expect(find.text('Back'), findsOneWidget);
     });
 

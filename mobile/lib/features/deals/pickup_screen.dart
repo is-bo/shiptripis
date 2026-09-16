@@ -568,9 +568,7 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
       AppButton(
         label: l.pickupGoToDeliveryAction,
         variant: AppButtonVariant.secondary,
-        icon: context.isRtl
-            ? Icons.arrow_back_rounded
-            : Icons.arrow_forward_rounded,
+        icon: Icons.arrow_forward_rounded,
         onPressed: () => context.openDelivery(deal.id),
       ),
     ];

@@ -136,6 +136,28 @@ METHOD_REASON = {
     "cross_user_account_review": "this account is claimed by another Traveler too",
 }
 
+#: `compare_names` classifications, said as what the reviewer has to weigh. The
+#: queue and the decision history used to print the classification itself, so a
+#: row read "name review_alias_spelling" - a value only somebody who has read
+#: `payout_identity.py` can act on. Same rule as METHOD_REASON: the sentence is
+#: what the operator reads, and the code stays beside it where it is already
+#: shown for grepping.
+NAME_COMPARISON = {
+    "consistent": "name matches the attested identity",
+    "review_alias_spelling": "same name, spelled differently",
+    "mismatch": "name does not match the attested identity",
+    "insufficient_attestation": "no attested name to compare against",
+}
+
+
+def name_comparison_label(code):
+    """A `compare_names` classification as a sentence, code and all."""
+
+    if not code:
+        return ""
+    said = NAME_COMPARISON.get(code)
+    return f"{said} ({code})" if said else code
+
 #: Known domain refusals, said as something an operator can act on. Anything
 #: else falls back to the domain's own authored English, which never carries a
 #: stack trace, a provider detail or an exception repr.
@@ -352,6 +374,9 @@ def queue_rows(methods):
                 "submitted_at": profile.submitted_at,
                 "evidence": _evidence_state(profile),
                 "reason": latest.reason_code if latest else "",
+                "reason_label": (
+                    name_comparison_label(latest.reason_code) if latest else ""
+                ),
                 "decided_by": (
                     (latest.reviewer.full_name or latest.reviewer.email)
                     if latest
@@ -427,6 +452,7 @@ def review_view(profile, *, user, revealed=None):
         "identity": {
             "attested": identity_ok,
             "comparison": comparison,
+            "comparison_label": name_comparison_label(comparison),
             "assignment": (
                 {
                     "reference": str(assignment.public_reference),
@@ -444,6 +470,7 @@ def review_view(profile, *, user, revealed=None):
                 "label": DECISIONS[row.status][0],
                 "tone": DECISIONS[row.status][2],
                 "reason": row.reason_code,
+                "reason_label": name_comparison_label(row.reason_code),
                 "reviewer": row.reviewer.full_name or row.reviewer.email,
                 "at": row.created_at,
             }

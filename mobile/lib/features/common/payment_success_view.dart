@@ -95,7 +95,12 @@ class PaymentSuccessView extends StatelessWidget {
           const SizedBox(height: AppSpace.xs),
           Center(
             child: Text(
-              '$originPlaceName → $destinationPlaceName',
+              // Travel order, not string order: in Arabic the origin is on the
+              // right and the arrow has to run the other way. A hard-coded
+              // `→` reversed the route on every Arabic receipt.
+              context.isRtl
+                  ? '$destinationPlaceName ← $originPlaceName'
+                  : '$originPlaceName → $destinationPlaceName',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: c.textSecondary,
                 fontWeight: FontWeight.w500,
@@ -152,11 +157,13 @@ class PaymentSuccessView extends StatelessWidget {
                   ),
                 ),
               DetailRow(
-                label: paidByGuest
-                    ? l.paymentSuccessPaidByGuest
-                    : l.paymentSuccessPaidBySelf,
+                label: l.paymentSuccessPaidByLabel,
                 value: Text(
-                  paidByGuest ? 'Guest' : 'Self',
+                  // Was a hard-coded 'Guest' / 'Self', which reached French and
+                  // Arabic receipts untranslated and repeated the label.
+                  paidByGuest
+                      ? l.paymentSuccessPayerGuest
+                      : l.paymentSuccessPayerYou,
                   style: TextStyle(color: c.textSecondary),
                 ),
               ),

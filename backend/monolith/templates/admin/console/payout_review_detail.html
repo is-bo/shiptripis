@@ -58,7 +58,7 @@
     {% if review.identity.attested %}
     <p>A reviewer has recorded this Traveler's legal name from their approved KYC. The server compared it against the account holder on this profile:</p>
     <dl class="st-facts">
-      <div><dt>Name comparison</dt><dd><span class="st-chip st-{% if review.identity.comparison == 'consistent' %}ok{% else %}attn{% endif %}">{{ review.identity.comparison|default:"unavailable" }}</span></dd></div>
+      <div><dt>Name comparison</dt><dd><span class="st-chip st-{% if review.identity.comparison == 'consistent' %}ok{% else %}attn{% endif %}">{{ review.identity.comparison_label|default:"unavailable" }}</span></dd></div>
       <div><dt>Traveler</dt><dd><a href="{% url 'admin_console:user-detail' review.traveler.id %}">Open user record</a></dd></div>
     </dl>
     {% if review.needs_name_acceptance %}
@@ -205,7 +205,7 @@
         <span class="st-chip st-{{ row.tone }}">{{ row.label }}</span>
         <div>
           <strong>{{ row.reviewer }}</strong>
-          <span>{{ row.at|date:"d M Y, H:i" }}{% if row.reason %} &middot; name check: {{ row.reason }}{% endif %}</span>
+          <span>{{ row.at|date:"d M Y, H:i" }}{% if row.reason_label %} &middot; name check: {{ row.reason_label }}{% endif %}</span>
         </div>
       </li>
       {% endfor %}

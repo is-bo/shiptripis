@@ -6725,3 +6725,83 @@ operator session this environment does not have — and is recorded as not run
 rather than assumed; the local finance suite (1041 tests, including the H5
 control plane and its reconciliation gates) and CI's Django job both passed on
 this exact code.
+
+## Phase J6 — Final UX, device and end-to-end acceptance review (2026-09-16)
+
+Starting main `3d7be28`, branch `claude/j6-final-ux-review`. One hard pass over
+the product as it renders rather than as the phase reports describe it. Full
+detail in `docs/PHASE_J6_FINAL_UX_REVIEW.md`.
+
+No physical device and no emulator exist on this workstation, so the device pass
+ran as a rendered-pixel harness: the real widget tree and theme with the four
+bundled variable fonts and the Material icon font loaded into `flutter test`,
+each screen pumped at a real viewport and written out as a PNG through
+`matchesGoldenFile --update-goldens`, then read as an image. 320×640, 390×844,
+411×869, landscape, 1.6× text scale, and EN/FR/AR. The harness is deliberately
+not committed — it pins an absolute Windows path to the SDK icon font and golden
+PNGs do not survive a Linux runner — but it is three small files and the phase
+doc says how to rebuild it.
+
+**The blocker it found, which no assertion could.** Material's
+`arrow_forward_rounded`, `arrow_back_rounded` and both chevrons carry
+`matchTextDirection`, so Flutter already mirrors them under RTL. Ten call sites
+also flipped the constant by hand. Two mirrors cancel: in Arabic every route
+arrow and every row chevron pointed back the way it came, and a Paris → Algiers
+trip read `Algiers → Paris` on the Sender's main discovery screen. Every existing
+RTL test asserted *which constant was named* — and the constant was right — so
+the bug was invisible to the suite. Both arrow tests now assert the rendered
+direction, and a source guard fails if the hand flip returns.
+
+**Boost and propose were the other cluster.** The Boost breakdown card made four
+false statements about money on one screen: it was headed "Remaining balance at
+delivery", labelled the Boost alone "Traveler receives", called Boost plus its fee
+the "Total sender cost", and closed with the deposit screen's paid-in-full notice.
+The platform fee was computed in the client on a hard-coded 2500 bps fallback; a
+saved Boost now takes the server's own `economics` split and an unsaved one is
+projected from the published rate and labelled an estimate. Over-maximum was
+refused with an "offer at least" string and a hard-coded `€100.00`. History
+printed `sender_increased` and friends verbatim.
+
+The propose sheet pre-filled the *recommended* reward rather than the reward the
+sender had already chosen, so a sender who posted at €30.00 and tapped Send offer
+raised their own reward by five euro without being told. It also labelled the base
+reward as though it were the whole reward, could address the wrong parcel via
+`?? target.journeyId`, and left the trip sheet mounted underneath, so returning
+from the negotiation screen landed on a live "Make an offer" for a Traveler the
+sender had just proposed to.
+
+**Smaller but real.** The payment receipt rendered hard-coded `Guest`/`Self` in
+every locale and a hard-coded `→` that reversed the route in Arabic. The guest
+payer sheet labelled the amount still owed "Paid", carried two hard-coded English
+error strings, and polled every three seconds indefinitely — it now subscribes to
+the `payment.*` live update it was already entitled to and keeps a backing-off
+poll as the fallback. The trip sheet listed "Identity verified" under "Why this
+trip fits" and showed less schedule than the card that opened it. Find Travelers
+renamed an unknown `route_fit` "Compatible route", told a sender their request was
+"closed" on an unparseable reason, put "Continue" on a button that opens a payment,
+and announced the page title once per card to a screen reader. Deliveries headed
+live negotiations "Offer history" and called creating a whole journey "Add a leg".
+A custom deposit outside the server's bounds had no inline validation.
+
+**English shipped both spellings of its own core noun** — 63 strings said
+"traveller", 13 said "traveler", and one Boost card used both three lines apart.
+Standardised on Traveler/travelers.
+
+**Backend.** One operator-facing change only: the payout review queue and detail
+printed `compare_names`' raw classification, so a row read "name
+review_alias_spelling". A `NAME_COMPARISON` map now says the sentence and keeps
+the code beside it, matching what `METHOD_REASON` already did. No accounting,
+payout-routing, Deal-lifecycle or H5 reporting code was touched.
+
+**Totals.** 1 BLOCKER and 19 MAJOR found and fixed; 16 MINOR found, 7 fixed and 9
+deferred with reasons. 635 mobile tests pass (618 before, +17 in
+`test/phase_j6_ux_acceptance_test.dart`), `flutter analyze --fatal-infos` clean,
+`dart format` clean, `l10n_untranslated.json` empty. Backend: 62 admin-console and
+16 J1.2 finance tests pass. Stripe TEST, Chargily TEST,
+`PAYOUT_DZD_EXECUTION_ENABLED` false, no LIVE, no real money, no Railway
+deployment.
+
+Not covered, and recorded as limitations rather than inferred: no physical device
+or emulator, and no deployed Finance console operator session — that needs a login
+this environment does not hold, so those surfaces were reviewed as source and
+J1.2's browser QA remains the last real operator pass over them.

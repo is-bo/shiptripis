@@ -342,7 +342,7 @@ abstract class L {
   /// No description provided for @roleTraveler.
   ///
   /// In en, this message translates to:
-  /// **'Travelling'**
+  /// **'Traveling'**
   String get roleTraveler;
 
   /// No description provided for @roleSwitchLabel.
@@ -360,7 +360,7 @@ abstract class L {
   /// No description provided for @roleSenderDescription.
   ///
   /// In en, this message translates to:
-  /// **'Send a parcel with a traveller'**
+  /// **'Send a parcel with a traveler'**
   String get roleSenderDescription;
 
   /// No description provided for @roleTravelerDescription.
@@ -378,7 +378,7 @@ abstract class L {
   /// No description provided for @roleSwitchedToTraveler.
   ///
   /// In en, this message translates to:
-  /// **'Switched to travelling'**
+  /// **'Switched to traveling'**
   String get roleSwitchedToTraveler;
 
   /// No description provided for @authSignIn.
@@ -660,7 +660,7 @@ abstract class L {
   /// No description provided for @staleRequestAlreadyMatched.
   ///
   /// In en, this message translates to:
-  /// **'This request has already been matched with a traveller.'**
+  /// **'This request has already been matched with a traveler.'**
   String get staleRequestAlreadyMatched;
 
   /// No description provided for @staleJourneyNotActive.
@@ -804,7 +804,7 @@ abstract class L {
   /// No description provided for @moneyTravelerReceives.
   ///
   /// In en, this message translates to:
-  /// **'Traveller receives'**
+  /// **'Traveler receives'**
   String get moneyTravelerReceives;
 
   /// No description provided for @moneyPlatformFee.
@@ -864,7 +864,7 @@ abstract class L {
   /// No description provided for @moneyTravelerCompensation.
   ///
   /// In en, this message translates to:
-  /// **'Traveller compensation'**
+  /// **'Traveler compensation'**
   String get moneyTravelerCompensation;
 
   /// No description provided for @moneyBreakdownTitle.
@@ -876,7 +876,7 @@ abstract class L {
   /// No description provided for @moneyRewardNotReduced.
   ///
   /// In en, this message translates to:
-  /// **'The traveller receives this full amount. The ShipTrip fee is added on top, not taken out of it.'**
+  /// **'The traveler receives this full amount. The ShipTrip fee is added on top, not taken out of it.'**
   String get moneyRewardNotReduced;
 
   /// No description provided for @moneyDepositNotExtra.
@@ -966,7 +966,7 @@ abstract class L {
   /// No description provided for @homeEmptySenderBody.
   ///
   /// In en, this message translates to:
-  /// **'Post what you want to send and travellers heading that way will see it.'**
+  /// **'Post what you want to send and travelers heading that way will see it.'**
   String get homeEmptySenderBody;
 
   /// No description provided for @homeEmptyTravelerTitle.
@@ -1068,7 +1068,7 @@ abstract class L {
   /// No description provided for @requestStatusOpen.
   ///
   /// In en, this message translates to:
-  /// **'Finding a traveller'**
+  /// **'Finding a traveler'**
   String get requestStatusOpen;
 
   /// No description provided for @requestStatusMatched.
@@ -1254,7 +1254,7 @@ abstract class L {
   /// No description provided for @requestPickupHint.
   ///
   /// In en, this message translates to:
-  /// **'Where the traveller collects the parcel'**
+  /// **'Where the traveler collects the parcel'**
   String get requestPickupHint;
 
   /// No description provided for @requestDeliveryHint.
@@ -1296,7 +1296,7 @@ abstract class L {
   /// No description provided for @requestDescriptionHint.
   ///
   /// In en, this message translates to:
-  /// **'Describe it accurately. This is what the traveller agrees to carry.'**
+  /// **'Describe it accurately. This is what the traveler agrees to carry.'**
   String get requestDescriptionHint;
 
   /// No description provided for @requestCategory.
@@ -1386,7 +1386,7 @@ abstract class L {
   /// No description provided for @requestHandlingNotesHint.
   ///
   /// In en, this message translates to:
-  /// **'Anything the traveller should know'**
+  /// **'Anything the traveler should know'**
   String get requestHandlingNotesHint;
 
   /// No description provided for @requestFragile.
@@ -1470,7 +1470,7 @@ abstract class L {
   /// No description provided for @depositCreditedNote.
   ///
   /// In en, this message translates to:
-  /// **'It\'s credited towards your final payment when a traveller accepts.'**
+  /// **'It\'s credited towards your final payment when a traveler accepts.'**
   String get depositCreditedNote;
 
   /// No description provided for @depositRefundNote.
@@ -1536,7 +1536,7 @@ abstract class L {
   /// No description provided for @depositPaidBody.
   ///
   /// In en, this message translates to:
-  /// **'Travellers heading your way can see this now.'**
+  /// **'Travelers heading your way can see this now.'**
   String get depositPaidBody;
 
   /// No description provided for @journeyTitle.
@@ -1740,7 +1740,7 @@ abstract class L {
   /// No description provided for @journeyModeLabel.
   ///
   /// In en, this message translates to:
-  /// **'How you\'re travelling'**
+  /// **'How you\'re traveling'**
   String get journeyModeLabel;
 
   /// No description provided for @journeyLegStartsAt.
@@ -2364,7 +2364,7 @@ abstract class L {
   /// No description provided for @kycWhyBody.
   ///
   /// In en, this message translates to:
-  /// **'Senders are handing a stranger something that matters to them. Verifying travellers is what makes that reasonable.'**
+  /// **'Senders are handing a stranger something that matters to them. Verifying travelers is what makes that reasonable.'**
   String get kycWhyBody;
 
   /// No description provided for @kycStatusNotStarted.
@@ -2472,7 +2472,7 @@ abstract class L {
   /// No description provided for @discoveryTravelersTitle.
   ///
   /// In en, this message translates to:
-  /// **'Travellers for this parcel'**
+  /// **'Travelers for this parcel'**
   String get discoveryTravelersTitle;
 
   /// No description provided for @discoveryRequestsTitle.
@@ -2484,7 +2484,7 @@ abstract class L {
   /// No description provided for @discoveryEmptyTravelersTitle.
   ///
   /// In en, this message translates to:
-  /// **'No travellers yet'**
+  /// **'No travelers yet'**
   String get discoveryEmptyTravelersTitle;
 
   /// No description provided for @discoveryEmptyTravelersBody.
@@ -2556,7 +2556,7 @@ abstract class L {
   /// No description provided for @findTravelersEmptyTitle.
   ///
   /// In en, this message translates to:
-  /// **'No travellers going your way yet'**
+  /// **'No travelers going your way yet'**
   String get findTravelersEmptyTitle;
 
   /// No description provided for @findTravelersEmptyBody.
@@ -2574,7 +2574,7 @@ abstract class L {
   /// No description provided for @findTravelersIneligibleAlreadyMatched.
   ///
   /// In en, this message translates to:
-  /// **'This parcel already has a traveller.'**
+  /// **'This parcel already has a traveler.'**
   String get findTravelersIneligibleAlreadyMatched;
 
   /// No description provided for @findTravelersIneligibleClosed.
@@ -2634,7 +2634,7 @@ abstract class L {
   /// No description provided for @findTravelersShowMore.
   ///
   /// In en, this message translates to:
-  /// **'Show more travellers'**
+  /// **'Show more travelers'**
   String get findTravelersShowMore;
 
   /// A route stop reached by air: the city first, the airport code beside it. Airports are a facet of a stop, never a stop of their own.
@@ -2706,7 +2706,7 @@ abstract class L {
   /// No description provided for @discoveryVerifiedTraveler.
   ///
   /// In en, this message translates to:
-  /// **'Verified traveller'**
+  /// **'Verified traveler'**
   String get discoveryVerifiedTraveler;
 
   /// No description provided for @discoveryBoosted.
@@ -2718,7 +2718,7 @@ abstract class L {
   /// No description provided for @discoveryBoostedExplainer.
   ///
   /// In en, this message translates to:
-  /// **'The sender paid to be seen by more travellers. It doesn\'t change whether you\'re a match.'**
+  /// **'The sender paid to be seen by more travelers. It doesn\'t change whether you\'re a match.'**
   String get discoveryBoostedExplainer;
 
   /// No description provided for @discoveryRatingCount.
@@ -2742,13 +2742,13 @@ abstract class L {
   /// No description provided for @offerProposeExplainer.
   ///
   /// In en, this message translates to:
-  /// **'You choose what the traveller earns. They can accept, decline, or come back with a different amount.'**
+  /// **'You choose what the traveler earns. They can accept, decline, or come back with a different amount.'**
   String get offerProposeExplainer;
 
   /// No description provided for @offerRewardLabel.
   ///
   /// In en, this message translates to:
-  /// **'Traveller\'s reward'**
+  /// **'Traveler\'s reward'**
   String get offerRewardLabel;
 
   /// No description provided for @offerUseRecommended.
@@ -2796,7 +2796,7 @@ abstract class L {
   /// No description provided for @offerAwaitingTraveler.
   ///
   /// In en, this message translates to:
-  /// **'Waiting for the traveller'**
+  /// **'Waiting for the traveler'**
   String get offerAwaitingTraveler;
 
   /// No description provided for @offerAwaitingSender.
@@ -2916,7 +2916,7 @@ abstract class L {
   /// No description provided for @offerTravelerCounterTitle.
   ///
   /// In en, this message translates to:
-  /// **'Traveller\'s counter-offer'**
+  /// **'Traveler\'s counter-offer'**
   String get offerTravelerCounterTitle;
 
   /// No description provided for @offerYourCounterTitle.
@@ -2940,7 +2940,7 @@ abstract class L {
   /// No description provided for @offerTravelerAsks.
   ///
   /// In en, this message translates to:
-  /// **'Traveller asks {amount}'**
+  /// **'Traveler asks {amount}'**
   String offerTravelerAsks(String amount);
 
   /// No description provided for @offerYouWouldReceive.
@@ -3330,7 +3330,7 @@ abstract class L {
   /// No description provided for @recipientExplainer.
   ///
   /// In en, this message translates to:
-  /// **'We email the delivery code to the recipient. The traveller can only complete the delivery if the recipient gives them that code.'**
+  /// **'We email the delivery code to the recipient. The traveler can only complete the delivery if the recipient gives them that code.'**
   String get recipientExplainer;
 
   /// No description provided for @recipientName.
@@ -3414,7 +3414,7 @@ abstract class L {
   /// No description provided for @pickupSenderExplainer.
   ///
   /// In en, this message translates to:
-  /// **'Give this code to the traveller only when you\'re physically handing over the parcel. It\'s how they confirm they have it.'**
+  /// **'Give this code to the traveler only when you\'re physically handing over the parcel. It\'s how they confirm they have it.'**
   String get pickupSenderExplainer;
 
   /// No description provided for @pickupSenderReveal.
@@ -3474,7 +3474,7 @@ abstract class L {
   /// No description provided for @pickupAwaitingSenderBody.
   ///
   /// In en, this message translates to:
-  /// **'The traveller will ask for your pickup code when you meet.'**
+  /// **'The traveler will ask for your pickup code when you meet.'**
   String get pickupAwaitingSenderBody;
 
   /// No description provided for @pickupAwaitingTravelerBody.
@@ -3576,7 +3576,7 @@ abstract class L {
   /// No description provided for @deliveryCodeSenderWarning.
   ///
   /// In en, this message translates to:
-  /// **'The recipient gives this to the traveller at the door. Only share it with the recipient.'**
+  /// **'The recipient gives this to the traveler at the door. Only share it with the recipient.'**
   String get deliveryCodeSenderWarning;
 
   /// No description provided for @deliveryCodeTravelerNever.
@@ -3774,7 +3774,7 @@ abstract class L {
   /// No description provided for @disputeOpenExplainer.
   ///
   /// In en, this message translates to:
-  /// **'Tell us what went wrong. Opening a dispute puts the traveller\'s payout on hold while we look into it.'**
+  /// **'Tell us what went wrong. Opening a dispute puts the traveler\'s payout on hold while we look into it.'**
   String get disputeOpenExplainer;
 
   /// No description provided for @disputeCategory.
@@ -3912,7 +3912,7 @@ abstract class L {
   /// No description provided for @disputeResolutionTravelerPaid.
   ///
   /// In en, this message translates to:
-  /// **'Paid to the traveller'**
+  /// **'Paid to the traveler'**
   String get disputeResolutionTravelerPaid;
 
   /// No description provided for @disputeResolutionPartial.
@@ -3972,7 +3972,7 @@ abstract class L {
   /// No description provided for @cancelWithCompensation.
   ///
   /// In en, this message translates to:
-  /// **'Because it\'s close to pickup, the traveller is compensated for holding the space.'**
+  /// **'Because it\'s close to pickup, the traveler is compensated for holding the space.'**
   String get cancelWithCompensation;
 
   /// No description provided for @cancelNotAllowedTitle.
@@ -4014,7 +4014,7 @@ abstract class L {
   /// No description provided for @ratingSenderPrompt.
   ///
   /// In en, this message translates to:
-  /// **'Rate the traveller'**
+  /// **'Rate the traveler'**
   String get ratingSenderPrompt;
 
   /// No description provided for @ratingTravelerPrompt.
@@ -4632,7 +4632,7 @@ abstract class L {
   /// No description provided for @locationPrivacyAfterFunding.
   ///
   /// In en, this message translates to:
-  /// **'Full address shared with the traveller.'**
+  /// **'Full address shared with the traveler.'**
   String get locationPrivacyAfterFunding;
 
   /// No description provided for @locationHiddenUntilFunded.
@@ -4752,7 +4752,7 @@ abstract class L {
   /// No description provided for @locationPreferredExplainer.
   ///
   /// In en, this message translates to:
-  /// **'Travellers are matched on {place}. A preferred point only says where you would rather meet inside it.'**
+  /// **'Travelers are matched on {place}. A preferred point only says where you would rather meet inside it.'**
   String locationPreferredExplainer(String place);
 
   /// No description provided for @locationPreferredFlexibleHint.
@@ -5136,7 +5136,7 @@ abstract class L {
   /// No description provided for @homeVerifyIdentityBody.
   ///
   /// In en, this message translates to:
-  /// **'Travellers must be verified before a journey can go live.'**
+  /// **'Travelers must be verified before a journey can go live.'**
   String get homeVerifyIdentityBody;
 
   /// No description provided for @homeAttentionOfferAwaiting.
@@ -5160,7 +5160,7 @@ abstract class L {
   /// No description provided for @homeAttentionRevealPickup.
   ///
   /// In en, this message translates to:
-  /// **'Show the pickup code to your traveller'**
+  /// **'Show the pickup code to your traveler'**
   String get homeAttentionRevealPickup;
 
   /// No description provided for @homeAttentionSubmitPickup.
@@ -5244,7 +5244,7 @@ abstract class L {
   /// No description provided for @onboardingSendBody.
   ///
   /// In en, this message translates to:
-  /// **'Post what you want delivered. Travellers already heading that way can carry it, and you agree the price between you.'**
+  /// **'Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.'**
   String get onboardingSendBody;
 
   /// No description provided for @onboardingCarryTitle.
@@ -5628,7 +5628,7 @@ abstract class L {
   /// No description provided for @requestReadyWindowHelp.
   ///
   /// In en, this message translates to:
-  /// **'The stretch of time a traveller could collect it. Give a window, not a minute.'**
+  /// **'The stretch of time a traveler could collect it. Give a window, not a minute.'**
   String get requestReadyWindowHelp;
 
   /// No description provided for @requestDeadlineHelp.
@@ -5694,13 +5694,13 @@ abstract class L {
   /// No description provided for @requestProposedRewardHelp.
   ///
   /// In en, this message translates to:
-  /// **'A starting point, not a price. Travellers can accept it or come back with a different amount.'**
+  /// **'A starting point, not a price. Travelers can accept it or come back with a different amount.'**
   String get requestProposedRewardHelp;
 
   /// No description provided for @requestRewardIsIntent.
   ///
   /// In en, this message translates to:
-  /// **'This is what you proposed. The price is settled when a traveller accepts an offer.'**
+  /// **'This is what you proposed. The price is settled when a traveler accepts an offer.'**
   String get requestRewardIsIntent;
 
   /// No description provided for @requestReviewTitle.
@@ -5748,7 +5748,7 @@ abstract class L {
   /// No description provided for @requestMatchesSection.
   ///
   /// In en, this message translates to:
-  /// **'Travellers you\'ve approached'**
+  /// **'Travelers you\'ve approached'**
   String get requestMatchesSection;
 
   /// No description provided for @requestNoMatchesYet.
@@ -5760,13 +5760,13 @@ abstract class L {
   /// No description provided for @requestAwaitingDepositNotice.
   ///
   /// In en, this message translates to:
-  /// **'Travellers can\'t see this yet. Pay the deposit to publish it.'**
+  /// **'Travelers can\'t see this yet. Pay the deposit to publish it.'**
   String get requestAwaitingDepositNotice;
 
   /// No description provided for @requestFindTravelers.
   ///
   /// In en, this message translates to:
-  /// **'Find travellers'**
+  /// **'Find travelers'**
   String get requestFindTravelers;
 
   /// No description provided for @requestPayDepositAction.
@@ -5790,7 +5790,7 @@ abstract class L {
   /// No description provided for @requestCancelConfirmBody.
   ///
   /// In en, this message translates to:
-  /// **'It stops being visible to travellers. Any deposit you paid comes back to you.'**
+  /// **'It stops being visible to travelers. Any deposit you paid comes back to you.'**
   String get requestCancelConfirmBody;
 
   /// No description provided for @requestCancelled.
@@ -5802,7 +5802,7 @@ abstract class L {
   /// No description provided for @requestCancelNotCancellableBody.
   ///
   /// In en, this message translates to:
-  /// **'A traveller is already matched with this request, so it can\'t be cancelled here.'**
+  /// **'A traveler is already matched with this request, so it can\'t be cancelled here.'**
   String get requestCancelNotCancellableBody;
 
   /// No description provided for @requestCancelViaDealBody.
@@ -5832,7 +5832,7 @@ abstract class L {
   /// No description provided for @requestTargetedNotice.
   ///
   /// In en, this message translates to:
-  /// **'You addressed this request to one traveller. Nobody else can see it.'**
+  /// **'You addressed this request to one traveler. Nobody else can see it.'**
   String get requestTargetedNotice;
 
   /// No description provided for @depositNotRequiredTitle.
@@ -5868,7 +5868,7 @@ abstract class L {
   /// No description provided for @discoveryDetourLabel.
   ///
   /// In en, this message translates to:
-  /// **'Detour for the traveller'**
+  /// **'Detour for the traveler'**
   String get discoveryDetourLabel;
 
   /// No description provided for @discoveryFirstDeparture.
@@ -5904,13 +5904,13 @@ abstract class L {
   /// No description provided for @discoveryLegRangeMoved.
   ///
   /// In en, this message translates to:
-  /// **'This traveller\'s route changed while you were looking. We\'ve refreshed it.'**
+  /// **'This traveler\'s route changed while you were looking. We\'ve refreshed it.'**
   String get discoveryLegRangeMoved;
 
   /// No description provided for @discoveryIncompatibleCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{This traveller no longer fits your parcel, for 1 reason.} other{This traveller no longer fits your parcel, for {count} reasons.}}'**
+  /// **'{count, plural, =1{This traveler no longer fits your parcel, for 1 reason.} other{This traveler no longer fits your parcel, for {count} reasons.}}'**
   String discoveryIncompatibleCount(int count);
 
   /// No description provided for @boostRankingLabel.
@@ -5952,7 +5952,7 @@ abstract class L {
   /// No description provided for @boostCompatibilityNote.
   ///
   /// In en, this message translates to:
-  /// **'Only travellers who already match your parcel ever see it. A boost doesn\'t change who those travellers are.'**
+  /// **'Only travelers who already match your parcel ever see it. A boost doesn\'t change who those travelers are.'**
   String get boostCompatibilityNote;
 
   /// No description provided for @boostActivatesOnPayment.
@@ -6246,7 +6246,7 @@ abstract class L {
   /// Sender copy after pickup is confirmed.
   ///
   /// In en, this message translates to:
-  /// **'The delivery code is now available to your recipient. Only they can pass it to the traveller.'**
+  /// **'The delivery code is now available to your recipient. Only they can pass it to the traveler.'**
   String get pickupConfirmedSenderNext;
 
   /// Traveller copy after pickup is confirmed. States the invariant plainly.
@@ -6324,7 +6324,7 @@ abstract class L {
   /// Sender explainer on the delivery screen.
   ///
   /// In en, this message translates to:
-  /// **'The recipient receives this code by email. They read it to the traveller at the door, and that is what confirms the delivery.'**
+  /// **'The recipient receives this code by email. They read it to the traveler at the door, and that is what confirms the delivery.'**
   String get deliverySenderExplainer;
 
   /// Fallback for deliveryCodeSentToRecipient when no recipient contact is on the record.
@@ -6414,7 +6414,7 @@ abstract class L {
   /// Notice title on the dispute form.
   ///
   /// In en, this message translates to:
-  /// **'The traveller\'s payout goes on hold'**
+  /// **'The traveler\'s payout goes on hold'**
   String get disputeFreezesPayoutTitle;
 
   /// Notice body on the dispute form.
@@ -6486,7 +6486,7 @@ abstract class L {
   /// Value for opened_by_role = traveler.
   ///
   /// In en, this message translates to:
-  /// **'The traveller'**
+  /// **'The traveler'**
   String get disputeOpenedByTraveler;
 
   /// Row label for when the dispute was opened.
@@ -6720,13 +6720,13 @@ abstract class L {
   /// No description provided for @onboardingHeadline.
   ///
   /// In en, this message translates to:
-  /// **'Send anything,\nthe travellers\ndo the rest.'**
+  /// **'Send anything,\nthe travelers\ndo the rest.'**
   String get onboardingHeadline;
 
   /// No description provided for @onboardingBody.
   ///
   /// In en, this message translates to:
-  /// **'A peer-to-peer corridor between Algeria and France. Travellers carry, senders save, and the money is held until it arrives.'**
+  /// **'A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.'**
   String get onboardingBody;
 
   /// No description provided for @onboardingStamp.
@@ -6792,7 +6792,7 @@ abstract class L {
   /// No description provided for @benefitsChapterOneBody.
   ///
   /// In en, this message translates to:
-  /// **'Travellers carry your parcel as part of their luggage. You pay a sliver of express shipping.'**
+  /// **'Travelers carry your parcel as part of their luggage. You pay a sliver of express shipping.'**
   String get benefitsChapterOneBody;
 
   /// No description provided for @benefitsChapterOneStamp.
@@ -6960,7 +6960,7 @@ abstract class L {
   /// No description provided for @requestItemPhotoHelp.
   ///
   /// In en, this message translates to:
-  /// **'Add a clear photo of what you\'re sending. Travellers decide from this.'**
+  /// **'Add a clear photo of what you\'re sending. Travelers decide from this.'**
   String get requestItemPhotoHelp;
 
   /// No description provided for @requestItemPhotoChoose.
@@ -7050,7 +7050,7 @@ abstract class L {
   /// No description provided for @requestItemPhotoPrivacy.
   ///
   /// In en, this message translates to:
-  /// **'Only travellers who can see this request can see the photo.'**
+  /// **'Only travelers who can see this request can see the photo.'**
   String get requestItemPhotoPrivacy;
 
   /// No description provided for @fieldOptional.
@@ -8396,6 +8396,198 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Your payout has been transferred successfully.'**
   String get notificationPayoutSentBody;
+
+  /// boostBreakdownTitle
+  ///
+  /// In en, this message translates to:
+  /// **'What the Boost costs'**
+  String get boostBreakdownTitle;
+
+  /// boostTravelerBonusLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Added to the Traveler reward'**
+  String get boostTravelerBonusLabel;
+
+  /// boostYourCostLabel
+  ///
+  /// In en, this message translates to:
+  /// **'You pay for the Boost'**
+  String get boostYourCostLabel;
+
+  /// boostAddsOnTop
+  ///
+  /// In en, this message translates to:
+  /// **'The Boost is added on top of the delivery reward you already offered. Base reward + Boost is what the Traveler receives.'**
+  String get boostAddsOnTop;
+
+  /// boostEstimateNotice
+  ///
+  /// In en, this message translates to:
+  /// **'An estimate until you save. ShipTrip confirms the final amounts.'**
+  String get boostEstimateNotice;
+
+  /// boostAmountAboveMaximum
+  ///
+  /// In en, this message translates to:
+  /// **'The most you can Boost is {amount}'**
+  String boostAmountAboveMaximum(String amount);
+
+  /// boostHistoryReasonSenderSet
+  ///
+  /// In en, this message translates to:
+  /// **'You added a Boost'**
+  String get boostHistoryReasonSenderSet;
+
+  /// boostHistoryReasonSenderIncreased
+  ///
+  /// In en, this message translates to:
+  /// **'You raised the Boost'**
+  String get boostHistoryReasonSenderIncreased;
+
+  /// boostHistoryReasonSenderDecreased
+  ///
+  /// In en, this message translates to:
+  /// **'You lowered the Boost'**
+  String get boostHistoryReasonSenderDecreased;
+
+  /// boostHistoryReasonSenderRemoved
+  ///
+  /// In en, this message translates to:
+  /// **'You removed the Boost'**
+  String get boostHistoryReasonSenderRemoved;
+
+  /// boostHistoryReasonFrozen
+  ///
+  /// In en, this message translates to:
+  /// **'Locked in when the delivery was agreed'**
+  String get boostHistoryReasonFrozen;
+
+  /// boostHistoryReasonConsumed
+  ///
+  /// In en, this message translates to:
+  /// **'Included in the delivery payment'**
+  String get boostHistoryReasonConsumed;
+
+  /// boostHistoryReasonReleased
+  ///
+  /// In en, this message translates to:
+  /// **'Released when the match fell through'**
+  String get boostHistoryReasonReleased;
+
+  /// boostHistoryReasonRequestClosed
+  ///
+  /// In en, this message translates to:
+  /// **'Ended with the request'**
+  String get boostHistoryReasonRequestClosed;
+
+  /// boostHistoryReasonOther
+  ///
+  /// In en, this message translates to:
+  /// **'Boost updated'**
+  String get boostHistoryReasonOther;
+
+  /// guestPaymentAmountDue
+  ///
+  /// In en, this message translates to:
+  /// **'Amount due'**
+  String get guestPaymentAmountDue;
+
+  /// guestPaymentLinkFailed
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t create a payment link. Try again.'**
+  String get guestPaymentLinkFailed;
+
+  /// paymentSuccessPayerYou
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get paymentSuccessPayerYou;
+
+  /// paymentSuccessPayerGuest
+  ///
+  /// In en, this message translates to:
+  /// **'Someone else'**
+  String get paymentSuccessPayerGuest;
+
+  /// paymentSuccessPaidByLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Paid by'**
+  String get paymentSuccessPaidByLabel;
+
+  /// findTravelersCount
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 traveler} other{{count} travelers}}'**
+  String findTravelersCount(int count);
+
+  /// findTravelersIneligibleUnknown
+  ///
+  /// In en, this message translates to:
+  /// **'This request can\'t be matched right now.'**
+  String get findTravelersIneligibleUnknown;
+
+  /// findTravelersPayDeposit
+  ///
+  /// In en, this message translates to:
+  /// **'Pay deposit'**
+  String get findTravelersPayDeposit;
+
+  /// findTravelersDepartureLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Departs {when}'**
+  String findTravelersDepartureLabel(String when);
+
+  /// findTravelersArrivalLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Arrives {when}'**
+  String findTravelersArrivalLabel(String when);
+
+  /// findTravelersTrustTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Checks ShipTrip has done'**
+  String get findTravelersTrustTitle;
+
+  /// offerBaseRewardLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Base delivery reward'**
+  String get offerBaseRewardLabel;
+
+  /// offerBoostAddedOnTop
+  ///
+  /// In en, this message translates to:
+  /// **'Your Boost of {amount} is added on top of this.'**
+  String offerBoostAddedOnTop(String amount);
+
+  /// deliveriesOpenOffersSection
+  ///
+  /// In en, this message translates to:
+  /// **'Open offers'**
+  String get deliveriesOpenOffersSection;
+
+  /// journeyPostNew
+  ///
+  /// In en, this message translates to:
+  /// **'Post a trip'**
+  String get journeyPostNew;
+
+  /// depositBelowMinimum
+  ///
+  /// In en, this message translates to:
+  /// **'The smallest deposit is {amount}'**
+  String depositBelowMinimum(String amount);
+
+  /// depositAboveMaximum
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s more than the whole amount of {amount}'**
+  String depositAboveMaximum(String amount);
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

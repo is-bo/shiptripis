@@ -413,9 +413,7 @@ class PlaceResultRow extends StatelessWidget {
               Icon(
                 selected
                     ? Icons.check_circle_rounded
-                    : (context.isRtl
-                          ? Icons.chevron_left_rounded
-                          : Icons.chevron_right_rounded),
+                    : Icons.chevron_right_rounded,
                 size: 20,
                 color: selected ? c.brand : c.textTertiary,
               ),

@@ -4859,4 +4859,132 @@ class LFr extends L {
   @override
   String get notificationPayoutSentBody =>
       'Votre versement a été transféré avec succès.';
+
+  @override
+  String get boostBreakdownTitle => 'Ce que coûte le Boost';
+
+  @override
+  String get boostTravelerBonusLabel => 'Ajouté à la récompense du voyageur';
+
+  @override
+  String get boostYourCostLabel => 'Vous payez pour le Boost';
+
+  @override
+  String get boostAddsOnTop =>
+      'Le Boost s\'ajoute à la récompense de livraison que vous avez déjà proposée. Récompense de base + Boost, c\'est ce que le voyageur reçoit.';
+
+  @override
+  String get boostEstimateNotice =>
+      'Une estimation jusqu\'à l\'enregistrement. ShipTrip confirme les montants définitifs.';
+
+  @override
+  String boostAmountAboveMaximum(String amount) {
+    return 'Le Boost maximum est de $amount';
+  }
+
+  @override
+  String get boostHistoryReasonSenderSet => 'Vous avez ajouté un Boost';
+
+  @override
+  String get boostHistoryReasonSenderIncreased => 'Vous avez augmenté le Boost';
+
+  @override
+  String get boostHistoryReasonSenderDecreased => 'Vous avez réduit le Boost';
+
+  @override
+  String get boostHistoryReasonSenderRemoved => 'Vous avez retiré le Boost';
+
+  @override
+  String get boostHistoryReasonFrozen =>
+      'Verrouillé lors de la conclusion de la livraison';
+
+  @override
+  String get boostHistoryReasonConsumed =>
+      'Inclus dans le paiement de la livraison';
+
+  @override
+  String get boostHistoryReasonReleased =>
+      'Libéré lorsque l\'accord n\'a pas abouti';
+
+  @override
+  String get boostHistoryReasonRequestClosed => 'Terminé avec la demande';
+
+  @override
+  String get boostHistoryReasonOther => 'Boost mis à jour';
+
+  @override
+  String get guestPaymentAmountDue => 'Montant dû';
+
+  @override
+  String get guestPaymentLinkFailed =>
+      'Impossible de créer le lien de paiement. Réessayez.';
+
+  @override
+  String get paymentSuccessPayerYou => 'Vous';
+
+  @override
+  String get paymentSuccessPayerGuest => 'Quelqu’un d’autre';
+
+  @override
+  String get paymentSuccessPaidByLabel => 'Payé par';
+
+  @override
+  String findTravelersCount(int count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString voyageurs',
+      one: '1 voyageur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get findTravelersIneligibleUnknown =>
+      'Cette demande ne peut pas être mise en relation pour le moment.';
+
+  @override
+  String get findTravelersPayDeposit => 'Payer l\'acompte';
+
+  @override
+  String findTravelersDepartureLabel(String when) {
+    return 'Départ $when';
+  }
+
+  @override
+  String findTravelersArrivalLabel(String when) {
+    return 'Arrivée $when';
+  }
+
+  @override
+  String get findTravelersTrustTitle => 'Vérifications faites par ShipTrip';
+
+  @override
+  String get offerBaseRewardLabel => 'Récompense de base';
+
+  @override
+  String offerBoostAddedOnTop(String amount) {
+    return 'Votre Boost de $amount vient s’ajouter à ce montant.';
+  }
+
+  @override
+  String get deliveriesOpenOffersSection => 'Offres en cours';
+
+  @override
+  String get journeyPostNew => 'Publier un trajet';
+
+  @override
+  String depositBelowMinimum(String amount) {
+    return 'L\'acompte minimum est de $amount';
+  }
+
+  @override
+  String depositAboveMaximum(String amount) {
+    return 'C\'est plus que le montant total de $amount';
+  }
 }

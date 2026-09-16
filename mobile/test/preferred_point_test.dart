@@ -85,7 +85,7 @@ void main() {
       // And the reason it is optional is stated, not implied.
       expect(
         find.text(
-          'Travellers are matched on Jijel. A preferred point only says where '
+          'Travelers are matched on Jijel. A preferred point only says where '
           'you would rather meet inside it.',
         ),
         findsOneWidget,

@@ -63,7 +63,7 @@
           <span class="st-row-state">
             <span class="st-chip st-{{ row.bucket_tone }}">{{ row.bucket_label }}</span>
             {% if row.blocked %}<span class="st-row-blocker">Identity not attested{% if row.identity_reviewer %} &middot; assigned to {{ row.identity_reviewer }}{% endif %}</span>{% endif %}
-            {% if row.decided_by %}<span class="st-row-basis">{{ row.decided_by }} &middot; {{ row.decided_at|date:"d M Y" }}{% if row.reason and row.reason != "consistent" %} &middot; name {{ row.reason }}{% endif %}</span>{% endif %}
+            {% if row.decided_by %}<span class="st-row-basis">{{ row.decided_by }} &middot; {{ row.decided_at|date:"d M Y" }}{% if row.reason_label and row.reason != "consistent" %} &middot; {{ row.reason_label }}{% endif %}</span>{% endif %}
           </span>
         </li>
         {% endfor %}

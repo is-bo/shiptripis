@@ -334,7 +334,6 @@ class RouteSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final effective = style ?? Theme.of(context).textTheme.titleSmall;
-    final isRtl = context.isRtl;
 
     return Semantics(
       label: '$from to $to',
@@ -356,7 +355,7 @@ class RouteSummary extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
             child: Icon(
-              isRtl ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded,
+              Icons.arrow_forward_rounded,
               size: 15,
               color: c.textTertiary,
             ),
@@ -425,7 +424,6 @@ class InlineRoute extends StatelessWidget {
     if (stops.isEmpty) return const SizedBox.shrink();
 
     final c = context.colors;
-    final isRtl = context.isRtl;
     final textTheme = Theme.of(context).textTheme;
     final effectiveStyle =
         style ??
@@ -434,9 +432,11 @@ class InlineRoute extends StatelessWidget {
           color: c.textPrimary,
         );
     final effectiveArrowColor = arrowColor ?? c.textTertiary;
-    final arrowIcon = isRtl
-        ? Icons.arrow_back_rounded
-        : Icons.arrow_forward_rounded;
+    // `matchTextDirection` is true on this glyph, so Flutter mirrors it under
+    // an RTL Directionality and it already points the way the text runs.
+    // Choosing `arrow_back` here would mirror a second time and send the eye
+    // back to the origin — which is exactly what Arabic shipped with.
+    const arrowIcon = Icons.arrow_forward_rounded;
 
     final semanticText = stops.map((s) => s.displayText).join(' to ');
 

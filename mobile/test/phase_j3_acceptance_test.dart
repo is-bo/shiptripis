@@ -238,8 +238,18 @@ void main() {
           // Wax Seal glyph check
           expect(find.text('✓'), findsOneWidget);
 
-          // Contextual route check
-          expect(find.text('Paris → Algiers'), findsOneWidget);
+          // Contextual route check. The receipt draws travel order, not string
+          // order: Arabic reads origin-first from the right, so the arrow and
+          // the operands both turn round. A hard-coded `Paris → Algiers` used
+          // to print the route backwards on every Arabic receipt.
+          expect(
+            find.text(
+              locale.languageCode == 'ar'
+                  ? 'Algiers ← Paris'
+                  : 'Paris → Algiers',
+            ),
+            findsOneWidget,
+          );
 
           // Purpose-aware next step
           expect(find.text(l.paymentSuccessDepositNextBody), findsOneWidget);

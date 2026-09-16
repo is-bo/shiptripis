@@ -403,9 +403,7 @@ class _Blockers extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    context.isRtl
-                        ? Icons.chevron_left_rounded
-                        : Icons.chevron_right_rounded,
+                    Icons.chevron_right_rounded,
                     size: 20,
                     color: context.colors.textTertiary,
                   ),

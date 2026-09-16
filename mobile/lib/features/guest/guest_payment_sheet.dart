@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/live/live_updates.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/primitives.dart';
@@ -50,36 +51,90 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
   bool _revoking = false;
   String? _error;
   Timer? _pollTimer;
+  LiveUnsubscribe? _liveUnsubscribe;
   PaymentOrder? _liveOrder;
+  bool _reading = false;
+
+  /// Backoff for the fallback poll.
+  ///
+  /// A guest settling a link is a websocket event first: `payment.*` invalidates
+  /// this order's request and deal, so the sheet learns within a round trip of
+  /// the webhook. The poll is the answer for a sender whose socket is down, and
+  /// a flat three seconds forever was three requests a second per open sheet for
+  /// a payment somebody else may take ten minutes to make. It starts quick,
+  /// because most guests pay soon after the link is shared, then widens.
+  static const _pollSteps = <Duration>[
+    Duration(seconds: 3),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+  ];
+  static const _pollCeiling = Duration(seconds: 20);
+  int _pollTick = 0;
 
   @override
   void initState() {
     super.initState();
     _liveOrder = widget.order;
     _loadOrIssueLink();
-    _startPolling();
+    _liveUnsubscribe = ref
+        .read(liveUpdatesProvider)
+        .register(_liveResource(), _refreshOrder);
+    _schedulePoll();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _liveUnsubscribe?.call();
     super.dispose();
   }
 
-  void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      try {
-        final updated = await ref
-            .read(paymentRepositoryProvider)
-            .order(widget.order.publicReference);
-        if (!mounted) return;
-        setState(() => _liveOrder = updated);
-        if (updated.status.isSettled) {
-          _pollTimer?.cancel();
-          widget.onSettled?.call();
-        }
-      } catch (_) {}
+  /// The resource a `payment.*` event for this order lands on.
+  ///
+  /// A deal balance carries a deal id, a posting deposit carries the request it
+  /// publishes. Either way this is a resource the existing socket already
+  /// announces; nothing new is subscribed to.
+  LiveResource _liveResource() {
+    final dealId = widget.order.dealId;
+    if (dealId != null) return LiveResource.payment(dealId);
+    final requestId = widget.order.deliveryRequestId;
+    if (requestId != null) return LiveResource.deposit(requestId);
+    return const LiveResource.deals();
+  }
+
+  void _schedulePoll() {
+    if (!mounted) return;
+    final delay = _pollTick < _pollSteps.length
+        ? _pollSteps[_pollTick]
+        : _pollCeiling;
+    _pollTick++;
+    _pollTimer = Timer(delay, () async {
+      await _refreshOrder();
+      _schedulePoll();
     });
+  }
+
+  Future<void> _refreshOrder() async {
+    if (_reading || !mounted) return;
+    _reading = true;
+    try {
+      final updated = await ref
+          .read(paymentRepositoryProvider)
+          .order(widget.order.publicReference);
+      if (!mounted) return;
+      setState(() => _liveOrder = updated);
+      if (updated.status.isSettled) {
+        _pollTimer?.cancel();
+        widget.onSettled?.call();
+      }
+    } catch (_) {
+      // A failed read is not news the sender needs: the link is still valid and
+      // the next tick asks again.
+    } finally {
+      _reading = false;
+    }
   }
 
   Future<void> _loadOrIssueLink() async {
@@ -100,13 +155,13 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.serverDetail ?? 'Failed to generate guest link';
+        _error = e.serverDetail ?? L.of(context).guestPaymentLinkFailed;
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Failed to generate guest link';
+        _error = L.of(context).guestPaymentLinkFailed;
         _loading = false;
       });
     }
@@ -141,7 +196,7 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
           .revokeGuestLink(widget.order.publicReference);
       if (!mounted) return;
       Navigator.of(context).pop();
-      AppSnack.info(context, l.actionDone);
+      AppSnack.info(context, l.guestPayRevoked);
     } on ApiException catch (e) {
       if (!mounted) return;
       AppSnack.failure(context, e);
@@ -224,9 +279,14 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DetailRow(
-                    label: l.paymentStatusPaid,
+                    // Was `paymentStatusPaid` - the sheet labelled the amount
+                    // still owed "Paid".
+                    label: l.guestPaymentAmountDue,
                     value: Text(
-                      widget.order.amount?.format(locale) ?? '',
+                      (liveOrder.outstanding ?? liveOrder.amount)?.format(
+                            locale,
+                          ) ??
+                          '',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: c.brand,
@@ -268,12 +328,6 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy_rounded, size: 18),
-                          tooltip: l.guestPaymentCopyButton,
-                          onPressed: () =>
-                              _copyUrl(_link!.paymentLink ?? _link!.token),
                         ),
                       ],
                     ),

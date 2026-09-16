@@ -92,7 +92,7 @@ void main() {
     expect(find.text('SHIPTRIP · MEMBER'), findsOneWidget);
     expect(find.text('Amina Bouzid'), findsOneWidget);
     expect(find.text('amina@example.com'), findsOneWidget);
-    expect(find.text('Sending · Travelling'), findsOneWidget);
+    expect(find.text('Sending · Traveling'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('4.5 ★'), findsOneWidget);
     expect(find.textContaining('Français'), findsOneWidget);

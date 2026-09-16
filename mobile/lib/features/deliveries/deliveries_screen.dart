@@ -230,7 +230,10 @@ class _OpenNegotiations extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SectionHeader(title: l.offerHistoryTitle),
+            // These are live negotiations awaiting somebody's move. The
+            // heading used to read "Offer history", which told the sender the
+            // one thing they are not: over.
+            SectionHeader(title: l.deliveriesOpenOffersSection),
             for (final match in open) ...[
               _NegotiationRow(match: match, viewerId: account.id),
               const SizedBox(height: AppSpace.md),
@@ -371,8 +374,13 @@ class _RequestsSection extends ConsumerWidget {
                           ),
                           const SizedBox(height: AppSpace.xs),
                           Text(
-                            '${request.pickupLocation?.coarseLabel ?? ''} · '
-                            '${request.deliveryLocation?.coarseLabel ?? ''}',
+                            // A route, not a pair: the middle dot lost the
+                            // direction every other list on the app shows.
+                            context.isRtl
+                                ? '${request.deliveryLocation?.coarseLabel ?? ''} ← '
+                                      '${request.pickupLocation?.coarseLabel ?? ''}'
+                                : '${request.pickupLocation?.coarseLabel ?? ''} → '
+                                      '${request.deliveryLocation?.coarseLabel ?? ''}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: context.colors.textSecondary),
                             maxLines: 1,
@@ -435,7 +443,9 @@ class _JourneysSection extends ConsumerWidget {
           children: [
             SectionHeader(
               title: l.deliveriesJourneysSection,
-              actionLabel: showFinished ? null : l.journeyAddLeg,
+              // Opens the journey composer, which creates a whole trip. "Add
+              // a leg" named a step inside that screen, not the screen.
+              actionLabel: showFinished ? null : l.journeyPostNew,
               onAction: showFinished ? null : () => context.openJourneyCreate(),
             ),
             for (final journey in rows) ...[

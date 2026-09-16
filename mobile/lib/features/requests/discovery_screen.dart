@@ -336,29 +336,22 @@ class DiscoveryScreen extends ConsumerWidget {
     // Authoritative check: view_journey action must be available
     if (!candidate.can(CandidateAction.viewJourney)) return;
 
-    final outcome = await showAppSheet<_ProposeOutcome>(
+    // The trip sheet closes before the propose sheet opens. It used to stay
+    // mounted underneath, so sending an offer and returning from the negotiation
+    // screen landed the sender back on a live "Make an offer" button for a
+    // Traveler they had just proposed to. It answers `true` when the sender
+    // asked to make an offer and null when they simply dismissed it.
+    final wantsToPropose = await showAppSheet<bool>(
       context,
       builder: (sheetContext) => _TripDetailSheet(
         candidate: candidate,
         requestSummary: state.requestSummary,
-        onPropose: () =>
-            _openProposeSheet(context, ref, candidate, state.requestSummary),
+        onPropose: () => Navigator.of(sheetContext).pop(true),
       ),
     );
 
-    if (outcome == null || !context.mounted) return;
-
-    if (outcome.staleCode != null) {
-      ref.read(findTravelersControllerProvider(requestId)).refresh();
-      return;
-    }
-
-    final matchId = outcome.matchId;
-    if (matchId != null) {
-      ref.read(findTravelersControllerProvider(requestId)).refresh();
-      AppSnack.success(context, L.of(context).discoveryProposalSent);
-      context.openNegotiation(matchId);
-    }
+    if (wantsToPropose != true || !context.mounted) return;
+    await _openProposeSheet(context, ref, candidate, state.requestSummary);
   }
 
   Future<_ProposeOutcome?> _openProposeSheet(
@@ -372,8 +365,11 @@ class DiscoveryScreen extends ConsumerWidget {
 
     final outcome = await showAppSheet<_ProposeOutcome>(
       context,
-      builder: (sheetContext) =>
-          _ProposeSheet(candidate: candidate, requestSummary: requestSummary),
+      builder: (sheetContext) => _ProposeSheet(
+        candidate: candidate,
+        requestSummary: requestSummary,
+        requestId: requestId,
+      ),
     );
 
     if (outcome == null || !context.mounted) return null;
@@ -494,7 +490,8 @@ class _SortHeader extends StatelessWidget {
         runSpacing: AppSpace.xs,
         children: [
           Text(
-            '$total',
+            // Was a bare "4" floating over the list with no noun attached.
+            l.findTravelersCount(total),
             style: text.labelMedium?.copyWith(
               color: c.textSecondary,
               fontWeight: FontWeight.w600,
@@ -644,7 +641,6 @@ class _TravelerCard extends StatelessWidget {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context);
-    final isRtl = context.isRtl;
 
     final traveler = candidate.traveler;
     final canView = candidate.can(CandidateAction.viewJourney);
@@ -663,14 +659,27 @@ class _TravelerCard extends StatelessWidget {
         ? '$modeLabel · $departureText'
         : modeLabel;
 
-    final displayName = traveler.displayName.isNotEmpty
-        ? traveler.displayName
-        : l.findTravelersViewTrip;
+    // A Traveler with no display name used to be labelled "View trip", which
+    // read as a person called View trip. The row keeps its shape without
+    // inventing one.
+    final displayName = traveler.displayName.trim();
+    final hasName = displayName.isNotEmpty;
+
+    // Was `discoveryTravelersTitle`, so a screen reader read "Travelers for
+    // this parcel" once per card and never said who or where.
+    final routeLabel = candidate.route.stops
+        .map((s) => s.label)
+        .where((label) => label.isNotEmpty)
+        .join(' — ');
 
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpace.md),
-      semanticLabel: l.discoveryTravelersTitle,
+      semanticLabel: [
+        if (hasName) displayName,
+        if (routeLabel.isNotEmpty) routeLabel,
+        travelMeta,
+      ].join(' · '),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -680,21 +689,23 @@ class _TravelerCard extends StatelessWidget {
             children: [
               AppAvatar(
                 initials: _initial(traveler.displayName),
-                name: displayName,
+                name: hasName ? displayName : '',
                 size: 34,
                 isVerified: traveler.identityVerified,
               ),
               const SizedBox(width: AppSpace.sm),
               Expanded(
-                child: Text(
-                  displayName,
-                  style: text.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: c.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: hasName
+                    ? Text(
+                        displayName,
+                        style: text.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(width: AppSpace.xs),
               if (traveler.rating.hasScore)
@@ -813,13 +824,7 @@ class _TravelerCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 2),
-                    Icon(
-                      isRtl
-                          ? Icons.chevron_left_rounded
-                          : Icons.chevron_right_rounded,
-                      size: 16,
-                      color: c.brand,
-                    ),
+                    Icon(Icons.chevron_right_rounded, size: 16, color: c.brand),
                   ],
                 )
               else
@@ -876,18 +881,21 @@ class _RouteFitBadge extends StatelessWidget {
     final l = L.of(context);
     final text = Theme.of(context).textTheme;
 
-    final (label, tone) = switch (routeFit) {
+    // A fit the client has never heard of is not a fit it may name. Claiming
+    // "Compatible route" for an unknown verdict is the client scoring the match,
+    // which is exactly what this screen does not do; the badge degrades away
+    // instead and the rest of the card still reads.
+    final (String label, StatusTone tone)? classified = switch (routeFit) {
       RouteFit.excellent => (l.findTravelersRouteFitExcellent, StatusTone.good),
       RouteFit.good => (l.findTravelersRouteFitGood, StatusTone.progress),
       RouteFit.compatible => (
         l.findTravelersRouteFitCompatible,
         StatusTone.neutral,
       ),
-      RouteFit.unknown => (
-        l.findTravelersRouteFitCompatible,
-        StatusTone.neutral,
-      ),
+      RouteFit.unknown => null,
     };
+    if (classified == null) return const SizedBox.shrink();
+    final (label, tone) = classified;
 
     final style = StatusStyle.of(context, tone);
 
@@ -1070,6 +1078,7 @@ class _TripDetailSheet extends StatelessWidget {
 
           // Route Details
           _DetailedRouteStops(candidate: candidate),
+          _TripSchedule(candidate: candidate),
 
           const SizedBox(height: AppSpace.lg),
 
@@ -1083,6 +1092,8 @@ class _TripDetailSheet extends StatelessWidget {
             candidate: candidate,
             requestSummary: requestSummary,
           ),
+
+          _TripChecks(candidate: candidate),
 
           if (!canPropose) ...[
             const SizedBox(height: AppSpace.md),
@@ -1219,9 +1230,10 @@ class _WhyThisTripFits extends StatelessWidget {
           reason.weightKg != null
               ? l.findTravelersHasRoomFor(reason.weightKg!)
               : null,
-        'identity_verified' => l.findTravelersIdentityVerified,
-        'flight_proof_approved' => l.findTravelersFlightProofApproved,
-        // Unknown future code safely ignored per specification
+        // `identity_verified` and `flight_proof_approved` arrive in the same
+        // array but are not reasons this route fits this parcel — they are
+        // checks ShipTrip ran on the person and the ticket. They render in
+        // their own block so the route explanation stays a route explanation.
         _ => null,
       };
       if (rendered != null && !items.contains(rendered)) {
@@ -1285,6 +1297,125 @@ class _WhyThisTripFits extends StatelessWidget {
   }
 }
 
+/// When the trip departs and arrives.
+///
+/// The card says "Flight · Sep 20" and the sheet behind it used to say nothing
+/// at all: per-stop times are optional on the wire and the envelope's own
+/// `departs_at` / `arrives_at` were never rendered. A detail sheet with less
+/// detail than the row that opened it is not a detail sheet.
+class _TripSchedule extends StatelessWidget {
+  const _TripSchedule({required this.candidate});
+
+  final TravelerCandidate candidate;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final locale = Localizations.localeOf(context);
+
+    final departsAt = candidate.departsAt;
+    final arrivesAt = candidate.arrivesAt;
+    if (departsAt == null && arrivesAt == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.sm),
+      child: Row(
+        children: [
+          Icon(
+            candidate.primaryMode.icon,
+            size: 15,
+            color: _TravelerCard._modeAccent(context, candidate.primaryMode),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          Expanded(
+            child: Text(
+              [
+                transportModeLabel(context, candidate.primaryMode),
+                if (departsAt != null)
+                  l.findTravelersDepartureLabel(
+                    LocaleFormats.dateTime(locale, departsAt),
+                  ),
+                if (arrivesAt != null)
+                  l.findTravelersArrivalLabel(
+                    LocaleFormats.dateTime(locale, arrivesAt),
+                  ),
+              ].join(' · '),
+              style: text.bodySmall?.copyWith(color: c.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What ShipTrip checked, kept apart from why the route fits.
+///
+/// `identity_verified` and `flight_proof_approved` used to sit in the same
+/// ticked list as "Picks up in Paris", which read as though having a verified
+/// passport were a reason the route suited the parcel.
+class _TripChecks extends StatelessWidget {
+  const _TripChecks({required this.candidate});
+
+  final TravelerCandidate candidate;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    final items = <String>[
+      for (final reason in candidate.matchReasons)
+        if (reason.code == 'identity_verified')
+          l.findTravelersIdentityVerified
+        else if (reason.code == 'flight_proof_approved')
+          l.findTravelersFlightProofApproved,
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l.findTravelersTrustTitle,
+            style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          for (final item in {...items})
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.verified_user_outlined,
+                      size: 16,
+                      color: c.brand,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: text.bodyMedium?.copyWith(color: c.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Propose Sheet with Additive Boost
 // ---------------------------------------------------------------------------
@@ -1299,10 +1430,21 @@ class _ProposeOutcome {
 }
 
 class _ProposeSheet extends ConsumerStatefulWidget {
-  const _ProposeSheet({required this.candidate, required this.requestSummary});
+  const _ProposeSheet({
+    required this.candidate,
+    required this.requestSummary,
+    required this.requestId,
+  });
 
   final TravelerCandidate candidate;
   final DiscoveryRequestSummary? requestSummary;
+
+  /// The parcel this screen is browsing for.
+  ///
+  /// The sheet used to fall back to the candidate's *journey* id when the
+  /// envelope carried no request summary, which would have proposed against
+  /// whatever parcel happened to share that number.
+  final int requestId;
 
   @override
   ConsumerState<_ProposeSheet> createState() => _ProposeSheetState();
@@ -1317,12 +1459,17 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
   @override
   void initState() {
     super.initState();
-    final suggested =
+    // The sender already chose a reward when they posted the request. Opening
+    // this sheet on the *recommendation* silently raised their own offer — a
+    // sender who picked EUR 30.00 and tapped Send offer sent EUR 35.00 without
+    // ever being told. Their own number is the default; "Use suggested" is
+    // still one tap away.
+    final opening =
+        widget.requestSummary?.chosenRewardEurCents ??
         widget.candidate.economics?.recommendedReward ??
-        widget.candidate.economics?.minimumReward ??
-        widget.requestSummary?.totalOfferedRewardEurCents;
-    if (suggested != null) {
-      _reward.text = amountFieldText(Money.eurCents(suggested));
+        widget.candidate.economics?.minimumReward;
+    if (opening != null && opening > 0) {
+      _reward.text = amountFieldText(Money.eurCents(opening));
     }
   }
 
@@ -1356,7 +1503,7 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
       final offer = await ref
           .read(matchingRepositoryProvider)
           .propose(
-            parcelId: widget.requestSummary?.id ?? target.journeyId,
+            parcelId: widget.requestId,
             journeyId: target.journeyId,
             startLegId: target.startLegId,
             endLegId: target.endLegId,
@@ -1547,7 +1694,7 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
 
           // Amount Field
           AppAmountField(
-            label: l.offerRewardLabel,
+            label: l.offerBaseRewardLabel,
             controller: _reward,
             helper: minimumReward == null
                 ? null
@@ -1556,6 +1703,16 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
             enabled: !_busy,
             onChanged: (_) => setState(() {}),
           ),
+
+          if (hasBoost) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              l.offerBoostAddedOnTop(
+                Money.eurCents(request.boostEurCents).format(locale),
+              ),
+              style: text.bodySmall?.copyWith(color: c.textSecondary),
+            ),
+          ],
 
           if (recommendedReward != null) ...[
             const SizedBox(height: AppSpace.xs),
@@ -1669,10 +1826,12 @@ class _IneligibleView extends StatelessWidget {
     final l = L.of(context);
 
     final (title, body, actionLabel, onAction) = switch (reason) {
+      // The button opens the deposit checkout, so it says so. "Continue" named
+      // the flow rather than the thing the sender has to do.
       IneligibleReason.awaitingDeposit => (
         l.depositTitle,
         l.findTravelersIneligibleAwaitingDeposit,
-        l.actionContinue,
+        l.findTravelersPayDeposit,
         () => context.openDeposit(requestId),
       ),
       IneligibleReason.alreadyMatched => (
@@ -1693,8 +1852,11 @@ class _IneligibleView extends StatelessWidget {
         l.actionBack,
         () => context.openRequest(requestId),
       ),
+      // Was `findTravelersIneligibleClosed`, which told the sender their
+      // request was closed on the strength of a reason the client could not
+      // read. Saying less is the honest answer.
       null || IneligibleReason.unknown => (
-        l.findTravelersIneligibleClosed,
+        l.findTravelersIneligibleUnknown,
         '',
         l.actionBack,
         () => context.openRequest(requestId),

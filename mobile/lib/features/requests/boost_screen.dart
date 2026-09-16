@@ -65,16 +65,18 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
 
   Future<void> _saveBoost(BoostState state) async {
     final cents = _chosenCents ?? 0;
-    final maxCents = state.policy?.maximumBoost.minorUnits ?? 10000;
+    final maximum = state.policy?.maximumBoost;
     final l = L.of(context);
     final locale = Localizations.localeOf(context);
 
     if (cents < 0) return;
-    if (cents > maxCents) {
+    // Only refuse locally against a bound the server actually published. With
+    // no policy there is no ceiling to quote, and inventing one - the old code
+    // named a euro amount in every language - is worse than letting the server
+    // answer.
+    if (maximum != null && cents > maximum.minorUnits) {
       setState(() {
-        _error = l.pricingBelowMinimumError(
-          state.policy?.maximumBoost.format(locale) ?? '€100.00',
-        );
+        _error = l.boostAmountAboveMaximum(maximum.format(locale));
       });
       return;
     }
@@ -123,10 +125,31 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
             _syncInitial(state);
             final currentCents = _chosenCents ?? state.boostEur.minorUnits;
             final canEdit = state.canEdit;
-            final commissionBps = state.policy?.boostCommissionRateBps ?? 2500;
-            // Fee on top: ceiling integer cents
-            final feeCents = ((currentCents * commissionBps) + 9999) ~/ 10000;
-            final totalCents = currentCents + feeCents;
+            // Money is the server's. `economics` is the authoritative split for
+            // the Boost that is actually saved, so it is used verbatim whenever
+            // the sender has not moved the amount. While they are still
+            // choosing, the fee is projected from the rate the server
+            // published - never from a rate invented here - and the card says
+            // out loud that it is an estimate until it is saved.
+            final economics = state.economics;
+            final commissionBps = state.policy?.boostCommissionRateBps;
+            final isSaved =
+                currentCents == state.boostEur.minorUnits && economics != null;
+
+            final int? feeCents;
+            final int? totalCents;
+            if (isSaved) {
+              feeCents = economics.platformFee.minorUnits;
+              totalCents = economics.senderCost.minorUnits;
+            } else if (commissionBps != null) {
+              final projected =
+                  ((currentCents * commissionBps) + 9999) ~/ 10000;
+              feeCents = projected;
+              totalCents = currentCents + projected;
+            } else {
+              feeCents = null;
+              totalCents = null;
+            }
 
             return ListView(
               padding: AppScrollPadding.pageWithFooter(context),
@@ -176,7 +199,6 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
 
                 if (!canEdit) ...[
                   InfoNotice(
-                    title: l.boostNotEditable,
                     message: l.boostNotEditable,
                     tone: StatusTone.waiting,
                     icon: Icons.lock_outline_rounded,
@@ -184,8 +206,9 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                   const SizedBox(height: AppSpace.md),
                 ],
 
-                // Preset selector
-                SectionHeader(title: l.boostSectionTitle),
+                // Preset selector. No third "Boost this request" header here:
+                // the top bar and the explainer card have already said it.
+                const SizedBox(height: AppSpace.sm),
                 Wrap(
                   spacing: AppSpace.sm,
                   children: [
@@ -247,51 +270,66 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                 ),
                 const SizedBox(height: AppSpace.md),
 
-                // Live Breakdown
+                // What the Boost costs. Every label here names the Boost and
+                // only the Boost: these figures are not the delivery reward,
+                // not the sender's total for the delivery, and not a balance.
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        l.depositRemainingBalance,
+                        l.boostBreakdownTitle,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: AppSpace.sm),
                       DetailRow(
-                        label: l.pricingTravelerReceives,
+                        label: l.boostTravelerBonusLabel,
                         value: Text(
                           Money.eurCents(currentCents).format(locale),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
-                      DetailRow(
-                        label: l.pricingPlatformFee,
-                        value: Text(
-                          Money.eurCents(feeCents).format(locale),
-                          style: TextStyle(color: context.colors.textSecondary),
+                      if (feeCents != null)
+                        DetailRow(
+                          label: l.pricingPlatformFee,
+                          value: Text(
+                            Money.eurCents(feeCents).format(locale),
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
                         ),
-                      ),
-                      const Divider(),
-                      DetailRow(
-                        label: l.pricingTotalSenderCost,
-                        value: Text(
-                          Money.eurCents(totalCents).format(locale),
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: context.colors.brand,
-                              ),
+                      if (totalCents != null) ...[
+                        const Divider(),
+                        DetailRow(
+                          label: l.boostYourCostLabel,
+                          value: Text(
+                            Money.eurCents(totalCents).format(locale),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: context.colors.brand,
+                                ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: AppSpace.xs),
+                      ],
+                      const SizedBox(height: AppSpace.sm),
                       Text(
-                        l.depositFullDepositNotice,
+                        l.boostAddsOnTop,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.colors.textTertiary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
+                      if (!isSaved && totalCents != null) ...[
+                        const SizedBox(height: AppSpace.xxs),
+                        Text(
+                          l.boostEstimateNotice,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.colors.textTertiary),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -317,7 +355,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  ev.reason.isEmpty ? l.actionDone : ev.reason,
+                                  _historyReason(l, ev.reason),
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                                 const SizedBox(height: AppSpace.xxs),
@@ -365,3 +403,20 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
     );
   }
 }
+
+/// A `BoostIntentHistoryEvent.reason` as a sentence.
+///
+/// The wire carries `sender_increased`, `frozen_into_deal` and friends, and the
+/// screen used to print those verbatim. An unrecognised future code degrades to
+/// "Boost updated" rather than leaking the enum onto a sender's screen.
+String _historyReason(L l, String reason) => switch (reason) {
+  'sender_set' => l.boostHistoryReasonSenderSet,
+  'sender_increased' => l.boostHistoryReasonSenderIncreased,
+  'sender_decreased' => l.boostHistoryReasonSenderDecreased,
+  'sender_removed' => l.boostHistoryReasonSenderRemoved,
+  'frozen_into_deal' => l.boostHistoryReasonFrozen,
+  'consumed_by_funding' => l.boostHistoryReasonConsumed,
+  'released_with_reservation' => l.boostHistoryReasonReleased,
+  'request_closed' => l.boostHistoryReasonRequestClosed,
+  _ => l.boostHistoryReasonOther,
+};

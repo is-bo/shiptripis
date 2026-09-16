@@ -170,6 +170,18 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         ? (AppAmountField.centsOf(_customAmountController) ?? minCents)
         : (_chosenDepositCents ?? recCents);
 
+    // The bounds are the server's, and until now only the server enforced
+    // them: typing EUR 1.00 into Custom left Pay deposit live and answered with
+    // a failure snackbar after a round trip. Saying so at the field is the same
+    // rule, stated where the sender is standing.
+    final customError = !_isCustom
+        ? null
+        : effectiveDeposit < minCents
+        ? l.depositBelowMinimum(Money.eurCents(minCents).format(locale))
+        : (fullCents != null && effectiveDeposit > fullCents)
+        ? l.depositAboveMaximum(Money.eurCents(fullCents).format(locale))
+        : null;
+
     final remainingBalanceCents = fullCents != null
         ? max(0, fullCents - effectiveDeposit)
         : null;
@@ -277,6 +289,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           AppAmountField(
             label: l.depositCustomAmountLabel,
             controller: _customAmountController,
+            errorText: customError,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: AppSpace.md),
@@ -297,11 +310,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   ),
                 ),
               ),
-              DetailRow(
-                label: l.depositCreditedNote,
-                value: Text(
-                  Money.eurCents(effectiveDeposit).format(locale),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+              // `depositCreditedNote` is a sentence, not a label, and it used
+              // to sit opposite a second copy of the amount above it.
+              Text(
+                l.depositCreditedNote,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
                 ),
               ),
               if (remainingBalanceCents != null) ...[
@@ -340,7 +354,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           label: l.depositPayAction,
           icon: Icons.lock_rounded,
           isLoading: _creating,
-          onPressed: () => _createOrder(effectiveDeposit),
+          onPressed: customError != null
+              ? null
+              : () => _createOrder(effectiveDeposit),
         ),
       ],
     );

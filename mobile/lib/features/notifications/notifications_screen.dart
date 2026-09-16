@@ -285,9 +285,7 @@ class _Row extends StatelessWidget {
                 ),
                 if (navigable)
                   Icon(
-                    context.isRtl
-                        ? Icons.chevron_left_rounded
-                        : Icons.chevron_right_rounded,
+                    Icons.chevron_right_rounded,
                     size: 20,
                     color: c.textTertiary,
                   )

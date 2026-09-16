@@ -392,13 +392,7 @@ class _PlaceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpace.sm),
-          Icon(
-            context.isRtl
-                ? Icons.chevron_left_rounded
-                : Icons.chevron_right_rounded,
-            size: 20,
-            color: c.textTertiary,
-          ),
+          Icon(Icons.chevron_right_rounded, size: 20, color: c.textTertiary),
         ],
       ),
     );

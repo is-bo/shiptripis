@@ -590,9 +590,7 @@ class _Row extends StatelessWidget {
                 ],
                 const SizedBox(width: AppSpace.sm),
                 Icon(
-                  context.isRtl
-                      ? Icons.chevron_left_rounded
-                      : Icons.chevron_right_rounded,
+                  Icons.chevron_right_rounded,
                   size: 20,
                   color: enabled ? c.textTertiary : c.hairlineStrong,
                 ),

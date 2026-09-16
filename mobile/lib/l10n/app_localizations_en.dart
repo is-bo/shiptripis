@@ -132,7 +132,7 @@ class LEn extends L {
   String get roleSender => 'Sending';
 
   @override
-  String get roleTraveler => 'Travelling';
+  String get roleTraveler => 'Traveling';
 
   @override
   String get roleSwitchLabel => 'Switch role';
@@ -141,7 +141,7 @@ class LEn extends L {
   String get roleSwitchTitle => 'What are you doing today?';
 
   @override
-  String get roleSenderDescription => 'Send a parcel with a traveller';
+  String get roleSenderDescription => 'Send a parcel with a traveler';
 
   @override
   String get roleTravelerDescription =>
@@ -151,7 +151,7 @@ class LEn extends L {
   String get roleSwitchedToSender => 'Switched to sending';
 
   @override
-  String get roleSwitchedToTraveler => 'Switched to travelling';
+  String get roleSwitchedToTraveler => 'Switched to traveling';
 
   @override
   String get authSignIn => 'Sign in';
@@ -307,7 +307,7 @@ class LEn extends L {
 
   @override
   String get staleRequestAlreadyMatched =>
-      'This request has already been matched with a traveller.';
+      'This request has already been matched with a traveler.';
 
   @override
   String get staleJourneyNotActive => 'This journey isn\'t active any more.';
@@ -393,7 +393,7 @@ class LEn extends L {
   String get moneyTotalYouReceive => 'Total you receive';
 
   @override
-  String get moneyTravelerReceives => 'Traveller receives';
+  String get moneyTravelerReceives => 'Traveler receives';
 
   @override
   String get moneyPlatformFee => 'ShipTrip fee';
@@ -423,14 +423,14 @@ class LEn extends L {
   String get moneyRefundToYou => 'Refund to you';
 
   @override
-  String get moneyTravelerCompensation => 'Traveller compensation';
+  String get moneyTravelerCompensation => 'Traveler compensation';
 
   @override
   String get moneyBreakdownTitle => 'How this adds up';
 
   @override
   String get moneyRewardNotReduced =>
-      'The traveller receives this full amount. The ShipTrip fee is added on top, not taken out of it.';
+      'The traveler receives this full amount. The ShipTrip fee is added on top, not taken out of it.';
 
   @override
   String get moneyDepositNotExtra =>
@@ -480,7 +480,7 @@ class LEn extends L {
 
   @override
   String get homeEmptySenderBody =>
-      'Post what you want to send and travellers heading that way will see it.';
+      'Post what you want to send and travelers heading that way will see it.';
 
   @override
   String get homeEmptyTravelerTitle => 'No journeys yet';
@@ -534,7 +534,7 @@ class LEn extends L {
   String get requestStatusAwaitingDeposit => 'Deposit needed';
 
   @override
-  String get requestStatusOpen => 'Finding a traveller';
+  String get requestStatusOpen => 'Finding a traveler';
 
   @override
   String get requestStatusMatched => 'Matched';
@@ -627,7 +627,7 @@ class LEn extends L {
   String get requestDeliveryLocation => 'Deliver to';
 
   @override
-  String get requestPickupHint => 'Where the traveller collects the parcel';
+  String get requestPickupHint => 'Where the traveler collects the parcel';
 
   @override
   String get requestDeliveryHint =>
@@ -650,7 +650,7 @@ class LEn extends L {
 
   @override
   String get requestDescriptionHint =>
-      'Describe it accurately. This is what the traveller agrees to carry.';
+      'Describe it accurately. This is what the traveler agrees to carry.';
 
   @override
   String get requestCategory => 'Category';
@@ -697,7 +697,7 @@ class LEn extends L {
   String get requestHandlingNotes => 'Handling notes';
 
   @override
-  String get requestHandlingNotesHint => 'Anything the traveller should know';
+  String get requestHandlingNotesHint => 'Anything the traveler should know';
 
   @override
   String get requestFragile => 'Fragile';
@@ -744,7 +744,7 @@ class LEn extends L {
 
   @override
   String get depositCreditedNote =>
-      'It\'s credited towards your final payment when a traveller accepts.';
+      'It\'s credited towards your final payment when a traveler accepts.';
 
   @override
   String get depositRefundNote =>
@@ -780,7 +780,7 @@ class LEn extends L {
   String get depositPaidTitle => 'Published';
 
   @override
-  String get depositPaidBody => 'Travellers heading your way can see this now.';
+  String get depositPaidBody => 'Travelers heading your way can see this now.';
 
   @override
   String get journeyTitle => 'Journey';
@@ -889,7 +889,7 @@ class LEn extends L {
   String get journeyRouteShape => 'Your route';
 
   @override
-  String get journeyModeLabel => 'How you\'re travelling';
+  String get journeyModeLabel => 'How you\'re traveling';
 
   @override
   String get journeyLegStartsAt => 'Starts at';
@@ -1270,7 +1270,7 @@ class LEn extends L {
 
   @override
   String get kycWhyBody =>
-      'Senders are handing a stranger something that matters to them. Verifying travellers is what makes that reasonable.';
+      'Senders are handing a stranger something that matters to them. Verifying travelers is what makes that reasonable.';
 
   @override
   String get kycStatusNotStarted => 'Not started';
@@ -1328,13 +1328,13 @@ class LEn extends L {
   String get kycSelfie => 'Selfie';
 
   @override
-  String get discoveryTravelersTitle => 'Travellers for this parcel';
+  String get discoveryTravelersTitle => 'Travelers for this parcel';
 
   @override
   String get discoveryRequestsTitle => 'Parcels along your route';
 
   @override
-  String get discoveryEmptyTravelersTitle => 'No travellers yet';
+  String get discoveryEmptyTravelersTitle => 'No travelers yet';
 
   @override
   String get discoveryEmptyTravelersBody =>
@@ -1372,7 +1372,7 @@ class LEn extends L {
   String get findTravelersWhyThisFits => 'Why this trip fits';
 
   @override
-  String get findTravelersEmptyTitle => 'No travellers going your way yet';
+  String get findTravelersEmptyTitle => 'No travelers going your way yet';
 
   @override
   String get findTravelersEmptyBody =>
@@ -1384,7 +1384,7 @@ class LEn extends L {
 
   @override
   String get findTravelersIneligibleAlreadyMatched =>
-      'This parcel already has a traveller.';
+      'This parcel already has a traveler.';
 
   @override
   String get findTravelersIneligibleClosed => 'This request is closed.';
@@ -1415,7 +1415,7 @@ class LEn extends L {
   String get findTravelersSortSoonest => 'Soonest trip';
 
   @override
-  String get findTravelersShowMore => 'Show more travellers';
+  String get findTravelersShowMore => 'Show more travelers';
 
   @override
   String findTravelersStop(String city, String iata) {
@@ -1486,14 +1486,14 @@ class LEn extends L {
   String get discoveryDetourLarge => 'Noticeable detour';
 
   @override
-  String get discoveryVerifiedTraveler => 'Verified traveller';
+  String get discoveryVerifiedTraveler => 'Verified traveler';
 
   @override
   String get discoveryBoosted => 'Boosted';
 
   @override
   String get discoveryBoostedExplainer =>
-      'The sender paid to be seen by more travellers. It doesn\'t change whether you\'re a match.';
+      'The sender paid to be seen by more travelers. It doesn\'t change whether you\'re a match.';
 
   @override
   String discoveryRatingCount(String rating, int count) {
@@ -1508,10 +1508,10 @@ class LEn extends L {
 
   @override
   String get offerProposeExplainer =>
-      'You choose what the traveller earns. They can accept, decline, or come back with a different amount.';
+      'You choose what the traveler earns. They can accept, decline, or come back with a different amount.';
 
   @override
-  String get offerRewardLabel => 'Traveller\'s reward';
+  String get offerRewardLabel => 'Traveler\'s reward';
 
   @override
   String get offerUseRecommended => 'Use suggested';
@@ -1535,7 +1535,7 @@ class LEn extends L {
   String get offerWithdraw => 'Withdraw';
 
   @override
-  String get offerAwaitingTraveler => 'Waiting for the traveller';
+  String get offerAwaitingTraveler => 'Waiting for the traveler';
 
   @override
   String get offerAwaitingSender => 'Waiting for the sender';
@@ -1609,7 +1609,7 @@ class LEn extends L {
   String get offerYourOfferTitle => 'Your offer';
 
   @override
-  String get offerTravelerCounterTitle => 'Traveller\'s counter-offer';
+  String get offerTravelerCounterTitle => 'Traveler\'s counter-offer';
 
   @override
   String get offerYourCounterTitle => 'Your counter-offer';
@@ -1624,7 +1624,7 @@ class LEn extends L {
 
   @override
   String offerTravelerAsks(String amount) {
-    return 'Traveller asks $amount';
+    return 'Traveler asks $amount';
   }
 
   @override
@@ -1854,7 +1854,7 @@ class LEn extends L {
 
   @override
   String get recipientExplainer =>
-      'We email the delivery code to the recipient. The traveller can only complete the delivery if the recipient gives them that code.';
+      'We email the delivery code to the recipient. The traveler can only complete the delivery if the recipient gives them that code.';
 
   @override
   String get recipientName => 'Recipient\'s name';
@@ -1901,7 +1901,7 @@ class LEn extends L {
 
   @override
   String get pickupSenderExplainer =>
-      'Give this code to the traveller only when you\'re physically handing over the parcel. It\'s how they confirm they have it.';
+      'Give this code to the traveler only when you\'re physically handing over the parcel. It\'s how they confirm they have it.';
 
   @override
   String get pickupSenderReveal => 'Show pickup code';
@@ -1934,7 +1934,7 @@ class LEn extends L {
 
   @override
   String get pickupAwaitingSenderBody =>
-      'The traveller will ask for your pickup code when you meet.';
+      'The traveler will ask for your pickup code when you meet.';
 
   @override
   String get pickupAwaitingTravelerBody =>
@@ -1996,7 +1996,7 @@ class LEn extends L {
 
   @override
   String get deliveryCodeSenderWarning =>
-      'The recipient gives this to the traveller at the door. Only share it with the recipient.';
+      'The recipient gives this to the traveler at the door. Only share it with the recipient.';
 
   @override
   String get deliveryCodeTravelerNever =>
@@ -2118,7 +2118,7 @@ class LEn extends L {
 
   @override
   String get disputeOpenExplainer =>
-      'Tell us what went wrong. Opening a dispute puts the traveller\'s payout on hold while we look into it.';
+      'Tell us what went wrong. Opening a dispute puts the traveler\'s payout on hold while we look into it.';
 
   @override
   String get disputeCategory => 'What happened?';
@@ -2195,7 +2195,7 @@ class LEn extends L {
   String get disputeResolutionRefunded => 'Refunded to the sender';
 
   @override
-  String get disputeResolutionTravelerPaid => 'Paid to the traveller';
+  String get disputeResolutionTravelerPaid => 'Paid to the traveler';
 
   @override
   String get disputeResolutionPartial => 'Split between both sides';
@@ -2227,7 +2227,7 @@ class LEn extends L {
 
   @override
   String get cancelWithCompensation =>
-      'Because it\'s close to pickup, the traveller is compensated for holding the space.';
+      'Because it\'s close to pickup, the traveler is compensated for holding the space.';
 
   @override
   String get cancelNotAllowedTitle => 'This can\'t be cancelled here';
@@ -2249,7 +2249,7 @@ class LEn extends L {
   String get ratingTitle => 'How did it go?';
 
   @override
-  String get ratingSenderPrompt => 'Rate the traveller';
+  String get ratingSenderPrompt => 'Rate the traveler';
 
   @override
   String get ratingTravelerPrompt => 'Rate the sender';
@@ -2630,7 +2630,7 @@ class LEn extends L {
 
   @override
   String get locationPrivacyAfterFunding =>
-      'Full address shared with the traveller.';
+      'Full address shared with the traveler.';
 
   @override
   String get locationHiddenUntilFunded =>
@@ -2701,7 +2701,7 @@ class LEn extends L {
 
   @override
   String locationPreferredExplainer(String place) {
-    return 'Travellers are matched on $place. A preferred point only says where you would rather meet inside it.';
+    return 'Travelers are matched on $place. A preferred point only says where you would rather meet inside it.';
   }
 
   @override
@@ -2927,7 +2927,7 @@ class LEn extends L {
 
   @override
   String get homeVerifyIdentityBody =>
-      'Travellers must be verified before a journey can go live.';
+      'Travelers must be verified before a journey can go live.';
 
   @override
   String get homeAttentionOfferAwaiting =>
@@ -2941,7 +2941,7 @@ class LEn extends L {
 
   @override
   String get homeAttentionRevealPickup =>
-      'Show the pickup code to your traveller';
+      'Show the pickup code to your traveler';
 
   @override
   String get homeAttentionSubmitPickup => 'Enter the pickup code';
@@ -3011,7 +3011,7 @@ class LEn extends L {
 
   @override
   String get onboardingSendBody =>
-      'Post what you want delivered. Travellers already heading that way can carry it, and you agree the price between you.';
+      'Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.';
 
   @override
   String get onboardingCarryTitle => 'Earn on a trip you\'re already taking';
@@ -3220,7 +3220,7 @@ class LEn extends L {
 
   @override
   String get requestReadyWindowHelp =>
-      'The stretch of time a traveller could collect it. Give a window, not a minute.';
+      'The stretch of time a traveler could collect it. Give a window, not a minute.';
 
   @override
   String get requestDeadlineHelp =>
@@ -3257,11 +3257,11 @@ class LEn extends L {
 
   @override
   String get requestProposedRewardHelp =>
-      'A starting point, not a price. Travellers can accept it or come back with a different amount.';
+      'A starting point, not a price. Travelers can accept it or come back with a different amount.';
 
   @override
   String get requestRewardIsIntent =>
-      'This is what you proposed. The price is settled when a traveller accepts an offer.';
+      'This is what you proposed. The price is settled when a traveler accepts an offer.';
 
   @override
   String get requestReviewTitle => 'Check this over';
@@ -3285,17 +3285,17 @@ class LEn extends L {
   String get requestRouteSection => 'Route';
 
   @override
-  String get requestMatchesSection => 'Travellers you\'ve approached';
+  String get requestMatchesSection => 'Travelers you\'ve approached';
 
   @override
   String get requestNoMatchesYet => 'You haven\'t proposed to anyone yet.';
 
   @override
   String get requestAwaitingDepositNotice =>
-      'Travellers can\'t see this yet. Pay the deposit to publish it.';
+      'Travelers can\'t see this yet. Pay the deposit to publish it.';
 
   @override
-  String get requestFindTravelers => 'Find travellers';
+  String get requestFindTravelers => 'Find travelers';
 
   @override
   String get requestPayDepositAction => 'Pay deposit';
@@ -3308,14 +3308,14 @@ class LEn extends L {
 
   @override
   String get requestCancelConfirmBody =>
-      'It stops being visible to travellers. Any deposit you paid comes back to you.';
+      'It stops being visible to travelers. Any deposit you paid comes back to you.';
 
   @override
   String get requestCancelled => 'Request cancelled';
 
   @override
   String get requestCancelNotCancellableBody =>
-      'A traveller is already matched with this request, so it can\'t be cancelled here.';
+      'A traveler is already matched with this request, so it can\'t be cancelled here.';
 
   @override
   String get requestCancelViaDealBody =>
@@ -3341,7 +3341,7 @@ class LEn extends L {
 
   @override
   String get requestTargetedNotice =>
-      'You addressed this request to one traveller. Nobody else can see it.';
+      'You addressed this request to one traveler. Nobody else can see it.';
 
   @override
   String get depositNotRequiredTitle => 'No deposit needed';
@@ -3361,7 +3361,7 @@ class LEn extends L {
   String get discoveryMatchedDistance => 'Distance carried';
 
   @override
-  String get discoveryDetourLabel => 'Detour for the traveller';
+  String get discoveryDetourLabel => 'Detour for the traveler';
 
   @override
   String get discoveryFirstDeparture => 'Leaves';
@@ -3383,15 +3383,15 @@ class LEn extends L {
 
   @override
   String get discoveryLegRangeMoved =>
-      'This traveller\'s route changed while you were looking. We\'ve refreshed it.';
+      'This traveler\'s route changed while you were looking. We\'ve refreshed it.';
 
   @override
   String discoveryIncompatibleCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'This traveller no longer fits your parcel, for $count reasons.',
-      one: 'This traveller no longer fits your parcel, for 1 reason.',
+      other: 'This traveler no longer fits your parcel, for $count reasons.',
+      one: 'This traveler no longer fits your parcel, for 1 reason.',
     );
     return '$_temp0';
   }
@@ -3416,7 +3416,7 @@ class LEn extends L {
 
   @override
   String get boostCompatibilityNote =>
-      'Only travellers who already match your parcel ever see it. A boost doesn\'t change who those travellers are.';
+      'Only travelers who already match your parcel ever see it. A boost doesn\'t change who those travelers are.';
 
   @override
   String get boostActivatesOnPayment =>
@@ -3587,7 +3587,7 @@ class LEn extends L {
 
   @override
   String get pickupConfirmedSenderNext =>
-      'The delivery code is now available to your recipient. Only they can pass it to the traveller.';
+      'The delivery code is now available to your recipient. Only they can pass it to the traveler.';
 
   @override
   String get pickupConfirmedTravelerNext =>
@@ -3642,7 +3642,7 @@ class LEn extends L {
 
   @override
   String get deliverySenderExplainer =>
-      'The recipient receives this code by email. They read it to the traveller at the door, and that is what confirms the delivery.';
+      'The recipient receives this code by email. They read it to the traveler at the door, and that is what confirms the delivery.';
 
   @override
   String get deliveryCodeSentToRecipientUnknown =>
@@ -3694,8 +3694,7 @@ class LEn extends L {
       'You already have a dispute open on this delivery. We\'ve taken you to it.';
 
   @override
-  String get disputeFreezesPayoutTitle =>
-      'The traveller\'s payout goes on hold';
+  String get disputeFreezesPayoutTitle => 'The traveler\'s payout goes on hold';
 
   @override
   String get disputeFreezesPayoutBody =>
@@ -3734,7 +3733,7 @@ class LEn extends L {
   String get disputeOpenedBySender => 'The sender';
 
   @override
-  String get disputeOpenedByTraveler => 'The traveller';
+  String get disputeOpenedByTraveler => 'The traveler';
 
   @override
   String get disputeOpenedAtLabel => 'Opened';
@@ -3866,11 +3865,11 @@ class LEn extends L {
 
   @override
   String get onboardingHeadline =>
-      'Send anything,\nthe travellers\ndo the rest.';
+      'Send anything,\nthe travelers\ndo the rest.';
 
   @override
   String get onboardingBody =>
-      'A peer-to-peer corridor between Algeria and France. Travellers carry, senders save, and the money is held until it arrives.';
+      'A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.';
 
   @override
   String get onboardingStamp => 'EST. 2026 · ALG ↔ FR';
@@ -3907,7 +3906,7 @@ class LEn extends L {
 
   @override
   String get benefitsChapterOneBody =>
-      'Travellers carry your parcel as part of their luggage. You pay a sliver of express shipping.';
+      'Travelers carry your parcel as part of their luggage. You pay a sliver of express shipping.';
 
   @override
   String get benefitsChapterOneStamp => 'Par avion';
@@ -3999,7 +3998,7 @@ class LEn extends L {
 
   @override
   String get requestItemPhotoHelp =>
-      'Add a clear photo of what you\'re sending. Travellers decide from this.';
+      'Add a clear photo of what you\'re sending. Travelers decide from this.';
 
   @override
   String get requestItemPhotoChoose => 'Choose a photo';
@@ -4050,7 +4049,7 @@ class LEn extends L {
 
   @override
   String get requestItemPhotoPrivacy =>
-      'Only travellers who can see this request can see the photo.';
+      'Only travelers who can see this request can see the photo.';
 
   @override
   String get fieldOptional => 'Optional';
@@ -4817,4 +4816,131 @@ class LEn extends L {
   @override
   String get notificationPayoutSentBody =>
       'Your payout has been transferred successfully.';
+
+  @override
+  String get boostBreakdownTitle => 'What the Boost costs';
+
+  @override
+  String get boostTravelerBonusLabel => 'Added to the Traveler reward';
+
+  @override
+  String get boostYourCostLabel => 'You pay for the Boost';
+
+  @override
+  String get boostAddsOnTop =>
+      'The Boost is added on top of the delivery reward you already offered. Base reward + Boost is what the Traveler receives.';
+
+  @override
+  String get boostEstimateNotice =>
+      'An estimate until you save. ShipTrip confirms the final amounts.';
+
+  @override
+  String boostAmountAboveMaximum(String amount) {
+    return 'The most you can Boost is $amount';
+  }
+
+  @override
+  String get boostHistoryReasonSenderSet => 'You added a Boost';
+
+  @override
+  String get boostHistoryReasonSenderIncreased => 'You raised the Boost';
+
+  @override
+  String get boostHistoryReasonSenderDecreased => 'You lowered the Boost';
+
+  @override
+  String get boostHistoryReasonSenderRemoved => 'You removed the Boost';
+
+  @override
+  String get boostHistoryReasonFrozen =>
+      'Locked in when the delivery was agreed';
+
+  @override
+  String get boostHistoryReasonConsumed => 'Included in the delivery payment';
+
+  @override
+  String get boostHistoryReasonReleased =>
+      'Released when the match fell through';
+
+  @override
+  String get boostHistoryReasonRequestClosed => 'Ended with the request';
+
+  @override
+  String get boostHistoryReasonOther => 'Boost updated';
+
+  @override
+  String get guestPaymentAmountDue => 'Amount due';
+
+  @override
+  String get guestPaymentLinkFailed =>
+      'We couldn\'t create a payment link. Try again.';
+
+  @override
+  String get paymentSuccessPayerYou => 'You';
+
+  @override
+  String get paymentSuccessPayerGuest => 'Someone else';
+
+  @override
+  String get paymentSuccessPaidByLabel => 'Paid by';
+
+  @override
+  String findTravelersCount(int count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString travelers',
+      one: '1 traveler',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get findTravelersIneligibleUnknown =>
+      'This request can\'t be matched right now.';
+
+  @override
+  String get findTravelersPayDeposit => 'Pay deposit';
+
+  @override
+  String findTravelersDepartureLabel(String when) {
+    return 'Departs $when';
+  }
+
+  @override
+  String findTravelersArrivalLabel(String when) {
+    return 'Arrives $when';
+  }
+
+  @override
+  String get findTravelersTrustTitle => 'Checks ShipTrip has done';
+
+  @override
+  String get offerBaseRewardLabel => 'Base delivery reward';
+
+  @override
+  String offerBoostAddedOnTop(String amount) {
+    return 'Your Boost of $amount is added on top of this.';
+  }
+
+  @override
+  String get deliveriesOpenOffersSection => 'Open offers';
+
+  @override
+  String get journeyPostNew => 'Post a trip';
+
+  @override
+  String depositBelowMinimum(String amount) {
+    return 'The smallest deposit is $amount';
+  }
+
+  @override
+  String depositAboveMaximum(String amount) {
+    return 'That\'s more than the whole amount of $amount';
+  }
 }
