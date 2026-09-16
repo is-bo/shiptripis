@@ -315,6 +315,36 @@ closes first.
 Offer availability remains server-authoritative throughout — `propose_offer` and
 `view_journey` are read from `actions`, never inferred.
 
+### Negotiation screen — one MAJOR, reported rather than fixed
+
+**The negotiation screen understates both sides' money whenever a Boost is set,
+and it cannot be fixed in the client.** `Offer` carries `traveler_reward_minor`
+and `sender_total_minor` and nothing else; `grep -n boost` over
+`apps/matching/serializers.py` and `public_contract.py` returns nothing. Boost
+lives on the delivery request and does not enter the projection until the Deal
+funds.
+
+So with a €30.00 base reward and a €5.00 Boost, a Sender weighing an offer reads
+"Traveler receives €30.00 / ShipTrip fee / You pay €37.50", and a **Traveler
+deciding whether to accept reads a hero that says "You receive €30.00"** — when
+they will in fact be paid €35.00, and the Sender will in fact pay more than
+€37.50 once the Boost and its fee land in the balance. The one number a Traveler
+accepts an offer on is the one number this screen gets wrong.
+
+Every figure on that screen is a server field today, which is correct. Closing
+the gap means adding Boost to the offer money projection — a change to the
+financial contract, which §31 of this phase's brief puts out of bounds. Computing
+base + Boost in Dart would be exactly the client-derived financial truth the same
+brief forbids, and would be wrong the moment the fee model changes.
+
+**Handed to the backend.** `traveler_reward_minor` needs a companion — the
+Traveler's total including Boost — and `sender_total_minor` needs to account for
+the Boost and its commission, or the offer needs to carry `boost_eur_cents` so
+the client can render the same base / Boost / total the propose sheet already
+renders from the request envelope. The Deal screen already does this correctly
+from `DealPaymentState.travelerBoostBonus`; the gap is specifically the pre-Deal
+negotiation.
+
 ### Deliveries — two MAJOR, one MINOR fixed, one MINOR deferred
 
 Live negotiations awaiting somebody's move were headed **"Offer history"** — the
@@ -489,7 +519,7 @@ sun-button hero on Home and the parchment receipt all land.
 
 **BLOCKER — 1 found, 1 fixed.** Directional glyphs double-mirrored in Arabic.
 
-**MAJOR — 19 found, 19 fixed.**
+**MAJOR — 20 found, 19 fixed, 1 reported to the backend.**
 
 1. Boost breakdown headed "Remaining balance at delivery"
 2. Boost alone labelled "Traveler receives"; Boost + fee labelled "Total sender cost"
@@ -510,6 +540,9 @@ sun-button hero on Home and the parchment receipt all land.
 17. Trip sheet stayed mounted under the propose sheet
 18. Live negotiations headed "Offer history"; "Add a leg" created a whole journey
 19. `traveller` and `traveler` both shipped, sometimes in one paragraph
+20. **Not fixed, handed to the backend:** the negotiation screen understates
+    the Traveler's earnings and the Sender's total whenever a Boost is set,
+    because the offer money projection has no Boost field
 
 Plus, counted within the above areas and all fixed: unknown `route_fit` renamed
 "Compatible route"; unknown ineligible reason claiming "closed"; the
@@ -595,17 +628,21 @@ Remaining before any future LIVE cutover — none of it started here:
    `PAYOUT_DZD_EXECUTION_ENABLED` true, per `docs/PROVIDER_ACTIVATION_RUNBOOK.md`
    and `docs/PHASE_H8B_PRODUCTION_CUTOVER.md`.
 2. A real-money rehearsal on LIVE rails mirroring H7's TEST payout rehearsal.
-3. The Finance control plane's 85–100 queries and 4–6 s per page — handed to the
+3. Boost in the offer money projection, so the negotiation screen stops
+   understating what a Traveler earns and what a Sender pays. This is the one
+   finding from this pass that is still open, and it is a money figure a Traveler
+   accepts an offer on.
+4. The Finance control plane's 85–100 queries and 4–6 s per page — handed to the
    backend at J1.2 and still open. Operator-only, but it is the one genuinely slow
    server surface.
-4. A deployed Finance console operator pass, which needs a login this environment
+5. A deployed Finance console operator pass, which needs a login this environment
    does not have.
-5. A physical-device pass on real Android hardware. Everything in this phase was
+6. A physical-device pass on real Android hardware. Everything in this phase was
    verified at real viewport sizes with real fonts, but nothing was verified on
    glass.
-6. The Arabic place-label gap: canonical place names have no Arabic form, so
+7. The Arabic place-label gap: canonical place names have no Arabic form, so
    Arabic users read Latin script inside Arabic cards on every route.
-7. Legal, privacy and support surfaces, which are outside every J-phase to date.
+8. Legal, privacy and support surfaces, which are outside every J-phase to date.
 
 ---
 

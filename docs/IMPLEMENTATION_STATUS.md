@@ -6793,7 +6793,20 @@ review_alias_spelling". A `NAME_COMPARISON` map now says the sentence and keeps
 the code beside it, matching what `METHOD_REASON` already did. No accounting,
 payout-routing, Deal-lifecycle or H5 reporting code was touched.
 
-**Totals.** 1 BLOCKER and 19 MAJOR found and fixed; 16 MINOR found, 7 fixed and 9
+**One MAJOR was reported rather than fixed.** `Offer` carries
+`traveler_reward_minor` and `sender_total_minor` and no Boost at all — `grep -n
+boost` over `apps/matching/serializers.py` and `public_contract.py` returns
+nothing. So with a EUR 30.00 base and a EUR 5.00 Boost, the negotiation screen
+tells a Traveler deciding whether to accept "You receive EUR 30.00" when they
+will be paid EUR 35.00, and tells the Sender they pay EUR 37.50 when the Boost
+and its commission are still to land. Closing it means adding Boost to the offer
+money projection, which is the financial contract and out of this phase's
+ownership; computing base + Boost in Dart would be the client-derived financial
+truth the same brief forbids. Requires an Astra/Codex backend phase. The Deal
+screen already gets this right from `DealPaymentState.travelerBoostBonus`; the
+gap is specifically the pre-Deal negotiation.
+
+**Totals.** 1 BLOCKER and 19 MAJOR found and fixed, 1 MAJOR handed to the backend; 16 MINOR found, 7 fixed and 9
 deferred with reasons. 635 mobile tests pass (618 before, +17 in
 `test/phase_j6_ux_acceptance_test.dart`), `flutter analyze --fatal-infos` clean,
 `dart format` clean, `l10n_untranslated.json` empty. Backend: 62 admin-console and
