@@ -589,6 +589,16 @@ Deferred, with reasons:
   code was touched — the only backend change is three presentation labels on one
   operator page.
 
+Two of the worst findings — `depositRemainingBalance` heading the Boost
+breakdown, `paymentStatusPaid` labelling the amount still owed — were the same
+mistake: a localisation key borrowed from another domain, where the sentence is
+right for the screen it was written for and wrong for the screen it landed on.
+After fixing both, every `l.<key>` reference in the feature screens was swept for
+a key whose domain prefix does not match its file's own area. What is left is all
+legitimate shared vocabulary — `money*`, `route*` and `rating*` on the Deal
+screen that hosts those sections, `offer*` on the propose sheet that is an offer.
+No further cross-domain borrow remains.
+
 The ARB round-trip also collapsed two pre-existing duplicate keys
 (`depositExplainer`, `boostExplainer`, each defined twice in all three files).
 Last-wins was already the effective behaviour in both Python and the Flutter
@@ -598,14 +608,28 @@ tool, and a key-set diff confirms nothing was lost and no value changed.
 
 ## 6. TEST-only confirmation
 
-* Stripe: **TEST**
-* Chargily: **TEST**
-* `PAYOUT_DZD_EXECUTION_ENABLED`: **false**
-* No LIVE provider activated, no real money moved, no production cutover begun.
-* API origin used for the build: `https://shiptrip-production-f7f7.up.railway.app`
-  (`/readyz` answered `v1.0.0-rc.35+9614db6`, database, migrations and rate-limit
-  cache all `ok`).
-* No Railway deployment was made in this phase.
+Read back from the live Railway `production` environment of project `shiptripis`,
+service `shiptrip`, rather than asserted from the runbook:
+
+| Variable | Value |
+|---|---|
+| `PAYMENTS_ENVIRONMENT` | `test` |
+| `STRIPE_SECRET_KEY` | `sk_test_…` — TEST key |
+| `STRIPE_CONNECT_EXPECTED_MODE` | `test` |
+| `CHARGILY_API_BASE` | `https://pay.chargily.net/test/api/v2` |
+| `CHARGILY_SECRET_KEY` | `test_sk_…` — TEST key |
+| `PAYOUT_DZD_EXECUTION_ENABLED` | `false` |
+| `PAYMENTS_ALLOW_MOCK_PROVIDER` | `false` |
+| `PAYMENTS_MOCK_WEBHOOK_ENABLED` | `false` |
+| `RELEASE_ID` | `v1.0.0-rc.35+9614db6` (J4; unchanged by this phase) |
+
+No LIVE provider activated, no real money moved, no production cutover begun, and
+no variable was written. API origin used for the build:
+`https://shiptrip-production-f7f7.up.railway.app` — `/readyz` answered
+`v1.0.0-rc.35+9614db6` with database, migrations and rate-limit cache all `ok`.
+No Railway deployment was made in this phase; J6 changed mobile code plus three
+presentation labels on one operator template, and the labels ship with whatever
+deployment comes next.
 
 ---
 
