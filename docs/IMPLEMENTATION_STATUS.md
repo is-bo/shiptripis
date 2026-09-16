@@ -6806,8 +6806,14 @@ truth the same brief forbids. Requires an Astra/Codex backend phase. The Deal
 screen already gets this right from `DealPaymentState.travelerBoostBonus`; the
 gap is specifically the pre-Deal negotiation.
 
+The guest-sheet backoff introduced a bug of its own, caught before the build: the
+timer re-armed unconditionally and cancelling a timer inside its own callback
+does nothing, so a settled order kept being read every twenty seconds and
+`onSettled` — which invalidates providers — fired on every one. A `_settled` flag
+ends the loop and a test pumps eight ceiling intervals past settlement.
+
 **Totals.** 1 BLOCKER and 19 MAJOR found and fixed, 1 MAJOR handed to the backend; 16 MINOR found, 7 fixed and 9
-deferred with reasons. 635 mobile tests pass (618 before, +17 in
+deferred with reasons. 637 mobile tests pass (618 before, +19 in
 `test/phase_j6_ux_acceptance_test.dart`), `flutter analyze --fatal-infos` clean,
 `dart format` clean, `l10n_untranslated.json` empty. Backend: 62 admin-console and
 16 J1.2 finance tests pass. Stripe TEST, Chargily TEST,

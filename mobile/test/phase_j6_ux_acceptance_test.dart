@@ -16,6 +16,7 @@ import 'package:shiptrip/core/money/money.dart';
 import 'package:shiptrip/domain/find_travelers.dart';
 import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/features/common/payment_success_view.dart';
+import 'package:shiptrip/features/guest/guest_payment_sheet.dart';
 import 'package:shiptrip/features/requests/boost_screen.dart';
 import 'package:shiptrip/features/requests/deposit_screen.dart';
 import 'package:shiptrip/features/requests/discovery_screen.dart';
@@ -398,6 +399,61 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  // Guest payer
+  // -------------------------------------------------------------------------
+
+  group('the guest payer sheet', () {
+    testWidgets('labels the amount still owed as due, not as paid', (
+      tester,
+    ) async {
+      final backend = j6GuestBackend();
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: GuestPaymentSheet(
+            order: PaymentOrder.fromJson(j6UnpaidOrder()),
+          ),
+        ),
+        container: containerFor(backend),
+      );
+      await tester.pumpAndSettle();
+      final l = L.of(tester.element(find.byType(GuestPaymentSheet)));
+
+      expect(find.text(l.guestPaymentAmountDue), findsOneWidget);
+      expect(find.text(l.paymentStatusPaid), findsNothing);
+    });
+
+    testWidgets('stops reading the order once it settles', (tester) async {
+      // The backoff rewrite re-armed the timer unconditionally inside its own
+      // callback, so a settled order kept being read every twenty seconds and
+      // `onSettled` — which invalidates providers — fired on every one of them.
+      var settledCalls = 0;
+      final backend = j6GuestBackend(settled: true);
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: GuestPaymentSheet(
+            order: PaymentOrder.fromJson(j6UnpaidOrder()),
+            onSettled: () => settledCalls++,
+          ),
+        ),
+        container: containerFor(backend),
+      );
+      await tester.pumpAndSettle();
+
+      // Past every step of the backoff and well into the ceiling.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(seconds: 25));
+        await tester.pumpAndSettle();
+      }
+
+      expect(settledCalls, 1);
+      final reads = backend.to('GET', '/api/payments/orders/order_j6');
+      expect(reads.length, lessThanOrEqualTo(2));
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Deposit bounds
   // -------------------------------------------------------------------------
 
@@ -524,4 +580,50 @@ Map<String, dynamic> j6SettledOrder() => {
   'paid_eur_cents': 500,
   'outstanding_eur_cents': 0,
   'paid_at': '2026-09-16T09:00:00Z',
+};
+
+FakeBackend j6GuestBackend({bool settled = false}) {
+  const link = {
+    'token': 'tok_j6',
+    'currency': 'EUR',
+    'communication_language': 'en',
+    'payment_link': 'https://test.shiptrip.app/guest-pay/tok_j6',
+    'expires_at': '2026-09-20T12:00:00Z',
+    'reissued': false,
+  };
+  final backend = FakeBackend()
+    ..on(
+      'POST',
+      '/api/payments/orders/order_j6/guest-link',
+      const FakeResponse(201, link),
+    )
+    ..on(
+      'GET',
+      '/api/payments/orders/order_j6/guest-link',
+      const FakeResponse(200, link),
+    );
+  backend.handle(
+    'GET',
+    '/api/payments/orders/order_j6',
+    (_) => FakeResponse(200, {
+      ...j6UnpaidOrder(),
+      if (settled) ...{
+        'status': 'paid',
+        'paid_eur_cents': 3500,
+        'outstanding_eur_cents': 0,
+      },
+    }),
+  );
+  return backend;
+}
+
+Map<String, dynamic> j6UnpaidOrder() => {
+  'public_reference': 'order_j6',
+  'status': 'pending',
+  'purpose': 'deal_balance',
+  'currency': 'EUR',
+  'amount_eur_cents': 3500,
+  'paid_eur_cents': 0,
+  'outstanding_eur_cents': 3500,
+  'deal_id': 77,
 };

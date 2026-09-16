@@ -72,6 +72,7 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
   ];
   static const _pollCeiling = Duration(seconds: 20);
   int _pollTick = 0;
+  bool _settled = false;
 
   @override
   void initState() {
@@ -105,7 +106,11 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
   }
 
   void _schedulePoll() {
-    if (!mounted) return;
+    // `_settled` is what ends the loop. Cancelling the timer inside the
+    // callback would not: the timer that is running has already fired, so a
+    // bare re-arm here would keep reading a settled order every twenty seconds
+    // and re-fire `onSettled` — which invalidates providers — each time.
+    if (!mounted || _settled) return;
     final delay = _pollTick < _pollSteps.length
         ? _pollSteps[_pollTick]
         : _pollCeiling;
@@ -125,8 +130,11 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet> {
           .order(widget.order.publicReference);
       if (!mounted) return;
       setState(() => _liveOrder = updated);
-      if (updated.status.isSettled) {
+      if (updated.status.isSettled && !_settled) {
+        _settled = true;
         _pollTimer?.cancel();
+        _liveUnsubscribe?.call();
+        _liveUnsubscribe = null;
         widget.onSettled?.call();
       }
     } catch (_) {

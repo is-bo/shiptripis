@@ -221,6 +221,16 @@ poll stays as the answer for a sender whose socket is down, and steps
 3s, 3s, 5s, 5s, 10s, then 20s. No new realtime subsystem; one `register()` call
 on the existing `LiveUpdates`.
 
+That rewrite introduced a bug of its own, caught before the build and worth
+recording because it is the kind a backoff invites. The timer callback re-armed
+unconditionally, and cancelling the timer *inside* its own callback does nothing
+— the timer that is running has already fired. So a settled order went on being
+read every twenty seconds, and `onSettled`, which invalidates providers, fired on
+every one of them: the exact request amplification J1.2 spent a phase removing,
+reintroduced by the change meant to reduce it. A `_settled` flag ends the loop,
+the live subscription is released with it, and a test pumps eight ceiling
+intervals past settlement and asserts one `onSettled` call and at most two reads.
+
 ### Payment success — two MAJOR, fixed
 
 `'Guest'` and `'Self'` were hard-coded English rendered as the value of a row
@@ -586,8 +596,9 @@ Deferred, with reasons:
 
 ## 5. Verification
 
-* `flutter test` — **635 passing**, 0 failing (618 before; +17 new J6 tests,
-  `mobile/test/phase_j6_ux_acceptance_test.dart`).
+* `flutter test` — **637 passing**, 0 failing (618 before; +19 new J6 tests in
+  `mobile/test/phase_j6_ux_acceptance_test.dart`). CI's Linux runner reports the
+  same count.
 * `flutter analyze --fatal-infos` — **No issues found**.
 * `dart format --output=none --set-exit-if-changed lib test` — clean.
 * `flutter gen-l10n` — regenerated; `l10n_untranslated.json` is `{}`, so every
