@@ -737,7 +737,7 @@ class LEn extends L {
 
   @override
   String get depositExplainer =>
-      'Pay a small deposit to publish this request to travellers.';
+      'Paid now to list your request. 100% credited toward your final delivery payment.';
 
   @override
   String get depositAmount => 'Deposit';
@@ -2174,7 +2174,7 @@ class LEn extends L {
 
   @override
   String get boostExplainer =>
-      'A boost puts your request higher in the list for travellers who already match it.';
+      'Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.';
 
   @override
   String get boostDoesNotGuarantee =>
@@ -4487,4 +4487,216 @@ class LEn extends L {
 
   @override
   String get routeBasisLive => 'Live journey';
+
+  @override
+  String get pricingMinimumLabel => 'Minimum price';
+
+  @override
+  String get pricingRecommendedLabel => 'Recommended price';
+
+  @override
+  String get pricingYourOfferLabel => 'Your offer';
+
+  @override
+  String get pricingBelowRecommended =>
+      'Below recommendation — travelers may take longer to accept.';
+
+  @override
+  String get pricingCompetitive =>
+      'Competitive offer — matches more quickly with travelers.';
+
+  @override
+  String pricingBelowMinimumError(String amount) {
+    return 'Offer must be at least $amount';
+  }
+
+  @override
+  String get pricingTravelerReceives => 'Traveler receives';
+
+  @override
+  String get pricingPlatformFee => 'ShipTrip fee';
+
+  @override
+  String get pricingTotalSenderCost => 'Total sender cost';
+
+  @override
+  String get pricingIncrement50c => 'Increase by 50 cents';
+
+  @override
+  String get pricingDecrement50c => 'Decrease by 50 cents';
+
+  @override
+  String get depositSectionTitle => 'Posting deposit';
+
+  @override
+  String depositPresetMin(String amount) {
+    return 'Minimum ($amount)';
+  }
+
+  @override
+  String depositPresetRecommended(String amount) {
+    return 'Recommended ($amount)';
+  }
+
+  @override
+  String depositPresetFull(String amount) {
+    return 'Pay in full ($amount)';
+  }
+
+  @override
+  String get depositPresetCustom => 'Custom';
+
+  @override
+  String get depositFullDepositNotice =>
+      'Your current amount is paid in full. If you increase the reward or Boost later, an additional balance may be due.';
+
+  @override
+  String get depositRemainingBalance => 'Remaining balance at delivery';
+
+  @override
+  String get depositCustomAmountLabel => 'Custom deposit amount';
+
+  @override
+  String get boostSectionTitle => 'Boost this request';
+
+  @override
+  String get boostPresetNone => 'No Boost (€0)';
+
+  @override
+  String get boostPreset5 => '+€5';
+
+  @override
+  String get boostPreset10 => '+€10';
+
+  @override
+  String get boostPresetCustom => 'Custom';
+
+  @override
+  String get boostCustomAmountLabel => 'Custom Boost amount';
+
+  @override
+  String boostCurrentActive(String amount) {
+    return 'Active Boost: $amount';
+  }
+
+  @override
+  String get boostEditAction => 'Change Boost';
+
+  @override
+  String get boostRemoveAction => 'Remove Boost';
+
+  @override
+  String get boostHistoryTitle => 'Boost history';
+
+  @override
+  String boostHistoryChanged(String from, String to) {
+    return 'Changed from $from to $to';
+  }
+
+  @override
+  String get boostNotEditable =>
+      'Boost cannot be edited once an offer has been accepted or the request has expired.';
+
+  @override
+  String get guestPaymentTitle => 'Have someone else pay';
+
+  @override
+  String get guestPaymentDescription =>
+      'Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.';
+
+  @override
+  String get guestPaymentShareButton => 'Share payment link';
+
+  @override
+  String get guestPaymentCopyButton => 'Copy link';
+
+  @override
+  String get guestPaymentCopied => 'Payment link copied to clipboard';
+
+  @override
+  String guestPaymentExpires(String expiry) {
+    return 'Link expires on $expiry';
+  }
+
+  @override
+  String get guestPaymentRevokeAction => 'Revoke link';
+
+  @override
+  String get guestPaymentRevokeConfirmTitle => 'Revoke guest payment link?';
+
+  @override
+  String get guestPaymentRevokeConfirmBody =>
+      'Anyone holding this link will no longer be able to pay. You can generate a new link at any time.';
+
+  @override
+  String get guestPaymentPaidNotice => 'Paid by guest payer';
+
+  @override
+  String get paymentSuccessTitle => 'Payment secured';
+
+  @override
+  String get paymentSuccessWaxSeal => 'Secured';
+
+  @override
+  String get paymentSuccessReceiptTitle => 'Payment receipt';
+
+  @override
+  String get paymentSuccessAmountPaid => 'Amount paid';
+
+  @override
+  String get paymentSuccessDepositCredit => 'Deposit credited';
+
+  @override
+  String get paymentSuccessPaidBySelf => 'Paid by you';
+
+  @override
+  String get paymentSuccessPaidByGuest => 'Paid by guest payer';
+
+  @override
+  String get paymentSuccessRemainingDue => 'Remaining balance due at delivery';
+
+  @override
+  String get paymentSuccessNextStepsTitle => 'What happens next?';
+
+  @override
+  String get paymentSuccessDepositNextBody =>
+      'Your request is active. Travelers going your way can now match with it.';
+
+  @override
+  String get paymentSuccessDealNextBody =>
+      'Your delivery is funded. The traveler will meet you at the agreed pickup point.';
+
+  @override
+  String get paymentSuccessViewRequestAction => 'View request';
+
+  @override
+  String get paymentSuccessViewDeliveryAction => 'View delivery';
+
+  @override
+  String get notificationDepositPaidTitle => 'Deposit confirmed';
+
+  @override
+  String get notificationDepositPaidBody =>
+      'Your delivery request is now active and visible to travelers.';
+
+  @override
+  String get notificationDealFundedTitle => 'Delivery funded';
+
+  @override
+  String get notificationDealFundedBody =>
+      'Payment secured. Meet your traveler at the agreed pickup point.';
+
+  @override
+  String get notificationPayoutReadyTitle => 'Payout ready';
+
+  @override
+  String get notificationPayoutReadyBody =>
+      'Your delivery payout is ready for transfer.';
+
+  @override
+  String get notificationPayoutSentTitle => 'Payout sent';
+
+  @override
+  String get notificationPayoutSentBody =>
+      'Your payout has been transferred successfully.';
 }

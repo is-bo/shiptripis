@@ -74,6 +74,7 @@ import '../../design/tokens.dart';
 import '../../domain/delivery_request.dart';
 import '../../domain/canonical_place.dart';
 import '../../domain/location.dart';
+import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../location/preferred_point_field.dart';
@@ -280,6 +281,13 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
   FieldErrorMap _errors = const FieldErrorMap.empty();
 
+  PostingPricingQuote? _pricingQuote;
+  bool _pricingLoading = false;
+  String? _pricingError;
+  Timer? _rewardDebounceTimer;
+  int _chosenBoostCents = 0;
+  int? _chosenDepositCents;
+
   @override
   void initState() {
     super.initState();
@@ -300,6 +308,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
   @override
   void dispose() {
+    _rewardDebounceTimer?.cancel();
     _title.dispose();
     _description.dispose();
     _weight.dispose();
@@ -470,6 +479,17 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         final reward = _amountProblem(l, _reward);
         if (reward != null) {
           problems['sender_proposed_reward_eur_cents'] = reward;
+        } else if (_pricingQuote != null) {
+          final rewardCents = AppAmountField.centsOf(_reward) ?? 0;
+          final minCents = _pricingQuote!.minimumReward.minorUnits;
+          if (rewardCents < minCents) {
+            problems['sender_proposed_reward_eur_cents'] =
+                l.pricingBelowMinimumError(
+                  _pricingQuote!.minimumReward.format(
+                    Localizations.localeOf(context),
+                  ),
+                );
+          }
         }
     }
     return problems;
@@ -806,6 +826,9 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
     }
     if (_step < _lastStep) {
       setState(() => _step++);
+      if (_step == _lastStep) {
+        _fetchPricingQuote();
+      }
       return;
     }
 
@@ -823,6 +846,85 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       return;
     }
     _submit();
+  }
+
+  Future<void> _fetchPricingQuote() async {
+    final pickup = _pickup;
+    final delivery = _delivery;
+    final weight = parseDecimalInput(_weight.text);
+    final readyEnd = _readyEnd;
+    final deadline = _deadline;
+    if (pickup == null ||
+        delivery == null ||
+        weight == null ||
+        weight <= 0 ||
+        readyEnd == null ||
+        deadline == null) {
+      return;
+    }
+
+    setState(() {
+      _pricingLoading = true;
+      _pricingError = null;
+    });
+
+    final currentRewardCents = AppAmountField.centsOf(_reward);
+
+    try {
+      final quote = await ref.read(requestRepositoryProvider).quotePricingDraft(
+        pickupPlaceId: pickup.id,
+        deliveryPlaceId: delivery.id,
+        actualWeightKg: weight,
+        lengthCm: parseDecimalInput(_length.text),
+        widthCm: parseDecimalInput(_width.text),
+        heightCm: parseDecimalInput(_height.text),
+        readyWindowEnd: readyEnd,
+        deadlineAt: deadline,
+        chosenRewardEurCents: currentRewardCents,
+        boostEurCents: _chosenBoostCents > 0 ? _chosenBoostCents : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pricingQuote = quote;
+        _pricingLoading = false;
+        // If reward is empty, prefill with recommended
+        if (_reward.text.trim().isEmpty) {
+          _reward.text = quote.recommendedReward.editableString;
+        }
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _pricingLoading = false;
+        _pricingError = e.serverDetail ?? L.of(context).stateUnexpectedBody;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _pricingLoading = false;
+        _pricingError = L.of(context).stateUnexpectedBody;
+      });
+    }
+  }
+
+  void _adjustReward(int deltaCents) {
+    final currentCents = AppAmountField.centsOf(_reward) ??
+        _pricingQuote?.recommendedReward.minorUnits ??
+        1000;
+    final minCents = _pricingQuote?.minimumReward.minorUnits ?? 50;
+    final newCents = max(minCents, currentCents + deltaCents);
+    _reward.text = (newCents / 100.0).toStringAsFixed(2);
+    _onEdit(const ['sender_proposed_reward_eur_cents'])('');
+    _rewardDebounceTimer?.cancel();
+    _fetchPricingQuote();
+  }
+
+  void _onRewardChanged(String text) {
+    _onEdit(const ['sender_proposed_reward_eur_cents'])(text);
+    _rewardDebounceTimer?.cancel();
+    _rewardDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _fetchPricingQuote();
+    });
   }
 
   /// Says what is wrong, then puts the cursor on it.
@@ -903,6 +1005,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         heightCm: parseDecimalInput(_height.text),
         declaredValueEurCents: AppAmountField.centsOf(_declaredValue) ?? 0,
         senderProposedRewardEurCents: AppAmountField.centsOf(_reward) ?? 0,
+        boostEurCents: _chosenBoostCents,
+        postingDepositEurCents: _chosenDepositCents,
         title: _title.text.trim(),
         description: _description.text.trim(),
         category: _category!,
@@ -1592,21 +1696,264 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           icon: Icons.error_outline_rounded,
         ),
       ],
-      const SizedBox(height: AppSpace.xl),
+      SectionHeader(
+        title: l.pricingYourOfferLabel,
+        subtitle: l.requestProposedRewardHelp,
+      ),
+      if (_pricingLoading && _pricingQuote == null)
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
+            child: CircularProgressIndicator(),
+          ),
+        )
+      else ...[
+        if (_pricingQuote != null) ...[
+          Builder(
+            builder: (context) {
+              final locale = Localizations.localeOf(context);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpace.md),
+                          decoration: BoxDecoration(
+                            color: context.colors.surfaceSunken,
+                            borderRadius: AppRadius.rMd,
+                            border: Border.all(color: context.colors.hairline),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l.pricingMinimumLabel,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: context.colors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              Text(
+                                _pricingQuote!.minimumReward.format(locale),
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.md),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpace.md),
+                          decoration: BoxDecoration(
+                            color: context.colors.surfaceSunken,
+                            borderRadius: AppRadius.rMd,
+                            border: Border.all(color: context.colors.hairlineStrong),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l.pricingRecommendedLabel,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: context.colors.brand,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              Text(
+                                _pricingQuote!.recommendedReward.format(locale),
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: context.colors.brand,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
 
-      AppAmountField(
-        key: _anchor('sender_proposed_reward_eur_cents'),
-        focusNode: _focus('sender_proposed_reward_eur_cents'),
-        label: l.requestProposedReward,
-        controller: _reward,
-        helper: l.requestProposedRewardHelp,
-        errorText: _errorFor(l, 'sender_proposed_reward_eur_cents'),
-        onChanged: _onEdit(const ['sender_proposed_reward_eur_cents']),
-      ),
-      InfoNotice(
-        message: l.requestRewardIsIntent,
-        icon: Icons.info_outline_rounded,
-      ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: IconButton.outlined(
+                icon: const Icon(Icons.remove_rounded),
+                tooltip: l.pricingDecrement50c,
+                onPressed: () => _adjustReward(-50),
+              ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: AppAmountField(
+                key: _anchor('sender_proposed_reward_eur_cents'),
+                focusNode: _focus('sender_proposed_reward_eur_cents'),
+                label: l.pricingYourOfferLabel,
+                controller: _reward,
+                errorText: _errorFor(l, 'sender_proposed_reward_eur_cents'),
+                onChanged: _onRewardChanged,
+              ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: IconButton.outlined(
+                icon: const Icon(Icons.add_rounded),
+                tooltip: l.pricingIncrement50c,
+                onPressed: () => _adjustReward(50),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.sm),
+
+        if (_pricingQuote != null &&
+            _errorFor(l, 'sender_proposed_reward_eur_cents') == null) ...[
+          if ((AppAmountField.centsOf(_reward) ?? 0) <
+              _pricingQuote!.recommendedReward.minorUnits)
+            InfoNotice(
+              message: l.pricingBelowRecommended,
+              tone: StatusTone.neutral,
+              icon: Icons.info_outline_rounded,
+            )
+          else
+            InfoNotice(
+              message: l.pricingCompetitive,
+              tone: StatusTone.good,
+              icon: Icons.check_circle_outline_rounded,
+            ),
+          const SizedBox(height: AppSpace.md),
+        ],
+
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.boostSectionTitle,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                l.boostExplainer,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Wrap(
+                spacing: AppSpace.sm,
+                children: [
+                  ChoiceChip(
+                    label: Text(l.boostPresetNone),
+                    selected: _chosenBoostCents == 0,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _chosenBoostCents = 0);
+                        _fetchPricingQuote();
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: Text(l.boostPreset5),
+                    selected: _chosenBoostCents == 500,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _chosenBoostCents = 500);
+                        _fetchPricingQuote();
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: Text(l.boostPreset10),
+                    selected: _chosenBoostCents == 1000,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _chosenBoostCents = 1000);
+                        _fetchPricingQuote();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+
+        if (_pricingQuote != null) ...[
+          Builder(
+            builder: (context) {
+              final locale = Localizations.localeOf(context);
+              return AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DetailRow(
+                      label: l.pricingTravelerReceives,
+                      value: Text(
+                        _pricingQuote!.boost.totalOfferedReward.format(locale),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    DetailRow(
+                      label: l.pricingPlatformFee,
+                      value: Text(
+                        _pricingQuote!.effectiveEconomics.platformFee.format(locale),
+                      ),
+                    ),
+                    const Divider(),
+                    DetailRow(
+                      label: l.pricingTotalSenderCost,
+                      value: Text(
+                        _pricingQuote!.effectiveEconomics.senderTotal.format(locale),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.brand,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    DetailRow(
+                      label: l.depositSectionTitle,
+                      value: Text(
+                        _pricingQuote!.deposit.recommendedDeposit.format(locale),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+
+        if (_pricingError != null) ...[
+          const SizedBox(height: AppSpace.sm),
+          InfoNotice(
+            message: _pricingError!,
+            tone: StatusTone.bad,
+            icon: Icons.error_outline_rounded,
+            actionLabel: l.actionRetry,
+            onAction: _fetchPricingQuote,
+          ),
+        ],
+      ],
     ];
   }
 

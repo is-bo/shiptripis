@@ -104,6 +104,8 @@ class DeliveryRequest {
     this.heightCm,
     this.declaredValue,
     this.senderProposedReward,
+    this.boostEur,
+    this.totalOfferedReward,
     this.createdAt,
     this.updatedAt,
   });
@@ -133,6 +135,10 @@ class DeliveryRequest {
         declaredValue: Money.eurCentsOrNull(json['declared_value_eur_cents']),
         senderProposedReward: Money.eurCentsOrNull(
           json['sender_proposed_reward_eur_cents'],
+        ),
+        boostEur: Money.eurCentsOrNull(json['boost_eur_cents']),
+        totalOfferedReward: Money.eurCentsOrNull(
+          json['total_offered_reward_eur_cents'],
         ),
         title: readText(json['title']),
         description: readText(json['description']),
@@ -182,6 +188,14 @@ class DeliveryRequest {
 
   /// The sender's posted intent. Never an agreed price.
   final Money? senderProposedReward;
+
+  /// J2 additive boost reward.
+  final Money? boostEur;
+
+  /// J2 total offered reward (reward + boost) returned by backend.
+  final Money? totalOfferedReward;
+
+  bool get isBoosted => boostEur != null && boostEur!.isPositive;
 
   final String title;
   final String description;

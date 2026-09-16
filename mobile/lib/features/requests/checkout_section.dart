@@ -41,6 +41,7 @@ import '../../design/components/status.dart';
 import '../../design/tokens.dart';
 import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
+import '../guest/guest_payment_sheet.dart';
 
 /// Where the user is in the payment, from this widget's point of view.
 ///
@@ -547,6 +548,21 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
           semanticHint: l.paymentOpeningProvider,
           onPressed: () => _checkout(selected),
         ),
+        if (order != null && order.status.isCollectable && chosen.supportsGuestPayment) ...[
+          const SizedBox(height: AppSpace.sm),
+          Center(
+            child: AppButton(
+              label: l.guestPaymentTitle,
+              icon: Icons.share_outlined,
+              variant: AppButtonVariant.tertiary,
+              onPressed: () => GuestPaymentSheet.show(
+                context,
+                order: order,
+                onSettled: widget.onSettled,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpace.md),
         Text(
           l.paymentRedirectNotProof,

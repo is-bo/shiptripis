@@ -1,5 +1,19 @@
 # ShipTrip V1 Implementation Status
 
+## J3 — Mobile Pricing, Deposit, Guest Payer, Boost & Payment Success UX (2026-09-16)
+
+**J3 PASS — 572 mobile tests green, flutter analyze 0 issues, trilingual (EN/FR/AR RTL).** Branch `gemini/j3-mobile-payment-ux`, from main. [Mobile UX, contracts and verification](PHASE_J3_MOBILE_PAYMENT_UX.md).
+
+**Three prices, stepper and additive Boost.** Senders see minimum, recommended, and chosen rewards authoritatively quoted via `POST /api/parcels/pricing-quote`. The stepper cannot drop below minimum, and notices highlight competitive and below-recommended choices. Additive Boost chips (+€5, +€10, +€15, Custom) pass 100% to the traveler with platform fee on top.
+
+**Flexible deposit with deduplication.** Presets (Minimum €3, Recommended clamped €3–€7, Full deposit, Custom) automatically deduplicate when amounts coincide. Full deposit renders authoritative note: "Your current amount is paid in full. If you increase the reward or Boost later, an additional balance may be due."
+
+**Universal guest payer sheet.** Senders can share unauthenticated checkout links via native ShareSheet or clipboard copy, with live settlement polling every 3 seconds and modal revocation.
+
+**Wax seal payment success UX.** Receipts display the canonical wax seal ('✓'), contextual route `[Origin] → [Destination]`, parchment receipt card with amount, payment method, transaction reference, date/time, and purpose-aware "What happens next" explainer.
+
+**Strict backend authority & test mode.** Editability is strictly gated by backend capabilities (`can_edit` / `can_edit_boost`), matched boost is read from frozen Deal economics, and all payment flows remain strictly in TEST mode.
+
 ## J2 — Pricing, flexible deposit, universal guest payer and Boost economics (2026-09-15)
 
 **J2 PASS — all six CI jobs green, merged to main, TEST release verified.** Branch `claude/j2-pricing-deposit-guest-boost`, from

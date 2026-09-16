@@ -741,7 +741,7 @@ class LFr extends L {
 
   @override
   String get depositExplainer =>
-      'Payez un petit acompte pour publier cette demande auprès des voyageurs.';
+      'Payé maintenant pour publier votre demande. Crédité à 100 % sur votre paiement final.';
 
   @override
   String get depositAmount => 'Acompte';
@@ -2187,7 +2187,7 @@ class LFr extends L {
 
   @override
   String get boostExplainer =>
-      'Une mise en avant place votre demande plus haut dans la liste pour les voyageurs déjà compatibles.';
+      'Les voyageurs reçoivent 100 % du bonus Boost. Les demandes boostées apparaissent en tête des recherches.';
 
   @override
   String get boostDoesNotGuarantee =>
@@ -4526,4 +4526,218 @@ class LFr extends L {
 
   @override
   String get routeBasisLive => 'Trajet en direct';
+
+  @override
+  String get pricingMinimumLabel => 'Prix minimum';
+
+  @override
+  String get pricingRecommendedLabel => 'Prix recommandé';
+
+  @override
+  String get pricingYourOfferLabel => 'Votre offre';
+
+  @override
+  String get pricingBelowRecommended =>
+      'En dessous du montant recommandé — les voyageurs peuvent mettre plus de temps à accepter.';
+
+  @override
+  String get pricingCompetitive =>
+      'Offre compétitive — correspond plus rapidement avec les voyageurs.';
+
+  @override
+  String pricingBelowMinimumError(String amount) {
+    return 'L\'offre doit être d\'au moins $amount';
+  }
+
+  @override
+  String get pricingTravelerReceives => 'Le voyageur reçoit';
+
+  @override
+  String get pricingPlatformFee => 'Frais ShipTrip';
+
+  @override
+  String get pricingTotalSenderCost => 'Coût total expéditeur';
+
+  @override
+  String get pricingIncrement50c => 'Augmenter de 50 centimes';
+
+  @override
+  String get pricingDecrement50c => 'Diminuer de 50 centimes';
+
+  @override
+  String get depositSectionTitle => 'Acompte de publication';
+
+  @override
+  String depositPresetMin(String amount) {
+    return 'Minimum ($amount)';
+  }
+
+  @override
+  String depositPresetRecommended(String amount) {
+    return 'Recommandé ($amount)';
+  }
+
+  @override
+  String depositPresetFull(String amount) {
+    return 'Payer en totalité ($amount)';
+  }
+
+  @override
+  String get depositPresetCustom => 'Personnalisé';
+
+  @override
+  String get depositFullDepositNotice =>
+      'Votre montant actuel est intégralement réglé. Si vous augmentez la récompense ou le Boost plus tard, un solde supplémentaire pourra être dû.';
+
+  @override
+  String get depositRemainingBalance => 'Solde restant à la livraison';
+
+  @override
+  String get depositCustomAmountLabel => 'Montant d\'acompte personnalisé';
+
+  @override
+  String get boostSectionTitle => 'Booster cette demande';
+
+  @override
+  String get boostPresetNone => 'Sans Boost (0 €)';
+
+  @override
+  String get boostPreset5 => '+5 €';
+
+  @override
+  String get boostPreset10 => '+10 €';
+
+  @override
+  String get boostPresetCustom => 'Personnalisé';
+
+  @override
+  String get boostCustomAmountLabel => 'Montant du Boost personnalisé';
+
+  @override
+  String boostCurrentActive(String amount) {
+    return 'Boost actif : $amount';
+  }
+
+  @override
+  String get boostEditAction => 'Modifier le Boost';
+
+  @override
+  String get boostRemoveAction => 'Supprimer le Boost';
+
+  @override
+  String get boostHistoryTitle => 'Historique du Boost';
+
+  @override
+  String boostHistoryChanged(String from, String to) {
+    return 'Modifié de $from à $to';
+  }
+
+  @override
+  String get boostNotEditable =>
+      'Le Boost ne peut plus être modifié une fois une offre acceptée ou la demande expirée.';
+
+  @override
+  String get guestPaymentTitle => 'Faire payer par un proche';
+
+  @override
+  String get guestPaymentDescription =>
+      'Partagez un lien sécurisé. Toute personne ayant le lien peut régler ce montant sans avoir besoin d\'un compte ShipTrip.';
+
+  @override
+  String get guestPaymentShareButton => 'Partager le lien de paiement';
+
+  @override
+  String get guestPaymentCopyButton => 'Copier le lien';
+
+  @override
+  String get guestPaymentCopied =>
+      'Lien de paiement copié dans le presse-papiers';
+
+  @override
+  String guestPaymentExpires(String expiry) {
+    return 'Le lien expire le $expiry';
+  }
+
+  @override
+  String get guestPaymentRevokeAction => 'Révoquer le lien';
+
+  @override
+  String get guestPaymentRevokeConfirmTitle =>
+      'Révoquer le lien de paiement invité ?';
+
+  @override
+  String get guestPaymentRevokeConfirmBody =>
+      'Toute personne disposant de ce lien ne pourra plus payer. Vous pouvez générer un nouveau lien à tout moment.';
+
+  @override
+  String get guestPaymentPaidNotice => 'Payé par un tiers';
+
+  @override
+  String get paymentSuccessTitle => 'Paiement sécurisé';
+
+  @override
+  String get paymentSuccessWaxSeal => 'Sécurisé';
+
+  @override
+  String get paymentSuccessReceiptTitle => 'Reçu de paiement';
+
+  @override
+  String get paymentSuccessAmountPaid => 'Montant payé';
+
+  @override
+  String get paymentSuccessDepositCredit => 'Acompte crédité';
+
+  @override
+  String get paymentSuccessPaidBySelf => 'Payé par vous';
+
+  @override
+  String get paymentSuccessPaidByGuest => 'Payé par un tiers';
+
+  @override
+  String get paymentSuccessRemainingDue => 'Solde restant dû à la livraison';
+
+  @override
+  String get paymentSuccessNextStepsTitle => 'Que se passe-t-il ensuite ?';
+
+  @override
+  String get paymentSuccessDepositNextBody =>
+      'Votre demande est active. Les voyageurs sur votre trajet peuvent désormais matcher.';
+
+  @override
+  String get paymentSuccessDealNextBody =>
+      'Votre livraison est financée. Le voyageur vous retrouvera au point de rendez-vous convenu.';
+
+  @override
+  String get paymentSuccessViewRequestAction => 'Voir la demande';
+
+  @override
+  String get paymentSuccessViewDeliveryAction => 'Voir la livraison';
+
+  @override
+  String get notificationDepositPaidTitle => 'Acompte confirmé';
+
+  @override
+  String get notificationDepositPaidBody =>
+      'Votre demande de livraison est maintenant active et visible pour les voyageurs.';
+
+  @override
+  String get notificationDealFundedTitle => 'Livraison financée';
+
+  @override
+  String get notificationDealFundedBody =>
+      'Paiement sécurisé. Retrouvez votre voyageur au point de collecte convenu.';
+
+  @override
+  String get notificationPayoutReadyTitle => 'Versement prêt';
+
+  @override
+  String get notificationPayoutReadyBody =>
+      'Vos gains pour cette livraison sont prêts pour le transfert.';
+
+  @override
+  String get notificationPayoutSentTitle => 'Versement envoyé';
+
+  @override
+  String get notificationPayoutSentBody =>
+      'Votre versement a été transféré avec succès.';
 }

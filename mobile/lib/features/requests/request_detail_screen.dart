@@ -40,9 +40,15 @@ import '../../design/tokens.dart';
 import '../../domain/delivery_request.dart';
 import '../../domain/location.dart';
 import '../../domain/offer.dart';
+import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+
+final _requestPricingProvider =
+    FutureProvider.autoDispose.family<RequestPricing, int>((ref, id) async {
+  return ref.watch(requestRepositoryProvider).requestPricing(id);
+});
 
 class RequestDetailScreen extends ConsumerStatefulWidget {
   const RequestDetailScreen({required this.requestId, super.key});
@@ -338,6 +344,81 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
           ),
           const SizedBox(height: AppSpace.xl),
         ],
+
+        Builder(
+          builder: (context) {
+            final pricing = ref.watch(_requestPricingProvider(request.id)).asData?.value;
+            final boostAmount = pricing?.boost.amount ?? request.boostEur;
+            final isBoosted = boostAmount != null && boostAmount.isPositive;
+            final canEditBoost = pricing?.actions.canEditBoost ?? false;
+
+            if (!isBoosted && !canEditBoost) return const SizedBox.shrink();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(title: l.boostSectionTitle),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isBoosted) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              l.boostCurrentActive(boostAmount.format(locale)),
+                              style: text.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: c.brand,
+                              ),
+                            ),
+                            StatusPill(
+                              label: l.boostSectionTitle,
+                              tone: StatusTone.good,
+                              icon: Icons.rocket_launch_rounded,
+                              compact: true,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        Text(
+                          l.boostExplainer,
+                          style: text.bodySmall?.copyWith(color: c.textSecondary),
+                        ),
+                        const SizedBox(height: AppSpace.md),
+                      ] else ...[
+                        Text(
+                          l.boostExplainer,
+                          style: text.bodySmall?.copyWith(color: c.textSecondary),
+                        ),
+                        const SizedBox(height: AppSpace.md),
+                      ],
+                      if (canEditBoost)
+                        AppButton(
+                          label: isBoosted ? l.boostEditAction : l.boostSectionTitle,
+                          variant: isBoosted
+                              ? AppButtonVariant.secondary
+                              : AppButtonVariant.primary,
+                          icon: Icons.rocket_launch_outlined,
+                          onPressed: () => context.pushNamed(
+                            Routes.requestBoost,
+                            pathParameters: {'id': '${request.id}'},
+                          ),
+                        )
+                      else if (isBoosted)
+                        Text(
+                          l.boostNotEditable,
+                          style: text.bodySmall?.copyWith(color: c.textTertiary),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xl),
+              ],
+            );
+          },
+        ),
 
         _MatchesSection(requestId: request.id),
 

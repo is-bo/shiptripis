@@ -38,6 +38,7 @@ import '../domain/notification.dart';
 import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
+import '../domain/pricing.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
 
@@ -458,6 +459,8 @@ class DeliveryRequestDraft {
     this.handlingNotes = '',
     this.fragile = false,
     this.targetTravelerId,
+    this.boostEurCents = 0,
+    this.postingDepositEurCents,
   });
 
   final int? pickupLocationId;
@@ -479,6 +482,12 @@ class DeliveryRequestDraft {
 
   /// The sender's posted intent, in cents. Not a price.
   final int senderProposedRewardEurCents;
+
+  /// J2 additive boost reward intent, in cents.
+  final int boostEurCents;
+
+  /// J2 sender chosen posting deposit, in cents.
+  final int? postingDepositEurCents;
 
   final String title;
   final String description;
@@ -508,6 +517,9 @@ class DeliveryRequestDraft {
     if (heightCm != null) 'height_cm': heightCm!.toStringAsFixed(2),
     'declared_value_eur_cents': declaredValueEurCents,
     'sender_proposed_reward_eur_cents': senderProposedRewardEurCents,
+    if (boostEurCents > 0) 'boost_eur_cents': boostEurCents,
+    if (postingDepositEurCents != null)
+      'posting_deposit_eur_cents': postingDepositEurCents,
     'title': title,
     'description': description,
     'category': _categoryWire(category),
@@ -557,6 +569,49 @@ class RequestRepository {
       DeliveryRequest.fromJson(
         await _api.getObject('/api/parcels/$id', cancelToken: cancelToken),
       );
+
+  /// Quotes authoritative J2 pricing recommendation, minimums, deposit, and boost.
+  Future<PostingPricingQuote> quotePricingDraft({
+    required int pickupPlaceId,
+    required int deliveryPlaceId,
+    required double actualWeightKg,
+    double? lengthCm,
+    double? widthCm,
+    double? heightCm,
+    required DateTime readyWindowEnd,
+    required DateTime deadlineAt,
+    int? chosenRewardEurCents,
+    int? boostEurCents,
+    CancelToken? cancelToken,
+  }) async => PostingPricingQuote.fromJson(
+    await _api.postObject(
+      '/api/parcels/pricing-quote',
+      body: {
+        'pickup_place_id': pickupPlaceId,
+        'delivery_place_id': deliveryPlaceId,
+        'actual_weight_kg': actualWeightKg.toStringAsFixed(2),
+        if (lengthCm != null) 'length_cm': lengthCm.toStringAsFixed(2),
+        if (widthCm != null) 'width_cm': widthCm.toStringAsFixed(2),
+        if (heightCm != null) 'height_cm': heightCm.toStringAsFixed(2),
+        'ready_window_end': readyWindowEnd.toIso8601String(),
+        'deadline_at': deadlineAt.toIso8601String(),
+        'chosen_reward_eur_cents': ?chosenRewardEurCents,
+        'boost_eur_cents': ?boostEurCents,
+      },
+      cancelToken: cancelToken,
+    ),
+  );
+
+  /// Fetches authoritative J2 pricing, actions, deposit, and boost for an existing request.
+  Future<RequestPricing> requestPricing(
+    int requestId, {
+    CancelToken? cancelToken,
+  }) async => RequestPricing.fromJson(
+    await _api.getObject(
+      '/api/parcels/$requestId/pricing',
+      cancelToken: cancelToken,
+    ),
+  );
 
   Future<CreatedRequest> create(DeliveryRequestDraft draft) async {
     final body = await _api.postObject(
@@ -1227,11 +1282,18 @@ class PaymentRepository {
     ),
   );
 
-  /// Idempotent create-or-return.
-  Future<PaymentOrder> createPostingDeposit(int requestId) async =>
-      PaymentOrder.fromJson(
-        await _api.postObject('/api/parcels/$requestId/posting-deposit'),
-      );
+  /// Idempotent create-or-return with optional sender-chosen deposit amount.
+  Future<PaymentOrder> createPostingDeposit(
+    int requestId, {
+    int? amountEurCents,
+  }) async => PaymentOrder.fromJson(
+    await _api.postObject(
+      '/api/parcels/$requestId/posting-deposit',
+      body: {
+        'amount_eur_cents': ?amountEurCents,
+      },
+    ),
+  );
 
   /// The Deal's balance obligation.
   ///
@@ -1743,47 +1805,44 @@ class BoostRepository {
 
   final ApiClient _api;
 
-  Future<BoostCatalogue> catalogue({CancelToken? cancelToken}) async =>
-      BoostCatalogue.fromJson(
-        await _api.getObject('/api/boosts/packages', cancelToken: cancelToken),
+  /// Authoritative J2 boost bounds and commission rate.
+  Future<BoostPolicy> policy({CancelToken? cancelToken}) async =>
+      BoostPolicy.fromJson(
+        await _api.getObject('/api/boosts/policy', cancelToken: cancelToken),
       );
 
+  /// Current request's additive boost, calculated economics, policy, and capability.
   Future<BoostState> forRequest(
+    int requestId, {
+    CancelToken? cancelToken,
+  }) async => BoostState.fromJson(
+    await _api.getObject(
+      '/api/parcels/$requestId/boost',
+      cancelToken: cancelToken,
+    ),
+  );
+
+  /// Sets, raises, lowers, or removes (0) the additive boost reward on a request.
+  Future<BoostState> setBoost({
+    required int requestId,
+    required int amountEurCents,
+    CancelToken? cancelToken,
+  }) async => BoostState.fromJson(
+    await _api.putObject(
+      '/api/parcels/$requestId/boost',
+      body: {'boost_eur_cents': amountEurCents},
+      cancelToken: cancelToken,
+    ),
+  );
+
+  /// Historical retired package audit trail.
+  Future<BoostState> retiredHistory(
     int requestId, {
     CancelToken? cancelToken,
   }) async => BoostState.fromJson(
     await _api.getObject(
       '/api/parcels/$requestId/boosts',
       cancelToken: cancelToken,
-    ),
-  );
-
-  Future<BoostPreview> preview({
-    required String packageCode,
-    required int amountEurCents,
-  }) async => BoostPreview.fromJson(
-    await _api.postObject(
-      '/api/boosts/preview',
-      body: {'package_code': packageCode, 'amount_eur_cents': amountEurCents},
-    ),
-  );
-
-  /// Creates the purchase and its payment order. It activates only once that
-  /// order is confirmed paid — returning from a checkout page activates
-  /// nothing.
-  Future<BoostPurchase> purchase({
-    required int requestId,
-    required String packageCode,
-    required int amountEurCents,
-    required int previewSettingsVersion,
-  }) async => BoostPurchase.fromJson(
-    await _api.postObject(
-      '/api/parcels/$requestId/boosts',
-      body: {
-        'package_code': packageCode,
-        'amount_eur_cents': amountEurCents,
-        'preview_settings_version': previewSettingsVersion,
-      },
     ),
   );
 }

@@ -11,11 +11,11 @@
 /// or the sender cancels first. Both of those sentences are on screen, because
 /// "pay to post" reads like a listing charge otherwise.
 ///
-/// Nothing here computes an amount. `quote.percent_bps` is published so the
-/// policy can be explained, never so the client can multiply by it — the
-/// server already clamped the figure to its floor and cap and told us which,
-/// via `clamped`.
+/// J2 adds sender-selected deposit amount (Min, Recommended, Full, Custom),
+/// live balance calculation, and wax-seal PaymentSuccessView on settlement.
 library;
+
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,8 +24,10 @@ import 'package:go_router/go_router.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/money/money.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
+import '../../design/components/forms.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -34,6 +36,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/payment_success_view.dart';
 import 'checkout_section.dart';
 
 class DepositScreen extends ConsumerStatefulWidget {
@@ -46,19 +49,36 @@ class DepositScreen extends ConsumerStatefulWidget {
 }
 
 class _DepositScreenState extends ConsumerState<DepositScreen> {
-  /// The order this screen just created, held only until the provider catches
-  /// up. Without it the user taps "pay" and watches the same button for a
-  /// round trip.
   PaymentOrder? _created;
-
   bool _creating = false;
+  int? _chosenDepositCents;
+  final _customAmountController = TextEditingController();
+  bool _isCustom = false;
 
-  Future<void> _createOrder() async {
+  @override
+  void dispose() {
+    _customAmountController.dispose();
+    super.dispose();
+  }
+
+  void _syncInitial(DepositQuote quote) {
+    if (_chosenDepositCents == null && !_isCustom) {
+      final rec = quote.recommended?.minorUnits ??
+          quote.amount?.minorUnits ??
+          300;
+      _chosenDepositCents = rec;
+    }
+  }
+
+  Future<void> _createOrder(int amountCents) async {
     setState(() => _creating = true);
     try {
       final order = await ref
           .read(paymentRepositoryProvider)
-          .createPostingDeposit(widget.requestId);
+          .createPostingDeposit(
+            widget.requestId,
+            amountEurCents: amountCents,
+          );
       if (!mounted) return;
       setState(() => _created = order);
       ref.invalidate(postingDepositProvider(widget.requestId));
@@ -83,6 +103,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final deposit = ref.watch(postingDepositProvider(widget.requestId));
+    final order = deposit.asData?.value.order ?? _created;
+    final request = (order?.status.isSettled ?? false)
+        ? ref.watch(requestDetailProvider(widget.requestId)).asData?.value
+        : null;
 
     return AppScaffold(
       topBar: AppTopBar(title: l.depositTitle, showBack: true),
@@ -93,17 +117,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           padding: AppScrollPadding.page(context),
           children: const [SkeletonDetail()],
         ),
-        data: (state) => _body(context, l, state),
+        data: (state) => _body(context, l, state, request),
       ),
     );
   }
 
-  Widget _body(BuildContext context, L l, PostingDepositState state) {
+  Widget _body(
+    BuildContext context,
+    L l,
+    PostingDepositState state,
+    dynamic request,
+  ) {
     final order = state.order ?? _created;
 
     if (order != null) {
       return order.status.isSettled
-          ? _paid(context, l)
+          ? _paid(context, l, order, request)
           : _outstanding(context, l, order, state.quote);
     }
 
@@ -115,28 +144,42 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     return _quoted(context, l, quote);
   }
 
-  // -------------------------------------------------------------------------
-  // States
-  // -------------------------------------------------------------------------
-
   Widget _notRequired(BuildContext context, L l) => ListView(
-    padding: AppScrollPadding.page(context),
-    children: [
-      AppEmptyState(
-        title: l.depositNotRequiredTitle,
-        body: l.depositNotRequiredBody,
-        icon: Icons.check_circle_outline_rounded,
-        actionLabel: l.actionGoBack,
-        onAction: () => context.pop(),
-      ),
-    ],
-  );
+        padding: AppScrollPadding.page(context),
+        children: [
+          AppEmptyState(
+            title: l.depositNotRequiredTitle,
+            body: l.depositNotRequiredBody,
+            icon: Icons.check_circle_outline_rounded,
+            actionLabel: l.actionGoBack,
+            onAction: () => context.pop(),
+          ),
+        ],
+      );
 
   Widget _quoted(BuildContext context, L l, DepositQuote quote) {
+    _syncInitial(quote);
+    final locale = Localizations.localeOf(context);
     final suggestedTotal = quote.estimatedSenderTotal;
 
-    // The policy can put a floor or a cap on the figure. Saying so quietly is
-    // the difference between "that seems arbitrary" and "that is the rule".
+    final minCents = quote.minimum?.minorUnits ?? 300;
+    final recCents = quote.recommended?.minorUnits ??
+        quote.amount?.minorUnits ??
+        300;
+    final fullCents = suggestedTotal?.minorUnits;
+
+    final hasSeparateMin = minCents < recCents;
+    final hasSeparateFull = fullCents != null && fullCents > recCents;
+
+    final effectiveDeposit = _isCustom
+        ? (AppAmountField.centsOf(_customAmountController) ?? minCents)
+        : (_chosenDepositCents ?? recCents);
+
+    final remainingBalanceCents = fullCents != null
+        ? max(0, fullCents - effectiveDeposit)
+        : null;
+    final isFull = fullCents != null && effectiveDeposit >= fullCents;
+
     final clampNote = switch (quote.clamped) {
       'min' => l.depositClampedMin,
       'max' => l.depositClampedMax,
@@ -144,7 +187,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     };
 
     return ListView(
-      padding: AppScrollPadding.page(context),
+      padding: AppScrollPadding.pageWithFooter(context),
       children: [
         if (suggestedTotal != null) ...[
           MoneyHero(
@@ -154,27 +197,159 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           ),
           const SizedBox(height: AppSpace.xl),
         ],
+
         _DepositGuidance(
           quote: quote,
           showSuggestedTotal: suggestedTotal == null,
           recommendationNote: clampNote,
         ),
         const SizedBox(height: AppSpace.lg),
-        Text(l.depositExplainer, style: Theme.of(context).textTheme.bodyLarge),
-        const SizedBox(height: AppSpace.lg),
-        InfoNotice(
-          message: l.depositCreditedNote,
-          tone: StatusTone.good,
-          icon: Icons.savings_outlined,
+
+        Text(l.depositExplainer, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: AppSpace.md),
+
+        SectionHeader(title: l.depositSectionTitle),
+        Wrap(
+          spacing: AppSpace.sm,
+          children: [
+            if (hasSeparateMin)
+              ChoiceChip(
+                label: Text(
+                  l.depositPresetMin(Money.eurCents(minCents).format(locale)),
+                ),
+                selected: !_isCustom && _chosenDepositCents == minCents,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _isCustom = false;
+                      _chosenDepositCents = minCents;
+                    });
+                  }
+                },
+              ),
+            ChoiceChip(
+              label: Text(
+                l.depositPresetRecommended(
+                  Money.eurCents(recCents).format(locale),
+                ),
+              ),
+              selected: !_isCustom && _chosenDepositCents == recCents,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() {
+                    _isCustom = false;
+                    _chosenDepositCents = recCents;
+                  });
+                }
+              },
+            ),
+            if (hasSeparateFull)
+              ChoiceChip(
+                label: Text(
+                  l.depositPresetFull(
+                    Money.eurCents(fullCents).format(locale),
+                  ),
+                ),
+                selected: !_isCustom && _chosenDepositCents == fullCents,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _isCustom = false;
+                      _chosenDepositCents = fullCents;
+                    });
+                  }
+                },
+              ),
+            ChoiceChip(
+              label: Text(l.depositPresetCustom),
+              selected: _isCustom,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() {
+                    _isCustom = true;
+                    if (_customAmountController.text.isEmpty) {
+                      _customAmountController.text =
+                          Money.eurCents(recCents).editableString;
+                    }
+                  });
+                }
+              },
+            ),
+          ],
         ),
         const SizedBox(height: AppSpace.md),
-        InfoNotice(message: l.depositRefundNote, icon: Icons.undo_rounded),
+
+        if (_isCustom) ...[
+          AppAmountField(
+            label: l.depositCustomAmountLabel,
+            controller: _customAmountController,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
+
+        // Live Breakdown Card
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DetailRow(
+                label: l.depositAmount,
+                value: Text(
+                  Money.eurCents(effectiveDeposit).format(locale),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.brand,
+                      ),
+                ),
+              ),
+              DetailRow(
+                label: l.depositCreditedNote,
+                value: Text(
+                  Money.eurCents(effectiveDeposit).format(locale),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+              if (remainingBalanceCents != null) ...[
+                const Divider(),
+                DetailRow(
+                  label: l.depositRemainingBalance,
+                  value: Text(
+                    Money.eurCents(remainingBalanceCents).format(locale),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: remainingBalanceCents == 0
+                          ? context.colors.success
+                          : context.colors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+              if (isFull) ...[
+                const SizedBox(height: AppSpace.sm),
+                Text(
+                  l.depositFullDepositNotice,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+
+        InfoNotice(
+          message: l.depositRefundNote,
+          icon: Icons.undo_rounded,
+        ),
         const SizedBox(height: AppSpace.xl),
+
         AppButton(
           label: l.depositPayAction,
           icon: Icons.lock_rounded,
           isLoading: _creating,
-          onPressed: _createOrder,
+          onPressed: () => _createOrder(effectiveDeposit),
         ),
       ],
     );
@@ -185,66 +360,60 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     L l,
     PaymentOrder order,
     DepositQuote? quote,
-  ) => ListView(
-    padding: AppScrollPadding.page(context),
-    children: [
-      if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
-        MoneyHero(
-          amount: suggestedTotal,
-          label: l.depositSuggestedTotal,
-          tone: StatusTone.neutral,
-        ),
-        const SizedBox(height: AppSpace.lg),
-      ],
-      if (quote != null) ...[
-        _DepositGuidance(
-          quote: quote,
-          showSuggestedTotal: quote.estimatedSenderTotal == null,
-        ),
-        const SizedBox(height: AppSpace.lg),
-      ],
-      if (order.outstanding != null) ...[
-        MoneyHero(
-          amount: order.outstanding!,
-          label: l.depositAmount,
-          tone: StatusTone.action,
-        ),
-        const SizedBox(height: AppSpace.lg),
-      ],
-      InfoNotice(
-        message: l.depositCreditedNote,
-        tone: StatusTone.good,
-        icon: Icons.savings_outlined,
-      ),
-      const SizedBox(height: AppSpace.xl),
-      CheckoutSection(
-        orderReference: order.publicReference,
-        order: order,
-        onSettled: _onSettled,
-      ),
-    ],
-  );
+  ) =>
+      ListView(
+        padding: AppScrollPadding.page(context),
+        children: [
+          if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
+            MoneyHero(
+              amount: suggestedTotal,
+              label: l.depositSuggestedTotal,
+              tone: StatusTone.neutral,
+            ),
+            const SizedBox(height: AppSpace.lg),
+          ],
+          if (order.outstanding != null) ...[
+            MoneyHero(
+              amount: order.outstanding!,
+              label: l.depositAmount,
+              tone: StatusTone.action,
+            ),
+            const SizedBox(height: AppSpace.lg),
+          ],
+          InfoNotice(
+            message: l.depositCreditedNote,
+            tone: StatusTone.good,
+            icon: Icons.savings_outlined,
+          ),
+          const SizedBox(height: AppSpace.xl),
+          CheckoutSection(
+            orderReference: order.publicReference,
+            order: order,
+            onSettled: _onSettled,
+          ),
+        ],
+      );
 
-  Widget _paid(BuildContext context, L l) => ListView(
-    padding: AppScrollPadding.pageWithFooter(context),
-    children: [
-      InfoNotice(
-        title: l.depositPaidTitle,
-        message: l.depositPaidBody,
-        tone: StatusTone.good,
-        icon: Icons.check_circle_outline_rounded,
+  Widget _paid(
+    BuildContext context,
+    L l,
+    PaymentOrder order,
+    dynamic request,
+  ) {
+    final originName = request?.pickupPlace?.name as String?;
+    final destName = request?.deliveryPlace?.name as String?;
+
+    return PaymentSuccessView(
+      order: order,
+      originPlaceName: originName,
+      destinationPlaceName: destName,
+      onPrimaryAction: () => context.pushReplacementNamed(
+        Routes.requestDiscovery,
+        pathParameters: {'id': '${widget.requestId}'},
       ),
-      const SizedBox(height: AppSpace.xl),
-      AppButton(
-        label: l.requestFindTravelers,
-        icon: Icons.travel_explore_rounded,
-        onPressed: () => context.pushReplacementNamed(
-          Routes.requestDiscovery,
-          pathParameters: {'id': '${widget.requestId}'},
-        ),
-      ),
-    ],
-  );
+      primaryActionLabel: l.requestFindTravelers,
+    );
+  }
 }
 
 class _DepositGuidance extends StatelessWidget {
@@ -275,19 +444,19 @@ class _DepositGuidance extends StatelessWidget {
                 label: l.depositSuggestedTotal,
                 value: Text(quote.estimatedSenderTotal!.format(locale)),
               ),
-            if (quote.amount != null)
+            if (quote.recommended != null || quote.amount != null)
               DetailRow(
                 label: l.depositRecommended,
                 value: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(quote.amount!.format(locale)),
+                    Text((quote.recommended ?? quote.amount)!.format(locale)),
                     if (recommendationNote != null)
                       Text(
                         recommendationNote!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.colors.textSecondary,
-                        ),
+                              color: context.colors.textSecondary,
+                            ),
                         textAlign: TextAlign.end,
                       ),
                   ],
@@ -302,8 +471,8 @@ class _DepositGuidance extends StatelessWidget {
             Text(
               l.depositGuidanceNote,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.colors.textSecondary,
-              ),
+                    color: context.colors.textSecondary,
+                  ),
             ),
           ],
         ),
@@ -311,3 +480,4 @@ class _DepositGuidance extends StatelessWidget {
     );
   }
 }
+

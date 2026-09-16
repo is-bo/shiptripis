@@ -1458,7 +1458,7 @@ abstract class L {
   /// No description provided for @depositExplainer.
   ///
   /// In en, this message translates to:
-  /// **'Pay a small deposit to publish this request to travellers.'**
+  /// **'Paid now to list your request. 100% credited toward your final delivery payment.'**
   String get depositExplainer;
 
   /// No description provided for @depositAmount.
@@ -3918,7 +3918,7 @@ abstract class L {
   /// No description provided for @boostExplainer.
   ///
   /// In en, this message translates to:
-  /// **'A boost puts your request higher in the list for travellers who already match it.'**
+  /// **'Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.'**
   String get boostExplainer;
 
   /// No description provided for @boostDoesNotGuarantee.
@@ -7850,6 +7850,378 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Live journey'**
   String get routeBasisLive;
+
+  /// No description provided for @pricingMinimumLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum price'**
+  String get pricingMinimumLabel;
+
+  /// No description provided for @pricingRecommendedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended price'**
+  String get pricingRecommendedLabel;
+
+  /// No description provided for @pricingYourOfferLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your offer'**
+  String get pricingYourOfferLabel;
+
+  /// No description provided for @pricingBelowRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Below recommendation — travelers may take longer to accept.'**
+  String get pricingBelowRecommended;
+
+  /// No description provided for @pricingCompetitive.
+  ///
+  /// In en, this message translates to:
+  /// **'Competitive offer — matches more quickly with travelers.'**
+  String get pricingCompetitive;
+
+  /// No description provided for @pricingBelowMinimumError.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer must be at least {amount}'**
+  String pricingBelowMinimumError(String amount);
+
+  /// No description provided for @pricingTravelerReceives.
+  ///
+  /// In en, this message translates to:
+  /// **'Traveler receives'**
+  String get pricingTravelerReceives;
+
+  /// No description provided for @pricingPlatformFee.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip fee'**
+  String get pricingPlatformFee;
+
+  /// No description provided for @pricingTotalSenderCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Total sender cost'**
+  String get pricingTotalSenderCost;
+
+  /// No description provided for @pricingIncrement50c.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase by 50 cents'**
+  String get pricingIncrement50c;
+
+  /// No description provided for @pricingDecrement50c.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease by 50 cents'**
+  String get pricingDecrement50c;
+
+  /// No description provided for @depositSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Posting deposit'**
+  String get depositSectionTitle;
+
+  /// No description provided for @depositPresetMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum ({amount})'**
+  String depositPresetMin(String amount);
+
+  /// No description provided for @depositPresetRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended ({amount})'**
+  String depositPresetRecommended(String amount);
+
+  /// No description provided for @depositPresetFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay in full ({amount})'**
+  String depositPresetFull(String amount);
+
+  /// No description provided for @depositPresetCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get depositPresetCustom;
+
+  /// No description provided for @depositFullDepositNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your current amount is paid in full. If you increase the reward or Boost later, an additional balance may be due.'**
+  String get depositFullDepositNotice;
+
+  /// No description provided for @depositRemainingBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining balance at delivery'**
+  String get depositRemainingBalance;
+
+  /// No description provided for @depositCustomAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom deposit amount'**
+  String get depositCustomAmountLabel;
+
+  /// No description provided for @boostSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost this request'**
+  String get boostSectionTitle;
+
+  /// No description provided for @boostPresetNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No Boost (€0)'**
+  String get boostPresetNone;
+
+  /// No description provided for @boostPreset5.
+  ///
+  /// In en, this message translates to:
+  /// **'+€5'**
+  String get boostPreset5;
+
+  /// No description provided for @boostPreset10.
+  ///
+  /// In en, this message translates to:
+  /// **'+€10'**
+  String get boostPreset10;
+
+  /// No description provided for @boostPresetCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get boostPresetCustom;
+
+  /// No description provided for @boostCustomAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Boost amount'**
+  String get boostCustomAmountLabel;
+
+  /// No description provided for @boostCurrentActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active Boost: {amount}'**
+  String boostCurrentActive(String amount);
+
+  /// No description provided for @boostEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change Boost'**
+  String get boostEditAction;
+
+  /// No description provided for @boostRemoveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Boost'**
+  String get boostRemoveAction;
+
+  /// No description provided for @boostHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost history'**
+  String get boostHistoryTitle;
+
+  /// No description provided for @boostHistoryChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed from {from} to {to}'**
+  String boostHistoryChanged(String from, String to);
+
+  /// No description provided for @boostNotEditable.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost cannot be edited once an offer has been accepted or the request has expired.'**
+  String get boostNotEditable;
+
+  /// No description provided for @guestPaymentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Have someone else pay'**
+  String get guestPaymentTitle;
+
+  /// No description provided for @guestPaymentDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.'**
+  String get guestPaymentDescription;
+
+  /// No description provided for @guestPaymentShareButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Share payment link'**
+  String get guestPaymentShareButton;
+
+  /// No description provided for @guestPaymentCopyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get guestPaymentCopyButton;
+
+  /// No description provided for @guestPaymentCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment link copied to clipboard'**
+  String get guestPaymentCopied;
+
+  /// No description provided for @guestPaymentExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Link expires on {expiry}'**
+  String guestPaymentExpires(String expiry);
+
+  /// No description provided for @guestPaymentRevokeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke link'**
+  String get guestPaymentRevokeAction;
+
+  /// No description provided for @guestPaymentRevokeConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke guest payment link?'**
+  String get guestPaymentRevokeConfirmTitle;
+
+  /// No description provided for @guestPaymentRevokeConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone holding this link will no longer be able to pay. You can generate a new link at any time.'**
+  String get guestPaymentRevokeConfirmBody;
+
+  /// No description provided for @guestPaymentPaidNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid by guest payer'**
+  String get guestPaymentPaidNotice;
+
+  /// No description provided for @paymentSuccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment secured'**
+  String get paymentSuccessTitle;
+
+  /// No description provided for @paymentSuccessWaxSeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Secured'**
+  String get paymentSuccessWaxSeal;
+
+  /// No description provided for @paymentSuccessReceiptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment receipt'**
+  String get paymentSuccessReceiptTitle;
+
+  /// No description provided for @paymentSuccessAmountPaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount paid'**
+  String get paymentSuccessAmountPaid;
+
+  /// No description provided for @paymentSuccessDepositCredit.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit credited'**
+  String get paymentSuccessDepositCredit;
+
+  /// No description provided for @paymentSuccessPaidBySelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid by you'**
+  String get paymentSuccessPaidBySelf;
+
+  /// No description provided for @paymentSuccessPaidByGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid by guest payer'**
+  String get paymentSuccessPaidByGuest;
+
+  /// No description provided for @paymentSuccessRemainingDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining balance due at delivery'**
+  String get paymentSuccessRemainingDue;
+
+  /// No description provided for @paymentSuccessNextStepsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What happens next?'**
+  String get paymentSuccessNextStepsTitle;
+
+  /// No description provided for @paymentSuccessDepositNextBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is active. Travelers going your way can now match with it.'**
+  String get paymentSuccessDepositNextBody;
+
+  /// No description provided for @paymentSuccessDealNextBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your delivery is funded. The traveler will meet you at the agreed pickup point.'**
+  String get paymentSuccessDealNextBody;
+
+  /// No description provided for @paymentSuccessViewRequestAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View request'**
+  String get paymentSuccessViewRequestAction;
+
+  /// No description provided for @paymentSuccessViewDeliveryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View delivery'**
+  String get paymentSuccessViewDeliveryAction;
+
+  /// No description provided for @notificationDepositPaidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit confirmed'**
+  String get notificationDepositPaidTitle;
+
+  /// No description provided for @notificationDepositPaidBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your delivery request is now active and visible to travelers.'**
+  String get notificationDepositPaidBody;
+
+  /// No description provided for @notificationDealFundedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery funded'**
+  String get notificationDealFundedTitle;
+
+  /// No description provided for @notificationDealFundedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment secured. Meet your traveler at the agreed pickup point.'**
+  String get notificationDealFundedBody;
+
+  /// No description provided for @notificationPayoutReadyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout ready'**
+  String get notificationPayoutReadyTitle;
+
+  /// No description provided for @notificationPayoutReadyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your delivery payout is ready for transfer.'**
+  String get notificationPayoutReadyBody;
+
+  /// No description provided for @notificationPayoutSentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payout sent'**
+  String get notificationPayoutSentTitle;
+
+  /// No description provided for @notificationPayoutSentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your payout has been transferred successfully.'**
+  String get notificationPayoutSentBody;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

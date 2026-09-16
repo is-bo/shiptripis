@@ -22,6 +22,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../app/app_state.dart';
 import '../../core/live/live_updates.dart';
 import '../../core/session/session.dart';
@@ -36,6 +38,7 @@ import '../../design/tokens.dart';
 import '../../domain/payment.dart';
 import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/payment_success_view.dart';
 import '../common/status_copy.dart';
 import '../requests/checkout_section.dart';
 
@@ -120,24 +123,34 @@ class DealPaymentScreen extends ConsumerWidget {
             padding: AppScrollPadding.page(context),
             children: const [SkeletonDetail()],
           ),
-          data: (state) => ListView(
-            padding: AppScrollPadding.page(context),
-            children: [
-              _Summary(state: state, isTraveler: isTraveler),
-              const SizedBox(height: AppSpace.xl),
+          data: (state) {
+            if (!isTraveler && (state.order?.status.isSettled ?? false)) {
+              return PaymentSuccessView(
+                order: state.order!,
+                title: l.paymentSucceededTitle,
+                onPrimaryAction: () => context.pop(),
+                primaryActionLabel: l.actionDone,
+              );
+            }
+            return ListView(
+              padding: AppScrollPadding.page(context),
+              children: [
+                _Summary(state: state, isTraveler: isTraveler),
+                const SizedBox(height: AppSpace.xl),
 
-              if (isTraveler)
-                _TravelerView(state: state)
-              else
-                _SenderView(
-                  state: state,
-                  onSettled: () {
-                    ref.invalidate(_dealPaymentProvider(key));
-                    refreshVolatileState(ref);
-                  },
-                ),
-            ],
-          ),
+                if (isTraveler)
+                  _TravelerView(state: state)
+                else
+                  _SenderView(
+                    state: state,
+                    onSettled: () {
+                      ref.invalidate(_dealPaymentProvider(key));
+                      refreshVolatileState(ref);
+                    },
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -292,11 +305,11 @@ class _SenderView extends StatelessWidget {
     }
 
     if (order.status.isSettled) {
-      return AppEmptyState(
+      return PaymentSuccessView(
+        order: order,
         title: l.paymentSucceededTitle,
-        body: l.paymentSucceededBody,
-        icon: Icons.check_circle_outline_rounded,
-        compact: true,
+        onPrimaryAction: () => context.pop(),
+        primaryActionLabel: l.actionDone,
       );
     }
 

@@ -1,16 +1,11 @@
-/// Paid visibility plus a protected delivery bonus.
+/// J2 Additive Boost Screen.
 ///
-/// The copy on this screen is the product's honesty test. A boost moves a
-/// request **up a list of travellers who already match it**. It cannot widen
-/// the set of matches, and it cannot produce a delivery. The server states
-/// that as a literal contract field — `affects_compatibility` is hard-coded
-/// false — and this screen surfaces that rather than making the promise in
-/// prose nobody checks.
+/// Under Phase J2, a Boost is an extra reward added to the request to attract
+/// travelers. It goes 100% to the traveler, with ShipTrip's platform fee added
+/// on top. It does not create an immediate payment order; it is settled as part
+/// of the Deal balance.
 ///
-/// Buying is also not paying. A purchase creates a `PaymentOrder` and stops
-/// there; the boost activates when a webhook confirms that order. Leaving the
-/// checkout page activates nothing, and the screen says so before the user
-/// leaves rather than after they come back confused.
+/// Editability is strictly server-authoritative (`can_edit`).
 library;
 
 import 'package:flutter/material.dart';
@@ -18,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/money/money.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -28,15 +24,6 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/boost.dart';
 import '../../l10n/app_localizations.dart';
-import '../common/formatters.dart';
-import 'checkout_section.dart';
-
-final _catalogueProvider = FutureProvider.autoDispose<BoostCatalogue>((
-  ref,
-) async {
-  final repo = ref.watch(boostRepositoryProvider);
-  return repo.catalogue();
-});
 
 final _boostStateProvider = FutureProvider.autoDispose.family<BoostState, int>((
   ref,
@@ -56,539 +43,324 @@ class BoostScreen extends ConsumerStatefulWidget {
 }
 
 class _BoostScreenState extends ConsumerState<BoostScreen> {
-  String? _selectedCode;
+  final _amountController = TextEditingController();
+  int? _chosenCents;
   bool _busy = false;
-  final _amount = TextEditingController(text: '5.00');
-  String? _amountError;
-  BoostPreview? _preview;
-
-  /// Set once a purchase exists and the user is paying for it, so the screen
-  /// switches from a catalogue to a checkout.
-  String? _payingForReference;
+  String? _error;
 
   @override
   void dispose() {
-    _amount.dispose();
+    _amountController.dispose();
     super.dispose();
   }
 
-  Future<void> _review(BoostPackage package) async {
-    final cents = AppAmountField.centsOf(_amount);
-    if (cents == null || cents <= 0) {
-      setState(() => _amountError = L.of(context).validationMustBePositive);
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _amountError = null;
-    });
-    try {
-      final preview = await ref
-          .read(boostRepositoryProvider)
-          .preview(packageCode: package.code, amountEurCents: cents);
-      if (!mounted) return;
-      setState(() => _preview = preview);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      _explain(error);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  void _syncInitial(BoostState state) {
+    if (_chosenCents == null) {
+      _chosenCents = state.boostEur.minorUnits;
+      if (_chosenCents! > 0) {
+        _amountController.text = (_chosenCents! / 100.0).toStringAsFixed(2);
+      }
     }
   }
 
-  Future<void> _buy(BoostPackage package, BoostPreview preview) async {
-    setState(() => _busy = true);
+  Future<void> _saveBoost(BoostState state) async {
+    final cents = _chosenCents ?? 0;
+    final maxCents = state.policy?.maximumBoost.minorUnits ?? 10000;
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+
+    if (cents < 0) return;
+    if (cents > maxCents) {
+      setState(() {
+        _error = l.pricingBelowMinimumError(
+          state.policy?.maximumBoost.format(locale) ?? '€100.00',
+        );
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
     try {
-      final purchase = await ref
-          .read(boostRepositoryProvider)
-          .purchase(
+      await ref.read(boostRepositoryProvider).setBoost(
             requestId: widget.requestId,
-            packageCode: package.code,
-            amountEurCents: preview.amount.minorUnits,
-            previewSettingsVersion: preview.settingsVersion,
+            amountEurCents: cents,
           );
       if (!mounted) return;
       ref.invalidate(_boostStateProvider(widget.requestId));
-      setState(() => _payingForReference = purchase.paymentOrderReference);
-    } on ApiException catch (error) {
+      refreshVolatileState(ref);
+      AppSnack.success(context, l.actionDone);
+    } on ApiException catch (e) {
       if (!mounted) return;
-      _explain(error);
+      AppSnack.failure(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  /// Each refusal has a different meaning and a different next step, so each
-  /// gets its own sentence instead of a shared "couldn't do that".
-  void _explain(ApiException error) {
-    final l = L.of(context);
-    final message = switch (error.code.raw) {
-      'boost_disabled' => l.boostDisabledBody,
-      'boost_limit_reached' => l.boostLimitReachedBody(
-        error.intExtra('max_active_per_request') ?? 1,
-      ),
-      'boost_request_not_active' => l.boostNotEligible,
-      'boost_request_expired' => l.boostRequestExpiredBody,
-      'boost_package_unknown' => l.boostPackageUnknownBody,
-      'boost_request_not_eligible' => l.boostNotEligible,
-      'boost_amount_below_minimum' => l.boostAmountBelowMinimum,
-      'boost_preview_stale' => l.boostPreviewStale,
-      _ => null,
-    };
-    AppSnack.failure(context, error, fallback: message);
   }
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final catalogue = ref.watch(_catalogueProvider);
-    final state = ref.watch(_boostStateProvider(widget.requestId));
+    final locale = Localizations.localeOf(context);
+    final boostState = ref.watch(_boostStateProvider(widget.requestId));
 
     return AppScaffold(
-      topBar: AppTopBar(title: l.boostTitle, showBack: true),
+      topBar: AppTopBar(title: l.boostSectionTitle, showBack: true),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref
-            ..invalidate(_catalogueProvider)
-            ..invalidate(_boostStateProvider(widget.requestId));
+          ref.invalidate(_boostStateProvider(widget.requestId));
         },
-        child: AsyncView<BoostCatalogue>(
-          value: catalogue,
-          onRetry: () => ref.invalidate(_catalogueProvider),
+        child: AsyncView<BoostState>(
+          value: boostState,
+          onRetry: () => ref.invalidate(_boostStateProvider(widget.requestId)),
           loading: () => ListView(
             padding: AppScrollPadding.page(context),
             children: const [SkeletonCardList()],
           ),
-          data: (packages) {
-            if (!packages.enabled) {
-              return ListView(
-                padding: AppScrollPadding.page(context),
-                children: [
-                  AppEmptyState(
-                    title: l.boostDisabledTitle,
-                    body: l.boostDisabledBody,
-                    icon: Icons.speed_rounded,
-                  ),
-                ],
-              );
-            }
-
-            final reference = _payingForReference;
-            if (reference != null) {
-              return ListView(
-                padding: AppScrollPadding.page(context),
-                children: [
-                  InfoNotice(
-                    message: l.boostActivatesOnPayment,
-                    tone: StatusTone.waiting,
-                    icon: Icons.info_outline_rounded,
-                  ),
-                  const SizedBox(height: AppSpace.xl),
-                  CheckoutSection(
-                    orderReference: reference,
-                    order: null,
-                    onSettled: () {
-                      ref.invalidate(_boostStateProvider(widget.requestId));
-                      refreshVolatileState(ref);
-                      if (mounted) {
-                        setState(() => _payingForReference = null);
-                      }
-                    },
-                  ),
-                ],
-              );
-            }
+          data: (state) {
+            _syncInitial(state);
+            final currentCents = _chosenCents ?? state.boostEur.minorUnits;
+            final canEdit = state.canEdit;
+            final commissionBps = state.policy?.boostCommissionRateBps ?? 2500;
+            // Fee on top: ceiling integer cents
+            final feeCents = ((currentCents * commissionBps) + 9999) ~/ 10000;
+            final totalCents = currentCents + feeCents;
 
             return ListView(
               padding: AppScrollPadding.pageWithFooter(context),
               children: [
-                _Explainer(state: state.value),
-                const SizedBox(height: AppSpace.xl),
-
-                if (packages.packages.isEmpty)
-                  AppEmptyState(
-                    title: l.boostNoPackagesTitle,
-                    body: l.boostNoPackagesBody,
-                    icon: Icons.speed_rounded,
-                    compact: true,
-                  )
-                else ...[
-                  SectionHeader(title: l.boostChoosePackage),
-                  for (final package in packages.packages) ...[
-                    _PackageCard(
-                      package: package,
-                      selected: package.code == _selectedCode,
-                      onTap: () => setState(() {
-                        _selectedCode = package.code;
-                        _preview = null;
-                      }),
-                    ),
-                    const SizedBox(height: AppSpace.md),
-                  ],
-                  const SizedBox(height: AppSpace.lg),
-                  AppAmountField(
-                    label: l.boostAmountLabel,
-                    controller: _amount,
-                    helper: l.boostAmountHelper(
-                      packages.minimumAmount.format(
-                        Localizations.localeOf(context),
+                // Explainer Banner
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l.boostSectionTitle,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                       ),
-                    ),
-                    errorText: _amountError,
-                    onChanged: (_) => setState(() => _preview = null),
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        l.boostExplainer,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: context.colors.textSecondary,
+                            ),
+                      ),
+                      const SizedBox(height: AppSpace.sm),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified_outlined,
+                            size: 16,
+                            color: context.colors.success,
+                          ),
+                          const SizedBox(width: AppSpace.xs),
+                          Expanded(
+                            child: Text(
+                              l.boostCompatibilityNote,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: context.colors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  if (_preview case final preview?) ...[
-                    const SizedBox(height: AppSpace.lg),
-                    _EconomicsPreview(
-                      preview: preview,
-                      package: packages.packages.firstWhere(
-                        (p) => p.code == _selectedCode,
-                      ),
-                    ),
-                  ],
+                ),
+                const SizedBox(height: AppSpace.md),
+
+                if (!canEdit) ...[
+                  InfoNotice(
+                    title: l.boostNotEditable,
+                    message: l.boostNotEditable,
+                    tone: StatusTone.waiting,
+                    icon: Icons.lock_outline_rounded,
+                  ),
+                  const SizedBox(height: AppSpace.md),
                 ],
 
-                _Purchases(
-                  state: state,
-                  onPay: (reference) =>
-                      setState(() => _payingForReference = reference),
+                // Preset selector
+                SectionHeader(title: l.boostSectionTitle),
+                Wrap(
+                  spacing: AppSpace.sm,
+                  children: [
+                    ChoiceChip(
+                      label: Text(l.boostPresetNone),
+                      selected: currentCents == 0,
+                      onSelected: canEdit
+                          ? (selected) {
+                              if (selected) {
+                                setState(() {
+                                  _chosenCents = 0;
+                                  _amountController.clear();
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                    ChoiceChip(
+                      label: Text(l.boostPreset5),
+                      selected: currentCents == 500,
+                      onSelected: canEdit
+                          ? (selected) {
+                              if (selected) {
+                                setState(() {
+                                  _chosenCents = 500;
+                                  _amountController.text = '5.00';
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                    ChoiceChip(
+                      label: Text(l.boostPreset10),
+                      selected: currentCents == 1000,
+                      onSelected: canEdit
+                          ? (selected) {
+                              if (selected) {
+                                setState(() {
+                                  _chosenCents = 1000;
+                                  _amountController.text = '10.00';
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                  ],
                 ),
+                const SizedBox(height: AppSpace.md),
+
+                AppAmountField(
+                  label: l.boostCustomAmountLabel,
+                  controller: _amountController,
+                  enabled: canEdit,
+                  onChanged: (text) {
+                    final cents = AppAmountField.centsOf(_amountController) ?? 0;
+                    setState(() => _chosenCents = cents);
+                  },
+                ),
+                const SizedBox(height: AppSpace.md),
+
+                // Live Breakdown
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l.depositRemainingBalance,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: AppSpace.sm),
+                      DetailRow(
+                        label: l.pricingTravelerReceives,
+                        value: Text(
+                          Money.eurCents(currentCents).format(locale),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      DetailRow(
+                        label: l.pricingPlatformFee,
+                        value: Text(
+                          Money.eurCents(feeCents).format(locale),
+                          style: TextStyle(color: context.colors.textSecondary),
+                        ),
+                      ),
+                      const Divider(),
+                      DetailRow(
+                        label: l.pricingTotalSenderCost,
+                        value: Text(
+                          Money.eurCents(totalCents).format(locale),
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: context.colors.brand,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        l.depositFullDepositNotice,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: context.colors.textTertiary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (_error != null) ...[
+                  const SizedBox(height: AppSpace.md),
+                  InfoNotice(
+                    message: _error!,
+                    tone: StatusTone.bad,
+                    icon: Icons.error_outline_rounded,
+                  ),
+                ],
+
+                if (state.history.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.xl),
+                  SectionHeader(title: l.boostHistoryTitle),
+                  for (final ev in state.history) ...[
+                    AppCard(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ev.reason.isEmpty ? l.actionDone : ev.reason,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: AppSpace.xxs),
+                                Text(
+                                  MaterialLocalizations.of(context)
+                                      .formatFullDate(ev.createdAt),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: context.colors.textTertiary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            ev.amount.format(locale),
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                  ],
+                ],
               ],
             );
           },
         ),
       ),
-      footer: _payingForReference != null || _selectedCode == null
-          ? null
-          : Builder(
+      footer: boostState.hasValue && (boostState.value?.canEdit ?? false)
+          ? Builder(
               builder: (context) {
-                final package = catalogue.value?.packages
-                    .where((p) => p.code == _selectedCode)
-                    .firstOrNull;
-                if (package == null) return const SizedBox.shrink();
-                final preview = _preview;
+                final state = boostState.value!;
+                final isZero = (_chosenCents ?? 0) == 0;
                 return AppButton(
-                  label: preview == null
-                      ? l.boostReviewAction
-                      : l.boostConfirmAction,
+                  label: isZero ? l.boostRemoveAction : l.actionSave,
                   isLoading: _busy,
-                  onPressed: () => preview == null
-                      ? _review(package)
-                      : _buy(package, preview),
+                  onPressed: () => _saveBoost(state),
                 );
               },
-            ),
+            )
+          : null,
     );
-  }
-}
-
-/// What a boost is, and — just as importantly — what it is not.
-class _Explainer extends StatelessWidget {
-  const _Explainer({this.state});
-
-  final BoostState? state;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final c = context.colors;
-    final text = Theme.of(context).textTheme;
-
-    return AppInsetGroup(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l.boostExplainer, style: text.bodyMedium),
-          const SizedBox(height: AppSpace.md),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline_rounded, size: 15, color: c.textTertiary),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Text(
-                  l.boostDoesNotGuarantee,
-                  style: text.bodySmall?.copyWith(color: c.textSecondary),
-                ),
-              ),
-            ],
-          ),
-          // Backed by the API's own assertion rather than by this paragraph.
-          if (state != null && !state!.affectsCompatibility) ...[
-            const SizedBox(height: AppSpace.sm),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.verified_outlined, size: 15, color: c.success),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: Text(
-                    l.boostCompatibilityNote,
-                    style: text.bodySmall?.copyWith(color: c.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PackageCard extends StatelessWidget {
-  const _PackageCard({
-    required this.package,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final BoostPackage package;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final c = context.colors;
-    final text = Theme.of(context).textTheme;
-
-    // Qualitative, not a raw weight. "5" means nothing to a sender; "higher in
-    // the list" does, and it is the honest reading of a ranking bonus.
-    final visibility = switch (package.rankingWeight) {
-      >= 10 => l.boostRankingTop,
-      >= 5 => l.boostRankingStrong,
-      _ => l.boostRankingModest,
-    };
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: package.label,
-      hint: selected ? l.a11ySelected : l.a11yNotSelected,
-      onTap: onTap,
-      child: ExcludeSemantics(
-        child: AppCard(
-          onTap: onTap,
-          accent: selected ? StatusTone.progress : null,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(package.label, style: text.titleSmall)),
-                ],
-              ),
-              const SizedBox(height: AppSpace.md),
-              DetailRow(
-                label: l.boostDurationLabel,
-                value: Text(
-                  formatBoostDuration(context, package.durationSeconds),
-                ),
-              ),
-              DetailRow(label: l.boostRankingLabel, value: Text(visibility)),
-              const SizedBox(height: AppSpace.sm),
-              Row(
-                children: [
-                  Icon(
-                    selected
-                        ? Icons.radio_button_checked_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    size: 18,
-                    color: selected ? c.brand : c.hairlineStrong,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EconomicsPreview extends StatelessWidget {
-  const _EconomicsPreview({required this.preview, required this.package});
-
-  final BoostPreview preview;
-  final BoostPackage package;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final locale = Localizations.localeOf(context);
-    return Semantics(
-      container: true,
-      label: l.boostPreviewTitle,
-      child: AppCard(
-        accent: StatusTone.action,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionHeader(title: l.boostPreviewTitle),
-            DetailRow(
-              label: l.boostSenderPays,
-              value: Text(preview.amount.format(locale)),
-            ),
-            DetailRow(
-              label: l.boostTravelerGets,
-              value: Text(preview.travelerBonus.format(locale)),
-            ),
-            DetailRow(
-              label: l.boostPlatformKeeps,
-              value: Text(preview.platformRevenue.format(locale)),
-            ),
-            DetailRow(
-              label: l.boostDurationLabel,
-              value: Text(
-                formatBoostDuration(context, package.durationSeconds),
-              ),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            Text(
-              l.boostEarningsCondition,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.colors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Purchases extends StatelessWidget {
-  const _Purchases({required this.state, required this.onPay});
-
-  final AsyncValue<BoostState> state;
-  final ValueChanged<String> onPay;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final locale = Localizations.localeOf(context);
-
-    return AsyncView<BoostState>(
-      value: state,
-      loading: SizedBox.shrink,
-      error: (_) => const SizedBox.shrink(),
-      data: (data) {
-        if (data.purchases.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppSpace.xl),
-            SectionHeader(title: l.boostPurchasesSection),
-            for (final purchase in data.purchases) ...[
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            purchase.packageLabel ?? purchase.packageCode,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                        ),
-                        Builder(
-                          builder: (context) {
-                            final (label, tone, icon) = _describe(
-                              context,
-                              purchase.status,
-                            );
-                            return StatusPill(
-                              label: label,
-                              tone: tone,
-                              icon: icon,
-                              compact: true,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                    if (purchase.expiresAt != null) ...[
-                      const SizedBox(height: AppSpace.sm),
-                      Text(
-                        l.boostActiveUntil(
-                          MaterialLocalizations.of(
-                            context,
-                          ).formatFullDate(purchase.expiresAt!),
-                        ),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.colors.textSecondary,
-                        ),
-                      ),
-                    ],
-                    if (purchase.awaitsPayment &&
-                        purchase.paymentOrderReference != null) ...[
-                      const SizedBox(height: AppSpace.md),
-                      AppButton(
-                        label: purchase.amount == null
-                            ? l.boostPayAction
-                            : l.boostPurchase(purchase.amount!.format(locale)),
-                        variant: AppButtonVariant.secondary,
-                        expand: false,
-                        onPressed: () => onPay(purchase.paymentOrderReference!),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpace.md),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  (String, StatusTone, IconData) _describe(
-    BuildContext context,
-    BoostStatus status,
-  ) {
-    final l = L.of(context);
-    return switch (status) {
-      BoostStatus.active => (
-        l.boostActive,
-        StatusTone.good,
-        Icons.trending_up_rounded,
-      ),
-      BoostStatus.pendingPayment => (
-        l.boostPendingPayment,
-        StatusTone.action,
-        Icons.credit_card_rounded,
-      ),
-      BoostStatus.expired => (
-        l.boostExpired,
-        StatusTone.neutral,
-        Icons.timer_off_rounded,
-      ),
-      BoostStatus.cancelled => (
-        l.boostStatusCancelled,
-        StatusTone.neutral,
-        Icons.cancel_rounded,
-      ),
-      // Paid, then the request stopped being boostable — automatically
-      // refunded. Neutral, not a failure the sender caused.
-      BoostStatus.unusable => (
-        l.boostStatusUnusable,
-        StatusTone.neutral,
-        Icons.undo_rounded,
-      ),
-      BoostStatus.refunded => (
-        l.boostStatusRefunded,
-        StatusTone.neutral,
-        Icons.undo_rounded,
-      ),
-      BoostStatus.unknown => (
-        l.stateUnexpectedTitle,
-        StatusTone.neutral,
-        Icons.help_outline_rounded,
-      ),
-    };
   }
 }

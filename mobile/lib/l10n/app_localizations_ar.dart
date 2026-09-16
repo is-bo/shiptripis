@@ -730,7 +730,7 @@ class LAr extends L {
 
   @override
   String get depositExplainer =>
-      'ادفع عربونًا صغيرًا لنشر هذا الطلب للمسافرين.';
+      'يُدفع الآن لنشر طلبك. يُحسم 100% من المبلغ النهائي للرحلة.';
 
   @override
   String get depositAmount => 'العربون';
@@ -2170,7 +2170,7 @@ class LAr extends L {
 
   @override
   String get boostExplainer =>
-      'يرفع التعزيز طلبك في القائمة أمام المسافرين المطابقين له بالفعل.';
+      'يحصل المسافر على 100% من مكافأة التعزيز. تظهر الطلبات المعززة في مقدمة نتائج البحث.';
 
   @override
   String get boostDoesNotGuarantee =>
@@ -4496,4 +4496,213 @@ class LAr extends L {
 
   @override
   String get routeBasisLive => 'المسار المباشر';
+
+  @override
+  String get pricingMinimumLabel => 'الحد الأدنى للسعر';
+
+  @override
+  String get pricingRecommendedLabel => 'السعر الموصى به';
+
+  @override
+  String get pricingYourOfferLabel => 'عرضك';
+
+  @override
+  String get pricingBelowRecommended =>
+      'أقل من الموصى به — قد يستغرق قبول المسافرين وقتاً أطول.';
+
+  @override
+  String get pricingCompetitive => 'عرض منافس — يتطابق بشكل أسرع مع المسافرين.';
+
+  @override
+  String pricingBelowMinimumError(String amount) {
+    return 'يجب أن يكون العرض $amount على الأقل';
+  }
+
+  @override
+  String get pricingTravelerReceives => 'يستلم المسافر';
+
+  @override
+  String get pricingPlatformFee => 'رسوم شيب تريب';
+
+  @override
+  String get pricingTotalSenderCost => 'إجمالي تكلفة المرسل';
+
+  @override
+  String get pricingIncrement50c => 'زيادة 50 سنتاً';
+
+  @override
+  String get pricingDecrement50c => 'إنقاص 50 سنتاً';
+
+  @override
+  String get depositSectionTitle => 'عربون النشر';
+
+  @override
+  String depositPresetMin(String amount) {
+    return 'الحد الأدنى ($amount)';
+  }
+
+  @override
+  String depositPresetRecommended(String amount) {
+    return 'الموصى به ($amount)';
+  }
+
+  @override
+  String depositPresetFull(String amount) {
+    return 'دفع كامل المبلغ ($amount)';
+  }
+
+  @override
+  String get depositPresetCustom => 'مخصص';
+
+  @override
+  String get depositFullDepositNotice =>
+      'تم دفع المبلغ الحالي بالكامل. إذا قمت بزيادة المكافأة أو التعزيز لاحقاً، فقد يُطلب رصيد إضافي.';
+
+  @override
+  String get depositRemainingBalance => 'الرصيد المتبقي عند التسليم';
+
+  @override
+  String get depositCustomAmountLabel => 'مبلغ عربون مخصص';
+
+  @override
+  String get boostSectionTitle => 'تعزيز هذا الطلب';
+
+  @override
+  String get boostPresetNone => 'بدون تعزيز (0 €)';
+
+  @override
+  String get boostPreset5 => '+5 €';
+
+  @override
+  String get boostPreset10 => '+10 €';
+
+  @override
+  String get boostPresetCustom => 'مخصص';
+
+  @override
+  String get boostCustomAmountLabel => 'مبلغ تعزيز مخصص';
+
+  @override
+  String boostCurrentActive(String amount) {
+    return 'التعزيز الحالي: $amount';
+  }
+
+  @override
+  String get boostEditAction => 'تعديل التعزيز';
+
+  @override
+  String get boostRemoveAction => 'إزالة التعزيز';
+
+  @override
+  String get boostHistoryTitle => 'سجل التعزيز';
+
+  @override
+  String boostHistoryChanged(String from, String to) {
+    return 'تم التغيير من $from إلى $to';
+  }
+
+  @override
+  String get boostNotEditable =>
+      'لا يمكن تعديل التعزيز بعد قبول العرض أو انتهاء صلاحية الطلب.';
+
+  @override
+  String get guestPaymentTitle => 'الدفع عبر شخص آخر';
+
+  @override
+  String get guestPaymentDescription =>
+      'شارك رابطاً آمناً. يمكن لأي شخص لديه الرابط دفع هذا المبلغ دون الحاجة لحساب شيب تريب.';
+
+  @override
+  String get guestPaymentShareButton => 'مشاركة رابط الدفع';
+
+  @override
+  String get guestPaymentCopyButton => 'نسخ الرابط';
+
+  @override
+  String get guestPaymentCopied => 'تم نسخ رابط الدفع إلى الحافظة';
+
+  @override
+  String guestPaymentExpires(String expiry) {
+    return 'ينتهي الرابط في $expiry';
+  }
+
+  @override
+  String get guestPaymentRevokeAction => 'إلغاء الرابط';
+
+  @override
+  String get guestPaymentRevokeConfirmTitle => 'إلغاء رابط دفع الضيف؟';
+
+  @override
+  String get guestPaymentRevokeConfirmBody =>
+      'لن يتمكن أي شخص لديه هذا الرابط من الدفع بعد الآن. يمكنك إنشاء رابط جديد في أي وقت.';
+
+  @override
+  String get guestPaymentPaidNotice => 'تم الدفع بواسطة ضيف';
+
+  @override
+  String get paymentSuccessTitle => 'تم تأمين الدفع';
+
+  @override
+  String get paymentSuccessWaxSeal => 'مؤمّن';
+
+  @override
+  String get paymentSuccessReceiptTitle => 'إيصال الدفع';
+
+  @override
+  String get paymentSuccessAmountPaid => 'المبلغ المدفوع';
+
+  @override
+  String get paymentSuccessDepositCredit => 'العربون المحسوم';
+
+  @override
+  String get paymentSuccessPaidBySelf => 'دفع بواسطتك';
+
+  @override
+  String get paymentSuccessPaidByGuest => 'دفع بواسطة ضيف';
+
+  @override
+  String get paymentSuccessRemainingDue => 'الرصيد المتبقي المستحق عند التسليم';
+
+  @override
+  String get paymentSuccessNextStepsTitle => 'ماذا يحدث الآن؟';
+
+  @override
+  String get paymentSuccessDepositNextBody =>
+      'طلبك نشط الآن. يمكن للمسافرين على مسارك تقديم عروضهم.';
+
+  @override
+  String get paymentSuccessDealNextBody =>
+      'تم تمويل شحنتك. سيلتقي بك المسافر في نقطة الاستلام المتفق عليها.';
+
+  @override
+  String get paymentSuccessViewRequestAction => 'عرض الطلب';
+
+  @override
+  String get paymentSuccessViewDeliveryAction => 'عرض الشحنة';
+
+  @override
+  String get notificationDepositPaidTitle => 'تم تأكيد العربون';
+
+  @override
+  String get notificationDepositPaidBody =>
+      'طلب الشحن الخاص بك نشط الآن ومرئي للمسافرين.';
+
+  @override
+  String get notificationDealFundedTitle => 'تم تمويل الشحنة';
+
+  @override
+  String get notificationDealFundedBody =>
+      'تم تأمين الدفع. التقي بالمسافر في نقطة الاستلام المحددة.';
+
+  @override
+  String get notificationPayoutReadyTitle => 'المستحقات جاهزة';
+
+  @override
+  String get notificationPayoutReadyBody => 'مستحقات الشحنة جاهزة للتحويل.';
+
+  @override
+  String get notificationPayoutSentTitle => 'تم إرسال المستحقات';
+
+  @override
+  String get notificationPayoutSentBody => 'تم تحويل مستحقاتك بنجاح.';
 }

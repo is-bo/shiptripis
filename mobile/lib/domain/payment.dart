@@ -392,6 +392,81 @@ class ChargilyQuote {
   final int? rateSettingsVersion;
 }
 
+enum PaymentSettlementNextStep {
+  awaitOffers,
+  payPostingDeposit,
+  awaitPickup,
+  payDealBalance,
+  unknown;
+
+  static PaymentSettlementNextStep parse(String? raw) {
+    return switch (raw) {
+      'await_offers' => PaymentSettlementNextStep.awaitOffers,
+      'pay_posting_deposit' => PaymentSettlementNextStep.payPostingDeposit,
+      'await_pickup' => PaymentSettlementNextStep.awaitPickup,
+      'pay_deal_balance' => PaymentSettlementNextStep.payDealBalance,
+      _ => PaymentSettlementNextStep.unknown,
+    };
+  }
+}
+
+class PaymentSettlement {
+  const PaymentSettlement({
+    required this.isSettled,
+    required this.purpose,
+    required this.currency,
+    required this.amount,
+    required this.paid,
+    required this.depositCredited,
+    required this.remaining,
+    required this.refunded,
+    required this.paidBy,
+    required this.nextStep,
+    this.dealId,
+    this.deliveryRequestId,
+    this.paidAt,
+  });
+
+  factory PaymentSettlement.fromJson(Map<String, dynamic> json) =>
+      PaymentSettlement(
+        isSettled: readBool(json['is_settled']),
+        purpose: readEnum(
+          json['purpose'],
+          PaymentPurpose.values,
+          fallback: PaymentPurpose.unknown,
+        ),
+        currency: readText(json['currency']).isEmpty
+            ? 'EUR'
+            : readText(json['currency']),
+        amount: Money.eurCentsOrNull(json['amount_eur_cents']),
+        paid: Money.eurCentsOrNull(json['paid_eur_cents']),
+        depositCredited: Money.eurCentsOrNull(
+          json['deposit_credited_eur_cents'],
+        ),
+        remaining: Money.eurCentsOrNull(json['remaining_eur_cents']),
+        refunded: Money.eurCentsOrNull(json['refunded_eur_cents']),
+        paidBy: readString(json['paid_by']),
+        nextStep: PaymentSettlementNextStep.parse(readString(json['next_step'])),
+        dealId: readInt(json['deal_id']),
+        deliveryRequestId: readInt(json['delivery_request_id']),
+        paidAt: readDate(json['paid_at']),
+      );
+
+  final bool isSettled;
+  final PaymentPurpose purpose;
+  final String currency;
+  final Money? amount;
+  final Money? paid;
+  final Money? depositCredited;
+  final Money? remaining;
+  final Money? refunded;
+  final String? paidBy;
+  final PaymentSettlementNextStep nextStep;
+  final int? dealId;
+  final int? deliveryRequestId;
+  final DateTime? paidAt;
+}
+
 class PaymentOrder {
   const PaymentOrder({
     required this.publicReference,
@@ -411,6 +486,7 @@ class PaymentOrder {
     this.paidAt,
     this.createdAt,
     this.chargilyQuote,
+    this.settlement,
     this.isReducedProjection = false,
   });
 
@@ -452,6 +528,9 @@ class PaymentOrder {
         .where((p) => p.provider != PaymentProviderId.mock)
         .toList(growable: false),
     chargilyQuote: ChargilyQuote.maybe(json['chargily_quote']),
+    settlement: readObject(json['settlement']) == null
+        ? null
+        : PaymentSettlement.fromJson(readObject(json['settlement'])!),
     isReducedProjection: isReducedProjection,
   );
 
@@ -486,6 +565,7 @@ class PaymentOrder {
   final List<ProviderOption> providers;
 
   final ChargilyQuote? chargilyQuote;
+  final PaymentSettlement? settlement;
 
   /// True for the traveller's cut-down view of a Deal's balance order: status
   /// and outstanding only, no attempts and no payer detail.
@@ -549,29 +629,50 @@ class DepositQuote {
   const DepositQuote({
     required this.clamped,
     this.amount,
+    this.recommended,
+    this.chosen,
     this.percentBps,
     this.minimum,
     this.maximum,
     this.estimatedSenderTotal,
+    this.isFlexible = true,
   });
 
   static DepositQuote? maybe(Object? raw) {
     final json = readObject(raw);
     if (json == null) return null;
+    final fallbackAmount = Money.eurCentsOrNull(json['amount_eur_cents']);
+    final recommendedAmount =
+        Money.eurCentsOrNull(json['recommended_eur_cents']) ?? fallbackAmount;
+    final minAmount = Money.eurCentsOrNull(
+      json['minimum_eur_cents'] ?? json['min_eur_cents'],
+    );
+    final maxAmount = Money.eurCentsOrNull(
+      json['maximum_eur_cents'] ?? json['max_eur_cents'],
+    );
     return DepositQuote(
-      amount: Money.eurCentsOrNull(json['amount_eur_cents']),
+      amount: fallbackAmount,
+      recommended: recommendedAmount,
+      chosen: Money.eurCentsOrNull(json['chosen_eur_cents']),
       percentBps: readInt(json['percent_bps']),
-      minimum: Money.eurCentsOrNull(json['min_eur_cents']),
-      maximum: Money.eurCentsOrNull(json['max_eur_cents']),
+      minimum: minAmount,
+      maximum: maxAmount,
       estimatedSenderTotal: Money.eurCentsOrNull(
         json['estimated_sender_total_eur_cents'],
       ),
       clamped: readText(json['clamped']),
+      isFlexible: json['is_flexible'] == null ? true : readBool(json['is_flexible']),
     );
   }
 
   /// What to charge. Rendered as-is; the percentage is never applied locally.
   final Money? amount;
+
+  /// J2 authoritative recommended deposit.
+  final Money? recommended;
+
+  /// J2 sender chosen deposit if already set on an order.
+  final Money? chosen;
 
   final int? percentBps;
   final Money? minimum;
@@ -580,6 +681,8 @@ class DepositQuote {
 
   /// `""`, `"min"` or `"max"` — whether the amount hit a policy floor or cap.
   final String clamped;
+
+  final bool isFlexible;
 }
 
 /// `GET /api/deals/<id>/payment`.
@@ -698,6 +801,9 @@ class GuestPaymentLink {
     required this.communicationLanguage,
     this.amount,
     this.expiresAt,
+    this.paymentLink,
+    this.reissued = false,
+    this.purpose = PaymentPurpose.unknown,
   });
 
   factory GuestPaymentLink.fromJson(Map<String, dynamic> json) =>
@@ -711,6 +817,13 @@ class GuestPaymentLink {
         communicationLanguage: CommunicationLanguage.parse(
           json['communication_language'],
         ),
+        paymentLink: readString(json['payment_link']),
+        reissued: readBool(json['reissued']),
+        purpose: readEnum(
+          json['purpose'],
+          PaymentPurpose.values,
+          fallback: PaymentPurpose.unknown,
+        ),
       );
 
   /// Opaque bearer string. Never parsed, never logged, never persisted.
@@ -719,6 +832,15 @@ class GuestPaymentLink {
   final String currency;
   final Money? amount;
   final DateTime? expiresAt;
+
+  /// Full URL returned by backend for sharing directly with the payer.
+  final String? paymentLink;
+
+  /// True when this link replaced an already active link.
+  final bool reissued;
+
+  /// Purpose of the payment obligation (posting deposit or deal balance).
+  final PaymentPurpose purpose;
 
   /// What the server snapshotted onto the link. Echoed back so the issuer can
   /// see which language the payer's receipt will use; it is not re-sent and
