@@ -1,5 +1,93 @@
 # ShipTrip V1 Implementation Status
 
+## J4 — Find Travelers contract, match explanation and discovery architecture (2026-09-16)
+
+**J4 PASS — 61 new backend tests, 22 new mobile tests, full mobile suite 594
+green, no schema change.** Branch `claude/j4-find-travelers-contract`, from J3
+`d27dbe0`. [The frozen contract, the privacy allowlist and the J5 card
+hierarchy](PHASE_J4_FIND_TRAVELERS_CONTRACT.md).
+
+**The old discovery payload answered the wrong question.**
+`compatible-journeys` repeats the Sender's own request on every row, sends the
+covered legs twice, carries a pricing diagnostic, and names no Traveler at all —
+only a `traveler_id`. Worse, two of the rows it fed the card were constants
+dressed as measurements: canonical V1 compatibility is locality *identity*, so
+`pickup_detour`, `delivery_detour` and `added_distance` are a hard zero on every
+canonical candidate and every band reads `under_5km`. The app was inviting the
+owner to read "2 km away" into a model with no such concept. J4 drops the whole
+distance vocabulary and a test now fails any payload that reintroduces it.
+
+**`GET /api/matches/find-travelers` is the frozen browse contract.**
+`compatible-journeys` is untouched and still serves the shipped J3 app; J5
+renders the new one. A row is route and fit first, person second, money last:
+the carrying sub-route as ordered stops (city label with the airport as a facet
+— `Algiers · ALG`, the spec's locked route UX), mode per segment, a route-fit
+and timing-fit classification, the Traveler's first name, rating state and
+completed-delivery count, a coded match explanation, server-authored actions and
+the frozen propose leg range. One request renders a whole list; there is no
+per-candidate profile fetch and no N+1.
+
+**Route fit is "how much of this Traveler's trip is your route", never
+proximity.** Canonical matching resolves both request endpoints to route nodes,
+so the covered-leg span records exactly where the parcel joins and leaves:
+`excellent` when it rides the whole published Journey, `good` when it shares one
+end, `compatible` when the Traveler passes through. A pure function of
+`(covered_leg_positions, journey_leg_count)`. The ranking engine's own
+`route_fit` factor is deliberately unused — it is the constant 1000 on every
+canonical candidate, and `public_contract` documents ranking factors as
+reversible into corridor geometry.
+
+**"Nobody matches" and "this request cannot be matched" are now different
+screens.** Before J4 a cancelled request and a route nobody travels both
+produced an empty list, because every candidate failed the `request_active` gate
+one by one — a Sender who had not paid their posting deposit was told "no
+travellers yet". The envelope carries `results` / `no_candidates` /
+`request_ineligible` (with a reason), all HTTP 200, plus real pagination:
+default page 10 over a deterministic total order, `next_offset` from the server,
+capped at the policy `result_limit`. Sorting is `best_match` (the authoritative
+ranking) or `soonest_departure`, both server-side. No filters in V1, each
+deferral reasoned.
+
+**Boost, honestly reported.** Compatibility effect: none — a €1,000 Boost on an
+unroutable request still returns an empty list, asserted by test. Ranking effect
+on Find Travelers: **none**, because `rank_compatible_candidate` reads the Boost
+from the delivery request and every candidate on this screen shares one request,
+so the bonus is a constant; a test adds a Boost and asserts the order is
+identical. Its real ranking effect lives on the traveller-facing scan. Display
+effect: no badge on a Traveler card, because there is no effect to claim.
+
+**Ratings respect the blind window and never fabricate a score.** Aggregated in
+SQL over Sender-written ratings that have revealed — the window has passed or
+both sides have spoken. An unrated Traveler is `{"state": "new", "average":
+null}`, never `5.0`. Completed deliveries come from `Deal.status == COMPLETED`,
+never from journeys, offers or matched requests.
+
+**Cost and size.** Seven queries at 1, 10 and 40 candidates — J1.2's five-query
+scan plus exactly two grouped trust aggregates, and the split is pinned by test.
+The default page is 24 KB at any candidate volume; the old endpoint ships 229 KB
+in one body at 40 candidates.
+
+**Privacy.** The candidate payload's shape is the allowlist. Refused, asserted
+against real values rather than key names: exact points, coordinates, addresses,
+email, phone, surname, KYC state or evidence, payout data, delivery codes, deal
+or chat data, ranking scores and factors, gate details, per-leg capacity, and
+every distance band. Sender-only; `403` for a stranger and for the Traveler on
+the list.
+
+**Browser UX review.** Today's card and the proposed hierarchy were rendered
+side by side at 390 × 844 with the real design system: **≈540 dp per card, one
+visible** today versus **≈155 dp, four visible** proposed. The route goes
+horizontal for the browse card — the vertical rail stays where the line is the
+screen — and `identity_verified`, being true of every row, moves off the card
+into the match explanation.
+
+**Deferred to Gemini J5.** All card visuals, the inline route component and its
+RTL behaviour, the four envelope states as presentations, pagination UI, the
+"Why this trip fits" surface, the propose-sheet layout, and rebuilding
+`discovery_screen.dart` against the new contract. `discovery_screen.dart` is
+untouched here and still reads the old endpoint, so the shipped app is
+unaffected.
+
 ## J3 — Mobile Pricing, Deposit, Guest Payer, Boost & Payment Success UX (2026-09-16)
 
 **J3 PASS — 572 mobile tests green, flutter analyze 0 issues, trilingual (EN/FR/AR RTL).** Branch `gemini/j3-mobile-payment-ux`, from main. [Mobile UX, contracts and verification](PHASE_J3_MOBILE_PAYMENT_UX.md).

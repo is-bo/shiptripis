@@ -1358,6 +1358,125 @@ class LFr extends L {
       'Rien ne correspond à votre trajet pour le moment. Nous vous préviendrons dès que ce sera le cas.';
 
   @override
+  String get findTravelersRouteFitExcellent => 'Itinéraire idéal';
+
+  @override
+  String get findTravelersRouteFitGood => 'Bon itinéraire';
+
+  @override
+  String get findTravelersRouteFitCompatible => 'Itinéraire compatible';
+
+  @override
+  String get findTravelersTimingComfortable => 'Arrive largement à temps';
+
+  @override
+  String get findTravelersTimingFits => 'Respecte votre délai de livraison';
+
+  @override
+  String get findTravelersNewTraveller => 'Nouveau';
+
+  @override
+  String get findTravelersViewTrip => 'Voir le trajet';
+
+  @override
+  String get findTravelersWhyThisFits => 'Pourquoi ce trajet convient';
+
+  @override
+  String get findTravelersEmptyTitle =>
+      'Aucun voyageur ne va dans votre direction pour l’instant';
+
+  @override
+  String get findTravelersEmptyBody =>
+      'Votre demande reste active. Nous vous préviendrons dès qu’un voyageur publiera un trajet sur votre itinéraire.';
+
+  @override
+  String get findTravelersIneligibleAwaitingDeposit =>
+      'Payez le dépôt de publication pour publier cette demande.';
+
+  @override
+  String get findTravelersIneligibleAlreadyMatched =>
+      'Ce colis a déjà un voyageur.';
+
+  @override
+  String get findTravelersIneligibleClosed => 'Cette demande est clôturée.';
+
+  @override
+  String get findTravelersIneligibleInProgress => 'Ce colis est déjà en route.';
+
+  @override
+  String get findTravelersTripContinues => 'Le trajet continue';
+
+  @override
+  String get findTravelersDirectLeg => 'Transporté en un seul tronçon';
+
+  @override
+  String get findTravelersWholeTripMatches =>
+      'Tout ce trajet correspond à votre itinéraire';
+
+  @override
+  String get findTravelersIdentityVerified => 'Identité vérifiée';
+
+  @override
+  String get findTravelersFlightProofApproved => 'Billet d’avion vérifié';
+
+  @override
+  String get findTravelersSortBestMatch => 'Meilleure correspondance';
+
+  @override
+  String get findTravelersSortSoonest => 'Trajet le plus proche';
+
+  @override
+  String get findTravelersShowMore => 'Afficher plus de voyageurs';
+
+  @override
+  String findTravelersStop(String city, String iata) {
+    return '$city · $iata';
+  }
+
+  @override
+  String findTravelersTransfers(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count correspondances',
+      one: '1 correspondance',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String findTravelersPicksUpIn(String place) {
+    return 'Récupération à $place';
+  }
+
+  @override
+  String findTravelersArrivesIn(String place) {
+    return 'Arrivée à $place';
+  }
+
+  @override
+  String findTravelersArrivesBeforeDeadline(String arrival, String deadline) {
+    return 'Arrive le $arrival, avant votre échéance du $deadline';
+  }
+
+  @override
+  String findTravelersHasRoomFor(String weight) {
+    return 'Peut prendre $weight kg';
+  }
+
+  @override
+  String findTravelersDeliveries(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count livraisons',
+      one: '1 livraison',
+      zero: 'Aucune livraison',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String discoveryCoveredLegs(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

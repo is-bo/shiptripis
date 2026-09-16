@@ -31,6 +31,7 @@ from .discovery import (
     explain_candidate,
     phase2_policy,
 )
+from .find_travelers import find_travelers, request_ineligibility
 from .models import Offer
 from .policy import InvalidPhase2Policy
 from .pricing import PricingError
@@ -39,6 +40,7 @@ from .serializers import (
     CompatibleJourneysQuerySerializer,
     CompatibleRequestsQuerySerializer,
     CounterOfferV1Serializer,
+    FindTravelersQuerySerializer,
     OfferSerializer,
     PricingQuoteV1Serializer,
     SenderProposeV1Serializer,
@@ -275,6 +277,71 @@ class CompatibleJourneysV1View(APIView):
                 ],
             }
         )
+
+
+class FindTravelersV1View(APIView):
+    """`GET /api/matches/find-travelers` — the frozen J4 browse contract.
+
+    Supersedes `compatible-journeys` for the Sender's Find Travelers screen.
+    The older endpoint keeps answering the shipped J3 app unchanged; this one is
+    what Gemini J5 renders.
+
+    Three things it does that the older endpoint cannot.
+
+    It **names the Traveler**, with a first name, a rating state and a completed
+    delivery count, so a browse row answers "would I trust this person" without
+    a second request per candidate.
+
+    It **pages**. The active policy allows a fifty-row answer, which is a large
+    response for a phone and an unreadable one for a human. The authoritative
+    result set is unchanged; only how much of it crosses the wire at once.
+
+    It **separates "nobody matches" from "this request cannot be matched"**.
+    Both used to arrive as an empty list, because a closed request simply failed
+    the `request_active` gate on every candidate in turn.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (UserRateThrottle, ScopedRateThrottle)
+    throttle_scope = "matching_discovery"
+
+    def get(self, request: Request) -> Response:
+        serializer = FindTravelersQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        query = serializer.validated_data
+        try:
+            delivery_request = _request_for_owner(
+                pk=query["parcel_id"],
+                user=request.user,
+            )
+            policy = phase2_policy()
+            # An ineligible request never runs a scan. Discovery would evaluate
+            # every candidate only to reject all of them on the same gate.
+            if request_ineligibility(delivery_request) is None:
+                candidates = compatible_journeys_for_request(
+                    delivery_request=delivery_request,
+                    policy=policy,
+                )
+            else:
+                candidates = []
+        except (
+            OfferAuthorizationError,
+            NoActiveBusinessSettings,
+            InvalidPhase2Policy,
+            PricingError,
+        ) as exc:
+            return _domain_error_response(exc)
+
+        page, block = find_travelers(
+            delivery_request=delivery_request,
+            candidates=candidates,
+            sort=query["sort"],
+            # `result_limit` bounds the authoritative result set, so it is also
+            # the largest page that could ever be whole.
+            limit=min(query["limit"], policy.result_limit),
+            offset=query["offset"],
+        )
+        return Response(page.as_dict(request_block=block))
 
 
 class CompatibleRequestsV1View(APIView):

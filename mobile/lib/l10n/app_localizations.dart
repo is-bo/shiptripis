@@ -2505,6 +2505,180 @@ abstract class L {
   /// **'Nothing matches your journey right now. We\'ll notify you when something does.'**
   String get discoveryEmptyRequestsBody;
 
+  /// No description provided for @findTravelersRouteFitExcellent.
+  ///
+  /// In en, this message translates to:
+  /// **'Excellent route match'**
+  String get findTravelersRouteFitExcellent;
+
+  /// No description provided for @findTravelersRouteFitGood.
+  ///
+  /// In en, this message translates to:
+  /// **'Good route match'**
+  String get findTravelersRouteFitGood;
+
+  /// No description provided for @findTravelersRouteFitCompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible route'**
+  String get findTravelersRouteFitCompatible;
+
+  /// No description provided for @findTravelersTimingComfortable.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrives with time to spare'**
+  String get findTravelersTimingComfortable;
+
+  /// No description provided for @findTravelersTimingFits.
+  ///
+  /// In en, this message translates to:
+  /// **'Fits your delivery window'**
+  String get findTravelersTimingFits;
+
+  /// No description provided for @findTravelersNewTraveller.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get findTravelersNewTraveller;
+
+  /// No description provided for @findTravelersViewTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'View trip'**
+  String get findTravelersViewTrip;
+
+  /// No description provided for @findTravelersWhyThisFits.
+  ///
+  /// In en, this message translates to:
+  /// **'Why this trip fits'**
+  String get findTravelersWhyThisFits;
+
+  /// No description provided for @findTravelersEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No travellers going your way yet'**
+  String get findTravelersEmptyTitle;
+
+  /// No description provided for @findTravelersEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your request stays active. We’ll tell you as soon as somebody posts a trip along your route.'**
+  String get findTravelersEmptyBody;
+
+  /// No description provided for @findTravelersIneligibleAwaitingDeposit.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay the posting deposit to publish this request.'**
+  String get findTravelersIneligibleAwaitingDeposit;
+
+  /// No description provided for @findTravelersIneligibleAlreadyMatched.
+  ///
+  /// In en, this message translates to:
+  /// **'This parcel already has a traveller.'**
+  String get findTravelersIneligibleAlreadyMatched;
+
+  /// No description provided for @findTravelersIneligibleClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'This request is closed.'**
+  String get findTravelersIneligibleClosed;
+
+  /// No description provided for @findTravelersIneligibleInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'This parcel is already on its way.'**
+  String get findTravelersIneligibleInProgress;
+
+  /// No description provided for @findTravelersTripContinues.
+  ///
+  /// In en, this message translates to:
+  /// **'Trip continues'**
+  String get findTravelersTripContinues;
+
+  /// No description provided for @findTravelersDirectLeg.
+  ///
+  /// In en, this message translates to:
+  /// **'Carried in one leg'**
+  String get findTravelersDirectLeg;
+
+  /// No description provided for @findTravelersWholeTripMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'This whole trip is your route'**
+  String get findTravelersWholeTripMatches;
+
+  /// No description provided for @findTravelersIdentityVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity verified'**
+  String get findTravelersIdentityVerified;
+
+  /// No description provided for @findTravelersFlightProofApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Flight ticket verified'**
+  String get findTravelersFlightProofApproved;
+
+  /// No description provided for @findTravelersSortBestMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Best match'**
+  String get findTravelersSortBestMatch;
+
+  /// No description provided for @findTravelersSortSoonest.
+  ///
+  /// In en, this message translates to:
+  /// **'Soonest trip'**
+  String get findTravelersSortSoonest;
+
+  /// No description provided for @findTravelersShowMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Show more travellers'**
+  String get findTravelersShowMore;
+
+  /// A route stop reached by air: the city first, the airport code beside it. Airports are a facet of a stop, never a stop of their own.
+  ///
+  /// In en, this message translates to:
+  /// **'{city} · {iata}'**
+  String findTravelersStop(String city, String iata);
+
+  /// No description provided for @findTravelersTransfers.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transfer} other{{count} transfers}}'**
+  String findTravelersTransfers(int count);
+
+  /// No description provided for @findTravelersPicksUpIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Picks up in {place}'**
+  String findTravelersPicksUpIn(String place);
+
+  /// No description provided for @findTravelersArrivesIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrives in {place}'**
+  String findTravelersArrivesIn(String place);
+
+  /// Both dates arrive already formatted by the client for the reader's locale.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrives {arrival}, before your {deadline} deadline'**
+  String findTravelersArrivesBeforeDeadline(String arrival, String deadline);
+
+  /// No description provided for @findTravelersHasRoomFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Has room for {weight} kg'**
+  String findTravelersHasRoomFor(String weight);
+
+  /// No description provided for @findTravelersDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No deliveries yet} =1{1 delivery} other{{count} deliveries}}'**
+  String findTravelersDeliveries(int count);
+
   /// No description provided for @discoveryCoveredLegs.
   ///
   /// In en, this message translates to:

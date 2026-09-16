@@ -29,6 +29,7 @@ import '../domain/deal.dart';
 import '../domain/delivery_request.dart';
 import '../domain/discovery.dart';
 import '../domain/dispute.dart';
+import '../domain/find_travelers.dart';
 import '../domain/handover.dart';
 import '../domain/journey.dart';
 import '../domain/json.dart';
@@ -756,6 +757,35 @@ class MatchingRepository {
     await _api.getObject(
       '/api/matches/compatible-journeys',
       query: {'parcel_id': parcelId},
+      cancelToken: cancelToken,
+    ),
+  );
+
+  /// One page of Find Travelers — the frozen J4 contract.
+  ///
+  /// Supersedes [compatibleJourneys] for the Sender's discovery screen. Every
+  /// row already carries the Traveler's name, rating and delivery history, so
+  /// rendering a list costs exactly one request no matter how many candidates
+  /// come back.
+  ///
+  /// `sort` and `offset` are the server's vocabulary, not the client's: an
+  /// unrecognised sort is a `400` rather than a silent reorder, and the next
+  /// offset comes from the response instead of being computed here.
+  Future<FindTravelersPage> findTravelers({
+    required int parcelId,
+    int? limit,
+    int? offset,
+    String? sort,
+    CancelToken? cancelToken,
+  }) async => FindTravelersPage.fromJson(
+    await _api.getObject(
+      '/api/matches/find-travelers',
+      query: {
+        'parcel_id': parcelId,
+        'limit': ?limit,
+        'offset': ?offset,
+        'sort': ?sort,
+      },
       cancelToken: cancelToken,
     ),
   );

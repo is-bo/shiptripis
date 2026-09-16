@@ -1344,6 +1344,125 @@ class LAr extends L {
       'لا شيء يطابق رحلتك الآن. سنُعلمك عندما يتوفر شيء.';
 
   @override
+  String get findTravelersRouteFitExcellent => 'مسار مطابق ممتاز';
+
+  @override
+  String get findTravelersRouteFitGood => 'مسار مطابق جيد';
+
+  @override
+  String get findTravelersRouteFitCompatible => 'مسار متوافق';
+
+  @override
+  String get findTravelersTimingComfortable => 'يصل قبل الموعد بوقت كافٍ';
+
+  @override
+  String get findTravelersTimingFits => 'يناسب مهلة التسليم';
+
+  @override
+  String get findTravelersNewTraveller => 'جديد';
+
+  @override
+  String get findTravelersViewTrip => 'عرض الرحلة';
+
+  @override
+  String get findTravelersWhyThisFits => 'لماذا تناسب هذه الرحلة';
+
+  @override
+  String get findTravelersEmptyTitle => 'لا يوجد مسافرون في اتجاهك بعد';
+
+  @override
+  String get findTravelersEmptyBody =>
+      'طلبك لا يزال نشطًا. سنُعلمك فور نشر أحدهم رحلة على مسارك.';
+
+  @override
+  String get findTravelersIneligibleAwaitingDeposit =>
+      'ادفع وديعة النشر لإظهار هذا الطلب.';
+
+  @override
+  String get findTravelersIneligibleAlreadyMatched =>
+      'هذا الطرد لديه مسافر بالفعل.';
+
+  @override
+  String get findTravelersIneligibleClosed => 'هذا الطلب مغلق.';
+
+  @override
+  String get findTravelersIneligibleInProgress => 'هذا الطرد في الطريق بالفعل.';
+
+  @override
+  String get findTravelersTripContinues => 'الرحلة تستمر';
+
+  @override
+  String get findTravelersDirectLeg => 'يُنقل في مرحلة واحدة';
+
+  @override
+  String get findTravelersWholeTripMatches => 'كامل هذه الرحلة هو مسارك';
+
+  @override
+  String get findTravelersIdentityVerified => 'الهوية موثّقة';
+
+  @override
+  String get findTravelersFlightProofApproved => 'تذكرة الطيران موثّقة';
+
+  @override
+  String get findTravelersSortBestMatch => 'أفضل تطابق';
+
+  @override
+  String get findTravelersSortSoonest => 'أقرب رحلة';
+
+  @override
+  String get findTravelersShowMore => 'عرض مسافرين آخرين';
+
+  @override
+  String findTravelersStop(String city, String iata) {
+    return '$city · $iata';
+  }
+
+  @override
+  String findTravelersTransfers(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تبديلات',
+      two: 'تبديلان',
+      one: 'تبديل واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String findTravelersPicksUpIn(String place) {
+    return 'الاستلام في $place';
+  }
+
+  @override
+  String findTravelersArrivesIn(String place) {
+    return 'الوصول إلى $place';
+  }
+
+  @override
+  String findTravelersArrivesBeforeDeadline(String arrival, String deadline) {
+    return 'يصل $arrival، قبل موعدك $deadline';
+  }
+
+  @override
+  String findTravelersHasRoomFor(String weight) {
+    return 'يتسع لـ $weight كغ';
+  }
+
+  @override
+  String findTravelersDeliveries(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count توصيلات',
+      two: 'توصيلتان',
+      one: 'توصيلة واحدة',
+      zero: 'لا توجد توصيلات بعد',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String discoveryCoveredLegs(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

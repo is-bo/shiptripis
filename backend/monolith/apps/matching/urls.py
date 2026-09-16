@@ -18,6 +18,7 @@ from .v1_views import (
     CompatibleJourneysV1View,
     CompatibleRequestsV1View,
     CounterOfferV1View,
+    FindTravelersV1View,
     OfferAcceptV1View,
     RetiredLegacyMatchingWriteView,
     SenderProposeV1View,
@@ -41,6 +42,11 @@ urlpatterns = [
         "matches/compatible-journeys",
         CompatibleJourneysV1View.as_view(),
         name="matches-compatible-journeys-v1",
+    ),
+    path(
+        "matches/find-travelers",
+        FindTravelersV1View.as_view(),
+        name="matches-find-travelers-v1",
     ),
     path(
         "matches/compatible-requests",

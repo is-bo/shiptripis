@@ -11,6 +11,7 @@ from rest_framework import serializers
 
 from apps.parcels.models import ParcelRequest
 
+from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
 from .models import Match, MatchEvent, Offer
 from .public_contract import public_compatibility_payload, public_terms_snapshot
 
@@ -361,6 +362,26 @@ class PricingQuoteV1Serializer(serializers.Serializer):
 
 class CompatibleJourneysQuerySerializer(serializers.Serializer):
     parcel_id = serializers.IntegerField(min_value=1)
+
+
+class FindTravelersQuerySerializer(serializers.Serializer):
+    """Query contract for the J4 Find Travelers page.
+
+    `limit` is capped by the view against the active policy's `result_limit`,
+    which is the size of the authoritative result set; this serializer only
+    holds the outer edge so an absurd value is refused before it reaches a
+    slice. `sort` is a closed vocabulary because the client must never be able
+    to name an order ShipTrip does not own.
+    """
+
+    parcel_id = serializers.IntegerField(min_value=1)
+    limit = serializers.IntegerField(
+        min_value=1, max_value=100, required=False, default=DEFAULT_PAGE_SIZE
+    )
+    offset = serializers.IntegerField(min_value=0, required=False, default=0)
+    sort = serializers.ChoiceField(
+        choices=SORT_VALUES, required=False, default=SORT_BEST_MATCH
+    )
 
 
 class CompatibleRequestsQuerySerializer(serializers.Serializer):

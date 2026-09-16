@@ -518,6 +518,92 @@
   "discoveryEmptyTravelersBody": "Nobody is going your way right now. We'll notify you when someone is.",
   "discoveryEmptyRequestsTitle": "No parcels yet",
   "discoveryEmptyRequestsBody": "Nothing matches your journey right now. We'll notify you when something does.",
+  "findTravelersRouteFitExcellent": "Excellent route match",
+  "findTravelersRouteFitGood": "Good route match",
+  "findTravelersRouteFitCompatible": "Compatible route",
+  "findTravelersTimingComfortable": "Arrives with time to spare",
+  "findTravelersTimingFits": "Fits your delivery window",
+  "findTravelersNewTraveller": "New",
+  "findTravelersViewTrip": "View trip",
+  "findTravelersWhyThisFits": "Why this trip fits",
+  "findTravelersEmptyTitle": "No travellers going your way yet",
+  "findTravelersEmptyBody": "Your request stays active. We’ll tell you as soon as somebody posts a trip along your route.",
+  "findTravelersIneligibleAwaitingDeposit": "Pay the posting deposit to publish this request.",
+  "findTravelersIneligibleAlreadyMatched": "This parcel already has a traveller.",
+  "findTravelersIneligibleClosed": "This request is closed.",
+  "findTravelersIneligibleInProgress": "This parcel is already on its way.",
+  "findTravelersTripContinues": "Trip continues",
+  "findTravelersDirectLeg": "Carried in one leg",
+  "findTravelersWholeTripMatches": "This whole trip is your route",
+  "findTravelersIdentityVerified": "Identity verified",
+  "findTravelersFlightProofApproved": "Flight ticket verified",
+  "findTravelersSortBestMatch": "Best match",
+  "findTravelersSortSoonest": "Soonest trip",
+  "findTravelersShowMore": "Show more travellers",
+  "findTravelersStop": "{city} · {iata}",
+  "@findTravelersStop": {
+    "description": "A route stop reached by air: the city first, the airport code beside it. Airports are a facet of a stop, never a stop of their own.",
+    "placeholders": {
+      "city": {
+        "type": "String"
+      },
+      "iata": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersTransfers": "{count, plural, =1{1 transfer} other{{count} transfers}}",
+  "@findTravelersTransfers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "findTravelersPicksUpIn": "Picks up in {place}",
+  "@findTravelersPicksUpIn": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersArrivesIn": "Arrives in {place}",
+  "@findTravelersArrivesIn": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersArrivesBeforeDeadline": "Arrives {arrival}, before your {deadline} deadline",
+  "@findTravelersArrivesBeforeDeadline": {
+    "description": "Both dates arrive already formatted by the client for the reader's locale.",
+    "placeholders": {
+      "arrival": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersHasRoomFor": "Has room for {weight} kg",
+  "@findTravelersHasRoomFor": {
+    "placeholders": {
+      "weight": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersDeliveries": "{count, plural, =0{No deliveries yet} =1{1 delivery} other{{count} deliveries}}",
+  "@findTravelersDeliveries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "discoveryCoveredLegs": "Covers {count, plural, =1{1 leg} other{{count} legs}}",
   "@discoveryCoveredLegs": {
     "placeholders": {

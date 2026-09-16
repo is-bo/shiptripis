@@ -1348,6 +1348,124 @@ class LEn extends L {
       'Nothing matches your journey right now. We\'ll notify you when something does.';
 
   @override
+  String get findTravelersRouteFitExcellent => 'Excellent route match';
+
+  @override
+  String get findTravelersRouteFitGood => 'Good route match';
+
+  @override
+  String get findTravelersRouteFitCompatible => 'Compatible route';
+
+  @override
+  String get findTravelersTimingComfortable => 'Arrives with time to spare';
+
+  @override
+  String get findTravelersTimingFits => 'Fits your delivery window';
+
+  @override
+  String get findTravelersNewTraveller => 'New';
+
+  @override
+  String get findTravelersViewTrip => 'View trip';
+
+  @override
+  String get findTravelersWhyThisFits => 'Why this trip fits';
+
+  @override
+  String get findTravelersEmptyTitle => 'No travellers going your way yet';
+
+  @override
+  String get findTravelersEmptyBody =>
+      'Your request stays active. We’ll tell you as soon as somebody posts a trip along your route.';
+
+  @override
+  String get findTravelersIneligibleAwaitingDeposit =>
+      'Pay the posting deposit to publish this request.';
+
+  @override
+  String get findTravelersIneligibleAlreadyMatched =>
+      'This parcel already has a traveller.';
+
+  @override
+  String get findTravelersIneligibleClosed => 'This request is closed.';
+
+  @override
+  String get findTravelersIneligibleInProgress =>
+      'This parcel is already on its way.';
+
+  @override
+  String get findTravelersTripContinues => 'Trip continues';
+
+  @override
+  String get findTravelersDirectLeg => 'Carried in one leg';
+
+  @override
+  String get findTravelersWholeTripMatches => 'This whole trip is your route';
+
+  @override
+  String get findTravelersIdentityVerified => 'Identity verified';
+
+  @override
+  String get findTravelersFlightProofApproved => 'Flight ticket verified';
+
+  @override
+  String get findTravelersSortBestMatch => 'Best match';
+
+  @override
+  String get findTravelersSortSoonest => 'Soonest trip';
+
+  @override
+  String get findTravelersShowMore => 'Show more travellers';
+
+  @override
+  String findTravelersStop(String city, String iata) {
+    return '$city · $iata';
+  }
+
+  @override
+  String findTravelersTransfers(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transfers',
+      one: '1 transfer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String findTravelersPicksUpIn(String place) {
+    return 'Picks up in $place';
+  }
+
+  @override
+  String findTravelersArrivesIn(String place) {
+    return 'Arrives in $place';
+  }
+
+  @override
+  String findTravelersArrivesBeforeDeadline(String arrival, String deadline) {
+    return 'Arrives $arrival, before your $deadline deadline';
+  }
+
+  @override
+  String findTravelersHasRoomFor(String weight) {
+    return 'Has room for $weight kg';
+  }
+
+  @override
+  String findTravelersDeliveries(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count deliveries',
+      one: '1 delivery',
+      zero: 'No deliveries yet',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String discoveryCoveredLegs(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
