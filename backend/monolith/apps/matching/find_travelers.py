@@ -333,10 +333,32 @@ def _locality_of(place: Place | None) -> Place | None:
     return mapping.locality if mapping else None
 
 
+def _legacy_label(*locations) -> tuple[str, str | None]:
+    """Coarse label and country from a pre-8C `Location`, or an empty answer.
+
+    Every V1 journey is canonical, but a pre-8C journey that is still active
+    carries `origin`/`destination` `Location` rows and no `Place` at all — and a
+    route of unlabelled stops is the exact defect J1.2 spent a phase fixing. The
+    fields used here are `public_label` and `city`, both already in
+    `PUBLIC_LOCATION_SUMMARY_FIELDS`, so this is the same coarse disclosure the
+    public serializer has always made and never the private label.
+    """
+
+    for location in locations:
+        if location is None:
+            continue
+        label = (location.public_label or location.city or "").strip()
+        if label:
+            return label, location.country_code or None
+    return "", None
+
+
 def _stop(
     *,
     arriving_place: Place | None,
     departing_place: Place | None,
+    arriving_location=None,
+    departing_location=None,
     arrive_at,
     depart_at,
 ) -> dict:
@@ -366,10 +388,14 @@ def _stop(
         ),
         None,
     )
+    label = locality.display_label if locality else ""
+    country_code = locality.country_id if locality else None
+    if not label:
+        label, country_code = _legacy_label(arriving_location, departing_location)
     return {
         "place_id": locality.pk if locality else None,
-        "label": locality.display_label if locality else "",
-        "country_code": locality.country_id if locality else None,
+        "label": label,
+        "country_code": country_code,
         "airport_iata": (airport.iata_code or None) if airport else None,
         "arrive_at": _isoformat(arrive_at),
         "depart_at": _isoformat(depart_at),
@@ -402,6 +428,8 @@ def project_route(
             _stop(
                 arriving_place=previous.destination_place if previous else None,
                 departing_place=leg.origin_place,
+                arriving_location=previous.destination if previous else None,
+                departing_location=leg.origin,
                 arrive_at=previous.arrive_at if previous else None,
                 depart_at=leg.depart_at,
             )
@@ -420,6 +448,8 @@ def project_route(
             _stop(
                 arriving_place=last.destination_place,
                 departing_place=None,
+                arriving_location=last.destination,
+                departing_location=None,
                 arrive_at=last.arrive_at,
                 depart_at=None,
             )
@@ -547,17 +577,15 @@ def candidate_payload(
         first_covered_position=covered_positions[0] if covered_positions else None,
         last_covered_position=covered_positions[-1] if covered_positions else None,
     )
+    arrival = covered_legs[-1].arrive_at if covered_legs else None
     departs_at = _isoformat(covered_legs[0].depart_at) if covered_legs else None
-    arrives_at = _isoformat(covered_legs[-1].arrive_at) if covered_legs else None
+    arrives_at = _isoformat(arrival)
     deadline_at = evaluation.delivery_request.deadline_at
     route_fit = classify_route_fit(
         covered_leg_positions=covered_positions,
         journey_leg_count=len(legs),
     )
-    timing_fit = classify_timing_fit(
-        arrives_at=_parse(arrives_at),
-        deadline_at=deadline_at,
-    )
+    timing_fit = classify_timing_fit(arrives_at=arrival, deadline_at=deadline_at)
     has_flight_leg = any(
         (segment.get("mode") or "") == JourneyLeg.Mode.FLIGHT
         for segment in route["segments"]

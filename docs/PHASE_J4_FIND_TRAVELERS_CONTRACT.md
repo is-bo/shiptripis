@@ -203,6 +203,14 @@ Properties:
 * **Published schedule only.** First stop has no arrival, last has no departure.
 * **No coordinates, no private point, no hidden metadata.** A stop is a
   catalogue id, a label, a country, an optional IATA code and two instants.
+* **A legacy journey still names its stops.** Every V1 journey is canonical, but
+  a pre-8C journey that is still active carries `Location` rows and no `Place`.
+  Rather than render the unlabelled dots J1.2 spent a phase fixing, the stop
+  falls back to `public_label` / `city` — both already in
+  `PUBLIC_LOCATION_SUMMARY_FIELDS`, so it is the same coarse disclosure the
+  public serializer has always made, never the private label. `place_id` and
+  `airport_iata` are null in that case, because there is no canonical identity
+  to publish.
 
 ### Relevant route only
 
@@ -651,7 +659,7 @@ Gemini J5 owns:
 
 ## 17. Verification
 
-**Backend** — 61 new tests in
+**Backend** — 63 new tests in
 `apps/matching/tests/test_phase_j4_find_travelers.py`, covering compatibility
 authority and the Boost gate, route projection and multi-leg shapes, all three
 route-fit classifications plus the pure function, timing fit, identity and every

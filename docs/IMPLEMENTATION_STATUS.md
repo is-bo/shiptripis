@@ -2,7 +2,7 @@
 
 ## J4 — Find Travelers contract, match explanation and discovery architecture (2026-09-16)
 
-**J4 PASS — 61 new backend tests, 22 new mobile tests, full mobile suite 594
+**J4 PASS — 63 new backend tests, 22 new mobile tests, full mobile suite 594
 green, no schema change.** Branch `claude/j4-find-travelers-contract`, from J3
 `d27dbe0`. [The frozen contract, the privacy allowlist and the J5 card
 hierarchy](PHASE_J4_FIND_TRAVELERS_CONTRACT.md).

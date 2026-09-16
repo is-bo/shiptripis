@@ -24,6 +24,7 @@ from rest_framework.test import APIClient
 
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal
+from apps.locations.models import Location
 from apps.matching.discovery import compatible_journeys_for_request
 from apps.matching.find_travelers import (
     ROUTE_FIT_COMPATIBLE,
@@ -39,6 +40,7 @@ from apps.matching.find_travelers import (
     classify_timing_fit,
     find_travelers,
     first_name,
+    project_route,
 )
 from apps.matching.policy import Phase2Policy
 from apps.matching.tests.test_phase8dr_offer_locks import CanonicalOfferFixture
@@ -1169,6 +1171,106 @@ class ReadCostTests(FindTravelersFixture, TestCase):
             )
         )
         self.assertLess(new, legacy)
+
+
+class LegacyJourneyRouteTests(FindTravelersFixture, TestCase):
+    """A pre-8C journey must still name its stops.
+
+    Every V1 journey is canonical, but a legacy journey that is still active
+    carries `Location` rows and no `Place` at all. A route of unlabelled dots is
+    the exact defect J1.2 spent a phase fixing, so the projection falls back to
+    the coarse public label rather than rendering an empty stop.
+    """
+
+    def _location(self, label: str) -> Location:
+        return Location.objects.create(
+            kind=Location.Kind.MAP_POINT,
+            normalized_label=f"Exact {label}",
+            public_label=label,
+            private_label=f"Private {label}",
+            city=label,
+            country_code="DZ",
+            latitude=Decimal("36.000000"),
+            longitude=Decimal("3.000000"),
+            coarse_latitude=Decimal("36.0"),
+            coarse_longitude=Decimal("3.0"),
+        )
+
+    def test_a_legacy_leg_falls_back_to_its_coarse_public_label(self):
+        origin = self._location("Setif")
+        destination = self._location("Bejaia")
+        legacy = Journey.objects.create(
+            traveler=self.traveler,
+            schema_version=1,
+            start_location=origin,
+            destination_location=destination,
+            status=Journey.Status.ACTIVE,
+            published_at=self.now,
+        )
+        leg = JourneyLeg.objects.create(
+            journey=legacy,
+            position=0,
+            mode=JourneyLeg.Mode.DRIVE,
+            origin=origin,
+            destination=destination,
+            depart_at=self.depart,
+            arrive_at=self.depart + timedelta(hours=3),
+            capacity_kg=Decimal("8.00"),
+            distance_meters=120_000,
+            route_provider="catalogue_snapshot",
+        )
+
+        route = project_route(
+            [leg],
+            journey_leg_count=1,
+            first_covered_position=0,
+            last_covered_position=0,
+        )
+        self.assertEqual(
+            [stop["label"] for stop in route["stops"]], ["Setif", "Bejaia"]
+        )
+        # No canonical identity to publish, and no airport facet either.
+        for stop in route["stops"]:
+            self.assertIsNone(stop["place_id"])
+            self.assertIsNone(stop["airport_iata"])
+            self.assertEqual(stop["country_code"], "DZ")
+
+    def test_the_fallback_uses_the_coarse_label_and_never_the_private_one(self):
+        origin = self._location("Setif")
+        destination = self._location("Bejaia")
+        legacy = Journey.objects.create(
+            traveler=self.traveler,
+            schema_version=1,
+            start_location=origin,
+            destination_location=destination,
+            status=Journey.Status.ACTIVE,
+            published_at=self.now,
+        )
+        leg = JourneyLeg.objects.create(
+            journey=legacy,
+            position=0,
+            mode=JourneyLeg.Mode.DRIVE,
+            origin=origin,
+            destination=destination,
+            depart_at=self.depart,
+            arrive_at=self.depart + timedelta(hours=3),
+            capacity_kg=Decimal("8.00"),
+            distance_meters=120_000,
+            route_provider="catalogue_snapshot",
+        )
+
+        import json
+
+        blob = json.dumps(
+            project_route(
+                [leg],
+                journey_leg_count=1,
+                first_covered_position=0,
+                last_covered_position=0,
+            )
+        )
+        self.assertNotIn("Private", blob)
+        self.assertNotIn("Exact", blob)
 
 
 class PlaceTypeSanityTests(FindTravelersFixture, TestCase):
