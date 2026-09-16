@@ -7011,8 +7011,9 @@ TEST Railway deployment `90c75ccb-5cc1-41e3-b64d-e5737a3c0678` **SUCCESS**, rele
 `core.autocrlf=false`; the four changed runtime files and
 `backend/railway/Dockerfile` were byte-compared against their blobs. `/healthz` 200
 and `/readyz` 200 on the new release, with database, migrations and rate-limit cache
-`ok`; "No migrations to apply"; all processes started, and the notification service
-logged "dispatcher subscribed" with the new channel in its list. One gRPC
+`ok`; "No migrations to apply"; all processes started and the notification service
+logged "dispatcher subscribed" (Railway's log view does not show the channel list, so
+the new subscription is evidenced by the deployed source, not by the log). One gRPC
 `too_many_pings` GoAway line also appears on the J6.1 deployment and is not new.
 Unauthenticated `GET /api/matches`, `/api/matches/1`, `/api/parcels/1/boost` and
 `/api/notifications/unread-count` answer 401, with a 404 control. Railway variables
