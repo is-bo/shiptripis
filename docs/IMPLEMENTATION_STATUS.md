@@ -81,6 +81,20 @@ horizontal for the browse card — the vertical rail stays where the line is the
 screen — and `identity_verified`, being true of every row, moves off the card
 into the match explanation.
 
+**J4 release.** CI run 35044758964: all six jobs SUCCESS at
+`9614db64840345dd71c35c68aee4215a3eb9464d`. Main fast-forwarded to that commit
+and the phase branch deleted locally and remotely. Deployment
+`bee7d628-eb3b-4892-87c1-0e985ecf0cd1`, release `v1.0.0-rc.35+9614db6`, SUCCESS
+from a clean `git archive` of the exact reviewed SHA whose four changed runtime
+files were hash-checked first. `/healthz` and `/readyz` both 200 with that
+release, database, migrations and rate-limit cache all `ok`, no migrations to
+apply, and all ten child processes started. `GET /api/matches/find-travelers`
+answers 401 unauthenticated against a 404 control, so the new route is live and
+gated. `RELEASE_ID` was the only variable touched; Stripe TEST, Chargily TEST,
+`PAYMENTS_ENVIRONMENT=test`, `PAYOUT_DZD_EXECUTION_ENABLED=false` and
+`EMAIL_ENABLED=false` all unchanged. Verification was unauthenticated reads only
+— no row was created or modified on the deployed database.
+
 **Deferred to Gemini J5.** All card visuals, the inline route component and its
 RTL behaviour, the four envelope states as presentations, pagination UI, the
 "Why this trip fits" surface, the propose-sheet layout, and rebuilding

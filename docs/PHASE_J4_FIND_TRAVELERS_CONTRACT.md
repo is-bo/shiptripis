@@ -681,6 +681,54 @@ pattern. Full suite **594 passed**. `flutter analyze`: no issues.
 
 ---
 
+## 17.1 CI and the TEST release
+
+CI run [35044758964](https://github.com/is-bo/shiptripis/actions/runs/35044758964)
+passed all six jobs at `9614db64840345dd71c35c68aee4215a3eb9464d` — schema drift,
+Django migrations/tests/lint, Flutter, Go build/vet/unit, Go real-Redis
+integration, and production config + static web. Results were read only after the
+run reported completion.
+
+Main was fast-forwarded to that exact SHA and pushed; the phase branch was
+deleted locally and remotely. Local `main` and `origin/main` both read
+`9614db64840345dd71c35c68aee4215a3eb9464d` and the worktree is clean.
+
+A clean `git archive` of that SHA was uploaded to the existing ShipTrip Railway
+service. All four changed runtime files were hash-compared against the commit
+before upload and match, allowing for the documented Windows archive newline
+conversion. No local scratch directory entered the archive.
+
+Deployment `bee7d628-eb3b-4892-87c1-0e985ecf0cd1` reached **SUCCESS**.
+Release: `v1.0.0-rc.35+9614db6`. Railway's environment is named `production`, but
+the application remains TEST.
+
+* Public `/healthz`: **200**, correct release.
+* Public `/readyz`: **200**, correct release; database, migrations and rate-limit
+  cache all `ok`.
+* Remote migration graph: **No migrations to apply** — as expected, J4 ships none.
+* All ten expected process types started: Redis, Gunicorn, the Django KYC gRPC
+  server, the reservation releaser, the finance worker, the Go chat, notification,
+  KYC and email services, and the Caddy gateway. The email consumer is correctly
+  disabled (`EMAIL_ENABLED=false`); the FCM consumer is enabled and running.
+* `GET /api/matches/find-travelers` answers **401** unauthenticated, so the new
+  route is live and gated; `compatible-journeys` still answers **401**, unchanged;
+  a nonexistent path under the same prefix answers **404**, which is the control
+  that makes the first two meaningful.
+
+Only `RELEASE_ID` changed in service configuration; every other variable was
+compared before and after and is identical. Runtime confirms
+`PAYMENTS_ENVIRONMENT=test`, Stripe TEST (`sk_test_…`),
+`STRIPE_CONNECT_EXPECTED_MODE=test`, Chargily TEST (`/test/api/v2`),
+`PAYOUT_DZD_EXECUTION_ENABLED=false`, `PAYMENTS_ALLOW_MOCK_PROVIDER=false` and
+`EMAIL_ENABLED=false`. No LIVE operation, no real-money operation, no provider
+object created, no DZD execution and no production cutover.
+
+The probes above are unauthenticated reads only. No account, request, journey,
+offer, deal, payment or lifecycle row was created or modified on the deployed
+database by this release verification.
+
+---
+
 ## 18. Findings
 
 **BLOCKER** — none.
