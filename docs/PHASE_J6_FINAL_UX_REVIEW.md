@@ -104,11 +104,21 @@ the hand flip.
 
 ## 3. Findings by area
 
-### Auth and onboarding — no findings
+### Auth and onboarding — no UX findings, one launch gap
 
-Sign up, sign in, role choice, verify e-mail, session restore and the router's
-single `SessionState` redirect were reviewed as source. One guard, no per-screen
-auth checks, no dead ends. Not redesigned.
+Sign up, sign in, verify e-mail, session restore and the router's single
+`SessionState` redirect were reviewed as source. One guard, no per-screen auth
+checks, no dead ends. Not redesigned.
+
+On the "Sender / Traveler / Both" question: there is no such choice at sign-up,
+and that is right rather than missing. Role is a context toggle on Home, not an
+account type, so there is no Both to present, no second inbox, and no state that
+exists in only one role — which is also why there is no stale role to go wrong.
+
+One thing that is not a UX defect but is a launch gap: `authTermsNotice` says "By
+creating an account you accept the Terms and the Privacy Policy" and neither is a
+link, because neither document has a surface in the app. Recorded under remaining
+work rather than fixed — legal copy is not this phase's to write.
 
 ### Home — one MINOR
 
@@ -667,6 +677,8 @@ Remaining before any future LIVE cutover — none of it started here:
 7. The Arabic place-label gap: canonical place names have no Arabic form, so
    Arabic users read Latin script inside Arabic cards on every route.
 8. Legal, privacy and support surfaces, which are outside every J-phase to date.
+   Concretely: sign-up asserts the user accepts the Terms and the Privacy Policy,
+   and neither exists as a screen or a link.
 
 ---
 
