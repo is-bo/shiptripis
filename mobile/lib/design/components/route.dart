@@ -374,3 +374,123 @@ class RouteSummary extends StatelessWidget {
     );
   }
 }
+
+/// A single stop for an [InlineRoute].
+@immutable
+class InlineRouteStop {
+  const InlineRouteStop({required this.label, this.airportIata});
+
+  final String label;
+  final String? airportIata;
+
+  String get displayText => airportIata != null && airportIata!.isNotEmpty
+      ? '$label · $airportIata'
+      : label;
+}
+
+/// A compact, horizontal route representation for list cards and summaries.
+///
+/// Visualizes ordered stops: `Jijel → Algiers → Paris` or with airport IATA
+/// `Paris · CDG → Algiers · ALG → Jijel`.
+///
+/// Respects strict semantic travel order in both LTR and RTL:
+/// In LTR: Stop 0 is left, arrow points right (→), next stop to the right.
+/// In RTL: Stop 0 is right, arrow points left (←), next stop to the left.
+/// Reading in the native direction (LTR: left-to-right; RTL: right-to-left),
+/// the traveller starts at Stop 0, passes intermediate stops, and reaches
+/// destination Stop N.
+///
+/// [continuesBefore] indicates the journey starts before Stop 0 (`… →`).
+/// [continuesAfter] indicates the journey continues beyond Stop N (`→ …`).
+class InlineRoute extends StatelessWidget {
+  const InlineRoute({
+    required this.stops,
+    this.continuesBefore = false,
+    this.continuesAfter = false,
+    this.style,
+    this.arrowColor,
+    this.wrap = true,
+    super.key,
+  });
+
+  final List<InlineRouteStop> stops;
+  final bool continuesBefore;
+  final bool continuesAfter;
+  final TextStyle? style;
+  final Color? arrowColor;
+  final bool wrap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (stops.isEmpty) return const SizedBox.shrink();
+
+    final c = context.colors;
+    final isRtl = context.isRtl;
+    final textTheme = Theme.of(context).textTheme;
+    final effectiveStyle =
+        style ??
+        textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: c.textPrimary,
+        );
+    final effectiveArrowColor = arrowColor ?? c.textTertiary;
+    final arrowIcon = isRtl
+        ? Icons.arrow_back_rounded
+        : Icons.arrow_forward_rounded;
+
+    final semanticText = stops.map((s) => s.displayText).join(' to ');
+
+    Widget buildArrow() => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
+      child: Icon(arrowIcon, size: 14, color: effectiveArrowColor),
+    );
+
+    Widget buildEllipsis() => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.xxs),
+      child: Text(
+        '…',
+        style: effectiveStyle?.copyWith(color: effectiveArrowColor),
+      ),
+    );
+
+    final children = <Widget>[];
+
+    if (continuesBefore) {
+      children.add(buildEllipsis());
+      children.add(buildArrow());
+    }
+
+    for (var i = 0; i < stops.length; i++) {
+      if (i > 0) {
+        children.add(buildArrow());
+      }
+      children.add(
+        Text(
+          stops[i].displayText,
+          style: effectiveStyle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+
+    if (continuesAfter) {
+      children.add(buildArrow());
+      children.add(buildEllipsis());
+    }
+
+    final content = wrap
+        ? Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: AppSpace.xxs,
+            children: children,
+          )
+        : Row(mainAxisSize: MainAxisSize.min, children: children);
+
+    return Semantics(
+      label: semanticText,
+      excludeSemantics: true,
+      child: content,
+    );
+  }
+}

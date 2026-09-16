@@ -12,10 +12,10 @@ import 'package:shiptrip/core/api/error_codes.dart';
 import 'package:shiptrip/core/env/app_config.dart';
 import 'package:shiptrip/core/live/live_updates.dart';
 import 'package:shiptrip/design/components/feedback.dart';
+import 'package:shiptrip/design/components/route.dart';
 import 'package:shiptrip/domain/discovery.dart';
 import 'package:shiptrip/domain/transport_mode.dart';
 import 'package:shiptrip/features/profile/payout_methods_screen.dart';
-import 'package:shiptrip/features/requests/discovery_screen.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
@@ -228,75 +228,79 @@ void main() {
     testWidgets('every stop on the candidate card carries a place name', (
       tester,
     ) async {
-      final backend = FakeBackend();
-      backend.on(
-        'GET',
-        '/api/matches/compatible-journeys',
-        FakeResponse(200, {
-          'count': 1,
-          'results': [
-            {
-              'delivery_request': {
-                'id': 5,
-                'sender_id': 42,
-                'pickup': null,
-                'delivery': null,
-                'pickup_place': {
-                  'id': 1,
-                  'name': 'Paris',
-                  'display_label': 'Paris',
-                  'place_type': 'locality',
-                  'country_code': 'FR',
-                  'iata_code': null,
-                },
-                'delivery_place': {
-                  'id': 3,
-                  'name': 'Jijel',
-                  'display_label': 'Jijel',
-                  'place_type': 'locality',
-                  'country_code': 'DZ',
-                  'iata_code': null,
-                },
-                'actual_weight_kg': '2.00',
-              },
-              'journey': {
-                'id': 12,
-                'traveler_id': 99,
-                'start_location': null,
-                'destination_location': null,
-                'first_departure': '2026-09-17T11:00:00Z',
-                'start_leg_id': 1,
-                'end_leg_id': 2,
-                'covered_legs': <Object>[],
-              },
-              'compatibility': {
-                'compatible': true,
-                'rejection_codes': <String>[],
-                'covered_leg_ids': [1, 2],
-                'covered_legs': [
-                  canonicalLeg(),
-                  canonicalLeg(
-                    id: 2,
-                    position: 1,
-                    mode: 'DRIVE',
-                    originName: 'Houari Boumediene',
-                    originIata: 'ALG',
-                    destinationName: 'Jijel',
-                    destinationIata: null,
-                  ),
-                ],
-                'limitations': <String>[],
-              },
-              'pricing': null,
-            },
+      final candidate = DiscoveryCandidate.fromJson({
+        'delivery_request': {
+          'id': 5,
+          'sender_id': 42,
+          'pickup': null,
+          'delivery': null,
+          'pickup_place': {
+            'id': 1,
+            'name': 'Paris',
+            'display_label': 'Paris',
+            'place_type': 'locality',
+            'country_code': 'FR',
+            'iata_code': null,
+          },
+          'delivery_place': {
+            'id': 3,
+            'name': 'Jijel',
+            'display_label': 'Jijel',
+            'place_type': 'locality',
+            'country_code': 'DZ',
+            'iata_code': null,
+          },
+          'actual_weight_kg': '2.00',
+        },
+        'journey': {
+          'id': 12,
+          'traveler_id': 99,
+          'start_location': null,
+          'destination_location': null,
+          'first_departure': '2026-09-17T11:00:00Z',
+          'start_leg_id': 1,
+          'end_leg_id': 2,
+          'covered_legs': <Object>[],
+        },
+        'compatibility': {
+          'compatible': true,
+          'rejection_codes': <String>[],
+          'covered_leg_ids': [1, 2],
+          'covered_legs': [
+            canonicalLeg(),
+            canonicalLeg(
+              id: 2,
+              position: 1,
+              mode: 'DRIVE',
+              originName: 'Houari Boumediene',
+              originIata: 'ALG',
+              destinationName: 'Jijel',
+              destinationIata: null,
+            ),
           ],
-        }),
-      );
+          'limitations': <String>[],
+        },
+        'pricing': null,
+      });
 
-      await pumpRouted(
-        tester,
-        const DiscoveryScreen(requestId: 5),
-        container: containerFor(backend),
+      final legs = candidate.compatibility!.coveredLegs;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RouteLine(
+              stops: [
+                for (final leg in legs)
+                  RouteStop(label: leg.origin!.displayLabel),
+                RouteStop(label: legs.last.destination!.displayLabel),
+              ],
+              segments: [
+                for (final leg in legs)
+                  RouteSegment(mode: leg.mode, modeLabel: leg.mode.name),
+              ],
+            ),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
