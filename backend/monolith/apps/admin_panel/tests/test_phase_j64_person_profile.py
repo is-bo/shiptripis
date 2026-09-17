@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import pytest
 from django.db import connection
-from django.test import Client
+from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -38,6 +38,26 @@ from apps.ratings.services import submit_rating
 from apps.trips.models import Journey, JourneyLeg
 
 TABS = ("overview", "identity", "activity", "deliveries", "payments", "payouts", "trust", "audit")
+
+
+@pytest.fixture(autouse=True)
+def console_staticfiles(settings):
+    """CI does not run collectstatic, so the hashed manifest does not exist.
+
+    Every test here renders a console page, and the admin's own stylesheet is
+    resolved through `{% static %}`; without this the manifest storage raises
+    before any assertion about the page can run.
+    """
+
+    with override_settings(
+        STORAGES={
+            **settings.STORAGES,
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    ):
+        yield
 
 
 def staff(email, role):
