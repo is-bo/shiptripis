@@ -100,7 +100,7 @@
         <div class="st-identity" data-row-link>
           <span class="st-avatar" aria-hidden="true">{{ applicant.full_name|default:applicant.email|slice:":1"|upper }}</span>
           <div class="st-identity-body">
-            <strong><a href="{% url 'admin_console:user-detail' applicant.pk %}" data-row-primary>{{ applicant.full_name|default:"Name not provided" }}</a></strong>
+            <strong>{% if may_open_people %}<a href="{% url 'admin_console:user-detail' applicant.pk %}?from=kyc" data-row-primary>{{ applicant.full_name|default:"Name not provided" }}</a>{% else %}{{ applicant.full_name|default:"Name not provided" }}{% endif %}</strong>
             <span>{{ applicant.email }}</span>
           </div>
         </div>

@@ -1,6 +1,8 @@
 from django.urls import path
 
 from . import console_views as views
+from .console_identity_checks import identity_check_detail, identity_checks
+from .console_people import person_profile
 from .console_payout_reviews import (
     payout_review_detail,
     payout_review_evidence,
@@ -36,13 +38,27 @@ urlpatterns = [
     path("finance/dashboard/rows/", finance_rows, name="finance-rows"),
     path("", views.overview, name="overview"),
     path("users/", views.users, name="users"),
-    path("users/<int:pk>/", views.user_detail, name="user-detail"),
+    # J6.4. The Person profile replaces the old four-count user page at the same
+    # route and name, so every existing link lands on the complete profile.
+    path("users/<int:pk>/", person_profile, name="user-detail"),
     path("verification/kyc/", views.kyc_queue, name="kyc-queue"),
     path("verification/kyc/<int:pk>/", views.kyc_detail, name="kyc-detail"),
     path(
         "verification/kyc/<int:pk>/evidence/<slug:slot>/",
         views.kyc_evidence,
         name="kyc-evidence",
+    ),
+    # J6.4. The assigned reviewer's side of a DZD payout identity check. Guarded
+    # by the same capability `attest_identity` checks.
+    path(
+        "verification/payout-identity/",
+        capability_required("attest_payout_identity")(identity_checks),
+        name="identity-checks",
+    ),
+    path(
+        "verification/payout-identity/<uuid:reference>/",
+        capability_required("attest_payout_identity")(identity_check_detail),
+        name="identity-check-detail",
     ),
     path("verification/flight-proofs/", views.flight_proof_queue, name="proof-queue"),
     path(

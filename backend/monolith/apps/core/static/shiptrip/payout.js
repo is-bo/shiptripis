@@ -171,7 +171,45 @@
     if (submitter) submitter.setAttribute("aria-busy", "true");
   }
 
+  /* ------------------------------------------------------- confirmations --
+   * J6.4. Reject and "ask for a correction" confirm in a small dialog. The
+   * trigger is a real link (`?confirm=reject#decision`) that the server answers
+   * with the same dialog already open, so the decision still works with this
+   * file absent; with it, the dialog opens in place as a modal. */
+  function openConfirm(trigger) {
+    var dialog = document.getElementById(trigger.getAttribute("data-dialog-open"));
+    if (!dialog || !dialog.showModal) return false;
+    if (dialog.open) dialog.close();
+    dialog.showModal();
+    // Never land on the committing button: Enter should not reject. Focus the
+    // acknowledgement box where there is one, otherwise Cancel.
+    var first =
+      dialog.querySelector("input[type='checkbox']") ||
+      dialog.querySelector("[data-dialog-close]");
+    if (first) first.focus();
+    return true;
+  }
+
   document.addEventListener("click", function (event) {
+    var opener = event.target.closest && event.target.closest("[data-dialog-open]");
+    if (opener && !(event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) {
+      if (openConfirm(opener)) event.preventDefault();
+      return;
+    }
+    var closer = event.target.closest && event.target.closest("[data-dialog-close]");
+    if (closer) {
+      var host = closer.closest("dialog");
+      if (host && host.open) {
+        event.preventDefault();
+        host.close();
+        // A dialog reached by link carries `?confirm=` in the address; clear it
+        // so a reload does not reopen what the operator just cancelled.
+        if (window.history && window.history.replaceState && window.location.search.indexOf("confirm=") !== -1) {
+          window.history.replaceState(null, "", closer.getAttribute("href"));
+        }
+      }
+      return;
+    }
     var copy = event.target.closest && event.target.closest(".st-copy");
     if (copy) {
       event.preventDefault();
@@ -227,4 +265,18 @@
 
   var panels = document.querySelectorAll("[data-reveal-panel]");
   for (var i = 0; i < panels.length; i++) armAutoHide(panels[i]);
+
+  // A confirmation the server rendered open (reached by its link) becomes a
+  // real modal once script is here, so focus and Escape behave the same way.
+  var opened = document.querySelectorAll("dialog.st-confirm-dialog[open]");
+  for (var j = 0; j < opened.length; j++) {
+    if (opened[j].showModal) {
+      opened[j].close();
+      opened[j].showModal();
+      var focusTarget =
+        opened[j].querySelector("input[type='checkbox']") ||
+        opened[j].querySelector("[data-dialog-close]");
+      if (focusTarget) focusTarget.focus();
+    }
+  }
 })();

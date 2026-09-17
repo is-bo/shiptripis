@@ -136,7 +136,11 @@ def test_a_submitted_profile_is_visible_countable_and_carries_no_account_value(
     ).content.decode()
     assert "Payout method reviews" in body
     assert scenario.traveler.email in body
-    assert f"#{profile.sequence}" in body
+    # J6.4: the row is the Traveler, the submission date, the state and Review.
+    # Revision numbers moved under the review page's Details.
+    assert reverse(
+        "admin_console:payout-review-detail", args=[profile.public_reference]
+    ) in body
     assert "Waiting for review" in body
 
     # H4.1's list rule, unchanged: no account data reaches a list, masked or
@@ -206,8 +210,8 @@ def test_all_three_decisions_are_recordable_and_each_one_is_kept(
     assert approved_profile(profile) is True
 
     history = client.get(url).content.decode()
-    assert history.count("Needs correction") >= 1
-    assert history.count("Reject") >= 1
+    assert history.count("Correction requested") >= 1
+    assert history.count("Rejected") >= 1
 
 
 @pytest.mark.django_db
@@ -219,9 +223,12 @@ def test_no_decision_is_offered_or_accepted_without_an_attested_identity(
     url = detail_url(profile)
 
     page = client.get(url).content.decode()
-    assert "Not attested" in page
+    assert "Identity check required" in page
     assert 'name="decision"' not in page
-    assert "Assign identity review" in page
+    # J6.4: says whose move it is. With nobody holding identity-review access
+    # there is no one to ask, and the page says that instead of a dead form.
+    assert "Trust &amp; Verification or a Super Admin" in page
+    assert "Nobody can do this yet" in page
 
     # And the server refuses it independently of what the page offered.
     client.post(url, {"action": "decide", "decision": "approved"})
@@ -249,9 +256,20 @@ def test_an_approval_over_a_name_difference_needs_explicit_acceptance(
     client = finance_client(scenario)
     url = detail_url(profile)
 
-    # Approving without the acceptance is recorded as a correction request —
-    # the server makes that substitution, not the page.
-    client.post(url, {"action": "decide", "decision": "approved"})
+    # J6.4: the console no longer lets a click on Approve quietly become a
+    # correction request sent to the Traveler. Without the acceptance it
+    # records nothing and says why.
+    refused = client.post(
+        url, {"action": "decide", "decision": "approved"}, follow=True
+    ).content.decode()
+    assert "differs from the verified identity" in refused
+    assert not PayoutProfileReview.objects.filter(profile=profile).exists()
+
+    # The domain rule itself is unchanged: called directly, an approval over a
+    # name difference is still recorded as a correction request.
+    review_profile(
+        actor=scenario.admin, reference=profile.public_reference, decision="approved"
+    )
     assert (
         PayoutProfileReview.objects.filter(profile=profile)
         .order_by("-pk")

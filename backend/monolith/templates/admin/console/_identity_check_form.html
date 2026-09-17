@@ -1,0 +1,69 @@
+{% comment %}
+  The identity check: the approved ID beside the two names it establishes.
+
+  Shared by the payout-method review page (Super Admin, `combined=True`, where
+  the check can finish with the approval) and the assigned reviewer's identity
+  check page. Nothing is prefilled: not the account holder's name from the
+  payout details, which is the claim being checked, and not the account's
+  display name, which the user edits freely. The names come from the document.
+{% endcomment %}
+<div class="st-idcheck">
+  <div class="st-idcheck-docs">
+    {% if documents_unavailable %}
+    <p class="st-alert st-alert-bad" role="status"><strong>The ID document is temporarily unavailable.</strong> The secure document store could not be reached. Do not confirm an identity you cannot see — try again shortly.</p>
+    {% endif %}
+    {% if documents %}
+    <ul class="st-idcheck-thumbs">
+      {% for item in documents %}{% if item.available %}
+      <li>
+        <a href="{{ item.url }}" target="_blank" rel="noreferrer">
+          <img loading="lazy" referrerpolicy="no-referrer" src="{{ item.url }}" alt="{{ item.label }} of the approved ID">
+        </a>
+        <span>{{ item.label }}</span>
+      </li>
+      {% endif %}{% endfor %}
+    </ul>
+    <p class="st-muted">{% if submission %}{{ submission.get_document_type_display }}{% if submission.reviewed_at %}, approved {{ submission.reviewed_at|date:"d M Y" }}{% endif %}. {% endif %}Each document view is audited. Click an image for full size.</p>
+    {% elif not documents_unavailable %}
+    <p class="st-privacy-note">No ID image can be shown here.{% if submission %} Open the KYC submission to see it.{% endif %}</p>
+    {% endif %}
+  </div>
+
+  <form method="post" class="st-form st-idcheck-form" data-once autocomplete="off">{% csrf_token %}
+    <input type="hidden" name="action" value="confirm_identity">
+    <div class="st-idcheck-names">
+      <div class="st-field">
+        <label for="st-given-name">Legal first name(s)</label>
+        <input id="st-given-name" name="given_name" maxlength="160" required spellcheck="false" autocomplete="off">
+      </div>
+      <div class="st-field">
+        <label for="st-family-name">Legal last name</label>
+        <input id="st-family-name" name="family_name" maxlength="160" required spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+    <details class="st-idcheck-alias">
+      <summary>Add another spelling of the same name</summary>
+      <p class="st-muted">For example the name in Arabic script, or a transliteration printed on the ID.</p>
+      <div class="st-idcheck-names">
+        <div class="st-field">
+          <label for="st-other-given">Other first name(s)</label>
+          <input id="st-other-given" name="other_given_name" maxlength="160" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="st-field">
+          <label for="st-other-family">Other last name</label>
+          <input id="st-other-family" name="other_family_name" maxlength="160" spellcheck="false" autocomplete="off">
+        </div>
+      </div>
+    </details>
+    <div class="st-check"><input type="checkbox" id="st-confirm-checked" name="confirm_checked" required><label for="st-confirm-checked">I entered these names from the approved ID document.</label></div>
+    <div class="st-review-actions">
+      {% if combined %}
+      <button type="submit" name="then" value="approve" class="st-button-ok st-button-large">Confirm identity and approve</button>
+      <button type="submit" name="then" value="" class="st-button-quiet">Confirm identity only</button>
+      {% else %}
+      <button type="submit" class="st-button-ok">Confirm identity</button>
+      {% endif %}
+    </div>
+    {% if combined %}<p class="st-muted">Approval happens only if the name on the payout account matches. If it is spelled differently you decide next, with the cheque in front of you.</p>{% endif %}
+  </form>
+</div>

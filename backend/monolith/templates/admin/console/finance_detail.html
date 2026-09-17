@@ -28,7 +28,7 @@
         <div><dt>Provider reference</dt><dd>{{ record.provider_refund_id|default:"Not assigned" }}</dd></div>
         {% if record.failure_message %}<div class="st-fact-wide"><dt>What went wrong</dt><dd>{{ record.failure_message }}</dd></div>{% endif %}
       {% else %}
-        <div><dt>Traveler</dt><dd>{{ record.traveler.email }}</dd></div>
+        <div><dt>Traveler</dt><dd>{% person_link record.traveler "payouts" %}<small>{{ record.traveler.email }}</small></dd></div>
         <div><dt>Method</dt><dd>{{ record.get_method_display }}</dd></div>
         <div><dt>Eligible from</dt><dd>{{ record.eligible_at|date:"d M Y, H:i"|default:"Not yet" }}</dd></div>
         <div><dt>Protection</dt><dd>{% if record.status == 'frozen' %}<span class="st-chip st-attn">Frozen by a dispute</span>{% elif record.status == 'not_eligible' %}<span class="st-chip st-wait">48-hour window still open</span>{% else %}<span class="st-chip st-ok">Window has passed</span>{% endif %}</dd></div>

@@ -9,10 +9,12 @@ audited domain services remain authoritative.
 The header is filtered to the signed-in staff member's capabilities:
 
 - **Overview** answers “what needs attention?” with live queue counts.
-- **Users** covers identity, verification state, restrictions and safe account
-  context.
-- **Verification** contains KYC and flight-proof queues and private evidence
-review.
+- **People** opens one complete profile per user: identity, requests, journeys,
+  offers, Deals, payments, payout setup and payouts, disputes, revealed ratings,
+  notifications and audit history, each section gated on the capability that
+  owns it (J6.4). Names elsewhere in the console link to it.
+- **Verification** contains KYC and flight-proof queues, private evidence review
+  and the payout identity checks Finance asks Trust for.
 - **Marketplace** contains Delivery requests, ordered Journeys and Deals.
 - **Disputes** keeps the case, evidence, participants, protection and money in
   one review flow.
@@ -115,6 +117,21 @@ one-time invitation is sent through the durable email queue; its token is never
 shown in the browser. Owners can see pending invitations, revoke/replace them,
 change an existing role and disable sign-in. Self-disable and Super Admin
 guardrails are enforced by the service layer.
+
+## Approving a Traveler's DZD payout method
+
+**Finance → Payout method reviews** (and "Payout methods awaiting approval" on the
+main Overview) lists what is waiting. A review page is Person, payout method
+(masked, with one audited reveal), the crossed cheque and two controls: **Approve**
+and **Reject**. "Ask for a correction" is under **More**.
+
+A payout method can only be decided once someone has confirmed the Traveler's
+legal name against their approved ID — the domain refuses every decision without
+it. A **Super Admin** does that on the review page itself and may approve in the
+same step. **Finance** cannot confirm an identity: the page says so and requests
+the check from a Trust & Verification operator, who completes it under
+**Verification → Payout identity checks**. Nothing here bypasses the gate; the
+console simply composes the two audited commands that were always required.
 
 On **Settings**, pricing accepts percentages and EUR amounts rather than basis
 points/cents. The page explains commission, deposit bounds, floors, boosts and

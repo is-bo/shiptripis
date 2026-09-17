@@ -1,0 +1,45 @@
+{% comment %}
+  One history list on the Person profile. Wide screens read it as columns; a
+  phone reads each row as a small card whose cells carry their own labels, so
+  no list ever needs a horizontal scroll.
+{% endcomment %}
+{% if list %}
+<section class="st-plist-wrap" aria-label="{{ list.title|default:'Records' }}">
+  {% if list.title %}<h3 class="st-plist-title">{{ list.title }}</h3>{% endif %}
+  {% if list.note %}<p class="st-plist-note">{{ list.note }}</p>{% endif %}
+  {% if list.rows %}
+  <div class="st-plist st-plist-{{ list.layout }}">
+    <div class="st-plist-head" aria-hidden="true">{% for column in list.head %}<span{% if column.numeric %} class="is-numeric"{% endif %}>{{ column.label }}</span>{% endfor %}</div>
+    <ul class="st-plist-rows">
+      {% for row in list.rows %}
+      <li class="st-plist-row"{% if row.openable %} data-row-link{% endif %}>
+        {% for cell in row.cells %}
+        <div class="st-plist-cell{% if cell.kind == 'money' or cell.kind == 'money-lead' or cell.kind == 'money-pair' %} is-numeric{% endif %}{% if forloop.first %} is-lead{% endif %}">
+          <span class="st-plist-label">{{ cell.label }}</span>
+          <span class="st-plist-value">{% include "admin/console/_cell.html" %}</span>
+        </div>
+        {% endfor %}
+        {% if row.technical %}
+        <details class="st-plist-tech">
+          <summary>Technical details</summary>
+          <dl>{% for item in row.technical %}<div><dt>{{ item.label }}</dt><dd><code>{{ item.value }}</code></dd></div>{% endfor %}</dl>
+        </details>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% if list.page_obj and list.page_obj.paginator.num_pages > 1 %}
+  <nav class="st-pagination" aria-label="Pagination">
+    <span>Page {{ list.page_obj.number }} of {{ list.page_obj.paginator.num_pages }} &middot; {{ list.page_obj.paginator.count }} record{{ list.page_obj.paginator.count|pluralize }}</span>
+    <span class="st-inline-actions">
+      {% if list.page_obj.has_previous %}<a href="?{{ page_query }}&amp;page={{ list.page_obj.previous_page_number }}">Previous</a>{% endif %}
+      {% if list.page_obj.has_next %}<a href="?{{ page_query }}&amp;page={{ list.page_obj.next_page_number }}">Next</a>{% endif %}
+    </span>
+  </nav>
+  {% endif %}
+  {% else %}
+  <p class="st-plist-empty">{{ list.empty }}</p>
+  {% endif %}
+</section>
+{% endif %}

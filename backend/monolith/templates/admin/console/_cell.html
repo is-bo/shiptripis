@@ -1,0 +1,12 @@
+{% comment %}One console cell's content, shared by the wide tables and the Person profile's lists. The wrapper (a table cell or a labelled list cell) belongs to the caller.{% endcomment %}{% if cell.kind == "status" %}
+  <span class="st-chip st-{{ cell.tone }}">{{ cell.primary }}</span>{% if cell.secondary %}<small>{{ cell.secondary }}</small>{% endif %}
+{% elif cell.kind == "route" %}
+  {% include "admin/console/_route.html" with nodes=cell.nodes variant="line" %}
+{% elif cell.kind == "money-pair" %}
+  <span class="st-money-pair"><strong>{{ cell.primary }}</strong>{% if cell.secondary %}<small>{{ cell.secondary }}</small>{% endif %}</span>
+{% else %}
+  <span{% if cell.kind == "money" or cell.kind == "money-lead" %} class="st-money{% if cell.kind == 'money-lead' %} st-money-lead{% endif %}"{% elif cell.kind == "strong" %} class="st-cell-strong"{% elif cell.kind == "ref" %} class="st-ref"{% elif cell.kind == "time" %} class="st-time"{% endif %}>
+    {% if cell.href %}<a href="{{ cell.href }}"{% if cell.aria_label %} aria-label="{{ cell.aria_label }}"{% endif %}{% if cell.is_primary %} data-row-primary{% endif %}>{{ cell.primary }}</a>{% else %}{{ cell.primary }}{% endif %}
+  </span>
+  {% if cell.secondary %}<small{% if cell.kind == "ref" %} class="st-ref"{% endif %}>{% if cell.secondary_href %}<a href="{{ cell.secondary_href }}">{{ cell.secondary }}</a>{% else %}{{ cell.secondary }}{% endif %}</small>{% endif %}
+{% endif %}

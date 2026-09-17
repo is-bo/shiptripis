@@ -203,6 +203,7 @@ def text_cell(
     kind: str = "",
     opens_row: bool = False,
     aria_label: str = "",
+    secondary_href: str = "",
 ) -> dict:
     """One cell.
 
@@ -225,6 +226,9 @@ def text_cell(
         # generic label names its record instead. The accessible name still
         # begins with the visible word, which is what label-in-name asks for.
         "aria_label": aria_label,
+        # J6.4: the secondary line can name a second person (a Deal's Traveler
+        # beside its Sender) and link to them too.
+        "secondary_href": secondary_href,
     }
 
 

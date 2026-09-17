@@ -50,20 +50,7 @@
             <tr{% if row.openable %} data-row-link{% endif %}>
               {% if bulk_action_url %}<td>{% if row.select_id %}<input type="checkbox" name="job_ids" value="{{ row.select_id }}" aria-label="Select job {{ row.select_id }}">{% else %}&mdash;{% endif %}</td>{% endif %}
               {% for cell in row.cells %}
-                <td{% if cell.kind == "money" or cell.kind == "money-lead" or cell.kind == "money-pair" %} class="is-numeric"{% endif %}>
-                  {% if cell.kind == "status" %}
-                    <span class="st-chip st-{{ cell.tone }}">{{ cell.primary }}</span>
-                  {% elif cell.kind == "route" %}
-                    {% include "admin/console/_route.html" with nodes=cell.nodes variant="line" %}
-                  {% elif cell.kind == "money-pair" %}
-                    <span class="st-money-pair"><strong>{{ cell.primary }}</strong>{% if cell.secondary %}<small>{{ cell.secondary }}</small>{% endif %}</span>
-                  {% else %}
-                    <span{% if cell.kind == "money" or cell.kind == "money-lead" %} class="st-money{% if cell.kind == 'money-lead' %} st-money-lead{% endif %}"{% elif cell.kind == "strong" %} class="st-cell-strong"{% elif cell.kind == "ref" %} class="st-ref"{% elif cell.kind == "time" %} class="st-time"{% endif %}>
-                      {% if cell.href %}<a href="{{ cell.href }}"{% if cell.aria_label %} aria-label="{{ cell.aria_label }}"{% endif %}{% if cell.is_primary %} data-row-primary{% endif %}>{{ cell.primary }}</a>{% else %}{{ cell.primary }}{% endif %}
-                    </span>
-                    {% if cell.secondary %}<small{% if cell.kind == "ref" %} class="st-ref"{% endif %}>{{ cell.secondary }}</small>{% endif %}
-                  {% endif %}
-                </td>
+                <td{% if cell.kind == "money" or cell.kind == "money-lead" or cell.kind == "money-pair" %} class="is-numeric"{% endif %}>{% include "admin/console/_cell.html" %}</td>
               {% endfor %}
               {% comment %}Where the row's link lives in a column, this cell is only the mark and is hidden from a reader; where the link IS the mark, the cell holds it and must not be.{% endcomment %}
               {% if has_row_links %}{% if row.open %}<td class="st-row-go"><a href="{{ row.open.href }}" aria-label="{{ row.open.aria_label }}" data-row-primary></a></td>{% else %}<td class="st-row-go" aria-hidden="true"></td>{% endif %}{% endif %}

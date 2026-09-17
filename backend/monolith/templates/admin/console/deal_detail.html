@@ -44,8 +44,8 @@
       <p class="st-eyebrow">People and records</p>
       <h2>Who and what</h2>
       <dl class="st-facts">
-        <div><dt>Sender</dt><dd>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' deal.sender_id %}">{{ deal.sender.full_name|default:deal.sender.email }}</a>{% else %}{{ deal.sender.full_name|default:deal.sender.email }}{% endif %}<small>{{ deal.sender.email }}</small></dd></div>
-        <div><dt>Traveler</dt><dd>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' deal.traveler_id %}">{{ deal.traveler.full_name|default:deal.traveler.email }}</a>{% else %}{{ deal.traveler.full_name|default:deal.traveler.email }}{% endif %}<small>{{ deal.traveler.email }}</small></dd></div>
+        <div><dt>Sender</dt><dd>{% person_link deal.sender "deals" %}<small>{{ deal.sender.email }}</small></dd></div>
+        <div><dt>Traveler</dt><dd>{% person_link deal.traveler "deals" %}<small>{{ deal.traveler.email }}</small></dd></div>
         <div><dt>Delivery request</dt><dd>Request {{ deal.delivery_request_id }}</dd></div>
         <div><dt>Journey</dt><dd>{% if perms.admin_panel.view_journeys %}<a href="{% url 'admin_console:journey-detail' deal.journey_id %}">Journey {{ deal.journey_id }}</a>{% else %}Journey {{ deal.journey_id }}{% endif %}</dd></div>
       </dl>

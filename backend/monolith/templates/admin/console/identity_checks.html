@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:kyc-queue' %}">Verification</a> &rsaquo; Payout identity checks</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-reviews">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Verification</p>
+      <h1>Payout identity checks</h1>
+      <p>Finance asked for these before deciding a Traveler's DZD payout method. Confirm the Traveler's legal name from their approved ID.</p>
+    </div>
+  </header>
+
+  <nav class="st-review-tabs" aria-label="Identity checks">
+    <a href="?scope=mine" class="st-review-tab is-primary{% if scope == 'mine' %} is-current{% endif %}{% if mine_count %} has-work{% endif %}"{% if scope == 'mine' %} aria-current="page"{% endif %}><span>Assigned to you</span><b>{{ mine_count }}</b></a>
+    <a href="?scope=all" class="st-review-tab{% if scope == 'all' %} is-current{% endif %}"{% if scope == 'all' %} aria-current="page"{% endif %}><span>All open checks</span></a>
+  </nav>
+
+  <section class="st-review-list" aria-label="Open identity checks">
+    {% if rows %}
+    <div class="st-review-rows-head" aria-hidden="true"><span>Traveler</span><span>Asked</span><span>Reviewer</span><span></span></div>
+    <ul class="st-review-rows">
+      {% for row in rows %}
+      <li class="st-review-row" data-row-link>
+        <span class="st-review-who">
+          <strong>{% if row.traveler_href %}<a href="{{ row.traveler_href }}" class="st-person-link">{{ row.traveler }}</a>{% else %}{{ row.traveler }}{% endif %}</strong>
+          <small>{{ row.email }}</small>
+        </span>
+        <span class="st-review-when">
+          <time datetime="{{ row.assigned_at|date:'c' }}">{{ row.assigned_at|date:"d M Y" }}</time>
+          <small>by {{ row.assigned_by }}</small>
+        </span>
+        <span class="st-review-state">
+          {% if row.confirmed %}<span class="st-chip st-mute">Already confirmed</span>{% elif row.is_mine %}<span class="st-chip st-bad">Waiting on you</span>{% else %}<span class="st-chip st-wait">With {{ row.reviewer }}</span>{% endif %}
+        </span>
+        <span class="st-review-go"><a class="button{% if not row.is_mine or row.confirmed %} st-button-quiet{% endif %}" href="{{ row.url }}" data-row-primary aria-label="Open the identity check for {{ row.traveler }}">{% if row.is_mine and not row.confirmed %}Check identity{% else %}Open{% endif %}</a></span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="st-pagination" aria-label="Pagination">
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <span class="st-inline-actions">
+        {% if page_obj.has_previous %}<a href="?scope={{ scope }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+        {% if page_obj.has_next %}<a href="?scope={{ scope }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+      </span>
+    </nav>
+    {% endif %}
+    {% else %}
+    <div class="st-empty"><span aria-hidden="true">&#10003;</span><h2>{% if scope == 'mine' %}No identity checks are waiting on you.{% else %}No identity checks are open.{% endif %}</h2><p>Finance asks for one when a Traveler's payout method cannot be decided without it.</p></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:identity-checks' %}">Payout identity checks</a> &rsaquo; {{ check.traveler }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow st-review">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Payout identity check</p>
+      <h1>{% if check.traveler_href %}<a href="{{ check.traveler_href }}">{{ check.traveler }}</a>{% else %}{{ check.traveler }}{% endif %}</h1>
+      <p>{{ check.email }} &middot; asked by {{ check.assigned_by }} on {{ check.assigned_at|date:"d M Y, H:i" }}</p>
+    </div>
+    <div class="st-page-aside">
+      {% if check.confirmed %}<span class="st-chip st-mute">Already confirmed</span>{% elif check.is_mine %}<span class="st-chip st-bad">Waiting on you</span>{% else %}<span class="st-chip st-wait">With {{ check.reviewer }}</span>{% endif %}
+    </div>
+  </header>
+
+  <section class="st-card">
+    {% if check.confirmed %}
+      <h2>No action needed</h2>
+      <p>This Traveler's legal name was confirmed after this check was requested.{% if review_url %} <a href="{{ review_url }}">Open the payout method review</a>.{% endif %}</p>
+    {% elif not check.is_mine %}
+      <h2>Assigned to {{ check.reviewer }}</h2>
+      <p>Only the person a check is assigned to can confirm it.</p>
+    {% elif not check.submission_usable %}
+      <h2>The ID this check was requested for is no longer approved</h2>
+      <p>Finance has to request a new check once the Traveler has a current approved ID.{% if check.kyc_url %} <a href="{{ check.kyc_url }}">Open the KYC submission</a>.{% endif %}</p>
+    {% else %}
+      <p class="st-eyebrow">What to do</p>
+      <h2>Confirm the legal name on the approved ID</h2>
+      <p>Type the names exactly as the ID shows them. You are not shown the name on the payout account — ShipTrip compares the two and Finance decides.</p>
+      {% include "admin/console/_identity_check_form.html" with submission=check.submission combined=False %}
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% if reviewers %}
+<form method="post" class="st-form st-idcheck-assign" data-once>{% csrf_token %}
+  <input type="hidden" name="action" value="assign">
+  <div class="st-field">
+    <label for="st-reviewer">Ask</label>
+    <select name="reviewer" id="st-reviewer" required>
+      <option value="">Choose a reviewer…</option>
+      {% for person in reviewers %}<option value="{{ person.pk }}">{{ person.full_name|default:person.email }} &middot; {{ person.email }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit">Request identity check</button>
+</form>
+{% else %}
+<p class="st-review-note st-tone-attn"><strong>Nobody can do this yet.</strong> No active operator holds identity-review access. A Super Admin has to invite someone to Trust &amp; Verification.</p>
+{% endif %}

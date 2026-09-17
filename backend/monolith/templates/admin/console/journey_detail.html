@@ -60,7 +60,7 @@
         <div class="st-identity"{% if perms.admin_panel.view_users %} data-row-link{% endif %}>
           <span class="st-avatar" aria-hidden="true">{{ journey.traveler.full_name|default:journey.traveler.email|slice:":1"|upper }}</span>
           <div class="st-identity-body">
-            <strong>{% if perms.admin_panel.view_users %}<a href="{% url 'admin_console:user-detail' journey.traveler_id %}" data-row-primary>{{ journey.traveler.full_name|default:"Name not provided" }}</a>{% else %}{{ journey.traveler.full_name|default:"Name not provided" }}{% endif %}</strong>
+            <strong>{% if may_open_people %}<a href="{% url 'admin_console:user-detail' journey.traveler_id %}" data-row-primary>{{ journey.traveler.full_name|default:"Name not provided" }}</a>{% else %}{{ journey.traveler.full_name|default:"Name not provided" }}{% endif %}</strong>
             <span>{{ journey.traveler.email }}</span>
           </div>
         </div>

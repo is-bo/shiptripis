@@ -782,10 +782,10 @@ def build_overview(snapshot, params, scope, *, user):
             0,
             {
                 "key": "payout_reviews",
-                "label": "Payout methods awaiting review",
+                "label": "Payout methods awaiting approval",
                 "says": (
-                    "A Traveler submitted a CCP account and a crossed cheque. "
-                    "They cannot be paid in dinars until it is reviewed."
+                    "Travelers submitted DZD payout details that need review. "
+                    "They cannot be paid in dinars until it is approved."
                 ),
                 "owner": "Finance",
                 "tone": "bad",

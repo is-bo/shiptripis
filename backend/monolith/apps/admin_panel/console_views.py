@@ -22,7 +22,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import Avg, Count, Prefetch, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -96,7 +96,6 @@ from apps.notifications.models import OutboundMessage
 from apps.parcels.models import DeliveryRequest
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
-from apps.trips.services import has_current_kyc_approval
 
 from .console_forms import (
     BoostEconomicsSettingsForm,
@@ -143,6 +142,7 @@ from .console_presenters import (
 from .health import storage_health
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import AdminSettingsCreateSerializer
+from .people_links import may_open_people, person_href
 from .permissions import (
     AdminRole,
     ROLE_GROUP_NAMES,
@@ -210,6 +210,9 @@ def _render(request, template: str, context: dict | None = None, *, status=200):
         **admin.site.each_context(request),
         "is_console": True,
         "request_id": getattr(request, "request_id", ""),
+        # Every console page may print a person's name; this is what decides
+        # whether that name is a link to their profile or plain text.
+        "may_open_people": may_open_people(request.user),
         **(context or {}),
     }
     # Render to a concrete response so each guided console route has stable
@@ -246,6 +249,14 @@ def _query_without_page(request) -> str:
 
 def _page(request, queryset, *, page_size: int = 50):
     return Paginator(queryset, page_size).get_page(request.GET.get("page"))
+
+
+def _person_link(request, user, source: str = "") -> str:
+    """A profile URL when this operator may open profiles, else nothing (J6.4)."""
+
+    if user is None or not may_open_people(request.user):
+        return ""
+    return person_href(user.pk, source=source)
 
 
 def _table(
@@ -567,6 +578,32 @@ def _attention_items(user) -> list[dict]:
         "attention=1",
         "bad",
     )
+    # J6.4. A submitted DZD payout method is operational work, not a Finance
+    # metric, so it belongs here as well as on the Finance Overview. Both read
+    # `awaiting_review_count`, so the two pages cannot disagree, and the count
+    # is read on every render, so it falls the moment a decision is recorded.
+    if has_admin_permission(user, "review_payout_profiles"):
+        from .console_payout_reviews import awaiting_review_count
+
+        add(
+            "review_payout_profiles",
+            "Payout methods awaiting approval",
+            "Travelers submitted DZD payout details that need review.",
+            awaiting_review_count(),
+            "admin_console:payout-reviews",
+            "",
+            "bad",
+        )
+    if has_admin_permission(user, "attest_payout_identity"):
+        from .console_identity_checks import waiting_for
+
+        add(
+            "attest_payout_identity",
+            "Payout identity checks assigned to you",
+            "Confirm a Traveler's legal name so their payout method can be decided.",
+            waiting_for(user),
+            "admin_console:identity-checks",
+        )
     add(
         "view_payment_attempts",
         "Payments needing finance review",
@@ -748,36 +785,50 @@ def users(request):
     )
 
 
-@capability_required("view_users")
-def user_detail(request, pk: int):
-    user = get_object_or_404(User.objects.prefetch_related("groups"), pk=pk)
-    kyc = list(user.kyc_submissions.order_by("-created_at")[:10])
-    stats = {
-        "requests": DeliveryRequest.objects.filter(sender=user).count(),
-        "journeys": Journey.objects.filter(traveler=user).count(),
-        "deals": Deal.objects.filter(Q(sender=user) | Q(traveler=user)).count(),
-        "disputes": Dispute.objects.filter(
-            Q(opened_by=user) | Q(deal__sender=user) | Q(deal__traveler=user)
+def kyc_evidence_slots(submission, *, user, request=None):
+    """The stored ID images of one KYC submission, checked before they render.
+
+    Reachability is checked here rather than left to the browser. A presigned
+    URL is produced by local signing and is well-formed even when the credential
+    has no grant on the bucket, so rendering one blind is how a storage failure
+    turns into a broken image with no explanation. One HEAD per slot, and only
+    for a reviewer who may see evidence at all. Shared by KYC review, the payout
+    identity check and the payout-method review page, so all three say the same
+    thing about the same document.
+    """
+
+    may_view_evidence = has_admin_permission(user, "view_evidence")
+    store = storage_for("kyc")
+    evidence = []
+    unavailable = False
+    for slot, label, key in (
+        ("front", "Document front", submission.front_image_key),
+        ("back", "Document back", submission.back_image_key),
+        ("selfie", "Applicant selfie", submission.selfie_image_key),
+    ):
+        if not key:
+            continue
+        reachable = store.readable(key) if may_view_evidence else True
+        if not reachable:
+            unavailable = True
+            logger.error(
+                "admin_console.kyc_evidence_unreachable submission=%s slot=%s "
+                "store=%s request_id=%s",
+                submission.pk,
+                slot,
+                store.name,
+                getattr(request, "request_id", ""),
+            )
+        evidence.append(
+            {
+                "slot": slot,
+                "label": label,
+                "previewable": reachable,
+                "available": reachable,
+                "url": reverse("admin_console:kyc-evidence", args=(submission.pk, slot)),
+            }
         )
-        .distinct()
-        .count(),
-        "rating": user.ratings_received.aggregate(value=Avg("score"))["value"],
-    }
-    return _render(
-        request,
-        "admin/console/user_detail.html",
-        {
-            "title": user.full_name or user.email,
-            "person": user,
-            "roles": user_admin_roles(user),
-            "kyc_submissions": kyc,
-            "kyc_current": has_current_kyc_approval(user),
-            "stats": stats,
-            "may_view_sensitive": has_admin_permission(
-                request.user, "view_user_sensitive"
-            ),
-        },
-    )
+    return evidence, unavailable
 
 
 def _kyc_queryset(request):
@@ -895,35 +946,9 @@ def kyc_detail(request, pk: int):
     # storage failure turns into a broken image with no explanation. One HEAD
     # per slot, and only for a reviewer who may see evidence at all.
     may_view_evidence = has_admin_permission(request.user, "view_evidence")
-    store = storage_for("kyc")
-    evidence = []
-    evidence_unavailable = False
-    for slot, label, key in (
-        ("front", "Document front", submission.front_image_key),
-        ("back", "Document back", submission.back_image_key),
-        ("selfie", "Applicant selfie", submission.selfie_image_key),
-    ):
-        if not key:
-            continue
-        reachable = store.readable(key) if may_view_evidence else True
-        if not reachable:
-            evidence_unavailable = True
-            logger.error(
-                "admin_console.kyc_evidence_unreachable submission=%s slot=%s "
-                "store=%s request_id=%s",
-                submission.pk,
-                slot,
-                store.name,
-                getattr(request, "request_id", ""),
-            )
-        evidence.append(
-            {
-                "slot": slot,
-                "label": label,
-                "previewable": reachable,
-                "available": reachable,
-            }
-        )
+    evidence, evidence_unavailable = kyc_evidence_slots(
+        submission, user=request.user, request=request
+    )
     return _render(
         request,
         "admin/console/verification_detail.html",
@@ -1215,7 +1240,9 @@ def delivery_requests(request):
             "cells": (
                 text_cell(f"Request {item.pk}", parcel_summary(item), kind="strong"),
                 text_cell(
-                    item.sender.full_name or item.sender.email, item.sender.email
+                    item.sender.full_name or item.sender.email,
+                    item.sender.email,
+                    href=_person_link(request, item.sender),
                 ),
                 route_cell(request_route_nodes(item)),
                 status_cell(item.status, item.get_status_display()),
@@ -1327,6 +1354,7 @@ def journeys(request):
                     text_cell(
                         journey.traveler.full_name or journey.traveler.email,
                         journey.traveler.email,
+                        href=_person_link(request, journey.traveler),
                     ),
                     route_cell(journey_route_nodes(journey)),
                     text_cell(
@@ -1451,8 +1479,10 @@ def deals(request):
                         kind="strong",
                     ),
                     text_cell(
-                        deal.sender.email,
-                        f"to {deal.traveler.email}",
+                        deal.sender.full_name or deal.sender.email,
+                        f"to {deal.traveler.full_name or deal.traveler.email}",
+                        href=_person_link(request, deal.sender, "deals"),
+                        secondary_href=_person_link(request, deal.traveler, "deals"),
                     ),
                     route_cell(request_route_nodes(deal.delivery_request)),
                     money_cell(terms.traveler_reward_minor if terms else None),
@@ -1578,8 +1608,12 @@ def disputes(request):
                         kind="strong",
                     ),
                     text_cell(
-                        dispute.deal.sender.email,
-                        f"against {dispute.deal.traveler.email}",
+                        dispute.deal.sender.full_name or dispute.deal.sender.email,
+                        f"against {dispute.deal.traveler.full_name or dispute.deal.traveler.email}",
+                        href=_person_link(request, dispute.deal.sender, "disputes"),
+                        secondary_href=_person_link(
+                            request, dispute.deal.traveler, "disputes"
+                        ),
                     ),
                     text_cell(
                         dispute.get_category_display(),
@@ -1825,7 +1859,11 @@ def payments(request):
         rows.append(
             {
                 "cells": (
-                    text_cell(attempt.get_provider_display(), payer),
+                    text_cell(
+                        attempt.get_provider_display(),
+                        payer,
+                        secondary_href=_person_link(request, attempt.payer),
+                    ),
                     text_cell(
                         f"Deal {attempt.order.deal_id}"
                         if attempt.order.deal_id
@@ -2660,6 +2698,7 @@ def payout_accounts(request):
                     text_cell(
                         account.traveler.full_name or account.traveler.email,
                         account.traveler.email,
+                        href=_person_link(request, account.traveler, "payouts"),
                         kind="strong",
                     ),
                     ref_cell(

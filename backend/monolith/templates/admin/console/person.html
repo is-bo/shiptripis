@@ -1,0 +1,218 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  The Person profile. One page for one user, one tab loaded at a time.
+
+  The header is identity and state, and only the actions that are genuinely
+  waiting on this operator. The tabs are the history, each bounded and paged.
+  No payout account value, ID document or chat content is embedded anywhere on
+  this page; each lives behind its own audited screen, linked from here.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a>{% for crumb in header.crumbs %} &rsaquo; <a href="{{ crumb.url }}">{{ crumb.label }}</a>{% endfor %} &rsaquo; {{ header.name }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-person">
+  <header class="st-person-head">
+    <span class="st-person-avatar" aria-hidden="true">{{ header.initials }}</span>
+    <div class="st-person-id">
+      <p class="st-eyebrow">Person &middot; account #{{ header.id }}</p>
+      <h1>{{ header.name }}</h1>
+      <p class="st-person-contact">
+        <span>{{ header.email }}</span>
+        {% if header.phone %}<span>{{ header.phone }}</span>{% endif %}
+        <span>Joined {{ header.joined|date:"d M Y" }}</span>
+      </p>
+      <ul class="st-person-chips" aria-label="Account state">
+        <li><span class="st-chip st-{{ header.account.tone }}">{{ header.account.label }}</span></li>
+        <li><span class="st-chip st-mute">{{ header.role }}</span></li>
+        {% for role in header.staff_roles %}<li><span class="st-chip st-info">Staff &middot; {{ role }}</span></li>{% endfor %}
+        {% for item in header.verification %}<li><span class="st-chip st-{{ item.tone }}">{{ item.label }}</span></li>{% endfor %}
+      </ul>
+    </div>
+    {% if header.actions %}
+    <div class="st-person-actions">
+      {% for action in header.actions %}<a class="button{% if not action.primary %} st-button-quiet{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+    </div>
+    {% endif %}
+  </header>
+
+  {% if person.is_banned or not person.is_active %}
+  <div class="st-alert st-alert-bad" role="status">
+    <strong>{% if person.is_banned %}This account is banned.{% else %}This account cannot sign in.{% endif %}</strong>
+    <span>Existing Deals and money owed are unaffected by the restriction and remain visible below.</span>
+  </div>
+  {% endif %}
+
+  <nav class="st-person-tabs" aria-label="Profile sections">
+    {% for item in tabs %}<a href="{{ item.url }}" class="st-person-tab{% if item.current %} is-current{% endif %}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+  </nav>
+
+  <div class="st-person-body">
+
+  {% if tab == "overview" %}
+    {% if body.attention %}
+    <section class="st-person-attention" aria-labelledby="st-person-attention">
+      <h2 id="st-person-attention">Needs attention</h2>
+      <ul>
+        {% for item in body.attention %}
+        <li class="st-person-attn st-person-attn-{{ item.tone }}" data-row-link>
+          <a href="{{ item.url }}" data-row-primary><strong>{{ item.label }}</strong></a>
+          <span>{{ item.detail }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if body.facts %}
+    <section aria-labelledby="st-person-glance">
+      <h2 id="st-person-glance" class="st-person-section">At a glance</h2>
+      <ul class="st-person-facts">
+        {% for fact in body.facts %}
+        <li data-row-link>
+          <a href="{{ fact.url }}" class="st-person-fact-label" data-row-primary>{{ fact.label }}</a>
+          <strong{% if fact.tone %} class="st-tone-{{ fact.tone }}"{% endif %}>{{ fact.value }}{% if fact.unit %} <small>{{ fact.unit }}</small>{% endif %}</strong>
+          <span class="st-person-fact-detail">{{ fact.detail }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <div class="st-grid st-grid-2">
+      <section class="st-card">
+        <p class="st-eyebrow">Account</p>
+        <dl class="st-facts">
+          <div><dt>Status</dt><dd><span class="st-chip st-{{ header.account.tone }}">{{ header.account.label }}</span></dd></div>
+          <div><dt>Marketplace role</dt><dd>{{ header.role }}</dd></div>
+          <div><dt>Uses ShipTrip as</dt><dd>{% if body.uses %}{{ body.uses|join:" and " }}{% else %}No marketplace activity yet{% endif %}</dd></div>
+          <div><dt>Joined</dt><dd>{{ header.joined|date:"d M Y, H:i" }}</dd></div>
+          {% if body.deals %}<div><dt>Deliveries</dt><dd>{{ body.deals.sender }} as Sender &middot; {{ body.deals.traveler }} as Traveler</dd></div>{% endif %}
+          {% if header.staff_roles %}<div><dt>Staff access</dt><dd>{{ header.staff_roles|join:", " }}</dd></div>{% endif %}
+        </dl>
+      </section>
+
+      {% if body.payout %}
+      <section class="st-card">
+        <div class="st-card-head">
+          <p class="st-eyebrow">Payout readiness</p>
+          <a href="?tab=payouts{% if source %}&amp;from={{ source }}{% endif %}">Payouts</a>
+        </div>
+        <dl class="st-facts">
+          <div><dt>Preferred payout</dt><dd>{{ body.payout.preference }}</dd></div>
+          <div><dt>EUR · Stripe</dt><dd><span class="st-chip st-{{ body.payout.eur.tone }}">{{ body.payout.eur.label }}</span></dd></div>
+          <div><dt>DZD · Algerian CCP</dt><dd><span class="st-chip st-{{ body.payout.dzd.tone }}">{{ body.payout.dzd.label }}</span>{% if header.payout_review and header.payout_review.bucket == "waiting" %} <a href="{{ header.payout_review.url }}">Review</a>{% endif %}</dd></div>
+          {% if body.issues %}<div><dt>Payment &amp; payout issues</dt><dd>{% if body.issues.payments or body.issues.payouts %}<span class="st-chip st-bad">{{ body.issues.payments|add:body.issues.payouts }} open</span>{% else %}<span class="st-chip st-ok">None</span>{% endif %}</dd></div>{% endif %}
+        </dl>
+      </section>
+      {% endif %}
+    </div>
+
+  {% elif tab == "identity" %}
+    <div class="st-grid st-grid-2">
+      <section class="st-card">
+        <p class="st-eyebrow">Contact &amp; verification</p>
+        <dl class="st-facts">
+          <div><dt>Display name</dt><dd>{% if header.has_name %}{{ header.name }}{% else %}Not provided{% endif %}<small>Set by the user; not a verified legal name.</small></dd></div>
+          <div><dt>Email</dt><dd>{{ header.email }} <span class="st-chip st-{% if body.contact.email_verified %}ok{% else %}mute{% endif %}">{{ body.contact.email_verified|yesno:"Verified,Not verified" }}</span></dd></div>
+          <div><dt>Phone</dt><dd>{% if body.contact.sensitive %}{{ body.contact.phone|default:"Not provided" }} {% endif %}<span class="st-chip st-{% if body.contact.phone_verified %}ok{% else %}mute{% endif %}">{{ body.contact.phone_verified|yesno:"Verified,Not verified" }}</span></dd></div>
+          {% if body.contact.sensitive %}<div><dt>Wilaya</dt><dd>{{ body.contact.wilaya|default:"Not provided" }}</dd></div>{% endif %}
+          <div><dt>Language</dt><dd>{{ body.contact.language }}</dd></div>
+          <div><dt>ID</dt><dd><span class="st-chip st-{{ header.kyc.tone }}">{{ header.kyc.label }}</span></dd></div>
+        </dl>
+      </section>
+
+      {% if body.payout_identity %}
+      <section class="st-card">
+        <p class="st-eyebrow">Legal name for DZD payouts</p>
+        {% if body.payout_identity.checks %}
+        <ul class="st-reading-list">
+          {% for check in body.payout_identity.checks %}
+          <li><div><strong>Identity check with {{ check.reviewer }}</strong><small>requested {{ check.at|date:"d M Y, H:i" }}</small></div>{% if check.url %}<a class="button st-button-quiet" href="{{ check.url }}">Open</a>{% else %}<span class="st-chip st-wait">Open</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if body.payout_identity.attestations %}
+        <ol class="st-timeline">
+          {% for row in body.payout_identity.attestations %}
+          <li><strong>Confirmed by {{ row.by }}</strong><span><span class="st-chip st-{{ row.tone }}">{{ row.state }}</span> &middot; {{ row.at|date:"d M Y, H:i" }} &middot; against ID submission {{ row.kyc }}</span></li>
+          {% endfor %}
+        </ol>
+        <p class="st-muted">The confirmed legal name is stored encrypted and is never shown; payout reviews see only whether it matches.</p>
+        {% elif not body.payout_identity.checks %}
+        <p class="st-muted">Nobody has confirmed this person's legal name. It is only needed once they submit DZD payout details.</p>
+        {% endif %}
+      </section>
+      {% endif %}
+    </div>
+    {% include "admin/console/_person_list.html" with list=body.kyc_list %}
+
+  {% elif tab == "activity" or tab == "trust" or tab == "audit" %}
+    {% if tab == "trust" and body.summary %}
+    <ul class="st-person-facts st-person-facts-small">
+      <li><span class="st-person-fact-label">Account</span><strong class="st-tone-{{ header.account.tone }}">{{ header.account.label }}</strong></li>
+      {% if body.summary.disputes %}<li><span class="st-person-fact-label">Disputes</span><strong{% if body.summary.disputes.open %} class="st-tone-bad"{% endif %}>{{ body.summary.disputes.open }} <small>open</small></strong><span class="st-person-fact-detail">{{ body.summary.disputes.total }} in total</span></li>{% endif %}
+      {% if body.summary.deals %}
+      <li><span class="st-person-fact-label">No-shows recorded</span><strong{% if body.summary.deals.no_shows %} class="st-tone-attn"{% endif %}>{{ body.summary.deals.no_shows }}</strong><span class="st-person-fact-detail">by an admin, against this person</span></li>
+      <li><span class="st-person-fact-label">Cancelled by this person</span><strong>{{ body.summary.deals.cancelled_by_person }}</strong><span class="st-person-fact-detail">of {{ body.summary.deals.total }} Deal{{ body.summary.deals.total|pluralize }}</span></li>
+      {% endif %}
+    </ul>
+    {% endif %}
+    {% if body.views|length > 1 %}
+    <nav class="st-person-views" aria-label="Views">
+      {% for view in body.views %}<a href="{{ view.url }}" class="st-person-view{% if view.current %} is-current{% endif %}"{% if view.current %} aria-current="page"{% endif %}>{{ view.label }}</a>{% endfor %}
+    </nav>
+    {% endif %}
+    {% include "admin/console/_person_list.html" with list=body.list %}
+    {% if tab == "trust" %}<p class="st-muted st-person-footnote">Conversations are private between the Sender and the Traveler; the console has no support access to chat, so none is shown here.</p>{% endif %}
+
+  {% elif tab == "deliveries" %}
+    <nav class="st-person-views" aria-label="Delivery state">
+      {% for segment in body.segments %}<a href="{{ segment.url }}" class="st-person-view{% if segment.current %} is-current{% endif %}"{% if segment.current %} aria-current="page"{% endif %}>{{ segment.label }} <b>{{ segment.count }}</b></a>{% endfor %}
+    </nav>
+    {% include "admin/console/_person_list.html" with list=body.list %}
+
+  {% elif tab == "payments" %}
+    {% include "admin/console/_person_list.html" with list=body.list %}
+
+  {% elif tab == "payouts" %}
+    <div class="st-grid st-grid-2">
+      <section class="st-card">
+        <p class="st-eyebrow">Payout methods</p>
+        <dl class="st-facts">
+          <div><dt>Preferred payout</dt><dd>{{ body.readiness.preference }}</dd></div>
+          <div><dt>EUR · Stripe Connect</dt><dd><span class="st-chip st-{{ body.readiness.eur.tone }}">{{ body.readiness.eur.label }}</span>{% if body.stripe %}<small>{{ body.stripe.status }} &middot; payouts {{ body.stripe.payouts_enabled|yesno:"enabled,off" }} &middot; {{ body.stripe.bank|yesno:"EUR bank on file,no EUR bank" }}{% if body.stripe.checked_at %} &middot; checked {{ body.stripe.checked_at|date:"d M Y" }}{% endif %}</small>{% endif %}</dd></div>
+          <div><dt>DZD · Algerian CCP</dt><dd><span class="st-chip st-{{ body.readiness.dzd.tone }}">{{ body.readiness.dzd.label }}</span></dd></div>
+        </dl>
+      </section>
+
+      <section class="st-card">
+        <div class="st-card-head">
+          <p class="st-eyebrow">DZD payout details</p>
+          {% if body.dzd and body.dzd.review and body.dzd.may_review %}<span class="st-chip st-{{ body.dzd.review.tone }}">{{ body.dzd.review.label }}</span>{% endif %}
+        </div>
+        {% if body.dzd %}
+        <dl class="st-facts">
+          <div><dt>Current submission</dt><dd>Revision #{{ body.dzd.revision }} of {{ body.dzd.revisions }}<small>submitted {{ body.dzd.submitted_at|date:"d M Y, H:i" }}</small></dd></div>
+          <div><dt>Latest decision</dt><dd>{% if body.dzd.latest %}<span class="st-chip st-{{ body.dzd.latest.tone }}">{{ body.dzd.latest.label }}</span><small>{{ body.dzd.latest.by }} &middot; {{ body.dzd.latest.at|date:"d M Y, H:i" }}</small>{% else %}Not decided yet{% endif %}</dd></div>
+        </dl>
+        {% if body.dzd.review and body.dzd.may_review %}
+        <div class="st-split-actions">
+          <a class="button{% if body.dzd.review.bucket != 'waiting' %} st-button-quiet{% endif %}" href="{{ body.dzd.review.url }}">{% if body.dzd.review.bucket == "waiting" %}Review payout method{% else %}Open payout method{% endif %}</a>
+          <span class="st-muted">Account details stay masked here; the review page has the audited reveal.</span>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="st-muted">No DZD payout details have been submitted.</p>
+        {% endif %}
+      </section>
+    </div>
+    {% if body.history %}
+    {% include "admin/console/_person_list.html" with list=body.history %}
+    {% endif %}
+  {% endif %}
+
+  </div>
+</main>
+{% endblock %}

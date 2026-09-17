@@ -1,5 +1,71 @@
 # ShipTrip V1 Implementation Status
 
+## J6.4 — Admin People profile and simplified payout-method review (2026-09-17)
+
+**J6.4 PASS — 17 new backend tests, 377 console-touching backend tests green, no
+schema change.** Branch `claude/j64-admin-people-payout-review`, from J6.3
+`b842622`. [The identity prerequisite, the two-control review page and the Person
+profile](PHASE_J64_ADMIN_PEOPLE_PAYOUT_REVIEW.md).
+
+**Approve did not work because one prerequisite had no console surface.**
+`review_profile` refuses every decision — approve, reject and correction — without
+a current `PayoutIdentityAttestation`, which needs `assign_identity_review`
+followed by `attest_identity`. J1.2 gave the first a console control; the second
+existed only as a JSON endpoint, so the owner could assign an identity review and
+then had no way to complete it. J6.4 gives it a surface and composes both audited
+commands for the one role holding both capabilities, without weakening the gate:
+a Super Admin confirms the legal name from the approved ID image on the review
+page and may approve in the same step, Finance is told whose move it is and
+requests the check, and Trust completes it under **Verification → Payout identity
+checks**. When the name is spelled differently the combined step records the
+attestation and stops, so the name difference is decided with the cheque in view.
+
+**A pending payout method is now operational work on the main Overview.**
+"Payout methods awaiting approval — N" sits with disputes and KYC in Action
+queues, from the same `awaiting_review_count()` the Finance Overview publishes,
+so the two pages cannot disagree; it clears the moment a decision is recorded
+(QA: 5 → 2, no manual step).
+
+**The review page is Person, payout method, cheque, decide.** Approve is one
+click; Reject is a small confirmation; "Ask for a correction" is under More.
+Warnings, revision numbers, status codes and history moved into collapsed Details
+and Review history. Posting Approve over a name difference without the explicit
+acceptance is now refused with a sentence instead of quietly recording a
+correction request against the Traveler — the domain substitution is unchanged
+for the API. Masking, the audited reveal, the scoped audited cheque route and
+every capability check are untouched.
+
+**People became the operational page for a user.** `/admin/users/<id>/` keeps its
+route and name and now carries a header (identity, account state, verification)
+and eight tabs: Overview, Identity, Activity (requests · journeys · offers with
+J6.1 economics), Deliveries (active/completed/cancelled with payment and payout
+state), Payments, Payouts (readiness, DZD review state, payout history), Trust &
+support (disputes · revealed ratings · notifications) and Audit. Reaching it needs
+any capability that already showed the person's name; every section below the
+header is gated again on the capability owning its data, so Support sees no
+payment, payout or phone data. No payout account value, ID image, chat content,
+hidden rating or notification payload appears on any tab, and the console has no
+authorized chat access to offer.
+
+**Bounded by construction.** One tab loads at a time. On PostgreSQL: main
+Overview 15 queries, payout queue 10, review page 14–17, profile Overview 13–20,
+each history tab 7–19 — and a test adds 25 more requests, journeys, notifications
+and audit rows and asserts every count is identical. The Finance dashboard's
+~90-query snapshot is untouched.
+
+**Browser QA on real PostgreSQL rows** covered both overviews, the queue, all six
+review stages, Approve, Reject, the audited reveal, the Super one-step identity
+flow, the Trust check, the count falling after decisions, the profile with Sender
+and Traveler activity, the Support view, and 11 pages at 390 px with no horizontal
+scroll. Nine visual defects were found there and fixed before commit. Every person
+and document was synthetic and only the mock payment rail was used.
+
+**Reported for Codex, not changed here:** `review_profile` requires an attestation
+even to reject; ban/unban writes no audit row; an identity check assigned to
+someone else cannot be closed when a Super Admin confirms the identity directly;
+`payout_identity.compared` is written on every review-page render; a parcel request
+with no Deal has no console detail page.
+
 ## J5 — Find Travelers Mobile Redesign (2026-09-16)
 
 **J5 PASS — 24 new mobile tests, full mobile suite 618 green, 0 analysis issues, 0 schema changes.** Branch `gemini/j5-find-travelers-ui`, from J4. [The dense route-first UI, trust badges, state separation and responsive layouts](PHASE_J5_FIND_TRAVELERS_UI.md).

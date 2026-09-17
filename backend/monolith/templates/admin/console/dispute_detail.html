@@ -48,8 +48,8 @@
           <p class="st-privacy-note">Private participant statements are restricted to evidence-authorized staff.</p>
         {% endif %}
         <dl class="st-facts">
-          <div><dt>Sender</dt><dd>{{ dispute.deal.sender.email }}</dd></div>
-          <div><dt>Traveler</dt><dd>{{ dispute.deal.traveler.email }}</dd></div>
+          <div><dt>Sender</dt><dd>{% person_link dispute.deal.sender "disputes" %}<small>{{ dispute.deal.sender.email }}</small></dd></div>
+          <div><dt>Traveler</dt><dd>{% person_link dispute.deal.traveler "disputes" %}<small>{{ dispute.deal.traveler.email }}</small></dd></div>
           <div><dt>Deal state</dt><dd>{{ dispute.deal.get_status_display }}</dd></div>
           <div><dt>Pickup confirmed</dt><dd>{{ dispute.deal.pickup_confirmed_at|date:"d M Y, H:i"|default:"Not confirmed" }}</dd></div>
           <div><dt>Delivery confirmed</dt><dd>{{ dispute.deal.delivery_confirmed_at|date:"d M Y, H:i"|default:"Not confirmed" }}</dd></div>

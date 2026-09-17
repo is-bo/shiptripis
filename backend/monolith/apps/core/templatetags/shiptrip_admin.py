@@ -92,6 +92,14 @@ NAVIGATION = (
                 ("view_flight_proofs",),
                 ("proof-queue", "proof-detail", "proof-evidence"),
             ),
+            # J6.4. The Trust side of DZD payout approval: confirming a
+            # Traveler's legal name from their approved ID.
+            (
+                "Payout identity checks",
+                "admin_console:identity-checks",
+                ("attest_payout_identity",),
+                ("identity-checks", "identity-check-detail"),
+            ),
         ),
     ),
     (
@@ -431,6 +439,35 @@ def operations_destinations(context):
     if request is None or not getattr(user, "is_authenticated", False):
         return ()
     return _navigation_sections(user)
+
+
+# ---------------------------------------------------------------------------
+# People
+# ---------------------------------------------------------------------------
+
+
+@register.simple_tag(takes_context=True)
+def person_link(context, user, source="", label=""):
+    """A person's name, linked to their profile when this operator may open it.
+
+    J6.4 makes the Person profile the operational page for a user, so a name in
+    the console should lead there. Whether it does is decided once per page by
+    `may_open_people` (set by the console's `_render`); a role that cannot open
+    profiles gets the same name as plain text, never a link that answers 403.
+    """
+
+    if user is None:
+        return "System"
+    from apps.admin_panel.people_links import display_name, person_href
+
+    text = label or display_name(user)
+    if not context.get("may_open_people"):
+        return text
+    return format_html(
+        '<a href="{}" class="st-person-link">{}</a>',
+        person_href(user.pk, source=source),
+        text,
+    )
 
 
 # ---------------------------------------------------------------------------
