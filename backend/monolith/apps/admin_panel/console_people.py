@@ -696,7 +696,7 @@ def _requests_list(request, person, caps, source):
                 text_cell(window or "No ready window",
                           f"deliver by {_date_text(item.deadline_at)}" if item.deadline_at else ""),
                 money_cell(item.traveler_reward_eur_cents) if item.traveler_reward_eur_cents else text_cell("—"),
-                money_cell(boost) if boost else text_cell("No Boost"),
+                (money_cell(boost) if boost else text_cell("No Boost" if boost == 0 else "—")),
                 {**status_cell(item.lifecycle_status, REQUEST_STATUS_LABELS.get(item.lifecycle_status)),
                  "secondary": f"Deal {item.latest_deal_id}" if item.latest_deal_id else ""},
                 datetime_cell(item.created_at),

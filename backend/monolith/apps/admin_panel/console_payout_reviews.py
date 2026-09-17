@@ -855,12 +855,20 @@ def payout_review_detail(request, reference):
                         actor=request.user, profile=profile
                     )["classification"]
                     if comparison == "consistent":
-                        _decide(
-                            request,
-                            profile,
-                            decision="approved",
-                            accept_name_difference=False,
-                        )
+                        # The attestation is already recorded and valid on its
+                        # own, so a refusal here has to say that rather than
+                        # read as "the identity check failed".
+                        try:
+                            _decide(
+                                request,
+                                profile,
+                                decision="approved",
+                                accept_name_difference=False,
+                            )
+                        except (ValidationError, PermissionDenied) as exc:
+                            messages.success(request, "Identity confirmed.")
+                            _refuse(request, "The approval", exc)
+                            return _detail_redirect(request, reference)
                         messages.success(
                             request,
                             "Identity confirmed and payout method approved. This "
