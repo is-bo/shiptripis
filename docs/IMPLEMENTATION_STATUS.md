@@ -66,6 +66,38 @@ someone else cannot be closed when a Super Admin confirms the identity directly;
 `payout_identity.compared` is written on every review-page render; a parcel request
 with no Deal has no console detail page.
 
+**J6.4 release.** Branch CI run `35280666862` green on
+`b879724ff84926f0637f5d6160ac135c213e5787`, all six jobs; main fast-forwarded to
+that exact SHA and pushed, local `main` equal to `origin/main`, phase branch deleted
+locally and remotely. Push CI run `35283477110` on the same SHA: green, all six
+jobs. The run before it failed only on five profile tests asserting a hashed
+staticfiles manifest CI never builds; the tests now render with plain static
+storage, verified locally with the manifest moved aside.
+
+TEST Railway deployment `0bd75246-21d7-4ec6-949a-ca062f16f8b0` **SUCCESS**, release
+`v1.0.0-rc.39+b879724`, uploaded from a `git archive` of that SHA taken with
+`core.autocrlf=false`; the eleven changed backend runtime files and `railway.json`
+were hash-compared against their blobs and match. `/healthz` 200 and `/readyz` 200
+on the new release with database, migrations and rate-limit cache `ok`; "No
+migrations to apply"; web, gRPC, reservation releaser, finance jobs, chat,
+notification (dispatcher subscribed, FCM consumer started), KYC, email and gateway
+all started. The served console stylesheet
+`/static/shiptrip/admin.7adbec2b68d9.css` carries the J6.4 rules
+(`st-plist`, `st-person-tabs`, `st-confirm-dialog`, the review grid) and
+`/static/shiptrip/payout.b79c202839b1.js` — the hash Django derives from this SHA's
+blob — carries the dialog handlers, so the deployed assets are this SHA's. `/admin/`,
+`/admin/users/1/`, `/admin/payout-reviews/` and `/admin/verification/payout-identity/`
+all redirect to the console login unauthenticated.
+
+Only `RELEASE_ID` was set (`v1.0.0-rc.38+2e97157` → `v1.0.0-rc.39+b879724`), with
+deploys skipped; every other variable is byte-identical before and after.
+`PAYMENTS_ENVIRONMENT=test`, Stripe `sk_test_`, `STRIPE_CONNECT_EXPECTED_MODE=test`,
+Chargily `/test/api/v2` with a `test_sk_` key, `PAYOUT_DZD_EXECUTION_ENABLED=false`.
+Probes were unauthenticated reads; nothing was created on the deployed database or
+at a provider; no LIVE or real-money operation. The console screens themselves were
+not exercised against the deployed runtime, which needs a signed-in TEST staff
+account; all operator QA was on the local PostgreSQL preview of the same code.
+
 ## J5 — Find Travelers Mobile Redesign (2026-09-16)
 
 **J5 PASS — 24 new mobile tests, full mobile suite 618 green, 0 analysis issues, 0 schema changes.** Branch `gemini/j5-find-travelers-ui`, from J4. [The dense route-first UI, trust badges, state separation and responsive layouts](PHASE_J5_FIND_TRAVELERS_UI.md).
