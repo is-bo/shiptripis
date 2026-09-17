@@ -7079,3 +7079,33 @@ in EN, FR (1.3× text) and AR (320 px) and read.
 are still Dart-side derivations; the form's Back button wraps mid-word at 320 px AR
 and 1.3× FR (pre-existing); J6.2's arrival-channel relay and J4 legacy-package total.
 
+**J6.3 release.** Branch CI run `35175289521` green on
+`2e97157608e13f542d21180e9420cfa5a886f7f7`, all six jobs; main fast-forwarded to
+that exact SHA and pushed, local `main` equal to `origin/main`, phase branch deleted
+locally and remotely. Push CI run `35177129064` on the same SHA: green, all six jobs.
+
+TEST Railway deployment `f2ade4a2-7607-45b1-a400-0b617ad49e62` **SUCCESS**, release
+`v1.0.0-rc.38+2e97157`, uploaded from a `git archive` of that SHA taken with
+`core.autocrlf=false`; the four changed backend runtime files and
+`backend/railway/Dockerfile` were hash-compared against their blobs and match.
+`/healthz` 200 and `/readyz` 200 on the new release with database, migrations and
+rate-limit cache `ok`; "No migrations to apply"; web, gRPC, reservation releaser,
+finance jobs, chat, notification (dispatcher subscribed), KYC, email and gateway
+all started. Unauthenticated `POST /api/parcels/pricing-quote`,
+`GET /api/parcels/1/pricing` and `/api/parcels/1/posting-deposit` answer 401, with a
+404 control. Only `RELEASE_ID` was set. `PAYMENTS_ENVIRONMENT=test`, Stripe
+`sk_test_`, `STRIPE_CONNECT_EXPECTED_MODE=test`, Chargily `/test/api/v2`,
+`PAYOUT_DZD_EXECUTION_ENABLED=false`. Probes were unauthenticated reads; nothing was
+created on the deployed database or at a provider; no LIVE or real-money operation.
+The new `chosen_terms` field was not exercised against the deployed runtime, which
+needs a signed-in TEST account.
+
+QA APK `shiptrip-v1.0.0-rc.38-2e97157-profile-arm64.apk` from build run
+`35177376972` on the same SHA, SHA-256
+`e7b2a4217d253c2a4621b9c74ee68fe30fbb2bd0eb22f9d8dd6f8c6f6eb90e04` (CI's
+`SHA256SUMS.txt`, recomputed after download and matching), 36,589,441 bytes,
+profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
+`libapp.so` contains `chosen_terms`, `sender_total_with_boost_minor`, "Your total for
+this delivery", "Updating the price", the French deposit label and the API origin.
+Uninstall the J6.2 build first; profile APKs are signed with a per-run debug key.
+
