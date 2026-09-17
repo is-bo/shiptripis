@@ -646,9 +646,9 @@ class DepositQuote {
     final minAmount = Money.eurCentsOrNull(
       json['minimum_eur_cents'] ?? json['min_eur_cents'],
     );
-    final maxAmount = Money.eurCentsOrNull(
-      json['maximum_eur_cents'] ?? json['max_eur_cents'],
-    );
+    // The obligation ceiling only. `max_eur_cents` clamps the recommendation
+    // and is not a limit on what a sender may pre-pay (J6.3).
+    final maxAmount = Money.eurCentsOrNull(json['maximum_eur_cents']);
     return DepositQuote(
       amount: fallbackAmount,
       recommended: recommendedAmount,
@@ -677,7 +677,14 @@ class DepositQuote {
 
   final int? percentBps;
   final Money? minimum;
+
+  /// The whole obligation the deposit pre-pays: chosen reward, its fee, the
+  /// Boost and the Boost fee. The only ceiling. Null when the server cannot
+  /// state one.
   final Money? maximum;
+
+  /// The *recommended* base sender total the recommendation is built on. Not
+  /// the obligation: it ignores the chosen reward and the Boost.
   final Money? estimatedSenderTotal;
 
   /// `""`, `"min"` or `"max"` — whether the amount hit a policy floor or cap.

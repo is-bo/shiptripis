@@ -67,13 +67,17 @@ void main() {
             'recommended_eur_cents': 350,
             'min_eur_cents': 300,
             'max_eur_cents': 700,
+            // J6.3: the obligation ceiling, Boost included. `max_eur_cents`
+            // above only clamps the recommendation.
+            'maximum_eur_cents': 4375,
             'clamped': 'none',
           },
+          // The keys `BoostReward.as_dict` actually sends.
           'boost': {
             'boost_eur_cents': 500,
-            'traveler_boost_eur_cents': 500,
-            'platform_fee_eur_cents': 125,
-            'sender_total_boost_eur_cents': 625,
+            'boost_traveler_bonus_eur_cents': 500,
+            'boost_platform_fee_eur_cents': 125,
+            'boost_sender_cost_eur_cents': 625,
           },
           'actions': {'can_edit_reward': true, 'can_edit_boost': true},
         };
@@ -91,12 +95,12 @@ void main() {
 
         expect(quote.deposit.recommendedDeposit, Money.eurCents(350));
         expect(quote.deposit.minimumDeposit, Money.eurCents(300));
-        expect(quote.deposit.maximumDeposit, Money.eurCents(700));
+        expect(quote.deposit.maximumDeposit, Money.eurCents(4375));
 
         expect(quote.boost.amount, Money.eurCents(500));
-        expect(quote.boost.travelerReward, Money.eurCents(500));
+        expect(quote.boost.travelerBonus, Money.eurCents(500));
         expect(quote.boost.commissionFee, Money.eurCents(125));
-        expect(quote.boost.senderTotal, Money.eurCents(625));
+        expect(quote.boost.senderCost, Money.eurCents(625));
       },
     );
 
@@ -129,10 +133,10 @@ void main() {
           'is_flexible': true,
         },
         'boost': {
-          'amount_eur_cents': 500,
-          'commission_fee_eur_cents': 125,
-          'sender_total_eur_cents': 625,
-          'traveler_reward_eur_cents': 500,
+          'boost_eur_cents': 500,
+          'boost_platform_fee_eur_cents': 125,
+          'boost_sender_cost_eur_cents': 625,
+          'boost_traveler_bonus_eur_cents': 500,
           'base_reward_eur_cents': 2800,
           'total_offered_reward_eur_cents': 3300,
         },
@@ -325,6 +329,8 @@ void main() {
               'min_eur_cents': 300,
               'max_eur_cents': 700,
               'estimated_sender_total_eur_cents': 5000,
+              // J6.3: "pay in full" is the obligation the server states.
+              'maximum_eur_cents': 5000,
               'clamped': '',
             },
           }),
@@ -346,7 +352,11 @@ void main() {
       expect(find.text(l.depositPresetFull('€50.00')), findsOneWidget);
       expect(find.text(l.depositPresetCustom), findsOneWidget);
 
-      // Select full deposit
+      // Select full deposit. J6.3 puts the whole obligation in the hero and
+      // keeps the suggested total in the guidance card, so the presets sit
+      // lower on the page.
+      await tester.ensureVisible(find.text(l.depositPresetFull('€50.00')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text(l.depositPresetFull('€50.00')));
       await tester.pumpAndSettle();
 

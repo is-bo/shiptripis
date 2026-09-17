@@ -157,11 +157,17 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     _syncInitial(quote);
     final locale = Localizations.localeOf(context);
     final suggestedTotal = quote.estimatedSenderTotal;
+    // The whole obligation is the server's `maximum`: chosen reward, its fee,
+    // the Boost and the Boost fee (J6.3). The suggested total is only the
+    // recommendation's basis — it ignores the chosen reward and the Boost — so
+    // it is never "pay in full", never the ceiling and never what the balance
+    // is measured from.
+    final obligation = quote.maximum;
 
     final minCents = quote.minimum?.minorUnits ?? 300;
     final recCents =
         quote.recommended?.minorUnits ?? quote.amount?.minorUnits ?? 300;
-    final fullCents = suggestedTotal?.minorUnits;
+    final fullCents = obligation?.minorUnits;
 
     final hasSeparateMin = minCents < recCents;
     final hasSeparateFull = fullCents != null && fullCents > recCents;
@@ -196,7 +202,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     return ListView(
       padding: AppScrollPadding.pageWithFooter(context),
       children: [
-        if (suggestedTotal != null) ...[
+        if (obligation != null) ...[
+          MoneyHero(
+            amount: obligation,
+            label: l.depositWholeAmount,
+            tone: StatusTone.neutral,
+          ),
+          const SizedBox(height: AppSpace.xl),
+        ] else if (suggestedTotal != null) ...[
           MoneyHero(
             amount: suggestedTotal,
             label: l.depositSuggestedTotal,
@@ -207,7 +220,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
         _DepositGuidance(
           quote: quote,
-          showSuggestedTotal: suggestedTotal == null,
+          showSuggestedTotal: obligation != null || suggestedTotal == null,
           recommendationNote: clampNote,
         ),
         const SizedBox(height: AppSpace.lg),
@@ -370,7 +383,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   ) => ListView(
     padding: AppScrollPadding.page(context),
     children: [
-      if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
+      if (quote?.maximum case final obligation?) ...[
+        MoneyHero(
+          amount: obligation,
+          label: l.depositWholeAmount,
+          tone: StatusTone.neutral,
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ] else if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
         MoneyHero(
           amount: suggestedTotal,
           label: l.depositSuggestedTotal,

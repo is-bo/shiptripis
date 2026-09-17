@@ -1491,6 +1491,18 @@ abstract class L {
   /// **'ShipTrip suggested total'**
   String get depositSuggestedTotal;
 
+  /// No description provided for @depositWholeAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Your total for this delivery'**
+  String get depositWholeAmount;
+
+  /// No description provided for @pricingUpdating.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating the price'**
+  String get pricingUpdating;
+
   /// No description provided for @depositRecommended.
   ///
   /// In en, this message translates to:

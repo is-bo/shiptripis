@@ -268,6 +268,8 @@
   "depositRefundNote": "If nobody takes it, or you cancel before accepting an offer, you get it back in full.",
   "depositGuidanceTitle": "Deposit guidance",
   "depositSuggestedTotal": "ShipTrip suggested total",
+  "depositWholeAmount": "Your total for this delivery",
+  "pricingUpdating": "Updating the price",
   "depositRecommended": "Recommended deposit",
   "depositMinimumAllowed": "Minimum deposit",
   "depositGuidanceNote": "ShipTrip calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.",

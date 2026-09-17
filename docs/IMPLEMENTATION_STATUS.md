@@ -7035,3 +7035,47 @@ profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
 are the latest amounts.", the Arabic Boost fee and update line, and the API origin,
 and no longer contains "ShipTrip boost share". Uninstall the J6.1 build first;
 profile APKs are signed with a per-run debug key.
+
+## Phase J6.3 — Request-creation Boost total projection (2026-09-17)
+
+Starting main `256a110`, branch `claude/j63-request-boost-total`. Closes J6.2's
+request-creation MAJOR. Full detail in `docs/PHASE_J63_REQUEST_BOOST_TOTAL.md`.
+
+**Contract.** Both pricing endpoints (`POST /api/parcels/pricing-quote`,
+`GET /api/parcels/<id>/pricing`) add `chosen_terms`: base reward, delivery fee, base
+sender total, Boost, Boost bonus, Boost fee, `traveler_total_minor` and
+`sender_total_with_boost_minor`, under the Offer/Deal-terms names, with
+`terms_status` `provisional` (draft or editable request), `frozen` (read from the
+Deal's terms once committed) or `unavailable`. The draft deposit block adds
+`maximum_eur_cents` = the Boost-inclusive total. Additive; no field changed meaning.
+
+**One computation.** `build_terms` (new, `offer_economics.py`) is the single place a
+base and a resolved Boost become an unsaved `DealTermsSnapshot`; acceptance's
+`commitment_terms`, the J6.1 Offer projection, the request quote
+(`request_economics.py`, new) and `maximum_chosen_deposit` all use it and read the
+model's own total properties. No new pricing arithmetic.
+
+**Mobile.** The posting card prints `chosen_terms` in the Offer/Deal order (Base
+delivery reward · Boost bonus · Traveler receives · ShipTrip fee · Boost fee · You
+pay) — €43.75 for €30.00 + €5.00, three lines and €37.50 with no Boost. Quotes are
+latest-wins (sequence guard + cancel), reward typing stays debounced, a prefilled
+reward is priced once more, and figures that no longer match the form are dimmed
+and announced as updating. The deposit screen's "Pay in full", custom ceiling and
+remaining balance now use the server obligation instead of the recommended base
+total; two parsers no longer read the recommendation clamp as a ceiling;
+`PricingBoostQuote` reads the keys the server sends.
+
+**Not changed.** Ledger, revenue recognition, Traveler liability, payouts, refunds,
+provider payments, Deal/Offer freeze semantics, J4 envelope. No migration.
+
+**Verification (local, before CI).** Backend 2,126 passed, 34 skipped, 0 failed (+10
+in `apps/parcels/tests/test_phase_j63_request_boost_total.py`); `ruff` clean;
+`makemigrations --check` no changes. Mobile 695 passed (+21 in
+`test/phase_j63_request_boost_total_test.dart`); analyze, format and l10n clean.
+Mutation checks bite on both sides. Card and deposit screen rendered with real fonts
+in EN, FR (1.3× text) and AR (320 px) and read.
+
+**Remaining MINOR.** Boost-screen unsaved fee estimate and deposit remaining balance
+are still Dart-side derivations; the form's Back button wraps mid-word at 320 px AR
+and 1.3× FR (pre-existing); J6.2's arrival-channel relay and J4 legacy-package total.
+

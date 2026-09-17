@@ -757,6 +757,12 @@ class LEn extends L {
   String get depositSuggestedTotal => 'ShipTrip suggested total';
 
   @override
+  String get depositWholeAmount => 'Your total for this delivery';
+
+  @override
+  String get pricingUpdating => 'Updating the price';
+
+  @override
   String get depositRecommended => 'Recommended deposit';
 
   @override

@@ -232,6 +232,8 @@
   "depositRefundNote": "Si personne ne l’accepte, ou si vous annulez avant d’accepter une offre, il vous est intégralement remboursé.",
   "depositGuidanceTitle": "Repères pour l’acompte",
   "depositSuggestedTotal": "Total suggéré par ShipTrip",
+  "depositWholeAmount": "Votre total pour cette livraison",
+  "pricingUpdating": "Mise à jour du prix",
   "depositRecommended": "Acompte recommandé",
   "depositMinimumAllowed": "Acompte minimum",
   "depositGuidanceNote": "ShipTrip calcule l’acompte à partir du total suggéré et applique le minimum et le maximum en vigueur. Il sera déduit du paiement final : ce n’est pas un supplément.",

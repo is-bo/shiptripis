@@ -621,25 +621,22 @@ def maximum_chosen_deposit(
     what they chose.
     """
 
-    from apps.boosts.services import calculate_boost_reward
-    from apps.core.phase4_policy import phase4_policy
+    from apps.matching.request_economics import project_request_terms
 
     chosen = int(delivery_request.traveler_reward_eur_cents or 0)
     if chosen <= 0:
         raise RequestNotDepositable("The request has no chosen reward.")
     economics = calculate_offer_economics(chosen, policy.settings_version)
-    total = int(economics["sender_total_minor"])
     boost = int(getattr(delivery_request, "boost_eur_cents", 0) or 0)
-    if boost > 0:
-        try:
-            reward = calculate_boost_reward(
-                amount_eur_cents=boost, policy=phase4_policy()
-            )
-        except Exception:  # noqa: BLE001 - a bad revision must not raise the cap
-            total += boost
-        else:
-            total += reward.sender_cost_eur_cents
-    return total
+    try:
+        # J6.3: the same terms row the pricing quote, the Offer projection and
+        # acceptance build, so the ceiling is the total the sender is shown.
+        terms = project_request_terms(
+            economics=economics, boost_intent_eur_cents=boost
+        )
+    except Exception:  # noqa: BLE001 - a bad revision must not raise the cap
+        return int(economics["sender_total_minor"]) + boost
+    return terms.sender_total_with_boost_minor
 
 
 def posting_deposit_quote_from_order(order: PaymentOrder) -> DepositQuote:

@@ -750,6 +750,12 @@ class LAr extends L {
   String get depositSuggestedTotal => 'الإجمالي المقترح من ShipTrip';
 
   @override
+  String get depositWholeAmount => 'إجمالي ما تدفعه لهذا التوصيل';
+
+  @override
+  String get pricingUpdating => 'جارٍ تحديث السعر';
+
+  @override
   String get depositRecommended => 'العربون الموصى به';
 
   @override

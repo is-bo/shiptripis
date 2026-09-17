@@ -70,21 +70,54 @@ def commitment_terms(offer: Offer, boost) -> DealTermsSnapshot:
     Acceptance saves exactly this row. The projection reads it and discards it.
     """
 
-    return DealTermsSnapshot(
+    return build_terms(
         currency=offer.currency,
-        traveler_reward_minor=offer.traveler_reward_minor,
-        commission_rate_bps=offer.commission_rate_bps,
-        platform_fee_minor=offer.platform_fee_minor,
-        sender_total_minor=offer.sender_total_minor,
+        economics={
+            "traveler_reward_minor": offer.traveler_reward_minor,
+            "commission_rate_bps": offer.commission_rate_bps,
+            "platform_fee_minor": offer.platform_fee_minor,
+            "sender_total_minor": offer.sender_total_minor,
+        },
+        boost=boost,
+        business_settings_version_id=offer.business_settings_version_id,
+        pricing_version=offer.pricing_version,
+        policy_snapshot=offer.terms_snapshot,
+    )
+
+
+def build_terms(
+    *,
+    economics: dict,
+    boost,
+    currency: str = DealTermsSnapshot.Currency.EUR,
+    business_settings_version_id: int | None = None,
+    pricing_version: str = "",
+    policy_snapshot: dict | None = None,
+) -> DealTermsSnapshot:
+    """One unsaved `DealTermsSnapshot` from base economics and a resolved Boost.
+
+    The single place a base reward and a Boost become a terms row. Acceptance,
+    the Offer projection, the request pricing quote (J6.3) and the deposit
+    ceiling all come through here, and every total is then read from the model's
+    own `traveler_total_minor` / `sender_total_with_boost_minor` -- so there is
+    one `base + Boost + Boost fee`, not one per screen.
+    """
+
+    return DealTermsSnapshot(
+        currency=currency,
+        traveler_reward_minor=int(economics["traveler_reward_minor"]),
+        commission_rate_bps=int(economics["commission_rate_bps"]),
+        platform_fee_minor=int(economics["platform_fee_minor"]),
+        sender_total_minor=int(economics["sender_total_minor"]),
         boost_amount_minor=boost.amount_eur_cents,
         boost_traveler_bonus_minor=boost.traveler_bonus_eur_cents,
         boost_platform_fee_minor=boost.platform_fee_eur_cents,
         boost_economics_version=boost.economics_version,
         boost_commission_rate_bps=boost.commission_rate_bps,
-        business_settings_version_id=offer.business_settings_version_id,
-        pricing_version=offer.pricing_version,
+        business_settings_version_id=business_settings_version_id,
+        pricing_version=pricing_version,
         policy_snapshot={
-            **offer.terms_snapshot,
+            **(policy_snapshot or {}),
             "boost_economics": boost.snapshot,
         },
         is_legacy=False,

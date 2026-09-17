@@ -8,6 +8,7 @@ library;
 
 import '../core/money/money.dart';
 import 'boost.dart';
+import 'deal.dart';
 import 'json.dart';
 
 /// One economics breakdown block: traveler payout, platform fee, sender total.
@@ -71,8 +72,10 @@ class PostingDepositQuote {
         readInt(json['min_eur_cents']) ??
         readInt(json['chosen_min_eur_cents']) ??
         300;
-    final maxCents =
-        readInt(json['maximum_eur_cents']) ?? readInt(json['max_eur_cents']);
+    // `maximum_eur_cents` is the obligation ceiling. `max_eur_cents` is only
+    // the upper clamp on the *recommendation*; reading it as a ceiling would
+    // cap a sender's deposit at a number that is not a limit (J6.3).
+    final maxCents = readInt(json['maximum_eur_cents']);
     final chosenCents = readInt(json['chosen_eur_cents']);
     final paidCents = readInt(json['paid_eur_cents']);
     final outstandingCents = readInt(json['outstanding_eur_cents']);
@@ -112,55 +115,98 @@ class PostingDepositQuote {
 }
 
 /// Boost pricing block from pricing quote / request pricing.
+///
+/// Describes the Boost on its own. The sender's whole obligation, Boost
+/// included, is [ChosenTerms.senderTotalWithBoost] — never a sum of this block
+/// and the base economics.
 class PricingBoostQuote {
   const PricingBoostQuote({
     required this.amount,
     required this.commissionFee,
-    required this.senderTotal,
-    required this.travelerReward,
-    required this.baseReward,
-    required this.totalOfferedReward,
+    required this.senderCost,
+    required this.travelerBonus,
+    this.baseReward,
+    this.totalOfferedReward,
     this.policy,
   });
 
   factory PricingBoostQuote.fromJson(Map<String, dynamic> json) {
     final policyRaw = readObject(json['policy']);
+    final baseCents = readInt(json['base_reward_eur_cents']);
+    final totalCents = readInt(json['total_offered_reward_eur_cents']);
     return PricingBoostQuote(
-      amount: Money.eurCents(
-        readInt(json['amount_eur_cents']) ??
-            readInt(json['boost_eur_cents']) ??
-            0,
-      ),
+      amount: Money.eurCents(readInt(json['boost_eur_cents']) ?? 0),
       commissionFee: Money.eurCents(
-        readInt(json['commission_fee_eur_cents']) ??
-            readInt(json['platform_fee_eur_cents']) ??
-            0,
+        readInt(json['boost_platform_fee_eur_cents']) ?? 0,
       ),
-      senderTotal: Money.eurCents(
-        readInt(json['sender_total_eur_cents']) ??
-            readInt(json['sender_total_boost_eur_cents']) ??
-            0,
+      senderCost: Money.eurCents(
+        readInt(json['boost_sender_cost_eur_cents']) ?? 0,
       ),
-      travelerReward: Money.eurCents(
-        readInt(json['traveler_reward_eur_cents']) ??
-            readInt(json['traveler_boost_eur_cents']) ??
-            0,
+      travelerBonus: Money.eurCents(
+        readInt(json['boost_traveler_bonus_eur_cents']) ?? 0,
       ),
-      baseReward: Money.eurCents(readInt(json['base_reward_eur_cents']) ?? 0),
-      totalOfferedReward: Money.eurCents(
-        readInt(json['total_offered_reward_eur_cents']) ?? 0,
-      ),
+      // Absent until a reward is chosen. Null, not €0.00.
+      baseReward: baseCents != null ? Money.eurCents(baseCents) : null,
+      totalOfferedReward: totalCents != null
+          ? Money.eurCents(totalCents)
+          : null,
       policy: policyRaw != null ? BoostPolicy.fromJson(policyRaw) : null,
     );
   }
 
   final Money amount;
   final Money commissionFee;
-  final Money senderTotal;
-  final Money travelerReward;
-  final Money baseReward;
-  final Money totalOfferedReward;
+  final Money senderCost;
+  final Money travelerBonus;
+  final Money? baseReward;
+  final Money? totalOfferedReward;
   final BoostPolicy? policy;
+}
+
+/// J6.3 — what committing the chosen reward with the current Boost would
+/// freeze, published by the server as `chosen_terms`.
+///
+/// The same field names and meanings as an Offer (J6.1) and a Deal's terms,
+/// parsed through [DealTerms] so the three cannot drift. Every figure is the
+/// server's; nothing here adds a Boost to anything.
+class ChosenTerms {
+  const ChosenTerms({required this.status, this.terms});
+
+  static const provisional = 'provisional';
+  static const frozen = 'frozen';
+  static const unavailable = 'unavailable';
+
+  factory ChosenTerms.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const ChosenTerms(status: unavailable);
+    final status = readText(json['terms_status']);
+    return ChosenTerms(
+      status: status.isEmpty ? unavailable : status,
+      terms: DealTerms.maybe(json),
+    );
+  }
+
+  final String status;
+  final DealTerms? terms;
+
+  /// Base reward. Same meaning as `traveler_reward_minor` everywhere.
+  Money? get baseReward => terms?.travelerReward;
+  Money? get platformFee => terms?.platformFee;
+
+  /// Base reward + base fee. Not the whole obligation when a Boost is set.
+  Money? get baseSenderTotal => terms?.senderTotal;
+  Money? get boostAmount => terms?.boostAmount;
+  Money? get boostFee => terms?.boostPlatformFee;
+  Money? get travelerTotal => terms?.travelerTotal;
+  Money? get senderTotalWithBoost => terms?.senderTotalWithBoost;
+
+  /// True only when both totals are published. A screen that cannot show
+  /// both shows neither, rather than a base total posing as the whole.
+  bool get hasTotals =>
+      status != unavailable &&
+      travelerTotal != null &&
+      senderTotalWithBoost != null;
+
+  bool get hasBoost => boostAmount?.isPositive ?? false;
 }
 
 /// Permitted actions determined authoritatively by the backend.
@@ -196,6 +242,7 @@ class PostingPricingQuote {
     required this.chosenIsBelowRecommended,
     required this.deposit,
     required this.boost,
+    this.chosenTerms = const ChosenTerms(status: ChosenTerms.unavailable),
     required this.commissionRateBps,
     required this.pricingVersion,
   });
@@ -240,6 +287,7 @@ class PostingPricingQuote {
         readObject(json['deposit']) ?? const {},
       ),
       boost: PricingBoostQuote.fromJson(readObject(json['boost']) ?? const {}),
+      chosenTerms: ChosenTerms.fromJson(readObject(json['chosen_terms'])),
       commissionRateBps: readInt(json['commission_rate_bps']) ?? 0,
       pricingVersion: readText(json['pricing_version']),
     );
@@ -256,12 +304,12 @@ class PostingPricingQuote {
   final bool chosenIsBelowRecommended;
   final PostingDepositQuote deposit;
   final PricingBoostQuote boost;
+
+  /// The Boost-inclusive totals. Read these for "Traveler receives" and "You
+  /// pay"; [chosenEconomics] is base-only.
+  final ChosenTerms chosenTerms;
   final int commissionRateBps;
   final String pricingVersion;
-
-  /// Effective economics: chosen if present, otherwise recommended.
-  EconomicsBlock get effectiveEconomics =>
-      chosenEconomics ?? recommendedEconomics;
 }
 
 /// The response from `GET /api/parcels/<id>/pricing`.
@@ -280,6 +328,7 @@ class RequestPricing {
     required this.chosenIsBelowRecommended,
     required this.deposit,
     required this.boost,
+    this.chosenTerms = const ChosenTerms(status: ChosenTerms.unavailable),
     required this.actions,
   });
 
@@ -325,6 +374,7 @@ class RequestPricing {
         readObject(json['deposit']) ?? const {},
       ),
       boost: PricingBoostQuote.fromJson(readObject(json['boost']) ?? const {}),
+      chosenTerms: ChosenTerms.fromJson(readObject(json['chosen_terms'])),
       actions: PricingActions.fromJson(readObject(json['actions']) ?? const {}),
     );
   }
@@ -342,8 +392,9 @@ class RequestPricing {
   final bool chosenIsBelowRecommended;
   final PostingDepositQuote deposit;
   final PricingBoostQuote boost;
-  final PricingActions actions;
 
-  EconomicsBlock get effectiveEconomics =>
-      chosenEconomics ?? recommendedEconomics;
+  /// The Boost-inclusive totals. Read these for "Traveler receives" and "You
+  /// pay"; [chosenEconomics] is base-only.
+  final ChosenTerms chosenTerms;
+  final PricingActions actions;
 }

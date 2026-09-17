@@ -761,6 +761,12 @@ class LFr extends L {
   String get depositSuggestedTotal => 'Total suggéré par ShipTrip';
 
   @override
+  String get depositWholeAmount => 'Votre total pour cette livraison';
+
+  @override
+  String get pricingUpdating => 'Mise à jour du prix';
+
+  @override
   String get depositRecommended => 'Acompte recommandé';
 
   @override

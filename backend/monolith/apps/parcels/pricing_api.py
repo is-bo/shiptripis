@@ -43,6 +43,7 @@ from apps.matching.posting_pricing import (
     quote_posting_price,
 )
 from apps.matching.pricing import PricingError
+from apps.matching.request_economics import draft_request_terms, saved_request_terms
 
 from .models import DeliveryRequest
 
@@ -210,11 +211,16 @@ class PricingQuoteDraftView(APIView):
                 delivery_request=draft, chosen_reward_eur_cents=chosen
             )
             payload = _pricing_payload(quote=quote, chosen_reward_eur_cents=chosen)
+            boost = int(data.get("boost_eur_cents", 0) or 0)
             payload["boost"] = _boost_block(
-                amount_eur_cents=data.get("boost_eur_cents", 0),
-                base_reward_eur_cents=chosen,
+                amount_eur_cents=boost, base_reward_eur_cents=chosen
             )
-            payload["deposit"] = _draft_deposit_block(quote)
+            payload["chosen_terms"] = draft_request_terms(
+                chosen_economics=quote.chosen_economics, boost_eur_cents=boost
+            )
+            payload["deposit"] = _draft_deposit_block(
+                quote, chosen_terms=payload["chosen_terms"]
+            )
         except PRICING_FAILURES as exc:
             return _pricing_error_response(exc)
         return Response(payload)
@@ -237,7 +243,7 @@ def _pricing_payload(
     return payload
 
 
-def _draft_deposit_block(quote: PostingPriceQuote) -> dict:
+def _draft_deposit_block(quote: PostingPriceQuote, *, chosen_terms: dict) -> dict:
     """The deposit a draft would be asked for, and the band around it.
 
     Built from the *recommended* sender total, exactly as the real deposit quote
@@ -245,6 +251,11 @@ def _draft_deposit_block(quote: PostingPriceQuote) -> dict:
     obligation will carry. Boost is deliberately absent from the basis: it is
     optional extra reward, and letting it move an untouched default would make
     the suggestion jump whenever the sender nudges a slider.
+
+    The *ceiling* is different: it is the whole obligation the deposit pre-pays,
+    so it is the Boost-inclusive sender total from `chosen_terms` (J6.3) -- the
+    same figure `maximum_chosen_deposit` enforces once the request exists. Null
+    until a reward is chosen, because there is no obligation to cap against.
     """
 
     from apps.finance.money import clamp, percentage_of
@@ -263,6 +274,7 @@ def _draft_deposit_block(quote: PostingPriceQuote) -> dict:
         "minimum_eur_cents": deposit.chosen_min_eur_cents,
         "percent_bps": deposit.percent_bps,
         "recommendation_basis_eur_cents": sender_total,
+        "maximum_eur_cents": chosen_terms["sender_total_with_boost_minor"],
         "is_flexible": True,
     }
 
@@ -300,6 +312,9 @@ class RequestPricingView(APIView):
             payload["boost"] = _boost_block(
                 amount_eur_cents=int(delivery_request.boost_eur_cents or 0),
                 base_reward_eur_cents=chosen,
+            )
+            payload["chosen_terms"] = saved_request_terms(
+                delivery_request, chosen_economics=quote.chosen_economics
             )
             payload["deposit"] = _request_deposit_block(delivery_request)
         except PRICING_FAILURES as exc:

@@ -49,6 +49,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -63,6 +64,7 @@ import '../../core/format/locale_formats.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
+import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/place.dart';
 import '../../design/components/primitives.dart';
@@ -122,8 +124,38 @@ final itemPhotoPickerProvider = Provider<ItemPhotoPicker>((ref) {
   );
 });
 
+/// Pricing inputs a widget test can start the form with.
+///
+/// Reaching the pricing step through the UI means driving date and time dials
+/// three times over, which tests the pickers rather than the price. This opens
+/// the real screen on its last step with the inputs a quote needs, so the
+/// quote refresh, the stale-response guard and the totals card are exercised
+/// exactly as they run on a phone (J6.3). Never used by the app.
+@visibleForTesting
+class RequestCreatePricingSeed {
+  const RequestCreatePricingSeed({
+    required this.pickup,
+    required this.delivery,
+    required this.weightKg,
+    required this.readyStart,
+    required this.readyEnd,
+    required this.deadline,
+  });
+
+  final CanonicalPlace pickup;
+  final CanonicalPlace delivery;
+  final String weightKg;
+  final DateTime readyStart;
+  final DateTime readyEnd;
+  final DateTime deadline;
+}
+
 class RequestCreateScreen extends ConsumerStatefulWidget {
-  const RequestCreateScreen({super.key});
+  const RequestCreateScreen({super.key, this.debugPricingSeed});
+
+  /// Test-only. See [RequestCreatePricingSeed].
+  @visibleForTesting
+  final RequestCreatePricingSeed? debugPricingSeed;
 
   @override
   ConsumerState<RequestCreateScreen> createState() =>
@@ -285,6 +317,17 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   bool _pricingLoading = false;
   String? _pricingError;
   Timer? _rewardDebounceTimer;
+
+  /// Which request is the latest. A response from any earlier one is dropped,
+  /// so a slow quote for +€5 can never land after a quick one for no Boost and
+  /// put the wrong total on screen (J6.3).
+  int _quoteSeq = 0;
+  CancelToken? _quoteCancel;
+
+  /// The reward and Boost [_pricingQuote] was priced for. While the form holds
+  /// anything else, its totals are not this form's totals.
+  int? _quotedRewardCents;
+  int _quotedBoostCents = 0;
   int _chosenBoostCents = 0;
   int? _chosenDepositCents;
 
@@ -304,11 +347,25 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         '${orphans.toList()..sort()}',
       );
     }());
+    final seed = widget.debugPricingSeed;
+    if (seed != null) {
+      _pickup = seed.pickup;
+      _delivery = seed.delivery;
+      _weight.text = seed.weightKg;
+      _readyStart = seed.readyStart;
+      _readyEnd = seed.readyEnd;
+      _deadline = seed.deadline;
+      _step = _lastStep;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fetchPricingQuote();
+      });
+    }
   }
 
   @override
   void dispose() {
     _rewardDebounceTimer?.cancel();
+    _quoteCancel?.cancel();
     _title.dispose();
     _description.dispose();
     _weight.dispose();
@@ -863,12 +920,17 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       return;
     }
 
+    final seq = ++_quoteSeq;
+    _quoteCancel?.cancel();
+    final cancel = _quoteCancel = CancelToken();
+
     setState(() {
       _pricingLoading = true;
       _pricingError = null;
     });
 
     final currentRewardCents = AppAmountField.centsOf(_reward);
+    final boostCents = _chosenBoostCents;
 
     try {
       final quote = await ref
@@ -883,30 +945,53 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             readyWindowEnd: readyEnd,
             deadlineAt: deadline,
             chosenRewardEurCents: currentRewardCents,
-            boostEurCents: _chosenBoostCents > 0 ? _chosenBoostCents : null,
+            boostEurCents: boostCents > 0 ? boostCents : null,
+            cancelToken: cancel,
           );
-      if (!mounted) return;
+      if (!mounted || seq != _quoteSeq) return;
+      var prefilled = false;
       setState(() {
         _pricingQuote = quote;
+        _quotedRewardCents = currentRewardCents;
+        _quotedBoostCents = boostCents;
         _pricingLoading = false;
         // If reward is empty, prefill with recommended
         if (_reward.text.trim().isEmpty) {
           _reward.text = quote.recommendedReward.editableString;
+          prefilled = true;
         }
       });
+      // The prefill chose a reward, and a quote without a chosen reward has
+      // no totals. One follow-up read prices it; the server does the sums.
+      if (prefilled) unawaited(_fetchPricingQuote());
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _quoteSeq) return;
       setState(() {
         _pricingLoading = false;
         _pricingError = e.serverDetail ?? L.of(context).stateUnexpectedBody;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || seq != _quoteSeq) return;
       setState(() {
         _pricingLoading = false;
         _pricingError = L.of(context).stateUnexpectedBody;
       });
     }
+  }
+
+  /// True when [_pricingQuote] was priced for exactly what the form holds.
+  bool get _quoteIsCurrent =>
+      _pricingQuote != null &&
+      _quotedRewardCents == AppAmountField.centsOf(_reward) &&
+      _quotedBoostCents == _chosenBoostCents;
+
+  void _chooseBoost(int cents) {
+    if (_chosenBoostCents == cents) return;
+    setState(() => _chosenBoostCents = cents);
+    // A tap is one discrete choice, not a keystroke: price it now, and let
+    // the sequence guard drop whatever an earlier tap was still waiting on.
+    _rewardDebounceTimer?.cancel();
+    _fetchPricingQuote();
   }
 
   void _adjustReward(int deltaCents) {
@@ -1870,30 +1955,21 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                     label: Text(l.boostPresetNone),
                     selected: _chosenBoostCents == 0,
                     onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _chosenBoostCents = 0);
-                        _fetchPricingQuote();
-                      }
+                      if (selected) _chooseBoost(0);
                     },
                   ),
                   ChoiceChip(
                     label: Text(l.boostPreset5),
                     selected: _chosenBoostCents == 500,
                     onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _chosenBoostCents = 500);
-                        _fetchPricingQuote();
-                      }
+                      if (selected) _chooseBoost(500);
                     },
                   ),
                   ChoiceChip(
                     label: Text(l.boostPreset10),
                     selected: _chosenBoostCents == 1000,
                     onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _chosenBoostCents = 1000);
-                        _fetchPricingQuote();
-                      }
+                      if (selected) _chooseBoost(1000);
                     },
                   ),
                 ],
@@ -1903,58 +1979,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         ),
         const SizedBox(height: AppSpace.md),
 
-        if (_pricingQuote != null) ...[
-          Builder(
-            builder: (context) {
-              final locale = Localizations.localeOf(context);
-              return AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DetailRow(
-                      label: l.pricingTravelerReceives,
-                      value: Text(
-                        _pricingQuote!.boost.totalOfferedReward.format(locale),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    DetailRow(
-                      label: l.pricingPlatformFee,
-                      value: Text(
-                        _pricingQuote!.effectiveEconomics.platformFee.format(
-                          locale,
-                        ),
-                      ),
-                    ),
-                    const Divider(),
-                    DetailRow(
-                      label: l.pricingTotalSenderCost,
-                      value: Text(
-                        _pricingQuote!.effectiveEconomics.senderTotal.format(
-                          locale,
-                        ),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: context.colors.brand,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpace.xs),
-                    DetailRow(
-                      label: l.depositSectionTitle,
-                      value: Text(
-                        _pricingQuote!.deposit.recommendedDeposit.format(
-                          locale,
-                        ),
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
+        if (_pricingQuote != null)
+          _PricingTotalsCard(quote: _pricingQuote!, isCurrent: _quoteIsCurrent),
 
         if (_pricingError != null) ...[
           const SizedBox(height: AppSpace.sm),
@@ -2345,4 +2371,98 @@ class _DimensionField extends StatelessWidget {
     unit: unit,
     errorText: errorText,
   );
+}
+
+/// The request's price, as the server states it (J6.3).
+///
+/// Every figure is a `chosen_terms` field: the same terms, under the same
+/// names, that the Offer and the Deal will carry. Nothing here adds the Boost
+/// to a reward or a fee to a total. With a Boost the card reads in the Offer
+/// and Deal order — Base delivery reward, Boost bonus, Traveler receives,
+/// ShipTrip fee, Boost fee, You pay. Without one it stays three lines.
+///
+/// While the form holds a reward or Boost the quote was not priced for, the
+/// old figures are dimmed, hidden from screen readers and marked as updating:
+/// a stale total must never read as this request's total.
+class _PricingTotalsCard extends StatelessWidget {
+  const _PricingTotalsCard({required this.quote, required this.isCurrent});
+
+  final PostingPricingQuote quote;
+  final bool isCurrent;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final terms = quote.chosenTerms;
+
+    final lines = <MoneyLine>[];
+    if (terms.hasTotals) {
+      if (terms.hasBoost) {
+        if (terms.baseReward case final base?) {
+          lines.add(MoneyLine(label: l.moneyBaseReward, amount: base));
+        }
+        lines
+          ..add(MoneyLine(label: l.moneyBoostBonus, amount: terms.boostAmount!))
+          ..add(
+            MoneyLine.total(
+              label: l.moneyTravelerReceives,
+              amount: terms.travelerTotal!,
+            ),
+          );
+      } else {
+        lines.add(
+          MoneyLine(
+            label: l.moneyTravelerReceives,
+            amount: terms.travelerTotal!,
+          ),
+        );
+      }
+      if (terms.platformFee case final fee?) {
+        lines.add(MoneyLine(label: l.moneyPlatformFee, amount: fee));
+      }
+      if (terms.boostFee case final boostFee? when boostFee.isPositive) {
+        lines.add(MoneyLine(label: l.moneyBoostFee, amount: boostFee));
+      }
+      lines.add(
+        MoneyLine.total(
+          label: l.moneyYouPay,
+          amount: terms.senderTotalWithBoost!,
+        ),
+      );
+    }
+
+    final figures = Column(
+      key: const ValueKey('request-pricing-totals'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (lines.isNotEmpty)
+          MoneyBreakdown(title: l.moneyBreakdownTitle, lines: lines),
+        const SizedBox(height: AppSpace.sm),
+        AppCard(
+          child: DetailRow(
+            label: l.depositSectionTitle,
+            value: Text(
+              quote.deposit.recommendedDeposit.format(locale),
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (isCurrent) return figures;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          liveRegion: true,
+          label: l.pricingUpdating,
+          child: const LinearProgressIndicator(minHeight: 2),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        ExcludeSemantics(child: Opacity(opacity: 0.4, child: figures)),
+      ],
+    );
+  }
 }

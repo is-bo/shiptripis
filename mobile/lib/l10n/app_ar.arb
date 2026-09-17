@@ -232,6 +232,8 @@
   "depositRefundNote": "إذا لم يقبله أحد، أو ألغيت الطلب قبل قبول أي عرض، فسيُرد إليك بالكامل.",
   "depositGuidanceTitle": "تفاصيل العربون",
   "depositSuggestedTotal": "الإجمالي المقترح من ShipTrip",
+  "depositWholeAmount": "إجمالي ما تدفعه لهذا التوصيل",
+  "pricingUpdating": "جارٍ تحديث السعر",
   "depositRecommended": "العربون الموصى به",
   "depositMinimumAllowed": "الحد الأدنى للعربون",
   "depositGuidanceNote": "تحسب ShipTrip العربون من الإجمالي المقترح وتطبق الحدين الأدنى والأقصى الحاليين. يُحتسب هذا المبلغ من الدفعة النهائية وليس رسماً إضافياً.",
