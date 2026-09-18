@@ -1371,6 +1371,8 @@
   "boostCustomAmountLabel": "Montant du Boost personnalisé",
   "boostCurrentActive": "Boost actif : {amount}",
   "boostEditAction": "Modifier le Boost",
+  "boostAddAction": "Ajouter un Boost",
+  "boostPostPublicationOnly": "Vous pouvez ajouter un Boost maintenant que cette demande est en ligne. Les voyageurs le reçoivent intégralement.",
   "boostRemoveAction": "Supprimer le Boost",
   "boostHistoryTitle": "Historique du Boost",
   "boostHistoryChanged": "Modifié de {from} à {to}",

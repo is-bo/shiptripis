@@ -1371,6 +1371,8 @@
   "boostCustomAmountLabel": "مبلغ تعزيز مخصص",
   "boostCurrentActive": "التعزيز الحالي: {amount}",
   "boostEditAction": "تعديل التعزيز",
+  "boostAddAction": "أضف تعزيزًا",
+  "boostPostPublicationOnly": "يمكنك إضافة تعزيز الآن بعد نشر هذا الطلب. يحصل المسافرون عليه بالكامل.",
   "boostRemoveAction": "إزالة التعزيز",
   "boostHistoryTitle": "سجل التعزيز",
   "boostHistoryChanged": "تم التغيير من {from} إلى {to}",

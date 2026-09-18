@@ -4746,6 +4746,13 @@ class LFr extends L {
   String get boostEditAction => 'Modifier le Boost';
 
   @override
+  String get boostAddAction => 'Ajouter un Boost';
+
+  @override
+  String get boostPostPublicationOnly =>
+      'Vous pouvez ajouter un Boost maintenant que cette demande est en ligne. Les voyageurs le reçoivent intégralement.';
+
+  @override
   String get boostRemoveAction => 'Supprimer le Boost';
 
   @override

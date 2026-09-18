@@ -8199,6 +8199,18 @@ abstract class L {
   /// **'Change Boost'**
   String get boostEditAction;
 
+  /// No description provided for @boostAddAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Boost'**
+  String get boostAddAction;
+
+  /// No description provided for @boostPostPublicationOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'You can add a Boost now that this request is live. Travelers receive all of it.'**
+  String get boostPostPublicationOnly;
+
   /// No description provided for @boostRemoveAction.
   ///
   /// In en, this message translates to:

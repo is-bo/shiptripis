@@ -4716,6 +4716,13 @@ class LAr extends L {
   String get boostEditAction => 'تعديل التعزيز';
 
   @override
+  String get boostAddAction => 'أضف تعزيزًا';
+
+  @override
+  String get boostPostPublicationOnly =>
+      'يمكنك إضافة تعزيز الآن بعد نشر هذا الطلب. يحصل المسافرون عليه بالكامل.';
+
+  @override
   String get boostRemoveAction => 'إزالة التعزيز';
 
   @override

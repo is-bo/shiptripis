@@ -834,6 +834,315 @@ class AppAmountField extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Amount stepper
+// ---------------------------------------------------------------------------
+
+/// A euro amount with a decrement and an increment control: `− [ 30.00 € ] +`.
+///
+/// ## Why this is one widget and not three (Phase J7A)
+///
+/// The request form built this control by hand — two `IconButton.outlined`s in
+/// a `Row` either side of an [AppAmountField], each nudged down by a hard-coded
+/// `EdgeInsets.only(top: 8)`. That row aligned on `CrossAxisAlignment.start`,
+/// and the amount field carries its own label above the input box. So the
+/// buttons started 8 points below the top of the *label* while the input box
+/// started below the whole label line: on a phone the two circles sat visibly
+/// higher than the digits they changed, and the gap grew with the text scale,
+/// because the label grows and the magic 8 does not.
+///
+/// There is no padding constant that fixes that, because the mismatch is a
+/// function of the label's rendered height. So the three controls become one
+/// component: a single bordered box, one label above the whole thing, and the
+/// buttons stretched to exactly the input's height by [IntrinsicHeight]. They
+/// cannot drift, at any text scale, in any language, because nothing positions
+/// them independently any more.
+///
+/// ## What it does not do
+///
+/// No arithmetic. [onDecrement] and [onIncrement] are callbacks; the step size,
+/// the floor and the ceiling belong to the screen, which gets them from the
+/// server. In Arabic the box mirrors as a whole — `−` moves to the right — but
+/// the meaning does not: minus still decreases. Arithmetic is not a direction.
+class AppAmountStepper extends StatefulWidget {
+  const AppAmountStepper({
+    required this.label,
+    required this.controller,
+    required this.onDecrement,
+    required this.onIncrement,
+    required this.decrementLabel,
+    required this.incrementLabel,
+    this.helper,
+    this.errorText,
+    this.enabled = true,
+    this.labelVisible = true,
+    this.onChanged,
+    this.focusNode,
+    super.key,
+  });
+
+  final String label;
+  final TextEditingController controller;
+
+  /// Draws [label] above the control.
+  ///
+  /// Set false where a section heading directly above already says the same
+  /// words — "Your offer" twice in four lines is not two pieces of
+  /// information. The label is still attached to the input for a screen
+  /// reader, which has no heading in view to borrow from.
+  final bool labelVisible;
+
+  /// Accessible names for the two controls. They say what changes and by how
+  /// much ("Decrease by 50 cents"), because "minus" is not an answer to "what
+  /// does this button do".
+  final String decrementLabel;
+  final String incrementLabel;
+
+  final VoidCallback? onDecrement;
+  final VoidCallback? onIncrement;
+  final String? helper;
+  final String? errorText;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
+
+  @override
+  State<AppAmountStepper> createState() => _AppAmountStepperState();
+}
+
+class _AppAmountStepperState extends State<AppAmountStepper> {
+  FocusNode? _owned;
+  late FocusNode _node;
+
+  @override
+  void initState() {
+    super.initState();
+    _node = widget.focusNode ?? (_owned = FocusNode());
+    _node.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(AppAmountStepper old) {
+    super.didUpdateWidget(old);
+    if (widget.focusNode != old.focusNode) {
+      _node.removeListener(_onFocusChanged);
+      _owned?.dispose();
+      _owned = null;
+      _node = widget.focusNode ?? (_owned = FocusNode());
+      _node.addListener(_onFocusChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _node.removeListener(_onFocusChanged);
+    _owned?.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final hasError = widget.errorText != null;
+
+    final border = hasError
+        ? BorderSide(color: c.danger, width: _node.hasFocus ? 2 : 1)
+        : _node.hasFocus
+        ? BorderSide(color: c.textPrimary, width: 1.6)
+        : BorderSide(color: c.hairline);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.labelVisible) ...[
+          _FieldLabel(label: widget.label, isRequired: true),
+          const SizedBox(height: AppSpace.sm),
+        ],
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: widget.enabled ? c.surfaceRaised : c.surfaceSunken,
+            borderRadius: AppRadius.rMd,
+            border: Border.fromBorderSide(border),
+          ),
+          // The whole point of the component. Every child is stretched to the
+          // row's intrinsic height, which is the input's height — so the two
+          // buttons are exactly as tall as the field between them and share
+          // its vertical centre by construction rather than by arithmetic.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _StepControl(
+                  icon: Icons.remove_rounded,
+                  label: widget.decrementLabel,
+                  onPressed: widget.enabled ? widget.onDecrement : null,
+                  side: _StepSide.start,
+                ),
+                _StepperRule(color: c.hairline),
+                Expanded(
+                  child: Center(
+                    // The label is attached here rather than only drawn above,
+                    // so hiding it is a visual decision and never an
+                    // accessibility one: the input announces itself either way.
+                    child: Semantics(
+                      label: widget.label,
+                      child: TextField(
+                        controller: widget.controller,
+                        focusNode: _node,
+                        enabled: widget.enabled,
+                        onChanged: widget.onChanged,
+                        style: text.bodyLarge,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                          LengthLimitingTextInputFormatter(9),
+                        ],
+                        decoration: InputDecoration(
+                          // The box around the whole control already draws the
+                          // border and the fill; a second one inside it would be
+                          // a field inside a field.
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          isDense: true,
+                          counterText: '',
+                          helperText: null,
+                          errorText: null,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: AppSpace.md,
+                            vertical: AppSpace.lg,
+                          ),
+                          suffixIcon: const _FieldUnit(label: '€'),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 0,
+                            minHeight: 0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _StepperRule(color: c.hairline),
+                _StepControl(
+                  icon: Icons.add_rounded,
+                  label: widget.incrementLabel,
+                  onPressed: widget.enabled ? widget.onIncrement : null,
+                  side: _StepSide.end,
+                ),
+              ],
+            ),
+          ),
+        ),
+        _FieldFootnote(helper: widget.helper, errorText: widget.errorText),
+        ExcludeSemantics(
+          excluding: false,
+          child: Semantics(
+            label: l.a11yRequiredField,
+            child: const SizedBox.shrink(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+enum _StepSide { start, end }
+
+/// A hairline between a stepper control and the input, full height.
+class _StepperRule extends StatelessWidget {
+  const _StepperRule({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(width: 1, child: ColoredBox(color: color));
+}
+
+/// One end of [AppAmountStepper].
+///
+/// Square-ish and at least [AppSpace.minTapTarget] wide, so the tap area is
+/// the whole end of the control rather than a 24-point glyph. It has no border
+/// of its own: the enclosing box draws one, and the rule beside it is what
+/// separates the two.
+class _StepControl extends StatelessWidget {
+  const _StepControl({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    required this.side,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final _StepSide side;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final radius = side == _StepSide.start
+        ? const BorderRadiusDirectional.horizontal(
+            start: Radius.circular(AppRadius.md),
+          )
+        : const BorderRadiusDirectional.horizontal(
+            end: Radius.circular(AppRadius.md),
+          );
+
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: radius.resolve(Directionality.of(context)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minWidth: AppSpace.minTapTarget,
+                minHeight: AppSpace.minTapTarget,
+              ),
+              child: Center(
+                widthFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+                  child: Icon(
+                    icon,
+                    // The glyph grows with the text it sits beside, but only
+                    // so far: the button is already as tall as the input, and
+                    // a 35-point minus inside it reads as a banner rather than
+                    // a control.
+                    size: MediaQuery.textScalerOf(
+                      context,
+                    ).scale(22).clamp(22.0, 29.0),
+                    color: onPressed == null ? c.textTertiary : c.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Step indicator
 // ---------------------------------------------------------------------------
 

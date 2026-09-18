@@ -4706,6 +4706,13 @@ class LEn extends L {
   String get boostEditAction => 'Change Boost';
 
   @override
+  String get boostAddAction => 'Add Boost';
+
+  @override
+  String get boostPostPublicationOnly =>
+      'You can add a Boost now that this request is live. Travelers receive all of it.';
+
+  @override
   String get boostRemoveAction => 'Remove Boost';
 
   @override

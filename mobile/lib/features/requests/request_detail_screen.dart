@@ -366,16 +366,27 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (isBoosted) ...[
+                        // "Active Boost: €5.00" and a pill that repeats the
+                        // section title do not fit side by side in any of the
+                        // three languages — this row overflowed by 211 points
+                        // in English at 411 wide. The amount is the sentence
+                        // worth reading, so it takes the room and wraps; the
+                        // pill keeps its natural width.
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              l.boostCurrentActive(boostAmount.format(locale)),
-                              style: text.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: c.brand,
+                            Expanded(
+                              child: Text(
+                                l.boostCurrentActive(
+                                  boostAmount.format(locale),
+                                ),
+                                style: text.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: c.brand,
+                                ),
                               ),
                             ),
+                            const SizedBox(width: AppSpace.sm),
                             StatusPill(
                               label: l.boostSectionTitle,
                               tone: StatusTone.good,
@@ -393,6 +404,16 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                         ),
                         const SizedBox(height: AppSpace.md),
                       ] else ...[
+                        // Boost is no longer offered while the request is
+                        // being written (J7A), so this card is the first time
+                        // the sender meets it. It says why it is appearing
+                        // now — the request is live — rather than assuming
+                        // they turned it down earlier.
+                        Text(
+                          l.boostPostPublicationOnly,
+                          style: text.bodyMedium,
+                        ),
+                        const SizedBox(height: AppSpace.xs),
                         Text(
                           l.boostExplainer,
                           style: text.bodySmall?.copyWith(
@@ -405,7 +426,7 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                         AppButton(
                           label: isBoosted
                               ? l.boostEditAction
-                              : l.boostSectionTitle,
+                              : l.boostAddAction,
                           variant: isBoosted
                               ? AppButtonVariant.secondary
                               : AppButtonVariant.primary,
@@ -463,10 +484,16 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
               onPressed: () => context.openDiscovery(request.id),
             ),
             const SizedBox(height: AppSpace.sm),
+            // The post-publication entry point, and after J7A the *only* one:
+            // a sender who wants their parcel looked at harder never meets
+            // Boost until the request is open. It stays in the footer beside
+            // Find travelers rather than only in the card above, which scrolls
+            // away — this is where the sender is when they decide the request
+            // is not moving.
             AppButton(
-              label: l.boostTitle,
+              label: request.isBoosted ? l.boostEditAction : l.boostAddAction,
               variant: AppButtonVariant.secondary,
-              icon: Icons.trending_up_rounded,
+              icon: Icons.rocket_launch_outlined,
               onPressed: () => context.openBoost(request.id),
             ),
           ],

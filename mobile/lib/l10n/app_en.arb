@@ -2395,6 +2395,8 @@
     }
   },
   "boostEditAction": "Change Boost",
+  "boostAddAction": "Add Boost",
+  "boostPostPublicationOnly": "You can add a Boost now that this request is live. Travelers receive all of it.",
   "boostRemoveAction": "Remove Boost",
   "boostHistoryTitle": "Boost history",
   "boostHistoryChanged": "Changed from {from} to {to}",

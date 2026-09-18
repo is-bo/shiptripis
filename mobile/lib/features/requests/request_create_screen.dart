@@ -43,6 +43,27 @@
 /// * **Post cannot bounce silently.** Every step is re-checked locally before
 ///   submitting, and a server field error moves to the owning step *and* says
 ///   so, in a notice, next to the marked field.
+///
+/// ## There is no Boost on this screen (Phase J7A)
+///
+/// Boost used to sit on the last step, as three chips under the offer. It was
+/// the wrong question at the wrong moment, and the reason is not cosmetic:
+/// before the request exists there is nothing to make more attractive, and a
+/// sender who wants a traveller to look harder can simply offer more. Two
+/// controls for "pay the traveller more", one of which also charges a separate
+/// fee, is a decision nobody should be asked to make about a parcel they have
+/// not posted yet.
+///
+/// So the offer step asks one question — how much are you offering — against
+/// the server's minimum and recommendation. A Boost is what a *published*
+/// request can be given later, when the sender has watched it sit unmatched;
+/// it lives on the request detail screen and on [BoostScreen].
+///
+/// The economics are untouched. J2's Boost is still extra reward the traveller
+/// receives in full with its own fee on top, and J6.1–J6.3's authoritative
+/// totals still come from the server. This phase changed *when* the question
+/// is asked, not what the answer costs. Creation simply omits `boost_eur_cents`
+/// from the body; the server's contract defaults it to zero.
 library;
 
 import 'dart:async';
@@ -61,6 +82,7 @@ import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/money/money.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -89,6 +111,14 @@ const _maxWeightKg = 100.0;
 
 const _maxTitleLength = 160;
 const _maxDescriptionLength = 2000;
+
+/// One press of `−` or `+` on the offer, in cents.
+///
+/// Fifty cents, which is what the app has always stepped by and what
+/// `pricingIncrement50c` says out loud in all three languages. J7A moved where
+/// the control sits and how it is drawn; it deliberately did not change what a
+/// press is worth.
+const _rewardStepCents = 50;
 
 /// The server's own ceiling (`MAX_UPLOAD_BYTES`). Checked here as well so a
 /// 12 MB camera original is refused before it is pushed up a mobile uplink.
@@ -140,6 +170,11 @@ class RequestCreatePricingSeed {
     required this.readyStart,
     required this.readyEnd,
     required this.deadline,
+    this.title,
+    this.description,
+    this.category,
+    this.declaredValue,
+    this.itemPhotoMediaId,
   });
 
   final CanonicalPlace pickup;
@@ -148,6 +183,18 @@ class RequestCreatePricingSeed {
   final DateTime readyStart;
   final DateTime readyEnd;
   final DateTime deadline;
+
+  /// The parcel step's answers. Optional, and unset by default: a test that
+  /// only cares about the price leaves them out. Filling them in makes the
+  /// form *postable* — every earlier step complete — which is the only way to
+  /// see what the body of a real create call would carry (J7A).
+  final String? title;
+  final String? description;
+  final ItemCategory? category;
+  final String? declaredValue;
+
+  /// A staged photo id, as a successful upload would have produced.
+  final int? itemPhotoMediaId;
 }
 
 class RequestCreateScreen extends ConsumerStatefulWidget {
@@ -319,16 +366,14 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   Timer? _rewardDebounceTimer;
 
   /// Which request is the latest. A response from any earlier one is dropped,
-  /// so a slow quote for +€5 can never land after a quick one for no Boost and
+  /// so a slow quote for €40.00 can never land after a quick one for €30.00 and
   /// put the wrong total on screen (J6.3).
   int _quoteSeq = 0;
   CancelToken? _quoteCancel;
 
-  /// The reward and Boost [_pricingQuote] was priced for. While the form holds
-  /// anything else, its totals are not this form's totals.
+  /// The reward [_pricingQuote] was priced for. While the form holds anything
+  /// else, its totals are not this form's totals.
   int? _quotedRewardCents;
-  int _quotedBoostCents = 0;
-  int _chosenBoostCents = 0;
   int? _chosenDepositCents;
 
   @override
@@ -355,6 +400,14 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       _readyStart = seed.readyStart;
       _readyEnd = seed.readyEnd;
       _deadline = seed.deadline;
+      if (seed.title != null) _title.text = seed.title!;
+      if (seed.description != null) _description.text = seed.description!;
+      if (seed.declaredValue != null) _declaredValue.text = seed.declaredValue!;
+      _category = seed.category;
+      if (seed.itemPhotoMediaId != null) {
+        _photoMediaId = seed.itemPhotoMediaId;
+        _photoState = _PhotoState.ready;
+      }
       _step = _lastStep;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fetchPricingQuote();
@@ -930,7 +983,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
     });
 
     final currentRewardCents = AppAmountField.centsOf(_reward);
-    final boostCents = _chosenBoostCents;
 
     try {
       final quote = await ref
@@ -945,7 +997,10 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             readyWindowEnd: readyEnd,
             deadlineAt: deadline,
             chosenRewardEurCents: currentRewardCents,
-            boostEurCents: boostCents > 0 ? boostCents : null,
+            // No Boost is offered before publication (J7A), so none is quoted
+            // for. The key is omitted rather than sent as zero; the server's
+            // creation contract defaults it, and an explicit zero would only
+            // say the sender declined something they were never shown.
             cancelToken: cancel,
           );
       if (!mounted || seq != _quoteSeq) return;
@@ -953,7 +1008,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       setState(() {
         _pricingQuote = quote;
         _quotedRewardCents = currentRewardCents;
-        _quotedBoostCents = boostCents;
         _pricingLoading = false;
         // If reward is empty, prefill with recommended
         if (_reward.text.trim().isEmpty) {
@@ -982,29 +1036,35 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   /// True when [_pricingQuote] was priced for exactly what the form holds.
   bool get _quoteIsCurrent =>
       _pricingQuote != null &&
-      _quotedRewardCents == AppAmountField.centsOf(_reward) &&
-      _quotedBoostCents == _chosenBoostCents;
+      _quotedRewardCents == AppAmountField.centsOf(_reward);
 
-  void _chooseBoost(int cents) {
-    if (_chosenBoostCents == cents) return;
-    setState(() => _chosenBoostCents = cents);
-    // A tap is one discrete choice, not a keystroke: price it now, and let
-    // the sequence guard drop whatever an earlier tap was still waiting on.
-    _rewardDebounceTimer?.cancel();
-    _fetchPricingQuote();
-  }
-
+  /// Moves the offer by one step and prices it.
+  ///
+  /// The step is the app's approved €0.50 increment and is deliberately not
+  /// rounded to the nearest whole euro: a sender who typed €12.30 and pressed
+  /// `+` gets €12.80, not €13.00. The floor is the server's minimum — pressing
+  /// `−` at the minimum leaves the value where it is rather than sending an
+  /// amount the server will refuse.
   void _adjustReward(int deltaCents) {
     final currentCents =
         AppAmountField.centsOf(_reward) ??
         _pricingQuote?.recommendedReward.minorUnits ??
-        1000;
-    final minCents = _pricingQuote?.minimumReward.minorUnits ?? 50;
+        _rewardStepCents * 20;
+    final minCents =
+        _pricingQuote?.minimumReward.minorUnits ?? _rewardStepCents;
     final newCents = max(minCents, currentCents + deltaCents);
-    _reward.text = (newCents / 100.0).toStringAsFixed(2);
-    _onEdit(const ['sender_proposed_reward_eur_cents'])('');
-    _rewardDebounceTimer?.cancel();
-    _fetchPricingQuote();
+    final text = Money.eurCents(newCents).editableString;
+    // Assigning `.text` collapses the selection to offset -1, which drops the
+    // caret to the head of the field. A sender holding `+` would watch their
+    // cursor jump to the front of the number they are adjusting.
+    _reward.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    // The same path as typing, deliberately. A press is a keystroke here, not
+    // a discrete choice: holding `+` through five steps must move the field
+    // five times and read the price once.
+    _onRewardChanged(text);
   }
 
   void _onRewardChanged(String text) {
@@ -1093,7 +1153,10 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         heightCm: parseDecimalInput(_height.text),
         declaredValueEurCents: AppAmountField.centsOf(_declaredValue) ?? 0,
         senderProposedRewardEurCents: AppAmountField.centsOf(_reward) ?? 0,
-        boostEurCents: _chosenBoostCents,
+        // No `boostEurCents`. A request is created with no Boost at all
+        // (J7A): the draft's default keeps `boost_eur_cents` out of the body,
+        // and the server's creation contract defaults it to zero. Boost is a
+        // decision the sender makes on a request that is already published.
         postingDepositEurCents: _chosenDepositCents,
         title: _title.text.trim(),
         description: _description.text.trim(),
@@ -1267,18 +1330,23 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             ],
             Row(
               children: [
+                // Back takes the width of the word "Back" and no more.
+                // A fixed one-third share broke "Retour" across two lines in
+                // French and "Back" itself at 1.6× text, and there is no
+                // reason for a secondary action to claim a share of the bar
+                // it cannot use.
                 if (_step > 0) ...[
-                  Expanded(
+                  Flexible(
                     child: AppButton(
                       label: l.actionBack,
                       variant: AppButtonVariant.secondary,
+                      expand: false,
                       onPressed: _busy ? null : () => _goBackToStep(_step - 1),
                     ),
                   ),
                   const SizedBox(width: AppSpace.md),
                 ],
                 Expanded(
-                  flex: 2,
                   child: AppButton(
                     label: _step == _lastStep
                         ? l.requestPostAction
@@ -1784,6 +1852,9 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           icon: Icons.error_outline_rounded,
         ),
       ],
+      // The offer, and nothing else. There is no Boost here and there cannot
+      // be one: see the library comment. The whole section is about one
+      // number — what the sender is offering the traveller to carry this.
       SectionHeader(
         title: l.pricingYourOfferLabel,
         subtitle: l.requestProposedRewardHelp,
@@ -1796,121 +1867,30 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           ),
         )
       else ...[
+        // The band the offer sits in, stated before the sender chooses rather
+        // than discovered by being refused. Both figures are the server's.
         if (_pricingQuote != null) ...[
-          Builder(
-            builder: (context) {
-              final locale = Localizations.localeOf(context);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(AppSpace.md),
-                          decoration: BoxDecoration(
-                            color: context.colors.surfaceSunken,
-                            borderRadius: AppRadius.rMd,
-                            border: Border.all(color: context.colors.hairline),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l.pricingMinimumLabel,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: context.colors.textSecondary,
-                                    ),
-                              ),
-                              const SizedBox(height: AppSpace.xs),
-                              Text(
-                                _pricingQuote!.minimumReward.format(locale),
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpace.md),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(AppSpace.md),
-                          decoration: BoxDecoration(
-                            color: context.colors.surfaceSunken,
-                            borderRadius: AppRadius.rMd,
-                            border: Border.all(
-                              color: context.colors.hairlineStrong,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l.pricingRecommendedLabel,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: context.colors.brand,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              const SizedBox(height: AppSpace.xs),
-                              Text(
-                                _pricingQuote!.recommendedReward.format(locale),
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: context.colors.brand,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
+          _OfferBand(
+            minimum: _pricingQuote!.minimumReward,
+            recommended: _pricingQuote!.recommendedReward,
           ),
           const SizedBox(height: AppSpace.md),
         ],
 
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: IconButton.outlined(
-                icon: const Icon(Icons.remove_rounded),
-                tooltip: l.pricingDecrement50c,
-                onPressed: () => _adjustReward(-50),
-              ),
-            ),
-            const SizedBox(width: AppSpace.sm),
-            Expanded(
-              child: AppAmountField(
-                key: _anchor('sender_proposed_reward_eur_cents'),
-                focusNode: _focus('sender_proposed_reward_eur_cents'),
-                label: l.pricingYourOfferLabel,
-                controller: _reward,
-                errorText: _errorFor(l, 'sender_proposed_reward_eur_cents'),
-                onChanged: _onRewardChanged,
-              ),
-            ),
-            const SizedBox(width: AppSpace.sm),
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: IconButton.outlined(
-                icon: const Icon(Icons.add_rounded),
-                tooltip: l.pricingIncrement50c,
-                onPressed: () => _adjustReward(50),
-              ),
-            ),
-          ],
+        AppAmountStepper(
+          key: _anchor('sender_proposed_reward_eur_cents'),
+          focusNode: _focus('sender_proposed_reward_eur_cents'),
+          label: l.pricingYourOfferLabel,
+          // The section heading two lines above already says "Your offer".
+          labelVisible: false,
+          controller: _reward,
+          errorText: _errorFor(l, 'sender_proposed_reward_eur_cents'),
+          onChanged: _onRewardChanged,
+          decrementLabel: l.pricingDecrement50c,
+          incrementLabel: l.pricingIncrement50c,
+          onDecrement: () => _adjustReward(-_rewardStepCents),
+          onIncrement: () => _adjustReward(_rewardStepCents),
         ),
-        const SizedBox(height: AppSpace.sm),
 
         if (_pricingQuote != null &&
             _errorFor(l, 'sender_proposed_reward_eur_cents') == null) ...[
@@ -1929,55 +1909,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             ),
           const SizedBox(height: AppSpace.md),
         ],
-
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.boostSectionTitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: AppSpace.xs),
-              Text(
-                l.boostExplainer,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.colors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: AppSpace.sm),
-              Wrap(
-                spacing: AppSpace.sm,
-                children: [
-                  ChoiceChip(
-                    label: Text(l.boostPresetNone),
-                    selected: _chosenBoostCents == 0,
-                    onSelected: (selected) {
-                      if (selected) _chooseBoost(0);
-                    },
-                  ),
-                  ChoiceChip(
-                    label: Text(l.boostPreset5),
-                    selected: _chosenBoostCents == 500,
-                    onSelected: (selected) {
-                      if (selected) _chooseBoost(500);
-                    },
-                  ),
-                  ChoiceChip(
-                    label: Text(l.boostPreset10),
-                    selected: _chosenBoostCents == 1000,
-                    onSelected: (selected) {
-                      if (selected) _chooseBoost(1000);
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpace.md),
 
         if (_pricingQuote != null)
           _PricingTotalsCard(quote: _pricingQuote!, isCurrent: _quoteIsCurrent),
@@ -2373,17 +2304,131 @@ class _DimensionField extends StatelessWidget {
   );
 }
 
-/// The request's price, as the server states it (J6.3).
+/// The band the offer has to sit in: the server's minimum and its
+/// recommendation, side by side above the input.
+///
+/// Read-only on purpose. The recommendation is already in the field when the
+/// step opens, so these two are reference points rather than controls — what
+/// the sender may not go below, and what the server thinks will get carried.
+/// One sunken strip divided by a hairline rather than two bordered cards: this
+/// is supporting context for the number below it, not two more decisions.
+class _OfferBand extends StatelessWidget {
+  const _OfferBand({required this.minimum, required this.recommended});
+
+  final Money minimum;
+  final Money recommended;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final locale = Localizations.localeOf(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surfaceSunken,
+        borderRadius: AppRadius.rMd,
+        border: Border.all(color: c.hairline),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _OfferBandCell(
+                label: l.pricingMinimumLabel,
+                value: minimum.format(locale),
+                emphasised: false,
+              ),
+            ),
+            SizedBox(width: 1, child: ColoredBox(color: c.hairline)),
+            Expanded(
+              child: _OfferBandCell(
+                label: l.pricingRecommendedLabel,
+                value: recommended.format(locale),
+                emphasised: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OfferBandCell extends StatelessWidget {
+  const _OfferBandCell({
+    required this.label,
+    required this.value,
+    required this.emphasised,
+  });
+
+  final String label;
+  final String value;
+
+  /// The recommendation carries the brand colour; the minimum is a bound, not
+  /// a suggestion, and colouring both would recommend neither.
+  final bool emphasised;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return Semantics(
+      container: true,
+      label: label,
+      value: value,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: text.bodySmall?.copyWith(
+                  color: emphasised ? c.brand : c.textSecondary,
+                  fontWeight: emphasised ? FontWeight.w600 : null,
+                ),
+              ),
+              const SizedBox(height: AppSpace.xxs),
+              Text(
+                value,
+                style: text.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: emphasised ? c.brand : c.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the sender is about to owe for this offer, as the server states it
+/// (J6.3, narrowed by J7A).
 ///
 /// Every figure is a `chosen_terms` field: the same terms, under the same
-/// names, that the Offer and the Deal will carry. Nothing here adds the Boost
-/// to a reward or a fee to a total. With a Boost the card reads in the Offer
-/// and Deal order — Base delivery reward, Boost bonus, Traveler receives,
-/// ShipTrip fee, Boost fee, You pay. Without one it stays three lines.
+/// names, that the Offer and the Deal will carry. Nothing here adds anything
+/// to anything — `travelerTotal` and `senderTotalWithBoost` are read verbatim,
+/// and they are the whole obligation whatever it is made of.
 ///
-/// While the form holds a reward or Boost the quote was not priced for, the
-/// old figures are dimmed, hidden from screen readers and marked as updating:
-/// a stale total must never read as this request's total.
+/// Three lines, always. A request being created carries no Boost (J7A), so
+/// there is no Boost bonus, no Boost fee and no split between a base reward
+/// and a total to print — and a card that could name a Boost here would be
+/// naming something the sender was never offered. The itemised Boost reading
+/// lives where a Boost can exist: the Boost screen, the Offer and the Deal.
+///
+/// While the form holds a reward the quote was not priced for, the old figures
+/// are dimmed, hidden from screen readers and marked as updating: a stale
+/// total must never read as this request's total.
 class _PricingTotalsCard extends StatelessWidget {
   const _PricingTotalsCard({required this.quote, required this.isCurrent});
 
@@ -2398,31 +2443,11 @@ class _PricingTotalsCard extends StatelessWidget {
 
     final lines = <MoneyLine>[];
     if (terms.hasTotals) {
-      if (terms.hasBoost) {
-        if (terms.baseReward case final base?) {
-          lines.add(MoneyLine(label: l.moneyBaseReward, amount: base));
-        }
-        lines
-          ..add(MoneyLine(label: l.moneyBoostBonus, amount: terms.boostAmount!))
-          ..add(
-            MoneyLine.total(
-              label: l.moneyTravelerReceives,
-              amount: terms.travelerTotal!,
-            ),
-          );
-      } else {
-        lines.add(
-          MoneyLine(
-            label: l.moneyTravelerReceives,
-            amount: terms.travelerTotal!,
-          ),
-        );
-      }
+      lines.add(
+        MoneyLine(label: l.moneyTravelerReceives, amount: terms.travelerTotal!),
+      );
       if (terms.platformFee case final fee?) {
         lines.add(MoneyLine(label: l.moneyPlatformFee, amount: fee));
-      }
-      if (terms.boostFee case final boostFee? when boostFee.isPositive) {
-        lines.add(MoneyLine(label: l.moneyBoostFee, amount: boostFee));
       }
       lines.add(
         MoneyLine.total(
