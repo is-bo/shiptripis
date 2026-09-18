@@ -56,7 +56,27 @@ no changes; `schema.sql` regenerated from a migrated PostgreSQL (only
 `flutter analyze --fatal-infos` clean, `dart format` clean,
 `l10n_untranslated.json` empty. Sheet rendered to PNG in every state at
 320/390/411, landscape and 1.6× in EN/FR/AR; public page rendered for 11
-states and inspected in a browser at 320/390/160 %, light and dark.
+states and inspected in a browser at 320/390/160 %, light and dark. Full
+Django suite on local PostgreSQL: **2,199 passed, 34 skipped, 0 failed**.
+
+**J7C release.** Branch CI run
+[35375639693](https://github.com/is-bo/shiptripis/actions/runs/35375639693)
+passed at `311c804691b115cc1f8d1952e056d0017a69c35b` with **all six jobs
+green**, including **2,199 Django passes / 34 skips** (identical to local) and
+the schema-drift gate. `main` fast-forwarded to `311c804`, pushed, verified
+identical to `origin/main`; the branch was deleted locally and remotely.
+Deployment `99cc109d-751f-420a-9309-95a6c396bce9` **SUCCESS**, release
+`v1.0.0-rc.42+311c804`, uploaded from a `core.autocrlf=false` archive of the
+exact SHA (all 13 changed runtime files hash-identical to the commit).
+`finance.0026_guestpaymentlink_token_seed` applied; every process started.
+Public `/healthz` and `/readyz` **200** (`database ok`, `migrations ok`,
+`rate_limit_cache ok`). On TEST: an unknown `/pay/guest/<token>` renders the new
+uniform page at **404** in EN, in AR (`dir="rtl"`) via `?lang=ar`, and in FR from
+`Accept-Language`, with `no-referrer`; `GET`/`POST .../guest-link` answer **401**
+unauthenticated; the page's fonts are served. `RELEASE_ID` was the only variable
+changed. Stripe TEST, Chargily TEST, `EMAIL_ENABLED=false`,
+`PAYOUT_DZD_EXECUTION_ENABLED` false, no LIVE, no real money. **APK: not built**
+— deferred to the combined J7 build.
 
 ## J7B — Published request route and matching reliability (2026-09-18)
 

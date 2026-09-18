@@ -269,7 +269,23 @@ states/languages and inspected in a browser at 320, 390, 160 % text, light and
 dark: no horizontal scroll anywhere; in Arabic the button's amount is isolated
 LTR so it reads like the headline.
 
-## 13. Remaining findings
+## 13. Verification and release
+
+* Local: backend guest suites 82 passed (SQLite and PostgreSQL), full Django
+  suite on PostgreSQL **2,199 passed / 34 skipped / 0 failed**, `ruff` clean,
+  `manage.py check` clean, `makemigrations --check` no changes; mobile full suite
+  **837 passed**, `flutter analyze --fatal-infos` and `dart format` clean,
+  `l10n_untranslated.json` empty.
+* CI [35375639693](https://github.com/is-bo/shiptripis/actions/runs/35375639693)
+  at `311c804`: all six jobs green (Django 2,199 / 34 skipped, schema drift ok).
+* `main` = `origin/main` = `311c804`; branch deleted locally and remotely.
+* TEST deployment `99cc109d-751f-420a-9309-95a6c396bce9` SUCCESS, release
+  `v1.0.0-rc.42+311c804`; `/healthz` and `/readyz` 200; migration 0026 applied;
+  new public page and 401 owner endpoints verified from outside.
+* Stripe TEST, Chargily TEST, `EMAIL_ENABLED=false`, DZD execution false, no LIVE,
+  no real-money operation. **APK: not built** (deferred to the combined J7 build).
+
+## 14. Remaining findings
 
 * **MINOR (J7D)** — the post-provider return page `/pay/<ref>/return` still uses
   the old generic style; it is a payment-result surface and belongs to J7D.
