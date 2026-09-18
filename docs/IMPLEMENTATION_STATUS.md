@@ -1,5 +1,95 @@
 # ShipTrip V1 Implementation Status
 
+## J7A — Request-creation UX cleanup: Boost moves after publication (2026-09-18)
+
+**J7A PASS — 45 new mobile tests, full mobile suite 729 green, 0 analysis
+issues, no backend change and no schema change.** Branch
+`claude/j7a-request-create-ux`, from J6.4 `92a9fe8`. [The Boost timing decision,
+the one-component price control and the device coverage](PHASE_J7A_REQUEST_CREATE_UX.md).
+
+**Boost was the wrong question at the wrong moment, and it is gone from
+creation.** Before a request exists there is nothing to make more attractive,
+and a sender who wants a traveller to look harder can simply offer more — two
+controls for "pay the traveller more", one of which also charges its own fee, is
+a decision nobody should be asked to make about a parcel they have not posted
+yet. Creating a request is now route → parcel → timing → **your offer** →
+deposit → pay, with no Boost chips, no Boost fee, no Boost explainer and no
+"total including Boost". The create body omits `boost_eur_cents` entirely rather
+than sending a zero; the server's creation serializer already defaults it
+(`required=False, min_value=0, default=0`), so nothing changed on the backend and
+an older client that still sends one is accepted exactly as before. The pricing
+quote is likewise asked without a Boost parameter.
+
+**Boost is offered where it has an answer.** A published, unmatched request
+exposes **Add Boost** twice on its detail screen: in a card whose first sentence
+says why it is appearing now — the request is live — and in the footer beside
+Find travelers, which is where the sender is standing when they decide the
+request is not moving. Both read "Change Boost" once one is set. The J2
+economics, the Boost screen, `PUT /api/parcels/<id>/boost` and the J6.1–J6.3
+authoritative totals are untouched: this phase changed *when* the question is
+asked, not what the answer costs. A post-publication Boost still posts
+`boost_eur_cents` and still shows the server's 15 % Boost fee rather than the
+25 % delivery rate.
+
+**The `−`/`+` misalignment had no padding fix, so the control became one
+widget.** It was three unrelated widgets in a `Row` aligned on its top edge, each
+button nudged down by a hard-coded 8 points. The amount field carries its own
+label above its input box, so the buttons started 8 points below the top of the
+*label* while the box started below the whole label line — about twenty points
+of drift on a phone, growing with the text scale, because the label grows and the
+8 does not. `AppAmountStepper` now draws one bordered box with hairline rules and
+stretches both ends to exactly the input's height via `IntrinsicHeight`, so they
+share its vertical centre by construction. The step stays **€0.50**, still stops
+at the server's minimum, and now prices through the same 350 ms debounce as
+typing — holding `+` through five steps moves the field five times and reads the
+price once, where each old chip tap fired a read immediately.
+
+**Two defects found while testing this, both fixed.** The boosted
+request-detail card's header row put "Active Boost: €5.00" beside a status pill
+with no flex and overflowed by 211 points in English at 411 wide — present in
+every build since J2. And the form's footer gave Back a fixed third of the bar,
+which split "Retour" across two lines in French and "Back" itself at 1.6× text.
+
+**Device coverage was looked at, not only asserted.** 18 alignment cases —
+320×640, 390×844, 411×869, landscape 844×390, and 390×844 at 1.3× and 1.6× text,
+each in EN/FR/AR — assert one vertical centre, matched heights, symmetrical ends,
+≥48 pt tap targets and nothing clipped off either edge. The same matrix plus the
+published request detail was rendered to PNGs on a throwaway golden rig and
+inspected; the pictures are what caught "Your offer" printed twice (heading and
+field label), the two footer button splits, and confirmed the Arabic control
+mirrors as a whole without mirroring the arithmetic.
+
+`phase_j63_request_boost_total_test.dart` was trimmed from 21 to 10 tests: its
+pricing-contract and deposit groups are untouched and green, and the three groups
+that drove the creation screen's Boost chips were testing a control that no
+longer exists. Its header names where that coverage lives now — the refresh,
+debounce and latest-answer-wins guard in the J7A file, and the itemised Boost
+money lines on the Offer and Deal surfaces in `phase_j61` and `phase_j62`.
+
+**J7A release.** Branch CI run `35289709384` green on
+`7c1ef2323f32bd5f232a2be80fc8ae0c93bd70fd`, all six jobs; main fast-forwarded to
+that exact SHA and pushed, local `main` equal to `origin/main`, phase branch
+deleted locally and remotely. Push CI run `35292044052` on the same SHA: green,
+all six jobs.
+
+**No Railway deployment, deliberately.** The change set is `mobile/lib`,
+`mobile/test` and `docs/` only — no backend runtime file changed — so the
+deployed TEST service stays on the J6.4 release `v1.0.0-rc.39+b879724` and every
+TEST guarantee is unchanged: `PAYMENTS_ENVIRONMENT=test`, Stripe `sk_test_`,
+`STRIPE_CONNECT_EXPECTED_MODE=test`, Chargily `/test/api/v2` with a `test_sk_`
+key, `PAYOUT_DZD_EXECUTION_ENABLED=false`. No Railway variable was read or
+written this phase, nothing was created at a provider, and no LIVE or real-money
+operation was performed.
+
+QA APK `shiptrip-v1.0.0-rc.40-7c1ef23-profile-arm64.apk` from build run
+`35292049718` on `7c1ef23`, **36,654,913 bytes**, SHA-256
+`87894484bb3946d4676fe5682f7e7adf4de33b714e7db191cb3de63ba8b702fe` — matching the
+workflow's own `SHA256SUMS.txt`. `libapp.so` and `libflutter.so` are arm64-v8a
+only (the other two ABI folders carry small plugin stubs), and the binary carries
+`https://shiptrip-production-f7f7.up.railway.app` as its API origin. Profile
+builds are signed with the runner's auto-generated debug key, which differs on
+every run: uninstall the previous QA build before installing this one.
+
 ## J6.4 — Admin People profile and simplified payout-method review (2026-09-17)
 
 **J6.4 PASS — 17 new backend tests, 377 console-touching backend tests green, no
