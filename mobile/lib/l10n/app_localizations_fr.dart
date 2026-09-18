@@ -915,8 +915,8 @@ class LFr extends L {
   String get journeyChooseDateTime => 'Choisissez la date et l’heure';
 
   @override
-  String get journeyArriveOptionalHelp =>
-      'Facultatif. Cela nous permet de vérifier que l’étape suivante part à temps.';
+  String get journeyArriveHelp =>
+      'Nécessaire pour vous proposer des colis : l’échéance de l’expéditeur est comparée à cette heure.';
 
   @override
   String get journeyRemoveLeg => 'Retirer cette étape';
@@ -942,6 +942,10 @@ class LFr extends L {
   @override
   String get journeyLegDepartBeforePreviousArrival =>
       'Cette étape part avant que la précédente n’atterrisse.';
+
+  @override
+  String get journeyLegArriveRequired =>
+      'Indiquez l’heure d’arrivée de cette étape.';
 
   @override
   String get journeyLegArriveBeforeDepart =>
@@ -998,6 +1002,10 @@ class LFr extends L {
 
   @override
   String get journeyErrorLegTime => 'Une étape arrive avant de partir.';
+
+  @override
+  String get journeyErrorLegArrivalRequired =>
+      'Chaque étape doit avoir une heure d’arrivée avant publication. Sans elle, aucun expéditeur ne peut être associé à ce trajet.';
 
   @override
   String get journeyErrorLegsDisconnected =>
@@ -3310,6 +3318,9 @@ class LFr extends L {
 
   @override
   String get requestRouteSection => 'Trajet';
+
+  @override
+  String get requestRouteNotRecorded => 'Trajet non enregistré';
 
   @override
   String get requestMatchesSection => 'Voyageurs contactés';

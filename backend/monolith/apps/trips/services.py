@@ -151,7 +151,17 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
                 "journey_leg_endpoints_invalid",
                 f"Leg {leg.position} origin and destination must differ.",
             )
-        if leg.arrive_at is not None and leg.arrive_at <= leg.depart_at:
+        # A leg with no arrival can never deliver: compatibility compares the
+        # arrival at the drop-off node with the sender's deadline, so every
+        # request ending there is refused. Publishing it would list a journey
+        # nobody can be matched with. Writes have required an arrival since
+        # J7B; this catches a draft written before that.
+        if leg.arrive_at is None:
+            raise JourneyDomainError(
+                "journey_leg_arrival_required",
+                f"Leg {leg.position} needs an arrival time before publication.",
+            )
+        if leg.arrive_at <= leg.depart_at:
             raise JourneyDomainError(
                 "journey_leg_time_invalid",
                 f"Leg {leg.position} arrival must be after departure.",

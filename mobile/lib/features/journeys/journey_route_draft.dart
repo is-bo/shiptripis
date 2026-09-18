@@ -475,11 +475,19 @@ class JourneyRouteDraft extends ChangeNotifier {
       }
     }
 
+    // Required since J7B. Matching delivers a parcel at the end of a leg only
+    // if it knows when that leg arrives — the arrival is what the sender's
+    // deadline is checked against — so a leg without one published a trip no
+    // request could ever match. The server refuses it too.
     final arriveAt = segment.arriveAt;
-    final arrive =
-        (arriveAt != null && departAt != null && !arriveAt.isAfter(departAt))
-        ? copy.arriveBeforeDepart
-        : null;
+    final String? arrive;
+    if (arriveAt == null) {
+      arrive = copy.arriveRequired;
+    } else if (departAt != null && !arriveAt.isAfter(departAt)) {
+      arrive = copy.arriveBeforeDepart;
+    } else {
+      arrive = null;
+    }
 
     // The wire format is two decimal places, so the check is on what will
     // actually be sent — 0.004 kg rounds to 0.00 and would be refused.
@@ -565,6 +573,7 @@ typedef RouteCopy = ({
   String departRequired,
   String departNotAfterPrevious,
   String departBeforePreviousArrival,
+  String arriveRequired,
   String arriveBeforeDepart,
   String capacityInvalid,
   String required,

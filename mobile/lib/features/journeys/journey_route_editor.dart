@@ -42,6 +42,7 @@ RouteCopy routeCopyOf(BuildContext context) {
     departRequired: l.journeyLegDepartRequired,
     departNotAfterPrevious: l.journeyLegDepartNotAfterPrevious,
     departBeforePreviousArrival: l.journeyLegDepartBeforePreviousArrival,
+    arriveRequired: l.journeyLegArriveRequired,
     arriveBeforeDepart: l.journeyLegArriveBeforeDepart,
     capacityInvalid: l.journeyCapacityInvalid,
     required: l.validationRequired,
@@ -597,8 +598,9 @@ class _SegmentBlock extends StatelessWidget {
                 label: l.journeyArrives,
                 placeholder: l.journeyChooseDateTime,
                 icon: Icons.flag_outlined,
+                isRequired: true,
                 enabled: enabled,
-                helper: l.journeyArriveOptionalHelp,
+                helper: l.journeyArriveHelp,
                 value: segment.arriveAt == null
                     ? null
                     : LocaleFormats.preciseDateTime(locale, segment.arriveAt!),

@@ -37,6 +37,7 @@ import '../../domain/offer.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
+import '../requests/request_labels.dart';
 import '../shell/app_shell.dart';
 
 enum _Filter { active, awaitingYou, history }
@@ -376,11 +377,16 @@ class _RequestsSection extends ConsumerWidget {
                           Text(
                             // A route, not a pair: the middle dot lost the
                             // direction every other list on the app shows.
-                            context.isRtl
-                                ? '${request.deliveryLocation?.coarseLabel ?? ''} ← '
-                                      '${request.pickupLocation?.coarseLabel ?? ''}'
-                                : '${request.pickupLocation?.coarseLabel ?? ''} → '
-                                      '${request.deliveryLocation?.coarseLabel ?? ''}',
+                            // Named from the canonical places (J7B); the
+                            // meeting points it used are optional and were
+                            // usually absent, leaving a bare arrow.
+                            !requestHasRoute(request)
+                                ? l.requestRouteNotRecorded
+                                : context.isRtl
+                                ? '${requestDeliveryLabel(l, request)} ← '
+                                      '${requestPickupLabel(l, request)}'
+                                : '${requestPickupLabel(l, request)} → '
+                                      '${requestDeliveryLabel(l, request)}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: context.colors.textSecondary),
                             maxLines: 1,

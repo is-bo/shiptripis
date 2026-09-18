@@ -1779,11 +1779,11 @@ abstract class L {
   /// **'Choose date and time'**
   String get journeyChooseDateTime;
 
-  /// No description provided for @journeyArriveOptionalHelp.
+  /// No description provided for @journeyArriveHelp.
   ///
   /// In en, this message translates to:
-  /// **'Optional. It lets us check the next leg leaves in time.'**
-  String get journeyArriveOptionalHelp;
+  /// **'Needed to match you with senders: their deadline is checked against this time.'**
+  String get journeyArriveHelp;
 
   /// No description provided for @journeyRemoveLeg.
   ///
@@ -1826,6 +1826,12 @@ abstract class L {
   /// In en, this message translates to:
   /// **'This leg departs before the previous one lands.'**
   String get journeyLegDepartBeforePreviousArrival;
+
+  /// No description provided for @journeyLegArriveRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Add when this leg arrives.'**
+  String get journeyLegArriveRequired;
 
   /// No description provided for @journeyLegArriveBeforeDepart.
   ///
@@ -1916,6 +1922,12 @@ abstract class L {
   /// In en, this message translates to:
   /// **'One leg arrives before it departs.'**
   String get journeyErrorLegTime;
+
+  /// No description provided for @journeyErrorLegArrivalRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Every leg needs an arrival time before you publish. Without it, no sender can be matched with this trip.'**
+  String get journeyErrorLegArrivalRequired;
 
   /// No description provided for @journeyErrorLegsDisconnected.
   ///
@@ -5756,6 +5768,12 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Route'**
   String get requestRouteSection;
+
+  /// No description provided for @requestRouteNotRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'Route not recorded'**
+  String get requestRouteNotRecorded;
 
   /// No description provided for @requestMatchesSection.
   ///

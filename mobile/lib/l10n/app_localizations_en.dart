@@ -910,8 +910,8 @@ class LEn extends L {
   String get journeyChooseDateTime => 'Choose date and time';
 
   @override
-  String get journeyArriveOptionalHelp =>
-      'Optional. It lets us check the next leg leaves in time.';
+  String get journeyArriveHelp =>
+      'Needed to match you with senders: their deadline is checked against this time.';
 
   @override
   String get journeyRemoveLeg => 'Remove this leg';
@@ -936,6 +936,9 @@ class LEn extends L {
   @override
   String get journeyLegDepartBeforePreviousArrival =>
       'This leg departs before the previous one lands.';
+
+  @override
+  String get journeyLegArriveRequired => 'Add when this leg arrives.';
 
   @override
   String get journeyLegArriveBeforeDepart =>
@@ -992,6 +995,10 @@ class LEn extends L {
 
   @override
   String get journeyErrorLegTime => 'One leg arrives before it departs.';
+
+  @override
+  String get journeyErrorLegArrivalRequired =>
+      'Every leg needs an arrival time before you publish. Without it, no sender can be matched with this trip.';
 
   @override
   String get journeyErrorLegsDisconnected =>
@@ -3289,6 +3296,9 @@ class LEn extends L {
 
   @override
   String get requestRouteSection => 'Route';
+
+  @override
+  String get requestRouteNotRecorded => 'Route not recorded';
 
   @override
   String get requestMatchesSection => 'Travelers you\'ve approached';

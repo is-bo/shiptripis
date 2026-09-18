@@ -44,6 +44,7 @@ import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+import 'request_labels.dart';
 
 final _requestPricingProvider = FutureProvider.autoDispose
     .family<RequestPricing, int>((ref, id) async {
@@ -204,11 +205,33 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (pickup != null && delivery != null)
+              // The route is the two canonical places (J7B). It used to be
+              // drawn from the optional meeting points, which most requests
+              // do not have, so the card rendered empty.
+              if (requestHasRoute(request))
                 RouteSummary(
-                  from: _placeLabel(pickup),
-                  to: _placeLabel(delivery),
+                  from: requestPickupLabel(l, request),
+                  to: requestDeliveryLabel(l, request),
                   style: text.titleMedium,
+                )
+              else
+                Text(
+                  l.requestRouteNotRecorded,
+                  style: text.bodyMedium?.copyWith(color: c.textSecondary),
+                ),
+              // The meeting points, when the sender chose them, are detail
+              // inside the route rather than the route itself.
+              if (pickup != null || delivery != null)
+                const SizedBox(height: AppSpace.md),
+              if (pickup != null)
+                DetailRow(
+                  label: l.requestPickupLocation,
+                  value: Text(_placeLabel(pickup), textAlign: TextAlign.end),
+                ),
+              if (delivery != null)
+                DetailRow(
+                  label: l.requestDeliveryLocation,
+                  value: Text(_placeLabel(delivery), textAlign: TextAlign.end),
                 ),
               if (pickup != null && !pickup.isExact) ...[
                 const SizedBox(height: AppSpace.sm),

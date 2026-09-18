@@ -38,6 +38,7 @@ import '../../l10n/app_localizations.dart';
 import '../common/delivery_card.dart';
 import '../../core/format/locale_formats.dart';
 import '../common/status_copy.dart';
+import '../requests/request_labels.dart';
 import '../shell/app_shell.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -458,8 +459,8 @@ class _MyRequestsSection extends ConsumerWidget {
             for (final request in live.take(3)) ...[
               _RequestRow(
                 title: request.title,
-                from: request.pickupLocation?.coarseLabel ?? '',
-                to: request.deliveryLocation?.coarseLabel ?? '',
+                from: requestPickupLabel(l, request),
+                to: requestDeliveryLabel(l, request),
                 status: requestStatusCopy(context, request.status),
                 onTap: () => context.openRequest(request.id),
               ),

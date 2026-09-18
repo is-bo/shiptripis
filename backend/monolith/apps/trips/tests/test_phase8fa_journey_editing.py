@@ -342,6 +342,7 @@ class JourneyModeApiTests(APITestCase, GeographyFixture):
                     "origin_place_id": self.algiers.pk,
                     "destination_place_id": self.marseille.pk,
                     "depart_at": (self.depart + timedelta(hours=6)).isoformat(),
+                    "arrive_at": (self.depart + timedelta(hours=7)).isoformat(),
                     "capacity_kg": "10.00",
                 },
             ],
@@ -642,6 +643,7 @@ class JourneyEditApiTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.cdg.pk,
                         "destination_place_id": self.madrid.pk,
                         "depart_at": (self.depart + timedelta(hours=12)).isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=13)).isoformat(),
                         "capacity_kg": "12.00",
                     },
                 ],
@@ -780,6 +782,7 @@ class JourneyEditApiTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.alg.pk,
                         "destination_place_id": self.jijel.pk,
                         "depart_at": (self.depart + timedelta(hours=5)).isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=6)).isoformat(),
                         "capacity_kg": "12.00",
                     },
                 ],
@@ -807,6 +810,7 @@ class JourneyEditApiTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.jijel.pk,
                         "destination_place_id": self.paris.pk,
                         "depart_at": self.depart.isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=1)).isoformat(),
                         "capacity_kg": "12.00",
                     }
                 ],
@@ -908,7 +912,9 @@ class JourneyEditApiTests(APITestCase, GeographyFixture):
         response = self._edit(
             journey,
             self._unchanged_flight_payload(
-                journey, capacity_kg="4.00", arrive_at=None
+                journey,
+                capacity_kg="4.00",
+                arrive_at=(self.depart + timedelta(hours=4)).isoformat(),
             ),
         )
 
@@ -1044,6 +1050,7 @@ class JourneyEditApiTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.paris.pk,
                         "destination_place_id": self.madrid.pk,
                         "depart_at": self.depart.isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=1)).isoformat(),
                         "capacity_kg": "5.00",
                     }
                 ],
@@ -1094,6 +1101,7 @@ class JourneyEditDependentStateTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.jijel.pk,
                         "destination_place_id": self.algiers.pk,
                         "depart_at": self.depart.isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=1)).isoformat(),
                         "capacity_kg": "9.00",
                     }
                 ],
@@ -1185,6 +1193,7 @@ class FlightProofUploadTests(APITestCase, GeographyFixture):
                         "origin_place_id": self.cdg.pk,
                         "destination_place_id": self.paris.pk,
                         "depart_at": (self.depart + timedelta(hours=4)).isoformat(),
+                        "arrive_at": (self.depart + timedelta(hours=5)).isoformat(),
                         "capacity_kg": "11.00",
                     },
                 ],

@@ -180,6 +180,7 @@ String? journeyRouteFailure(BuildContext context, ApiException error) {
     'journey_leg_endpoints_invalid' => l.journeyErrorLegEndpoints,
     'journey_leg_time_order_invalid' => l.journeyErrorLegTimeOrder,
     'journey_leg_time_invalid' => l.journeyErrorLegTime,
+    'journey_leg_arrival_required' => l.journeyErrorLegArrivalRequired,
     'journey_not_editable' => l.journeyEditBlockedStatus,
     'journey_has_dependent_state' => l.journeyEditBlockedDependent,
     'journey_not_owned' => l.journeyErrorNotOwned,

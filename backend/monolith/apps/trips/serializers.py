@@ -154,8 +154,23 @@ class JourneyLegInputSerializer(serializers.Serializer):
         default=None,
     )
     depart_at = serializers.DateTimeField()
+    # Required since J7B. Matching can only deliver a parcel at the end of a
+    # leg whose arrival it knows: `evaluate_compatibility` compares that arrival
+    # with the sender's deadline, so a leg written without one was accepted,
+    # published and listed, and then silently refused every request that ended
+    # there. The column stays nullable for historical rows; new writes may not
+    # add another.
     arrive_at = serializers.DateTimeField(
-        required=False, allow_null=True, default=None
+        error_messages={
+            "required": (
+                "Every leg needs an arrival time so it can be matched with "
+                "senders' deadlines."
+            ),
+            "null": (
+                "Every leg needs an arrival time so it can be matched with "
+                "senders' deadlines."
+            ),
+        },
     )
     capacity_kg = serializers.DecimalField(
         max_digits=8,

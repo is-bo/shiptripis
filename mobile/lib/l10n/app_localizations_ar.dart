@@ -904,8 +904,8 @@ class LAr extends L {
   String get journeyChooseDateTime => 'اختر التاريخ والوقت';
 
   @override
-  String get journeyArriveOptionalHelp =>
-      'اختياري. يتيح لنا التحقق من أن المرحلة التالية تنطلق في الوقت المناسب.';
+  String get journeyArriveHelp =>
+      'مطلوب لمطابقتك مع المرسلين، إذ يُقارَن موعدهم النهائي بهذا الوقت.';
 
   @override
   String get journeyRemoveLeg => 'إزالة هذه المرحلة';
@@ -931,6 +931,9 @@ class LAr extends L {
   @override
   String get journeyLegDepartBeforePreviousArrival =>
       'تنطلق هذه المرحلة قبل وصول المرحلة السابقة.';
+
+  @override
+  String get journeyLegArriveRequired => 'أضف وقت وصول هذه المرحلة.';
 
   @override
   String get journeyLegArriveBeforeDepart => 'يجب أن يكون الوصول بعد المغادرة.';
@@ -985,6 +988,10 @@ class LAr extends L {
 
   @override
   String get journeyErrorLegTime => 'تصل إحدى المراحل قبل أن تنطلق.';
+
+  @override
+  String get journeyErrorLegArrivalRequired =>
+      'يجب أن يكون لكل مرحلة وقت وصول قبل النشر. بدونه لا يمكن مطابقة أي مرسل مع هذه الرحلة.';
 
   @override
   String get journeyErrorLegsDisconnected =>
@@ -3302,6 +3309,9 @@ class LAr extends L {
 
   @override
   String get requestRouteSection => 'المسار';
+
+  @override
+  String get requestRouteNotRecorded => 'لم يُسجَّل المسار';
 
   @override
   String get requestMatchesSection => 'المسافرون الذين تواصلت معهم';

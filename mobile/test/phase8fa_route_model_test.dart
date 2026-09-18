@@ -84,6 +84,7 @@ const RouteCopy _copy = (
   departRequired: 'depart-required',
   departNotAfterPrevious: 'depart-order',
   departBeforePreviousArrival: 'depart-before-arrival',
+  arriveRequired: 'arrive-required',
   arriveBeforeDepart: 'arrive-order',
   capacityInvalid: 'capacity',
   required: 'required',

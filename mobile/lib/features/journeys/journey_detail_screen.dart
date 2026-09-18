@@ -89,6 +89,7 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
       'journey_endpoints_mismatch' => l.journeyErrorEndpointsMismatch,
       'journey_leg_endpoints_invalid' => l.journeyErrorLegEndpoints,
       'journey_leg_time_invalid' => l.journeyErrorLegTime,
+      'journey_leg_arrival_required' => l.journeyErrorLegArrivalRequired,
       'journey_legs_disconnected' => l.journeyErrorLegsDisconnected,
       'journey_leg_time_order_invalid' => l.journeyErrorLegTimeOrder,
       'journey_leg_mode_unavailable' => l.routeErrorModeUnavailable,

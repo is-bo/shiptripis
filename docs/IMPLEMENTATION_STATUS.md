@@ -1,5 +1,62 @@
 # ShipTrip V1 Implementation Status
 
+## J7B — Published request route and matching reliability (2026-09-18)
+
+**J7B — two owner-reported defects, two different root causes, each fixed at the
+layer it starts in.** Branch `claude/j7b-route-matching-reliability`, from J7A
+`9b2cde1`. Backend and mobile; no schema change, no migration, no financial code
+touched. [Reproduction, pipeline trace, compatibility audit and test
+matrix](PHASE_J7B_ROUTE_MATCHING_RELIABILITY.md).
+
+**The empty route was a mobile read of the wrong field.** A published request's
+route is its two canonical places, and the server serves them at every status
+and in every language. The request detail, the Deliveries row and the Home row
+drew the route from the sender's *optional* meeting points instead, which most
+requests have not had since 8F-B made the map optional — so the card rendered
+empty and the rows showed a bare arrow. Journeys had the identical bug and J1.2
+fixed it; requests now use the same endpoint naming through
+`request_labels.dart`: canonical place first, a legacy row's coarse location as
+fallback, "Route not recorded" (EN/FR/AR) when a historical row has neither, and
+an airport endpoint as the spec's `Algiers · ALG` — the full airport name was cut
+to "Houari Bou…" at 320 pt and lost the code, which the rendered screenshot, not
+an assertion, showed. Meeting points, when set, are detail rows inside the route
+card.
+
+**The missing match was a Journey write contract that disagreed with matching.**
+Reproduced on PostgreSQL through the real endpoints (Journey created and
+published over HTTP; request created over HTTP and published by a Stripe-TEST
+deposit settling through `reconcile_attempt`): with a leg arrival the pair meets
+at every stage; with the arrival left blank — which the traveller app labelled
+"Optional" — the Journey is published, `active` and discoverable, and
+`evaluate_compatibility` refuses every request ending on it on
+`route_time_order_feasible` and `delivery_before_deadline`, because the arrival
+is what the deadline is checked against. The evaluator is right and is
+unchanged. The write contract now requires `arrive_at` on every leg (create and
+edit), publication refuses a pre-rule draft with `journey_leg_arrival_required`
+(409), and the route editor marks arrival required and explains why, in EN/FR/AR.
+Existing arrival-less active Journeys cannot be repaired without inventing an
+arrival; they stay unmatchable until they expire, and the traveller republishes.
+
+**Audited and correct:** canonical locality matching (ALG → Algiers, CDG/ORY →
+Paris through `SERVED` mappings only), contained and whole multi-leg coverage,
+inclusive timing boundaries, UTC on both write bodies, capacity in `DECIMAL` kg
+with active allocations subtracted, request and Journey lifecycle, KYC,
+self-match, `awaiting_deposit` and `already_matched`. **Not changed, recorded:**
+the ready-window rule (departure must fall inside the sender's window) is policy,
+and the draft pricing quote's naive local datetimes are a pricing input.
+**Limitation:** the owner's own deployed records could not be read — the TEST
+Postgres has no proxy and none was opened — so which case they hit is inferred.
+
+**Verification (local, before CI).** Backend: 31 new tests in
+`apps/matching/tests/test_phase_j7b_route_matching.py`, `apps/trips` 95 passed,
+`ruff check` clean, `makemigrations --check` no changes; mutation check fails the
+arrival tests against the old contract. Find Travelers: 9 queries per HTTP call
+and 7 per page at 1, 10 and 40 candidates — flat, J4's figure. Mobile: 26 new
+tests in `test/phase_j7b_route_matching_test.dart`, full suite **755 passed**,
+`flutter analyze --fatal-infos` clean, `dart format` clean,
+`l10n_untranslated.json` empty; the pre-J7B screens fail all 15 route widget
+tests. Detail screen rendered to PNG at 320 pt in EN/FR/AR and inspected.
+
 ## J7A — Request-creation UX cleanup: Boost moves after publication (2026-09-18)
 
 **J7A PASS — 45 new mobile tests, full mobile suite 729 green, 0 analysis
