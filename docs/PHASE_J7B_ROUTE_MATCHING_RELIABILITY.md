@@ -346,3 +346,10 @@ publish again.
 
 Branch CI, merge, TEST deployment, health checks and the TEST APK are recorded in
 `docs/IMPLEMENTATION_STATUS.md`.
+
+**Signed-in end-to-end on the deployed TEST service: not performed.** This
+environment holds no TEST account credentials, and creating accounts is not
+something to do on the owner's behalf. The equivalent was run against real
+PostgreSQL through the same HTTP endpoints and the same deposit reconciliation
+path (§1, `OwnerScenarioTests`). The deployed checks are unauthenticated reads
+only; no row was created or modified on the deployed database.

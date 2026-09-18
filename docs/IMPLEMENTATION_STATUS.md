@@ -57,6 +57,49 @@ tests in `test/phase_j7b_route_matching_test.dart`, full suite **755 passed**,
 `l10n_untranslated.json` empty; the pre-J7B screens fail all 15 route widget
 tests. Detail screen rendered to PNG at 320 pt in EN/FR/AR and inspected.
 
+**J7B release.** Branch CI run `35347405783` green on
+`68f5ddee06516fa2b2ea024ccda692b473220489`, all six jobs (Django **2,174 passed,
+34 skipped**; Flutter **755**); the same full Django suite also ran locally on
+PostgreSQL: 2,174 passed, 34 skipped. Main fast-forwarded to that exact SHA and
+pushed, local `main` equal to `origin/main`, phase branch deleted locally and
+remotely. Push CI run `35350464997` on the same SHA: attempt 1 failed one test,
+`apps/finance/tests/test_phase8fh5_control_plane.py::test_user_dispute_is_separate_and_postgres_plan_uses_existing_indexes`,
+which asserts the planner picks a ledger index and did not on that run — a
+statistics-dependent Finance test J7B does not touch, green on the branch run and
+locally; re-running the failed job (attempt 2) passed, all six jobs green.
+
+TEST Railway deployment `8d2e798d-77e1-4388-84e6-ebf6a2756016` **SUCCESS**,
+release `v1.0.0-rc.41+68f5dde`, uploaded from a `git archive` of that SHA taken
+with `core.autocrlf=false`; the two changed backend runtime files,
+`backend/railway/Dockerfile` and `railway.json` were hash-compared against their
+blobs and match. `/healthz` 200 and `/readyz` 200 on the new release with
+database, migrations and rate-limit cache `ok`; "No migrations to apply"; Redis,
+Gunicorn, the KYC gRPC server, reservation releaser, finance worker, chat,
+notification (dispatcher subscribed, FCM consumer started), KYC, email (consumer
+disabled, `EMAIL_ENABLED=false`) and the gateway all started; the bundled
+geography catalogue was already current. Unauthenticated `GET /api/journeys`,
+`GET /api/parcels/1`, `GET /api/matches/find-travelers` and
+`POST /api/journeys/1/publish` answer 401, with a 404 control. Railway variables
+compared before and after: only `RELEASE_ID` changed.
+`PAYMENTS_ENVIRONMENT=test`, Stripe `sk_test_`,
+`STRIPE_CONNECT_EXPECTED_MODE=test`, Chargily `/test/api/v2` with a `test_sk_`
+key, `PAYOUT_DZD_EXECUTION_ENABLED=false`, `PAYMENTS_ALLOW_MOCK_PROVIDER=false`.
+The probes were unauthenticated reads; nothing was created on the deployed
+database or at a provider, and no LIVE or real-money operation was performed. A
+signed-in two-account run on the deployed service was not possible — this
+environment holds no TEST credentials — so the owner scenario was run against
+PostgreSQL through the real endpoints instead.
+
+QA APK `shiptrip-v1.0.0-rc.41-68f5dde-profile-arm64.apk` from build run
+`35350523297` on `68f5dde`, **36,654,913 bytes**, SHA-256
+`476f3a6dc8190ac8228bba059de20e9301219880de4c3c8bfe5f5a3d3ef3ce26` — matching the
+workflow's own `SHA256SUMS.txt`, recomputed after download. profile/arm64, built
+against `https://shiptrip-production-f7f7.up.railway.app`. `libapp.so` carries the
+API origin, "Route not recorded" in English, French and Arabic, the new arrival
+help and the `journey_leg_arrival_required` mapping, and no longer carries the
+old "Optional" arrival help. Uninstall the J7A build first; profile APKs are
+signed with a per-run debug key.
+
 ## J7A — Request-creation UX cleanup: Boost moves after publication (2026-09-18)
 
 **J7A PASS — 45 new mobile tests, full mobile suite 729 green, 0 analysis
