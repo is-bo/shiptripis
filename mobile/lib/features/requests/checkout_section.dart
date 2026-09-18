@@ -379,6 +379,48 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     final providers = ref.watch(paymentProvidersProvider);
 
     final resumable = order?.latestAttempt;
+    if (order != null &&
+        resumable != null &&
+        resumable.canResume &&
+        resumable.isGuestPayment) {
+      // Somebody the Sender sent the link to is on the provider's page now.
+      // That session is theirs: offering "continue your payment" would send
+      // the Sender into it, and starting a fresh checkout would supersede it
+      // and risk the obligation being paid twice. Say what is happening.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InfoNotice(
+            title: l.guestPayingNowTitle,
+            message: l.guestPayingNowBody,
+            tone: StatusTone.waiting,
+            icon: Icons.hourglass_top_rounded,
+          ),
+          const SizedBox(height: AppSpace.lg),
+          AppButton(
+            label: l.paymentCheckAgain,
+            icon: Icons.refresh_rounded,
+            variant: AppButtonVariant.secondary,
+            isLoading: _checkingManually,
+            onPressed: _checkNow,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Center(
+            child: AppButton(
+              label: l.guestPaymentTitle,
+              icon: Icons.people_outline_rounded,
+              variant: AppButtonVariant.tertiary,
+              expand: false,
+              onPressed: () => GuestPaymentSheet.show(
+                context,
+                order: order,
+                onSettled: widget.onSettled,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     if (resumable != null && resumable.canResume) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,15 +590,20 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
           semanticHint: l.paymentOpeningProvider,
           onPressed: () => _checkout(selected),
         ),
+        // A quiet alternative under the primary Pay button, never beside it.
+        // It depends on whether *any* usable rail takes a guest payment, not
+        // on the rail the Sender happens to have selected for themselves: the
+        // payer chooses their own rail on the payment page.
         if (order != null &&
             order.status.isCollectable &&
-            chosen.supportsGuestPayment) ...[
+            usable.any((p) => p.supportsGuestPayment)) ...[
           const SizedBox(height: AppSpace.sm),
           Center(
             child: AppButton(
               label: l.guestPaymentTitle,
-              icon: Icons.share_outlined,
+              icon: Icons.people_outline_rounded,
               variant: AppButtonVariant.tertiary,
+              expand: false,
               onPressed: () => GuestPaymentSheet.show(
                 context,
                 order: order,

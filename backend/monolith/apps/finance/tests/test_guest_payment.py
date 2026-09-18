@@ -130,6 +130,7 @@ class GuestTokenValidationTests(GuestPaymentTestCase):
             "description",
             "expires_at",
             "providers",
+            "receipt_email_required",
         }
         assert response.data["currency"] == "EUR"
         assert response.data["amount_eur_cents"] == self.order.outstanding_eur_cents
@@ -167,6 +168,7 @@ class GuestTokenValidationTests(GuestPaymentTestCase):
             "description",
             "expires_at",
             "providers",
+            "receipt_email_required",
         }
         assert not any(
             key.endswith("_id") or key == "id" for key in response.data

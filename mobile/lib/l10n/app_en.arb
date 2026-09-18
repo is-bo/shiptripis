@@ -825,14 +825,8 @@
   "paymentStatusRefunded": "Refunded",
   "paymentReturnedTitle": "Welcome back",
   "paymentRedirectNotProof": "We confirm every payment with the provider before marking it paid.",
-  "guestPayTitle": "Have someone else pay",
-  "guestPayExplainer": "Share a link and anyone can pay this amount for you. They don't need a ShipTrip account.",
-  "guestPayCreateLink": "Create payment link",
-  "guestPayLinkReady": "Link ready",
-  "guestPayCopyLink": "Copy link",
-  "guestPayShareLink": "Share link",
-  "guestPayRevoke": "Cancel this link",
-  "guestPayRevoked": "Link cancelled",
+  "guestPayTitle": "Payment request",
+  "guestPayExplainer": "The person who sent you this link is asking you to pay this for their ShipTrip delivery. You don’t need an account.",
   "guestPayExpiresAt": "Expires {when}",
   "@guestPayExpiresAt": {
     "placeholders": {
@@ -841,12 +835,10 @@
       }
     }
   },
-  "guestPayWarning": "Anyone with this link can pay this amount. They get nothing else — no access to your delivery, your chat, or your details.",
-  "guestPayPayerEmail": "Your email for the receipt",
-  "guestPayPayerEmailHelp": "We use it for your payment receipt, failure updates and any refund communication. It does not create a ShipTrip account.",
+  "guestPayWarning": "This link only lets you pay this amount. It gives no access to the delivery or to anyone’s details.",
+  "guestPayPayerEmail": "Email for your receipt",
+  "guestPayPayerEmailHelp": "We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.",
   "guestPayAmountDue": "Amount due",
-  "guestPayForDelivery": "Payment for a ShipTrip delivery",
-  "guestPayThanksTitle": "Thank you",
   "guestPayThanksBody": "The payment is confirmed. Nothing else is needed from you.",
   "guestPayInvalidTitle": "This link isn't valid",
   "guestPayInvalidBody": "It may have expired, been cancelled, or already been paid.",
@@ -2075,7 +2067,6 @@
   },
   "paymentPollingHint": "This can take a moment. You can leave this screen — we'll keep checking.",
   "paymentOpenProvider": "Continue payment",
-  "guestPayPoweredBy": "Paid securely through ShipTrip",
   "onboardingEyebrow": "Welcome",
   "onboardingHeadline": "Send anything,\nthe travelers\ndo the rest.",
   "onboardingBody": "A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.",
@@ -2414,23 +2405,76 @@
     }
   },
   "boostNotEditable": "Boost cannot be edited once an offer has been accepted or the request has expired.",
-  "guestPaymentTitle": "Have someone else pay",
-  "guestPaymentDescription": "Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.",
-  "guestPaymentShareButton": "Share payment link",
-  "guestPaymentCopyButton": "Copy link",
-  "guestPaymentCopied": "Payment link copied to clipboard",
-  "guestPaymentExpires": "Link expires on {expiry}",
-  "@guestPaymentExpires": {
+  "guestPaymentTitle": "Someone else can pay",
+  "guestCreateAction": "Create payment link",
+  "guestShareLead": "Share this secure payment link with someone you trust. They can pay without a ShipTrip account.",
+  "guestShareAction": "Share link",
+  "guestCopyAction": "Copy link",
+  "guestCopiedAction": "Copied",
+  "guestLinkCopied": "Link copied",
+  "guestShareSubject": "ShipTrip payment request",
+  "guestShareMessage": "Could you pay {amount} for my ShipTrip delivery? Here is the secure link: {link}",
+  "@guestShareMessage": {
     "placeholders": {
-      "expiry": {
+      "amount": {
+        "type": "String"
+      },
+      "link": {
         "type": "String"
       }
     }
   },
-  "guestPaymentRevokeAction": "Revoke link",
-  "guestPaymentRevokeConfirmTitle": "Revoke guest payment link?",
-  "guestPaymentRevokeConfirmBody": "Anyone holding this link will no longer be able to pay. You can generate a new link at any time.",
-  "guestPaymentPaidNotice": "Paid by guest payer",
+  "guestLinkLabel": "Payment link",
+  "guestStatusReady": "Payment link ready",
+  "guestStatusExpiresOn": "Expires {when}",
+  "@guestStatusExpiresOn": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "guestStatusPaying": "Someone is paying now",
+  "guestStatusPayingBody": "This updates by itself as soon as their payment goes through.",
+  "guestStatusExpired": "This payment link has expired",
+  "guestStatusRevoked": "This payment link is no longer active",
+  "guestStatusNewLinkBody": "Create a new link if someone else should still pay.",
+  "guestStatusHidden": "Your earlier link still works",
+  "guestStatusHiddenBody": "For security it can’t be shown again. Create a new link to share — the earlier one will then stop working.",
+  "guestStatusClosed": "This payment can no longer be made by link.",
+  "guestCreateNewAction": "Create a new payment link",
+  "guestMoreActions": "More options",
+  "guestRevokeAction": "Revoke link",
+  "guestRevokeConfirmTitle": "Revoke this payment link?",
+  "guestRevokeConfirmBody": "Anyone who has it won’t be able to pay with it. You can create a new link afterwards.",
+  "guestRevokeKeep": "Keep link",
+  "guestRevokedDone": "Link revoked",
+  "guestPaidTitle": "Payment received",
+  "guestPaidBody": "{amount} was paid successfully.",
+  "@guestPaidBody": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "guestPaidBodyPlain": "The payment went through successfully.",
+  "guestErrorLoad": "We couldn’t load your payment link. Check your connection and try again.",
+  "guestErrorBusy": "Someone is paying with your current link right now. Try again once they’ve finished.",
+  "guestErrorRevokeBusy": "Someone is paying with this link right now, so it can’t be revoked.",
+  "guestErrorRevoke": "We couldn’t revoke the link. Try again.",
+  "guestErrorShare": "Sharing isn’t available right now. Copy the link instead.",
+  "guestPurposeDeposit": "Deposit for your request",
+  "guestPurposeRemaining": "Remaining delivery payment",
+  "guestPurposeDelivery": "Delivery payment",
+  "guestPurposeBoost": "Boost payment",
+  "guestPurposeOther": "ShipTrip payment",
+  "guestPayingNowTitle": "Someone else is paying this now",
+  "guestPayingNowBody": "They opened your payment link. This updates as soon as their payment goes through.",
+  "guestPayPurposeDeposit": "Deposit for a delivery request",
+  "guestPayPurposeDelivery": "Payment for a delivery",
+  "guestPayPurposeBoost": "Extra reward for a delivery",
+  "guestPayHandoff": "You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.",
   "paymentSuccessTitle": "Payment secured",
   "paymentSuccessWaxSeal": "Secured",
   "paymentSuccessReceiptTitle": "Payment receipt",
@@ -2516,10 +2560,6 @@
   "boostHistoryReasonOther": "Boost updated",
   "@boostHistoryReasonOther": {
     "description": "boostHistoryReasonOther"
-  },
-  "guestPaymentAmountDue": "Amount due",
-  "@guestPaymentAmountDue": {
-    "description": "guestPaymentAmountDue"
   },
   "guestPaymentLinkFailed": "We couldn't create a payment link. Try again.",
   "@guestPaymentLinkFailed": {

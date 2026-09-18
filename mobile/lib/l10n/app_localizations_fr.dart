@@ -1815,29 +1815,11 @@ class LFr extends L {
       'Nous confirmons chaque paiement auprès du prestataire avant de le marquer comme payé.';
 
   @override
-  String get guestPayTitle => 'Faire payer quelqu’un d’autre';
+  String get guestPayTitle => 'Demande de paiement';
 
   @override
   String get guestPayExplainer =>
-      'Partagez un lien et n’importe qui peut payer ce montant pour vous. Aucun compte ShipTrip n’est nécessaire.';
-
-  @override
-  String get guestPayCreateLink => 'Créer un lien de paiement';
-
-  @override
-  String get guestPayLinkReady => 'Lien prêt';
-
-  @override
-  String get guestPayCopyLink => 'Copier le lien';
-
-  @override
-  String get guestPayShareLink => 'Partager le lien';
-
-  @override
-  String get guestPayRevoke => 'Annuler ce lien';
-
-  @override
-  String get guestPayRevoked => 'Lien annulé';
+      'La personne qui vous a envoyé ce lien vous demande de régler ce montant pour sa livraison ShipTrip. Aucun compte n’est nécessaire.';
 
   @override
   String guestPayExpiresAt(String when) {
@@ -1846,23 +1828,17 @@ class LFr extends L {
 
   @override
   String get guestPayWarning =>
-      'Toute personne ayant ce lien peut payer ce montant. Elle n’obtient rien d’autre — pas d’accès à votre livraison, votre messagerie, ou vos coordonnées.';
+      'Ce lien permet uniquement de régler ce montant. Il ne donne accès ni à la livraison ni aux informations de quiconque.';
 
   @override
-  String get guestPayPayerEmail => 'Votre e-mail pour le reçu';
+  String get guestPayPayerEmail => 'E-mail pour votre reçu';
 
   @override
   String get guestPayPayerEmailHelp =>
-      'Nous l’utilisons pour votre reçu de paiement, les échecs et les remboursements. Il ne crée pas de compte ShipTrip.';
+      'Nous y enverrons votre reçu et vous préviendrons si un remboursement vous est dû. Aucun compte n’est créé.';
 
   @override
   String get guestPayAmountDue => 'Montant dû';
-
-  @override
-  String get guestPayForDelivery => 'Paiement pour une livraison ShipTrip';
-
-  @override
-  String get guestPayThanksTitle => 'Merci';
 
   @override
   String get guestPayThanksBody =>
@@ -3906,9 +3882,6 @@ class LFr extends L {
   String get paymentOpenProvider => 'Continuer le paiement';
 
   @override
-  String get guestPayPoweredBy => 'Paiement sécurisé via ShipTrip';
-
-  @override
   String get onboardingEyebrow => 'Bienvenue';
 
   @override
@@ -4779,40 +4752,160 @@ class LFr extends L {
       'Le Boost ne peut plus être modifié une fois une offre acceptée ou la demande expirée.';
 
   @override
-  String get guestPaymentTitle => 'Faire payer par un proche';
+  String get guestPaymentTitle => 'Faire payer quelqu’un d’autre';
 
   @override
-  String get guestPaymentDescription =>
-      'Partagez un lien sécurisé. Toute personne ayant le lien peut régler ce montant sans avoir besoin d\'un compte ShipTrip.';
+  String get guestCreateAction => 'Créer le lien de paiement';
 
   @override
-  String get guestPaymentShareButton => 'Partager le lien de paiement';
+  String get guestShareLead =>
+      'Partagez ce lien de paiement sécurisé avec une personne de confiance. Elle peut payer sans compte ShipTrip.';
 
   @override
-  String get guestPaymentCopyButton => 'Copier le lien';
+  String get guestShareAction => 'Partager le lien';
 
   @override
-  String get guestPaymentCopied =>
-      'Lien de paiement copié dans le presse-papiers';
+  String get guestCopyAction => 'Copier le lien';
 
   @override
-  String guestPaymentExpires(String expiry) {
-    return 'Le lien expire le $expiry';
+  String get guestCopiedAction => 'Copié';
+
+  @override
+  String get guestLinkCopied => 'Lien copié';
+
+  @override
+  String get guestShareSubject => 'Demande de paiement ShipTrip';
+
+  @override
+  String guestShareMessage(String amount, String link) {
+    return 'Pourriez-vous régler $amount pour ma livraison ShipTrip ? Voici le lien sécurisé : $link';
   }
 
   @override
-  String get guestPaymentRevokeAction => 'Révoquer le lien';
+  String get guestLinkLabel => 'Lien de paiement';
 
   @override
-  String get guestPaymentRevokeConfirmTitle =>
-      'Révoquer le lien de paiement invité ?';
+  String get guestStatusReady => 'Lien de paiement prêt';
 
   @override
-  String get guestPaymentRevokeConfirmBody =>
-      'Toute personne disposant de ce lien ne pourra plus payer. Vous pouvez générer un nouveau lien à tout moment.';
+  String guestStatusExpiresOn(String when) {
+    return 'Expire le $when';
+  }
 
   @override
-  String get guestPaymentPaidNotice => 'Payé par un tiers';
+  String get guestStatusPaying => 'Un paiement est en cours';
+
+  @override
+  String get guestStatusPayingBody =>
+      'Cet écran se met à jour dès que le paiement aboutit.';
+
+  @override
+  String get guestStatusExpired => 'Ce lien de paiement a expiré';
+
+  @override
+  String get guestStatusRevoked => 'Ce lien de paiement n’est plus actif';
+
+  @override
+  String get guestStatusNewLinkBody =>
+      'Créez un nouveau lien si quelqu’un d’autre doit encore payer.';
+
+  @override
+  String get guestStatusHidden => 'Votre lien précédent fonctionne toujours';
+
+  @override
+  String get guestStatusHiddenBody =>
+      'Par sécurité, il ne peut plus être affiché. Créez un nouveau lien à partager — le précédent cessera alors de fonctionner.';
+
+  @override
+  String get guestStatusClosed =>
+      'Ce paiement ne peut plus être réglé par lien.';
+
+  @override
+  String get guestCreateNewAction => 'Créer un nouveau lien de paiement';
+
+  @override
+  String get guestMoreActions => 'Plus d’options';
+
+  @override
+  String get guestRevokeAction => 'Désactiver le lien';
+
+  @override
+  String get guestRevokeConfirmTitle => 'Désactiver ce lien de paiement ?';
+
+  @override
+  String get guestRevokeConfirmBody =>
+      'Personne ne pourra plus payer avec ce lien. Vous pourrez en créer un nouveau ensuite.';
+
+  @override
+  String get guestRevokeKeep => 'Garder le lien';
+
+  @override
+  String get guestRevokedDone => 'Lien désactivé';
+
+  @override
+  String get guestPaidTitle => 'Paiement reçu';
+
+  @override
+  String guestPaidBody(String amount) {
+    return '$amount a bien été payé.';
+  }
+
+  @override
+  String get guestPaidBodyPlain => 'Le paiement a bien été effectué.';
+
+  @override
+  String get guestErrorLoad =>
+      'Impossible de charger votre lien de paiement. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get guestErrorBusy =>
+      'Quelqu’un paie avec votre lien actuel. Réessayez une fois le paiement terminé.';
+
+  @override
+  String get guestErrorRevokeBusy =>
+      'Un paiement est en cours avec ce lien : il ne peut pas être désactivé.';
+
+  @override
+  String get guestErrorRevoke => 'Impossible de désactiver le lien. Réessayez.';
+
+  @override
+  String get guestErrorShare =>
+      'Le partage n’est pas disponible pour le moment. Copiez plutôt le lien.';
+
+  @override
+  String get guestPurposeDeposit => 'Acompte pour votre demande';
+
+  @override
+  String get guestPurposeRemaining => 'Reste à payer pour la livraison';
+
+  @override
+  String get guestPurposeDelivery => 'Paiement de la livraison';
+
+  @override
+  String get guestPurposeBoost => 'Paiement du boost';
+
+  @override
+  String get guestPurposeOther => 'Paiement ShipTrip';
+
+  @override
+  String get guestPayingNowTitle => 'Quelqu’un d’autre est en train de payer';
+
+  @override
+  String get guestPayingNowBody =>
+      'Cette personne a ouvert votre lien de paiement. Cet écran se met à jour dès que le paiement aboutit.';
+
+  @override
+  String get guestPayPurposeDeposit => 'Acompte pour une demande de livraison';
+
+  @override
+  String get guestPayPurposeDelivery => 'Paiement d’une livraison';
+
+  @override
+  String get guestPayPurposeBoost => 'Bonus pour une livraison';
+
+  @override
+  String get guestPayHandoff =>
+      'Vous finaliserez sur la page sécurisée de notre partenaire de paiement. ShipTrip ne voit jamais vos données de carte.';
 
   @override
   String get paymentSuccessTitle => 'Paiement sécurisé';
@@ -4934,9 +5027,6 @@ class LFr extends L {
 
   @override
   String get boostHistoryReasonOther => 'Boost mis à jour';
-
-  @override
-  String get guestPaymentAmountDue => 'Montant dû';
 
   @override
   String get guestPaymentLinkFailed =>

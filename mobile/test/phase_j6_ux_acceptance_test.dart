@@ -419,7 +419,9 @@ void main() {
       await tester.pumpAndSettle();
       final l = L.of(tester.element(find.byType(GuestPaymentSheet)));
 
-      expect(find.text(l.guestPaymentAmountDue), findsOneWidget);
+      // J7C: the figure is headed by what it is for, in words.
+      expect(find.text(l.guestPurposeDelivery.toUpperCase()), findsOneWidget);
+      expect(find.text('€35.00'), findsOneWidget);
       expect(find.text(l.paymentStatusPaid), findsNothing);
     });
 

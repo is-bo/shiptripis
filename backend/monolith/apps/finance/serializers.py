@@ -15,7 +15,6 @@ attempt. The guest sees less again — see `GuestPaymentSerializer`.
 
 from __future__ import annotations
 
-from django.conf import settings
 from rest_framework import serializers
 
 from apps.core.languages import CommunicationLanguage
@@ -360,7 +359,9 @@ class GuestCheckoutCreateSerializer(CheckoutCreateSerializer):
 
     def validate(self, attrs: dict) -> dict:
         attrs = super().validate(attrs)
-        if settings.TRANSACTIONAL_EMAIL_ENABLED and not attrs.get("email"):
+        from .services import guest_receipt_email_required
+
+        if guest_receipt_email_required() and not attrs.get("email"):
             raise serializers.ValidationError(
                 {"email": "An email address is required for the payment receipt."}
             )

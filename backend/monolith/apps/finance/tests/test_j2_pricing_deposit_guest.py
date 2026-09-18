@@ -53,11 +53,13 @@ from apps.finance.services import (
 from apps.finance.policy import phase3_policy
 from apps.finance.settlement import assert_deal_reconciles
 from apps.finance.tests.factories import (
+    assert_page_withholds,
     build_scenario,
     deliver_mock_webhook,
     open_mock_checkout,
     pay_order_with_mock,
     succeed_attempt,
+    visible_page_text,
 )
 from apps.matching.posting_pricing import (
     PriceBelowPostingMinimum,
@@ -405,6 +407,9 @@ class GuestPayerTests(TestCase):
             "description",
             "expires_at",
             "providers",
+            # J7C: whether the page asks for a receipt address. Server config,
+            # not a fact about the obligation or anyone attached to it.
+            "receipt_email_required",
         }
 
         pay_order_with_mock(
@@ -514,8 +519,12 @@ class GuestPayerTests(TestCase):
         with self.assertRaises(GuestCheckoutInProgress):
             create_guest_link(order_id=balance.pk, actor_id=scenario.sender.pk)
 
-        # Revoking is still the owner's escape hatch.
-        assert revoke_guest_link(order_id=balance.pk, actor_id=scenario.sender.pk) == 1
+        # J7C: revoking is refused too. It could not have stopped the payer's
+        # open hosted session -- the provider would still take the payment and
+        # the webhook would still apply it -- so allowing it told the owner
+        # something untrue. The owner can still pay the obligation themselves.
+        with self.assertRaises(GuestCheckoutInProgress):
+            revoke_guest_link(order_id=balance.pk, actor_id=scenario.sender.pk)
 
     def test_two_payers_on_one_obligation_cannot_fund_it_twice(self):
         enable_mock_rail()
@@ -576,14 +585,14 @@ class GuestPayerTests(TestCase):
         page = anon.get(f"/pay/guest/{issued.token}")
         assert page.status_code == 200
         body = page.content.decode()
-        assert "5" in body
-        for secret in (
+        assert "€5.00" in visible_page_text(body)
+        assert_page_withholds(
+            body,
             scenario.sender.email,
             scenario.traveler.email,
             str(deposit.public_reference),
             str(scenario.delivery_request.pk),
-        ):
-            assert secret not in body, secret
+        )
 
         gone = anon.get("/pay/guest/definitely-not-a-token")
         assert gone.status_code == 404

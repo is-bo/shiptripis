@@ -209,6 +209,12 @@ class ApiErrorCode {
   );
   static const depositNotRequired = ApiErrorCode('deposit_not_required');
   static const guestLinkInvalid = ApiErrorCode('guest_link_invalid');
+
+  /// Someone is paying with the sender's live guest link right now, so it can
+  /// be neither replaced nor revoked until their checkout ends.
+  static const guestCheckoutInProgress = ApiErrorCode(
+    'guest_checkout_in_progress',
+  );
   static const v1DealPaymentNotAvailable = ApiErrorCode(
     'v1_deal_payment_not_available',
   );

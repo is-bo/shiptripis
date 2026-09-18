@@ -171,8 +171,14 @@ class GuestPaymentEmailTests(TestCase):
         response = client.post(
             endpoint, {"communication_language": "ar"}, format="json"
         )
-        self.assertEqual(response.status_code, 201)
+        # J7C: the live link is re-shared rather than replaced, and the explicit
+        # receipt language still lands on it.
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["reused"])
+        self.assertEqual(response.data["token"], self.issued.token)
         self.assertEqual(response.data["communication_language"], "ar")
+        self.issued.link.refresh_from_db()
+        self.assertEqual(self.issued.link.communication_language, "ar")
 
         invalid = client.post(
             endpoint, {"communication_language": "de"}, format="json"

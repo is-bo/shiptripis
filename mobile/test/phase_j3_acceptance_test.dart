@@ -420,8 +420,8 @@ void main() {
         final l = L.of(tester.element(find.byType(GuestPaymentSheet)));
 
         expect(find.text(l.guestPaymentTitle), findsOneWidget);
-        expect(find.text(l.guestPaymentDescription), findsOneWidget);
-        expect(find.text(l.guestPaymentCopyButton), findsOneWidget);
+        expect(find.text(l.guestShareLead), findsOneWidget);
+        expect(find.text(l.guestCopyAction), findsOneWidget);
         expect(find.byIcon(Icons.copy_rounded), findsWidgets);
       },
     );

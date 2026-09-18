@@ -1802,29 +1802,11 @@ class LAr extends L {
       'نؤكد كل عملية دفع مع مزود الخدمة قبل اعتبارها مدفوعة.';
 
   @override
-  String get guestPayTitle => 'اطلب من شخص آخر الدفع';
+  String get guestPayTitle => 'طلب دفع';
 
   @override
   String get guestPayExplainer =>
-      'شارك رابطًا ليتمكن أي شخص من دفع هذا المبلغ نيابة عنك. لا يحتاجون إلى حساب ShipTrip.';
-
-  @override
-  String get guestPayCreateLink => 'إنشاء رابط دفع';
-
-  @override
-  String get guestPayLinkReady => 'الرابط جاهز';
-
-  @override
-  String get guestPayCopyLink => 'نسخ الرابط';
-
-  @override
-  String get guestPayShareLink => 'مشاركة الرابط';
-
-  @override
-  String get guestPayRevoke => 'إلغاء هذا الرابط';
-
-  @override
-  String get guestPayRevoked => 'تم إلغاء الرابط';
+      'الشخص الذي أرسل إليك هذا الرابط يطلب منك دفع هذا المبلغ مقابل توصيله عبر ShipTrip. لا حاجة إلى حساب.';
 
   @override
   String guestPayExpiresAt(String when) {
@@ -1833,23 +1815,17 @@ class LAr extends L {
 
   @override
   String get guestPayWarning =>
-      'يمكن لأي شخص يملك هذا الرابط دفع هذا المبلغ. لن يحصل على أي شيء آخر — لا وصول إلى توصيلك أو محادثتك أو بياناتك.';
+      'يتيح لك هذا الرابط دفع هذا المبلغ فقط، ولا يمنح أي اطلاع على التوصيل أو على بيانات أي شخص.';
 
   @override
-  String get guestPayPayerEmail => 'بريدك الإلكتروني للإيصال';
+  String get guestPayPayerEmail => 'بريدك الإلكتروني لاستلام الإيصال';
 
   @override
   String get guestPayPayerEmailHelp =>
-      'نستخدمه لإيصال الدفع وإشعارات فشل الدفع وأي مراسلات عن الاسترداد. لا يؤدي ذلك إلى إنشاء حساب ShipTrip.';
+      'سنرسل إليه إيصال الدفع، ونبلغك إن استحق لك أي استرداد. لن يُنشأ لك أي حساب.';
 
   @override
   String get guestPayAmountDue => 'المبلغ المستحق';
-
-  @override
-  String get guestPayForDelivery => 'دفع مقابل توصيل عبر ShipTrip';
-
-  @override
-  String get guestPayThanksTitle => 'شكرًا لك';
 
   @override
   String get guestPayThanksBody => 'تم تأكيد الدفع. لا حاجة لأي شيء آخر منك.';
@@ -3895,9 +3871,6 @@ class LAr extends L {
   String get paymentOpenProvider => 'متابعة الدفع';
 
   @override
-  String get guestPayPoweredBy => 'تم الدفع بأمان عبر ShipTrip';
-
-  @override
   String get onboardingEyebrow => 'أهلاً بك';
 
   @override
@@ -4748,38 +4721,159 @@ class LAr extends L {
       'لا يمكن تعديل التعزيز بعد قبول العرض أو انتهاء صلاحية الطلب.';
 
   @override
-  String get guestPaymentTitle => 'الدفع عبر شخص آخر';
+  String get guestPaymentTitle => 'اطلب من شخص آخر أن يدفع';
 
   @override
-  String get guestPaymentDescription =>
-      'شارك رابطاً آمناً. يمكن لأي شخص لديه الرابط دفع هذا المبلغ دون الحاجة لحساب شيب تريب.';
+  String get guestCreateAction => 'إنشاء رابط الدفع';
 
   @override
-  String get guestPaymentShareButton => 'مشاركة رابط الدفع';
+  String get guestShareLead =>
+      'شارك رابط الدفع الآمن هذا مع شخص تثق به، ويمكنه الدفع دون حساب في ShipTrip.';
 
   @override
-  String get guestPaymentCopyButton => 'نسخ الرابط';
+  String get guestShareAction => 'مشاركة الرابط';
 
   @override
-  String get guestPaymentCopied => 'تم نسخ رابط الدفع إلى الحافظة';
+  String get guestCopyAction => 'نسخ الرابط';
 
   @override
-  String guestPaymentExpires(String expiry) {
-    return 'ينتهي الرابط في $expiry';
+  String get guestCopiedAction => 'تم النسخ';
+
+  @override
+  String get guestLinkCopied => 'تم نسخ الرابط';
+
+  @override
+  String get guestShareSubject => 'طلب دفع عبر ShipTrip';
+
+  @override
+  String guestShareMessage(String amount, String link) {
+    return 'هل يمكنك دفع $amount مقابل توصيلي عبر ShipTrip؟ هذا هو الرابط الآمن: $link';
   }
 
   @override
-  String get guestPaymentRevokeAction => 'إلغاء الرابط';
+  String get guestLinkLabel => 'رابط الدفع';
 
   @override
-  String get guestPaymentRevokeConfirmTitle => 'إلغاء رابط دفع الضيف؟';
+  String get guestStatusReady => 'رابط الدفع جاهز';
 
   @override
-  String get guestPaymentRevokeConfirmBody =>
-      'لن يتمكن أي شخص لديه هذا الرابط من الدفع بعد الآن. يمكنك إنشاء رابط جديد في أي وقت.';
+  String guestStatusExpiresOn(String when) {
+    return 'ينتهي في $when';
+  }
 
   @override
-  String get guestPaymentPaidNotice => 'تم الدفع بواسطة ضيف';
+  String get guestStatusPaying => 'هناك من يدفع الآن';
+
+  @override
+  String get guestStatusPayingBody =>
+      'ستتحدّث هذه الصفحة تلقائيًا فور إتمام الدفع.';
+
+  @override
+  String get guestStatusExpired => 'انتهت صلاحية رابط الدفع هذا';
+
+  @override
+  String get guestStatusRevoked => 'رابط الدفع هذا لم يعد فعّالًا';
+
+  @override
+  String get guestStatusNewLinkBody =>
+      'أنشئ رابطًا جديدًا إن كان على شخص آخر أن يدفع.';
+
+  @override
+  String get guestStatusHidden => 'رابطك السابق لا يزال يعمل';
+
+  @override
+  String get guestStatusHiddenBody =>
+      'لأسباب أمنية لا يمكن عرضه مرة أخرى. أنشئ رابطًا جديدًا لمشاركته، وسيتوقف الرابط السابق عندها عن العمل.';
+
+  @override
+  String get guestStatusClosed => 'لم يعد بالإمكان دفع هذا المبلغ عبر رابط.';
+
+  @override
+  String get guestCreateNewAction => 'إنشاء رابط دفع جديد';
+
+  @override
+  String get guestMoreActions => 'خيارات إضافية';
+
+  @override
+  String get guestRevokeAction => 'إلغاء الرابط';
+
+  @override
+  String get guestRevokeConfirmTitle => 'إلغاء رابط الدفع هذا؟';
+
+  @override
+  String get guestRevokeConfirmBody =>
+      'لن يتمكن أي شخص لديه هذا الرابط من الدفع به. يمكنك إنشاء رابط جديد لاحقًا.';
+
+  @override
+  String get guestRevokeKeep => 'الإبقاء على الرابط';
+
+  @override
+  String get guestRevokedDone => 'تم إلغاء الرابط';
+
+  @override
+  String get guestPaidTitle => 'تم استلام الدفع';
+
+  @override
+  String guestPaidBody(String amount) {
+    return 'تم دفع $amount بنجاح.';
+  }
+
+  @override
+  String get guestPaidBodyPlain => 'تمت عملية الدفع بنجاح.';
+
+  @override
+  String get guestErrorLoad =>
+      'تعذّر تحميل رابط الدفع. تحقّق من اتصالك وأعد المحاولة.';
+
+  @override
+  String get guestErrorBusy =>
+      'هناك من يدفع برابطك الحالي الآن. أعد المحاولة بعد أن ينتهي.';
+
+  @override
+  String get guestErrorRevokeBusy =>
+      'هناك من يدفع بهذا الرابط الآن، لذا لا يمكن إلغاؤه.';
+
+  @override
+  String get guestErrorRevoke => 'تعذّر إلغاء الرابط. أعد المحاولة.';
+
+  @override
+  String get guestErrorShare =>
+      'المشاركة غير متاحة حاليًا. انسخ الرابط بدلًا من ذلك.';
+
+  @override
+  String get guestPurposeDeposit => 'عربون طلبك';
+
+  @override
+  String get guestPurposeRemaining => 'المبلغ المتبقي للتوصيل';
+
+  @override
+  String get guestPurposeDelivery => 'دفع التوصيل';
+
+  @override
+  String get guestPurposeBoost => 'دفع التعزيز';
+
+  @override
+  String get guestPurposeOther => 'دفعة عبر ShipTrip';
+
+  @override
+  String get guestPayingNowTitle => 'شخص آخر يدفع هذا المبلغ الآن';
+
+  @override
+  String get guestPayingNowBody =>
+      'فتح هذا الشخص رابط الدفع الخاص بك. ستتحدّث الصفحة فور إتمام الدفع.';
+
+  @override
+  String get guestPayPurposeDeposit => 'عربون لطلب توصيل';
+
+  @override
+  String get guestPayPurposeDelivery => 'دفع مقابل توصيل';
+
+  @override
+  String get guestPayPurposeBoost => 'مكافأة إضافية لتوصيل';
+
+  @override
+  String get guestPayHandoff =>
+      'ستُكمل الدفع على الصفحة الآمنة لشريك الدفع لدينا. لا تطّلع ShipTrip على بيانات بطاقتك أبدًا.';
 
   @override
   String get paymentSuccessTitle => 'تم تأمين الدفع';
@@ -4896,9 +4990,6 @@ class LAr extends L {
 
   @override
   String get boostHistoryReasonOther => 'تم تحديث التعزيز';
-
-  @override
-  String get guestPaymentAmountDue => 'المبلغ المستحق';
 
   @override
   String get guestPaymentLinkFailed => 'تعذّر إنشاء رابط الدفع. حاول مرة أخرى.';

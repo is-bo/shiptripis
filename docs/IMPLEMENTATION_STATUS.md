@@ -1,5 +1,63 @@
 # ShipTrip V1 Implementation Status
 
+## J7C — Guest payer ("Someone else can pay") UX (2026-09-18)
+
+**J7C — the guest-payer flow redesigned on both sides, and a link-breaking
+defect fixed underneath it.** Branch `claude/j7c-guest-payer-ux`, from J7B
+`8461ff7`. Backend and mobile; one additive migration
+(`finance.0026_guestpaymentlink_token_seed`), schema contract updated; no
+payment accounting touched. **APK: not built** — deferred to the combined J7
+build. [Email investigation, contract, hierarchy, public page, tests and
+rendered QA](PHASE_J7C_GUEST_PAYER_UX.md).
+
+**The email field was the payer's, not the Sender's.** The Sender's sheet never
+had one. The field was the guest payer's receipt address on the public page and
+the in-app payer screen, shown as required everywhere — but the server requires
+it only when `EMAIL_ENABLED` is on, and TEST runs with it off, so in TEST it was
+collected and never used. It now appears only when ShipTrip will really send a
+receipt (`receipt_email_required` on the guest view, the same rule the checkout
+serializer applies), labelled "Email for your receipt" with one line of why, and
+is validated server-side on the page. The Sender is never asked for an email;
+"send by email" was deliberately not built (ShipTrip-sent payment links to
+arbitrary addresses would be a phishing amplifier — the share sheet covers mail).
+
+**Opening the sheet used to break the shared link.** J3 issued a new link on
+every open, and issuing revokes the previous one. Links now carry a random seed
+and the token is an HMAC of it under the app key, so the server can show the
+live link again while a database read alone still cannot produce one.
+`GET .../guest-link` reads state (`none/active/expired/revoked/paid/closed`,
+`checkout_in_progress`, `can_create`, `can_revoke`) without issuing;
+`POST` reuses the live link. **Deliberate rule change:** revoking is refused
+mid-checkout (`guest_checkout_in_progress`) — it could not stop the open hosted
+session, so allowing it told the Sender something untrue.
+
+**The Sender's sheet** leads with the purpose and the server's amount (Fraunces
+hero), one sentence, **Share link** (ink pill) and **Copy link** (confirms in
+place), and a sunken live-region status panel with the expiry, the link preview
+and ⋯ → Revoke. Paying, expired, revoked, not-showable, paid and closed each
+have their own state; nothing stale stays actionable; errors are words. The
+entry point stays a quiet tertiary under Pay and no longer disappears when the
+Sender selects Chargily for themselves. Related fix: while a guest is mid-
+checkout the Sender's section no longer offers "Continue your payment" into the
+guest's session. Realtime is the existing `payment.*` event; the fallback poll
+runs only while a link is live and stops after 10 minutes.
+
+**The public page** is rebuilt in the app's tokens and faces with a language
+switch (reader's browser → link language → English), the amount as the hero,
+purpose in words, one Pay button, a clear provider hand-off line and the link's
+remaining life in words; a rail outage is no longer shown as a dead link.
+
+**Verification (local, before CI).** Backend: 25 new tests in
+`apps/finance/tests/test_j7c_guest_link_ux.py`; guest/J2/6C suites 82 passed on
+SQLite; `ruff check` clean, `manage.py check` clean, `makemigrations --check`
+no changes; `schema.sql` regenerated from a migrated PostgreSQL (only
+`token_seed` differs). Mobile: 82 new tests in
+`test/phase_j7c_guest_payer_test.dart`, full suite **837 passed**,
+`flutter analyze --fatal-infos` clean, `dart format` clean,
+`l10n_untranslated.json` empty. Sheet rendered to PNG in every state at
+320/390/411, landscape and 1.6× in EN/FR/AR; public page rendered for 11
+states and inspected in a browser at 320/390/160 %, light and dark.
+
 ## J7B — Published request route and matching reliability (2026-09-18)
 
 **J7B — two owner-reported defects, two different root causes, each fixed at the

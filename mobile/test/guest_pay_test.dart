@@ -110,8 +110,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Your email for the receipt'), findsOneWidget);
-      expect(find.textContaining('payment receipt'), findsOneWidget);
+      expect(find.text('Email for your receipt'), findsOneWidget);
+      expect(find.textContaining('send your receipt here'), findsOneWidget);
 
       await tester.enterText(find.byType(TextFormField), 'not-an-email');
       await tester.tap(find.text('Stripe'));

@@ -1802,29 +1802,11 @@ class LEn extends L {
       'We confirm every payment with the provider before marking it paid.';
 
   @override
-  String get guestPayTitle => 'Have someone else pay';
+  String get guestPayTitle => 'Payment request';
 
   @override
   String get guestPayExplainer =>
-      'Share a link and anyone can pay this amount for you. They don\'t need a ShipTrip account.';
-
-  @override
-  String get guestPayCreateLink => 'Create payment link';
-
-  @override
-  String get guestPayLinkReady => 'Link ready';
-
-  @override
-  String get guestPayCopyLink => 'Copy link';
-
-  @override
-  String get guestPayShareLink => 'Share link';
-
-  @override
-  String get guestPayRevoke => 'Cancel this link';
-
-  @override
-  String get guestPayRevoked => 'Link cancelled';
+      'The person who sent you this link is asking you to pay this for their ShipTrip delivery. You don’t need an account.';
 
   @override
   String guestPayExpiresAt(String when) {
@@ -1833,23 +1815,17 @@ class LEn extends L {
 
   @override
   String get guestPayWarning =>
-      'Anyone with this link can pay this amount. They get nothing else — no access to your delivery, your chat, or your details.';
+      'This link only lets you pay this amount. It gives no access to the delivery or to anyone’s details.';
 
   @override
-  String get guestPayPayerEmail => 'Your email for the receipt';
+  String get guestPayPayerEmail => 'Email for your receipt';
 
   @override
   String get guestPayPayerEmailHelp =>
-      'We use it for your payment receipt, failure updates and any refund communication. It does not create a ShipTrip account.';
+      'We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.';
 
   @override
   String get guestPayAmountDue => 'Amount due';
-
-  @override
-  String get guestPayForDelivery => 'Payment for a ShipTrip delivery';
-
-  @override
-  String get guestPayThanksTitle => 'Thank you';
 
   @override
   String get guestPayThanksBody =>
@@ -3874,9 +3850,6 @@ class LEn extends L {
   String get paymentOpenProvider => 'Continue payment';
 
   @override
-  String get guestPayPoweredBy => 'Paid securely through ShipTrip';
-
-  @override
   String get onboardingEyebrow => 'Welcome';
 
   @override
@@ -4738,38 +4711,159 @@ class LEn extends L {
       'Boost cannot be edited once an offer has been accepted or the request has expired.';
 
   @override
-  String get guestPaymentTitle => 'Have someone else pay';
+  String get guestPaymentTitle => 'Someone else can pay';
 
   @override
-  String get guestPaymentDescription =>
-      'Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.';
+  String get guestCreateAction => 'Create payment link';
 
   @override
-  String get guestPaymentShareButton => 'Share payment link';
+  String get guestShareLead =>
+      'Share this secure payment link with someone you trust. They can pay without a ShipTrip account.';
 
   @override
-  String get guestPaymentCopyButton => 'Copy link';
+  String get guestShareAction => 'Share link';
 
   @override
-  String get guestPaymentCopied => 'Payment link copied to clipboard';
+  String get guestCopyAction => 'Copy link';
 
   @override
-  String guestPaymentExpires(String expiry) {
-    return 'Link expires on $expiry';
+  String get guestCopiedAction => 'Copied';
+
+  @override
+  String get guestLinkCopied => 'Link copied';
+
+  @override
+  String get guestShareSubject => 'ShipTrip payment request';
+
+  @override
+  String guestShareMessage(String amount, String link) {
+    return 'Could you pay $amount for my ShipTrip delivery? Here is the secure link: $link';
   }
 
   @override
-  String get guestPaymentRevokeAction => 'Revoke link';
+  String get guestLinkLabel => 'Payment link';
 
   @override
-  String get guestPaymentRevokeConfirmTitle => 'Revoke guest payment link?';
+  String get guestStatusReady => 'Payment link ready';
 
   @override
-  String get guestPaymentRevokeConfirmBody =>
-      'Anyone holding this link will no longer be able to pay. You can generate a new link at any time.';
+  String guestStatusExpiresOn(String when) {
+    return 'Expires $when';
+  }
 
   @override
-  String get guestPaymentPaidNotice => 'Paid by guest payer';
+  String get guestStatusPaying => 'Someone is paying now';
+
+  @override
+  String get guestStatusPayingBody =>
+      'This updates by itself as soon as their payment goes through.';
+
+  @override
+  String get guestStatusExpired => 'This payment link has expired';
+
+  @override
+  String get guestStatusRevoked => 'This payment link is no longer active';
+
+  @override
+  String get guestStatusNewLinkBody =>
+      'Create a new link if someone else should still pay.';
+
+  @override
+  String get guestStatusHidden => 'Your earlier link still works';
+
+  @override
+  String get guestStatusHiddenBody =>
+      'For security it can’t be shown again. Create a new link to share — the earlier one will then stop working.';
+
+  @override
+  String get guestStatusClosed => 'This payment can no longer be made by link.';
+
+  @override
+  String get guestCreateNewAction => 'Create a new payment link';
+
+  @override
+  String get guestMoreActions => 'More options';
+
+  @override
+  String get guestRevokeAction => 'Revoke link';
+
+  @override
+  String get guestRevokeConfirmTitle => 'Revoke this payment link?';
+
+  @override
+  String get guestRevokeConfirmBody =>
+      'Anyone who has it won’t be able to pay with it. You can create a new link afterwards.';
+
+  @override
+  String get guestRevokeKeep => 'Keep link';
+
+  @override
+  String get guestRevokedDone => 'Link revoked';
+
+  @override
+  String get guestPaidTitle => 'Payment received';
+
+  @override
+  String guestPaidBody(String amount) {
+    return '$amount was paid successfully.';
+  }
+
+  @override
+  String get guestPaidBodyPlain => 'The payment went through successfully.';
+
+  @override
+  String get guestErrorLoad =>
+      'We couldn’t load your payment link. Check your connection and try again.';
+
+  @override
+  String get guestErrorBusy =>
+      'Someone is paying with your current link right now. Try again once they’ve finished.';
+
+  @override
+  String get guestErrorRevokeBusy =>
+      'Someone is paying with this link right now, so it can’t be revoked.';
+
+  @override
+  String get guestErrorRevoke => 'We couldn’t revoke the link. Try again.';
+
+  @override
+  String get guestErrorShare =>
+      'Sharing isn’t available right now. Copy the link instead.';
+
+  @override
+  String get guestPurposeDeposit => 'Deposit for your request';
+
+  @override
+  String get guestPurposeRemaining => 'Remaining delivery payment';
+
+  @override
+  String get guestPurposeDelivery => 'Delivery payment';
+
+  @override
+  String get guestPurposeBoost => 'Boost payment';
+
+  @override
+  String get guestPurposeOther => 'ShipTrip payment';
+
+  @override
+  String get guestPayingNowTitle => 'Someone else is paying this now';
+
+  @override
+  String get guestPayingNowBody =>
+      'They opened your payment link. This updates as soon as their payment goes through.';
+
+  @override
+  String get guestPayPurposeDeposit => 'Deposit for a delivery request';
+
+  @override
+  String get guestPayPurposeDelivery => 'Payment for a delivery';
+
+  @override
+  String get guestPayPurposeBoost => 'Extra reward for a delivery';
+
+  @override
+  String get guestPayHandoff =>
+      'You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.';
 
   @override
   String get paymentSuccessTitle => 'Payment secured';
@@ -4890,9 +4984,6 @@ class LEn extends L {
 
   @override
   String get boostHistoryReasonOther => 'Boost updated';
-
-  @override
-  String get guestPaymentAmountDue => 'Amount due';
 
   @override
   String get guestPaymentLinkFailed =>

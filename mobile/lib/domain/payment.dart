@@ -776,6 +776,8 @@ class GuestPaymentView {
     required this.providers,
     this.amount,
     this.expiresAt,
+    this.purpose = PaymentPurpose.unknown,
+    this.receiptEmailRequired = true,
   });
 
   factory GuestPaymentView.fromJson(Map<String, dynamic> json) =>
@@ -786,6 +788,16 @@ class GuestPaymentView {
             : readText(json['currency']),
         description: readText(json['description']),
         expiresAt: readDate(json['expires_at']),
+        purpose: readEnum(
+          json['purpose'],
+          PaymentPurpose.values,
+          fallback: PaymentPurpose.unknown,
+        ),
+        // A server from before the flag always required the address when
+        // transactional email was on, so an absent flag keeps asking.
+        receiptEmailRequired: json.containsKey('receipt_email_required')
+            ? readBool(json['receipt_email_required'])
+            : true,
         providers: readObjectList(json['providers'])
             .map(ProviderOption.fromJson)
             .where((p) => p.provider != PaymentProviderId.mock)
@@ -794,14 +806,53 @@ class GuestPaymentView {
 
   final Money? amount;
   final String currency;
+
+  /// The server's English description. The screen names the purpose in the
+  /// reader's language from [purpose] instead.
   final String description;
   final DateTime? expiresAt;
+  final PaymentPurpose purpose;
+
+  /// Whether ShipTrip will send this payer a receipt, and so needs an address.
+  /// False when transactional email is off: nothing would ever be sent to it.
+  final bool receiptEmailRequired;
 
   /// Already filtered server-side to rails that are usable right now.
   final List<ProviderOption> providers;
 }
 
-/// The link the sender shares. The raw token is returned exactly once.
+/// Where the sender's "someone else can pay" link stands. Derived by the
+/// server from the order and its newest link; the app never infers it.
+enum GuestLinkState {
+  /// Never shared, or the last link was used by a payment.
+  none,
+  active,
+  expired,
+  revoked,
+
+  /// The obligation is settled, whoever paid it.
+  paid,
+
+  /// No longer collecting, without having been paid.
+  closed,
+  unknown;
+
+  static GuestLinkState parse(Object? raw) => switch (raw) {
+    'none' => none,
+    'active' => active,
+    'expired' => expired,
+    'revoked' => revoked,
+    'paid' => paid,
+    'closed' => closed,
+    _ => unknown,
+  };
+}
+
+/// The sender's guest link, as `GET`/`POST .../guest-link` and its revoke
+/// describe it: one shape, so the sheet renders whatever the server last said.
+///
+/// The token and the shareable URL are present only while the link is live and
+/// can be shown again. Opening the sheet reads this; it never issues a link.
 class GuestPaymentLink {
   const GuestPaymentLink({
     required this.token,
@@ -811,30 +862,48 @@ class GuestPaymentLink {
     this.expiresAt,
     this.paymentLink,
     this.reissued = false,
+    this.reused = false,
     this.purpose = PaymentPurpose.unknown,
+    this.state = GuestLinkState.unknown,
+    this.checkoutInProgress = false,
+    this.canCreate = false,
+    this.canRevoke = false,
   });
 
-  factory GuestPaymentLink.fromJson(Map<String, dynamic> json) =>
-      GuestPaymentLink(
-        token: readText(json['token']),
-        currency: readText(json['currency']).isEmpty
-            ? 'EUR'
-            : readText(json['currency']),
-        amount: Money.eurCentsOrNull(json['amount_eur_cents']),
-        expiresAt: readDate(json['expires_at']),
-        communicationLanguage: CommunicationLanguage.parse(
-          json['communication_language'],
-        ),
-        paymentLink: readString(json['payment_link']),
-        reissued: readBool(json['reissued']),
-        purpose: readEnum(
-          json['purpose'],
-          PaymentPurpose.values,
-          fallback: PaymentPurpose.unknown,
-        ),
-      );
+  factory GuestPaymentLink.fromJson(Map<String, dynamic> json) {
+    final token = readText(json['token']);
+    final state = GuestLinkState.parse(json['state']);
+    return GuestPaymentLink(
+      token: token,
+      currency: readText(json['currency']).isEmpty
+          ? 'EUR'
+          : readText(json['currency']),
+      amount: Money.eurCentsOrNull(json['amount_eur_cents']),
+      expiresAt: readDate(json['expires_at']),
+      communicationLanguage: CommunicationLanguage.parse(
+        json['communication_language'],
+      ),
+      paymentLink: readString(json['payment_link']),
+      reissued: readBool(json['reissued']),
+      reused: readBool(json['reused']),
+      purpose: readEnum(
+        json['purpose'],
+        PaymentPurpose.values,
+        fallback: PaymentPurpose.unknown,
+      ),
+      // A server from before link states answered only the issuing call, and
+      // an issued token is by definition a live link.
+      state: state == GuestLinkState.unknown && token.isNotEmpty
+          ? GuestLinkState.active
+          : state,
+      checkoutInProgress: readBool(json['checkout_in_progress']),
+      canCreate: readBool(json['can_create']),
+      canRevoke: readBool(json['can_revoke']),
+    );
+  }
 
   /// Opaque bearer string. Never parsed, never logged, never persisted.
+  /// Empty whenever the link is not live or cannot be shown again.
   final String token;
 
   final String currency;
@@ -846,6 +915,25 @@ class GuestPaymentLink {
 
   /// True when this link replaced an already active link.
   final bool reissued;
+
+  /// True when nothing was issued: this is the link already shared.
+  final bool reused;
+
+  final GuestLinkState state;
+
+  /// A payer holding this link is partway through a hosted checkout. While
+  /// true the link can be neither replaced nor revoked.
+  final bool checkoutInProgress;
+
+  /// A new link may be issued right now.
+  final bool canCreate;
+
+  /// The live link may be revoked right now.
+  final bool canRevoke;
+
+  /// Live, and the server could show it: there is a URL to copy and share.
+  bool get isShareable =>
+      state == GuestLinkState.active && (paymentLink?.isNotEmpty ?? false);
 
   /// Purpose of the payment obligation (posting deposit or deal balance).
   final PaymentPurpose purpose;

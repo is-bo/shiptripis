@@ -1263,10 +1263,21 @@ class PaymentRepository {
     ),
   );
 
-  /// Creates a shareable link so somebody else can pay this obligation.
+  /// The sender's current "someone else can pay" link for this obligation.
   ///
-  /// The raw token comes back exactly once and is not recoverable afterwards;
-  /// issuing a new link revokes the previous one.
+  /// A read: it issues nothing and changes nothing. This is what the sheet
+  /// opens on, so looking at the link again can never break the one a relative
+  /// is already holding.
+  Future<GuestPaymentLink> guestLink(String reference) async =>
+      GuestPaymentLink.fromJson(
+        await _api.getObject('/api/payments/orders/$reference/guest-link'),
+      );
+
+  /// Shares a link so somebody else can pay this obligation.
+  ///
+  /// Hands back the live link when there is one the server can show again
+  /// (`reused`), and issues a new one otherwise — which retires any previous
+  /// link (`reissued`). The server refuses while a payer is mid-checkout.
   ///
   /// [communicationLanguage] is the language of the guest payer's receipt. The
   /// server snapshots it onto the link at issue time, so a later change to the
@@ -1288,12 +1299,14 @@ class PaymentRepository {
     ),
   );
 
-  Future<int> revokeGuestLink(String reference) async {
-    final body = await _api.postObject(
-      '/api/payments/orders/$reference/guest-link/revoke',
-    );
-    return (body['revoked'] as num?)?.toInt() ?? 0;
-  }
+  /// Stops the live link. Answers with the link's state afterwards; refused
+  /// with `guest_checkout_in_progress` while someone is paying with it.
+  Future<GuestPaymentLink> revokeGuestLink(String reference) async =>
+      GuestPaymentLink.fromJson(
+        await _api.postObject(
+          '/api/payments/orders/$reference/guest-link/revoke',
+        ),
+      );
 
   /// Anonymous. Every invalid reason collapses to one `guest_link_invalid`
   /// response so a prober learns nothing.

@@ -3240,50 +3240,14 @@ abstract class L {
   /// No description provided for @guestPayTitle.
   ///
   /// In en, this message translates to:
-  /// **'Have someone else pay'**
+  /// **'Payment request'**
   String get guestPayTitle;
 
   /// No description provided for @guestPayExplainer.
   ///
   /// In en, this message translates to:
-  /// **'Share a link and anyone can pay this amount for you. They don\'t need a ShipTrip account.'**
+  /// **'The person who sent you this link is asking you to pay this for their ShipTrip delivery. You don’t need an account.'**
   String get guestPayExplainer;
-
-  /// No description provided for @guestPayCreateLink.
-  ///
-  /// In en, this message translates to:
-  /// **'Create payment link'**
-  String get guestPayCreateLink;
-
-  /// No description provided for @guestPayLinkReady.
-  ///
-  /// In en, this message translates to:
-  /// **'Link ready'**
-  String get guestPayLinkReady;
-
-  /// No description provided for @guestPayCopyLink.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy link'**
-  String get guestPayCopyLink;
-
-  /// No description provided for @guestPayShareLink.
-  ///
-  /// In en, this message translates to:
-  /// **'Share link'**
-  String get guestPayShareLink;
-
-  /// No description provided for @guestPayRevoke.
-  ///
-  /// In en, this message translates to:
-  /// **'Cancel this link'**
-  String get guestPayRevoke;
-
-  /// No description provided for @guestPayRevoked.
-  ///
-  /// In en, this message translates to:
-  /// **'Link cancelled'**
-  String get guestPayRevoked;
 
   /// No description provided for @guestPayExpiresAt.
   ///
@@ -3294,19 +3258,19 @@ abstract class L {
   /// No description provided for @guestPayWarning.
   ///
   /// In en, this message translates to:
-  /// **'Anyone with this link can pay this amount. They get nothing else — no access to your delivery, your chat, or your details.'**
+  /// **'This link only lets you pay this amount. It gives no access to the delivery or to anyone’s details.'**
   String get guestPayWarning;
 
   /// No description provided for @guestPayPayerEmail.
   ///
   /// In en, this message translates to:
-  /// **'Your email for the receipt'**
+  /// **'Email for your receipt'**
   String get guestPayPayerEmail;
 
   /// No description provided for @guestPayPayerEmailHelp.
   ///
   /// In en, this message translates to:
-  /// **'We use it for your payment receipt, failure updates and any refund communication. It does not create a ShipTrip account.'**
+  /// **'We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.'**
   String get guestPayPayerEmailHelp;
 
   /// No description provided for @guestPayAmountDue.
@@ -3314,18 +3278,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Amount due'**
   String get guestPayAmountDue;
-
-  /// No description provided for @guestPayForDelivery.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment for a ShipTrip delivery'**
-  String get guestPayForDelivery;
-
-  /// No description provided for @guestPayThanksTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Thank you'**
-  String get guestPayThanksTitle;
 
   /// No description provided for @guestPayThanksBody.
   ///
@@ -6735,12 +6687,6 @@ abstract class L {
   /// **'Continue payment'**
   String get paymentOpenProvider;
 
-  /// No description provided for @guestPayPoweredBy.
-  ///
-  /// In en, this message translates to:
-  /// **'Paid securely through ShipTrip'**
-  String get guestPayPoweredBy;
-
   /// No description provided for @onboardingEyebrow.
   ///
   /// In en, this message translates to:
@@ -8256,62 +8202,278 @@ abstract class L {
   /// No description provided for @guestPaymentTitle.
   ///
   /// In en, this message translates to:
-  /// **'Have someone else pay'**
+  /// **'Someone else can pay'**
   String get guestPaymentTitle;
 
-  /// No description provided for @guestPaymentDescription.
+  /// No description provided for @guestCreateAction.
   ///
   /// In en, this message translates to:
-  /// **'Share a secure link. Anyone with the link can pay this amount without needing a ShipTrip account.'**
-  String get guestPaymentDescription;
+  /// **'Create payment link'**
+  String get guestCreateAction;
 
-  /// No description provided for @guestPaymentShareButton.
+  /// No description provided for @guestShareLead.
   ///
   /// In en, this message translates to:
-  /// **'Share payment link'**
-  String get guestPaymentShareButton;
+  /// **'Share this secure payment link with someone you trust. They can pay without a ShipTrip account.'**
+  String get guestShareLead;
 
-  /// No description provided for @guestPaymentCopyButton.
+  /// No description provided for @guestShareAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Share link'**
+  String get guestShareAction;
+
+  /// No description provided for @guestCopyAction.
   ///
   /// In en, this message translates to:
   /// **'Copy link'**
-  String get guestPaymentCopyButton;
+  String get guestCopyAction;
 
-  /// No description provided for @guestPaymentCopied.
+  /// No description provided for @guestCopiedAction.
   ///
   /// In en, this message translates to:
-  /// **'Payment link copied to clipboard'**
-  String get guestPaymentCopied;
+  /// **'Copied'**
+  String get guestCopiedAction;
 
-  /// No description provided for @guestPaymentExpires.
+  /// No description provided for @guestLinkCopied.
   ///
   /// In en, this message translates to:
-  /// **'Link expires on {expiry}'**
-  String guestPaymentExpires(String expiry);
+  /// **'Link copied'**
+  String get guestLinkCopied;
 
-  /// No description provided for @guestPaymentRevokeAction.
+  /// No description provided for @guestShareSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip payment request'**
+  String get guestShareSubject;
+
+  /// No description provided for @guestShareMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Could you pay {amount} for my ShipTrip delivery? Here is the secure link: {link}'**
+  String guestShareMessage(String amount, String link);
+
+  /// No description provided for @guestLinkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment link'**
+  String get guestLinkLabel;
+
+  /// No description provided for @guestStatusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment link ready'**
+  String get guestStatusReady;
+
+  /// No description provided for @guestStatusExpiresOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires {when}'**
+  String guestStatusExpiresOn(String when);
+
+  /// No description provided for @guestStatusPaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone is paying now'**
+  String get guestStatusPaying;
+
+  /// No description provided for @guestStatusPayingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This updates by itself as soon as their payment goes through.'**
+  String get guestStatusPayingBody;
+
+  /// No description provided for @guestStatusExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'This payment link has expired'**
+  String get guestStatusExpired;
+
+  /// No description provided for @guestStatusRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'This payment link is no longer active'**
+  String get guestStatusRevoked;
+
+  /// No description provided for @guestStatusNewLinkBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new link if someone else should still pay.'**
+  String get guestStatusNewLinkBody;
+
+  /// No description provided for @guestStatusHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Your earlier link still works'**
+  String get guestStatusHidden;
+
+  /// No description provided for @guestStatusHiddenBody.
+  ///
+  /// In en, this message translates to:
+  /// **'For security it can’t be shown again. Create a new link to share — the earlier one will then stop working.'**
+  String get guestStatusHiddenBody;
+
+  /// No description provided for @guestStatusClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'This payment can no longer be made by link.'**
+  String get guestStatusClosed;
+
+  /// No description provided for @guestCreateNewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new payment link'**
+  String get guestCreateNewAction;
+
+  /// No description provided for @guestMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get guestMoreActions;
+
+  /// No description provided for @guestRevokeAction.
   ///
   /// In en, this message translates to:
   /// **'Revoke link'**
-  String get guestPaymentRevokeAction;
+  String get guestRevokeAction;
 
-  /// No description provided for @guestPaymentRevokeConfirmTitle.
+  /// No description provided for @guestRevokeConfirmTitle.
   ///
   /// In en, this message translates to:
-  /// **'Revoke guest payment link?'**
-  String get guestPaymentRevokeConfirmTitle;
+  /// **'Revoke this payment link?'**
+  String get guestRevokeConfirmTitle;
 
-  /// No description provided for @guestPaymentRevokeConfirmBody.
+  /// No description provided for @guestRevokeConfirmBody.
   ///
   /// In en, this message translates to:
-  /// **'Anyone holding this link will no longer be able to pay. You can generate a new link at any time.'**
-  String get guestPaymentRevokeConfirmBody;
+  /// **'Anyone who has it won’t be able to pay with it. You can create a new link afterwards.'**
+  String get guestRevokeConfirmBody;
 
-  /// No description provided for @guestPaymentPaidNotice.
+  /// No description provided for @guestRevokeKeep.
   ///
   /// In en, this message translates to:
-  /// **'Paid by guest payer'**
-  String get guestPaymentPaidNotice;
+  /// **'Keep link'**
+  String get guestRevokeKeep;
+
+  /// No description provided for @guestRevokedDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Link revoked'**
+  String get guestRevokedDone;
+
+  /// No description provided for @guestPaidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment received'**
+  String get guestPaidTitle;
+
+  /// No description provided for @guestPaidBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} was paid successfully.'**
+  String guestPaidBody(String amount);
+
+  /// No description provided for @guestPaidBodyPlain.
+  ///
+  /// In en, this message translates to:
+  /// **'The payment went through successfully.'**
+  String get guestPaidBodyPlain;
+
+  /// No description provided for @guestErrorLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t load your payment link. Check your connection and try again.'**
+  String get guestErrorLoad;
+
+  /// No description provided for @guestErrorBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone is paying with your current link right now. Try again once they’ve finished.'**
+  String get guestErrorBusy;
+
+  /// No description provided for @guestErrorRevokeBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone is paying with this link right now, so it can’t be revoked.'**
+  String get guestErrorRevokeBusy;
+
+  /// No description provided for @guestErrorRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t revoke the link. Try again.'**
+  String get guestErrorRevoke;
+
+  /// No description provided for @guestErrorShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing isn’t available right now. Copy the link instead.'**
+  String get guestErrorShare;
+
+  /// No description provided for @guestPurposeDeposit.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit for your request'**
+  String get guestPurposeDeposit;
+
+  /// No description provided for @guestPurposeRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining delivery payment'**
+  String get guestPurposeRemaining;
+
+  /// No description provided for @guestPurposeDelivery.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery payment'**
+  String get guestPurposeDelivery;
+
+  /// No description provided for @guestPurposeBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Boost payment'**
+  String get guestPurposeBoost;
+
+  /// No description provided for @guestPurposeOther.
+  ///
+  /// In en, this message translates to:
+  /// **'ShipTrip payment'**
+  String get guestPurposeOther;
+
+  /// No description provided for @guestPayingNowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone else is paying this now'**
+  String get guestPayingNowTitle;
+
+  /// No description provided for @guestPayingNowBody.
+  ///
+  /// In en, this message translates to:
+  /// **'They opened your payment link. This updates as soon as their payment goes through.'**
+  String get guestPayingNowBody;
+
+  /// No description provided for @guestPayPurposeDeposit.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit for a delivery request'**
+  String get guestPayPurposeDeposit;
+
+  /// No description provided for @guestPayPurposeDelivery.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment for a delivery'**
+  String get guestPayPurposeDelivery;
+
+  /// No description provided for @guestPayPurposeBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Extra reward for a delivery'**
+  String get guestPayPurposeBoost;
+
+  /// No description provided for @guestPayHandoff.
+  ///
+  /// In en, this message translates to:
+  /// **'You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.'**
+  String get guestPayHandoff;
 
   /// No description provided for @paymentSuccessTitle.
   ///
@@ -8528,12 +8690,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Boost updated'**
   String get boostHistoryReasonOther;
-
-  /// guestPaymentAmountDue
-  ///
-  /// In en, this message translates to:
-  /// **'Amount due'**
-  String get guestPaymentAmountDue;
 
   /// guestPaymentLinkFailed
   ///

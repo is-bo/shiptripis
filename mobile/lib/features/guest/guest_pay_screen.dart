@@ -83,6 +83,14 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
 
     setState(() => _busy = true);
     final l = L.of(context);
+    // Only an address that will be used is sent. With receipts off the field
+    // is not shown, and nothing typed into it earlier is collected.
+    final wantsEmail =
+        ref
+            .read(_guestViewProvider(widget.token))
+            .value
+            ?.receiptEmailRequired ??
+        true;
 
     try {
       final checkout = await ref
@@ -90,7 +98,7 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
           .guestCheckout(
             token: widget.token,
             provider: provider,
-            email: _email.text.trim(),
+            email: wantsEmail ? _email.text.trim() : '',
           );
 
       final uri = Uri.tryParse(checkout.checkoutUrl);
@@ -236,52 +244,56 @@ class _PayForm extends StatelessWidget {
       );
     }
 
+    // The amount leads, named in the reader's language; then who is asking;
+    // then — only if a receipt will really be sent — where to send it.
+    final purpose = switch (view.purpose) {
+      PaymentPurpose.postingDeposit => l.guestPayPurposeDeposit,
+      PaymentPurpose.dealBalance => l.guestPayPurposeDelivery,
+      PaymentPurpose.boost => l.guestPayPurposeBoost,
+      PaymentPurpose.unknown => l.guestPurposeOther,
+    };
+
     return Form(
       key: formKey,
       child: ListView(
         padding: AppScrollPadding.pageWithFooter(context),
         children: [
-          InfoNotice(
-            message: l.guestPayExplainer,
-            tone: StatusTone.progress,
-            icon: Icons.volunteer_activism_outlined,
-          ),
-          const SizedBox(height: AppSpace.xl),
-
-          AppTextField(
-            label: l.guestPayPayerEmail,
-            controller: email,
-            helper: l.guestPayPayerEmailHelp,
-            isRequired: true,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.email],
-            validator: Validators.of(context).email,
-            prefixIcon: Icons.alternate_email_rounded,
-          ),
-
           if (amount != null)
             AppCard(
               child: MoneyHero(
                 amount: amount,
-                label: l.guestPayAmountDue,
-                caption: view.description.isEmpty ? null : view.description,
+                label: purpose,
+                caption: view.expiresAt == null
+                    ? null
+                    : l.guestPayExpiresAt(
+                        LocaleFormats.dateTime(locale, view.expiresAt!),
+                      ),
               ),
             ),
+          const SizedBox(height: AppSpace.lg),
+          Text(
+            l.guestPayExplainer,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: c.textSecondary),
+          ),
+          const SizedBox(height: AppSpace.xl),
 
-          if (view.expiresAt != null) ...[
-            const SizedBox(height: AppSpace.md),
-            Text(
-              l.guestPayExpiresAt(
-                LocaleFormats.dateTime(locale, view.expiresAt!),
-              ),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
+          if (view.receiptEmailRequired) ...[
+            AppTextField(
+              label: l.guestPayPayerEmail,
+              controller: email,
+              helper: l.guestPayPayerEmailHelp,
+              isRequired: true,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.email],
+              validator: Validators.of(context).email,
+              prefixIcon: Icons.alternate_email_rounded,
             ),
+            const SizedBox(height: AppSpace.lg),
           ],
 
-          const SizedBox(height: AppSpace.xl),
           SectionHeader(title: l.paymentChooseProvider),
           for (final option in view.providers) ...[
             _ProviderTile(
@@ -292,19 +304,37 @@ class _PayForm extends StatelessWidget {
             const SizedBox(height: AppSpace.md),
           ],
 
-          const SizedBox(height: AppSpace.lg),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: c.textTertiary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Text(
+                  l.guestPayHandoff,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
           Text(
             l.guestPayWarning,
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            l.guestPayPoweredBy,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: c.textTertiary),
           ),
         ],
       ),

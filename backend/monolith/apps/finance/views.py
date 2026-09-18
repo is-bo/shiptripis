@@ -4,7 +4,8 @@
     GET  /api/payments/orders                             my obligations
     GET  /api/payments/orders/<reference>                 one obligation
     POST /api/payments/orders/<reference>/checkout        open a hosted checkout
-    POST /api/payments/orders/<reference>/guest-link      invite someone else to pay
+    GET  /api/payments/orders/<reference>/guest-link      my "someone else can pay" link
+    POST /api/payments/orders/<reference>/guest-link      share it (reuses the live one)
     POST /api/payments/orders/<reference>/guest-link/revoke
     GET  /api/parcels/<id>/posting-deposit                deposit quote + status
     GET  /api/deals/<id>/payment                          outstanding balance
@@ -69,6 +70,7 @@ from .services import (
     create_guest_link,
     ensure_posting_deposit_order,
     deposit_quote_payload,
+    guest_link_status,
     guest_payment_view,
     provider_options,
     request_refund,
@@ -262,17 +264,62 @@ class PaymentCheckoutView(APIView):
         )
 
 
-class GuestLinkCreateView(APIView):
-    """Issue a 'have someone else pay' capability.
+def _guest_link_payload(status) -> dict:
+    """The owner's view of their guest link, the same shape on every verb.
 
-    The plaintext token is returned exactly once, here. It is never stored, so
-    it cannot be recovered later — the owner reissues instead, which revokes the
-    previous link.
+    One shape for read, share and revoke, so the app renders whatever the
+    server last said instead of stitching state together from three replies.
+    The link itself appears only while it is live and can be shown; every
+    other state carries no token at all.
+    """
+
+    order = status.order
+    link = status.link
+    shows_expiry = link is not None and status.state in ("active", "expired")
+    return {
+        "state": status.state,
+        "token": status.token,
+        # The whole shareable address, built by the server. A client that
+        # assembled this itself would be a client that could get the host wrong
+        # and send a payer somewhere else.
+        "payment_link": status.url,
+        "expires_at": link.expires_at if shows_expiry else None,
+        "amount_eur_cents": order.outstanding_eur_cents,
+        "currency": "EUR",
+        "purpose": order.purpose,
+        "communication_language": link.communication_language if link else None,
+        "checkout_in_progress": status.checkout_in_progress,
+        "can_create": status.can_create,
+        "can_revoke": status.can_revoke,
+    }
+
+
+class GuestLinkCreateView(APIView):
+    """The owner's "someone else can pay" link for one order.
+
+    `GET` reads it and issues nothing. `POST` shares it: the live link if there
+    is one the owner can be shown again, otherwise a new one. Opening the sheet
+    twice therefore hands back the same link rather than breaking the one a
+    relative is already holding.
     """
 
     permission_classes = (IsAuthenticated,)
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "payment_checkout"
+
+    def get_throttles(self):
+        # Reading is not issuing; only the write shares the checkout budget.
+        if self.request.method == "GET":
+            return []
+        return super().get_throttles()
+
+    def get(self, request: Request, reference: str) -> Response:
+        try:
+            order = _owned_order(request, reference)
+            status = guest_link_status(order_id=order.pk, actor_id=request.user.id)
+        except FinanceError as exc:
+            return _finance_error_response(exc)
+        return Response(_guest_link_payload(status))
 
     def post(self, request: Request, reference: str) -> Response:
         serializer = GuestLinkCreateSerializer(data=request.data)
@@ -286,25 +333,22 @@ class GuestLinkCreateView(APIView):
                 communication_language=serializer.validated_data.get(
                     "communication_language"
                 ),
+                reuse_live=True,
             )
+            status = guest_link_status(order_id=order.pk, actor_id=request.user.id)
         except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy) as exc:
             return _finance_error_response(exc)
         return Response(
             {
+                **_guest_link_payload(status),
                 "token": issued.token,
-                # The whole shareable address, built by the server. A client
-                # that assembled this itself would be a client that could get
-                # the host wrong and send a payer somewhere else.
                 "payment_link": issued.url,
-                "expires_at": issued.link.expires_at,
-                "amount_eur_cents": order.outstanding_eur_cents,
-                "currency": "EUR",
-                "purpose": order.purpose,
-                "communication_language": issued.link.communication_language,
                 # True when this replaced a link the owner had already sent.
                 "reissued": issued.reissued,
+                # True when nothing was issued: this is the link already shared.
+                "reused": issued.reused,
             },
-            status=http.HTTP_201_CREATED,
+            status=http.HTTP_200_OK if issued.reused else http.HTTP_201_CREATED,
         )
 
 
@@ -315,9 +359,10 @@ class GuestLinkRevokeView(APIView):
         try:
             order = _owned_order(request, reference)
             revoked = revoke_guest_link(order_id=order.pk, actor_id=request.user.id)
+            status = guest_link_status(order_id=order.pk, actor_id=request.user.id)
         except FinanceError as exc:
             return _finance_error_response(exc)
-        return Response({"revoked": revoked})
+        return Response({"revoked": revoked, **_guest_link_payload(status)})
 
 
 # --- guest surface -----------------------------------------------------------

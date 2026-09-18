@@ -3,158 +3,448 @@ The page a guest payer lands on from a shared link.
 
 Everything about it is shaped by one constraint: the person reading it is not a
 ShipTrip user and must not become one by opening it. So the page shows an
-amount, what the amount is for in the most generic terms the system can state,
-and an expiry -- and nothing else. No sender, no traveler, no recipient, no
-addresses, no parcel, no deal, no order reference. A payer who forwards this
-link forwards the ability to pay, not a receipt and not a record.
+amount, what kind of payment it is in the most generic terms the system can
+state, and how long the link lasts -- and nothing else. No sender, no traveler,
+no recipient, no addresses, no parcel, no deal, no order reference. A payer who
+forwards this link forwards the ability to pay, not a receipt and not a record.
 
 The token is in the URL because it *is* the credential. The page never puts it
-in a query string, never logs it, and the server stores only its hash.
+in a query string, never logs it, and the server stores only its hash. The
+referrer is suppressed so the path never travels onward to anyone.
 
 An invalid, expired, revoked or already-paid link is answered the same way, in
 the same words: the link no longer works. Distinguishing them would let someone
 holding a guessed token learn which orders exist.
 
-Trilingual on one page because we do not know who is reading it: the guest
-arrived from a shared link and has no ShipTrip locale.
+Visually it is the app, not a web interpretation of it: parchment, ink,
+terracotta, Fraunces for the one figure the page is about, DM Sans for the rest,
+the wax seal as the mark. The values are `AppColorScheme` verbatim, and the
+faces are the landing site's own subsets under /assets/fonts. No script, no
+external request, no gradient.
 {% endcomment %}<!doctype html>
-<html lang="en">
+<html lang="{{ lang }}" dir="{{ dir }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>ShipTrip — payment request</title>
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>{{ t.title }}</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <style>
-    :root { color-scheme: light dark; }
+    @font-face { font-family: "Fraunces"; src: url("/assets/fonts/fraunces.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
+    @font-face { font-family: "DM Sans"; src: url("/assets/fonts/dmsans.woff2") format("woff2-variations"); font-weight: 100 1000; font-display: swap; }
+    @font-face { font-family: "Noto Sans Arabic"; src: url("/assets/fonts/notosansarabic.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
+
+    :root {
+      --canvas: #f4efe6;
+      --surface: #faf6ee;
+      --surface-raised: #fffcf5;
+      --surface-sunken: #eae3d2;
+      --ink: #0e1f2c;
+      --text-secondary: #2a3b49;
+      --text-tertiary: #616c79;
+      --on-ink: #faf6ee;
+      --hairline: rgba(14, 31, 44, .12);
+      --hairline-strong: rgba(14, 31, 44, .26);
+      --attention: #c75e26;
+      --attention-print: #9b4318;
+      --attention-soft: #fcebe0;
+      --attention-vivid: #e8763a;
+      --seal: #c9a961;
+      --danger: #b23a2e;
+      --danger-soft: #fcedeb;
+      --focus: #2a62a6;
+      --shadow: 0 1px 2px rgba(14, 31, 44, .05), 0 8px 24px rgba(14, 31, 44, .06);
+      --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      --font-ui: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --font-arabic: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #091620;
+        --surface: #11212c;
+        --surface-raised: #172a37;
+        --surface-sunken: #0d1b25;
+        --ink: #f2eee6;
+        --text-secondary: #c2cdd5;
+        --text-tertiary: #93a0ab;
+        --on-ink: #0e1f2c;
+        --hairline: rgba(255, 255, 255, .12);
+        --hairline-strong: rgba(255, 255, 255, .24);
+        --attention: #e8763a;
+        --attention-print: #f4b48d;
+        --attention-soft: #3a1e0e;
+        --danger: #d35f52;
+        --danger-soft: #361310;
+        --focus: #5a8fcc;
+        --shadow: none;
+      }
+    }
+
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
       min-height: 100vh;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 400 1rem/1.5 var(--font-ui);
+    }
+    [lang="ar"] body, body[lang="ar"], html[lang="ar"] body { font-family: var(--font-arabic); }
+    .shell {
+      width: 100%;
+      max-width: 30rem;
+      margin: 0 auto;
+      padding: 16px 16px 40px;
+    }
+
+    /* Header: the mark on one side, the language switch on the other. */
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 4px 0 18px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    html[lang="ar"] .brand { font-family: var(--font-display); }
+    .seal {
       display: grid;
       place-items: center;
-      padding: 24px;
-      background: #faf7f2;
-      color: #1b1a18;
-      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--attention-vivid);
+      box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--seal);
+      color: #0e1f2c;
+      font-family: var(--font-display);
+      font-size: .95rem;
+      font-weight: 700;
+      flex: none;
     }
-    main {
-      max-width: 32rem;
-      width: 100%;
-      background: #fff;
-      border: 1px solid #e7e1d8;
+    .langs { display: flex; gap: 2px; flex-wrap: wrap; }
+    .langs a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 10px;
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font-size: .875rem;
+      text-decoration: none;
+    }
+    .langs a[aria-current="true"] {
+      color: var(--ink);
+      font-weight: 650;
+      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
+    }
+
+    /* The one card. */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 26px 22px 22px;
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--attention-print);
+      font-size: .72rem;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    html[lang="ar"] .eyebrow { letter-spacing: 0; font-size: .8rem; }
+    .amount {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 11vw, 3.1rem);
+      font-weight: 600;
+      line-height: 1.05;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .purpose {
+      margin: 8px 0 0;
+      font-size: 1.02rem;
+      font-weight: 600;
+    }
+    .lead {
+      margin: 12px 0 0;
+      color: var(--text-secondary);
+      font-size: .95rem;
+    }
+
+    /* A ticket perforation between "what" and "how". */
+    .perf {
+      position: relative;
+      height: 0;
+      margin: 22px -22px;
+      border-top: 1.5px dashed var(--hairline-strong);
+    }
+    .perf::before, .perf::after {
+      content: "";
+      position: absolute;
+      top: -10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+    }
+    .perf::before { left: -11px; }
+    .perf::after { right: -11px; }
+
+    form { margin: 0; }
+    .label, legend, label.field-label {
+      display: block;
+      margin: 0 0 8px;
+      padding: 0;
+      color: var(--text-secondary);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+    fieldset { border: 0; margin: 0 0 18px; padding: 0; min-width: 0; }
+    .rail {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 56px;
+      padding: 10px 14px;
+      border: 1.4px solid var(--hairline-strong);
       border-radius: 14px;
-      padding: 28px 26px;
-      box-shadow: 0 1px 2px rgba(27, 26, 24, .05);
+      background: var(--surface-raised);
     }
-    .mark {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 38px; height: 38px; border-radius: 10px;
-      background: #1b1a18; color: #faf7f2;
-      font-weight: 700; letter-spacing: .02em;
+    .rail + .rail { margin-top: 8px; }
+    label.rail { cursor: pointer; }
+    label.rail:has(input:checked) { border-color: var(--ink); }
+    .rail input { width: 20px; height: 20px; margin: 0; accent-color: var(--ink); flex: none; }
+    .rail strong { display: block; font-weight: 650; }
+    .rail .note { display: block; color: var(--text-tertiary); font-size: .82rem; }
+    .single { margin-bottom: 18px; }
+    .single-icon {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--surface-sunken);
+      color: var(--text-secondary);
+      flex: none;
     }
-    h1 { font-size: 1.25rem; margin: 18px 0 6px; }
-    p { margin: 0 0 14px; }
-    .lead { color: #46423c; }
-    .amount { font-size: 2rem; font-weight: 700; margin: 4px 0 2px; }
-    .meta { color: #8a8177; font-size: .9rem; margin: 0 0 18px; }
-    .sep { height: 1px; background: #e7e1d8; margin: 20px 0 16px; border: 0; }
-    section + section { margin-top: 14px; }
-    section p { margin: 0; color: #46423c; font-size: .95rem; }
-    section h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase;
-                 color: #8a8177; margin: 0 0 4px; font-weight: 600; }
-    form { margin: 0 0 12px; }
-    label { display: block; font-size: .9rem; color: #46423c; margin: 0 0 6px; }
-    input[type="email"], select {
-      width: 100%; padding: 10px 12px; margin: 0 0 14px;
-      border: 1px solid #d9d2c7; border-radius: 9px;
-      background: #fff; color: #1b1a18; font: inherit;
+
+    .field { margin: 0 0 18px; }
+    input[type="email"] {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 12px 14px;
+      border: 1.4px solid var(--hairline-strong);
+      border-radius: 12px;
+      background: var(--surface-raised);
+      color: var(--ink);
+      font: inherit;
+      direction: ltr;
+      text-align: start;
     }
-    button {
-      width: 100%; padding: 12px 16px; border: 0; border-radius: 9px;
-      background: #1b1a18; color: #faf7f2; font: inherit; font-weight: 600;
+    html[dir="rtl"] input[type="email"] { text-align: right; }
+    .field.invalid input { border-color: var(--danger); }
+    .hint { margin: 8px 0 0; color: var(--text-tertiary); font-size: .82rem; }
+    .error {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+
+    .pay {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 54px;
+      padding: 12px 24px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--on-ink);
+      font: 650 1rem/1.2 var(--font-ui);
+      letter-spacing: .01em;
       cursor: pointer;
     }
-    .note { color: #8a8177; font-size: .85rem; }
-    [dir="rtl"] { text-align: right; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #171614; color: #f2efe9; }
-      main { background: #201e1b; border-color: #34302b; }
-      .lead, section p, label { color: #c8c2b8; }
-      .mark { background: #f2efe9; color: #171614; }
-      input[type="email"], select { background: #171614; color: #f2efe9; border-color: #34302b; }
-      button { background: #f2efe9; color: #171614; }
+    html[lang="ar"] .pay { font-family: var(--font-arabic); letter-spacing: 0; }
+    .pay .arrow { display: inline-block; }
+    html[dir="rtl"] .pay .arrow { transform: scaleX(-1); }
+    .pay:hover { filter: brightness(1.12); }
+    a:focus-visible, button:focus-visible, input:focus-visible {
+      outline: 2.5px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .handoff {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin: 12px 0 0;
+      color: var(--text-tertiary);
+      font-size: .82rem;
+    }
+    .handoff svg, .facts svg { flex: none; margin-top: 2px; }
+
+    .facts {
+      list-style: none;
+      margin: 20px 0 0;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--surface-sunken);
+      color: var(--text-secondary);
+      font-size: .85rem;
+    }
+    .facts li { display: flex; gap: 10px; align-items: flex-start; }
+    .facts li + li { margin-top: 10px; }
+
+    /* Non-payable states. */
+    .state-mark {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      margin-bottom: 16px;
+      border-radius: 50%;
+      background: var(--attention-soft);
+      color: var(--attention-print);
+    }
+    .title {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -.01em;
+    }
+    html[lang="ar"] .title, html[lang="ar"] .amount { font-family: var(--font-arabic); letter-spacing: 0; }
+    .secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      margin-top: 18px;
+      padding: 0 22px;
+      border-radius: 999px;
+      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
+      color: var(--ink);
+      font-weight: 650;
+      text-decoration: none;
+    }
+    bdi { unicode-bidi: isolate; }
+
+    @media (max-width: 360px) {
+      .shell { padding-inline: 12px; }
+      .card { padding: 22px 16px 18px; }
+      .perf { margin-inline: -16px; }
     }
   </style>
 </head>
 <body>
-<main>
-  <span class="mark">ST</span>
+<div class="shell">
+  <header class="bar">
+    <span class="brand"><span class="seal" aria-hidden="true">S</span><span lang="en" dir="ltr">ShipTrip</span></span>
+    <nav class="langs" aria-label="{{ t.languages }}">
+      {% for option in languages %}<a href="?lang={{ option.code }}" lang="{{ option.code }}" hreflang="{{ option.code }}"{% if option.current %} aria-current="true"{% endif %}>{{ option.name }}</a>{% endfor %}
+    </nav>
+  </header>
 
+  <main class="card">
   {% if payable %}
-    <h1>Someone asked you to pay</h1>
-    <p class="amount">{{ amount_display }}</p>
-    <p class="meta">{{ description }}</p>
-    <p class="lead">
-      This link lets you pay this one amount. It gives you no ShipTrip account
-      and no access to the delivery it belongs to.
-    </p>
+    <p class="eyebrow">{{ t.eyebrow }}</p>
+    <h1 class="amount"><bdi dir="ltr">{{ amount_display }}</bdi></h1>
+    <p class="purpose">{{ purpose }}</p>
+    <p class="lead">{{ t.lead }}</p>
+
+    <div class="perf" aria-hidden="true"></div>
 
     <form method="post" action="{{ checkout_action }}">
       {% csrf_token %}
-      <label for="email">Email for your receipt</label>
-      <input type="email" id="email" name="email" autocomplete="email" required>
-      <label for="provider">Pay with</label>
-      <select id="provider" name="provider">
-        {% for option in providers %}
-          <option value="{{ option.provider }}">{{ option.label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Continue to payment</button>
+      <input type="hidden" name="lang" value="{{ lang }}">
+      {% if providers|length == 1 %}
+        {% with option=providers.0 %}
+        <p class="label" id="rail-label">{{ t.pay_with }}</p>
+        <div class="rail single" aria-labelledby="rail-label">
+          <input type="hidden" name="provider" value="{{ option.provider }}">
+          <span class="single-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>
+          </span>
+          <span><strong>{{ option.label }}</strong>{% if option.note %}<span class="note">{{ option.note }}</span>{% endif %}</span>
+        </div>
+        {% endwith %}
+      {% else %}
+        <fieldset>
+          <legend>{{ t.pay_with }}</legend>
+          {% for option in providers %}
+          <label class="rail">
+            <input type="radio" name="provider" value="{{ option.provider }}"{% if option.provider == chosen %} checked{% endif %}>
+            <span><strong>{{ option.label }}</strong>{% if option.note %}<span class="note">{{ option.note }}</span>{% endif %}</span>
+          </label>
+          {% endfor %}
+        </fieldset>
+      {% endif %}
+
+      {% if email_required %}
+      <div class="field{% if email_error %} invalid{% endif %}">
+        <label class="field-label" for="email">{{ t.email_label }}</label>
+        <input type="email" id="email" name="email" value="{{ email }}" autocomplete="email" inputmode="email" spellcheck="false" required aria-describedby="{% if email_error %}email-error {% endif %}email-hint"{% if email_error %} aria-invalid="true" autofocus{% endif %}>
+        {% if email_error %}<p class="error" id="email-error" role="alert">{{ email_error }}</p>{% endif %}
+        <p class="hint" id="email-hint">{{ t.email_hint }}</p>
+      </div>
+      {% endif %}
+
+      <button type="submit" class="pay"><span>{{ pay_label }}</span><span class="arrow" aria-hidden="true">→</span></button>
+      <p class="handoff">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
+        <span>{{ t.handoff }}</span>
+      </p>
     </form>
-    <p class="note">This link stops working once the amount is paid, and expires on its own.</p>
 
-    <hr class="sep">
-    <section>
-      <h2>Français</h2>
-      <p>Ce lien permet de régler ce seul montant. Il ne donne aucun compte ShipTrip ni accès à la livraison concernée.</p>
-    </section>
-    <section dir="rtl" lang="ar">
-      <h2>العربية</h2>
-      <p>يتيح لك هذا الرابط دفع هذا المبلغ فقط. وهو لا يمنحك حساباً في ShipTrip ولا اطلاعاً على عملية التوصيل.</p>
-    </section>
+    <ul class="facts">
+      <li>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>{{ valid_for }}</span>
+      </li>
+      <li>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/></svg>
+        <span>{{ t.scope }}</span>
+      </li>
+    </ul>
   {% elif temporarily_unavailable %}
-    <h1>Payments are unavailable right now</h1>
-    <p class="lead">
-      Your link is fine — we just cannot take a payment at this moment. Please
-      try again shortly. There is no need to ask for a new link.
-    </p>
-
-    <hr class="sep">
-    <section>
-      <h2>Français</h2>
-      <p>Votre lien est valable : nous ne pouvons simplement pas encaisser en ce moment. Réessayez dans un instant ; inutile de demander un nouveau lien.</p>
-    </section>
-    <section dir="rtl" lang="ar">
-      <h2>العربية</h2>
-      <p>رابطك صالح، لكن لا يمكننا استلام الدفع في الوقت الحالي. أعد المحاولة بعد قليل، ولا حاجة لطلب رابط جديد.</p>
-    </section>
+    <div class="state-mark" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    </div>
+    <h1 class="title">{{ t.unavailable_title }}</h1>
+    <p class="lead">{{ t.unavailable_body }}</p>
+    <a class="secondary" href="?lang={{ lang }}">{{ t.try_again }}</a>
   {% else %}
-    <h1>This payment link no longer works</h1>
-    <p class="lead">
-      It may already have been paid, withdrawn by the person who sent it, or
-      simply expired. Ask them for a new one.
-    </p>
-
-    <hr class="sep">
-    <section>
-      <h2>Français</h2>
-      <p>Ce lien de paiement n’est plus valable. Il a peut-être déjà été réglé, retiré ou expiré. Demandez-en un nouveau.</p>
-    </section>
-    <section dir="rtl" lang="ar">
-      <h2>العربية</h2>
-      <p>لم يعد رابط الدفع هذا صالحاً. ربما تم الدفع أو سحب الرابط أو انتهت صلاحيته. اطلب رابطاً جديداً.</p>
-    </section>
+    <div class="state-mark" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a4.2 4.2 0 0 1 6 6L17 12.5"/><path d="M13 17.5l-1.2 1.2a4.2 4.2 0 0 1-6-6L7 11.5"/><path d="M4 4l16 16"/></svg>
+    </div>
+    <h1 class="title">{{ t.invalid_title }}</h1>
+    <p class="lead">{{ t.invalid_body }}</p>
   {% endif %}
-</main>
+  </main>
+</div>
 </body>
 </html>

@@ -1210,7 +1210,8 @@ CREATE TABLE public.finance_guest_payment_link (
     created_at timestamp with time zone NOT NULL,
     created_by_id bigint NOT NULL,
     order_id bigint NOT NULL,
-    communication_language character varying(2) NOT NULL
+    communication_language character varying(2) NOT NULL,
+    token_seed character varying(64) NOT NULL
 );
 
 

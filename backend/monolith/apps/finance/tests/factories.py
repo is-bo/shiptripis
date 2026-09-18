@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -329,3 +330,38 @@ def pay_order_with_mock(client, order: PaymentOrder, **kwargs) -> PaymentAttempt
     assert response.status_code == 200, response.content
     attempt.refresh_from_db()
     return attempt
+
+
+def visible_page_text(html: str) -> str:
+    """What a reader of a rendered page can actually see, as one line.
+
+    Styles, inline icons and markup are dropped first. A privacy assertion
+    that searched the raw HTML for a primary key like ``12`` would trip on a
+    CSS size or an SVG coordinate and say nothing about disclosure.
+    """
+
+    text = re.sub(r"<style\b.*?</style>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<svg\b.*?</svg>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
+    # Directional isolates and marks are invisible; a reader never sees them.
+    text = re.sub("[‎‏⁦-⁩]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def assert_page_withholds(html: str, *secrets: str) -> None:
+    """None of `secrets` appears as a word in the page's visible text or markup.
+
+    Numbers are matched as whole tokens, so an id ``1`` is not "found" inside
+    ``€15``; anything else is matched as a plain substring of the raw HTML too,
+    which also covers attributes and hidden inputs.
+    """
+
+    text = visible_page_text(html)
+    for secret in secrets:
+        secret = str(secret)
+        if secret.isdigit():
+            assert not re.search(rf"(?<![\d.,]){secret}(?![\d.,])", text), secret
+        else:
+            assert secret not in html, secret
+

@@ -745,8 +745,13 @@ class GuestPaymentLink(models.Model):
     of the recipient, the addresses or the counterparty. The guest surface
     returns the amount, the currency and a generic description — nothing else.
 
-    Only ``token_hash`` is stored. The plaintext is returned exactly once, at
-    creation, to the order owner.
+    ``token_hash`` is what a guest's token is looked up by. The plaintext is
+    never stored: it is re-derived for the order owner from ``token_seed`` and
+    a key that lives only in the application's settings, so the owner can share
+    the same live link again instead of being handed a replacement every time
+    they open the sheet. A database read alone still cannot reconstruct a
+    working link. Links issued before the seed existed have an empty seed and
+    simply cannot be shown again; the owner replaces them.
     """
 
     order = models.ForeignKey(
@@ -756,6 +761,16 @@ class GuestPaymentLink(models.Model):
         max_length=64,
         unique=True,
         help_text="SHA-256 hex digest of the token. The plaintext is never stored.",
+    )
+    token_seed = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=(
+            "Random input the owner's token is re-derived from with an "
+            "application key. Useless without that key; empty on links issued "
+            "before J7C, which cannot be shown again."
+        ),
     )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

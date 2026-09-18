@@ -384,6 +384,43 @@ def hash_guest_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+#: Domain separation for the guest-token derivation. Changing it retires every
+#: link's recoverability (not the links themselves, which resolve by hash).
+_GUEST_TOKEN_KEY_SALT = "shiptrip.finance.guest_payment_link.token"
+
+
+def derive_guest_token(seed: str) -> str:
+    """The bearer token for a link, from its stored seed and the app key.
+
+    HMAC-SHA256 keyed by the application secret, so the stored seed alone is
+    worthless: reconstructing a working link needs the database *and* the
+    deployment's key. The output is the same 256 bits a random token carried.
+    """
+
+    from base64 import urlsafe_b64encode
+
+    from django.utils.crypto import salted_hmac
+
+    digest = salted_hmac(_GUEST_TOKEN_KEY_SALT, seed, algorithm="sha256").digest()
+    return urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def recover_guest_token(link: GuestPaymentLink) -> str | None:
+    """The owner's token for an existing link, or None if it cannot be shown.
+
+    None for a link issued before seeds existed, and for one whose key has
+    since rotated -- the re-derived token is checked against the stored hash,
+    so a changed key can never hand the owner a link that does not work.
+    """
+
+    if not link.token_seed:
+        return None
+    token = derive_guest_token(link.token_seed)
+    if not secrets.compare_digest(hash_guest_token(token), link.token_hash):
+        return None
+    return token
+
+
 def _order_for_update(order_id: int) -> PaymentOrder:
     return PaymentOrder.objects.select_for_update(no_key=True).get(pk=order_id)
 
@@ -2879,12 +2916,105 @@ class IssuedGuestLink:
     token: str
     #: True when issuing this one retired a link the owner had already shared.
     reissued: bool = False
+    #: True when no link was issued: the owner was handed the live one again.
+    reused: bool = False
 
     @property
     def url(self) -> str:
         """The shareable address. Opaque token, no internal identifier in it."""
 
         return guest_payment_url(self.token)
+
+
+class GuestLinkState:
+    """What the owner's "someone else can pay" surface is looking at.
+
+    Derived, never stored: every value follows from the order and its newest
+    link, so there is no second copy of the truth to drift.
+    """
+
+    NONE = "none"  # never shared, or the last link was used by a payment
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+    PAID = "paid"  # the obligation is settled, by whoever paid it
+    CLOSED = "closed"  # no longer collecting, without having been paid
+
+
+@dataclass(frozen=True, slots=True)
+class GuestLinkStatus:
+    order: PaymentOrder
+    state: str
+    #: The newest link, whatever its state. None before the first is issued.
+    link: GuestPaymentLink | None
+    #: The shareable token, only while the link is live and can be shown.
+    token: str | None
+    checkout_in_progress: bool
+    can_create: bool
+    can_revoke: bool
+
+    @property
+    def url(self) -> str | None:
+        return guest_payment_url(self.token) if self.token else None
+
+
+def _guest_checkout_open(*, order_id: int, link_id: int) -> bool:
+    """A payer holding this link is partway through a hosted checkout."""
+
+    return PaymentAttempt.objects.filter(
+        order_id=order_id,
+        guest_link_id=link_id,
+        status__in=PaymentAttempt.OPEN_STATUSES,
+    ).exists()
+
+
+def guest_link_status(*, order_id: int, actor_id: int) -> GuestLinkStatus:
+    """The owner's read of their guest link. Issues nothing, changes nothing.
+
+    This is what lets the app reopen the sheet on the link it already shared
+    rather than replacing it -- the reason the relative's link used to stop
+    working the moment the sender looked at it again.
+    """
+
+    order = PaymentOrder.objects.get(pk=order_id)
+    if order.owner_id != actor_id:
+        raise NotAuthorized("Only the order owner may see its payment link.")
+
+    newest = (
+        GuestPaymentLink.objects.filter(order=order)
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    payable = order.is_collectable and order.outstanding_eur_cents > 0
+    now = timezone.now()
+    if not payable:
+        state = (
+            GuestLinkState.PAID
+            if order.status == PaymentOrder.Status.PAID
+            else GuestLinkState.CLOSED
+        )
+    elif newest is None or newest.consumed_at is not None:
+        state = GuestLinkState.NONE
+    elif newest.revoked_at is not None:
+        state = GuestLinkState.REVOKED
+    elif newest.expires_at <= now:
+        state = GuestLinkState.EXPIRED
+    else:
+        state = GuestLinkState.ACTIVE
+
+    active = state == GuestLinkState.ACTIVE
+    in_progress = active and _guest_checkout_open(
+        order_id=order.pk, link_id=newest.pk
+    )
+    return GuestLinkStatus(
+        order=order,
+        state=state,
+        link=newest,
+        token=recover_guest_token(newest) if active else None,
+        checkout_in_progress=in_progress,
+        can_create=payable and not in_progress,
+        can_revoke=active and not in_progress,
+    )
 
 
 def guest_payment_url(token: str) -> str:
@@ -2906,25 +3036,32 @@ def create_guest_link(
     label: str = "",
     communication_language: str | None = None,
     policy: Phase3Policy | None = None,
+    reuse_live: bool = False,
 ) -> IssuedGuestLink:
     """Issue a single-purpose capability to pay one order.
 
-    The plaintext token exists only in this return value. Only its SHA-256
-    digest is stored, so a database read cannot reconstruct a working link, and
-    the token never appears in a log line. That is also why tapping "have
-    someone else pay" twice cannot hand back the same link: the first token is
-    unrecoverable by design.
+    The plaintext token is never stored. It is derived from a random seed and
+    the application key (`derive_guest_token`), and only its SHA-256 digest is
+    what a guest's token is looked up by -- so a database read alone cannot
+    reconstruct a working link, and the token never appears in a log line.
 
-    What it does instead is keep the *obligation* singular. A partial unique
-    index allows exactly one live link per order, issuing retires the previous
-    one, and `start_checkout` allows exactly one open attempt per order -- so a
-    second tap cannot create a second competing way to pay, only a replacement
-    for the first. Once the order is paid, every link to it stops resolving,
-    because `resolve_guest_link` refuses an order with nothing outstanding.
+    With `reuse_live`, an owner who already has a live link is handed that same
+    link again rather than a replacement. That is the sharing flow: opening the
+    sheet twice must not break the link a relative is already holding. A live
+    link that cannot be shown again (issued before seeds existed, or under a
+    rotated key) is replaced exactly as before.
 
-    An open guest checkout blocks reissue: the person the owner already sent the
-    link to may be on the provider's page right now, and quietly invalidating
-    their session mid-payment is worse than telling the owner to wait.
+    The *obligation* stays singular throughout. A partial unique index allows
+    exactly one live link per order, issuing retires the previous one, and
+    `start_checkout` allows exactly one open attempt per order -- so no path
+    creates a second competing way to pay. Once the order is paid, every link
+    to it stops resolving, because `resolve_guest_link` refuses an order with
+    nothing outstanding.
+
+    An open guest checkout blocks replacement: the person the owner already
+    sent the link to may be on the provider's page right now, and quietly
+    invalidating their session mid-payment is worse than telling the owner to
+    wait.
     """
 
     policy = policy or phase3_policy()
@@ -2951,14 +3088,27 @@ def create_guest_link(
             )
             .first()
         )
-        if live is not None and PaymentAttempt.objects.filter(
-            order_id=order.pk,
-            guest_link_id=live.pk,
-            status__in=PaymentAttempt.OPEN_STATUSES,
-        ).exists():
+        if reuse_live and live is not None:
+            shown = recover_guest_token(live)
+            if shown is not None:
+                # An explicit receipt language still applies to the link being
+                # re-shared: nothing has been paid with it, so no message owed
+                # under the old snapshot is being rewritten.
+                if communication_language:
+                    from apps.core.languages import normalize_communication_language
+
+                    language = normalize_communication_language(
+                        communication_language
+                    )
+                    if language != live.communication_language:
+                        live.communication_language = language
+                        live.save(update_fields=["communication_language"])
+                return IssuedGuestLink(link=live, token=shown, reused=True)
+        if live is not None and _guest_checkout_open(
+            order_id=order.pk, link_id=live.pk
+        ):
             raise GuestCheckoutInProgress(
-                "Someone is paying with the current link. Revoke it first to "
-                "replace it."
+                "Someone is paying with the current link right now."
             )
 
         # Issuing a new link retires the previous one, so exactly one capability
@@ -2969,12 +3119,14 @@ def create_guest_link(
             ).update(revoked_at=now)
         )
 
-        token = secrets.token_urlsafe(GUEST_TOKEN_BYTES)
+        seed = secrets.token_urlsafe(GUEST_TOKEN_BYTES)
+        token = derive_guest_token(seed)
         from apps.core.languages import normalize_communication_language
 
         link = GuestPaymentLink.objects.create(
             order=order,
             token_hash=hash_guest_token(token),
+            token_seed=seed,
             created_by_id=actor_id,
             label=label[:80],
             communication_language=normalize_communication_language(
@@ -3015,12 +3167,41 @@ def resolve_guest_link(token: str) -> GuestPaymentLink:
 
 @transaction.atomic
 def revoke_guest_link(*, order_id: int, actor_id: int) -> int:
+    """Stop the owner's link from starting any new payment.
+
+    Refused while a payer is partway through a checkout on the live link.
+    Revoking cannot reach into a hosted session that is already open -- the
+    provider would still take that payment and the webhook would still apply
+    it -- so allowing it would tell the owner they had stopped something they
+    had not.
+    """
+
     order = _order_for_update(order_id)
     if order.owner_id != actor_id:
         raise NotAuthorized("Only the order owner may revoke a payment link.")
+    live = (
+        GuestPaymentLink.objects.select_for_update(no_key=True)
+        .filter(
+            order=order,
+            revoked_at__isnull=True,
+            consumed_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        )
+        .first()
+    )
+    if live is not None and _guest_checkout_open(order_id=order.pk, link_id=live.pk):
+        raise GuestCheckoutInProgress(
+            "Someone is paying with this link right now, so it cannot be revoked."
+        )
     return GuestPaymentLink.objects.filter(
         order=order, revoked_at__isnull=True, consumed_at__isnull=True
     ).update(revoked_at=timezone.now())
+
+
+def guest_receipt_email_required() -> bool:
+    """A guest checkout needs a receipt address only when ShipTrip sends email."""
+
+    return bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False))
 
 
 def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
@@ -3037,6 +3218,12 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         "purpose": order.purpose,
         "description": _checkout_description(order),
         "expires_at": link.expires_at.isoformat(),
+        # Whether the payer is asked for an email. It exists for one reason:
+        # ShipTrip's own receipt, failure and refund messages to someone with no
+        # account. With transactional email off none of those is ever sent, so
+        # asking would be collecting an address for nothing -- the checkout
+        # serializer applies the same rule, so the two cannot disagree.
+        "receipt_email_required": guest_receipt_email_required(),
         # Guest rails carry the same settlement preview as the signed-in
         # screen. Chargily reports `supports_guest_payment = False`, so it is
         # filtered out here rather than offered and refused at the tap.
