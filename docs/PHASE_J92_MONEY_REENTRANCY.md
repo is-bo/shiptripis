@@ -7,9 +7,10 @@
 **Scope:** `DEF-MOB-01`, `DEF-MOB-02`, `DEF-MOB-03`, `DEF-MOB-05`,
 `DEF-MOB-06`, `DEF-MOB-09`, and `DEF-MOB-14` only.
 
-The implementation is complete locally. Independent Gemini verification and CI
-remain pending. No backend runtime code, schema, migration, payment economics,
-matching rule, payout rule, or deployment configuration changed.
+The implementation is complete and independently verified GREEN by Gemini at
+`8c565b1f7060ca5f4fa5e384cebacefbd9698161`. CI remains pending. No backend
+runtime code, schema, migration, payment economics, matching rule, payout rule,
+or deployment configuration changed.
 
 ## Defects and fixes
 
@@ -82,12 +83,15 @@ departure after it is accepted. The validation model takes an optional clock
 value, which makes boundary tests deterministic. Journey edit behavior was not
 changed by this creation-only defect.
 
-**CODEX BACKEND REVIEW NEEDED:** the current V1 `JourneyRouteWriteSerializer`
-checks leg ordering and arrival-after-departure but does not reject a first
-`depart_at` in the past. `publish_journey` also does not visibly add that check.
-This conflicts with the J9.2 premise that the backend already rejects past
-Journey departures. No backend behavior was changed because J9.2 explicitly
-requires reporting a backend correctness discovery instead of expanding scope.
+**CODEX BACKEND REVIEW NEEDED — independently confirmed:** the current V1
+`JourneyRouteWriteSerializer` checks leg ordering and arrival-after-departure but
+does not reject a first `depart_at` in the past. `publish_journey` also omits that
+check. Gemini reproduced a past-dated Journey passing serializer validation,
+being created, and publishing as active. Lifecycle annotation then classifies it
+as expired and keeps it out of discovery, but direct API callers can still write
+invalid data. This is a separate medium-severity backend integrity follow-up. No
+backend behavior was changed because J9.2 explicitly requires reporting a
+backend correctness discovery instead of expanding scope.
 
 ## Amount-field caller audit
 
@@ -115,15 +119,36 @@ directly affected mobile modules.
 - `flutter gen-l10n`: successful; `l10n_untranslated.json` is `{}`.
 - `git diff --check`: clean.
 
-The full Flutter suite, broad J7/J8 regressions, previous J9.1 critical
-reconfirmation, full analyzer, and independent adversarial reproduction are
-intentionally reserved for Gemini.
+## Independent Gemini verification
+
+Gemini verified the exact implementation SHA
+`8c565b1f7060ca5f4fa5e384cebacefbd9698161` with a clean tree and preserved
+stash, and returned **GREEN** for all seven scoped mobile defects.
+
+- Full Flutter: 956 passed across 55 files.
+- J9.2 targeted: 118 passed.
+- J7/J8 regression: 247 passed.
+- J9.1 mobile regression: 23 passed.
+- Backend Admin/Journey regression: 23 passed.
+- `flutter analyze --fatal-infos`: zero findings.
+- Dart formatter: 187 files clean.
+- Localization: all 3 locales generated with no untranslated keys.
+- Adversarial attempts confirmed one dialog/mutation, retry after failure,
+  stale-quote rejection, exact money rejection, locked Boost state, guarded
+  forms, and deterministic Journey time boundaries.
+- `DEF-ADM-01`, `DEF-MOB-07`, and `DEF-MOB-08` remained closed.
+
+Gemini changed no repository file, stash, branch, deployment, or APK artifact.
 
 ## Release state
 
-- Gemini verification: pending.
-- CI: pending until the independent report is returned.
+- Gemini verification: GREEN on
+  `8c565b1f7060ca5f4fa5e384cebacefbd9698161`.
+- CI: pending branch push and run result.
 - Railway deployment: not required; backend runtime code did not change.
 - Migration: none.
 - APK: not built; J9.3 remains.
-- Remaining J9 after these fixes verify: 0 critical, 3 major, 4 minor.
+- Scoped J9.2 mobile findings: all seven closed.
+- Remaining previously tracked J9: 0 critical, 3 major, 4 minor. The newly
+  confirmed medium-severity backend Journey integrity gap also requires a later
+  owner-classified remediation phase.

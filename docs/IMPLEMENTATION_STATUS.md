@@ -7721,8 +7721,8 @@ Uninstall the J6.2 build first; profile APKs are signed with a per-run debug key
 ## J9.2 — Transaction, Money & Re-Entrancy Remediation (2026-09-19)
 
 Implemented on `codex/j92-money-reentrancy` from
-`74f0fcfde610542bc81b2c38528c924f3f2fab5d`. Pending independent Gemini
-verification before CI or merge. Full detail is in
+`74f0fcfde610542bc81b2c38528c924f3f2fab5d`. Independent Gemini verification
+returned GREEN on `8c565b1f7060ca5f4fa5e384cebacefbd9698161`. Full detail is in
 `docs/PHASE_J92_MONEY_REENTRANCY.md`.
 
 The request quote now carries a complete local input identity and accepts a
@@ -7735,12 +7735,20 @@ and exact-current departures with deterministic clock tests.
 
 Codex targeted verification: 135 tests passed across new J9.2 and directly
 affected modules; changed-file analyzer, formatter, localization generation and
-diff checks pass. Full Flutter, broad J7/J8/J9.1 regression, localization parity,
-and adversarial reproduction are reserved for Gemini under the mandated handoff.
-No backend runtime code or migration changed. A backend review is recorded:
-V1 Journey create/publish does not visibly enforce the past-departure rule that
-the J9.2 report said was already server-enforced.
+diff checks pass. Gemini then reported 956 full-Flutter, 118 J9.2, 247 J7/J8, 23
+J9.1 mobile, and 23 backend Admin/Journey tests passing. Full analyzer, formatter,
+localization parity, adversarial reproduction, and the three prior J9.1 critical
+regressions passed. No backend runtime code or migration changed.
 
-After J9.2 verification, the tracked J9 remainder is expected to be 0 CRITICAL,
-3 MAJOR (`DEF-ADM-02`, `DEF-ADM-03`, `DEF-MOB-13`) and 4 MINOR
+Gemini independently confirmed the backend review: V1 Journey create and publish
+accept a past first departure. Lifecycle calculation makes the resulting record
+expired and undiscoverable, but direct API callers can still create invalid data.
+This separate medium-severity backend integrity issue remains for a later scoped
+backend remediation.
+
+After J9.2 verification, all seven scoped mobile defects are closed. The
+previously tracked J9 remainder is 0 CRITICAL, 3 MAJOR (`DEF-ADM-02`,
+`DEF-ADM-03`, `DEF-MOB-13`) and 4 MINOR
 (`DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`), all assigned to J9.3.
+The newly confirmed backend Journey integrity gap also remains open pending owner
+classification. CI and merge are pending.
