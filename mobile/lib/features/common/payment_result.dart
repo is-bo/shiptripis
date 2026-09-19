@@ -177,14 +177,11 @@ String paymentResultPurposeLabel(L l, PaymentOrder order) {
 /// wrapped in a left-to-right isolate, so "30,00 €" is not reordered into
 /// "€ 30,00" by the surrounding right-to-left text (found on a rendered screen,
 /// J7D); elsewhere it is unchanged.
-String paymentResultFigure(Money amount, Locale locale) {
-  final text = amount.format(locale);
-  if (locale.languageCode != 'ar') return text;
-  // A left-to-right isolate (LRI … PDI). The Arabic currency pattern opens
-  // with a right-to-left mark; the isolate already fixes the direction, so
-  // the mark is dropped rather than left to argue with it.
-  return '\u2066${text.replaceAll('\u200f', '')}\u2069';
-}
+///
+/// In J7E, [Money.format] performs this formatting universally; this helper
+/// delegates directly to it.
+String paymentResultFigure(Money amount, Locale locale) =>
+    amount.format(locale);
 
 /// The payment that just settled, as the server reports it.
 ///

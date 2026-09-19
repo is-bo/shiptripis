@@ -171,6 +171,12 @@ class Money implements Comparable<Money> {
   /// Locale-aware money string — `€37.50`, `37,50 €`, `37,50 €` in Arabic
   /// with Latin digits (see [LocaleFormats] for why Algeria gets Latin
   /// numerals rather than Arabic-Indic ones).
+  ///
+  /// In Arabic, currency amounts are wrapped in a Left-to-Right isolate
+  /// (`\u2066` … `\u2069`) and the CLDR-generated Right-to-Left mark (`\u200f`)
+  /// is stripped. This guarantees that "35,00 €" / "40.500 DA" preserves its
+  /// natural reading order (digits first, currency symbol after) whether
+  /// presented standalone or embedded inside RTL sentences, buttons, and cards.
   String format(Locale locale, {bool showCurrency = true}) {
     final tag = LocaleFormats.intlTag(locale);
     final fmt = showCurrency
@@ -184,7 +190,10 @@ class Money implements Comparable<Money> {
             locale: tag,
             decimalDigits: exponent,
           );
-    return fmt.format(_asDecimal);
+    final text = fmt.format(_asDecimal);
+    if (locale.languageCode != 'ar') return text;
+    final cleaned = text.replaceAll('\u200f', '');
+    return showCurrency ? '\u2066$cleaned\u2069' : cleaned;
   }
 
   /// Same as [format] but never abbreviates and never drops the minor units,

@@ -1,5 +1,40 @@
 # ShipTrip V1 Implementation Status
 
+## J7E — Combined J7 Acceptance, Regression Sweep & Final TEST APK (2026-09-19)
+
+**J7E — full J7 acceptance consolidated, cross-phase verification (J7A–J7D) complete,
+universal Arabic currency isolation implemented, localized route accessibility
+introduced, and final TEST profile ARM64 APK built.** Branch `gemini/j7e-combined-acceptance`,
+from `f27c111`. Mobile presentation and test suite updates; no backend changes, no
+migrations, no schema changes, zero real money. **APK BUILT:** Profile ARM64 test
+build for owner testing against `https://shiptrip-production-f7f7.up.railway.app`.
+[Consolidated acceptance, Arabic formatting, route accessibility, and verification matrix](PHASE_J7E_COMBINED_ACCEPTANCE.md).
+
+**Mobile presentation fixes.** `Money.format` (`core/money/money.dart`) universally
+strips Right-to-Left marks (`\u200f`) and wraps Arabic figures in Left-to-Right
+Isolates (`\u2066` … `\u2069`), ensuring numbers precede symbols (`35,00 €` / `40.500 DA`)
+naturally in all contexts (buttons, sentences, headers, breakdowns). `paymentResultFigure`
+in `features/common/payment_result.dart` forwards cleanly to `amount.format(locale)`.
+Route accessibility was localized (`design/components/route.dart` via `routeSemanticLabel`
+and `InlineRoute`) to announce natural language connectors (EN: "to", FR: "vers",
+AR: "إلى") while preserving visual origin → destination travel progression across
+LTR and RTL viewports.
+
+**Integration & verification.** New comprehensive test suite
+`test/phase_j7e_combined_acceptance_test.dart` verifies J7A pricing steps (€0.50) &
+boost exclusion, J7B route ordering & arrival time compatibility, J7C guest payer
+token seeds & checkout lockout, J7D payment result layout & *Paid in full* stamp,
+and multi-viewport responsiveness (320×640, 390×844, 411×869, landscape 844×390,
+and 1.6× dynamic text scaling). `GuestPayScreen` audited and confirmed as an
+unreachable legacy route without synthetic navigation.
+
+**Owner testing rules.**
+1. Test device must uninstall any previous ShipTrip APK before installing this build.
+2. Target backend: `https://shiptrip-production-f7f7.up.railway.app` (Stripe/Chargily TEST,
+`PAYOUT_DZD_EXECUTION_ENABLED=false`).
+3. To test matching, create a NEW Journey with explicit arrival times (legacy journeys
+without arrival times remain cleanly incompatible).
+
 ## J7D — Payment success, return and completion UX (2026-09-19)
 
 **J7D — every payment result is one ShipTrip system with purpose-specific

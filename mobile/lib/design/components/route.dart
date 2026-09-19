@@ -387,6 +387,34 @@ class InlineRouteStop {
       : label;
 }
 
+/// Localized screen-reader route summary connecting ordered stops.
+///
+/// EN: "Paris to Algiers"
+/// FR: "Paris vers Alger"
+/// AR: "الجزائر إلى باريس"
+String routeSemanticLabel({
+  required List<InlineRouteStop> stops,
+  required Locale locale,
+  bool continuesBefore = false,
+  bool continuesAfter = false,
+}) {
+  if (stops.isEmpty) return '';
+  final connector = switch (locale.languageCode) {
+    'fr' => ' vers ',
+    'ar' => ' إلى ',
+    _ => ' to ',
+  };
+  final buffer = StringBuffer();
+  if (continuesBefore) {
+    buffer.write('…$connector');
+  }
+  buffer.write(stops.map((s) => s.displayText).join(connector));
+  if (continuesAfter) {
+    buffer.write('$connector…');
+  }
+  return buffer.toString();
+}
+
 /// A compact, horizontal route representation for list cards and summaries.
 ///
 /// Visualizes ordered stops: `Jijel → Algiers → Paris` or with airport IATA
@@ -438,7 +466,13 @@ class InlineRoute extends StatelessWidget {
     // back to the origin — which is exactly what Arabic shipped with.
     const arrowIcon = Icons.arrow_forward_rounded;
 
-    final semanticText = stops.map((s) => s.displayText).join(' to ');
+    final locale = Localizations.localeOf(context);
+    final semanticText = routeSemanticLabel(
+      stops: stops,
+      locale: locale,
+      continuesBefore: continuesBefore,
+      continuesAfter: continuesAfter,
+    );
 
     Widget buildArrow() => Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),

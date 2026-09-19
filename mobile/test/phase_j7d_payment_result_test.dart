@@ -19,6 +19,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/live/live_updates.dart';
 import 'package:shiptrip/core/money/money.dart';
@@ -1254,17 +1255,46 @@ void main() {
       final paragraph = tester.renderObject<RenderParagraph>(find.text(lead));
       expect(x(paragraph, lead, '€'), greaterThan(x(paragraph, lead, '4')));
 
-      // The same sentence without the isolate is what shipped before: the
-      // euro sign jumps to the front of the number.
-      final bare = l.payResultSomeoneElsePaid(Money.eurCents(4250).format(ar));
+      // In J7E, Money.format universally provides the LTR isolate, so
+      // sentences interpolating Money also keep "42,50 €" in natural order.
+      final interpolated = l.payResultSomeoneElsePaid(
+        Money.eurCents(4250).format(ar),
+      );
       await pumpApp(
         tester,
-        Scaffold(body: Center(child: Text(bare))),
+        Scaffold(body: Center(child: Text(interpolated))),
         locale: ar,
       );
       await _settle(tester);
-      final plain = tester.renderObject<RenderParagraph>(find.text(bare));
-      expect(x(plain, bare, '€'), lessThan(x(plain, bare, '4')));
+      final plain = tester.renderObject<RenderParagraph>(
+        find.text(interpolated),
+      );
+      expect(
+        x(plain, interpolated, '€'),
+        greaterThan(x(plain, interpolated, '4')),
+      );
+
+      // Without an isolate (raw NumberFormat currency), the euro sign jumps
+      // to the front of the number in RTL text — what shipped before J7D/J7E.
+      final rawFormatted = NumberFormat.currency(
+        locale: 'ar_DZ',
+        symbol: '€',
+        decimalDigits: 2,
+      ).format(42.5);
+      final legacy = l.payResultSomeoneElsePaid(rawFormatted);
+      await pumpApp(
+        tester,
+        Scaffold(body: Center(child: Text(legacy))),
+        locale: ar,
+      );
+      await _settle(tester);
+      final legacyPlain = tester.renderObject<RenderParagraph>(
+        find.text(legacy),
+      );
+      expect(
+        x(legacyPlain, legacy, '€'),
+        lessThan(x(legacyPlain, legacy, '4')),
+      );
     });
 
     test('other languages are left untouched', () {
