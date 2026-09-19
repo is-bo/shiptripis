@@ -97,18 +97,41 @@ The owner will receive this copy-paste prompt in the Codex handoff with
 > checks and why, and a final PASS/FAIL. Return the report to the owner for
 > Codex review. Do not merge, push, deploy, or build an APK.
 
-Gemini returned results: **pending owner report**.
+Gemini returned results for implementation SHA
+`1112ce4c5c8951b7038d9930aa6ee12e4246c2cb`:
+
+| Check | Result |
+| --- | --- |
+| SQLite new deadline regression | 3 passed |
+| SQLite ratings, J1, notifications | 92 passed |
+| PostgreSQL deadline, ratings, J1, notifications, mobile resolution | 136 passed |
+| PostgreSQL full Django suite | 2,227 passed, 34 skipped, 0 failed (2,261 collected) |
+| Backend Ruff | Passed |
+| Schema drift | No changes detected |
+| Deployment safety | 37 passed |
+| Production-profile deployment check | No issues |
+| Static web check | Passed (8 HTML files, 1 stylesheet) |
+
+Gemini compared SQLite and PostgreSQL at one microsecond before, exactly at,
+and one microsecond after the deadline. Computed deadlines, open/expired
+rating states, blind/reveal visibility, already-rated state, and resolution
+of `rating.prompt` and `rating.required` matched. Its first full-suite attempt
+stopped during collection on ignored workstation file
+`config/settings/test_pg.py` (missing local `pgserver` module). The owner then
+ran the follow-up Gemini prompt; the same full suite passed with
+`--ignore=config/settings/test_pg.py --ds=config.settings.dev` in 43m 32s.
+That ignored file is absent from a clean CI checkout. Neither report found a
+product regression. The reports were supplied by the owner; Codex did not
+run these long suites.
 
 ## Release record
 
 - Implementation branch: `codex/j82-sqlite-review-deadline`.
-- Implementation SHA: supplied in the Codex handoff (the commit cannot name
-  its own SHA inside this file).
-- CI: pending Gemini green evidence and finalization.
-- Railway TEST deployment: decision pending merge. The production PostgreSQL
-  expression remains unchanged, and the new calculation is SQLite-only. If
-  Gemini verifies PostgreSQL equivalence, no runtime TEST deployment is
-  expected to be necessary under the task's deployment rule.
+- Implementation SHA: `1112ce4c5c8951b7038d9930aa6ee12e4246c2cb`.
+- CI: pending branch review and required green gates.
+- Railway TEST deployment: **not required**. The only new runtime calculation
+  is selected for SQLite, while the original production PostgreSQL expression
+  remains intact. Gemini verified equivalent behavior against real PostgreSQL.
 - Provider configuration: unchanged. Stripe TEST, Chargily TEST, and
   `PAYOUT_DZD_EXECUTION_ENABLED=false` remain the safety requirements; no LIVE
   or real-money execution was performed.

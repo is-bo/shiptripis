@@ -2,15 +2,19 @@
 
 ## J8.2 — SQLite Review Deadline Compatibility (2026-09-19)
 
-`DEF-ADM-01` implementation is ready for owner-run Gemini verification.
+`DEF-ADM-01` implementation passed owner-run Gemini verification.
 `with_review_deadline()` retains the Deal's frozen per-row review duration and
 the original PostgreSQL expression; its SQLite branch uses JSON integer type
 validation and integer microseconds as a Django duration. There is no migration,
 product behavior change, provider configuration change, or APK. The new SQLite
 regression first reproduced the original operator error, then passed with
 focused J1 notification, rating window, and reveal tests (**10 passed**).
-Gemini broad SQLite/PostgreSQL verification, CI, and final deployment decision
-are pending. See [J8.2 compatibility record](PHASE_J82_SQLITE_DEADLINE_COMPATIBILITY.md).
+Gemini reported **3 SQLite deadline**, **92 SQLite related**, **136 PostgreSQL
+related**, and **2,227 full Django PostgreSQL** passes (34 skips, 0 failures).
+Backend lint, schema drift, deployment safety, production settings, and static
+web gates passed. CI is pending. Railway TEST deployment is unnecessary because
+the production PostgreSQL expression is unchanged and Gemini verified its
+behavior. See [J8.2 compatibility record](PHASE_J82_SQLITE_DEADLINE_COMPATIBILITY.md).
 
 ## J8.1 — Pre-Launch UI/i18n Remediation (2026-09-19)
 
