@@ -7751,4 +7751,10 @@ previously tracked J9 remainder is 0 CRITICAL, 3 MAJOR (`DEF-ADM-02`,
 `DEF-ADM-03`, `DEF-MOB-13`) and 4 MINOR
 (`DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`), all assigned to J9.3.
 The newly confirmed backend Journey integrity gap also remains open pending owner
-classification. CI and merge are pending.
+classification. [PR #6 CI](https://github.com/is-bo/shiptripis/actions/runs/35471512891)
+passed all 6 jobs on final branch head
+`9265373aaed515c8a045eb63d52d880a12447bd3`: Flutter 956 passed and Django
+2,231 passed with 34 skipped, alongside green Go race/Redis, Ruff, migrations,
+schema drift, production/static, analyzer, and formatter gates. PR #6 merged to
+`main` at `f86aa95574185bc9e187ff83708d2cb646ea51d5`. Railway deployment was not
+required because no backend runtime or deployment code changed. No APK was built.

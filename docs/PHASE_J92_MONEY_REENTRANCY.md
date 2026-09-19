@@ -144,7 +144,14 @@ Gemini changed no repository file, stash, branch, deployment, or APK artifact.
 
 - Gemini verification: GREEN on
   `8c565b1f7060ca5f4fa5e384cebacefbd9698161`.
-- CI: pending branch push and run result.
+- CI: [PR #6 run 35471512891](https://github.com/is-bo/shiptripis/actions/runs/35471512891)
+  passed all 6 jobs on final branch head
+  `9265373aaed515c8a045eb63d52d880a12447bd3`. Flutter reported 956 passed;
+  Django reported 2,231 passed and 34 skipped. Go build, vet, race tests, real
+  Redis integration, Ruff, migration checks, schema drift, production/static
+  checks, Flutter format, and Flutter analysis passed.
+- Merge and push: [PR #6](https://github.com/is-bo/shiptripis/pull/6) merged to
+  `main` at `f86aa95574185bc9e187ff83708d2cb646ea51d5`.
 - Railway deployment: not required; backend runtime code did not change.
 - Migration: none.
 - APK: not built; J9.3 remains.
