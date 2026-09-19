@@ -1,5 +1,17 @@
 # ShipTrip V1 Implementation Status
 
+## J8.2 — SQLite Review Deadline Compatibility (2026-09-19)
+
+`DEF-ADM-01` implementation is ready for owner-run Gemini verification.
+`with_review_deadline()` retains the Deal's frozen per-row review duration and
+the original PostgreSQL expression; its SQLite branch uses JSON integer type
+validation and integer microseconds as a Django duration. There is no migration,
+product behavior change, provider configuration change, or APK. The new SQLite
+regression first reproduced the original operator error, then passed with
+focused J1 notification, rating window, and reveal tests (**10 passed**).
+Gemini broad SQLite/PostgreSQL verification, CI, and final deployment decision
+are pending. See [J8.2 compatibility record](PHASE_J82_SQLITE_DEADLINE_COMPATIBILITY.md).
+
 ## J8.1 — Pre-Launch UI/i18n Remediation (2026-09-19)
 
 **J8.1 — narrow pre-launch remediation resolving UI, i18n, accessibility semantics, and dead field defects from J8 Certification.**
