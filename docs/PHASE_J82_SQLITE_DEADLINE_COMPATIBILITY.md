@@ -128,13 +128,16 @@ run these long suites.
 
 - Implementation branch: `codex/j82-sqlite-review-deadline`.
 - Implementation SHA: `1112ce4c5c8951b7038d9930aa6ee12e4246c2cb`.
-- CI: PR #4 run
+- CI: PR #4 runs
   [35443360745](https://github.com/is-bo/shiptripis/actions/runs/35443360745)
-  passed all six jobs at branch SHA
-  `bc6a744d0e43b77575b3a0c090af9bdbdcb232f7`: Django migrations,
-  tests and lint; schema drift; production config and static web; Go unit and
-  integration; and Flutter format, analysis and tests. Zero failed jobs or
-  steps. This record-only follow-up commit will receive its own PR CI run.
+  at `bc6a744` and
+  [35445042583](https://github.com/is-bo/shiptripis/actions/runs/35445042583)
+  at final PR head `4214018b340b2627568f13708507c352d506f66e`
+  each passed all six jobs: Django migrations, tests and lint; schema drift;
+  production config and static web; Go unit and integration; and Flutter
+  format, analysis and tests. Zero failed jobs or steps.
+- Merge: PR #4 merged to `main` at
+  `ee094e950567e97b4d99d235ec967d856f8e6fe5` after final PR CI passed.
 - Railway TEST deployment: **not required**. The only new runtime calculation
   is selected for SQLite, while the original production PostgreSQL expression
   remains intact. Gemini verified equivalent behavior against real PostgreSQL.

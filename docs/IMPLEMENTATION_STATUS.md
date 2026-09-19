@@ -12,10 +12,11 @@ focused J1 notification, rating window, and reveal tests (**10 passed**).
 Gemini reported **3 SQLite deadline**, **92 SQLite related**, **136 PostgreSQL
 related**, and **2,227 full Django PostgreSQL** passes (34 skips, 0 failures).
 Backend lint, schema drift, deployment safety, production settings, and static
-web gates passed. PR #4 CI run
+web gates passed. PR #4 CI runs
 [35443360745](https://github.com/is-bo/shiptripis/actions/runs/35443360745)
-passed all six jobs at `bc6a744`; the documentation follow-up is awaiting its
-own CI run. Railway TEST deployment is unnecessary because
+and [35445042583](https://github.com/is-bo/shiptripis/actions/runs/35445042583)
+passed all six jobs; PR #4 merged to `main` at `ee094e9`. Railway TEST
+deployment is unnecessary because
 the production PostgreSQL expression is unchanged and Gemini verified its
 behavior. See [J8.2 compatibility record](PHASE_J82_SQLITE_DEADLINE_COMPATIBILITY.md).
 
