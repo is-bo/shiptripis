@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import Group
 from rest_framework.permissions import BasePermission
 
@@ -255,9 +256,7 @@ def has_admin_permission(user, codename: str) -> bool:
     staff accounts receive only the permissions assigned by their role group.
     """
 
-    if not getattr(user, "is_authenticated", False):
-        return False
-    if not getattr(user, "is_staff", False):
+    if not has_admin_access(user):
         return False
     if getattr(user, "is_superuser", False):
         return True
@@ -266,6 +265,21 @@ def has_admin_permission(user, codename: str) -> bool:
     except ValueError:
         return False
     return bool(user.has_perm(permission))
+
+
+def has_admin_access(user) -> bool:
+    """Common staff boundary, including account revocation after a ban."""
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and getattr(user, "is_staff", False)
+        and not getattr(user, "is_banned", False)
+    )
+
+
+def staff_member_required(view):
+    """Apply the same revocation gate to staff-only console routes."""
+    return user_passes_test(has_admin_access, login_url="admin:login")(view)
 
 
 def assign_admin_roles(

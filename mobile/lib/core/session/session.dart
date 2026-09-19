@@ -43,8 +43,11 @@ class SessionSignedOut extends SessionState {
 }
 
 class SessionSignedIn extends SessionState {
-  const SessionSignedIn(this.account);
+  const SessionSignedIn(this.account, {this.generation = 0});
   final Account account;
+
+  /// Changes at each authentication, including a return to the same account.
+  final int generation;
 }
 
 /// Which side of the marketplace the UI is presenting.
@@ -100,6 +103,17 @@ final sessionProvider = NotifierProvider<SessionController, SessionState>(
 final accountProvider = Provider<Account?>((ref) {
   final state = ref.watch(sessionProvider);
   return state is SessionSignedIn ? state.account : null;
+});
+
+/// Cache identity for private reads. Account ID alone would reuse A's cached
+/// data after A signs out and signs back in while a listener remains mounted.
+typedef AccountSession = ({int accountId, int generation});
+
+final accountSessionProvider = Provider<AccountSession?>((ref) {
+  final session = ref.watch(sessionProvider);
+  return session is SessionSignedIn
+      ? (accountId: session.account.id, generation: session.generation)
+      : null;
 });
 
 /// The role the UI is currently presenting.
@@ -177,7 +191,9 @@ class SessionController extends Notifier<SessionState> {
 
     try {
       final account = await _auth.me();
-      if (generation == _generation) state = SessionSignedIn(account);
+      if (generation == _generation) {
+        state = SessionSignedIn(account, generation: generation);
+      }
     } on ApiException catch (error) {
       if (generation != _generation) return;
       // Offline at launch is not a signed-out user. Keeping the credentials
@@ -203,7 +219,7 @@ class SessionController extends Notifier<SessionState> {
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
-    state = SessionSignedIn(account);
+    state = SessionSignedIn(account, generation: generation);
   }
 
   Future<void> signUp({
@@ -228,7 +244,7 @@ class SessionController extends Notifier<SessionState> {
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
-    state = SessionSignedIn(account);
+    state = SessionSignedIn(account, generation: generation);
   }
 
   Future<void> signInWithGoogle({
@@ -249,7 +265,7 @@ class SessionController extends Notifier<SessionState> {
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
-    state = SessionSignedIn(account);
+    state = SessionSignedIn(account, generation: generation);
   }
 
   /// Changes the language ShipTrip writes to this account in.
@@ -269,7 +285,7 @@ class SessionController extends Notifier<SessionState> {
         state is SessionSignedIn &&
         (state as SessionSignedIn).account.id == current.account.id &&
         account.id == current.account.id) {
-      state = SessionSignedIn(account);
+      state = SessionSignedIn(account, generation: current.generation);
     }
   }
 
@@ -289,7 +305,7 @@ class SessionController extends Notifier<SessionState> {
           state is SessionSignedIn &&
           (state as SessionSignedIn).account.id == current.account.id &&
           account.id == current.account.id) {
-        state = SessionSignedIn(account);
+        state = SessionSignedIn(account, generation: current.generation);
       }
     } on ApiException {
       // Keep the previous account.
@@ -313,8 +329,8 @@ class SessionController extends Notifier<SessionState> {
     _invalidateEverything();
   }
 
-  /// Drops every cached provider so nothing from the previous account can be
-  /// rendered to the next one.
+  /// Resets local role context. Private reads bind to [accountSessionProvider]
+  /// and switch away from the old cache as soon as session state changes.
   void _invalidateEverything() {
     ref.invalidate(roleContextProvider);
   }

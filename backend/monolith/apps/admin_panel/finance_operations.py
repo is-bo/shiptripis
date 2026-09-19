@@ -41,7 +41,6 @@ from it.
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import ValidationError
 from django.db import OperationalError
 from django.urls import reverse
@@ -64,7 +63,7 @@ from .finance_dashboard import (
     scope_params,
     value,
 )
-from .permissions import has_admin_permission
+from .permissions import has_admin_permission, staff_member_required
 
 #: The only query keys these pages own beyond H5's own scope. `cohort` selects a
 #: tab and means nothing to H5, so it is carried through links but never reaches

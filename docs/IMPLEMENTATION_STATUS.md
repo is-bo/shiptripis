@@ -1,5 +1,19 @@
 # ShipTrip V1 Implementation Status
 
+## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
+
+J9.1 fixes only `DEF-ADM-01`, `DEF-MOB-07`, and `DEF-MOB-08` on
+`codex/j91-critical-isolation` from `c78d9eab1e978da27d374b63ccd8f997be10afba`.
+Banned staff are denied by the shared Admin capability boundary, staff-only
+console routes, and Django's model Admin site. Received ratings, payout details,
+and signed parcel photo URLs are scoped to account and authentication generation;
+Find Travelers discards pagination from a superseded query. Focused Codex tests:
+4 Admin, 3 ratings isolation, 4 race, and 27 existing Find Travelers/profile
+passes. Broad Gemini verification, CI, merge, and Railway TEST deployment remain
+pending. No migration, APK, LIVE activation, or real-money operation. The J8.3
+APK remains not launch-ready, and J9 MAJOR/MINOR findings remain open. See
+[J9.1 record](PHASE_J91_CRITICAL_ISOLATION.md).
+
 ## J8.4 — Public Legal Route Edge Fix (2026-09-19)
 
 **J8.4 — narrow edge routing remediation making canonical legal URLs (`/terms`, `/privacy`) resolve cleanly with HTTP 200 on public TEST gateway without APK rebuild.**
