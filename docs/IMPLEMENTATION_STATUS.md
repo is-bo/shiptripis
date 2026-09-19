@@ -9,8 +9,14 @@ console routes, and Django's model Admin site. Received ratings, payout details,
 and signed parcel photo URLs are scoped to account and authentication generation;
 Find Travelers discards pagination from a superseded query. Focused Codex tests:
 4 Admin, 3 ratings isolation, 4 race, and 27 existing Find Travelers/profile
-passes. Broad Gemini verification, CI, merge, and Railway TEST deployment remain
-pending. No migration, APK, LIVE activation, or real-money operation. The J8.3
+passes. Gemini verified the follow-up implementation commit
+`07d62437bc3fc4e2bd6cc2d95d2552d8d3c6e0ce` GREEN: full Flutter 941 passed,
+ratings/discovery 7 passed, related mobile 76 passed, Admin/deployment 53 passed,
+and banned Admin passed on SQLite and PostgreSQL. Analyzer, formatter,
+localization, Ruff, schema drift, static web, and deploy checks passed. The J9
+adversarial Admin suite had 13 passes and 2 failures from open `DEF-ADM-02`;
+full Django was not run. CI, merge, and Railway TEST deployment remain pending.
+No migration, APK, LIVE activation, or real-money operation. The J8.3
 APK remains not launch-ready, and J9 MAJOR/MINOR findings remain open. See
 [J9.1 record](PHASE_J91_CRITICAL_ISOLATION.md).
 
@@ -21,7 +27,7 @@ required correction. The follow-up updates the authenticated payout test
 fixtures, adds the standard staticfiles test override, and formats the
 discovery source. The J8.1 test file's canonical Git content passed the local
 targeted formatter check without a content change. Focused Codex reruns pass;
-a second broad Gemini report is pending.
+a second broad Gemini report returned GREEN for the three J9.1 defects.
 The two J9 Admin adversarial failures tied to disabled payout profiles remain
 the separate, open `DEF-ADM-02` finding.
 
