@@ -45,6 +45,7 @@ class BoostScreen extends ConsumerStatefulWidget {
 class _BoostScreenState extends ConsumerState<BoostScreen> {
   final _amountController = TextEditingController();
   int? _chosenCents;
+  bool _initialized = false;
   bool _busy = false;
   String? _error;
 
@@ -55,7 +56,8 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
   }
 
   void _syncInitial(BoostState state) {
-    if (_chosenCents == null) {
+    if (!_initialized) {
+      _initialized = true;
       _chosenCents = state.boostEur.minorUnits;
       if (_chosenCents! > 0) {
         _amountController.text = (_chosenCents! / 100.0).toStringAsFixed(2);
@@ -64,12 +66,20 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
   }
 
   Future<void> _saveBoost(BoostState state) async {
-    final cents = _chosenCents ?? 0;
+    if (_busy) return;
+    final cents = _chosenCents;
     final maximum = state.policy?.maximumBoost;
     final l = L.of(context);
     final locale = Localizations.localeOf(context);
 
-    if (cents < 0) return;
+    if (cents == null || cents < 0) {
+      setState(
+        () => _error = AppAmountField.hasExcessPrecision(_amountController)
+            ? l.validationMoneyPrecision
+            : l.validationNumberInvalid,
+      );
+      return;
+    }
     // Only refuse locally against a bound the server actually published. With
     // no policy there is no ceiling to quote, and inventing one - the old code
     // named a euro amount in every language - is worse than letting the server
@@ -91,7 +101,16 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
           .read(boostRepositoryProvider)
           .setBoost(requestId: widget.requestId, amountEurCents: cents);
       if (!mounted) return;
-      ref.invalidate(_boostStateProvider(widget.requestId));
+      final saved = await ref.refresh(
+        _boostStateProvider(widget.requestId).future,
+      );
+      if (!mounted) return;
+      setState(() {
+        _chosenCents = saved.boostEur.minorUnits;
+        _amountController.text = _chosenCents == 0
+            ? ''
+            : Money.eurCents(_chosenCents!).editableString;
+      });
       refreshVolatileState(ref);
       AppSnack.success(context, l.actionDone);
     } on ApiException catch (e) {
@@ -215,7 +234,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                     ChoiceChip(
                       label: Text(l.boostPresetNone),
                       selected: currentCents == 0,
-                      onSelected: canEdit
+                      onSelected: canEdit && !_busy
                           ? (selected) {
                               if (selected) {
                                 setState(() {
@@ -229,7 +248,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                     ChoiceChip(
                       label: Text(l.boostPreset5),
                       selected: currentCents == 500,
-                      onSelected: canEdit
+                      onSelected: canEdit && !_busy
                           ? (selected) {
                               if (selected) {
                                 setState(() {
@@ -243,7 +262,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                     ChoiceChip(
                       label: Text(l.boostPreset10),
                       selected: currentCents == 1000,
-                      onSelected: canEdit
+                      onSelected: canEdit && !_busy
                           ? (selected) {
                               if (selected) {
                                 setState(() {
@@ -261,11 +280,14 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                 AppAmountField(
                   label: l.boostCustomAmountLabel,
                   controller: _amountController,
-                  enabled: canEdit,
+                  enabled: canEdit && !_busy,
+                  errorText: _error,
                   onChanged: (text) {
-                    final cents =
-                        AppAmountField.centsOf(_amountController) ?? 0;
-                    setState(() => _chosenCents = cents);
+                    final cents = AppAmountField.centsOf(_amountController);
+                    setState(() {
+                      _chosenCents = text.trim().isEmpty ? 0 : cents;
+                      _error = null;
+                    });
                   },
                 ),
                 const SizedBox(height: AppSpace.md),
@@ -395,7 +417,9 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                 return AppButton(
                   label: isZero ? l.boostRemoveAction : l.actionSave,
                   isLoading: _busy,
-                  onPressed: () => _saveBoost(state),
+                  onPressed: _busy || _chosenCents == null
+                      ? null
+                      : () => _saveBoost(state),
                 );
               },
             )

@@ -74,6 +74,7 @@ Map<String, dynamic> _terms(int reward, int fee) => {
 /// Written out per reward rather than computed, so "€7.50" on screen is this
 /// table's €7.50 and not a quarter of something the client multiplied.
 const _feeFor = <int, int>{
+  500: 125,
   2000: 500,
   2500: 625,
   2950: 738,
@@ -409,6 +410,7 @@ FakeBackend _publishedBackend({
   int boostCents = 0,
   bool canEditBoost = true,
   void Function(RecordedRequest)? onSetBoost,
+  Future<void>? holdSetBoost,
 }) {
   var boost = boostCents;
   return FakeBackend()
@@ -433,6 +435,7 @@ FakeBackend _publishedBackend({
     )
     ..handle('PUT', '/api/parcels/42/boost', (request) async {
       onSetBoost?.call(request);
+      if (holdSetBoost != null) await holdSetBoost;
       boost = request.body['boost_eur_cents'] as int;
       return FakeResponse(200, _boostStateFixture(boostCents: boost));
     })
@@ -589,6 +592,46 @@ void main() {
       expect(created, isNotNull, reason: 'the request was never posted');
       expect(created!.body.containsKey('boost_eur_cents'), isFalse);
       expect(created.body['sender_proposed_reward_eur_cents'], 3000);
+    });
+
+    testWidgets('rapid Post taps create one request', (tester) async {
+      final release = Completer<void>();
+      final backend = _backend()
+        ..handle('POST', _createPath, (_) async {
+          await release.future;
+          return FakeResponse(201, _requestFixture());
+        });
+      final l = await _pumpCreate(
+        tester,
+        backend,
+        seed: _postableSeed(),
+        routed: true,
+      );
+      for (final ack in [
+        l.requestAckCustoms,
+        l.requestAckValueAccurate,
+        l.requestAckNoProhibited,
+        l.requestAckItemLegal,
+        l.requestAckDescriptionAccurate,
+      ]) {
+        await _scrollBackTo(tester, find.text(ack));
+        await tester.tap(find.text(ack));
+        await tester.pump();
+      }
+      final post = find.text(l.requestPostAction);
+      final action = tester
+          .widget<FilledButton>(
+            find.ancestor(of: post, matching: find.byType(FilledButton)),
+          )
+          .onPressed!;
+      action();
+      action();
+      for (var i = 0; i < 20 && backend.to('POST', _createPath).isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(backend.to('POST', _createPath), hasLength(1));
+      release.complete();
+      await _tick(tester);
     });
   });
 
@@ -1025,6 +1068,57 @@ void main() {
 
       expect(sent, isNotNull);
       expect(sent!.body['boost_eur_cents'], 500);
+    });
+
+    testWidgets('Boost save locks selection and shows the server result', (
+      tester,
+    ) async {
+      final release = Completer<void>();
+      final backend = _publishedBackend(holdSetBoost: release.future);
+      final container = await _signedIn(tester, backend);
+      await pumpApp(
+        tester,
+        const BoostScreen(requestId: 42),
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      final l = L.of(tester.element(find.byType(BoostScreen)));
+      await tester.tap(find.text(l.boostPreset5));
+      await tester.pump();
+
+      final save = find.text(l.actionSave);
+      tester
+          .widget<FilledButton>(
+            find.ancestor(of: save, matching: find.byType(FilledButton)),
+          )
+          .onPressed!();
+      for (
+        var i = 0;
+        i < 20 && backend.to('PUT', '/api/parcels/42/boost').isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(backend.to('PUT', '/api/parcels/42/boost'), hasLength(1));
+      final ten = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, l.boostPreset10),
+      );
+      expect(ten.onSelected, isNull);
+      expect(
+        tester.widget<AppAmountField>(find.byType(AppAmountField)).enabled,
+        isFalse,
+      );
+
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(backend.to('PUT', '/api/parcels/42/boost'), hasLength(1));
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, l.boostPreset5))
+            .selected,
+        isTrue,
+      );
+      expect(find.text('€5.75'), findsOneWidget);
     });
   });
 }

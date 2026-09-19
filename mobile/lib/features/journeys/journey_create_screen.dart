@@ -38,7 +38,12 @@ import 'journey_route_draft.dart';
 import 'journey_route_editor.dart';
 
 class JourneyCreateScreen extends ConsumerStatefulWidget {
-  const JourneyCreateScreen({super.key});
+  const JourneyCreateScreen({super.key, this.debugDraft, this.debugNow});
+
+  @visibleForTesting
+  final JourneyRouteDraft? debugDraft;
+  @visibleForTesting
+  final DateTime Function()? debugNow;
 
   @override
   ConsumerState<JourneyCreateScreen> createState() =>
@@ -47,7 +52,7 @@ class JourneyCreateScreen extends ConsumerStatefulWidget {
 
 class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   final _notes = TextEditingController();
-  final _draft = JourneyRouteDraft();
+  late final _draft = widget.debugDraft ?? JourneyRouteDraft();
 
   bool _busy = false;
 
@@ -72,8 +77,12 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     final l = L.of(context);
-    if (!_draft.isValid(routeCopyOf(context))) {
+    if (!_draft.isValid(
+      routeCopyOf(context),
+      now: widget.debugNow?.call() ?? DateTime.now(),
+    )) {
       setState(() => _showErrors = true);
       return;
     }
@@ -142,6 +151,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               draft: _draft,
               enabled: !_busy,
               showErrors: _showErrors,
+              validateFutureDepartures: true,
             ),
 
             const SizedBox(height: AppSpace.xl),

@@ -77,6 +77,7 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
   }
 
   Future<void> _pay() async {
+    if (_busy || _handedOff) return;
     final provider = _selected;
     if (provider == null) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -174,7 +175,7 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
               // what keeps that a coincidence rather than an assumption.
               label: _payLabel(context, l, view.value, _selected),
               isLoading: _busy,
-              onPressed: _selected == null ? null : _pay,
+              onPressed: _busy || _selected == null ? null : _pay,
             )
           : null,
     );

@@ -54,6 +54,7 @@ class JourneyRouteEditor extends StatelessWidget {
     required this.draft,
     required this.enabled,
     required this.showErrors,
+    this.validateFutureDepartures = false,
     super.key,
   });
 
@@ -63,6 +64,7 @@ class JourneyRouteEditor extends StatelessWidget {
   /// Errors stay hidden until the first submit. A form that turns red before
   /// it has been filled in teaches people to ignore red.
   final bool showErrors;
+  final bool validateFutureDepartures;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +102,7 @@ class JourneyRouteEditor extends StatelessWidget {
                   index: i,
                   enabled: enabled,
                   showErrors: showErrors,
+                  validateFutureDepartures: validateFutureDepartures,
                 ),
             ],
             if (stops.length == 1) ...[
@@ -446,12 +449,14 @@ class _SegmentBlock extends StatelessWidget {
     required this.index,
     required this.enabled,
     required this.showErrors,
+    required this.validateFutureDepartures,
   });
 
   final JourneyRouteDraft draft;
   final int index;
   final bool enabled;
   final bool showErrors;
+  final bool validateFutureDepartures;
 
   Future<void> _pickTime(BuildContext context, {required bool arrival}) async {
     final segment = draft.segments[index];
@@ -472,7 +477,12 @@ class _SegmentBlock extends StatelessWidget {
     final locale = Localizations.localeOf(context);
     final segment = draft.segments[index];
     final issues = showErrors
-        ? draft.issuesFor(index, routeCopyOf(context))
+        ? draft.issuesFor(
+            index,
+            routeCopyOf(context),
+            now: validateFutureDepartures ? DateTime.now() : null,
+            pastDepartureError: l.validationDateInPast,
+          )
         : null;
     final modes = draft.modesFor(index);
     final mustFly = draft.segmentMustFly(index);

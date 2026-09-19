@@ -7718,3 +7718,29 @@ profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
 this delivery", "Updating the price", the French deposit label and the API origin.
 Uninstall the J6.2 build first; profile APKs are signed with a per-run debug key.
 
+## J9.2 — Transaction, Money & Re-Entrancy Remediation (2026-09-19)
+
+Implemented on `codex/j92-money-reentrancy` from
+`74f0fcfde610542bc81b2c38528c924f3f2fab5d`. Pending independent Gemini
+verification before CI or merge. Full detail is in
+`docs/PHASE_J92_MONEY_REENTRANCY.md`.
+
+The request quote now carries a complete local input identity and accepts a
+response only when both its generation and inputs are current. EUR input is
+parsed exactly from decimal text to integer cents and rejects more than two
+decimal places. Offer Accept, guest Pay, Boost save, request/Journey creation,
+dispute, rating, and deposit order boundaries reject re-entry. Boost controls
+lock during save and refresh from server state. Journey creation rejects past
+and exact-current departures with deterministic clock tests.
+
+Codex targeted verification: 135 tests passed across new J9.2 and directly
+affected modules; changed-file analyzer, formatter, localization generation and
+diff checks pass. Full Flutter, broad J7/J8/J9.1 regression, localization parity,
+and adversarial reproduction are reserved for Gemini under the mandated handoff.
+No backend runtime code or migration changed. A backend review is recorded:
+V1 Journey create/publish does not visibly enforce the past-departure rule that
+the J9.2 report said was already server-enforced.
+
+After J9.2 verification, the tracked J9 remainder is expected to be 0 CRITICAL,
+3 MAJOR (`DEF-ADM-02`, `DEF-ADM-03`, `DEF-MOB-13`) and 4 MINOR
+(`DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`), all assigned to J9.3.

@@ -215,6 +215,9 @@ class LEn extends L {
   String get validationNumberInvalid => 'Enter a number';
 
   @override
+  String get validationMoneyPrecision => 'Use no more than 2 decimal places';
+
+  @override
   String get validationMustBePositive => 'Enter a number greater than zero';
 
   @override

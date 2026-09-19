@@ -6,6 +6,8 @@
 /// still owns card details.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/data/repositories.dart';
@@ -50,6 +52,52 @@ FakeBackend _guestBackend({FakeHandler? checkout}) => FakeBackend()
   );
 
 void main() {
+  testWidgets('rapid Pay taps start one checkout and failure allows retry', (
+    tester,
+  ) async {
+    final release = Completer<void>();
+    var calls = 0;
+    final backend = _guestBackend(
+      checkout: (_) async {
+        calls++;
+        if (calls == 1) await release.future;
+        return const FakeResponse(503, {'code': 'payment_unavailable'});
+      },
+    );
+    await pumpApp(
+      tester,
+      const GuestPayScreen(token: 'opaque'),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'payer@example.eu');
+    await tester.tap(find.text('Stripe'));
+    await tester.pump();
+
+    final pay = find.text('Pay €42.00');
+    final action = tester
+        .widget<FilledButton>(
+          find.ancestor(of: pay, matching: find.byType(FilledButton)),
+        )
+        .onPressed!;
+    action();
+    action();
+    for (var i = 0; i < 20 && calls == 0; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(calls, 1);
+
+    release.complete();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.ancestor(of: pay, matching: find.byType(FilledButton)),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+  });
+
   group('guest checkout email contract', () {
     test('sends the trimmed payer email and provider only', () async {
       final backend = _guestBackend();

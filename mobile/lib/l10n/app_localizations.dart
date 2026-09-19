@@ -495,6 +495,12 @@ abstract class L {
   /// **'Enter a number'**
   String get validationNumberInvalid;
 
+  /// No description provided for @validationMoneyPrecision.
+  ///
+  /// In en, this message translates to:
+  /// **'Use no more than 2 decimal places'**
+  String get validationMoneyPrecision;
+
   /// No description provided for @validationMustBePositive.
   ///
   /// In en, this message translates to:

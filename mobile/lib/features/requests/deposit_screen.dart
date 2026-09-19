@@ -91,6 +91,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   }
 
   Future<void> _createOrder(int amountCents) async {
+    if (_creating) return;
     setState(() => _creating = true);
     try {
       final order = await ref
@@ -195,8 +196,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     final hasSeparateMin = minCents < recCents;
     final hasSeparateFull = fullCents != null && fullCents > recCents;
 
+    final customCents = AppAmountField.centsOf(_customAmountController);
     final effectiveDeposit = _isCustom
-        ? (AppAmountField.centsOf(_customAmountController) ?? minCents)
+        ? (customCents ?? minCents)
         : (_chosenDepositCents ?? recCents);
 
     // The bounds are the server's, and until now only the server enforced
@@ -205,6 +207,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     // rule, stated where the sender is standing.
     final customError = !_isCustom
         ? null
+        : customCents == null
+        ? AppAmountField.hasExcessPrecision(_customAmountController)
+              ? l.validationMoneyPrecision
+              : l.validationNumberInvalid
         : effectiveDeposit < minCents
         ? l.depositBelowMinimum(Money.eurCents(minCents).format(locale))
         : (fullCents != null && effectiveDeposit > fullCents)
@@ -390,7 +396,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           label: l.depositPayAction,
           icon: Icons.lock_rounded,
           isLoading: _creating,
-          onPressed: customError != null
+          onPressed: _creating || customError != null
               ? null
               : () => _createOrder(effectiveDeposit),
         ),

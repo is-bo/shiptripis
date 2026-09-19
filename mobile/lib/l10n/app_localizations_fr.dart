@@ -215,6 +215,9 @@ class LFr extends L {
   String get validationNumberInvalid => 'Saisissez un nombre';
 
   @override
+  String get validationMoneyPrecision => 'Utilisez au maximum 2 décimales';
+
+  @override
   String get validationMustBePositive => 'Saisissez un nombre supérieur à zéro';
 
   @override

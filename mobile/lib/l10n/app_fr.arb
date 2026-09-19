@@ -66,6 +66,7 @@
   "validationEmailInvalid": "Saisissez une adresse e-mail valide",
   "validationPasswordTooShort": "Utilisez au moins 8 caractères",
   "validationNumberInvalid": "Saisissez un nombre",
+  "validationMoneyPrecision": "Utilisez au maximum 2 décimales",
   "validationMustBePositive": "Saisissez un nombre supérieur à zéro",
   "validationTooLong": "Restez sous {max} caractères",
   "validationSelectOne": "Choisissez une option",

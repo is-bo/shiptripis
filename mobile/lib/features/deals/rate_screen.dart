@@ -50,6 +50,7 @@ class _RateScreenState extends ConsumerState<RateScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     if (_score == 0) return;
     setState(() => _busy = true);
     final l = L.of(context);
@@ -202,7 +203,9 @@ class _Stars extends StatelessWidget {
 
     return Semantics(
       slider: true,
-      value: score == 0 ? null : l.ratingScoreLabel(score),
+      value: l.ratingScoreLabel(score),
+      increasedValue: score < 5 ? l.ratingScoreLabel(score + 1) : null,
+      decreasedValue: score > 1 ? l.ratingScoreLabel(score - 1) : null,
       // A slider is operated with increase/decrease, not a tap. Without these
       // the control announces a score a screen reader can never change.
       onIncrease: score < 5 ? () => onChanged(score + 1) : null,
