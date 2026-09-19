@@ -114,8 +114,11 @@ class FindTravelersController extends ChangeNotifier {
   bool isLoading = true;
   Object? initialError;
   FindTravelersState? state;
+  int _queryGeneration = 0;
+  String _requestedSort = 'best_match';
 
   Future<void> loadInitial() async {
+    final generation = ++_queryGeneration;
     isLoading = true;
     initialError = null;
     notifyListeners();
@@ -127,6 +130,7 @@ class FindTravelersController extends ChangeNotifier {
         offset: 0,
         sort: 'best_match',
       );
+      if (generation != _queryGeneration) return;
       state = FindTravelersState(
         requestId: requestId,
         sort: response.sort.isEmpty ? 'best_match' : response.sort,
@@ -137,17 +141,26 @@ class FindTravelersController extends ChangeNotifier {
         ineligibleReason: response.reason,
         requestStatus: response.requestStatus,
       );
+      _requestedSort = state!.sort;
     } catch (error) {
+      if (generation != _queryGeneration) return;
       initialError = error;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (generation == _queryGeneration) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<void> refresh() async {
-    final current = state;
-    final sort = current?.sort ?? 'best_match';
+    final generation = ++_queryGeneration;
+    final sort = _requestedSort;
+    isLoading = false;
+    if (state?.isLoadingMore == true) {
+      state = state!.copyWith(isLoadingMore: false);
+      notifyListeners();
+    }
     try {
       final response = await repository.findTravelers(
         parcelId: requestId,
@@ -155,6 +168,7 @@ class FindTravelersController extends ChangeNotifier {
         offset: 0,
         sort: sort,
       );
+      if (generation != _queryGeneration) return;
       state = FindTravelersState(
         requestId: requestId,
         sort: response.sort.isEmpty ? sort : response.sort,
@@ -167,20 +181,26 @@ class FindTravelersController extends ChangeNotifier {
       );
       initialError = null;
     } catch (error) {
+      if (generation != _queryGeneration) return;
       if (state == null) {
         initialError = error;
       }
       // Retain existing results on refresh failure
     } finally {
-      notifyListeners();
+      if (generation == _queryGeneration) notifyListeners();
     }
   }
 
   Future<void> setSort(String newSort) async {
     final current = state;
-    if (current == null || current.sort == newSort) return;
+    if (current == null || (current.sort == newSort && !isLoading)) return;
 
+    final generation = ++_queryGeneration;
+    _requestedSort = newSort;
     isLoading = true;
+    if (current.isLoadingMore) {
+      state = current.copyWith(isLoadingMore: false);
+    }
     notifyListeners();
 
     try {
@@ -190,6 +210,7 @@ class FindTravelersController extends ChangeNotifier {
         offset: 0,
         sort: newSort,
       );
+      if (generation != _queryGeneration) return;
       state = FindTravelersState(
         requestId: requestId,
         sort: newSort,
@@ -202,10 +223,13 @@ class FindTravelersController extends ChangeNotifier {
       );
       initialError = null;
     } catch (error) {
+      if (generation != _queryGeneration) return;
       initialError = error;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (generation == _queryGeneration) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -218,7 +242,12 @@ class FindTravelersController extends ChangeNotifier {
       return;
     }
 
-    state = current.copyWith(isLoadingMore: true, clearPaginationError: true);
+    final generation = _queryGeneration;
+    final loadingState = current.copyWith(
+      isLoadingMore: true,
+      clearPaginationError: true,
+    );
+    state = loadingState;
     notifyListeners();
 
     try {
@@ -228,6 +257,10 @@ class FindTravelersController extends ChangeNotifier {
         offset: current.nextOffset,
         sort: current.sort,
       );
+
+      if (generation != _queryGeneration || !identical(state, loadingState)) {
+        return;
+      }
 
       final existingIds = current.candidates.map((c) => c.journeyId).toSet();
       final deduplicatedNew = response.candidates
@@ -241,9 +274,12 @@ class FindTravelersController extends ChangeNotifier {
         isLoadingMore: false,
       );
     } catch (error) {
+      if (generation != _queryGeneration || !identical(state, loadingState)) {
+        return;
+      }
       state = current.copyWith(isLoadingMore: false, paginationError: error);
     } finally {
-      notifyListeners();
+      if (generation == _queryGeneration) notifyListeners();
     }
   }
 }

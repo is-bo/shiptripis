@@ -17,7 +17,6 @@ from functools import wraps
 import redis
 from django.conf import settings
 from django.contrib import admin, messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
@@ -148,6 +147,7 @@ from .permissions import (
     ROLE_GROUP_NAMES,
     ROLE_PERMISSIONS,
     has_admin_permission,
+    staff_member_required,
     user_admin_roles,
 )
 from .services import (
@@ -3977,7 +3977,7 @@ def audit_log(request):
 
 @staff_member_required
 def technical_records(request):
-    if not request.user.is_superuser:
+    if not admin.site.has_permission(request) or not request.user.is_superuser:
         raise PermissionDenied(
             "Technical records are limited to the owner/Super Admin."
         )

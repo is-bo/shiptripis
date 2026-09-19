@@ -108,10 +108,29 @@ typedef ParcelPhotoRef = ({int requestId, int mediaId});
 /// is the only route to the bytes. `autoDispose` matters more than usual: the
 /// URL expires in minutes, so a provider that outlived its screen would hand
 /// the next viewer a link that has already stopped working.
-final parcelPhotoUrlProvider = FutureProvider.autoDispose
-    .family<String, ParcelPhotoRef>((ref, photo) async {
+final _parcelPhotoUrlQuery = FutureProvider.autoDispose
+    .family<String, ({AccountSession session, ParcelPhotoRef photo})>((
+      ref,
+      key,
+    ) async {
       final repo = ref.watch(requestRepositoryProvider);
-      return repo.photoUrl(requestId: photo.requestId, mediaId: photo.mediaId);
+      final url = await repo.photoUrl(
+        requestId: key.photo.requestId,
+        mediaId: key.photo.mediaId,
+      );
+      if (ref.read(accountSessionProvider) != key.session) {
+        throw const _StaleSessionRead();
+      }
+      return url;
+    });
+final parcelPhotoUrlProvider = Provider.autoDispose
+    .family<AsyncValue<String>, ParcelPhotoRef>((ref, photo) {
+      final session = ref.watch(accountSessionProvider);
+      if (session == null) return const AsyncLoading<String>();
+      return _projectLiveQuery(
+        ref,
+        _parcelPhotoUrlQuery((session: session, photo: photo)),
+      );
     });
 
 final _postingDepositQuery = FutureProvider.autoDispose
@@ -476,17 +495,43 @@ final payoutHistoryProvider =
           _projectLiveQuery(ref, _payoutHistoryQuery(_watchAccountId(ref))),
     );
 
-final payoutDetailProvider = FutureProvider.autoDispose
-    .family<PayoutMobile, String>((ref, reference) async {
+final _payoutDetailQuery = FutureProvider.autoDispose
+    .family<PayoutMobile, ({AccountSession session, String reference})>((
+      ref,
+      key,
+    ) async {
       final repo = ref.watch(paymentRepositoryProvider);
-      return repo.payoutDetail(reference);
+      final payout = await repo.payoutDetail(key.reference);
+      if (ref.read(accountSessionProvider) != key.session) {
+        throw const _StaleSessionRead();
+      }
+      return payout;
+    });
+final payoutDetailProvider = Provider.autoDispose
+    .family<AsyncValue<PayoutMobile>, String>((ref, reference) {
+      final session = ref.watch(accountSessionProvider);
+      if (session == null) return const AsyncLoading<PayoutMobile>();
+      return _projectLiveQuery(
+        ref,
+        _payoutDetailQuery((session: session, reference: reference)),
+      );
     });
 
-final receivedRatingsProvider = FutureProvider.autoDispose<List<Rating>>((
+final _receivedRatingsQuery = FutureProvider.autoDispose
+    .family<List<Rating>, AccountSession>((ref, session) async {
+      final repo = ref.watch(ratingRepositoryProvider);
+      final ratings = await repo.received();
+      if (ref.read(accountSessionProvider) != session) {
+        throw const _StaleSessionRead();
+      }
+      return ratings;
+    });
+final receivedRatingsProvider = Provider.autoDispose<AsyncValue<List<Rating>>>((
   ref,
-) async {
-  final repo = ref.watch(ratingRepositoryProvider);
-  return repo.received();
+) {
+  final session = ref.watch(accountSessionProvider);
+  if (session == null) return const AsyncData<List<Rating>>([]);
+  return _projectLiveQuery(ref, _receivedRatingsQuery(session));
 });
 
 final paymentProvidersProvider = FutureProvider.autoDispose<ProvidersView>((

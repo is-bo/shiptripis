@@ -29,7 +29,6 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import OperationalError
 from django.http import Http404
@@ -44,7 +43,11 @@ from apps.finance.control_plane.filters import Scope
 from apps.finance.models import Payout
 
 from .console_presenters import decimal_micros, format_minor_amount
-from .permissions import has_admin_permission, has_all_admin_permissions
+from .permissions import (
+    has_admin_permission,
+    has_all_admin_permissions,
+    staff_member_required,
+)
 
 #: Every filter H5's `Scope` accepts for a page request. `metric`, `page` and
 #: `page_size` belong to the drilldown and are added there.

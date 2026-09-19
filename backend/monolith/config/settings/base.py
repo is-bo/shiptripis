@@ -75,7 +75,7 @@ PAYOUT_S3_USE_PATH_STYLE = env.bool("PAYOUT_S3_USE_PATH_STYLE", default=False)
 
 # --- Apps ---
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.admin_panel.admin_app.ShipTripAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

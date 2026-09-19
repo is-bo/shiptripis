@@ -44,7 +44,7 @@ ProviderContainer _container({
     completedDealsCountProvider.overrideWith(
       (ref) => AsyncData(completedDeals),
     ),
-    receivedRatingsProvider.overrideWith((ref) async => ratings),
+    receivedRatingsProvider.overrideWith((ref) => AsyncData(ratings)),
     unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
   ],
 );

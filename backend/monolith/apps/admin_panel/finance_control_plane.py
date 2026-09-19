@@ -1,7 +1,6 @@
 """Minimal Finance/Super-only JSON consumer surface for H5.1."""
 
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import OperationalError
 from django.http import Http404, JsonResponse
@@ -11,7 +10,7 @@ from django.views.decorators.http import require_GET
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
 from apps.finance.control_plane.snapshot import build_snapshot
-from .permissions import has_all_admin_permissions
+from .permissions import has_all_admin_permissions, staff_member_required
 
 
 @never_cache
