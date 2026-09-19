@@ -14,6 +14,17 @@ pending. No migration, APK, LIVE activation, or real-money operation. The J8.3
 APK remains not launch-ready, and J9 MAJOR/MINOR findings remain open. See
 [J9.1 record](PHASE_J91_CRITICAL_ISOLATION.md).
 
+Gemini's independent pass of the first J9.1 commit was RED: all three critical
+reproduction attempts passed, while three payout-detail widget tests, a Dart
+formatter gate, and the Admin test's clean-checkout static-file dependency
+required correction. The follow-up updates the authenticated payout test
+fixtures, adds the standard staticfiles test override, and formats the
+discovery source. The J8.1 test file's canonical Git content passed the local
+targeted formatter check without a content change. Focused Codex reruns pass;
+a second broad Gemini report is pending.
+The two J9 Admin adversarial failures tied to disabled payout profiles remain
+the separate, open `DEF-ADM-02` finding.
+
 ## J8.4 — Public Legal Route Edge Fix (2026-09-19)
 
 **J8.4 — narrow edge routing remediation making canonical legal URLs (`/terms`, `/privacy`) resolve cleanly with HTTP 200 on public TEST gateway without APK rebuild.**

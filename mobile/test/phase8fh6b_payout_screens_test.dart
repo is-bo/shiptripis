@@ -33,6 +33,19 @@ class _FixedSession extends SessionController {
   SessionState build() => SessionSignedIn(_account);
 }
 
+ProviderContainer _payoutDetailContainer(FakeBackend backend) {
+  final store = FakeTokenStore();
+  return ProviderContainer(
+    overrides: [
+      tokenStoreProvider.overrideWithValue(store),
+      apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+      sessionProvider.overrideWith(
+        () => _FixedSession(Account.fromJson(meFixture())),
+      ),
+    ],
+  );
+}
+
 Map<String, dynamic> payoutMethodsFixture({
   String preference = 'both',
   String eurState = 'ready',
@@ -365,7 +378,7 @@ void main() {
         FakeResponse(200, payoutMobileFixture()),
       );
 
-      final container = containerFor(backend);
+      final container = _payoutDetailContainer(backend);
       await pumpRouted(
         tester,
         const PayoutDetailScreen(reference: 'po-ref-123'),
@@ -403,7 +416,7 @@ void main() {
         ),
       );
 
-      final container = containerFor(backend);
+      final container = _payoutDetailContainer(backend);
       await pumpRouted(
         tester,
         const PayoutDetailScreen(reference: 'po-blocked'),
@@ -659,7 +672,7 @@ void main() {
         await pumpRouted(
           tester,
           const PayoutDetailScreen(reference: 'po-ref-123'),
-          container: containerFor(backend),
+          container: _payoutDetailContainer(backend),
           device: DeviceProfile.iphone,
           locale: const Locale('ar'),
         );

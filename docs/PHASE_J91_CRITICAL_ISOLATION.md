@@ -55,7 +55,7 @@ Each first-page query now increments `_queryGeneration`. Pagination captures tha
 | Existing Find Travelers and profile tests | 27 passed |
 | Changed Dart file analyzer | No issues |
 | Changed Python file Ruff lint | Passed |
-| Formatter | Edited Dart source and new tests formatted; Python new files formatted; unrelated baseline formatting left intact |
+| Formatter | Edited Dart source and tests formatted; Python new files formatted. Full repository formatter awaits Gemini rerun. |
 | Migrations | No schema or migration changes |
 
 Full Flutter, full Django, broad Admin/mobile, schema drift, localization, and CI are reserved for Gemini verification. No APK, merge, push, CI trigger, or deployment in this handoff. Stripe and Chargily remain TEST; `PAYOUT_DZD_EXECUTION_ENABLED=false`; no real-money or LIVE activation.
@@ -64,7 +64,8 @@ Full Flutter, full Django, broad Admin/mobile, schema drift, localization, and C
 
 | Stage | Status |
 | --- | --- |
-| Gemini verification against exact implementation SHA | Pending owner-run report |
+| Gemini verification of `7d2dbc40fd952e1963ab3a859c08c15ad9152e5a` | RED: the three critical repros passed, but 3 payout-detail widget tests and formatter failed; new Admin test required static files in a clean checkout |
+| J9.1 follow-up | Payout-detail tests now establish an authenticated session; Admin ban test overrides static storage; discovery source was formatted. The J8.1 test file's canonical Git content was already formatter-clean on this workstation. Focused reruns: 3 payout-detail and 1 Admin test passed; changed Dart analysis, targeted formatter, and Ruff passed. Broad Gemini rerun pending. |
 | CI | Not triggered; pending Gemini green report |
 | Merge and push | Not done |
 | Railway TEST deployment | Not done; required after reviewed merge for the Admin runtime change |
@@ -72,3 +73,10 @@ Full Flutter, full Django, broad Admin/mobile, schema drift, localization, and C
 | New APK | Not built; deferred until later J9 remediation phases |
 
 The J8.3 APK remains **not a release candidate**. Remaining J9 MAJOR and MINOR findings are outside J9.1.
+
+Gemini's first broad pass reported 938 Flutter passes and 3 payout-detail test
+failures, with a clean analyzer and localization result. Its J9 adversarial
+Admin suite had 13 passes and 2 failures attributed to the already-open
+`DEF-ADM-02` payout-profile feature gate. J9.1 remains unapproved until Gemini
+re-verifies the follow-up commit. No CI, merge, TEST deployment, or APK build
+has occurred.

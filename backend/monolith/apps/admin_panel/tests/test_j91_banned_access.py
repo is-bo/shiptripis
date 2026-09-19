@@ -1,7 +1,7 @@
 """J9.1: a ban revokes every administrative entry point immediately."""
 
 from django.contrib import admin
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -16,6 +16,14 @@ from ..permissions import (
 )
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
 class BannedAdminAccessTests(TestCase):
     def test_ban_revokes_console_direct_urls_api_and_django_admin(self):
         cases = (

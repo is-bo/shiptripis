@@ -1681,8 +1681,9 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
                         style: text.bodySmall?.copyWith(color: c.textSecondary),
                       ),
                       Text(
-                        Money.eurCents(request.chosenRewardEurCents)
-                            .format(locale),
+                        Money.eurCents(
+                          request.chosenRewardEurCents,
+                        ).format(locale),
                         style: text.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: c.textPrimary,
@@ -1719,8 +1720,9 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
                         ),
                       ),
                       Text(
-                        Money.eurCents(request.totalOfferedRewardEurCents)
-                            .format(locale),
+                        Money.eurCents(
+                          request.totalOfferedRewardEurCents,
+                        ).format(locale),
                         style: text.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: c.brandStrong,
