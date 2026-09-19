@@ -605,6 +605,31 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('validation before the round trip', () {
+    test('creation rejects past and current departures with a fixed clock', () {
+      final now = DateTime.utc(2026, 10, 1, 8);
+      final draft = JourneyRouteDraft()
+        ..setOrigin(jijel)
+        ..setDestination(algiers);
+      addTearDown(draft.dispose);
+      draft.segments.first.capacity.text = '10.00';
+
+      for (final departure in [now.subtract(const Duration(seconds: 1)), now]) {
+        draft.setSegmentDeparture(0, departure);
+        draft.setSegmentArrival(0, departure.add(const Duration(hours: 1)));
+        expect(draft.isValid(_copy, now: now), isFalse);
+        expect(
+          draft
+              .issuesFor(0, _copy, now: now, pastDepartureError: 'past')
+              .depart,
+          'past',
+        );
+      }
+
+      draft.setSegmentDeparture(0, now.add(const Duration(minutes: 1)));
+      draft.setSegmentArrival(0, now.add(const Duration(hours: 1)));
+      expect(draft.isValid(_copy, now: now), isTrue);
+    });
+
     test('a segment with no departure is not submittable', () {
       final draft = JourneyRouteDraft()
         ..setOrigin(jijel)

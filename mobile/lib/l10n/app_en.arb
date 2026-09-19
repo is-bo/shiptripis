@@ -81,6 +81,7 @@
   "validationEmailInvalid": "Enter a valid email address",
   "validationPasswordTooShort": "Use at least 8 characters",
   "validationNumberInvalid": "Enter a number",
+  "validationMoneyPrecision": "Use no more than 2 decimal places",
   "validationMustBePositive": "Enter a number greater than zero",
   "validationTooLong": "Keep this under {max} characters",
   "@validationTooLong": {

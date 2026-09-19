@@ -1525,7 +1525,13 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
       return;
     }
     if (cents == null || cents <= 0) {
-      setState(() => _rewardError = l.validationMustBePositive);
+      setState(
+        () => _rewardError = cents == null
+            ? AppAmountField.hasExcessPrecision(_reward)
+                  ? l.validationMoneyPrecision
+                  : l.validationNumberInvalid
+            : l.validationMustBePositive,
+      );
       return;
     }
 

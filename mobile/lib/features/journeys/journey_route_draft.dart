@@ -457,7 +457,12 @@ class JourneyRouteDraft extends ChangeNotifier {
   // Validation
   // -------------------------------------------------------------------------
 
-  SegmentIssues issuesFor(int index, RouteCopy copy) {
+  SegmentIssues issuesFor(
+    int index,
+    RouteCopy copy, {
+    DateTime? now,
+    String? pastDepartureError,
+  }) {
     final segment = _segments[index];
     final previous = index == 0 ? null : _segments[index - 1];
 
@@ -465,6 +470,8 @@ class JourneyRouteDraft extends ChangeNotifier {
     final departAt = segment.departAt;
     if (departAt == null) {
       depart = copy.departRequired;
+    } else if (now != null && !departAt.isAfter(now)) {
+      depart = pastDepartureError ?? copy.departRequired;
     } else if (previous != null) {
       final previousDepart = previous.departAt;
       final previousArrive = previous.arriveAt;
@@ -523,11 +530,11 @@ class JourneyRouteDraft extends ChangeNotifier {
     );
   }
 
-  bool isValid(RouteCopy copy) {
+  bool isValid(RouteCopy copy, {DateTime? now}) {
     if (!hasBothEnds) return false;
     if (_segments.isEmpty || _segments.length > maxJourneyLegs) return false;
     for (var i = 0; i < _segments.length; i++) {
-      final issues = issuesFor(i, copy);
+      final issues = issuesFor(i, copy, now: now);
       if (issues.depart != null ||
           issues.arrive != null ||
           issues.capacity != null ||

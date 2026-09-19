@@ -7718,3 +7718,37 @@ profile/arm64, built against `https://shiptrip-production-f7f7.up.railway.app`.
 this delivery", "Updating the price", the French deposit label and the API origin.
 Uninstall the J6.2 build first; profile APKs are signed with a per-run debug key.
 
+## J9.2 — Transaction, Money & Re-Entrancy Remediation (2026-09-19)
+
+Implemented on `codex/j92-money-reentrancy` from
+`74f0fcfde610542bc81b2c38528c924f3f2fab5d`. Independent Gemini verification
+returned GREEN on `8c565b1f7060ca5f4fa5e384cebacefbd9698161`. Full detail is in
+`docs/PHASE_J92_MONEY_REENTRANCY.md`.
+
+The request quote now carries a complete local input identity and accepts a
+response only when both its generation and inputs are current. EUR input is
+parsed exactly from decimal text to integer cents and rejects more than two
+decimal places. Offer Accept, guest Pay, Boost save, request/Journey creation,
+dispute, rating, and deposit order boundaries reject re-entry. Boost controls
+lock during save and refresh from server state. Journey creation rejects past
+and exact-current departures with deterministic clock tests.
+
+Codex targeted verification: 135 tests passed across new J9.2 and directly
+affected modules; changed-file analyzer, formatter, localization generation and
+diff checks pass. Gemini then reported 956 full-Flutter, 118 J9.2, 247 J7/J8, 23
+J9.1 mobile, and 23 backend Admin/Journey tests passing. Full analyzer, formatter,
+localization parity, adversarial reproduction, and the three prior J9.1 critical
+regressions passed. No backend runtime code or migration changed.
+
+Gemini independently confirmed the backend review: V1 Journey create and publish
+accept a past first departure. Lifecycle calculation makes the resulting record
+expired and undiscoverable, but direct API callers can still create invalid data.
+This separate medium-severity backend integrity issue remains for a later scoped
+backend remediation.
+
+After J9.2 verification, all seven scoped mobile defects are closed. The
+previously tracked J9 remainder is 0 CRITICAL, 3 MAJOR (`DEF-ADM-02`,
+`DEF-ADM-03`, `DEF-MOB-13`) and 4 MINOR
+(`DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`), all assigned to J9.3.
+The newly confirmed backend Journey integrity gap also remains open pending owner
+classification. CI and merge are pending.

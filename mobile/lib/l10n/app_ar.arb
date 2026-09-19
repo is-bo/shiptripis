@@ -66,6 +66,7 @@
   "validationEmailInvalid": "أدخل عنوان بريد إلكتروني صالحًا",
   "validationPasswordTooShort": "استخدم 8 أحرف على الأقل",
   "validationNumberInvalid": "أدخل رقمًا",
+  "validationMoneyPrecision": "استخدم منزلتين عشريتين كحد أقصى",
   "validationMustBePositive": "أدخل رقمًا أكبر من صفر",
   "validationTooLong": "اجعل هذا أقل من {max} حرفًا",
   "validationSelectOne": "اختر واحدًا",

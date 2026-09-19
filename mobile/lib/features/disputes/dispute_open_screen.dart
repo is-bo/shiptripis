@@ -74,6 +74,7 @@ class _DisputeOpenScreenState extends ConsumerState<DisputeOpenScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     setState(() => _categoryTouched = true);
     final formOk = _formKey.currentState?.validate() ?? false;
     if (!formOk || _category == null) return;

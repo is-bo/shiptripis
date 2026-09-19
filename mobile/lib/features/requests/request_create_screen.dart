@@ -209,6 +209,34 @@ class RequestCreateScreen extends ConsumerStatefulWidget {
       _RequestCreateScreenState();
 }
 
+/// The complete set sent to the draft pricing endpoint. Record equality keeps
+/// the displayed quote tied to the values used for that particular request.
+typedef RequestQuoteInputs = ({
+  int pickupPlaceId,
+  int deliveryPlaceId,
+  double weightKg,
+  double? lengthCm,
+  double? widthCm,
+  double? heightCm,
+  DateTime readyWindowEnd,
+  DateTime deadlineAt,
+  int? rewardCents,
+});
+
+bool requestQuoteIsCurrent(
+  RequestQuoteInputs? quoted,
+  RequestQuoteInputs? current,
+) => quoted != null && quoted == current;
+
+bool requestQuoteResponseMayApply({
+  required int responseSequence,
+  required int latestSequence,
+  required RequestQuoteInputs requested,
+  required RequestQuoteInputs? current,
+}) =>
+    responseSequence == latestSequence &&
+    requestQuoteIsCurrent(requested, current);
+
 /// What has happened to the required item photo so far.
 enum _PhotoState { empty, uploading, ready, failed }
 
@@ -371,9 +399,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   int _quoteSeq = 0;
   CancelToken? _quoteCancel;
 
-  /// The reward [_pricingQuote] was priced for. While the form holds anything
-  /// else, its totals are not this form's totals.
-  int? _quotedRewardCents;
+  RequestQuoteInputs? _quotedInputs;
 
   @override
   void initState() {
@@ -500,7 +526,12 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   String? _amountProblem(L l, TextEditingController controller) {
     if (controller.text.trim().isEmpty) return l.validationRequired;
     final cents = AppAmountField.centsOf(controller);
-    return (cents == null || cents <= 0) ? l.validationMustBePositive : null;
+    if (cents == null) {
+      return AppAmountField.hasExcessPrecision(controller)
+          ? l.validationMoneyPrecision
+          : l.validationNumberInvalid;
+    }
+    return cents <= 0 ? l.validationMustBePositive : null;
   }
 
   /// Everything wrong with [step] right now, keyed by server field name.
@@ -588,7 +619,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         final reward = _amountProblem(l, _reward);
         if (reward != null) {
           problems['sender_proposed_reward_eur_cents'] = reward;
-        } else if (_pricingQuote != null) {
+        } else if (_quoteIsCurrent) {
           final rewardCents = AppAmountField.centsOf(_reward) ?? 0;
           final minCents = _pricingQuote!.minimumReward.minorUnits;
           if (rewardCents < minCents) {
@@ -923,6 +954,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   }
 
   void _next() {
+    if (_busy) return;
     final l = L.of(context);
     setState(() {
       _revealed.add(_step);
@@ -954,23 +986,16 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       _announceAndFocusFirstProblem(l, first);
       return;
     }
+    if (!_quoteIsCurrent) {
+      if (!_pricingLoading) unawaited(_fetchPricingQuote());
+      return;
+    }
     _submit();
   }
 
   Future<void> _fetchPricingQuote() async {
-    final pickup = _pickup;
-    final delivery = _delivery;
-    final weight = parseDecimalInput(_weight.text);
-    final readyEnd = _readyEnd;
-    final deadline = _deadline;
-    if (pickup == null ||
-        delivery == null ||
-        weight == null ||
-        weight <= 0 ||
-        readyEnd == null ||
-        deadline == null) {
-      return;
-    }
+    final inputs = _currentQuoteInputs();
+    if (inputs == null) return;
 
     final seq = ++_quoteSeq;
     _quoteCancel?.cancel();
@@ -981,32 +1006,40 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       _pricingError = null;
     });
 
-    final currentRewardCents = AppAmountField.centsOf(_reward);
-
     try {
       final quote = await ref
           .read(requestRepositoryProvider)
           .quotePricingDraft(
-            pickupPlaceId: pickup.id,
-            deliveryPlaceId: delivery.id,
-            actualWeightKg: weight,
-            lengthCm: parseDecimalInput(_length.text),
-            widthCm: parseDecimalInput(_width.text),
-            heightCm: parseDecimalInput(_height.text),
-            readyWindowEnd: readyEnd,
-            deadlineAt: deadline,
-            chosenRewardEurCents: currentRewardCents,
+            pickupPlaceId: inputs.pickupPlaceId,
+            deliveryPlaceId: inputs.deliveryPlaceId,
+            actualWeightKg: inputs.weightKg,
+            lengthCm: inputs.lengthCm,
+            widthCm: inputs.widthCm,
+            heightCm: inputs.heightCm,
+            readyWindowEnd: inputs.readyWindowEnd,
+            deadlineAt: inputs.deadlineAt,
+            chosenRewardEurCents: inputs.rewardCents,
             // No Boost is offered before publication (J7A), so none is quoted
             // for. The key is omitted rather than sent as zero; the server's
             // creation contract defaults it, and an explicit zero would only
             // say the sender declined something they were never shown.
             cancelToken: cancel,
           );
-      if (!mounted || seq != _quoteSeq) return;
+      if (!mounted) return;
+      if (!requestQuoteResponseMayApply(
+        responseSequence: seq,
+        latestSequence: _quoteSeq,
+        requested: inputs,
+        current: _currentQuoteInputs(),
+      )) {
+        if (seq != _quoteSeq) return;
+        setState(() => _pricingLoading = false);
+        return;
+      }
       var prefilled = false;
       setState(() {
         _pricingQuote = quote;
-        _quotedRewardCents = currentRewardCents;
+        _quotedInputs = inputs;
         _pricingLoading = false;
         // If reward is empty, prefill with recommended
         if (_reward.text.trim().isEmpty) {
@@ -1032,10 +1065,45 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
     }
   }
 
+  RequestQuoteInputs? _currentQuoteInputs() {
+    final pickup = _pickup;
+    final delivery = _delivery;
+    final weight = parseDecimalInput(_weight.text);
+    final length = parseDecimalInput(_length.text);
+    final width = parseDecimalInput(_width.text);
+    final height = parseDecimalInput(_height.text);
+    final reward = AppAmountField.centsOf(_reward);
+    final readyEnd = _readyEnd;
+    final deadline = _deadline;
+    if (pickup == null ||
+        delivery == null ||
+        weight == null ||
+        weight <= 0 ||
+        readyEnd == null ||
+        deadline == null ||
+        (_length.text.trim().isNotEmpty && length == null) ||
+        (_width.text.trim().isNotEmpty && width == null) ||
+        (_height.text.trim().isNotEmpty && height == null) ||
+        (_reward.text.trim().isNotEmpty && reward == null)) {
+      return null;
+    }
+    return (
+      pickupPlaceId: pickup.id,
+      deliveryPlaceId: delivery.id,
+      weightKg: weight,
+      lengthCm: length,
+      widthCm: width,
+      heightCm: height,
+      readyWindowEnd: readyEnd,
+      deadlineAt: deadline,
+      rewardCents: reward,
+    );
+  }
+
   /// True when [_pricingQuote] was priced for exactly what the form holds.
   bool get _quoteIsCurrent =>
       _pricingQuote != null &&
-      _quotedRewardCents == AppAmountField.centsOf(_reward);
+      requestQuoteIsCurrent(_quotedInputs, _currentQuoteInputs());
 
   /// Moves the offer by one step and prices it.
   ///
@@ -1047,10 +1115,13 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   void _adjustReward(int deltaCents) {
     final currentCents =
         AppAmountField.centsOf(_reward) ??
-        _pricingQuote?.recommendedReward.minorUnits ??
+        (_quoteIsCurrent
+            ? _pricingQuote?.recommendedReward.minorUnits
+            : null) ??
         _rewardStepCents * 20;
     final minCents =
-        _pricingQuote?.minimumReward.minorUnits ?? _rewardStepCents;
+        (_quoteIsCurrent ? _pricingQuote?.minimumReward.minorUnits : null) ??
+        _rewardStepCents;
     final newCents = max(minCents, currentCents + deltaCents);
     final text = Money.eurCents(newCents).editableString;
     // Assigning `.text` collapses the selection to offset -1, which drops the
@@ -1131,6 +1202,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     setState(() {
       _busy = true;
       _errors = const FieldErrorMap.empty();
@@ -1867,7 +1939,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       else ...[
         // The band the offer sits in, stated before the sender chooses rather
         // than discovered by being refused. Both figures are the server's.
-        if (_pricingQuote != null) ...[
+        if (_quoteIsCurrent) ...[
           _OfferBand(
             minimum: _pricingQuote!.minimumReward,
             recommended: _pricingQuote!.recommendedReward,
@@ -1890,7 +1962,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
           onIncrement: () => _adjustReward(_rewardStepCents),
         ),
 
-        if (_pricingQuote != null &&
+        if (_quoteIsCurrent &&
             _errorFor(l, 'sender_proposed_reward_eur_cents') == null) ...[
           if ((AppAmountField.centsOf(_reward) ?? 0) <
               _pricingQuote!.recommendedReward.minorUnits)

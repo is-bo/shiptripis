@@ -805,10 +805,17 @@ class AppAmountField extends StatelessWidget {
 
   /// Cents currently in the field, or null if it is not a usable amount.
   static int? centsOf(TextEditingController controller) {
-    final value = parseDecimalInput(controller.text);
-    if (value == null || value < 0) return null;
-    return (value * 100).round();
+    final text = controller.text.trim();
+    final match = RegExp(r'^(\d+)(?:[.,](\d{1,2}))?$').firstMatch(text);
+    if (match == null) return null;
+    final euros = int.tryParse(match.group(1)!);
+    final cents = int.tryParse((match.group(2) ?? '').padRight(2, '0'));
+    if (euros == null || cents == null) return null;
+    return euros * 100 + cents;
   }
+
+  static bool hasExcessPrecision(TextEditingController controller) =>
+      RegExp(r'^\d+[.,]\d{3,}$').hasMatch(controller.text.trim());
 
   @override
   Widget build(BuildContext context) {
@@ -816,7 +823,11 @@ class AppAmountField extends StatelessWidget {
       label: label,
       controller: controller,
       helper: helper,
-      errorText: errorText,
+      errorText:
+          errorText ??
+          (hasExcessPrecision(controller)
+              ? L.of(context).validationMoneyPrecision
+              : null),
       isRequired: isRequired,
       enabled: enabled,
       onChanged: onChanged,

@@ -214,6 +214,9 @@ class LAr extends L {
   String get validationNumberInvalid => 'أدخل رقمًا';
 
   @override
+  String get validationMoneyPrecision => 'استخدم منزلتين عشريتين كحد أقصى';
+
+  @override
   String get validationMustBePositive => 'أدخل رقمًا أكبر من صفر';
 
   @override

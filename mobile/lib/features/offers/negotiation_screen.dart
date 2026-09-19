@@ -71,6 +71,7 @@ class NegotiationScreen extends ConsumerStatefulWidget {
 
 class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
   bool _busy = false;
+  bool _acceptPending = false;
 
   /// Held only while the offer on screen is provisional.
   LiveUnsubscribe? _economicsSubscription;
@@ -157,54 +158,60 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
   }
 
   Future<void> _accept(Offer offer) async {
-    final l = L.of(context);
-    final locale = Localizations.localeOf(context);
-    final account = ref.read(accountProvider);
-    final match = ref.read(matchDetailProvider(widget.matchId)).value;
-    if (account == null || match == null) return;
+    if (_busy || _acceptPending) return;
+    setState(() => _acceptPending = true);
+    try {
+      final l = L.of(context);
+      final locale = Localizations.localeOf(context);
+      final account = ref.read(accountProvider);
+      final match = ref.read(matchDetailProvider(widget.matchId)).value;
+      if (account == null || match == null) return;
 
-    final perspective = match.moneyPerspectiveFor(account.id);
-    if (perspective == null) return;
-    final amount = offer.amountFor(perspective);
-    final isSender = perspective.isSender;
-    final confirmed = await confirmAction(
-      context,
-      title: amount == null
-          ? l.offerAccept
-          : isSender
-          ? l.offerAcceptSenderConfirmTitle(amount.format(locale))
-          : l.offerAcceptTravelerConfirmTitle(amount.format(locale)),
-      body: isSender ? l.offerAcceptSenderBody : l.offerAcceptTravelerBody,
-      confirmLabel: l.offerAccept,
-    );
-    if (!confirmed || !mounted) return;
+      final perspective = match.moneyPerspectiveFor(account.id);
+      if (perspective == null) return;
+      final amount = offer.amountFor(perspective);
+      final isSender = perspective.isSender;
+      final confirmed = await confirmAction(
+        context,
+        title: amount == null
+            ? l.offerAccept
+            : isSender
+            ? l.offerAcceptSenderConfirmTitle(amount.format(locale))
+            : l.offerAcceptTravelerConfirmTitle(amount.format(locale)),
+        body: isSender ? l.offerAcceptSenderBody : l.offerAcceptTravelerBody,
+        confirmLabel: l.offerAccept,
+      );
+      if (!confirmed || !mounted) return;
 
-    await _run(() async {
-      // Exactly the totals on the screen and in the dialog. If the sender
-      // changed their Boost in the meantime the server refuses, the screen
-      // refreshes, and the user is told the amounts moved.
-      final deal = await ref
-          .read(matchingRepositoryProvider)
-          .accept(
-            offer.id,
-            shownTravelerTotal: offer.travelerTotal,
-            shownSenderTotal: offer.senderTotalWithBoost,
-          );
-      if (!mounted) return;
-      refreshVolatileState(ref);
-      // The sender's next step is paying; the traveller's is waiting. Both
-      // belong on the deal, so send the sender straight to the payment screen
-      // and the traveller to the deal itself.
-      if (isSender) {
-        context
-          ..pop()
-          ..openDealPayment(deal.id);
-      } else {
-        context
-          ..pop()
-          ..openDeal(deal.id);
-      }
-    });
+      await _run(() async {
+        // Exactly the totals on the screen and in the dialog. If the sender
+        // changed their Boost in the meantime the server refuses, the screen
+        // refreshes, and the user is told the amounts moved.
+        final deal = await ref
+            .read(matchingRepositoryProvider)
+            .accept(
+              offer.id,
+              shownTravelerTotal: offer.travelerTotal,
+              shownSenderTotal: offer.senderTotalWithBoost,
+            );
+        if (!mounted) return;
+        refreshVolatileState(ref);
+        // The sender's next step is paying; the traveller's is waiting. Both
+        // belong on the deal, so send the sender straight to the payment screen
+        // and the traveller to the deal itself.
+        if (isSender) {
+          context
+            ..pop()
+            ..openDealPayment(deal.id);
+        } else {
+          context
+            ..pop()
+            ..openDeal(deal.id);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _acceptPending = false);
+    }
   }
 
   Future<void> _decline(Offer offer) async {
@@ -325,6 +332,7 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
       footer: _Actions(
         matchId: widget.matchId,
         busy: _busy,
+        disabled: _busy || _acceptPending,
         onAccept: _accept,
         onCounter: _counter,
         onDecline: _decline,
@@ -717,6 +725,7 @@ class _Actions extends ConsumerWidget {
   const _Actions({
     required this.matchId,
     required this.busy,
+    required this.disabled,
     required this.onAccept,
     required this.onCounter,
     required this.onDecline,
@@ -725,6 +734,7 @@ class _Actions extends ConsumerWidget {
 
   final int matchId;
   final bool busy;
+  final bool disabled;
   final Future<void> Function(Offer) onAccept;
   final Future<void> Function(Offer) onCounter;
   final Future<void> Function(Offer) onDecline;
@@ -743,14 +753,14 @@ class _Actions extends ConsumerWidget {
           AppButton(
             label: l.offerAccept,
             isLoading: busy,
-            onPressed: () => onAccept(offer),
+            onPressed: disabled ? null : () => onAccept(offer),
           ),
         if (offer.canCounter) ...[
           if (offer.canAccept) const SizedBox(height: AppSpace.sm),
           AppButton(
             label: l.offerCounter,
             variant: AppButtonVariant.secondary,
-            onPressed: busy ? null : () => onCounter(offer),
+            onPressed: disabled ? null : () => onCounter(offer),
           ),
         ],
         if (offer.canDecline) ...[
@@ -758,14 +768,14 @@ class _Actions extends ConsumerWidget {
           AppButton(
             label: l.offerDecline,
             variant: AppButtonVariant.tertiary,
-            onPressed: busy ? null : () => onDecline(offer),
+            onPressed: disabled ? null : () => onDecline(offer),
           ),
         ],
         if (offer.canWithdraw)
           AppButton(
             label: l.offerWithdraw,
             variant: AppButtonVariant.tertiary,
-            onPressed: busy ? null : () => onWithdraw(offer),
+            onPressed: disabled ? null : () => onWithdraw(offer),
           ),
       ],
     );
@@ -810,7 +820,14 @@ class _CounterSheetState extends State<_CounterSheet> {
   void _submit() {
     final cents = AppAmountField.centsOf(_amount);
     if (cents == null || cents <= 0) {
-      setState(() => _error = L.of(context).validationMustBePositive);
+      final l = L.of(context);
+      setState(
+        () => _error = cents == null
+            ? AppAmountField.hasExcessPrecision(_amount)
+                  ? l.validationMoneyPrecision
+                  : l.validationNumberInvalid
+            : l.validationMustBePositive,
+      );
       return;
     }
     Navigator.of(context).pop(cents);

@@ -8,6 +8,8 @@
 /// them up — and to sending back what it showed when accepting.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -147,6 +149,44 @@ Future<L> _pump(
 }
 
 void main() {
+  for (final isSender in [false, true]) {
+    testWidgets('rapid Accept taps open one dialog and send one mutation '
+        'for ${isSender ? 'sender' : 'traveler'}', (tester) async {
+      final release = Completer<void>();
+      final backend =
+          _backend(
+            viewerIsSender: isSender,
+            latest: () => _offer(viewerIsSender: isSender),
+          )..handle('POST', '/api/offers/1/accept', (_) async {
+            await release.future;
+            return const FakeResponse(409, {'code': 'offer_economics_changed'});
+          });
+      final l = await _pump(tester, backend);
+      final accept = find.widgetWithText(AppButton, l.offerAccept);
+
+      final action = tester
+          .widget<FilledButton>(
+            find.descendant(of: accept, matching: find.byType(FilledButton)),
+          )
+          .onPressed!;
+      action();
+      action();
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, l.offerAccept));
+      for (
+        var i = 0;
+        i < 20 && backend.to('POST', '/api/offers/1/accept').isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(backend.to('POST', '/api/offers/1/accept'), hasLength(1));
+      release.complete();
+      await tester.pumpAndSettle();
+    });
+  }
+
   group('the offer contract', () {
     test('reads base, Boost and both totals, and chooses only totals', () {
       final offer = Offer.fromJson(_offer());
