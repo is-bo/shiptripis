@@ -128,7 +128,13 @@ run these long suites.
 
 - Implementation branch: `codex/j82-sqlite-review-deadline`.
 - Implementation SHA: `1112ce4c5c8951b7038d9930aa6ee12e4246c2cb`.
-- CI: pending branch review and required green gates.
+- CI: PR #4 run
+  [35443360745](https://github.com/is-bo/shiptripis/actions/runs/35443360745)
+  passed all six jobs at branch SHA
+  `bc6a744d0e43b77575b3a0c090af9bdbdcb232f7`: Django migrations,
+  tests and lint; schema drift; production config and static web; Go unit and
+  integration; and Flutter format, analysis and tests. Zero failed jobs or
+  steps. This record-only follow-up commit will receive its own PR CI run.
 - Railway TEST deployment: **not required**. The only new runtime calculation
   is selected for SQLite, while the original production PostgreSQL expression
   remains intact. Gemini verified equivalent behavior against real PostgreSQL.
