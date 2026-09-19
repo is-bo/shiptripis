@@ -603,3 +603,38 @@ class HandoverSecretBootTests(SimpleTestCase):
         )
         assert result.returncode != 0
         assert "differ from DJANGO_SECRET_KEY" in result.stderr
+
+
+class PublicEdgeRoutingTests(SimpleTestCase):
+    """The canonical public legal URLs must resolve cleanly at the edge."""
+
+    def test_caddyfiles_define_clean_legal_rewrites(self):
+        caddyfiles = [
+            REPO / "backend" / "railway" / "Caddyfile",
+            REPO / "backend" / "gateway" / "Caddyfile",
+        ]
+        for caddyfile in caddyfiles:
+            assert caddyfile.exists(), f"Missing {caddyfile}"
+            text = caddyfile.read_text(encoding="utf-8")
+            assert "/terms" in text
+            assert "/privacy" in text
+            assert "rewrite /terms /terms.html" in text
+            assert "rewrite /privacy /privacy.html" in text
+
+    def test_legal_documents_exist_with_valid_titles(self):
+        terms = REPO / "web" / "terms.html"
+        privacy = REPO / "web" / "privacy.html"
+        assert terms.exists()
+        assert privacy.exists()
+        assert "Terms of Service" in terms.read_text(encoding="utf-8")
+        assert "Privacy Policy" in privacy.read_text(encoding="utf-8")
+
+    def test_public_matcher_does_not_shadow_protected_routes(self):
+        import re
+        caddyfile = REPO / "backend" / "railway" / "Caddyfile"
+        text = caddyfile.read_text(encoding="utf-8")
+        match = re.search(r"@public\s+path\s+([^\n]+)", text)
+        assert match is not None
+        public_paths = match.group(1).split()
+        for protected in ("/api", "/admin", "/pay", "/payouts", "/healthz", "/readyz", "/ws", "/kyc"):
+            assert not any(p.startswith(protected) for p in public_paths)

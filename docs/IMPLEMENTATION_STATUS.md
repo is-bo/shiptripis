@@ -1,5 +1,29 @@
 # ShipTrip V1 Implementation Status
 
+## J8.4 — Public Legal Route Edge Fix (2026-09-19)
+
+**J8.4 — narrow edge routing remediation making canonical legal URLs (`/terms`, `/privacy`) resolve cleanly with HTTP 200 on public TEST gateway without APK rebuild.**
+- Root cause: Edge Caddy configuration matched `@public path` for `.html` files only; extensionless clean URLs fell through to Django and 404'd.
+- Fix: Added clean URLs (`/terms`, `/terms/`, `/privacy`, `/privacy/`, `/prohibited-items`, `/support`) to `@public path` in `backend/railway/Caddyfile` and `backend/gateway/Caddyfile` and added internal `rewrite` directives to `.html` inside `handle @public`.
+- Backward compatibility: `.html` routes continue serving HTTP 200 directly; Django/API/WebSocket routes completely unaffected.
+- Automated tests: `tools/check_static_web.py` verified; `test_deployment_safety.py` added `PublicEdgeRoutingTests` (40 passed); Django deploy check clean; schema drift 0.
+- Mobile compatibility: Mobile source code untouched (0 mobile changes); existing J8.3 APK `shiptrip-v1.0.0-j83-test-07f777e-profile-arm64.apk` fully functional against deployed edge.
+- Deployed to Railway TEST origin `https://shiptrip-production-f7f7.up.railway.app` and verified live: `/terms` (200 OK), `/privacy` (200 OK), `/terms.html` (200 OK), `/privacy.html` (200 OK), `/healthz` (200 OK), `/readyz` (200 OK).
+- Full deliverable: [docs/PHASE_J84_LEGAL_ROUTE_EDGE_FIX.md](PHASE_J84_LEGAL_ROUTE_EDGE_FIX.md).
+
+## J8.3 — Final Pre-LIVE Release Candidate Sign-Off & TEST APK Build (2026-09-19)
+
+**J8.3 — consolidated pre-LIVE release candidate sign-off after J8 Certification, J8.1 UI/i18n remediation, and J8.2 SQLite deadline compatibility. Final TEST APK produced.**
+- Source SHA verified at `07f777ee3b88df801eb920479edb0699ebc948b4` (main == origin/main, clean working tree).
+- Zero source code changes introduced during J8.3.
+- J8.1 mobile remediations verified: Arabic route progression (`الجزائر ← باريس`), localized route accessibility semantics (EN: `to`, FR: `vers`, AR: `إلى`), profile legal links (`/terms`, `/privacy`), hidden support contact row, and clean removal of dead deposit field.
+- J8.2 SQLite review deadline compatibility confirmed: 3/3 passed on SQLite; PostgreSQL production interval expression unchanged.
+- Quality gates: Full Flutter test suite **934 passed, 0 failed**; `flutter analyze --fatal-infos` **0 issues found**; Dart format 100% formatted; `tools/check_static_web.py` passed; `l10n_untranslated.json` is `{}`; backend deployment safety 37 passed; matching 31 passed; finance results 50 passed; boost economics 58 passed; Go microservices passed; schema drift 0 drift.
+- GitHub Actions CI push run [35446943356](https://github.com/is-bo/shiptripis/actions/runs/35446943356) green on all 6 jobs.
+- Edge verification: `https://shiptrip-production-f7f7.up.railway.app` `/healthz` and `/readyz` healthy (200 OK); `/terms.html` and `/privacy.html` served (200 OK); extensionless `/terms` and `/privacy` 404 logged as MINOR pre-launch edge routing configuration item.
+- Official TEST APK built via GitHub Actions run [35450999164](https://github.com/is-bo/shiptripis/actions/runs/35450999164): `shiptrip-v1.0.0-j83-test-07f777e-profile-arm64.apk` (SHA-256: `621394886c2548c20519b260258e92d4353ccb5f2e7c7daee53dd6a1c2cbb5d3`, 36,785,781 bytes).
+- Full deliverable: [docs/PHASE_J83_FINAL_PRELIVE_SIGNOFF.md](PHASE_J83_FINAL_PRELIVE_SIGNOFF.md).
+
 ## J8.2 — SQLite Review Deadline Compatibility (2026-09-19)
 
 `DEF-ADM-01` implementation passed owner-run Gemini verification.

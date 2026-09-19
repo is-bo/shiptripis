@@ -46,11 +46,19 @@
 	# from the authenticated Django/admin surface. Keep this matcher before
 	# the API catch-all so a missing public asset can never be proxied into an
 	# admin endpoint.
-	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms.html /privacy.html /prohibited-items.html /support.html /robots.txt /sitemap.xml /favicon.ico
+	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms /terms/ /terms.html /privacy /privacy/ /privacy.html /prohibited-items /prohibited-items/ /prohibited-items.html /support /support/ /support.html /robots.txt /sitemap.xml /favicon.ico
 	handle @public {
 		header Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"
 		header Cache-Control "public, max-age=300"
 		root * /web
+		rewrite /terms /terms.html
+		rewrite /terms/ /terms.html
+		rewrite /privacy /privacy.html
+		rewrite /privacy/ /privacy.html
+		rewrite /prohibited-items /prohibited-items.html
+		rewrite /prohibited-items/ /prohibited-items.html
+		rewrite /support /support.html
+		rewrite /support/ /support.html
 		encode gzip
 		file_server
 	}
