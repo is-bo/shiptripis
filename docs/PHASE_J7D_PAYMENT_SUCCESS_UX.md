@@ -257,7 +257,28 @@ deposit note's unanchored "It's", a heavy outline button on the checking state,
 a still-spinning ring after checks stopped, and unlabelled amounts on non-success
 web pages — all fixed.
 
-## 11. Remaining findings
+## 11. Verification and release
+
+**J7D release.** Branch CI run
+[35428829236](https://github.com/is-bo/shiptripis/actions/runs/35428829236)
+passed at `ee5ff63b9f1ec3022ba309433b92ec78fe166cd8` with **all six jobs green**,
+including **2,224 Django passes / 34 skips**; the full Django suite on local
+PostgreSQL matched it exactly (2,224 / 34 / 0 failed). `main` fast-forwarded to
+`ee5ff63`, pushed, verified identical to `origin/main`; the branch was deleted
+locally and remotely. Deployment `09d09f28-29b1-46b7-8358-b08f9baa58fa`
+**SUCCESS**, release `v1.0.0-rc.43+ee5ff63`, uploaded from a
+`core.autocrlf=false` archive of the exact SHA (every changed runtime file
+hash-identical to the commit). Public `/healthz` and `/readyz` **200**
+(`database ok`, `migrations ok`, `rate_limit_cache ok`). On TEST an unknown
+`/pay/<uuid>/return` renders the new shell's *This link is no longer active* at
+404 in EN and in AR (`dir="rtl"`) with `no-referrer` and the site's fonts; an
+unknown guest link reads *Ce lien n’est plus actif* in FR; the deposit endpoint
+answers 401 unauthenticated. `RELEASE_ID` was the only variable changed. Stripe
+TEST, Chargily TEST, `EMAIL_ENABLED=false`, `PAYOUT_DZD_EXECUTION_ENABLED`
+false, no LIVE, no real money. **APK: NOT BUILT** — deferred to the combined J7
+acceptance build.
+
+## 12. Remaining findings
 
 * **MINOR** — app-wide, pre-existing: Arabic sentences and buttons elsewhere that
   embed a formatted amount (e.g. *Pay 35,00 € with Stripe*) put the euro sign in
