@@ -2,9 +2,10 @@
 
 ## J9.3 — Final Remaining Defect Remediation (2026-09-20)
 
-Implementation is staged on `codex/j93-final-defects` from
-`35b3d4fbafb07a9e55489e5ca39622cb369a20a8`; independent Gemini
-verification is pending. `J9-BE-01` is classified MAJOR and addressed with
+Implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` is staged
+on `codex/j93-final-defects` from
+`35b3d4fbafb07a9e55489e5ca39622cb369a20a8`. Independent Gemini
+verification returned GREEN. `J9-BE-01` is classified MAJOR and addressed with
 strict future first-departure checks on Journey route writes and publication.
 The remaining known Admin and mobile J9 findings (`DEF-ADM-02`, `DEF-ADM-03`,
 `DEF-MOB-13`, `DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`) have
@@ -17,9 +18,14 @@ Codex ran only targeted checks: 14 new and 22 existing Journey/Admin Django
 tests, 31 matching tests, 1 J9.1 banned-admin regression, 18 new and 59
 existing Flutter tests, changed-file
 Ruff/analyzer, localization generation, changed-screen design detection and
-schema drift (none). Broad suites, Gemini, CI, Railway TEST and APK are not
-yet run. The remaining known J9 count is provisionally zero, subject to
-independent GREEN verification. See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
+schema drift (none). Gemini reported full Flutter 974 passed, Admin/Finance 100
+passed, Journey/matching 133 passed and 10 skipped, six adversarial probes,
+Ruff, analyzer, formatter, localization, deploy checks and schema drift green.
+Its broader SQLite Django discovery had one PostgreSQL-only assertion failure;
+that test passed on PostgreSQL, while the complete PostgreSQL Django CI job is
+still the merge gate. CI, Railway TEST and APK are not yet run. The remaining
+known J9 count is 0 CRITICAL, 0 MAJOR and 0 MINOR after independent verification.
+See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
 
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
 
