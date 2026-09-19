@@ -205,6 +205,19 @@ class LAr extends L {
   String get validationRequired => 'هذا الحقل مطلوب';
 
   @override
+  String get validationCodeSixDigits => 'يجب أن يتكون الرمز من 6 أرقام';
+
+  @override
+  String get validationCcpNumberDigits =>
+      'يجب أن يحتوي رقم حساب CCP على رقم واحد إلى 20 رقمًا';
+
+  @override
+  String get validationCcpKeyDigits => 'يجب أن يتكون مفتاح CCP من رقمين بالضبط';
+
+  @override
+  String get validationRipDigits => 'يجب أن يتكون RIP من 20 رقمًا بالضبط';
+
+  @override
   String get validationEmailInvalid => 'أدخل عنوان بريد إلكتروني صالحًا';
 
   @override
@@ -488,6 +501,13 @@ class LAr extends L {
 
   @override
   String get deliveriesTitle => 'التوصيلات';
+
+  @override
+  String get dealUnavailableTitle => 'التوصيل غير متاح';
+
+  @override
+  String get dealUnavailableBody =>
+      'هذا التوصيل غير متاح لهذا الحساب. ربما طرأ عليه تغيير أو أن الرابط لم يعد صالحًا.';
 
   @override
   String get deliveriesFilterActive => 'نشطة';
@@ -915,7 +935,7 @@ class LAr extends L {
 
   @override
   String get journeyCapacityInvalid =>
-      'أدخل 0.01 كغ على الأقل، بدقة رقمين عشريين.';
+      'أدخل قيمة بين 0.01 و200 كغ، بدقة رقمين عشريين.';
 
   @override
   String get journeyLegDepartRequired => 'حدّد وقت مغادرة هذه المرحلة.';

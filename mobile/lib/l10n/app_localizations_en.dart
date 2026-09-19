@@ -206,6 +206,19 @@ class LEn extends L {
   String get validationRequired => 'This is required';
 
   @override
+  String get validationCodeSixDigits => 'Code must be 6 digits';
+
+  @override
+  String get validationCcpNumberDigits =>
+      'CCP account number must contain 1 to 20 digits';
+
+  @override
+  String get validationCcpKeyDigits => 'CCP key must be exactly 2 digits';
+
+  @override
+  String get validationRipDigits => 'RIP must be exactly 20 digits';
+
+  @override
   String get validationEmailInvalid => 'Enter a valid email address';
 
   @override
@@ -494,6 +507,13 @@ class LEn extends L {
 
   @override
   String get deliveriesTitle => 'Deliveries';
+
+  @override
+  String get dealUnavailableTitle => 'Delivery unavailable';
+
+  @override
+  String get dealUnavailableBody =>
+      'This delivery is not available for this account. It may have changed, or the link may be out of date.';
 
   @override
   String get deliveriesFilterActive => 'Active';
@@ -921,7 +941,7 @@ class LEn extends L {
 
   @override
   String get journeyCapacityInvalid =>
-      'Enter at least 0.01 kg, to two decimal places.';
+      'Enter between 0.01 and 200 kg, to two decimal places.';
 
   @override
   String get journeyLegDepartRequired => 'Say when this leg departs.';

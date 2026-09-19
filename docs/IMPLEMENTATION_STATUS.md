@@ -1,5 +1,26 @@
 # ShipTrip V1 Implementation Status
 
+## J9.3 — Final Remaining Defect Remediation (2026-09-20)
+
+Implementation is staged on `codex/j93-final-defects` from
+`35b3d4fbafb07a9e55489e5ca39622cb369a20a8`; independent Gemini
+verification is pending. `J9-BE-01` is classified MAJOR and addressed with
+strict future first-departure checks on Journey route writes and publication.
+The remaining known Admin and mobile J9 findings (`DEF-ADM-02`, `DEF-ADM-03`,
+`DEF-MOB-13`, `DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`) have
+implementation fixes. Finance PostgreSQL snapshot guarantees are unchanged;
+unsupported environments receive a controlled unavailable result. Journey
+leg capacity is bounded at the inherited 0.01–200.00 kg server limit and
+mirrored by mobile. Deal privacy and EN/FR/AR validation/error copy are covered.
+
+Codex ran only targeted checks: 14 new and 22 existing Journey/Admin Django
+tests, 31 matching tests, 1 J9.1 banned-admin regression, 18 new and 59
+existing Flutter tests, changed-file
+Ruff/analyzer, localization generation, changed-screen design detection and
+schema drift (none). Broad suites, Gemini, CI, Railway TEST and APK are not
+yet run. The remaining known J9 count is provisionally zero, subject to
+independent GREEN verification. See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
+
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
 
 J9.1 fixes only `DEF-ADM-01`, `DEF-MOB-07`, and `DEF-MOB-08` on

@@ -206,6 +206,21 @@ class LFr extends L {
   String get validationRequired => 'Ce champ est obligatoire';
 
   @override
+  String get validationCodeSixDigits => 'Le code doit contenir 6 chiffres';
+
+  @override
+  String get validationCcpNumberDigits =>
+      'Le numéro de compte CCP doit contenir de 1 à 20 chiffres';
+
+  @override
+  String get validationCcpKeyDigits =>
+      'La clé CCP doit contenir exactement 2 chiffres';
+
+  @override
+  String get validationRipDigits =>
+      'Le RIP doit contenir exactement 20 chiffres';
+
+  @override
   String get validationEmailInvalid => 'Saisissez une adresse e-mail valide';
 
   @override
@@ -497,6 +512,13 @@ class LFr extends L {
 
   @override
   String get deliveriesTitle => 'Livraisons';
+
+  @override
+  String get dealUnavailableTitle => 'Livraison indisponible';
+
+  @override
+  String get dealUnavailableBody =>
+      'Cette livraison n’est pas disponible pour ce compte. Elle a peut-être changé ou le lien n’est plus à jour.';
 
   @override
   String get deliveriesFilterActive => 'Actives';
@@ -926,7 +948,7 @@ class LFr extends L {
 
   @override
   String get journeyCapacityInvalid =>
-      'Saisissez au moins 0,01 kg, avec deux décimales.';
+      'Saisissez entre 0,01 et 200 kg, avec deux décimales.';
 
   @override
   String get journeyLegDepartRequired => 'Indiquez quand cette étape part.';

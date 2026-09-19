@@ -103,6 +103,21 @@ import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../location/preferred_point_field.dart';
 
+/// User-facing pricing failures are selected from structured API metadata.
+/// Server prose is intentionally excluded because it is unlocalized and may
+/// contain implementation details.
+String requestPricingFailureMessage(BuildContext context, ApiException error) {
+  if (error.kind == ApiFailureKind.validation ||
+      error.kind == ApiFailureKind.conflict) {
+    if (error.code != ApiErrorCode.rewardBelowMinimum &&
+        error.code != ApiErrorCode.routeInputsChanged &&
+        error.code != ApiErrorCode.routePreflightMissing) {
+      return L.of(context).stateUnexpectedBody;
+    }
+  }
+  return describeFailure(context, error).body;
+}
+
 /// The smallest and largest parcel the V1 contract accepts, in kilograms.
 /// Enforced here only so an obvious typo never becomes a round trip; the
 /// server remains the authority.
@@ -1054,7 +1069,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
       if (!mounted || seq != _quoteSeq) return;
       setState(() {
         _pricingLoading = false;
-        _pricingError = e.serverDetail ?? L.of(context).stateUnexpectedBody;
+        _pricingError = requestPricingFailureMessage(context, e);
       });
     } catch (_) {
       if (!mounted || seq != _quoteSeq) return;

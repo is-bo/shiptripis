@@ -24,9 +24,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/app_state.dart';
 import '../../app/router.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
@@ -57,19 +59,24 @@ class DealScreen extends ConsumerWidget {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
     final deal = ref.watch(dealDetailProvider(dealId));
+    final loadedDeal = deal.value;
+    final hasDealAccess =
+        account != null &&
+        loadedDeal != null &&
+        loadedDeal.moneyPerspectiveFor(account.id) != null;
 
     return AppScaffold(
       topBar: AppTopBar(
         title: l.deliveriesTitle,
         showBack: true,
         actions: [
-          if (deal.value?.matchId != null)
+          if (hasDealAccess && loadedDeal.matchId != null)
             AppIconButton(
               icon: Icons.forum_outlined,
               label: l.dealOpenChat,
               onPressed: () => context.openChatThread(
-                deal.value!.matchId!,
-                dealId: deal.value!.id,
+                loadedDeal.matchId!,
+                dealId: loadedDeal.id,
               ),
             ),
         ],
@@ -79,6 +86,12 @@ class DealScreen extends ConsumerWidget {
         child: AsyncView<Deal>(
           value: deal,
           onRetry: () => ref.invalidate(dealDetailProvider(dealId)),
+          error: (error) => _isUnavailableDealError(error)
+              ? const _DealUnavailable()
+              : AppErrorState(
+                  error: error,
+                  onRetry: () => ref.invalidate(dealDetailProvider(dealId)),
+                ),
           loading: () => ListView(
             padding: AppScrollPadding.page(context),
             children: const [SkeletonDetail()],
@@ -86,7 +99,7 @@ class DealScreen extends ConsumerWidget {
           data: (data) {
             if (account == null) return const SkeletonDetail();
             final perspective = data.moneyPerspectiveFor(account.id);
-            if (perspective == null) return const SizedBox.shrink();
+            if (perspective == null) return const _DealUnavailable();
             final isSender = perspective.isSender;
 
             return ListView(
@@ -134,6 +147,12 @@ class DealScreen extends ConsumerWidget {
       ),
     );
   }
+
+  static bool _isUnavailableDealError(Object error) =>
+      error is ApiException &&
+      (error.kind == ApiFailureKind.forbidden ||
+          error.kind == ApiFailureKind.notFound ||
+          error.kind == ApiFailureKind.gone);
 
   /// The lifecycle, assembled from server instants and server permissions.
   List<LifecycleStep> _buildSteps(
@@ -262,6 +281,33 @@ class DealScreen extends ConsumerWidget {
         timeLabel: at(deal.completedAt),
       ),
     ];
+  }
+}
+
+class _DealUnavailable extends StatelessWidget {
+  const _DealUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: ListView(
+        padding: AppScrollPadding.page(context),
+        children: [
+          AppEmptyState(
+            title: l.dealUnavailableTitle,
+            body: l.dealUnavailableBody,
+            icon: Icons.lock_outline_rounded,
+            actionLabel: l.navHome,
+            onAction: () => context.goNamed(Routes.home),
+            secondaryLabel: context.canPop() ? l.actionBack : null,
+            onSecondary: context.canPop() ? () => context.pop() : null,
+          ),
+        ],
+      ),
+    );
   }
 }
 

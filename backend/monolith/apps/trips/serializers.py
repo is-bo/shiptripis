@@ -20,6 +20,12 @@ from .models import (
     Trip,
     TripStopover,
 )
+from .constraints import (
+    DEPARTURE_NOT_FUTURE_CODE,
+    DEPARTURE_NOT_FUTURE_MESSAGE,
+    MAX_JOURNEY_LEG_CAPACITY_KG,
+    first_departure_is_future,
+)
 from .transport_rules import (
     MODE_UNAVAILABLE_CODE,
     check_leg_mode,
@@ -176,6 +182,7 @@ class JourneyLegInputSerializer(serializers.Serializer):
         max_digits=8,
         decimal_places=2,
         min_value=Decimal("0.01"),
+        max_value=MAX_JOURNEY_LEG_CAPACITY_KG,
     )
     flight_number = serializers.CharField(
         max_length=16, required=False, allow_blank=True, default=""
@@ -363,9 +370,21 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
             leg["position"] = positions[index]
         legs.sort(key=lambda leg: leg["position"])
 
-        if self._matching_place_id(
-            legs[0]["origin_place"]
-        ) != self._matching_place_id(start_place) or self._matching_place_id(
+        # Every route write must avoid stale inventory; publication rechecks
+        # the same boundary under the journey lock after request processing.
+        if not first_departure_is_future(legs[0]["depart_at"]):
+            raise serializers.ValidationError(
+                {
+                    "code": DEPARTURE_NOT_FUTURE_CODE,
+                    "legs": {
+                        0: {"depart_at": DEPARTURE_NOT_FUTURE_MESSAGE},
+                    },
+                }
+            )
+
+        if self._matching_place_id(legs[0]["origin_place"]) != self._matching_place_id(
+            start_place
+        ) or self._matching_place_id(
             legs[-1]["destination_place"]
         ) != self._matching_place_id(destination_place):
             raise serializers.ValidationError(
@@ -574,9 +593,9 @@ class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
             )
         if supplied:
             owned = set(
-                JourneyLeg.objects.filter(
-                    journey=journey, pk__in=supplied
-                ).values_list("pk", flat=True)
+                JourneyLeg.objects.filter(journey=journey, pk__in=supplied).values_list(
+                    "pk", flat=True
+                )
             )
             unknown = sorted(set(supplied) - owned)
             if unknown:
@@ -770,9 +789,14 @@ class JourneySerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
         from .lifecycle import with_lifecycle
+
         if hasattr(obj, "lifecycle_status"):
             return obj.lifecycle_status
-        return with_lifecycle(Journey.objects.filter(pk=obj.pk)).values_list("lifecycle_status", flat=True).get()
+        return (
+            with_lifecycle(Journey.objects.filter(pk=obj.pk))
+            .values_list("lifecycle_status", flat=True)
+            .get()
+        )
 
     traveler_id = serializers.IntegerField(read_only=True)
     traveler_name = serializers.CharField(source="traveler.full_name", read_only=True)
