@@ -5,11 +5,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/money/money.dart';
-import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/communication_language.dart';
 import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/domain/pricing.dart';
-import 'package:shiptrip/features/common/payment_success_view.dart';
+import 'package:shiptrip/design/components/route.dart';
+import 'package:shiptrip/features/common/payment_result.dart';
 import 'package:shiptrip/features/guest/guest_payment_sheet.dart';
 import 'package:shiptrip/features/requests/deposit_screen.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
@@ -35,6 +35,26 @@ PaymentOrder _mockOrder({
   paid: paid,
   outstanding: outstanding,
   settlement: settlement,
+);
+
+/// The shared J7D result for [order], as the app builds it for a settled
+/// payment. Replaces the J3 receipt widget.
+Widget _settledResult(PaymentOrder order, {bool published = false}) => Builder(
+  builder: (context) => SingleChildScrollView(
+    child: PaymentResultView(
+      content: settledPaymentResult(
+        l: L.of(context),
+        locale: Localizations.localeOf(context),
+        order: order,
+        justPaid: true,
+        requestPublished: published,
+      ),
+      routeStops: const [
+        InlineRouteStop(label: 'Paris'),
+        InlineRouteStop(label: 'Algiers'),
+      ],
+    ),
+  ),
 );
 
 void main() {
@@ -226,40 +246,32 @@ void main() {
 
           await pumpApp(
             tester,
-            Scaffold(
-              body: PaymentSuccessView(
-                order: order,
-                originPlaceName: 'Paris',
-                destinationPlaceName: 'Algiers',
-              ),
-            ),
+            Scaffold(body: _settledResult(order, published: true)),
             locale: locale,
           );
           await tester.pumpAndSettle();
 
-          final l = L.of(tester.element(find.byType(PaymentSuccessView)));
+          final l = L.of(tester.element(find.byType(PaymentResultView)));
 
-          // Wax Seal glyph check
-          expect(find.text('✓'), findsOneWidget);
+          // The seal carries a check *icon*: the app's faces have no check
+          // glyph, and a "✓" rendered as an empty box on a real screen (J7C).
+          expect(find.text('✓'), findsNothing);
+          expect(find.byIcon(Icons.check_rounded), findsWidgets);
 
-          // Contextual route check. The receipt draws travel order, not string
-          // order: Arabic reads origin-first from the right, so the arrow and
-          // the operands both turn round. A hard-coded `Paris → Algiers` used
-          // to print the route backwards on every Arabic receipt.
+          // The route is the shared InlineRoute, whose arrow mirrors itself in
+          // Arabic; the stops read in travel order either way.
+          expect(find.text('Paris'), findsOneWidget);
+          expect(find.text('Algiers'), findsOneWidget);
+          final paris = tester.getCenter(find.text('Paris')).dx;
+          final algiers = tester.getCenter(find.text('Algiers')).dx;
           expect(
-            find.text(
-              locale.languageCode == 'ar'
-                  ? 'Algiers ← Paris'
-                  : 'Paris → Algiers',
-            ),
-            findsOneWidget,
+            locale.languageCode == 'ar' ? paris > algiers : paris < algiers,
+            isTrue,
           );
 
-          // Purpose-aware next step
-          expect(find.text(l.paymentSuccessDepositNextBody), findsOneWidget);
-
-          // Card
-          expect(find.byType(AppCard), findsWidgets);
+          // Purpose-aware outcome and next step.
+          expect(find.text(l.payResultRequestPublished), findsOneWidget);
+          expect(find.text(l.payResultDepositNext), findsOneWidget);
         },
       );
     }
@@ -290,23 +302,18 @@ void main() {
 
       await pumpApp(
         tester,
-        Scaffold(
-          body: PaymentSuccessView(
-            order: order,
-            originPlaceName: 'Marseille',
-            destinationPlaceName: 'Oran',
-          ),
-        ),
+        Scaffold(body: _settledResult(order)),
         locale: const Locale('ar'),
       );
       await tester.pumpAndSettle();
 
       expect(
-        Directionality.of(tester.element(find.byType(PaymentSuccessView))),
+        Directionality.of(tester.element(find.byType(PaymentResultView))),
         TextDirection.rtl,
       );
-      final l = L.of(tester.element(find.byType(PaymentSuccessView)));
-      expect(find.text(l.paymentSuccessDealNextBody), findsOneWidget);
+      final l = L.of(tester.element(find.byType(PaymentResultView)));
+      expect(find.text(l.payResultDealNext), findsOneWidget);
+      expect(find.text(l.payResultPaidInFull), findsOneWidget);
     });
   });
 

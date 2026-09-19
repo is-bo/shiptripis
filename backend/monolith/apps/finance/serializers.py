@@ -102,6 +102,11 @@ def payment_settlement_payload(order: PaymentOrder) -> dict:
       owner's business; the guest's email is not, and never appears here.
     * `next_step` is the one thing the sender does next, named by the server
       because the server is what knows whether a Deal is now funded.
+    * `last_payment_eur_cents` / `last_paid_by` describe the most recent
+      applied payment alone (J7D). `paid_eur_cents` is cumulative, so a result
+      screen that wants to say "you just paid €X" -- or "someone else paid €X
+      for this payment" -- needs the one payment, not the running total. Same
+      privacy rule as `paid_by`: who, never which guest.
     """
 
     # `all()` so a prefetched order answers from its cache and an un-prefetched
@@ -113,6 +118,16 @@ def payment_settlement_payload(order: PaymentOrder) -> dict:
         and not attempt.is_unapplied
     ]
     guest_paid = any(attempt.guest_link_id is not None for attempt in applied)
+    # Newest applied payment. Ordered here rather than trusting the prefetch,
+    # which some callers order by creation and others do not order at all.
+    last = max(
+        applied,
+        key=lambda attempt: (
+            attempt.succeeded_at or attempt.created_at,
+            attempt.pk,
+        ),
+        default=None,
+    )
     settled = order.status in (
         PaymentOrder.Status.PAID,
         PaymentOrder.Status.REFUND_PENDING,
@@ -135,6 +150,14 @@ def payment_settlement_payload(order: PaymentOrder) -> dict:
         "deal_id": order.deal_id,
         "delivery_request_id": order.delivery_request_id,
         "paid_by": ("guest" if guest_paid else "self") if applied else None,
+        "last_payment_eur_cents": (
+            int(last.amount_eur_cents) if last is not None else None
+        ),
+        "last_paid_by": (
+            ("guest" if last.guest_link_id is not None else "self")
+            if last is not None
+            else None
+        ),
         "next_step": next_step,
         "paid_at": order.paid_at,
     }

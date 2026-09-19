@@ -783,12 +783,6 @@ class LEn extends L {
       'We\'re waiting for your payment provider to confirm. This usually takes a few seconds.';
 
   @override
-  String get depositPaidTitle => 'Published';
-
-  @override
-  String get depositPaidBody => 'Travelers heading your way can see this now.';
-
-  @override
   String get journeyTitle => 'Journey';
 
   @override
@@ -1743,20 +1737,6 @@ class LEn extends L {
   String get paymentOpeningProvider => 'Opening secure checkout…';
 
   @override
-  String get paymentConfirmingTitle => 'Confirming your payment';
-
-  @override
-  String get paymentConfirmingBody =>
-      'Your bank has told us, and we\'re confirming it with ShipTrip. Don\'t pay again — this usually takes a few seconds.';
-
-  @override
-  String get paymentSucceededTitle => 'Paid';
-
-  @override
-  String get paymentSucceededBody =>
-      'Your money is held until the parcel is delivered.';
-
-  @override
   String get paymentFailedTitle => 'Payment didn\'t go through';
 
   @override
@@ -1826,10 +1806,6 @@ class LEn extends L {
 
   @override
   String get guestPayAmountDue => 'Amount due';
-
-  @override
-  String get guestPayThanksBody =>
-      'The payment is confirmed. Nothing else is needed from you.';
 
   @override
   String get guestPayInvalidTitle => 'This link isn\'t valid';
@@ -3177,13 +3153,6 @@ class LEn extends L {
   @override
   String get paymentCouldNotOpen =>
       'We couldn\'t open the checkout page. Check that you have a browser installed.';
-
-  @override
-  String get paymentStillConfirmingTitle => 'Still confirming';
-
-  @override
-  String get paymentStillConfirmingBody =>
-      'This is taking longer than usual. Nothing is lost, and you have not been charged twice.';
 
   @override
   String get paymentCheckAgain => 'Check again';
@@ -4805,11 +4774,11 @@ class LEn extends L {
 
   @override
   String guestPaidBody(String amount) {
-    return '$amount was paid successfully.';
+    return '$amount has been paid.';
   }
 
   @override
-  String get guestPaidBodyPlain => 'The payment went through successfully.';
+  String get guestPaidBodyPlain => 'The payment has been received.';
 
   @override
   String get guestErrorLoad =>
@@ -4866,39 +4835,7 @@ class LEn extends L {
       'You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.';
 
   @override
-  String get paymentSuccessTitle => 'Payment secured';
-
-  @override
-  String get paymentSuccessWaxSeal => 'Secured';
-
-  @override
-  String get paymentSuccessReceiptTitle => 'Payment receipt';
-
-  @override
   String get paymentSuccessAmountPaid => 'Amount paid';
-
-  @override
-  String get paymentSuccessDepositCredit => 'Deposit credited';
-
-  @override
-  String get paymentSuccessPaidBySelf => 'Paid by you';
-
-  @override
-  String get paymentSuccessPaidByGuest => 'Paid by guest payer';
-
-  @override
-  String get paymentSuccessRemainingDue => 'Remaining balance due at delivery';
-
-  @override
-  String get paymentSuccessNextStepsTitle => 'What happens next?';
-
-  @override
-  String get paymentSuccessDepositNextBody =>
-      'Your request is active. Travelers going your way can now match with it.';
-
-  @override
-  String get paymentSuccessDealNextBody =>
-      'Your delivery is funded. The traveler will meet you at the agreed pickup point.';
 
   @override
   String get paymentSuccessViewRequestAction => 'View request';
@@ -4990,15 +4927,6 @@ class LEn extends L {
       'We couldn\'t create a payment link. Try again.';
 
   @override
-  String get paymentSuccessPayerYou => 'You';
-
-  @override
-  String get paymentSuccessPayerGuest => 'Someone else';
-
-  @override
-  String get paymentSuccessPaidByLabel => 'Paid by';
-
-  @override
   String findTravelersCount(int count) {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
       locale: localeName,
@@ -5088,4 +5016,97 @@ class LEn extends L {
   @override
   String get offerEconomicsUpdated =>
       'Offer updated. These are the latest amounts.';
+
+  @override
+  String get payResultAlreadyCompleteTitle =>
+      'This payment is already complete';
+
+  @override
+  String get payResultCheckingTitle => 'Checking your payment';
+
+  @override
+  String get payResultCheckingBody =>
+      'If you finished paying, it will show here in a moment. You don\'t need to pay again.';
+
+  @override
+  String get payResultStillCheckingTitle =>
+      'We\'re still confirming your payment';
+
+  @override
+  String get payResultStillCheckingBody =>
+      'This is taking longer than usual. If the payment went through, it will appear here, and you won\'t be charged twice.';
+
+  @override
+  String get payResultBackToPayment => 'Back to payment';
+
+  @override
+  String get payResultCancelledTitle => 'Payment cancelled';
+
+  @override
+  String get payResultCancelledBody =>
+      'No completed payment was recorded. You can try again when you\'re ready.';
+
+  @override
+  String payResultSomeoneElsePaid(String amount) {
+    return 'Someone else paid $amount for this payment.';
+  }
+
+  @override
+  String get payResultRequestPublished => 'Your request is now published';
+
+  @override
+  String get payResultDepositNext =>
+      'Find a traveler going your way and send them an offer.';
+
+  @override
+  String get payResultPaidInFull => 'Paid in full';
+
+  @override
+  String get payResultDepositCoversTotal =>
+      'This covers your delivery total as it stands. If you later add a Boost or raise the reward, only the difference would be due.';
+
+  @override
+  String get payResultPaidNow => 'Paid now';
+
+  @override
+  String get payResultDeliveryTotal => 'Delivery total';
+
+  @override
+  String get payResultRemaining => 'Remaining';
+
+  @override
+  String payResultRemainingNote(String amount) {
+    return 'Pay the remaining $amount to confirm the delivery. The traveler can\'t collect the parcel until it\'s paid.';
+  }
+
+  @override
+  String get payResultDealNext =>
+      'Funds are held pending delivery. Follow the delivery steps to continue.';
+
+  @override
+  String get payResultNextTitle => 'What happens next';
+
+  @override
+  String get payResultBackHome => 'Back to Home';
+
+  @override
+  String payResultPayRemaining(String amount) {
+    return 'Pay remaining $amount';
+  }
+
+  @override
+  String a11yPaymentResultAmount(String label, String amount, String purpose) {
+    return '$label: $amount. $purpose';
+  }
+
+  @override
+  String get guestPayHandoffTitle => 'Finish on the payment page';
+
+  @override
+  String get guestPayHandoffBody =>
+      'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in ShipTrip.';
+
+  @override
+  String get payResultDepositCredited =>
+      'This deposit counts toward your delivery total when a traveler accepts.';
 }

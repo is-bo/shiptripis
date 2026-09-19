@@ -14,9 +14,10 @@ parcel, a deal or an order reference, and the POST handler cannot be given an
 amount -- it reads the outstanding balance from the locked order, exactly as the
 app's own checkout does.
 
-Every failure -- unknown token, expired, revoked, already paid, order closed --
-renders the same page in the same words. Distinguishing them would let someone
-holding a guessed token learn which obligations exist.
+Every failure -- unknown token, expired, revoked, order closed -- renders the
+same page in the same words. Distinguishing them would let someone holding a
+guessed token learn which obligations exist. A real link whose payment is
+complete says so instead (J7D; see `_completed_link`).
 
 **Language.** A guest has no ShipTrip locale, so the page speaks the reader's
 browser language when it is one of ours, falls back to the language the owner's
@@ -39,11 +40,13 @@ from django.views.decorators.http import require_http_methods
 
 from apps.core.business_settings import NoActiveBusinessSettings
 
+from .models import GuestPaymentLink, PaymentOrder
 from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError
 from .services import (
     FinanceError,
     guest_payment_view,
+    hash_guest_token,
     resolve_guest_link,
     start_checkout,
 )
@@ -82,11 +85,13 @@ COPY: dict[str, dict[str, str]] = {
         ),
         "valid_for": "Link valid for {duration}.",
         "languages": "Language",
-        "invalid_title": "This payment link no longer works",
+        "invalid_title": "This link is no longer active",
         "invalid_body": (
-            "It may already have been paid, stopped by the person who sent it, "
-            "or expired. If a payment is still needed, ask them for a new link."
+            "It may have expired or been stopped by the person who sent it. If "
+            "a payment is still needed, ask them for a new link."
         ),
+        "paid_title": "This payment has already been completed",
+        "paid_body": "Nothing more is needed. You can close this page.",
         "unavailable_title": "Payments are paused for a moment",
         "unavailable_body": (
             "Your link is fine — we just can't take a payment right now. Please "
@@ -130,12 +135,14 @@ COPY: dict[str, dict[str, str]] = {
         ),
         "valid_for": "Lien encore valable {duration}.",
         "languages": "Langue",
-        "invalid_title": "Ce lien de paiement n’est plus valable",
+        "invalid_title": "Ce lien n’est plus actif",
         "invalid_body": (
-            "Il a peut-être déjà été réglé, désactivé par la personne qui l’a "
-            "envoyé, ou il a expiré. Si un paiement est encore nécessaire, "
-            "demandez-lui un nouveau lien."
+            "Il a peut-être expiré ou été désactivé par la personne qui l’a "
+            "envoyé. Si un paiement est encore nécessaire, demandez-lui un "
+            "nouveau lien."
         ),
+        "paid_title": "Ce paiement a déjà été effectué",
+        "paid_body": "Vous n’avez plus rien à faire. Vous pouvez fermer cette page.",
         "unavailable_title": "Les paiements sont momentanément indisponibles",
         "unavailable_body": (
             "Votre lien est valable : nous ne pouvons simplement pas encaisser "
@@ -180,11 +187,13 @@ COPY: dict[str, dict[str, str]] = {
         ),
         "valid_for": "الرابط صالح لمدة {duration}.",
         "languages": "اللغة",
-        "invalid_title": "لم يعد رابط الدفع هذا صالحًا",
+        "invalid_title": "لم يعد هذا الرابط صالحًا",
         "invalid_body": (
-            "ربما تم الدفع مسبقًا، أو أوقفه الشخص الذي أرسله، أو انتهت "
-            "صلاحيته. إن كان الدفع لا يزال مطلوبًا، اطلب منه رابطًا جديدًا."
+            "ربما انتهت صلاحيته أو أوقفه الشخص الذي أرسله. إن كان الدفع لا "
+            "يزال مطلوبًا، اطلب منه رابطًا جديدًا."
         ),
+        "paid_title": "تمّ هذا الدفع من قبل",
+        "paid_body": "لا حاجة إلى أي إجراء آخر. يمكنك إغلاق هذه الصفحة.",
         "unavailable_title": "الدفع غير متاح مؤقتًا",
         "unavailable_body": (
             "رابطك صالح، لكن لا يمكننا استلام الدفع حاليًا. أعد المحاولة بعد "
@@ -303,7 +312,12 @@ def _page(
             "dir": "rtl" if lang == "ar" else "ltr",
             "t": COPY[lang],
             "languages": [
-                {"code": code, "name": LANGUAGE_NAMES[code], "current": code == lang}
+                {
+                    "code": code,
+                    "name": LANGUAGE_NAMES[code],
+                    "current": code == lang,
+                    "href": f"?lang={code}",
+                }
                 for code in LANGUAGES
             ],
         },
@@ -334,6 +348,28 @@ def _no_rail(request: HttpRequest, lang: str) -> HttpResponse:
     )
 
 
+def _completed_link(token: str):
+    """The stored link behind `token` when its payment is complete (J7D).
+
+    Every other dead link keeps the one uniform page. This branch exists for
+    the person who has just paid and opens the link again: "no longer active,
+    ask for a new link" would send them back to the Sender for a payment that
+    is already done. It is reached only by a token whose hash matches a stored
+    link, and tokens cannot be guessed, so it teaches a prober nothing.
+    """
+
+    if not token or len(token) > 512:
+        return None
+    link = (
+        GuestPaymentLink.objects.select_related("order")
+        .filter(token_hash=hash_guest_token(token))
+        .first()
+    )
+    if link is None or link.order.status != PaymentOrder.Status.PAID:
+        return None
+    return link
+
+
 @require_http_methods(["GET", "POST"])
 def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     """Show what is owed, or start a hosted checkout for it.
@@ -349,6 +385,13 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
         link = resolve_guest_link(token)
         policy = phase3_policy()
     except (FinanceError, NoActiveBusinessSettings, InvalidPaymentPolicy):
+        completed = _completed_link(token)
+        if completed is not None:
+            return _page(
+                request,
+                _language(request, completed),
+                {"payable": False, "already_paid": True},
+            )
         return _unavailable(request, _language(request))
 
     lang = _language(request, link)

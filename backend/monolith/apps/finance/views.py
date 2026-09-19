@@ -61,6 +61,7 @@ from .serializers import (
     PostingDepositCreateSerializer,
     PayoutSerializer,
     RefundRequestSerializer,
+    payment_settlement_payload,
 )
 from .services import (
     FinanceError,
@@ -470,6 +471,10 @@ class PostingDepositView(APIView):
             payload["order"] = _with_payment_options(
                 PaymentOrderSummarySerializer(order).data, order
             )
+            # J7D: the same settlement block the Deal balance already serves, so
+            # the deposit's result screen states what the server applied (and
+            # whether someone else paid it) rather than inferring it.
+            payload["order"]["settlement"] = payment_settlement_payload(order)
             try:
                 payload["quote"] = deposit_quote_payload(
                     delivery_request=delivery_request, order=order, policy=policy

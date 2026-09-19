@@ -276,8 +276,6 @@
   "depositPayAction": "Pay deposit and publish",
   "depositPending": "Confirming your deposit…",
   "depositPendingBody": "We're waiting for your payment provider to confirm. This usually takes a few seconds.",
-  "depositPaidTitle": "Published",
-  "depositPaidBody": "Travelers heading your way can see this now.",
   "journeyTitle": "Journey",
   "journeyCreateTitle": "Add a journey",
   "journeyOverallRoute": "Where are you going?",
@@ -807,10 +805,6 @@
     }
   },
   "paymentOpeningProvider": "Opening secure checkout…",
-  "paymentConfirmingTitle": "Confirming your payment",
-  "paymentConfirmingBody": "Your bank has told us, and we're confirming it with ShipTrip. Don't pay again — this usually takes a few seconds.",
-  "paymentSucceededTitle": "Paid",
-  "paymentSucceededBody": "Your money is held until the parcel is delivered.",
   "paymentFailedTitle": "Payment didn't go through",
   "paymentFailedBody": "Nothing was charged. You can try again or use a different method.",
   "paymentExpiredTitle": "Checkout expired",
@@ -839,7 +833,6 @@
   "guestPayPayerEmail": "Email for your receipt",
   "guestPayPayerEmailHelp": "We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.",
   "guestPayAmountDue": "Amount due",
-  "guestPayThanksBody": "The payment is confirmed. Nothing else is needed from you.",
   "guestPayInvalidTitle": "This link isn't valid",
   "guestPayInvalidBody": "It may have expired, been cancelled, or already been paid.",
   "recipientTitle": "Who's receiving this?",
@@ -1594,8 +1587,6 @@
   "paymentContinueBody": "Finish the payment you started instead of opening a second one.",
   "paymentContinueAction": "Continue your payment",
   "paymentCouldNotOpen": "We couldn't open the checkout page. Check that you have a browser installed.",
-  "paymentStillConfirmingTitle": "Still confirming",
-  "paymentStillConfirmingBody": "This is taking longer than usual. Nothing is lost, and you have not been charged twice.",
   "paymentCheckAgain": "Check again",
   "paymentNothingOutstandingTitle": "Nothing left to pay",
   "paymentNothingOutstandingBody": "This has already been settled.",
@@ -2450,7 +2441,7 @@
   "guestRevokeKeep": "Keep link",
   "guestRevokedDone": "Link revoked",
   "guestPaidTitle": "Payment received",
-  "guestPaidBody": "{amount} was paid successfully.",
+  "guestPaidBody": "{amount} has been paid.",
   "@guestPaidBody": {
     "placeholders": {
       "amount": {
@@ -2458,7 +2449,7 @@
       }
     }
   },
-  "guestPaidBodyPlain": "The payment went through successfully.",
+  "guestPaidBodyPlain": "The payment has been received.",
   "guestErrorLoad": "We couldn’t load your payment link. Check your connection and try again.",
   "guestErrorBusy": "Someone is paying with your current link right now. Try again once they’ve finished.",
   "guestErrorRevokeBusy": "Someone is paying with this link right now, so it can’t be revoked.",
@@ -2475,17 +2466,7 @@
   "guestPayPurposeDelivery": "Payment for a delivery",
   "guestPayPurposeBoost": "Extra reward for a delivery",
   "guestPayHandoff": "You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.",
-  "paymentSuccessTitle": "Payment secured",
-  "paymentSuccessWaxSeal": "Secured",
-  "paymentSuccessReceiptTitle": "Payment receipt",
   "paymentSuccessAmountPaid": "Amount paid",
-  "paymentSuccessDepositCredit": "Deposit credited",
-  "paymentSuccessPaidBySelf": "Paid by you",
-  "paymentSuccessPaidByGuest": "Paid by guest payer",
-  "paymentSuccessRemainingDue": "Remaining balance due at delivery",
-  "paymentSuccessNextStepsTitle": "What happens next?",
-  "paymentSuccessDepositNextBody": "Your request is active. Travelers going your way can now match with it.",
-  "paymentSuccessDealNextBody": "Your delivery is funded. The traveler will meet you at the agreed pickup point.",
   "paymentSuccessViewRequestAction": "View request",
   "paymentSuccessViewDeliveryAction": "View delivery",
   "notificationDepositPaidTitle": "Deposit confirmed",
@@ -2564,18 +2545,6 @@
   "guestPaymentLinkFailed": "We couldn't create a payment link. Try again.",
   "@guestPaymentLinkFailed": {
     "description": "guestPaymentLinkFailed"
-  },
-  "paymentSuccessPayerYou": "You",
-  "@paymentSuccessPayerYou": {
-    "description": "paymentSuccessPayerYou"
-  },
-  "paymentSuccessPayerGuest": "Someone else",
-  "@paymentSuccessPayerGuest": {
-    "description": "paymentSuccessPayerGuest"
-  },
-  "paymentSuccessPaidByLabel": "Paid by",
-  "@paymentSuccessPaidByLabel": {
-    "description": "paymentSuccessPaidByLabel"
   },
   "findTravelersCount": "{count, plural, =1{1 traveler} other{{count} travelers}}",
   "@findTravelersCount": {
@@ -2706,5 +2675,71 @@
   "offerEconomicsUpdated": "Offer updated. These are the latest amounts.",
   "@offerEconomicsUpdated": {
     "description": "Shown on an open offer when its amounts changed while the viewer was looking at it, for example because the sender changed their Boost."
-  }
+  },
+  "payResultAlreadyCompleteTitle": "This payment is already complete",
+  "payResultCheckingTitle": "Checking your payment",
+  "payResultCheckingBody": "If you finished paying, it will show here in a moment. You don't need to pay again.",
+  "payResultStillCheckingTitle": "We're still confirming your payment",
+  "payResultStillCheckingBody": "This is taking longer than usual. If the payment went through, it will appear here, and you won't be charged twice.",
+  "payResultBackToPayment": "Back to payment",
+  "payResultCancelledTitle": "Payment cancelled",
+  "payResultCancelledBody": "No completed payment was recorded. You can try again when you're ready.",
+  "payResultSomeoneElsePaid": "Someone else paid {amount} for this payment.",
+  "@payResultSomeoneElsePaid": {
+    "description": "Payment result shown to the Sender when a guest payer paid. amount is the server's figure for that one payment. Never names the payer.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "payResultRequestPublished": "Your request is now published",
+  "payResultDepositNext": "Find a traveler going your way and send them an offer.",
+  "payResultPaidInFull": "Paid in full",
+  "payResultDepositCoversTotal": "This covers your delivery total as it stands. If you later add a Boost or raise the reward, only the difference would be due.",
+  "@payResultDepositCoversTotal": {
+    "description": "Deposit result when the deposit paid the whole current delivery total. Must not promise that nothing can ever be due again."
+  },
+  "payResultPaidNow": "Paid now",
+  "payResultDeliveryTotal": "Delivery total",
+  "payResultRemaining": "Remaining",
+  "payResultRemainingNote": "Pay the remaining {amount} to confirm the delivery. The traveler can't collect the parcel until it's paid.",
+  "@payResultRemainingNote": {
+    "description": "Deal payment result when money is still owed after this payment. amount is the server's remaining balance.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "payResultDealNext": "Funds are held pending delivery. Follow the delivery steps to continue.",
+  "payResultNextTitle": "What happens next",
+  "payResultBackHome": "Back to Home",
+  "payResultPayRemaining": "Pay remaining {amount}",
+  "@payResultPayRemaining": {
+    "description": "Button on a partial Deal payment result; amount is the server's remaining balance.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "a11yPaymentResultAmount": "{label}: {amount}. {purpose}",
+  "@a11yPaymentResultAmount": {
+    "description": "Screen-reader label for the hero amount on a payment result: e.g. 'Amount paid: €42.50. Delivery payment'.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "purpose": {
+        "type": "String"
+      }
+    }
+  },
+  "guestPayHandoffTitle": "Finish on the payment page",
+  "guestPayHandoffBody": "Complete the payment on our payment partner's secure page. That page will show you the result, and the person who asked you will see it in ShipTrip.",
+  "payResultDepositCredited": "This deposit counts toward your delivery total when a traveler accepts."
 }

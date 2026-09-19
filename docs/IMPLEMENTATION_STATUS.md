@@ -1,5 +1,52 @@
 # ShipTrip V1 Implementation Status
 
+## J7D — Payment success, return and completion UX (2026-09-19)
+
+**J7D — every payment result is one ShipTrip system with purpose-specific
+words, and the provider return page now tells the payer what the server knows.**
+Branch `claude/j7d-payment-success-ux`, from `667ddcb`. Backend, public web and
+mobile; no migration, no schema change, no payment accounting touched. **APK:
+NOT BUILT** — deferred to the combined J7 acceptance build. [Inventory, system,
+states, navigation, tests and visual QA](PHASE_J7D_PAYMENT_SUCCESS_UX.md).
+
+**Mobile.** `PaymentSuccessView` is gone; `features/common/payment_result.dart`
+draws every result: wax-seal mark (no tick while checking), purpose eyebrow, one
+Fraunces heading, the payment just made as the hero, the request's own route,
+and a receipt-style ledger with a *Paid in full* stamp instead of "Remaining
+€0.00". Deposit → *Your request is now published* + **View request**; full
+obligation at posting → *Paid in full* without promising nothing can ever be due
+again; Deal → *Payment protected*, *Funds are held pending delivery* +
+**View delivery**; partial → *Remaining* + *Pay remaining €Y*; guest-paid →
+"Someone else paid €X for this payment."; reopened → *This payment is already
+complete*. The checkout hands the whole page to *Checking your payment* /
+*still confirming* / *didn't go through* / *cancelled* results, and its backup
+re-reads went from 40 fixed to 9 backing-off, then stop. CTAs pop back to the
+request/delivery underneath or replace the payment screen — Back never reaches a
+payable form. Three bugs found by the new tests were fixed: a lost in-flight
+checkout when the summary hid, a stale order after *Back to payment* (double-pay
+path), and a same-frame double tap opening two checkouts. Arabic figures render
+"30,00 €" (hero LTR; LTR isolate inside sentences; measured in a test).
+
+**Backend / web.** `settlement` gains `last_payment_eur_cents` and
+`last_paid_by`; the posting-deposit endpoint serves `settlement` too.
+`/pay/<ref>/return` is now a view on the J7C shell (`_shell.html`) that reads the
+order: *Payment complete* (guest: "You can close this page."; app payer: back
+to the app), *already completed*, *We're confirming your payment* with a bounded
+re-check then *Still confirming*, *wasn't completed*, *Payment cancelled*, *no
+longer active*. `?result=` never decides the outcome. A receipt is mentioned only
+when email is on and a live receipt is queued/dispatched. A reopened guest link
+whose payment is done says so instead of "ask for a new link".
+
+**Verification (local).** Backend: 25 new tests in
+`apps/finance/tests/test_j7d_payment_results.py`, 8FC/J2/J7C tests updated;
+related finance suites 177 passed on SQLite; `ruff`, `manage.py check`,
+`makemigrations --check` clean. Mobile: 49 new tests in
+`test/phase_j7d_payment_result_test.dart`, J3/J6/8F-F4 updated; full suite
+**886 passed**; `flutter analyze --fatal-infos` and `dart format` clean;
+`l10n_untranslated.json` empty. Real screens rendered at 390×844 EN (A–H),
+FR 1.6×, AR, 320×640, 411×869 and 844×390; public pages inspected at 390/320,
+light and dark, EN/FR/AR.
+
 ## J7C — Guest payer ("Someone else can pay") UX (2026-09-18)
 
 **J7C — the guest-payer flow redesigned on both sides, and a link-breaking

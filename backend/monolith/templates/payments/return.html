@@ -1,110 +1,75 @@
-{% comment %}
-Where a hosted provider sends the payer back.
+{% extends "payments/_shell.html" %}{% comment %}
+Where a hosted provider sends the payer back (J7D).
 
-This page deliberately says the same thing whatever `?result=` claims, because
-the redirect is not evidence. Stripe and Chargily both bounce the browser back
-through a URL the payer's own machine follows, and the only thing that moves
-money in this system is a signature-verified webhook. A page that read the
-query string and announced "Payment successful" would be announcing something
-it does not know, on the one screen where being wrong is most expensive.
+The words on this page come from the order's own state, which only a
+signature-verified webhook moves -- never from `?result=`. See
+`apps.finance.payment_return_web` for the state table and for what the page
+may disclose: an amount, a generic purpose and an outcome, nothing about any
+party, place, parcel, deal or order id.
 
-It also carries no order, no amount and no party. The reference in the URL is
-enough to render this page and deliberately not enough to learn anything from
-it — a payer forwards this link without forwarding a receipt.
+A pending result re-checks itself a bounded number of times through a plain
+meta refresh (no script, like every public page), then stops and offers a
+manual check. The mark is decorative; the heading carries the outcome and sits
+in a status region so a screen reader hears it.
+{% endcomment %}
+{% block title %}{{ t.title }}{% endblock %}
+{% block head_extra %}{% if recheck_after %}
+  <meta http-equiv="refresh" content="{{ recheck_after }};url={{ recheck_href }}">{% endif %}{% endblock %}
+{% block content %}
+  <main class="card result">
+    {% if state == "success" or state == "already_paid" %}
+    <div class="mark seal-mark" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </div>
+    {% elif state == "pending" or state == "slow" %}
+    <div class="mark pending-mark{% if state == 'slow' %} still{% endif %}" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
+    </div>
+    {% elif state == "failed" %}
+    <div class="mark failed-mark" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M14.5 14.5l4 4M18.5 14.5l-4 4"/></svg>
+    </div>
+    {% else %}
+    <div class="mark quiet-mark" aria-hidden="true">
+      {% if state == "inactive" %}
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a4.2 4.2 0 0 1 6 6L17 12.5"/><path d="M13 17.5l-1.2 1.2a4.2 4.2 0 0 1-6-6L7 11.5"/><path d="M4 4l16 16"/></svg>
+      {% else %}
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>
+      {% endif %}
+    </div>
+    {% endif %}
 
-Trilingual on one page because we do not know who is reading it: the app payer
-has a locale, the guest payer arrived from a shared link and does not.
-{% endcomment %}<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <title>ShipTrip — confirming your payment</title>
-  <style>
-    :root { color-scheme: light dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      background: #faf7f2;
-      color: #1b1a18;
-      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    main {
-      max-width: 32rem;
-      width: 100%;
-      background: #fff;
-      border: 1px solid #e7e1d8;
-      border-radius: 14px;
-      padding: 28px 26px;
-      box-shadow: 0 1px 2px rgba(27, 26, 24, .05);
-    }
-    .mark {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 38px; height: 38px; border-radius: 10px;
-      background: #1b1a18; color: #faf7f2;
-      font-weight: 700; letter-spacing: .02em;
-    }
-    h1 { font-size: 1.25rem; margin: 18px 0 6px; }
-    p { margin: 0 0 14px; }
-    .lead { color: #46423c; }
-    .sep { height: 1px; background: #e7e1d8; margin: 20px 0 16px; border: 0; }
-    section + section { margin-top: 14px; }
-    section p { margin: 0; color: #46423c; font-size: .95rem; }
-    section h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase;
-                 color: #8a8177; margin: 0 0 4px; font-weight: 600; }
-    [dir="rtl"] { text-align: right; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #16150f; color: #f2efe8; }
-      main { background: #1f1e17; border-color: #33302a; box-shadow: none; }
-      .mark { background: #f2efe8; color: #16150f; }
-      .lead, section p { color: #cbc5ba; }
-      .sep { background: #33302a; }
-      section h2 { color: #98908382; color: #9a9184; }
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <span class="mark" aria-hidden="true">ST</span>
-    <h1>Thanks — we&rsquo;re confirming your payment</h1>
-    <p class="lead">
-      ShipTrip confirms every payment with the payment provider before marking
-      it as received, so this page cannot tell you the outcome yet. It usually
-      takes a few seconds.
-    </p>
-    <p class="lead">
-      You can close this tab. If you paid from the ShipTrip app, go back to it
-      and the delivery will update on its own. If you paid a link someone
-      shared with you, they will see the result on their side.
-    </p>
+    {% if purpose %}<p class="eyebrow">{{ purpose }}</p>{% endif %}
+    <div role="status">
+      <h1 class="title">{% if state == "success" %}{{ t.success_title }}{% elif state == "already_paid" %}{{ t.paid_title }}{% elif state == "pending" %}{{ t.pending_title }}{% elif state == "slow" %}{{ t.slow_title }}{% elif state == "failed" or state == "not_completed" %}{{ t.failed_title }}{% elif state == "cancelled" %}{{ t.cancelled_title }}{% else %}{{ t.inactive_title }}{% endif %}</h1>
+      {% if amount_display %}{% if state == "success" %}<p class="amount"><span class="sr">{{ amount_label }}: </span><bdi dir="ltr">{{ amount_display }}</bdi></p>{% else %}<p class="amount-label">{{ amount_label }}</p>
+      <p class="amount muted"><bdi dir="ltr">{{ amount_display }}</bdi></p>{% endif %}{% endif %}
+      {% if state == "pending" %}<p class="lead">{{ t.pending_body }}</p>
+      {% elif state == "slow" %}<p class="lead">{{ t.slow_body }}</p>
+      {% elif state == "failed" %}<p class="lead">{{ t.failed_body }}</p>
+      {% elif state == "not_completed" %}<p class="lead">{{ t.not_completed_body }}</p>
+      {% elif state == "cancelled" %}<p class="lead">{{ t.cancelled_body }}</p>
+      {% elif state == "inactive" %}<p class="lead">{{ t.inactive_body }}</p>
+      {% endif %}
+      {% if refund_line %}<p class="lead">{{ refund_line }}</p>{% endif %}
+      {% if next_line %}<p class="lead">{{ next_line }}</p>{% endif %}
+    </div>
 
-    <hr class="sep">
+    {% if charged_line or receipt_line %}
+    <ul class="facts">
+      {% if charged_line %}<li>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>
+        <span>{{ charged_line }}</span>
+      </li>{% endif %}
+      {% if receipt_line %}<li>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>
+        <span>{{ receipt_line }}</span>
+      </li>{% endif %}
+    </ul>
+    {% endif %}
 
-    <section lang="fr">
-      <h2>Français</h2>
-      <p>
-        Merci. ShipTrip confirme chaque paiement auprès du prestataire avant de
-        l&rsquo;enregistrer, donc cette page ne peut pas encore vous en donner
-        le résultat. Vous pouvez fermer cet onglet&nbsp;: l&rsquo;application se
-        met à jour toute seule, et si vous avez payé un lien partagé, la
-        personne qui vous l&rsquo;a envoyé verra le résultat de son côté.
-      </p>
-    </section>
-
-    <section lang="ar" dir="rtl">
-      <h2>العربية</h2>
-      <p>
-        شكرًا لك. تؤكّد ShipTrip كل عملية دفع مع مزوّد الدفع قبل تسجيلها، لذلك
-        لا يمكن لهذه الصفحة أن تخبرك بالنتيجة بعد. يمكنك إغلاق هذه النافذة؛
-        سيتحدّث التطبيق تلقائيًا، وإن كنت قد دفعت عبر رابط شاركه معك شخص ما،
-        فسيرى هو النتيجة من جهته.
-      </p>
-    </section>
+    {% if check_href %}
+    <div class="actions"><a class="secondary" href="{{ check_href }}">{{ t.check_again }}</a></div>
+    {% endif %}
   </main>
-</body>
-</html>
+{% endblock %}

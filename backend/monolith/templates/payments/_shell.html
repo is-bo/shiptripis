@@ -1,0 +1,438 @@
+{% comment %}
+The shell every public payment page shares: the guest payer's page and the page
+a payment provider sends the browser back to (J7D).
+
+Visually it is the app, not a web interpretation of it: parchment, ink,
+terracotta, Fraunces for the one figure a page is about, DM Sans for the rest,
+Noto Sans Arabic in Arabic, the wax seal as the mark. The values are
+`AppColorScheme` verbatim, and the faces are the landing site's own subsets
+under /assets/fonts. No script, no external request, no gradient. The referrer
+is suppressed so a path carrying a capability never travels onward.
+
+Blocks: `title`, `head_extra` (the return page's bounded re-check lives there),
+and `content`, which is the one card.
+{% endcomment %}<!doctype html>
+<html lang="{{ lang }}" dir="{{ dir }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{{ t.title }}{% endblock %}</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  {% block head_extra %}{% endblock %}
+  <style>
+    @font-face { font-family: "Fraunces"; src: url("/assets/fonts/fraunces.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
+    @font-face { font-family: "DM Sans"; src: url("/assets/fonts/dmsans.woff2") format("woff2-variations"); font-weight: 100 1000; font-display: swap; }
+    @font-face { font-family: "Noto Sans Arabic"; src: url("/assets/fonts/notosansarabic.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
+
+    :root {
+      --canvas: #f4efe6;
+      --surface: #faf6ee;
+      --surface-raised: #fffcf5;
+      --surface-sunken: #eae3d2;
+      --ink: #0e1f2c;
+      --text-secondary: #2a3b49;
+      --text-tertiary: #616c79;
+      --on-ink: #faf6ee;
+      --hairline: rgba(14, 31, 44, .12);
+      --hairline-strong: rgba(14, 31, 44, .26);
+      --attention: #c75e26;
+      --attention-print: #9b4318;
+      --attention-soft: #fcebe0;
+      --attention-vivid: #e8763a;
+      --seal: #c9a961;
+      --danger: #b23a2e;
+      --danger-soft: #fcedeb;
+      --focus: #2a62a6;
+      --shadow: 0 1px 2px rgba(14, 31, 44, .05), 0 8px 24px rgba(14, 31, 44, .06);
+      --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      --font-ui: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --font-arabic: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #091620;
+        --surface: #11212c;
+        --surface-raised: #172a37;
+        --surface-sunken: #0d1b25;
+        --ink: #f2eee6;
+        --text-secondary: #c2cdd5;
+        --text-tertiary: #93a0ab;
+        --on-ink: #0e1f2c;
+        --hairline: rgba(255, 255, 255, .12);
+        --hairline-strong: rgba(255, 255, 255, .24);
+        --attention: #e8763a;
+        --attention-print: #f4b48d;
+        --attention-soft: #3a1e0e;
+        --danger: #d35f52;
+        --danger-soft: #361310;
+        --focus: #5a8fcc;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 400 1rem/1.5 var(--font-ui);
+    }
+    [lang="ar"] body, body[lang="ar"], html[lang="ar"] body { font-family: var(--font-arabic); }
+    .shell {
+      width: 100%;
+      max-width: 30rem;
+      margin: 0 auto;
+      padding: 16px 16px 40px;
+    }
+
+    /* Header: the mark on one side, the language switch on the other. */
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 4px 0 18px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    html[lang="ar"] .brand { font-family: var(--font-display); }
+    .seal {
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--attention-vivid);
+      box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--seal);
+      color: #0e1f2c;
+      font-family: var(--font-display);
+      font-size: .95rem;
+      font-weight: 700;
+      flex: none;
+    }
+    .langs { display: flex; gap: 2px; flex-wrap: wrap; }
+    .langs a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 10px;
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font-size: .875rem;
+      text-decoration: none;
+    }
+    .langs a[aria-current="true"] {
+      color: var(--ink);
+      font-weight: 650;
+      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
+    }
+
+    /* The one card. */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 26px 22px 22px;
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--attention-print);
+      font-size: .72rem;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    html[lang="ar"] .eyebrow { letter-spacing: 0; font-size: .8rem; }
+    .amount {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 11vw, 3.1rem);
+      font-weight: 600;
+      line-height: 1.05;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .purpose {
+      margin: 8px 0 0;
+      font-size: 1.02rem;
+      font-weight: 600;
+    }
+    .lead {
+      margin: 12px 0 0;
+      color: var(--text-secondary);
+      font-size: .95rem;
+    }
+
+    /* A ticket perforation between "what" and "how". */
+    .perf {
+      position: relative;
+      height: 0;
+      margin: 22px -22px;
+      border-top: 1.5px dashed var(--hairline-strong);
+    }
+    .perf::before, .perf::after {
+      content: "";
+      position: absolute;
+      top: -10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+    }
+    .perf::before { left: -11px; }
+    .perf::after { right: -11px; }
+
+    form { margin: 0; }
+    .label, legend, label.field-label {
+      display: block;
+      margin: 0 0 8px;
+      padding: 0;
+      color: var(--text-secondary);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+    fieldset { border: 0; margin: 0 0 18px; padding: 0; min-width: 0; }
+    .rail {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 56px;
+      padding: 10px 14px;
+      border: 1.4px solid var(--hairline-strong);
+      border-radius: 14px;
+      background: var(--surface-raised);
+    }
+    .rail + .rail { margin-top: 8px; }
+    label.rail { cursor: pointer; }
+    label.rail:has(input:checked) { border-color: var(--ink); }
+    .rail input { width: 20px; height: 20px; margin: 0; accent-color: var(--ink); flex: none; }
+    .rail strong { display: block; font-weight: 650; }
+    .rail .note { display: block; color: var(--text-tertiary); font-size: .82rem; }
+    .single { margin-bottom: 18px; }
+    .single-icon {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--surface-sunken);
+      color: var(--text-secondary);
+      flex: none;
+    }
+
+    .field { margin: 0 0 18px; }
+    input[type="email"] {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 12px 14px;
+      border: 1.4px solid var(--hairline-strong);
+      border-radius: 12px;
+      background: var(--surface-raised);
+      color: var(--ink);
+      font: inherit;
+      direction: ltr;
+      text-align: start;
+    }
+    html[dir="rtl"] input[type="email"] { text-align: right; }
+    .field.invalid input { border-color: var(--danger); }
+    .hint { margin: 8px 0 0; color: var(--text-tertiary); font-size: .82rem; }
+    .error {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+
+    .pay {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 54px;
+      padding: 12px 24px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--on-ink);
+      font: 650 1rem/1.2 var(--font-ui);
+      letter-spacing: .01em;
+      cursor: pointer;
+    }
+    html[lang="ar"] .pay { font-family: var(--font-arabic); letter-spacing: 0; }
+    .pay .arrow { display: inline-block; }
+    html[dir="rtl"] .pay .arrow { transform: scaleX(-1); }
+    .pay:hover { filter: brightness(1.12); }
+    a:focus-visible, button:focus-visible, input:focus-visible {
+      outline: 2.5px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .handoff {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin: 12px 0 0;
+      color: var(--text-tertiary);
+      font-size: .82rem;
+    }
+    .handoff svg, .facts svg { flex: none; margin-top: 2px; }
+
+    .facts {
+      list-style: none;
+      margin: 20px 0 0;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--surface-sunken);
+      color: var(--text-secondary);
+      font-size: .85rem;
+    }
+    .facts li { display: flex; gap: 10px; align-items: flex-start; }
+    .facts li + li { margin-top: 10px; }
+
+    /* Non-payable states. */
+    .state-mark {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      margin-bottom: 16px;
+      border-radius: 50%;
+      background: var(--attention-soft);
+      color: var(--attention-print);
+    }
+    .title {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -.01em;
+    }
+    html[lang="ar"] .title, html[lang="ar"] .amount { font-family: var(--font-arabic); letter-spacing: 0; }
+    .secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      margin-top: 18px;
+      padding: 0 22px;
+      border-radius: 999px;
+      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
+      color: var(--ink);
+      font-weight: 650;
+      text-decoration: none;
+    }
+    bdi { unicode-bidi: isolate; }
+
+    @media (max-width: 360px) {
+      .shell { padding-inline: 12px; }
+      .card { padding: 22px 16px 18px; }
+      .perf { margin-inline: -16px; }
+    }
+
+    /* ---- Payment results (J7D) ---------------------------------------- */
+    /* One calm treatment for every outcome: a mark, the purpose, one
+       heading, the figure, one or two sentences. No gradient, no confetti,
+       no green: the seal is the app's own wax seal. */
+    .result { text-align: center; }
+    .result .eyebrow { margin-top: 0; }
+    .result .lead { margin-inline: auto; max-width: 26rem; }
+    .result .amount { font-size: clamp(2.1rem, 10vw, 2.7rem); margin: 10px 0 0; }
+    .result .amount.muted { margin-top: 2px; color: var(--text-tertiary); }
+    /* Outside a success the figure is not what was paid, so it says what it
+       is: "Amount still due", "Amount being confirmed". */
+    .result .amount-label {
+      margin: 14px 0 0;
+      color: var(--text-tertiary);
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .result .facts { text-align: start; }
+    .result .actions { margin-top: 20px; }
+    .result .actions .secondary { margin-top: 0; }
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      margin: 2px auto 18px;
+      border-radius: 50%;
+    }
+    .mark svg { display: block; }
+    .mark.seal-mark {
+      background: var(--attention-vivid);
+      color: #fffcf5;
+      /* The wax seal: a pressed inner ring and an offset shadow, as the app
+         paints it — wax sits on the paper, it does not float above it. */
+      box-shadow:
+        inset 0 0 0 4px var(--attention-vivid),
+        inset 0 0 0 5.5px rgba(255, 252, 245, .55),
+        2px 2px 0 rgba(232, 118, 58, .28);
+    }
+    .mark.pending-mark {
+      position: relative;
+      background: var(--surface-sunken);
+      color: var(--text-secondary);
+    }
+    .mark.pending-mark::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 2.5px solid transparent;
+      border-top-color: var(--attention);
+      animation: turn 1.6s linear infinite;
+    }
+    /* No longer checking by itself: the ring stops. */
+    .mark.pending-mark.still::after { display: none; }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .mark.pending-mark::after { animation: none; border-color: var(--hairline-strong); border-top-color: var(--attention); }
+    }
+    .mark.failed-mark { background: var(--danger-soft); color: var(--danger); }
+    .mark.quiet-mark { background: var(--surface-sunken); color: var(--text-secondary); }
+    .sr {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header class="bar">
+    <span class="brand"><span class="seal" aria-hidden="true">S</span><span lang="en" dir="ltr">ShipTrip</span></span>
+    <nav class="langs" aria-label="{{ t.languages }}">
+      {% for option in languages %}<a href="{{ option.href }}" lang="{{ option.code }}" hreflang="{{ option.code }}"{% if option.current %} aria-current="true"{% endif %}>{{ option.name }}</a>{% endfor %}
+    </nav>
+  </header>
+
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

@@ -422,6 +422,8 @@ class PaymentSettlement {
     required this.refunded,
     required this.paidBy,
     required this.nextStep,
+    this.lastPayment,
+    this.lastPaidBy,
     this.dealId,
     this.deliveryRequestId,
     this.paidAt,
@@ -446,6 +448,8 @@ class PaymentSettlement {
     refunded: Money.eurCentsOrNull(json['refunded_eur_cents']),
     paidBy: readString(json['paid_by']),
     nextStep: PaymentSettlementNextStep.parse(readString(json['next_step'])),
+    lastPayment: Money.eurCentsOrNull(json['last_payment_eur_cents']),
+    lastPaidBy: readString(json['last_paid_by']),
     dealId: readInt(json['deal_id']),
     deliveryRequestId: readInt(json['delivery_request_id']),
     paidAt: readDate(json['paid_at']),
@@ -461,6 +465,14 @@ class PaymentSettlement {
   final Money? refunded;
   final String? paidBy;
   final PaymentSettlementNextStep nextStep;
+
+  /// The most recent payment applied to this obligation, on its own (J7D).
+  /// [paid] is cumulative; a result screen says "you just paid €X".
+  final Money? lastPayment;
+
+  /// `self` or `guest` for [lastPayment] alone. Never who the guest was.
+  final String? lastPaidBy;
+
   final int? dealId;
   final int? deliveryRequestId;
   final DateTime? paidAt;

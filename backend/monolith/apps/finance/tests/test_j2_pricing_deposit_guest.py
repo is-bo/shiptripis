@@ -596,7 +596,7 @@ class GuestPayerTests(TestCase):
 
         gone = anon.get("/pay/guest/definitely-not-a-token")
         assert gone.status_code == 404
-        assert "no longer works" in gone.content.decode()
+        assert "no longer active" in gone.content.decode()
 
     def test_the_shared_page_hands_the_payer_to_the_provider(self):
         enable_mock_rail()

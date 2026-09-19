@@ -57,6 +57,7 @@ import '../../design/tokens.dart';
 import '../../design/typography.dart';
 import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/payment_result.dart';
 
 class GuestPaymentSheet extends ConsumerStatefulWidget {
   const GuestPaymentSheet({required this.order, this.onSettled, super.key});
@@ -457,10 +458,10 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
     final locale = Localizations.localeOf(context);
 
     if (_settled || _link?.state == GuestLinkState.paid) {
-      final settlement = _order.settlement;
       return AppSheet(
         title: l.guestPaymentTitle,
-        child: _PaidView(amount: settlement?.paid ?? _order.paid),
+        // The one payment that settled it, not the running total (J7D).
+        child: _PaidView(amount: lastPaymentOf(_order)),
       );
     }
 
@@ -899,19 +900,10 @@ class _PaidView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: AppSpace.sm),
-        // The mark is an icon pressed into the seal rather than a "✓"
-        // character: the app's own faces carry no check glyph, and a fallback
-        // font is not something a success moment should depend on.
-        Center(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              const WaxSeal(glyph: '', diameter: 56),
-              ExcludeSemantics(
-                child: Icon(Icons.check_rounded, size: 28, color: c.surface),
-              ),
-            ],
-          ),
+        // The same mark as every payment result (J7D): an icon pressed into
+        // the seal, never a "✓" glyph the app's own faces do not carry.
+        const Center(
+          child: PaymentResultMark(kind: PaymentResultKind.received, size: 56),
         ),
         const SizedBox(height: AppSpace.lg),
         Semantics(

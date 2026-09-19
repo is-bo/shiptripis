@@ -1,4 +1,4 @@
-{% comment %}
+{% extends "payments/_shell.html" %}{% comment %}
 The page a guest payer lands on from a shared link.
 
 Everything about it is shaped by one constraint: the person reading it is not a
@@ -12,364 +12,19 @@ The token is in the URL because it *is* the credential. The page never puts it
 in a query string, never logs it, and the server stores only its hash. The
 referrer is suppressed so the path never travels onward to anyone.
 
-An invalid, expired, revoked or already-paid link is answered the same way, in
-the same words: the link no longer works. Distinguishing them would let someone
-holding a guessed token learn which orders exist.
+An unknown, expired, revoked or closed link is answered the same way, in the
+same words: the link is no longer active. Distinguishing them would let someone
+holding a guessed token learn which orders exist. The one exception (J7D) is a
+real link whose payment is complete: its holder -- the person who just paid,
+opening the link again -- is told so instead of being sent back to ask for a
+new link. Only a token that hashes to a stored link reaches that branch, and
+a token cannot be guessed, so it tells a prober nothing.
 
-Visually it is the app, not a web interpretation of it: parchment, ink,
-terracotta, Fraunces for the one figure the page is about, DM Sans for the rest,
-the wax seal as the mark. The values are `AppColorScheme` verbatim, and the
-faces are the landing site's own subsets under /assets/fonts. No script, no
-external request, no gradient.
-{% endcomment %}<!doctype html>
-<html lang="{{ lang }}" dir="{{ dir }}">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="referrer" content="no-referrer">
-  <meta name="color-scheme" content="light dark">
-  <title>{{ t.title }}</title>
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <style>
-    @font-face { font-family: "Fraunces"; src: url("/assets/fonts/fraunces.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
-    @font-face { font-family: "DM Sans"; src: url("/assets/fonts/dmsans.woff2") format("woff2-variations"); font-weight: 100 1000; font-display: swap; }
-    @font-face { font-family: "Noto Sans Arabic"; src: url("/assets/fonts/notosansarabic.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
-
-    :root {
-      --canvas: #f4efe6;
-      --surface: #faf6ee;
-      --surface-raised: #fffcf5;
-      --surface-sunken: #eae3d2;
-      --ink: #0e1f2c;
-      --text-secondary: #2a3b49;
-      --text-tertiary: #616c79;
-      --on-ink: #faf6ee;
-      --hairline: rgba(14, 31, 44, .12);
-      --hairline-strong: rgba(14, 31, 44, .26);
-      --attention: #c75e26;
-      --attention-print: #9b4318;
-      --attention-soft: #fcebe0;
-      --attention-vivid: #e8763a;
-      --seal: #c9a961;
-      --danger: #b23a2e;
-      --danger-soft: #fcedeb;
-      --focus: #2a62a6;
-      --shadow: 0 1px 2px rgba(14, 31, 44, .05), 0 8px 24px rgba(14, 31, 44, .06);
-      --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-      --font-ui: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
-      --font-arabic: "Noto Sans Arabic", "Segoe UI", system-ui, sans-serif;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --canvas: #091620;
-        --surface: #11212c;
-        --surface-raised: #172a37;
-        --surface-sunken: #0d1b25;
-        --ink: #f2eee6;
-        --text-secondary: #c2cdd5;
-        --text-tertiary: #93a0ab;
-        --on-ink: #0e1f2c;
-        --hairline: rgba(255, 255, 255, .12);
-        --hairline-strong: rgba(255, 255, 255, .24);
-        --attention: #e8763a;
-        --attention-print: #f4b48d;
-        --attention-soft: #3a1e0e;
-        --danger: #d35f52;
-        --danger-soft: #361310;
-        --focus: #5a8fcc;
-        --shadow: none;
-      }
-    }
-
-    * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: var(--canvas);
-      color: var(--ink);
-      font: 400 1rem/1.5 var(--font-ui);
-    }
-    [lang="ar"] body, body[lang="ar"], html[lang="ar"] body { font-family: var(--font-arabic); }
-    .shell {
-      width: 100%;
-      max-width: 30rem;
-      margin: 0 auto;
-      padding: 16px 16px 40px;
-    }
-
-    /* Header: the mark on one side, the language switch on the other. */
-    .bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      padding: 4px 0 18px;
-    }
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-family: var(--font-display);
-      font-size: 1.15rem;
-      font-weight: 700;
-      letter-spacing: -.02em;
-    }
-    html[lang="ar"] .brand { font-family: var(--font-display); }
-    .seal {
-      display: grid;
-      place-items: center;
-      width: 2rem;
-      height: 2rem;
-      border-radius: 50%;
-      background: var(--attention-vivid);
-      box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--seal);
-      color: #0e1f2c;
-      font-family: var(--font-display);
-      font-size: .95rem;
-      font-weight: 700;
-      flex: none;
-    }
-    .langs { display: flex; gap: 2px; flex-wrap: wrap; }
-    .langs a {
-      display: inline-flex;
-      align-items: center;
-      min-height: 44px;
-      padding: 0 10px;
-      border-radius: 999px;
-      color: var(--text-secondary);
-      font-size: .875rem;
-      text-decoration: none;
-    }
-    .langs a[aria-current="true"] {
-      color: var(--ink);
-      font-weight: 650;
-      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
-    }
-
-    /* The one card. */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--hairline);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 26px 22px 22px;
-    }
-    .eyebrow {
-      margin: 0 0 6px;
-      color: var(--attention-print);
-      font-size: .72rem;
-      font-weight: 650;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-    }
-    html[lang="ar"] .eyebrow { letter-spacing: 0; font-size: .8rem; }
-    .amount {
-      margin: 0;
-      font-family: var(--font-display);
-      font-size: clamp(2.4rem, 11vw, 3.1rem);
-      font-weight: 600;
-      line-height: 1.05;
-      letter-spacing: -.02em;
-      font-variant-numeric: tabular-nums;
-      overflow-wrap: anywhere;
-    }
-    .purpose {
-      margin: 8px 0 0;
-      font-size: 1.02rem;
-      font-weight: 600;
-    }
-    .lead {
-      margin: 12px 0 0;
-      color: var(--text-secondary);
-      font-size: .95rem;
-    }
-
-    /* A ticket perforation between "what" and "how". */
-    .perf {
-      position: relative;
-      height: 0;
-      margin: 22px -22px;
-      border-top: 1.5px dashed var(--hairline-strong);
-    }
-    .perf::before, .perf::after {
-      content: "";
-      position: absolute;
-      top: -10px;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: var(--canvas);
-      border: 1px solid var(--hairline);
-    }
-    .perf::before { left: -11px; }
-    .perf::after { right: -11px; }
-
-    form { margin: 0; }
-    .label, legend, label.field-label {
-      display: block;
-      margin: 0 0 8px;
-      padding: 0;
-      color: var(--text-secondary);
-      font-size: .85rem;
-      font-weight: 600;
-    }
-    fieldset { border: 0; margin: 0 0 18px; padding: 0; min-width: 0; }
-    .rail {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-height: 56px;
-      padding: 10px 14px;
-      border: 1.4px solid var(--hairline-strong);
-      border-radius: 14px;
-      background: var(--surface-raised);
-    }
-    .rail + .rail { margin-top: 8px; }
-    label.rail { cursor: pointer; }
-    label.rail:has(input:checked) { border-color: var(--ink); }
-    .rail input { width: 20px; height: 20px; margin: 0; accent-color: var(--ink); flex: none; }
-    .rail strong { display: block; font-weight: 650; }
-    .rail .note { display: block; color: var(--text-tertiary); font-size: .82rem; }
-    .single { margin-bottom: 18px; }
-    .single-icon {
-      display: grid;
-      place-items: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: var(--surface-sunken);
-      color: var(--text-secondary);
-      flex: none;
-    }
-
-    .field { margin: 0 0 18px; }
-    input[type="email"] {
-      display: block;
-      width: 100%;
-      min-height: 52px;
-      padding: 12px 14px;
-      border: 1.4px solid var(--hairline-strong);
-      border-radius: 12px;
-      background: var(--surface-raised);
-      color: var(--ink);
-      font: inherit;
-      direction: ltr;
-      text-align: start;
-    }
-    html[dir="rtl"] input[type="email"] { text-align: right; }
-    .field.invalid input { border-color: var(--danger); }
-    .hint { margin: 8px 0 0; color: var(--text-tertiary); font-size: .82rem; }
-    .error {
-      margin: 8px 0 0;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: var(--danger-soft);
-      color: var(--danger);
-      font-size: .85rem;
-      font-weight: 600;
-    }
-
-    .pay {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      min-height: 54px;
-      padding: 12px 24px;
-      border: 0;
-      border-radius: 999px;
-      background: var(--ink);
-      color: var(--on-ink);
-      font: 650 1rem/1.2 var(--font-ui);
-      letter-spacing: .01em;
-      cursor: pointer;
-    }
-    html[lang="ar"] .pay { font-family: var(--font-arabic); letter-spacing: 0; }
-    .pay .arrow { display: inline-block; }
-    html[dir="rtl"] .pay .arrow { transform: scaleX(-1); }
-    .pay:hover { filter: brightness(1.12); }
-    a:focus-visible, button:focus-visible, input:focus-visible {
-      outline: 2.5px solid var(--focus);
-      outline-offset: 2px;
-    }
-    .handoff {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      margin: 12px 0 0;
-      color: var(--text-tertiary);
-      font-size: .82rem;
-    }
-    .handoff svg, .facts svg { flex: none; margin-top: 2px; }
-
-    .facts {
-      list-style: none;
-      margin: 20px 0 0;
-      padding: 14px 16px;
-      border-radius: 12px;
-      background: var(--surface-sunken);
-      color: var(--text-secondary);
-      font-size: .85rem;
-    }
-    .facts li { display: flex; gap: 10px; align-items: flex-start; }
-    .facts li + li { margin-top: 10px; }
-
-    /* Non-payable states. */
-    .state-mark {
-      display: grid;
-      place-items: center;
-      width: 52px;
-      height: 52px;
-      margin-bottom: 16px;
-      border-radius: 50%;
-      background: var(--attention-soft);
-      color: var(--attention-print);
-    }
-    .title {
-      margin: 0 0 8px;
-      font-family: var(--font-display);
-      font-size: 1.5rem;
-      font-weight: 600;
-      line-height: 1.2;
-      letter-spacing: -.01em;
-    }
-    html[lang="ar"] .title, html[lang="ar"] .amount { font-family: var(--font-arabic); letter-spacing: 0; }
-    .secondary {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 48px;
-      margin-top: 18px;
-      padding: 0 22px;
-      border-radius: 999px;
-      box-shadow: inset 0 0 0 1.4px var(--hairline-strong);
-      color: var(--ink);
-      font-weight: 650;
-      text-decoration: none;
-    }
-    bdi { unicode-bidi: isolate; }
-
-    @media (max-width: 360px) {
-      .shell { padding-inline: 12px; }
-      .card { padding: 22px 16px 18px; }
-      .perf { margin-inline: -16px; }
-    }
-  </style>
-</head>
-<body>
-<div class="shell">
-  <header class="bar">
-    <span class="brand"><span class="seal" aria-hidden="true">S</span><span lang="en" dir="ltr">ShipTrip</span></span>
-    <nav class="langs" aria-label="{{ t.languages }}">
-      {% for option in languages %}<a href="?lang={{ option.code }}" lang="{{ option.code }}" hreflang="{{ option.code }}"{% if option.current %} aria-current="true"{% endif %}>{{ option.name }}</a>{% endfor %}
-    </nav>
-  </header>
-
-  <main class="card">
+Its look -- tokens, faces, header and language switch -- is the shared
+`payments/_shell.html`, which the provider-return page uses too (J7D).
+{% endcomment %}
+{% block content %}
+  <main class="card{% if already_paid %} result{% endif %}">
   {% if payable %}
     <p class="eyebrow">{{ t.eyebrow }}</p>
     <h1 class="amount"><bdi dir="ltr">{{ amount_display }}</bdi></h1>
@@ -437,6 +92,14 @@ external request, no gradient.
     <h1 class="title">{{ t.unavailable_title }}</h1>
     <p class="lead">{{ t.unavailable_body }}</p>
     <a class="secondary" href="?lang={{ lang }}">{{ t.try_again }}</a>
+  {% elif already_paid %}
+    <div class="mark seal-mark" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </div>
+    <div role="status">
+      <h1 class="title">{{ t.paid_title }}</h1>
+      <p class="lead">{{ t.paid_body }}</p>
+    </div>
   {% else %}
     <div class="state-mark" aria-hidden="true">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a4.2 4.2 0 0 1 6 6L17 12.5"/><path d="M13 17.5l-1.2 1.2a4.2 4.2 0 0 1-6-6L7 11.5"/><path d="M4 4l16 16"/></svg>
@@ -445,6 +108,4 @@ external request, no gradient.
     <p class="lead">{{ t.invalid_body }}</p>
   {% endif %}
   </main>
-</div>
-</body>
-</html>
+{% endblock %}

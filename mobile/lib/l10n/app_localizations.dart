@@ -1539,18 +1539,6 @@ abstract class L {
   /// **'We\'re waiting for your payment provider to confirm. This usually takes a few seconds.'**
   String get depositPendingBody;
 
-  /// No description provided for @depositPaidTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Published'**
-  String get depositPaidTitle;
-
-  /// No description provided for @depositPaidBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Travelers heading your way can see this now.'**
-  String get depositPaidBody;
-
   /// No description provided for @journeyTitle.
   ///
   /// In en, this message translates to:
@@ -3129,30 +3117,6 @@ abstract class L {
   /// **'Opening secure checkout…'**
   String get paymentOpeningProvider;
 
-  /// No description provided for @paymentConfirmingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirming your payment'**
-  String get paymentConfirmingTitle;
-
-  /// No description provided for @paymentConfirmingBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your bank has told us, and we\'re confirming it with ShipTrip. Don\'t pay again — this usually takes a few seconds.'**
-  String get paymentConfirmingBody;
-
-  /// No description provided for @paymentSucceededTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Paid'**
-  String get paymentSucceededTitle;
-
-  /// No description provided for @paymentSucceededBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your money is held until the parcel is delivered.'**
-  String get paymentSucceededBody;
-
   /// No description provided for @paymentFailedTitle.
   ///
   /// In en, this message translates to:
@@ -3278,12 +3242,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Amount due'**
   String get guestPayAmountDue;
-
-  /// No description provided for @guestPayThanksBody.
-  ///
-  /// In en, this message translates to:
-  /// **'The payment is confirmed. Nothing else is needed from you.'**
-  String get guestPayThanksBody;
 
   /// No description provided for @guestPayInvalidTitle.
   ///
@@ -5546,18 +5504,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'We couldn\'t open the checkout page. Check that you have a browser installed.'**
   String get paymentCouldNotOpen;
-
-  /// No description provided for @paymentStillConfirmingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Still confirming'**
-  String get paymentStillConfirmingTitle;
-
-  /// No description provided for @paymentStillConfirmingBody.
-  ///
-  /// In en, this message translates to:
-  /// **'This is taking longer than usual. Nothing is lost, and you have not been charged twice.'**
-  String get paymentStillConfirmingBody;
 
   /// No description provided for @paymentCheckAgain.
   ///
@@ -8370,13 +8316,13 @@ abstract class L {
   /// No description provided for @guestPaidBody.
   ///
   /// In en, this message translates to:
-  /// **'{amount} was paid successfully.'**
+  /// **'{amount} has been paid.'**
   String guestPaidBody(String amount);
 
   /// No description provided for @guestPaidBodyPlain.
   ///
   /// In en, this message translates to:
-  /// **'The payment went through successfully.'**
+  /// **'The payment has been received.'**
   String get guestPaidBodyPlain;
 
   /// No description provided for @guestErrorLoad.
@@ -8475,71 +8421,11 @@ abstract class L {
   /// **'You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.'**
   String get guestPayHandoff;
 
-  /// No description provided for @paymentSuccessTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment secured'**
-  String get paymentSuccessTitle;
-
-  /// No description provided for @paymentSuccessWaxSeal.
-  ///
-  /// In en, this message translates to:
-  /// **'Secured'**
-  String get paymentSuccessWaxSeal;
-
-  /// No description provided for @paymentSuccessReceiptTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment receipt'**
-  String get paymentSuccessReceiptTitle;
-
   /// No description provided for @paymentSuccessAmountPaid.
   ///
   /// In en, this message translates to:
   /// **'Amount paid'**
   String get paymentSuccessAmountPaid;
-
-  /// No description provided for @paymentSuccessDepositCredit.
-  ///
-  /// In en, this message translates to:
-  /// **'Deposit credited'**
-  String get paymentSuccessDepositCredit;
-
-  /// No description provided for @paymentSuccessPaidBySelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Paid by you'**
-  String get paymentSuccessPaidBySelf;
-
-  /// No description provided for @paymentSuccessPaidByGuest.
-  ///
-  /// In en, this message translates to:
-  /// **'Paid by guest payer'**
-  String get paymentSuccessPaidByGuest;
-
-  /// No description provided for @paymentSuccessRemainingDue.
-  ///
-  /// In en, this message translates to:
-  /// **'Remaining balance due at delivery'**
-  String get paymentSuccessRemainingDue;
-
-  /// No description provided for @paymentSuccessNextStepsTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'What happens next?'**
-  String get paymentSuccessNextStepsTitle;
-
-  /// No description provided for @paymentSuccessDepositNextBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your request is active. Travelers going your way can now match with it.'**
-  String get paymentSuccessDepositNextBody;
-
-  /// No description provided for @paymentSuccessDealNextBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your delivery is funded. The traveler will meet you at the agreed pickup point.'**
-  String get paymentSuccessDealNextBody;
 
   /// No description provided for @paymentSuccessViewRequestAction.
   ///
@@ -8697,24 +8583,6 @@ abstract class L {
   /// **'We couldn\'t create a payment link. Try again.'**
   String get guestPaymentLinkFailed;
 
-  /// paymentSuccessPayerYou
-  ///
-  /// In en, this message translates to:
-  /// **'You'**
-  String get paymentSuccessPayerYou;
-
-  /// paymentSuccessPayerGuest
-  ///
-  /// In en, this message translates to:
-  /// **'Someone else'**
-  String get paymentSuccessPayerGuest;
-
-  /// paymentSuccessPaidByLabel
-  ///
-  /// In en, this message translates to:
-  /// **'Paid by'**
-  String get paymentSuccessPaidByLabel;
-
   /// findTravelersCount
   ///
   /// In en, this message translates to:
@@ -8828,6 +8696,156 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Offer updated. These are the latest amounts.'**
   String get offerEconomicsUpdated;
+
+  /// No description provided for @payResultAlreadyCompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This payment is already complete'**
+  String get payResultAlreadyCompleteTitle;
+
+  /// No description provided for @payResultCheckingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking your payment'**
+  String get payResultCheckingTitle;
+
+  /// No description provided for @payResultCheckingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'If you finished paying, it will show here in a moment. You don\'t need to pay again.'**
+  String get payResultCheckingBody;
+
+  /// No description provided for @payResultStillCheckingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'re still confirming your payment'**
+  String get payResultStillCheckingTitle;
+
+  /// No description provided for @payResultStillCheckingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This is taking longer than usual. If the payment went through, it will appear here, and you won\'t be charged twice.'**
+  String get payResultStillCheckingBody;
+
+  /// No description provided for @payResultBackToPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to payment'**
+  String get payResultBackToPayment;
+
+  /// No description provided for @payResultCancelledTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment cancelled'**
+  String get payResultCancelledTitle;
+
+  /// No description provided for @payResultCancelledBody.
+  ///
+  /// In en, this message translates to:
+  /// **'No completed payment was recorded. You can try again when you\'re ready.'**
+  String get payResultCancelledBody;
+
+  /// Payment result shown to the Sender when a guest payer paid. amount is the server's figure for that one payment. Never names the payer.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone else paid {amount} for this payment.'**
+  String payResultSomeoneElsePaid(String amount);
+
+  /// No description provided for @payResultRequestPublished.
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is now published'**
+  String get payResultRequestPublished;
+
+  /// No description provided for @payResultDepositNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Find a traveler going your way and send them an offer.'**
+  String get payResultDepositNext;
+
+  /// No description provided for @payResultPaidInFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid in full'**
+  String get payResultPaidInFull;
+
+  /// Deposit result when the deposit paid the whole current delivery total. Must not promise that nothing can ever be due again.
+  ///
+  /// In en, this message translates to:
+  /// **'This covers your delivery total as it stands. If you later add a Boost or raise the reward, only the difference would be due.'**
+  String get payResultDepositCoversTotal;
+
+  /// No description provided for @payResultPaidNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid now'**
+  String get payResultPaidNow;
+
+  /// No description provided for @payResultDeliveryTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery total'**
+  String get payResultDeliveryTotal;
+
+  /// No description provided for @payResultRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining'**
+  String get payResultRemaining;
+
+  /// Deal payment result when money is still owed after this payment. amount is the server's remaining balance.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay the remaining {amount} to confirm the delivery. The traveler can\'t collect the parcel until it\'s paid.'**
+  String payResultRemainingNote(String amount);
+
+  /// No description provided for @payResultDealNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Funds are held pending delivery. Follow the delivery steps to continue.'**
+  String get payResultDealNext;
+
+  /// No description provided for @payResultNextTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What happens next'**
+  String get payResultNextTitle;
+
+  /// No description provided for @payResultBackHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get payResultBackHome;
+
+  /// Button on a partial Deal payment result; amount is the server's remaining balance.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay remaining {amount}'**
+  String payResultPayRemaining(String amount);
+
+  /// Screen-reader label for the hero amount on a payment result: e.g. 'Amount paid: €42.50. Delivery payment'.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {amount}. {purpose}'**
+  String a11yPaymentResultAmount(String label, String amount, String purpose);
+
+  /// No description provided for @guestPayHandoffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish on the payment page'**
+  String get guestPayHandoffTitle;
+
+  /// No description provided for @guestPayHandoffBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in ShipTrip.'**
+  String get guestPayHandoffBody;
+
+  /// No description provided for @payResultDepositCredited.
+  ///
+  /// In en, this message translates to:
+  /// **'This deposit counts toward your delivery total when a traveler accepts.'**
+  String get payResultDepositCredited;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

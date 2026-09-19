@@ -11,8 +11,11 @@
 /// or the sender cancels first. Both of those sentences are on screen, because
 /// "pay to post" reads like a listing charge otherwise.
 ///
-/// J2 adds sender-selected deposit amount (Min, Recommended, Full, Custom),
-/// live balance calculation, and wax-seal PaymentSuccessView on settlement.
+/// J2 adds sender-selected deposit amount (Min, Recommended, Full, Custom)
+/// and live balance calculation. J7D's settled state is the shared payment
+/// result: *Payment received*, the amount, *Your request is now published*
+/// when the request really is open, and **View request** — never "View
+/// delivery", because a deposit has no Deal behind it.
 library;
 
 import 'dart:math';
@@ -31,13 +34,16 @@ import '../../design/components/forms.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
+import '../../domain/delivery_request.dart';
 import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
-import '../common/payment_success_view.dart';
+import '../common/payment_result.dart';
 import 'checkout_section.dart';
+import 'request_labels.dart';
 
 class DepositScreen extends ConsumerStatefulWidget {
   const DepositScreen({required this.requestId, super.key});
@@ -54,6 +60,21 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   int? _chosenDepositCents;
   final _customAmountController = TextEditingController();
   bool _isCustom = false;
+
+  /// Whether this screen has shown the deposit still owed. A deposit that
+  /// settles while the Sender watches is "Payment received"; one that was
+  /// already settled when they arrived is "already complete".
+  bool _sawOutstanding = false;
+
+  /// The checkout is showing a result (checking, failed, cancelled), so the
+  /// "what you owe" summary above it steps aside.
+  bool _checkoutShowsResult = false;
+
+  void _onCheckoutPhase(CheckoutPhase phase) {
+    final showing = phase.showsResult;
+    if (!mounted || showing == _checkoutShowsResult) return;
+    setState(() => _checkoutShowsResult = showing);
+  }
 
   @override
   void dispose() {
@@ -100,7 +121,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     final l = L.of(context);
     final deposit = ref.watch(postingDepositProvider(widget.requestId));
     final order = deposit.asData?.value.order ?? _created;
-    final request = (order?.status.isSettled ?? false)
+    final settled = order?.status.isSettled ?? false;
+    if (!settled && deposit.hasValue) _sawOutstanding = true;
+    final request = settled
         ? ref.watch(requestDetailProvider(widget.requestId)).asData?.value
         : null;
 
@@ -122,13 +145,13 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     BuildContext context,
     L l,
     PostingDepositState state,
-    dynamic request,
+    DeliveryRequest? request,
   ) {
     final order = state.order ?? _created;
 
     if (order != null) {
       return order.status.isSettled
-          ? _paid(context, l, order, request)
+          ? _paid(context, l, order, state.quote, request)
           : _outstanding(context, l, order, state.quote);
     }
 
@@ -383,56 +406,103 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   ) => ListView(
     padding: AppScrollPadding.page(context),
     children: [
-      if (quote?.maximum case final obligation?) ...[
-        MoneyHero(
-          amount: obligation,
-          label: l.depositWholeAmount,
-          tone: StatusTone.neutral,
+      // The summary steps aside while a result shows, but keeps its slot so
+      // the checkout below is never rebuilt mid-payment.
+      if (_checkoutShowsResult)
+        const SizedBox.shrink()
+      else
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _owedSummary(l, order, quote),
         ),
-        const SizedBox(height: AppSpace.lg),
-      ] else if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
-        MoneyHero(
-          amount: suggestedTotal,
-          label: l.depositSuggestedTotal,
-          tone: StatusTone.neutral,
-        ),
-        const SizedBox(height: AppSpace.lg),
-      ],
-      if (order.outstanding != null) ...[
-        MoneyHero(
-          amount: order.outstanding!,
-          label: l.depositAmount,
-          tone: StatusTone.action,
-        ),
-        const SizedBox(height: AppSpace.lg),
-      ],
-      InfoNotice(
-        message: l.depositCreditedNote,
-        tone: StatusTone.good,
-        icon: Icons.savings_outlined,
-      ),
-      const SizedBox(height: AppSpace.xl),
       CheckoutSection(
+        key: ValueKey(order.publicReference),
         orderReference: order.publicReference,
         order: order,
         onSettled: _onSettled,
+        onPhaseChanged: _onCheckoutPhase,
+        exitAction: PaymentResultAction(
+          label: l.paymentSuccessViewRequestAction,
+          onPressed: () => context.leavePaymentForRequest(widget.requestId),
+        ),
       ),
     ],
   );
 
-  Widget _paid(BuildContext context, L l, PaymentOrder order, dynamic request) {
-    final originName = request?.pickupPlace?.name as String?;
-    final destName = request?.deliveryPlace?.name as String?;
-
-    return PaymentSuccessView(
-      order: order,
-      originPlaceName: originName,
-      destinationPlaceName: destName,
-      onPrimaryAction: () => context.pushReplacementNamed(
-        Routes.requestDiscovery,
-        pathParameters: {'id': '${widget.requestId}'},
+  List<Widget> _owedSummary(L l, PaymentOrder order, DepositQuote? quote) => [
+    if (quote?.maximum case final obligation?) ...[
+      MoneyHero(
+        amount: obligation,
+        label: l.depositWholeAmount,
+        tone: StatusTone.neutral,
       ),
-      primaryActionLabel: l.requestFindTravelers,
+      const SizedBox(height: AppSpace.lg),
+    ] else if (quote?.estimatedSenderTotal case final suggestedTotal?) ...[
+      MoneyHero(
+        amount: suggestedTotal,
+        label: l.depositSuggestedTotal,
+        tone: StatusTone.neutral,
+      ),
+      const SizedBox(height: AppSpace.lg),
+    ],
+    if (order.outstanding != null) ...[
+      MoneyHero(
+        amount: order.outstanding!,
+        label: l.depositAmount,
+        tone: StatusTone.action,
+      ),
+      const SizedBox(height: AppSpace.lg),
+    ],
+    InfoNotice(
+      message: l.depositCreditedNote,
+      tone: StatusTone.good,
+      icon: Icons.savings_outlined,
+    ),
+    const SizedBox(height: AppSpace.xl),
+  ];
+
+  Widget _paid(
+    BuildContext context,
+    L l,
+    PaymentOrder order,
+    DepositQuote? quote,
+    DeliveryRequest? request,
+  ) {
+    final locale = Localizations.localeOf(context);
+    // The route is the request's own two canonical places (J7B), and only when
+    // both are recorded. Nothing is assembled from other data.
+    final route = request != null && requestHasRoute(request)
+        ? [
+            InlineRouteStop(label: requestPickupLabel(l, request)),
+            InlineRouteStop(label: requestDeliveryLabel(l, request)),
+          ]
+        : null;
+    return ListView(
+      padding: AppScrollPadding.page(context),
+      children: [
+        PaymentResultView(
+          content: settledPaymentResult(
+            l: l,
+            locale: locale,
+            order: order,
+            justPaid: _sawOutstanding,
+            // Published is the request's own status, not an inference from the
+            // payment: a request cancelled meanwhile is not "now published".
+            requestPublished: request?.status == RequestStatus.open,
+            currentObligation: quote?.maximum,
+          ),
+          routeStops: route,
+          primary: PaymentResultAction(
+            label: l.paymentSuccessViewRequestAction,
+            icon: Icons.arrow_forward_rounded,
+            onPressed: () => context.leavePaymentForRequest(widget.requestId),
+          ),
+          secondary: PaymentResultAction(
+            label: l.payResultBackHome,
+            onPressed: () => context.goHome(),
+          ),
+        ),
+      ],
     );
   }
 }

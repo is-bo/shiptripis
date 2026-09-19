@@ -414,7 +414,8 @@ void main() {
       eventId: 'payment-captured-7',
       data: {'deal_id': 7},
     );
-    expect(find.text(l.paymentSucceededTitle), findsOneWidget);
+    // J7D: the balance settled while the Sender watched.
+    expect(find.text(l.guestPaidTitle), findsOneWidget);
   });
 
   testWidgets('payment screen refreshes to failed after a failed event', (

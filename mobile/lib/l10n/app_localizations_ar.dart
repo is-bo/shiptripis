@@ -776,13 +776,6 @@ class LAr extends L {
       'ننتظر تأكيد مزود الدفع الخاص بك. عادةً ما يستغرق هذا بضع ثوانٍ.';
 
   @override
-  String get depositPaidTitle => 'تم النشر';
-
-  @override
-  String get depositPaidBody =>
-      'يمكن للمسافرين المتجهين إلى وجهتك رؤية هذا الآن.';
-
-  @override
   String get journeyTitle => 'الرحلة';
 
   @override
@@ -1744,19 +1737,6 @@ class LAr extends L {
   String get paymentOpeningProvider => 'جارٍ فتح صفحة الدفع الآمنة…';
 
   @override
-  String get paymentConfirmingTitle => 'جارٍ تأكيد دفعتك';
-
-  @override
-  String get paymentConfirmingBody =>
-      'أخبرنا بنكك بذلك، ونحن نؤكده مع ShipTrip. لا تدفع مرة أخرى، فهذا يستغرق عادةً بضع ثوانٍ.';
-
-  @override
-  String get paymentSucceededTitle => 'تم الدفع';
-
-  @override
-  String get paymentSucceededBody => 'يُحتفظ بأموالك إلى حين توصيل الطرد.';
-
-  @override
   String get paymentFailedTitle => 'لم تكتمل عملية الدفع';
 
   @override
@@ -1826,9 +1806,6 @@ class LAr extends L {
 
   @override
   String get guestPayAmountDue => 'المبلغ المستحق';
-
-  @override
-  String get guestPayThanksBody => 'تم تأكيد الدفع. لا حاجة لأي شيء آخر منك.';
 
   @override
   String get guestPayInvalidTitle => 'هذا الرابط غير صالح';
@@ -3190,13 +3167,6 @@ class LAr extends L {
   @override
   String get paymentCouldNotOpen =>
       'تعذّر علينا فتح صفحة الدفع. تأكد من وجود متصفح مثبّت لديك.';
-
-  @override
-  String get paymentStillConfirmingTitle => 'لا يزال التأكيد جاريًا';
-
-  @override
-  String get paymentStillConfirmingBody =>
-      'يستغرق هذا وقتًا أطول من المعتاد. لم يضع شيء، ولم يُخصم منك المبلغ مرتين.';
 
   @override
   String get paymentCheckAgain => 'تحقق مرة أخرى';
@@ -4815,11 +4785,11 @@ class LAr extends L {
 
   @override
   String guestPaidBody(String amount) {
-    return 'تم دفع $amount بنجاح.';
+    return 'تمّ دفع $amount.';
   }
 
   @override
-  String get guestPaidBodyPlain => 'تمت عملية الدفع بنجاح.';
+  String get guestPaidBodyPlain => 'تمّ استلام الدفع.';
 
   @override
   String get guestErrorLoad =>
@@ -4876,39 +4846,7 @@ class LAr extends L {
       'ستُكمل الدفع على الصفحة الآمنة لشريك الدفع لدينا. لا تطّلع ShipTrip على بيانات بطاقتك أبدًا.';
 
   @override
-  String get paymentSuccessTitle => 'تم تأمين الدفع';
-
-  @override
-  String get paymentSuccessWaxSeal => 'مؤمّن';
-
-  @override
-  String get paymentSuccessReceiptTitle => 'إيصال الدفع';
-
-  @override
   String get paymentSuccessAmountPaid => 'المبلغ المدفوع';
-
-  @override
-  String get paymentSuccessDepositCredit => 'العربون المحسوم';
-
-  @override
-  String get paymentSuccessPaidBySelf => 'دفع بواسطتك';
-
-  @override
-  String get paymentSuccessPaidByGuest => 'دفع بواسطة ضيف';
-
-  @override
-  String get paymentSuccessRemainingDue => 'الرصيد المتبقي المستحق عند التسليم';
-
-  @override
-  String get paymentSuccessNextStepsTitle => 'ماذا يحدث الآن؟';
-
-  @override
-  String get paymentSuccessDepositNextBody =>
-      'طلبك نشط الآن. يمكن للمسافرين على مسارك تقديم عروضهم.';
-
-  @override
-  String get paymentSuccessDealNextBody =>
-      'تم تمويل شحنتك. سيلتقي بك المسافر في نقطة الاستلام المتفق عليها.';
 
   @override
   String get paymentSuccessViewRequestAction => 'عرض الطلب';
@@ -4993,15 +4931,6 @@ class LAr extends L {
 
   @override
   String get guestPaymentLinkFailed => 'تعذّر إنشاء رابط الدفع. حاول مرة أخرى.';
-
-  @override
-  String get paymentSuccessPayerYou => 'أنت';
-
-  @override
-  String get paymentSuccessPayerGuest => 'شخص آخر';
-
-  @override
-  String get paymentSuccessPaidByLabel => 'دُفع بواسطة';
 
   @override
   String findTravelersCount(int count) {
@@ -5096,4 +5025,94 @@ class LAr extends L {
 
   @override
   String get offerEconomicsUpdated => 'تم تحديث العرض. هذه أحدث المبالغ.';
+
+  @override
+  String get payResultAlreadyCompleteTitle => 'هذا الدفع مكتمل بالفعل';
+
+  @override
+  String get payResultCheckingTitle => 'نتحقّق من دفعك';
+
+  @override
+  String get payResultCheckingBody =>
+      'إن أكملت الدفع فسيظهر هنا خلال لحظات. لا داعي للدفع مرة أخرى.';
+
+  @override
+  String get payResultStillCheckingTitle => 'ما زلنا نتحقّق من دفعك';
+
+  @override
+  String get payResultStillCheckingBody =>
+      'يستغرق الأمر وقتًا أطول من المعتاد. إن تمّ الدفع فسيظهر هنا، ولن يُقتطع المبلغ مرتين.';
+
+  @override
+  String get payResultBackToPayment => 'العودة إلى الدفع';
+
+  @override
+  String get payResultCancelledTitle => 'أُلغي الدفع';
+
+  @override
+  String get payResultCancelledBody =>
+      'لم يُسجَّل أي دفع مكتمل. يمكنك إعادة المحاولة متى شئت.';
+
+  @override
+  String payResultSomeoneElsePaid(String amount) {
+    return 'دفع شخص آخر $amount عن هذا الدفع.';
+  }
+
+  @override
+  String get payResultRequestPublished => 'طلبك منشور الآن';
+
+  @override
+  String get payResultDepositNext => 'ابحث عن مسافر في طريقك وأرسل إليه عرضًا.';
+
+  @override
+  String get payResultPaidInFull => 'مدفوع بالكامل';
+
+  @override
+  String get payResultDepositCoversTotal =>
+      'يغطي هذا إجمالي التوصيل الحالي. إن أضفت لاحقًا تعزيزًا أو رفعت المكافأة، فلن يُطلب منك سوى الفرق.';
+
+  @override
+  String get payResultPaidNow => 'المدفوع الآن';
+
+  @override
+  String get payResultDeliveryTotal => 'إجمالي التوصيل';
+
+  @override
+  String get payResultRemaining => 'المتبقّي';
+
+  @override
+  String payResultRemainingNote(String amount) {
+    return 'ادفع المبلغ المتبقّي $amount لتأكيد التوصيل. لا يمكن للمسافر استلام الطرد قبل ذلك.';
+  }
+
+  @override
+  String get payResultDealNext =>
+      'تُحتجز الأموال إلى حين التسليم. اتّبع خطوات التوصيل للمتابعة.';
+
+  @override
+  String get payResultNextTitle => 'الخطوة التالية';
+
+  @override
+  String get payResultBackHome => 'العودة إلى الرئيسية';
+
+  @override
+  String payResultPayRemaining(String amount) {
+    return 'ادفع المتبقّي $amount';
+  }
+
+  @override
+  String a11yPaymentResultAmount(String label, String amount, String purpose) {
+    return '$label: $amount. $purpose';
+  }
+
+  @override
+  String get guestPayHandoffTitle => 'أكمل الدفع على صفحة الدفع';
+
+  @override
+  String get guestPayHandoffBody =>
+      'أكمل الدفع على الصفحة الآمنة لشريك الدفع لدينا. ستُظهر لك تلك الصفحة النتيجة، وسيراها الشخص الذي طلب منك الدفع في ShipTrip.';
+
+  @override
+  String get payResultDepositCredited =>
+      'يُحتسب هذا العربون من إجمالي التوصيل عند قبول مسافر.';
 }

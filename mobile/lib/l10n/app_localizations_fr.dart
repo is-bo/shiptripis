@@ -787,13 +787,6 @@ class LFr extends L {
       'Nous attendons la confirmation de votre prestataire de paiement. Cela prend généralement quelques secondes.';
 
   @override
-  String get depositPaidTitle => 'Publié';
-
-  @override
-  String get depositPaidBody =>
-      'Les voyageurs qui vont dans votre direction peuvent maintenant le voir.';
-
-  @override
   String get journeyTitle => 'Trajet';
 
   @override
@@ -1756,20 +1749,6 @@ class LFr extends L {
   String get paymentOpeningProvider => 'Ouverture du paiement sécurisé…';
 
   @override
-  String get paymentConfirmingTitle => 'Confirmation de votre paiement';
-
-  @override
-  String get paymentConfirmingBody =>
-      'Votre banque nous a informés, et nous confirmons cela avec ShipTrip. Ne payez pas à nouveau — cela prend généralement quelques secondes.';
-
-  @override
-  String get paymentSucceededTitle => 'Payé';
-
-  @override
-  String get paymentSucceededBody =>
-      'Votre argent est conservé jusqu’à la livraison du colis.';
-
-  @override
   String get paymentFailedTitle => 'Le paiement n’a pas abouti';
 
   @override
@@ -1839,10 +1818,6 @@ class LFr extends L {
 
   @override
   String get guestPayAmountDue => 'Montant dû';
-
-  @override
-  String get guestPayThanksBody =>
-      'Le paiement est confirmé. Aucune autre action n’est nécessaire de votre part.';
 
   @override
   String get guestPayInvalidTitle => 'Ce lien n’est pas valide';
@@ -3198,13 +3173,6 @@ class LFr extends L {
   @override
   String get paymentCouldNotOpen =>
       'Nous n’avons pas pu ouvrir la page de paiement. Vérifiez qu’un navigateur est installé.';
-
-  @override
-  String get paymentStillConfirmingTitle => 'Confirmation en cours';
-
-  @override
-  String get paymentStillConfirmingBody =>
-      'Cela prend plus de temps que d’habitude. Rien n’est perdu, et vous n’avez pas été débité deux fois.';
 
   @override
   String get paymentCheckAgain => 'Vérifier à nouveau';
@@ -4847,11 +4815,11 @@ class LFr extends L {
 
   @override
   String guestPaidBody(String amount) {
-    return '$amount a bien été payé.';
+    return 'Le paiement de $amount a bien été reçu.';
   }
 
   @override
-  String get guestPaidBodyPlain => 'Le paiement a bien été effectué.';
+  String get guestPaidBodyPlain => 'Le paiement a bien été reçu.';
 
   @override
   String get guestErrorLoad =>
@@ -4908,39 +4876,7 @@ class LFr extends L {
       'Vous finaliserez sur la page sécurisée de notre partenaire de paiement. ShipTrip ne voit jamais vos données de carte.';
 
   @override
-  String get paymentSuccessTitle => 'Paiement sécurisé';
-
-  @override
-  String get paymentSuccessWaxSeal => 'Sécurisé';
-
-  @override
-  String get paymentSuccessReceiptTitle => 'Reçu de paiement';
-
-  @override
   String get paymentSuccessAmountPaid => 'Montant payé';
-
-  @override
-  String get paymentSuccessDepositCredit => 'Acompte crédité';
-
-  @override
-  String get paymentSuccessPaidBySelf => 'Payé par vous';
-
-  @override
-  String get paymentSuccessPaidByGuest => 'Payé par un tiers';
-
-  @override
-  String get paymentSuccessRemainingDue => 'Solde restant dû à la livraison';
-
-  @override
-  String get paymentSuccessNextStepsTitle => 'Que se passe-t-il ensuite ?';
-
-  @override
-  String get paymentSuccessDepositNextBody =>
-      'Votre demande est active. Les voyageurs sur votre trajet peuvent désormais matcher.';
-
-  @override
-  String get paymentSuccessDealNextBody =>
-      'Votre livraison est financée. Le voyageur vous retrouvera au point de rendez-vous convenu.';
 
   @override
   String get paymentSuccessViewRequestAction => 'Voir la demande';
@@ -5033,15 +4969,6 @@ class LFr extends L {
       'Impossible de créer le lien de paiement. Réessayez.';
 
   @override
-  String get paymentSuccessPayerYou => 'Vous';
-
-  @override
-  String get paymentSuccessPayerGuest => 'Quelqu’un d’autre';
-
-  @override
-  String get paymentSuccessPaidByLabel => 'Payé par';
-
-  @override
   String findTravelersCount(int count) {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
       locale: localeName,
@@ -5131,4 +5058,96 @@ class LFr extends L {
   @override
   String get offerEconomicsUpdated =>
       'Offre mise à jour. Ces montants sont les plus récents.';
+
+  @override
+  String get payResultAlreadyCompleteTitle => 'Ce paiement est déjà effectué';
+
+  @override
+  String get payResultCheckingTitle => 'Vérification de votre paiement';
+
+  @override
+  String get payResultCheckingBody =>
+      'Si vous avez terminé le paiement, il s’affichera ici dans un instant. Inutile de payer une seconde fois.';
+
+  @override
+  String get payResultStillCheckingTitle =>
+      'Nous vérifions toujours votre paiement';
+
+  @override
+  String get payResultStillCheckingBody =>
+      'C’est plus long que d’habitude. Si le paiement est passé, il apparaîtra ici, et vous ne serez pas débité deux fois.';
+
+  @override
+  String get payResultBackToPayment => 'Retour au paiement';
+
+  @override
+  String get payResultCancelledTitle => 'Paiement annulé';
+
+  @override
+  String get payResultCancelledBody =>
+      'Aucun paiement n’a été enregistré. Vous pouvez réessayer quand vous le souhaitez.';
+
+  @override
+  String payResultSomeoneElsePaid(String amount) {
+    return 'Quelqu’un d’autre a réglé $amount pour ce paiement.';
+  }
+
+  @override
+  String get payResultRequestPublished => 'Votre demande est publiée';
+
+  @override
+  String get payResultDepositNext =>
+      'Trouvez un voyageur qui va dans votre direction et envoyez-lui une offre.';
+
+  @override
+  String get payResultPaidInFull => 'Payé intégralement';
+
+  @override
+  String get payResultDepositCoversTotal =>
+      'Cela couvre le total actuel de votre livraison. Si vous ajoutez un Boost ou augmentez la récompense plus tard, seule la différence serait à payer.';
+
+  @override
+  String get payResultPaidNow => 'Payé maintenant';
+
+  @override
+  String get payResultDeliveryTotal => 'Total de la livraison';
+
+  @override
+  String get payResultRemaining => 'Reste à payer';
+
+  @override
+  String payResultRemainingNote(String amount) {
+    return 'Réglez les $amount restants pour confirmer la livraison. Le voyageur ne peut pas récupérer le colis avant.';
+  }
+
+  @override
+  String get payResultDealNext =>
+      'Les fonds sont conservés jusqu’à la livraison. Suivez les étapes de la livraison pour continuer.';
+
+  @override
+  String get payResultNextTitle => 'La suite';
+
+  @override
+  String get payResultBackHome => 'Retour à l’accueil';
+
+  @override
+  String payResultPayRemaining(String amount) {
+    return 'Payer les $amount restants';
+  }
+
+  @override
+  String a11yPaymentResultAmount(String label, String amount, String purpose) {
+    return '$label : $amount. $purpose';
+  }
+
+  @override
+  String get guestPayHandoffTitle => 'Terminez sur la page de paiement';
+
+  @override
+  String get guestPayHandoffBody =>
+      'Finalisez le paiement sur la page sécurisée de notre partenaire. Elle vous indiquera le résultat, et la personne qui vous l’a demandé le verra dans ShipTrip.';
+
+  @override
+  String get payResultDepositCredited =>
+      'Cet acompte sera déduit du total de votre livraison lorsqu’un voyageur acceptera.';
 }

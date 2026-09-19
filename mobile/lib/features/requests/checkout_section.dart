@@ -8,10 +8,17 @@
 /// The one rule that shapes the whole file: **coming back from a provider is
 /// not a payment.** The redirect carries no proof, the query string is not
 /// consulted, and nothing here marks anything paid. After the browser opens,
-/// this widget polls `GET /api/payments/orders/<ref>` until the server's own
-/// `status` settles or the newest attempt dies. Two minutes of that is enough
-/// for a webhook; past it the user is offered a manual check rather than a
-/// spinner that never ends.
+/// this widget shows *Checking your payment* and re-reads
+/// `GET /api/payments/orders/<ref>` until the server's own `status` settles or
+/// the newest attempt dies. The live `payment.*` event usually answers first
+/// (the surrounding screen re-reads on it); these re-reads are the backup, on a
+/// backing-off schedule of about two minutes, after which the user is offered
+/// a manual check rather than a spinner that never ends.
+///
+/// J7D: the in-flight, partial, failed and cancelled moments are drawn with the
+/// shared [PaymentResultView], and the phase is reported to the parent through
+/// [CheckoutSection.onPhaseChanged], so it can hand the whole page to the
+/// result instead of leaving a stale "Remaining to pay" hero above it.
 ///
 /// Two smaller decisions worth stating:
 ///
@@ -41,19 +48,43 @@ import '../../design/components/status.dart';
 import '../../design/tokens.dart';
 import '../../domain/payment.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/payment_result.dart';
 import '../guest/guest_payment_sheet.dart';
 
 /// Where the user is in the payment, from this widget's point of view.
 ///
-/// Note that only [_Phase.settled] is a claim about money, and it is only ever
+/// Only [settled] and [partial] are claims about money, and they are only ever
 /// reached by reading the order back from the server.
-enum _Phase { choosing, confirming, settled, failed }
+enum CheckoutPhase {
+  /// Picking a rail (or resuming one). The parent's summary belongs above it.
+  choosing,
+
+  /// Back from the provider, waiting for the server.
+  confirming,
+
+  /// The server reports the obligation paid.
+  settled,
+
+  /// The server applied a payment and something is still owed.
+  partial,
+
+  /// The provider reported the payment failed.
+  failed,
+
+  /// The checkout was abandoned or expired. Not a failure.
+  cancelled;
+
+  /// Whether the section is showing a result rather than a way to pay.
+  bool get showsResult => this != choosing;
+}
 
 class CheckoutSection extends ConsumerStatefulWidget {
   const CheckoutSection({
     required this.orderReference,
     required this.order,
     required this.onSettled,
+    this.onPhaseChanged,
+    this.exitAction,
     super.key,
   });
 
@@ -70,26 +101,44 @@ class CheckoutSection extends ConsumerStatefulWidget {
   /// what that means — publish the request, activate the boost, fund the deal.
   final VoidCallback onSettled;
 
+  /// Told whenever the phase changes, so the surrounding screen can drop its
+  /// "what you owe" summary while a result is showing.
+  final ValueChanged<CheckoutPhase>? onPhaseChanged;
+
+  /// Where a payer can go instead of retrying — *View request* for a deposit,
+  /// *View delivery* for a Deal. Offered on failed, cancelled and partial
+  /// results.
+  final PaymentResultAction? exitAction;
+
   @override
   ConsumerState<CheckoutSection> createState() => _CheckoutSectionState();
 }
 
 class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     with WidgetsBindingObserver {
-  /// Frequent enough to feel immediate, slow enough that two minutes of it is
-  /// forty requests rather than four hundred.
-  static const _pollInterval = Duration(seconds: 3);
-
-  /// After this the poll stops on its own. A webhook that has not landed in
-  /// two minutes is not going to land in the next three, and an endless
-  /// spinner is worse than an honest "check again".
-  static const _pollBudget = Duration(minutes: 2);
+  /// The backup re-reads after a hand-off, in order: quick at first, when the
+  /// answer is most likely, then backing off — nine reads over about two
+  /// minutes, where the J3 poll made forty. Counted rather than timed against
+  /// the wall clock, so the schedule ends however the device sleeps. A webhook
+  /// that has not landed by the end is not going to land in the next minute,
+  /// and an endless spinner is worse than an honest "check again".
+  static const pollSchedule = [
+    Duration(seconds: 3),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+    Duration(seconds: 20),
+    Duration(seconds: 20),
+  ];
 
   Timer? _poll;
-  DateTime? _confirmingSince;
+  int _pollStep = 0;
   bool _pollExhausted = false;
 
-  _Phase _phase = _Phase.choosing;
+  CheckoutPhase _phase = CheckoutPhase.choosing;
   PaymentOrder? _order;
   PaymentProviderId? _selected;
   PaymentProviderId? _busyProvider;
@@ -104,7 +153,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _order = widget.order;
-    if (_order?.status.isSettled ?? false) _phase = _Phase.settled;
+    if (_order?.status.isSettled ?? false) _phase = CheckoutPhase.settled;
     if (_order == null) {
       // A surface that hands over a reference before anyone has read the
       // order behind it — a boost purchase. Read it once, so its rails arrive
@@ -119,18 +168,29 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   void didUpdateWidget(CheckoutSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     // The parent re-read the order. Adopt it unless we are mid-poll, where our
-    // own copy is the fresher of the two.
-    if (widget.order != null && _phase != _Phase.confirming) {
+    // own copy is the fresher of the two. A parent that merely rebuilt (to
+    // hide its summary, say) hands over the same object it had before — and
+    // adopting that would forget an open checkout this section has since read
+    // back, inviting a second payment (J7D).
+    if (widget.order != null &&
+        !identical(widget.order, oldWidget.order) &&
+        _phase != CheckoutPhase.confirming) {
       _order = widget.order;
     }
     if (widget.orderReference != oldWidget.orderReference) {
       _stopPolling();
       setState(() {
         _order = widget.order;
-        _phase = _Phase.choosing;
         _notice = null;
       });
+      _setPhase(CheckoutPhase.choosing);
     }
+  }
+
+  void _setPhase(CheckoutPhase phase) {
+    if (!mounted || _phase == phase) return;
+    setState(() => _phase = phase);
+    widget.onPhaseChanged?.call(phase);
   }
 
   @override
@@ -145,7 +205,8 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     // Returning from the browser is the single most likely moment for the
     // answer to have arrived. Ask straight away rather than waiting out the
     // rest of the interval.
-    if (state == AppLifecycleState.resumed && _phase == _Phase.confirming) {
+    if (state == AppLifecycleState.resumed &&
+        _phase == CheckoutPhase.confirming) {
       unawaited(_readOrder());
     }
   }
@@ -157,19 +218,23 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   void _startConfirming() {
     _poll?.cancel();
     setState(() {
-      _phase = _Phase.confirming;
       _pollExhausted = false;
-      _confirmingSince = DateTime.now();
+      _pollStep = 0;
       _notice = null;
     });
-    _poll = Timer.periodic(_pollInterval, (_) {
-      final since = _confirmingSince;
-      if (since != null && DateTime.now().difference(since) >= _pollBudget) {
-        _stopPolling();
-        if (mounted) setState(() => _pollExhausted = true);
-        return;
-      }
-      unawaited(_readOrder());
+    _setPhase(CheckoutPhase.confirming);
+    _scheduleRead();
+  }
+
+  void _scheduleRead() {
+    if (_pollStep >= pollSchedule.length) {
+      _stopPolling();
+      if (mounted) setState(() => _pollExhausted = true);
+      return;
+    }
+    _poll = Timer(pollSchedule[_pollStep++], () async {
+      await _readOrder();
+      if (mounted && _phase == CheckoutPhase.confirming) _scheduleRead();
     });
   }
 
@@ -189,13 +254,26 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
 
       if (order.status.isSettled) {
         _stopPolling();
-        setState(() => _phase = _Phase.settled);
+        _setPhase(CheckoutPhase.settled);
         widget.onSettled();
+        return;
+      }
+      if (_phase != CheckoutPhase.confirming) return;
+      final latest = order.latestAttempt;
+      if (latest?.status == PaymentAttemptStatus.succeeded &&
+          order.hasOutstanding) {
+        // A payment went through and the obligation still has a balance.
+        _stopPolling();
+        _setPhase(CheckoutPhase.partial);
         return;
       }
       if (order.lastAttemptFailed) {
         _stopPolling();
-        setState(() => _phase = _Phase.failed);
+        _setPhase(
+          latest?.status == PaymentAttemptStatus.failed
+              ? CheckoutPhase.failed
+              : CheckoutPhase.cancelled,
+        );
       }
     } on ApiException {
       // A failed poll says nothing about the payment. Keep waiting; the
@@ -209,9 +287,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     if (!mounted) return;
     setState(() {
       _checkingManually = false;
-      // Give the automatic poll another budget, since the user has told us
+      // Give the automatic re-reads another round, since the user has told us
       // they are still waiting.
-      if (_phase == _Phase.confirming) _startConfirming();
+      if (_phase == CheckoutPhase.confirming) _startConfirming();
     });
   }
 
@@ -220,6 +298,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   // -------------------------------------------------------------------------
 
   Future<void> _checkout(PaymentProviderId provider) async {
+    // A second tap can land before the rebuild that disables the button, and
+    // two taps must never open two checkouts (J7D).
+    if (_busyProvider != null) return;
     setState(() {
       _busyProvider = provider;
       _notice = null;
@@ -241,6 +322,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   }
 
   Future<void> _resume(PaymentAttempt attempt) async {
+    if (_busyProvider != null) return;
     setState(() {
       _busyProvider = attempt.provider;
       _notice = null;
@@ -353,24 +435,102 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   // Build
   // -------------------------------------------------------------------------
 
+  void _backToPayment() {
+    _stopPolling();
+    setState(() => _notice = null);
+    _setPhase(CheckoutPhase.choosing);
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = _order;
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    final purpose = order == null ? null : paymentResultPurposeLabel(l, order);
+    final canPayAgain =
+        order == null || (order.status.isCollectable && order.hasOutstanding);
+    final retry = canPayAgain
+        ? PaymentResultAction(
+            label: l.actionRetry,
+            icon: Icons.refresh_rounded,
+            onPressed: _backToPayment,
+          )
+        : null;
 
     return switch (_phase) {
-      _Phase.settled => const _SettledBlock(),
-      _Phase.confirming => _ConfirmingBlock(
-        exhausted: _pollExhausted,
-        isChecking: _checkingManually,
-        onCheck: _checkNow,
+      // The parent replaces this with its own full result as soon as it has
+      // re-read the order; until then, the fact the server just reported.
+      CheckoutPhase.settled => PaymentResultView(
+        content: PaymentResultContent(
+          kind: PaymentResultKind.received,
+          title: l.guestPaidTitle,
+          eyebrow: purpose,
+        ),
       ),
-      _Phase.failed => _FailedBlock(
-        onRetry: () => setState(() {
-          _phase = _Phase.choosing;
-          _notice = null;
-        }),
+      CheckoutPhase.partial => PaymentResultView(
+        content: settledPaymentResult(
+          l: l,
+          locale: locale,
+          order: order!,
+          justPaid: true,
+        ),
+        primary: PaymentResultAction(
+          label: l.payResultPayRemaining(
+            paymentResultFigure(order.outstanding ?? Money.eurCents(0), locale),
+          ),
+          icon: Icons.lock_rounded,
+          onPressed: _backToPayment,
+        ),
+        secondary: widget.exitAction,
       ),
-      _Phase.choosing => _buildChooser(context, order),
+      CheckoutPhase.confirming => PaymentResultView(
+        content: PaymentResultContent(
+          kind: _pollExhausted
+              ? PaymentResultKind.stillChecking
+              : PaymentResultKind.checking,
+          title: _pollExhausted
+              ? l.payResultStillCheckingTitle
+              : l.payResultCheckingTitle,
+          eyebrow: purpose,
+          lead: _pollExhausted
+              ? l.payResultStillCheckingBody
+              : l.payResultCheckingBody,
+        ),
+        primary: _pollExhausted
+            ? PaymentResultAction(
+                label: l.paymentCheckAgain,
+                icon: Icons.refresh_rounded,
+                onPressed: _checkingManually ? () {} : _checkNow,
+              )
+            : null,
+        // The payer may simply not have finished: going back offers the same
+        // open session again ("Continue your payment"), never a second one.
+        secondary: PaymentResultAction(
+          label: l.payResultBackToPayment,
+          onPressed: _backToPayment,
+        ),
+      ),
+      CheckoutPhase.failed => PaymentResultView(
+        content: PaymentResultContent(
+          kind: PaymentResultKind.failed,
+          title: l.paymentFailedTitle,
+          eyebrow: purpose,
+          lead: l.paymentFailedBody,
+        ),
+        primary: retry,
+        secondary: widget.exitAction,
+      ),
+      CheckoutPhase.cancelled => PaymentResultView(
+        content: PaymentResultContent(
+          kind: PaymentResultKind.cancelled,
+          title: l.payResultCancelledTitle,
+          eyebrow: purpose,
+          lead: l.payResultCancelledBody,
+        ),
+        primary: retry,
+        secondary: widget.exitAction,
+      ),
+      CheckoutPhase.choosing => _buildChooser(context, order),
     };
   }
 
@@ -825,115 +985,6 @@ class _ProviderTile extends StatelessWidget {
     'amount_below_provider_minimum' => l.paymentProviderAmountTooSmall,
     _ => l.paymentProviderUnavailable,
   };
-}
-
-class _ConfirmingBlock extends StatelessWidget {
-  const _ConfirmingBlock({
-    required this.exhausted,
-    required this.isChecking,
-    required this.onCheck,
-  });
-
-  final bool exhausted;
-  final bool isChecking;
-  final VoidCallback onCheck;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final c = context.colors;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InfoNotice(
-          title: exhausted
-              ? l.paymentStillConfirmingTitle
-              : l.paymentConfirmingTitle,
-          message: exhausted
-              ? l.paymentStillConfirmingBody
-              : l.paymentConfirmingBody,
-          tone: StatusTone.waiting,
-          icon: Icons.hourglass_top_rounded,
-        ),
-        const SizedBox(height: AppSpace.lg),
-        if (!exhausted)
-          Row(
-            children: [
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  valueColor: AlwaysStoppedAnimation(c.brand),
-                ),
-              ),
-              const SizedBox(width: AppSpace.md),
-              Expanded(
-                child: Text(
-                  l.paymentRedirectNotProof,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
-                ),
-              ),
-            ],
-          )
-        else
-          AppButton(
-            label: l.paymentCheckAgain,
-            icon: Icons.refresh_rounded,
-            variant: AppButtonVariant.secondary,
-            isLoading: isChecking,
-            onPressed: onCheck,
-          ),
-      ],
-    );
-  }
-}
-
-class _SettledBlock extends StatelessWidget {
-  const _SettledBlock();
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    return InfoNotice(
-      title: l.paymentSucceededTitle,
-      message: l.paymentSucceededBody,
-      tone: StatusTone.good,
-      icon: Icons.check_circle_outline_rounded,
-    );
-  }
-}
-
-class _FailedBlock extends StatelessWidget {
-  const _FailedBlock({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InfoNotice(
-          title: l.paymentFailedTitle,
-          message: l.paymentFailedBody,
-          tone: StatusTone.bad,
-          icon: Icons.credit_card_off_rounded,
-        ),
-        const SizedBox(height: AppSpace.lg),
-        AppButton(
-          label: l.actionRetry,
-          icon: Icons.refresh_rounded,
-          variant: AppButtonVariant.secondary,
-          onPressed: onRetry,
-        ),
-      ],
-    );
-  }
 }
 
 /// The euro amount as plain digits for an [AppAmountField].

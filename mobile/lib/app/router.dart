@@ -606,6 +606,39 @@ extension AppNavigation on BuildContext {
   void openDealPayment(int id) =>
       pushNamed(Routes.dealPayment, pathParameters: {'id': '$id'});
 
+  /// Leave a finished payment for its request (J7D).
+  ///
+  /// A payment screen is usually pushed *from* the request, so "View request"
+  /// pops back onto it; pushing another copy would leave the settled payment
+  /// underneath, one Back away. Anywhere else — the payment was reached
+  /// straight from request creation — the payment screen is replaced, so Back
+  /// never returns to a payable form. The whole app is never reset to Home.
+  void leavePaymentForRequest(int requestId) => _leavePaymentFor(
+    Routes.requestDetail,
+    '/requests/$requestId',
+    {'id': '$requestId'},
+  );
+
+  /// Leave a finished payment for its delivery. See [leavePaymentForRequest].
+  void leavePaymentForDeal(int dealId) =>
+      _leavePaymentFor(Routes.deal, '/deals/$dealId', {'id': '$dealId'});
+
+  void _leavePaymentFor(
+    String name,
+    String location,
+    Map<String, String> pathParameters,
+  ) {
+    final router = GoRouter.maybeOf(this);
+    if (router == null) return;
+    final matches = router.routerDelegate.currentConfiguration.matches;
+    final below = matches.length >= 2 ? matches[matches.length - 2] : null;
+    if (below?.matchedLocation == location && canPop()) {
+      pop();
+      return;
+    }
+    pushReplacementNamed(name, pathParameters: pathParameters);
+  }
+
   void openRecipient(int dealId) =>
       pushNamed(Routes.dealRecipient, pathParameters: {'id': '$dealId'});
 

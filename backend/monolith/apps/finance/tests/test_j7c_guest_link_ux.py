@@ -476,7 +476,7 @@ class PublicPageTests(_BalanceCase):
             res = APIClient().get(f"{path}?lang=fr")
             assert res.status_code == 404
             html = res.content.decode()
-            assert "Ce lien de paiement n’est plus valable" in html
+            assert "Ce lien n’est plus actif" in html
             assert "€" not in visible_page_text(html)
 
     def test_a_rail_outage_at_the_tap_is_not_reported_as_a_dead_link(self):
@@ -487,7 +487,7 @@ class PublicPageTests(_BalanceCase):
             res = APIClient().post(self.page, {"provider": "mock", "lang": "en"})
         assert res.status_code == 503
         assert "Payments are paused for a moment" in res.content.decode()
-        assert "no longer works" not in res.content.decode()
+        assert "no longer active" not in res.content.decode()
 
     def test_the_page_hands_off_to_the_provider_without_touching_the_amount(self):
         res = APIClient().post(

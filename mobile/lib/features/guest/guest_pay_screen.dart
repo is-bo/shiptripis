@@ -19,7 +19,7 @@
 /// and never put in an analytics event. It reaches this screen as a route
 /// parameter and goes straight back out in the two calls that need it.
 ///
-/// ## Known gap, stated honestly
+/// ## Known gap, stated honestly (unchanged by J7D)
 ///
 /// There is no anonymous *status* endpoint. After the provider redirect a
 /// guest has no way to ask the server "did it work" — the quote endpoint stops
@@ -443,9 +443,12 @@ class _ProviderTile extends StatelessWidget {
 
 /// After the payer has been sent to the provider.
 ///
-/// It says what is true — the payment is with the provider and the sender will
-/// see the outcome — and does **not** claim success, because the redirect
-/// proves nothing and this surface has no way to check.
+/// It says what is true — the payment is being finished on the provider's
+/// page, which shows the outcome, and the Sender sees it in ShipTrip — and
+/// claims nothing. J3 said "The payment is confirmed" here, beside "a redirect
+/// is not proof"; this surface cannot check, so it no longer says either
+/// (J7D). The provider returns the payer to ShipTrip's own result page, which
+/// reads the server's state.
 class _AfterHandoff extends StatelessWidget {
   const _AfterHandoff({required this.view});
 
@@ -458,9 +461,9 @@ class _AfterHandoff extends StatelessWidget {
       padding: AppScrollPadding.page(context),
       children: [
         AppEmptyState(
-          title: l.paymentConfirmingTitle,
-          body: '${l.paymentRedirectNotProof}\n\n${l.guestPayThanksBody}',
-          icon: Icons.hourglass_top_rounded,
+          title: l.guestPayHandoffTitle,
+          body: l.guestPayHandoffBody,
+          icon: Icons.open_in_new_rounded,
         ),
       ],
     );

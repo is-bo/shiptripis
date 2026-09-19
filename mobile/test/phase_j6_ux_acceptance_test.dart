@@ -15,7 +15,7 @@ import 'package:shiptrip/design/components/route.dart';
 import 'package:shiptrip/core/money/money.dart';
 import 'package:shiptrip/domain/find_travelers.dart';
 import 'package:shiptrip/domain/payment.dart';
-import 'package:shiptrip/features/common/payment_success_view.dart';
+import 'package:shiptrip/features/common/payment_result.dart';
 import 'package:shiptrip/features/guest/guest_payment_sheet.dart';
 import 'package:shiptrip/features/requests/boost_screen.dart';
 import 'package:shiptrip/features/requests/deposit_screen.dart';
@@ -35,6 +35,27 @@ import 'support/harness.dart';
 /// constant by hand, which mirrored a second time: in Arabic every route arrow
 /// and every row chevron pointed back the way it came. `Paris → Algiers`
 /// rendered as `Algiers → Paris` on the Sender's main discovery screen.
+
+/// The shared J7D result for [order], as the app builds it for a settled
+/// payment. Replaces the J3 receipt widget.
+Widget _settledResult(PaymentOrder order, {bool published = false}) => Builder(
+  builder: (context) => SingleChildScrollView(
+    child: PaymentResultView(
+      content: settledPaymentResult(
+        l: L.of(context),
+        locale: Localizations.localeOf(context),
+        order: order,
+        justPaid: true,
+        requestPublished: published,
+      ),
+      routeStops: const [
+        InlineRouteStop(label: 'Paris'),
+        InlineRouteStop(label: 'Algiers'),
+      ],
+    ),
+  ),
+);
+
 void main() {
   group('a directional glyph is mirrored once, not twice', () {
     testWidgets('the inline route arrow runs with Arabic, not against it', (
@@ -205,11 +226,7 @@ void main() {
         await pumpApp(
           tester,
           Scaffold(
-            body: PaymentSuccessView(
-              order: PaymentOrder.fromJson(j6SettledOrder()),
-              originPlaceName: 'Paris',
-              destinationPlaceName: 'Algiers',
-            ),
+            body: _settledResult(PaymentOrder.fromJson(j6SettledOrder())),
           ),
           locale: locale,
         );
@@ -224,19 +241,20 @@ void main() {
     testWidgets('the route turns round in Arabic', (tester) async {
       await pumpApp(
         tester,
-        Scaffold(
-          body: PaymentSuccessView(
-            order: PaymentOrder.fromJson(j6SettledOrder()),
-            originPlaceName: 'Paris',
-            destinationPlaceName: 'Algiers',
-          ),
-        ),
+        Scaffold(body: _settledResult(PaymentOrder.fromJson(j6SettledOrder()))),
         locale: const Locale('ar'),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Algiers ← Paris'), findsOneWidget);
-      expect(find.text('Paris → Algiers'), findsNothing);
+      // J7D draws the route with the shared InlineRoute: the origin sits on
+      // the right in Arabic and the arrow (matchTextDirection) points left,
+      // at the destination. No text arrow to get backwards.
+      expect(
+        tester.getCenter(find.text('Paris')).dx,
+        greaterThan(tester.getCenter(find.text('Algiers')).dx),
+      );
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+      expect(find.text('Algiers ← Paris'), findsNothing);
     });
   });
 

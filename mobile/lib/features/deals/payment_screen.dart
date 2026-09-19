@@ -17,14 +17,19 @@
 /// A deposit already paid on the request shows up here as
 /// `deposit_credit_eur_cents`, rendered as a subtraction labelled as already
 /// paid — never as a second charge.
+///
+/// J7D: once the server reports the balance paid, the page *is* the result —
+/// the shared [PaymentResultView] with the amount just paid, the credited
+/// deposit, *Paid in full* (never "Remaining €0.00"), *Payment protected* and
+/// **View delivery**. Opened again later, it says the payment is already
+/// complete rather than offering anything to pay.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:go_router/go_router.dart';
-
 import '../../app/app_state.dart';
+import '../../app/router.dart';
 import '../../core/live/live_updates.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
@@ -32,15 +37,17 @@ import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/payment.dart';
 import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
-import '../common/payment_success_view.dart';
+import '../common/payment_result.dart';
 import '../common/status_copy.dart';
 import '../requests/checkout_section.dart';
+import '../requests/request_labels.dart';
 
 typedef _DealPaymentKey = ({int dealId, bool isTraveler});
 typedef _AccountDealPaymentKey = ({int? accountId, _DealPaymentKey payment});
@@ -75,13 +82,35 @@ final _dealPaymentProvider = Provider.autoDispose
       return ref.watch(query);
     });
 
-class DealPaymentScreen extends ConsumerWidget {
+class DealPaymentScreen extends ConsumerStatefulWidget {
   const DealPaymentScreen({required this.dealId, super.key});
 
   final int dealId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DealPaymentScreen> createState() => _DealPaymentScreenState();
+}
+
+class _DealPaymentScreenState extends ConsumerState<DealPaymentScreen> {
+  /// Whether this screen has shown the balance still owed. A balance that
+  /// settles while the Sender watches is "Payment received"; one already
+  /// settled when they arrived is "This payment is already complete".
+  bool _sawOutstanding = false;
+
+  /// The checkout is showing a result, so the "what you owe" summary above it
+  /// steps aside.
+  bool _checkoutShowsResult = false;
+
+  int get dealId => widget.dealId;
+
+  void _onCheckoutPhase(CheckoutPhase phase) {
+    final showing = phase.showsResult;
+    if (!mounted || showing == _checkoutShowsResult) return;
+    setState(() => _checkoutShowsResult = showing);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
     final deal = ref.watch(dealDetailProvider(dealId)).value;
@@ -124,25 +153,38 @@ class DealPaymentScreen extends ConsumerWidget {
             children: const [SkeletonDetail()],
           ),
           data: (state) {
-            if (!isTraveler && (state.order?.status.isSettled ?? false)) {
-              return PaymentSuccessView(
-                order: state.order!,
-                title: l.paymentSucceededTitle,
-                onPrimaryAction: () => context.pop(),
-                primaryActionLabel: l.actionDone,
+            final order = state.order;
+            if (!isTraveler && order != null && order.status.isSettled) {
+              return _SettledResult(
+                order: order,
+                dealId: order.dealId ?? dealId,
+                requestId: deal.deliveryRequestId,
+                justPaid: _sawOutstanding,
               );
             }
+            if (!isTraveler && order != null) _sawOutstanding = true;
+            final showsResult = !isTraveler && _checkoutShowsResult;
             return ListView(
               padding: AppScrollPadding.page(context),
               children: [
-                _Summary(state: state, isTraveler: isTraveler),
-                const SizedBox(height: AppSpace.xl),
+                // The summary steps aside while a result shows, but its slot
+                // stays: shifting the checkout to another index would rebuild
+                // it and lose the payment it is waiting on.
+                if (showsResult)
+                  const SizedBox.shrink()
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xl),
+                    child: _Summary(state: state, isTraveler: isTraveler),
+                  ),
 
                 if (isTraveler)
                   _TravelerView(state: state)
                 else
                   _SenderView(
                     state: state,
+                    dealId: dealId,
+                    onPhaseChanged: _onCheckoutPhase,
                     onSettled: () {
                       ref.invalidate(_dealPaymentProvider(key));
                       refreshVolatileState(ref);
@@ -283,11 +325,72 @@ class _TravelerView extends StatelessWidget {
   }
 }
 
+/// The page once the server reports the balance paid.
+class _SettledResult extends ConsumerWidget {
+  const _SettledResult({
+    required this.order,
+    required this.dealId,
+    required this.requestId,
+    required this.justPaid,
+  });
+
+  final PaymentOrder order;
+
+  /// The order's own Deal. A result never manufactures one.
+  final int dealId;
+
+  final int? requestId;
+  final bool justPaid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final locale = Localizations.localeOf(context);
+    // The parcel's route is its request's two canonical places (J7B), shown
+    // only when both are recorded. Nothing is assembled from other data.
+    final request = requestId == null
+        ? null
+        : ref.watch(requestDetailProvider(requestId!)).asData?.value;
+    final route = request != null && requestHasRoute(request)
+        ? [
+            InlineRouteStop(label: requestPickupLabel(l, request)),
+            InlineRouteStop(label: requestDeliveryLabel(l, request)),
+          ]
+        : null;
+    return ListView(
+      padding: AppScrollPadding.page(context),
+      children: [
+        PaymentResultView(
+          content: settledPaymentResult(
+            l: l,
+            locale: locale,
+            order: order,
+            justPaid: justPaid,
+          ),
+          routeStops: route,
+          primary: PaymentResultAction(
+            label: l.paymentSuccessViewDeliveryAction,
+            icon: Icons.arrow_forward_rounded,
+            onPressed: () => context.leavePaymentForDeal(dealId),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SenderView extends StatelessWidget {
-  const _SenderView({required this.state, required this.onSettled});
+  const _SenderView({
+    required this.state,
+    required this.dealId,
+    required this.onSettled,
+    required this.onPhaseChanged,
+  });
 
   final DealPaymentState state;
+  final int dealId;
   final VoidCallback onSettled;
+  final ValueChanged<CheckoutPhase> onPhaseChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -304,19 +407,16 @@ class _SenderView extends StatelessWidget {
       );
     }
 
-    if (order.status.isSettled) {
-      return PaymentSuccessView(
-        order: order,
-        title: l.paymentSucceededTitle,
-        onPrimaryAction: () => context.pop(),
-        primaryActionLabel: l.actionDone,
-      );
-    }
-
     return CheckoutSection(
+      key: ValueKey(order.publicReference),
       orderReference: order.publicReference,
       order: order,
       onSettled: onSettled,
+      onPhaseChanged: onPhaseChanged,
+      exitAction: PaymentResultAction(
+        label: l.paymentSuccessViewDeliveryAction,
+        onPressed: () => context.leavePaymentForDeal(order.dealId ?? dealId),
+      ),
     );
   }
 }
