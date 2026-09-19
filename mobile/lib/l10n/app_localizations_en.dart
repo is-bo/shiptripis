@@ -2484,6 +2484,10 @@ class LEn extends L {
   String get profilePrivacy => 'Privacy policy';
 
   @override
+  String get profileLinkOpenFailed =>
+      'We couldn\'t open that page. Check that you have a browser installed.';
+
+  @override
   String get profileAppearance => 'Appearance';
 
   @override

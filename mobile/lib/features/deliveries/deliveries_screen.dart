@@ -27,6 +27,7 @@ import '../../design/components/forms.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
@@ -374,24 +375,25 @@ class _RequestsSection extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: AppSpace.xs),
-                          Text(
-                            // A route, not a pair: the middle dot lost the
-                            // direction every other list on the app shows.
-                            // Named from the canonical places (J7B); the
-                            // meeting points it used are optional and were
-                            // usually absent, leaving a bare arrow.
-                            !requestHasRoute(request)
-                                ? l.requestRouteNotRecorded
-                                : context.isRtl
-                                ? '${requestDeliveryLabel(l, request)} ← '
-                                      '${requestPickupLabel(l, request)}'
-                                : '${requestPickupLabel(l, request)} → '
-                                      '${requestDeliveryLabel(l, request)}',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: context.colors.textSecondary),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          if (!requestHasRoute(request))
+                            Text(
+                              l.requestRouteNotRecorded,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: context.colors.textSecondary,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          else
+                            RouteSummary(
+                              from: requestPickupLabel(l, request),
+                              to: requestDeliveryLabel(l, request),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: context.colors.textSecondary,
+                                  ),
+                            ),
                         ],
                       ),
                     ),

@@ -335,8 +335,17 @@ class RouteSummary extends StatelessWidget {
     final c = context.colors;
     final effective = style ?? Theme.of(context).textTheme.titleSmall;
 
+    final locale = Localizations.localeOf(context);
+    final semanticLabel = routeSemanticLabel(
+      stops: [
+        InlineRouteStop(label: from),
+        InlineRouteStop(label: to),
+      ],
+      locale: locale,
+    );
+
     return Semantics(
-      label: '$from to $to',
+      label: semanticLabel,
       excludeSemantics: true,
       child: Row(
         children: [

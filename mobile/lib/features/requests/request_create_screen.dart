@@ -374,7 +374,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   /// The reward [_pricingQuote] was priced for. While the form holds anything
   /// else, its totals are not this form's totals.
   int? _quotedRewardCents;
-  int? _chosenDepositCents;
 
   @override
   void initState() {
@@ -1157,7 +1156,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         // (J7A): the draft's default keeps `boost_eur_cents` out of the body,
         // and the server's creation contract defaults it to zero. Boost is a
         // decision the sender makes on a request that is already published.
-        postingDepositEurCents: _chosenDepositCents,
         title: _title.text.trim(),
         description: _description.text.trim(),
         category: _category!,

@@ -1137,6 +1137,10 @@
   "profileSupport": "Help and support",
   "profileTerms": "Terms of service",
   "profilePrivacy": "Privacy policy",
+  "profileLinkOpenFailed": "We couldn't open that page. Check that you have a browser installed.",
+  "@profileLinkOpenFailed": {
+    "description": "Shown when tapping a legal link like Terms or Privacy cannot open in an external browser."
+  },
   "profileAppearance": "Appearance",
   "profileAppearanceSystem": "Match device",
   "profileAppearanceLight": "Light",

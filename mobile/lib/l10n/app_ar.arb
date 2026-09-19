@@ -723,6 +723,7 @@
   "profileSupport": "المساعدة والدعم",
   "profileTerms": "شروط الخدمة",
   "profilePrivacy": "سياسة الخصوصية",
+  "profileLinkOpenFailed": "تعذّر علينا فتح هذه الصفحة. تأكد من تثبيت متصفح.",
   "profileAppearance": "المظهر",
   "profileAppearanceSystem": "مطابقة الجهاز",
   "profileAppearanceLight": "فاتح",

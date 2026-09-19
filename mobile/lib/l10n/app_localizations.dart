@@ -4395,6 +4395,12 @@ abstract class L {
   /// **'Privacy policy'**
   String get profilePrivacy;
 
+  /// Shown when tapping a legal link like Terms or Privacy cannot open in an external browser.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t open that page. Check that you have a browser installed.'**
+  String get profileLinkOpenFailed;
+
   /// No description provided for @profileAppearance.
   ///
   /// In en, this message translates to:

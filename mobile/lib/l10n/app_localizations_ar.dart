@@ -2492,6 +2492,10 @@ class LAr extends L {
   String get profilePrivacy => 'سياسة الخصوصية';
 
   @override
+  String get profileLinkOpenFailed =>
+      'تعذّر علينا فتح هذه الصفحة. تأكد من تثبيت متصفح.';
+
+  @override
   String get profileAppearance => 'المظهر';
 
   @override

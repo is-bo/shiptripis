@@ -2500,6 +2500,10 @@ class LFr extends L {
   String get profilePrivacy => 'Politique de confidentialité';
 
   @override
+  String get profileLinkOpenFailed =>
+      'Nous n’avons pas pu ouvrir cette page. Vérifiez qu’un navigateur est installé.';
+
+  @override
   String get profileAppearance => 'Apparence';
 
   @override

@@ -360,7 +360,12 @@ void main() {
   group('the request rows name the route too', () {
     testWidgets('Deliveries', (tester) async {
       await _pumpList(tester, const DeliveriesScreen());
-      expect(find.text('Algiers → Paris'), findsOneWidget);
+      expect(find.byType(RouteSummary), findsWidgets);
+      final summary = tester.widget<RouteSummary>(
+        find.byType(RouteSummary).first,
+      );
+      expect(summary.from, 'Algiers');
+      expect(summary.to, 'Paris');
     });
 
     testWidgets('Deliveries in Arabic reads right to left', (tester) async {
@@ -369,12 +374,29 @@ void main() {
         const DeliveriesScreen(),
         locale: const Locale('ar'),
       );
-      expect(find.text('Paris ← Algiers'), findsOneWidget);
+      expect(find.byType(RouteSummary), findsWidgets);
+      final summary = tester.widget<RouteSummary>(
+        find.byType(RouteSummary).first,
+      );
+      expect(summary.from, 'Algiers');
+      expect(summary.to, 'Paris');
+      final algiersPos = tester.getTopLeft(find.text('Algiers'));
+      final parisPos = tester.getTopLeft(find.text('Paris'));
+      expect(
+        algiersPos.dx > parisPos.dx,
+        isTrue,
+        reason: 'Origin (Algiers) appears on the right in Arabic RTL',
+      );
     });
 
     testWidgets('Home', (tester) async {
       await _pumpList(tester, const HomeScreen());
-      expect(find.text('Algiers → Paris'), findsOneWidget);
+      expect(find.byType(RouteSummary), findsWidgets);
+      final summary = tester.widget<RouteSummary>(
+        find.byType(RouteSummary).first,
+      );
+      expect(summary.from, 'Algiers');
+      expect(summary.to, 'Paris');
     });
   });
 

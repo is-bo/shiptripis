@@ -28,6 +28,7 @@ import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
@@ -519,11 +520,10 @@ class _RequestRow extends StatelessWidget {
           ),
           if (from.isNotEmpty && to.isNotEmpty) ...[
             const SizedBox(height: AppSpace.sm),
-            Text(
-              context.isRtl ? '$to ← $from' : '$from → $to',
+            RouteSummary(
+              from: from,
+              to: to,
               style: text.bodySmall?.copyWith(color: c.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],

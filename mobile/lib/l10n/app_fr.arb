@@ -723,6 +723,7 @@
   "profileSupport": "Aide et support",
   "profileTerms": "Conditions d’utilisation",
   "profilePrivacy": "Politique de confidentialité",
+  "profileLinkOpenFailed": "Nous n’avons pas pu ouvrir cette page. Vérifiez qu’un navigateur est installé.",
   "profileAppearance": "Apparence",
   "profileAppearanceSystem": "Suivre l’appareil",
   "profileAppearanceLight": "Clair",

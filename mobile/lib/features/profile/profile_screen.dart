@@ -13,10 +13,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_settings.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
+import '../../core/env/app_config.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
@@ -111,11 +113,15 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: AppSpace.xl),
 
             SectionHeader(title: l.profileSupport),
-            _Row(icon: Icons.description_outlined, label: l.profileTerms),
-            _Row(icon: Icons.privacy_tip_outlined, label: l.profilePrivacy),
             _Row(
-              icon: Icons.support_agent_rounded,
-              label: l.actionContactSupport,
+              icon: Icons.description_outlined,
+              label: l.profileTerms,
+              onTap: () => _openLegalUrl(context, '/terms'),
+            ),
+            _Row(
+              icon: Icons.privacy_tip_outlined,
+              label: l.profilePrivacy,
+              onTap: () => _openLegalUrl(context, '/privacy'),
             ),
             const SizedBox(height: AppSpace.xxl),
 
@@ -176,6 +182,34 @@ class ProfileScreen extends ConsumerWidget {
     );
     if (!confirmed || !context.mounted) return;
     await ref.read(sessionProvider.notifier).signOut();
+  }
+
+  Future<void> _openLegalUrl(BuildContext context, String path) async {
+    final l = L.of(context);
+    try {
+      final base = AppConfig.webBaseUrl.trim();
+      if (base.isEmpty) {
+        AppSnack.info(context, l.profileLinkOpenFailed);
+        return;
+      }
+      final baseUri = Uri.tryParse(base);
+      if (baseUri == null || !baseUri.hasScheme) {
+        AppSnack.info(context, l.profileLinkOpenFailed);
+        return;
+      }
+      final uri = baseUri.resolve(path);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && context.mounted) {
+        AppSnack.info(context, l.profileLinkOpenFailed);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppSnack.info(context, l.profileLinkOpenFailed);
+      }
+    }
   }
 }
 

@@ -1,5 +1,68 @@
 # ShipTrip V1 Implementation Status
 
+## J8.1 — Pre-Launch UI/i18n Remediation (2026-09-19)
+
+**J8.1 — narrow pre-launch remediation resolving UI, i18n, accessibility semantics, and dead field defects from J8 Certification.**
+- `DEF-SND-01` (MAJOR | Resolved): Replaced inverted string concatenation on `HomeScreen` and `DeliveriesScreen` with `RouteSummary`. Arabic RTL route progression now renders Origin on the right, Destination on the left, with left-pointing arrow and proper logical direction.
+- `DEF-SND-02` (MINOR | Resolved): Localized `RouteSummary` accessibility semantics for screen readers (EN: "to", FR: "vers", AR: "إلى") with `excludeSemantics: true` on visual row to prevent duplicate reading.
+- `DEF-SND-03` (MINOR | Resolved): Profile legal links (Terms of Service `/terms` and Privacy Policy `/privacy`) wired with canonical URL resolution via `AppConfig.webBaseUrl`, external browser launcher, and graceful failure snackbar (`profileLinkOpenFailed` in en/fr/ar). Contact Support hidden awaiting authoritative destination.
+- `DEF-SND-05` (MINOR / DEAD CODE | Resolved): Removed unused `_chosenDepositCents` field and argument from `RequestCreateScreen`.
+- `DEF-SND-04` (+€15 Boost Preset): Strictly excluded per phase instructions.
+- Full deliverable: [docs/PHASE_J81_UI_I18N_REMEDIATION.md](PHASE_J81_UI_I18N_REMEDIATION.md).
+
+**Verification metrics & automated gates:**
+- Flutter mobile test suite: **934 tests executed, 934 passing, 0 failing** across all 56 test files.
+- Static analyzer: `flutter analyze --fatal-infos` — **0 issues found** (clean).
+- Dart formatter: `dart format --output=none --set-exit-if-changed .` — **183 files 100% formatted**.
+- Web check: `tools/check_static_web.py` — **Passed** (8 HTML files, 1 CSS stylesheet).
+- Localization parity: `mobile/l10n_untranslated.json` — **`{}`** (100% translated).
+- Responsive matrix: 320×640, 390×844, 411×869, 1.6× text scale verified with zero overflow.
+- Railway deployment: **NO** (mobile only).
+- APK build: **NOT BUILT**.
+
+## J8 — Deep Pre-Launch Product Certification (2026-09-19)
+
+**J8 — complete pre-launch certification across all 50 product parts, all screens, routes, dialogs, roles, financial paths, matching, payouts, admin console, public web, responsive matrix, and localization.**
+Strict audit-first methodology: zero product code modified during J8; zero real money (Stripe TEST, Chargily TEST, `PAYOUT_DZD_EXECUTION_ENABLED=false`).
+Coordinated multi-agent architecture with Lead QA Agent (integration, cross-role, invariants, adjudication) and 3 specialized subagents (Sender QA Agent, Traveler QA Agent, Admin QA Agent).
+Full deliverable: [docs/PHASE_J8_DEEP_PRELAUNCH_CERTIFICATION.md](PHASE_J8_DEEP_PRELAUNCH_CERTIFICATION.md).
+
+**Verification metrics & automated gates:**
+- Flutter mobile test suite: **906 tests executed, 906 passing, 0 failing** across all 55 test files.
+- Static analyzer: `flutter analyze --fatal-infos` — **0 issues found** (clean in 3.8s).
+- Dart formatter: `dart format --output=none --set-exit-if-changed .` — **182 files 100% formatted**.
+- Web check: `tools/check_static_web.py` — **Passed** (8 HTML files, 1 CSS stylesheet).
+- Backend deployment safety: `test_deployment_safety.py` — **37 passed, 0 failed**.
+- Route matching reliability: `test_phase_j7b_route_matching.py` — **31 passed, 0 failed**.
+- Schema drift: `python manage.py makemigrations --check --dry-run` — **0 changes detected (0 drift)**.
+- Production check: `python manage.py check --deploy --fail-level WARNING` — **0 issues identified**.
+- Go services suite: `go test ./...` in `backend/services` — **All 12 packages passed**, `go vet` clean.
+- Admin console suite: 67 passed (`test_phase8d_console.py`, `test_phase8fg2_console_rows.py`, `test_phase_j64_person_profile.py`).
+- Payout review & payment results: 62 passed (`test_phase_j64_payout_review.py`, `test_j7c_guest_link_ux.py`, `test_j7d_payment_results.py`).
+- Handover isolation: 16 passed (`test/phase8ff5_handover_test.dart`).
+- Canonical place picker: 44 passed across all viewports (320×640, 390×844, 411×869, landscape) and locales (en, fr, ar).
+
+**Core invariants certified:**
+- EUR canonical marketplace currency / DZD representation / snapshot server FX.
+- 100% Boost to traveler / strictly post-publication (zero Boost pre-publication).
+- Delivery code secrecy / 30-min buffer post-pickup / traveler strictly locked out.
+- Deal funding guard: traveler payout preference required before funding begins.
+- 48h payout protection window / dispute immediately freezes payout.
+- Route freeze: journey route locked once offer accepted or deal attached.
+- Leg transport modes: Algeria ↔ Europe flight only; road networks isolated.
+- Arrival timing validation: leg `arrive_at` required and strictly after `depart_at`.
+- Zero Kaba / ProductRequest in live product flows.
+
+**Findings & Defect Register:**
+- `DEF-SND-01` (MAJOR | Gemini-safe): Inverted route progression in Arabic RTL string formatting on `HomeScreen` & `DeliveriesScreen`.
+- `DEF-SND-02` (MINOR | Gemini-safe): Hardcoded English semantics in `RouteSummary` screen reader label (`route.dart:339`).
+- `DEF-SND-03` (MINOR | Gemini-safe): Dead action rows in Profile Support section (`profile_screen.dart:114-119`).
+- `DEF-SND-04` (IDEA | Gemini-safe): Missing `+€15` quick preset chip on `BoostScreen`.
+- `DEF-SND-05` (IDEA | Gemini-safe): Unused `_chosenDepositCents` field on `_RequestCreateScreenState`.
+- `DEF-ADM-01` (MINOR / HARNESS | Codex Recommended): SQLite test harness date arithmetic `DatabaseError: Invalid arguments for operator *` in `ratings/services.py:192`.
+
+**Certification Verdict:** PASS (with identified defects). Safe to begin final defect-fix phases before LIVE: YES. Safe to activate LIVE today: NO (remediate DEF-SND-01/02 and run final production verification first).
+
 ## J7E — Combined J7 Acceptance, Regression Sweep & Final TEST APK (2026-09-19)
 
 **J7E — full J7 acceptance consolidated, cross-phase verification (J7A–J7D) complete,

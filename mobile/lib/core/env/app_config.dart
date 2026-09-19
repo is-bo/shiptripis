@@ -28,6 +28,14 @@ abstract final class AppConfig {
     defaultValue: apiBaseUrl,
   );
 
+  /// Origin of the public marketing and legal site. Defaults to [apiBaseUrl],
+  /// which matches the Caddy gateway hosting both the public site and API
+  /// in development, staging and production.
+  static const webBaseUrl = String.fromEnvironment(
+    'WEB_BASE_URL',
+    defaultValue: apiBaseUrl,
+  );
+
   /// Tile template for the map surface.
   ///
   /// Defaults to OpenStreetMap, which needs no credential and therefore keeps
@@ -79,6 +87,7 @@ abstract final class AppConfig {
     if (!release) return;
     validateReleaseOrigin(apiBaseUrl);
     validateReleaseOrigin(kycBaseUrl);
+    validateReleaseOrigin(webBaseUrl);
   }
 
   static void validateReleaseOrigin(String value) {
