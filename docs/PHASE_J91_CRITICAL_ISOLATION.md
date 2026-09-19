@@ -67,10 +67,10 @@ Codex did not run broad suites. Stripe and Chargily remain TEST; `PAYOUT_DZD_EXE
 | Gemini verification of `7d2dbc40fd952e1963ab3a859c08c15ad9152e5a` | RED: the three critical repros passed, but 3 payout-detail widget tests and formatter failed; new Admin test required static files in a clean checkout |
 | J9.1 follow-up | Payout-detail tests now establish an authenticated session; Admin ban test overrides static storage; discovery source was formatted. The J8.1 test file's canonical Git content was already formatter-clean on this workstation. Focused reruns: 3 payout-detail and 1 Admin test passed; changed Dart analysis, targeted formatter, and Ruff passed. |
 | Gemini verification of `07d62437bc3fc4e2bd6cc2d95d2552d8d3c6e0ce` | GREEN for all three J9.1 defects: full Flutter 941 passed; targeted ratings and discovery 7 passed; auth/notification/discovery/offers 76 passed; analyzer 0 issues; formatter 185 files, 0 changes; localization `{}`. Banned Admin regression passed on SQLite and PostgreSQL; related Admin/deployment tests 53 passed; schema drift 0; Ruff, static web and production deploy checks passed. The adversarial Admin suite had 13 passes and 2 failures from open `DEF-ADM-02`. Full Django was not run. |
-| CI | Pending branch push and run result |
-| Merge and push | Not done |
-| Railway TEST deployment | Not done; required after reviewed merge for the Admin runtime change |
-| Healthz and readyz on deployed SHA | Pending deployment |
+| CI | [PR #5 run 35457906053](https://github.com/is-bo/shiptripis/actions/runs/35457906053) passed all 6 jobs on head `eab82b221678aa4e178e6b8083176c2867f137c2`. The Django job reported 2,231 passed and 34 skipped; Go unit, vet, race and Redis integration, Flutter format/analyze/tests, schema drift, and production/static web jobs passed. |
+| Merge and push | [PR #5](https://github.com/is-bo/shiptripis/pull/5) merged into `main` at `c63f9aa455fde16650b82e2e741a8e7160867ff9`; local `main` matched `origin/main` at that SHA. The original checkout's pre-existing J9 audit files and status block were preserved. |
+| Railway TEST deployment | Clean checkout of merged SHA `c63f9aa455fde16650b82e2e741a8e7160867ff9` uploaded to existing `shiptrip` service as [deployment `2c5bf9e8-9a80-4144-99a9-b33da68bc8e2`](https://railway.com/project/d7aeffbc-05b0-4c62-86a6-43e8fc99de88/service/f56dc033-2989-4e2c-9fa5-809e989c2e90?id=2c5bf9e8-9a80-4144-99a9-b33da68bc8e2); Railway reported SUCCESS. |
+| Healthz and readyz on deployed SHA | Public TEST origin returned HTTP 200 for both `/healthz` (`status: ok`) and `/readyz` (`status: ready`; database, migrations, rate-limit cache all `ok`). |
 | New APK | Not built; deferred until later J9 remediation phases |
 
 The J8.3 APK remains **not a release candidate**. Remaining J9 MAJOR and MINOR findings are outside J9.1.
@@ -78,5 +78,8 @@ The J8.3 APK remains **not a release candidate**. Remaining J9 MAJOR and MINOR f
 Gemini's first broad pass reported 938 Flutter passes and 3 payout-detail test
 failures. The follow-up commit resolved those failures and passed the independent
 rerun. Its 2 adversarial Admin failures remain attributed to the separate,
-open `DEF-ADM-02` payout-profile feature gate. CI, merge, TEST deployment, and
-APK build have not occurred at this verification point.
+open `DEF-ADM-02` payout-profile feature gate. The broader Django suite was
+subsequently covered by CI. Railway configuration was checked before deployment:
+`PAYMENTS_ENVIRONMENT=test`, Stripe and Chargily credentials were TEST,
+Chargily used its TEST API base, and `PAYOUT_DZD_EXECUTION_ENABLED=false`.
+No financial provider configuration was changed and no APK was built.

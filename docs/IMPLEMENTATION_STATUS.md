@@ -15,8 +15,12 @@ ratings/discovery 7 passed, related mobile 76 passed, Admin/deployment 53 passed
 and banned Admin passed on SQLite and PostgreSQL. Analyzer, formatter,
 localization, Ruff, schema drift, static web, and deploy checks passed. The J9
 adversarial Admin suite had 13 passes and 2 failures from open `DEF-ADM-02`;
-full Django was not run. CI, merge, and Railway TEST deployment remain pending.
-No migration, APK, LIVE activation, or real-money operation. The J8.3
+Gemini did not run full Django. [PR #5 CI](https://github.com/is-bo/shiptripis/actions/runs/35457906053)
+passed all 6 jobs, including full Django (2,231 passed, 34 skipped). PR #5
+merged at `c63f9aa455fde16650b82e2e741a8e7160867ff9`, which deployed to
+Railway TEST as `2c5bf9e8-9a80-4144-99a9-b33da68bc8e2` with SUCCESS status;
+`/healthz` and `/readyz` returned HTTP 200. Payments remained TEST and DZD
+execution false. No migration, APK, LIVE activation, or real-money operation. The J8.3
 APK remains not launch-ready, and J9 MAJOR/MINOR findings remain open. See
 [J9.1 record](PHASE_J91_CRITICAL_ISOLATION.md).
 
