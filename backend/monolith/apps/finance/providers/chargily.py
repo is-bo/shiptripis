@@ -29,6 +29,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 
 import requests
 from django.conf import settings
@@ -51,6 +52,7 @@ from .base import (
     RefundRequest,
     RefundResult,
 )
+from .http import log_provider_timing, provider_session, provider_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -148,12 +150,8 @@ class ChargilyGateway:
             if api_base is not None
             else getattr(settings, "CHARGILY_API_BASE", LIVE_API_BASE)
         ).rstrip("/")
-        self.timeout_seconds = (
-            timeout_seconds
-            if timeout_seconds is not None
-            else getattr(settings, "PAYMENTS_PROVIDER_TIMEOUT_SECONDS", 15)
-        )
-        self._session = session or requests
+        self.timeout = provider_timeout(timeout_seconds)
+        self._session = session if session is not None else provider_session("chargily")
 
     def is_configured(self) -> bool:
         return bool(self.secret_key and self.api_base)
@@ -217,84 +215,93 @@ class ChargilyGateway:
         if not self.secret_key:
             raise ProviderNotConfigured("CHARGILY_SECRET_KEY is not configured.")
 
-    def _request(self, method: str, path: str, *, payload: dict | None = None) -> dict:
+    def _request(
+        self, method: str, path: str, *, operation: str, payload: dict | None = None
+    ) -> dict:
         self._require_configured()
         headers = {
             "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        started = time.monotonic()
+        outcome = "internal_error"
         try:
-            response = self._session.request(
-                method,
-                f"{self.api_base}{path}",
-                headers=headers,
-                data=json.dumps(payload) if payload is not None else None,
-                timeout=self.timeout_seconds,
-            )
-        except requests.RequestException as exc:
-            logger.warning("chargily transport failure on %s %s", method, path)
-            raise ProviderUnavailable(
-                f"Chargily request failed: {type(exc).__name__}"
-            ) from exc
+            try:
+                response = self._session.request(
+                    method,
+                    f"{self.api_base}{path}",
+                    headers=headers,
+                    data=json.dumps(payload) if payload is not None else None,
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                outcome = "transport_error"
+                logger.warning("chargily transport failure operation=%s", operation)
+                raise ProviderUnavailable(
+                    f"Chargily request failed: {type(exc).__name__}"
+                ) from exc
 
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise ProviderUnavailable("Chargily returned a non-JSON response.") from exc
+            try:
+                body = response.json()
+            except ValueError as exc:
+                outcome = "invalid_response"
+                raise ProviderUnavailable(
+                    "Chargily returned a non-JSON response."
+                ) from exc
 
-        if response.status_code >= 500:
-            raise ProviderUnavailable(
-                f"Chargily returned {response.status_code}.",
-                provider_code=str(response.status_code),
+            if response.status_code >= 500:
+                outcome = "provider_unavailable"
+                raise ProviderUnavailable(
+                    f"Chargily returned {response.status_code}.",
+                    provider_code=str(response.status_code),
+                )
+            if response.status_code == 429:
+                outcome = "rate_limited"
+                raise ProviderUnavailable(
+                    "Chargily rate limited the request.", provider_code="429"
+                )
+            if response.status_code in (401, 403):
+                outcome = "auth_rejected"
+                # Only derived mode is logged; never URL, body or credential.
+                logger.error(
+                    "chargily auth rejected status=%s credential_mode=%s api_base_mode=%s",
+                    response.status_code,
+                    self.credential_mode(),
+                    self._api_base_environment(),
+                )
+                raise ProviderNotConfigured(
+                    "Chargily rejected this deployment's API credentials.",
+                    provider_code=str(response.status_code),
+                )
+            if response.status_code >= 400:
+                outcome = "rejected"
+                provider_code = ""
+                if isinstance(body, dict):
+                    provider_code = str(body.get("code") or "")
+                logger.warning(
+                    "chargily rejected operation=%s status=%s provider_code=%s",
+                    operation,
+                    response.status_code,
+                    provider_code or "-",
+                )
+                # Raw provider detail remains internal; payer errors are
+                # sanitized at the service boundary.
+                message = "Chargily rejected the request."
+                if isinstance(body, dict):
+                    message = str(body.get("message") or message)
+                raise ProviderCheckoutRejected(
+                    message, provider_code=provider_code or str(response.status_code)
+                )
+            outcome = "success"
+            return body if isinstance(body, dict) else {}
+        finally:
+            log_provider_timing(
+                provider="chargily",
+                operation=operation,
+                started=started,
+                outcome=outcome,
             )
-        if response.status_code == 429:
-            raise ProviderUnavailable(
-                "Chargily rate limited the request.", provider_code="429"
-            )
-        if response.status_code in (401, 403):
-            # The key this deployment holds was refused. On Chargily the
-            # overwhelmingly likely cause is an environment mismatch — a
-            # `test_sk_` key presented to the live API base, or the reverse —
-            # which `configuration_problem()` refuses in advance. Anything that
-            # still reaches here is a credential problem, not a transient one,
-            # and telling the payer to try again would be a lie.
-            #
-            # Everything logged is non-secret: the HTTP status, the derived
-            # mode, and which environment the base URL points at. The key and
-            # the response body are not logged.
-            logger.error(
-                "chargily auth rejected status=%s credential_mode=%s api_base_mode=%s",
-                response.status_code,
-                self.credential_mode(),
-                self._api_base_environment(),
-            )
-            raise ProviderNotConfigured(
-                "Chargily rejected this deployment's API credentials.",
-                provider_code=str(response.status_code),
-            )
-        if response.status_code >= 400:
-            provider_code = ""
-            if isinstance(body, dict):
-                provider_code = str(body.get("code") or "")
-            logger.warning(
-                "chargily rejected %s %s status=%s provider_code=%s",
-                method,
-                path,
-                response.status_code,
-                provider_code or "-",
-            )
-            # The provider's own message can name amounts, accounts and
-            # merchant configuration. It stays in the exception for the log and
-            # never reaches a payer, who is told the checkout could not be
-            # created.
-            message = "Chargily rejected the request."
-            if isinstance(body, dict):
-                message = str(body.get("message") or message)
-            raise ProviderCheckoutRejected(
-                message, provider_code=provider_code or str(response.status_code)
-            )
-        return body if isinstance(body, dict) else {}
 
     def _api_base_environment(self) -> str:
         """Which environment the configured base URL points at. Not a secret."""
@@ -322,7 +329,9 @@ class ChargilyGateway:
             # event finds its attempt even if the session id is missing.
             "metadata": [{"reference": request.reference}],
         }
-        body = self._request("POST", "/checkouts", payload=payload)
+        body = self._request(
+            "POST", "/checkouts", operation="checkout_create", payload=payload
+        )
         checkout_id = str(body.get("id") or "")
         checkout_url = str(body.get("checkout_url") or "")
         if not checkout_id or not checkout_url:
@@ -339,7 +348,9 @@ class ChargilyGateway:
     ) -> AttemptSnapshot:
         if not provider_session_id:
             raise ProviderError("No Chargily checkout to reconcile.")
-        body = self._request("GET", f"/checkouts/{provider_session_id}")
+        body = self._request(
+            "GET", f"/checkouts/{provider_session_id}", operation="checkout_fetch"
+        )
         status = str(body.get("status") or "").lower()
         return AttemptSnapshot(
             outcome=_STATUS_OUTCOMES.get(status, "ignored"),

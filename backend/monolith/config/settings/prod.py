@@ -164,6 +164,18 @@ CACHES["default"] = {  # noqa: F405
     "BACKEND": "django.core.cache.backends.redis.RedisCache",
     "LOCATION": REDIS_URL,  # noqa: F405
     "KEY_PREFIX": "shiptrip",
+    "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
+}
+# K1 keeps one Redis topology for the combined deployment. Route results are
+# disposable and their provider already degrades cleanly on cache errors, but
+# sharing them across workers/replicas avoids a hidden second Redis dependency.
+if ROUTE_PROVIDER_CACHE_URL and ROUTE_PROVIDER_CACHE_URL != REDIS_URL:  # noqa: F405
+    raise RuntimeError("ROUTE_PROVIDER_CACHE_URL must match REDIS_URL in production.")
+CACHES["routing"] = {  # noqa: F405
+    "BACKEND": "django.core.cache.backends.redis.RedisCache",
+    "LOCATION": REDIS_URL,  # noqa: F405
+    "KEY_PREFIX": "shiptrip-routing",
+    "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
 }
 
 if dsn := env.str("SENTRY_DSN", default=""):
@@ -228,6 +240,14 @@ if not _is_https_origin(PAYMENTS_PUBLIC_BASE_URL):  # noqa: F405
     raise RuntimeError("PAYMENTS_PUBLIC_BASE_URL must be an https:// origin.")
 if PAYMENTS_PROVIDER_TIMEOUT_SECONDS <= 0:  # noqa: F405
     raise RuntimeError("PAYMENTS_PROVIDER_TIMEOUT_SECONDS must be greater than zero.")
+if not 0 < PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS <= 10:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS must be greater than zero and at most 10."
+    )
+if not 0 < PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS <= 30:  # noqa: F405
+    raise RuntimeError(
+        "PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS must be greater than zero and at most 30."
+    )
 # Credentials are optional at boot: a provider that is not configured is simply
 # reported unavailable and its checkouts are refused. What is forbidden is a
 # half-configured Stripe, where a checkout could be created but its webhook
@@ -321,7 +341,20 @@ validate_payment_configuration(SimpleNamespace(**globals()))
 class _JsonFormatter(logging.Formatter):
     """Emit a small allow-listed JSON envelope without request/PII leakage."""
 
-    _fields = ("request_id", "method", "path", "status", "duration_ms")
+    _fields = (
+        "event",
+        "request_id",
+        "method",
+        "path",
+        "status",
+        "duration_ms",
+        "db_queries",
+        "db_time_ms",
+        "actor_class",
+        "provider",
+        "operation",
+        "outcome",
+    )
 
     def format(self, record):
         import json
@@ -363,6 +396,16 @@ LOGGING = {  # noqa: F405
     },
     "loggers": {
         "shiptrip.request": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "shiptrip.performance": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "shiptrip.provider": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
         # Middleware emits safe structured 4xx records. Keep Django's own
         # request logger for 5xx tracebacks only, with the formatter above

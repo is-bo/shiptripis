@@ -32,6 +32,7 @@ request for" is a financial-authority question.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from urllib.parse import urlencode
 
@@ -48,8 +49,33 @@ from .base import (
     ProviderNotConfigured,
     ProviderUnavailable,
 )
+from .http import log_provider_timing, provider_session, provider_timeout
 
 logger = logging.getLogger(__name__)
+
+
+def _timing_operation(method: str, path: str) -> str:
+    """Classify a Connect call without retaining identifiers from its path."""
+
+    resources = (
+        ("/v1/account_links", "account_link"),
+        ("/v1/accounts", "connected_account"),
+        ("/v1/payment_intents", "payment_intent"),
+        ("/v1/charges", "charge"),
+        ("/v1/transfers", "transfer"),
+        ("/v1/payouts", "payout"),
+        ("/v1/refunds", "refund"),
+        ("/v1/disputes", "dispute"),
+        ("/v1/balance", "balance"),
+        ("/v1/account", "platform_account"),
+    )
+    resource = next(
+        (name for prefix, name in resources if path.startswith(prefix)), "request"
+    )
+    action = {"GET": "fetch", "POST": "mutate", "DELETE": "delete"}.get(
+        method.upper(), "request"
+    )
+    return f"connect_{resource}_{action}"
 
 #: H0's pinned contract. Overridable by settings so a deliberate, tested
 #: version amendment is a configuration change, never an accident.
@@ -410,12 +436,8 @@ class StripeConnectGateway:
             if platform_account_id is not None
             else getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "")
         )
-        self.timeout_seconds = (
-            timeout_seconds
-            if timeout_seconds is not None
-            else getattr(settings, "PAYMENTS_PROVIDER_TIMEOUT_SECONDS", 15)
-        )
-        self._session = session or requests
+        self.timeout = provider_timeout(timeout_seconds)
+        self._session = session if session is not None else provider_session("stripe")
 
     # -- configuration ----------------------------------------------------
 
@@ -457,10 +479,52 @@ class StripeConnectGateway:
         stripe_account: str = "",
     ) -> ProviderResponse:
         self._require_configured()
-        if self.credential_mode() == "live" and method.upper() == "POST" and path in ("/v1/transfers", "/v1/payouts"):
+        if (
+            self.credential_mode() == "live"
+            and method.upper() == "POST"
+            and path in ("/v1/transfers", "/v1/payouts")
+        ):
             # Re-read the platform before issuing LIVE money instructions. This
             # GET recurses only into the transport, never into this POST guard.
             self.platform_identity()
+        started = time.monotonic()
+        outcome = "internal_error"
+        try:
+            response = self._request_once(
+                method,
+                path,
+                data=data,
+                idempotency_key=idempotency_key,
+                stripe_account=stripe_account,
+            )
+            outcome = "success"
+            return response
+        except ProviderNotConfigured:
+            outcome = "auth_rejected"
+            raise
+        except ProviderCheckoutRejected:
+            outcome = "rejected"
+            raise
+        except ProviderUnavailable:
+            outcome = "provider_unavailable"
+            raise
+        finally:
+            log_provider_timing(
+                provider="stripe",
+                operation=_timing_operation(method, path),
+                started=started,
+                outcome=outcome,
+            )
+
+    def _request_once(
+        self,
+        method: str,
+        path: str,
+        *,
+        data: dict | None = None,
+        idempotency_key: str = "",
+        stripe_account: str = "",
+    ) -> ProviderResponse:
         headers = {
             "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/x-www-form-urlencoded",
@@ -491,16 +555,13 @@ class StripeConnectGateway:
                 url,
                 headers=headers,
                 data=body,
-                timeout=self.timeout_seconds,
+                timeout=self.timeout,
             )
         except requests.RequestException as exc:
-            # Never the body, never the key: the method, path and exception
-            # class are the whole safe record of a transport failure.
+            # Never the body, key, path identifier, or connected-account id.
             logger.warning(
-                "stripe_connect transport failure on %s %s scope=%s",
-                method,
-                path,
-                stripe_account or "platform",
+                "stripe_connect transport failure operation=%s",
+                _timing_operation(method, path),
             )
             raise ProviderUnavailable(
                 f"Stripe Connect request failed: {type(exc).__name__}"

@@ -456,6 +456,13 @@ DISPUTE_EVIDENCE_URL_TTL_SECONDS = env.int(
 PAYMENTS_PROVIDER_TIMEOUT_SECONDS = env.int(
     "PAYMENTS_PROVIDER_TIMEOUT_SECONDS", default=15
 )
+PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS = env.float(
+    "PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS", default=3.05
+)
+PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS = env.float(
+    "PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS",
+    default=float(PAYMENTS_PROVIDER_TIMEOUT_SECONDS),
+)
 
 STRIPE_SECRET_KEY = env.str("STRIPE_SECRET_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env.str("STRIPE_WEBHOOK_SECRET", default="")
@@ -503,6 +510,15 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Injected by the release pipeline (git SHA, image digest, or release tag).
 # It is metadata only and is safe to expose on internal health responses.
 RELEASE_ID = env.str("RELEASE_ID", default="unknown")
+
+# Vendor-neutral performance evidence. Production records slow summaries;
+# TEST/staging may opt into query timing without retaining SQL text.
+PERFORMANCE_SLOW_REQUEST_MS = env.float(
+    "PERFORMANCE_SLOW_REQUEST_MS", default=500.0
+)
+PERFORMANCE_DB_METRICS_ENABLED = env.bool(
+    "PERFORMANCE_DB_METRICS_ENABLED", default=False
+)
 
 # Bound parsing before endpoint-level MIME/semantic validation. The private
 # media APIs enforce a 10 MiB object limit; two extra MiB cover multipart

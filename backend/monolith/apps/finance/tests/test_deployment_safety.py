@@ -7,6 +7,7 @@ import fnmatch
 import importlib.util
 import json
 import os
+import re
 import runpy
 import shutil
 import stat
@@ -353,6 +354,23 @@ class ProductionEntrypointTests(SimpleTestCase):
             assert result.returncode != 0
             assert "REDIS_URL" in result.stderr
 
+    def test_production_route_cache_uses_the_same_shared_redis(self):
+        result = boot_production(
+            "import config.settings.prod as settings; "
+            "assert settings.CACHES['default']['LOCATION'] == settings.REDIS_URL; "
+            "assert settings.CACHES['routing']['LOCATION'] == settings.REDIS_URL; "
+            "assert settings.CACHES['default']['OPTIONS']['socket_timeout'] == 1; "
+            "assert settings.CACHES['routing']['OPTIONS']['socket_connect_timeout'] == 1"
+        )
+        assert result.returncode == 0, result.stderr
+
+        result = boot_production(
+            PROD_ENTRYPOINT_BOOT,
+            ROUTE_PROVIDER_CACHE_URL="redis://other-cache.invalid:6379/0",
+        )
+        assert result.returncode != 0
+        assert "ROUTE_PROVIDER_CACHE_URL" in result.stderr
+
     def test_production_refuses_insecure_or_malformed_storage_urls(self):
         for value in (
             "http://storage.invalid",
@@ -471,66 +489,157 @@ class CombinedLauncherGeographyTests(SimpleTestCase):
         assert "raise" not in body
 
 
-class CombinedLauncherKycLimiterTests(SimpleTestCase):
-    def _kyc_env(self) -> dict[str, str]:
-        launcher = runpy.run_path(str(BACKEND / "railway" / "start.py"))
-        return launcher["kyc_env"]()
+class CombinedLauncherReliabilityTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.launcher = runpy.run_path(str(BACKEND / "railway" / "start.py"))
 
-    def test_combined_launcher_requires_external_shared_kyc_redis(self):
+    def test_railway_requires_external_shared_redis(self):
         for value in (
             "",
             "not-a-url",
             "https://cache.invalid",
             "redis://127.0.0.1:6379/0",
             "redis://localhost:6379/0",
+            "redis://localhost.:6379/0",
+            "redis://localhost.localdomain:6379/0",
             "redis://cache.invalid:bad-port/0",
+            "redis://user:password@[bad/0",
         ):
             with self.subTest(value=value), mock.patch.dict(
-                os.environ,
-                {"KYC_RATE_LIMIT_REDIS_URL": value},
-                clear=True,
+                os.environ, {"REDIS_URL": value}, clear=True
             ):
-                with self.assertRaisesRegex(RuntimeError, "KYC_RATE_LIMIT_REDIS_URL"):
-                    self._kyc_env()
+                with self.assertRaisesRegex(RuntimeError, "REDIS_URL"):
+                    self.launcher["redis_topology"]()
 
-    def test_combined_launcher_maps_only_shared_redis_into_kyc(self):
+    def test_every_child_receives_the_same_external_redis(self):
         shared_url = "rediss://user:secret@shared-cache.invalid:6380/4"
         with mock.patch.dict(
             os.environ,
-            {
-                "REDIS_URL": "redis://127.0.0.1:6379/0",
-                "KYC_RATE_LIMIT_REDIS_URL": shared_url,
-                "KYC_S3_ACCESS_KEY": "kyc-only-access-key",
-            },
+            {"REDIS_URL": shared_url, "KYC_S3_ACCESS_KEY": "kyc-only-access-key"},
             clear=True,
         ):
-            env = self._kyc_env()
+            redis_url, embedded = self.launcher["redis_topology"]()
+            env = self.launcher["kyc_env"](redis_url)
 
+        assert embedded is False
         assert env["REDIS_URL"] == shared_url
         assert env["S3_ACCESS_KEY"] == "kyc-only-access-key"
         assert env["KYC_HTTP_ADDR"] == "127.0.0.1:8083"
 
-    def test_combined_launcher_allows_explicit_single_replica_local_mode(self):
+    def test_embedded_redis_is_explicit_local_compatibility_only(self):
         with mock.patch.dict(
-            os.environ,
-            {"KYC_RATE_LIMIT_LOCAL_MODE": "true"},
-            clear=True,
+            os.environ, {"SHIPTRIP_EMBEDDED_REDIS": "true"}, clear=True
         ):
-            env = self._kyc_env()
+            redis_url, embedded = self.launcher["redis_topology"]()
 
-        assert env["REDIS_URL"] == "redis://127.0.0.1:6379/0"
+        assert embedded is True
+        assert redis_url == "redis://127.0.0.1:6379/0"
 
-    def test_combined_launcher_rejects_local_mode_with_external_url(self):
         with mock.patch.dict(
             os.environ,
             {
-                "KYC_RATE_LIMIT_LOCAL_MODE": "true",
-                "KYC_RATE_LIMIT_REDIS_URL": "rediss://cache.invalid:6380/0",
+                "SHIPTRIP_EMBEDDED_REDIS": "true",
+                "REDIS_URL": "redis://shared-cache.invalid:6379/0",
             },
             clear=True,
         ):
-            with self.assertRaisesRegex(RuntimeError, "LOCAL_MODE"):
-                self._kyc_env()
+            with self.assertRaisesRegex(RuntimeError, "SHIPTRIP_EMBEDDED_REDIS"):
+                self.launcher["redis_topology"]()
+
+    def test_default_combined_database_budget_is_rolling_deploy_safe(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            budget = self.launcher["connection_budget"]()
+
+        assert budget == {
+            "web_workers": 2,
+            "web_threads": 2,
+            "grpc_workers": 4,
+            "chat_max": 5,
+            "notif_max": 5,
+            "email_max": 2,
+            "steady_min": 11,
+            "steady_peak": 22,
+            "rolling_peak": 44,
+        }
+
+    def test_pool_and_concurrency_values_are_bounded(self):
+        for name, value in (
+            ("WEB_CONCURRENCY", "0"),
+            ("WEB_THREADS", "9"),
+            ("CHAT_DB_MAX_CONNS", "100"),
+            ("EMAIL_DB_MAX_CONNS", "not-an-int"),
+        ):
+            with self.subTest(name=name), mock.patch.dict(
+                os.environ, {name: value}, clear=True
+            ):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    self.launcher["connection_budget"]()
+
+    def test_combined_overrides_cannot_exhaust_the_rolling_database_budget(self):
+        environment = {
+            "WEB_CONCURRENCY": "4",
+            "WEB_THREADS": "4",
+            "KYC_GRPC_WORKERS": "8",
+            "CHAT_DB_MAX_CONNS": "15",
+            "NOTIF_DB_MAX_CONNS": "10",
+            "EMAIL_DB_MAX_CONNS": "5",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "rolling deployment"):
+                self.launcher["connection_budget"]()
+
+    def test_go_kyc_has_no_database_pool_used_only_for_readiness(self):
+        source = (BACKEND / "services" / "cmd" / "kyc" / "main.go").read_text(
+            encoding="utf-8"
+        )
+        assert "LoadPostgres" not in source
+        assert "db.NewPool" not in source
+        assert 'Register("postgres"' not in source
+
+
+class ProviderTimeoutBootSafetyTests(SimpleTestCase):
+    def test_production_refuses_unbounded_provider_timeouts(self):
+        for variable, value in (
+            ("PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS", "0"),
+            ("PAYMENTS_PROVIDER_CONNECT_TIMEOUT_SECONDS", "11"),
+            ("PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS", "0"),
+            ("PAYMENTS_PROVIDER_READ_TIMEOUT_SECONDS", "31"),
+        ):
+            with self.subTest(variable=variable, value=value):
+                result = boot_production(PROD_ENTRYPOINT_BOOT, **{variable: value})
+                assert result.returncode != 0
+                assert variable in result.stderr
+
+
+class KycEdgeLimitTests(SimpleTestCase):
+    def test_valid_kyc_request_fits_while_other_routes_stay_bounded(self):
+        handler = (
+            BACKEND / "services" / "internal" / "kyc" / "handler.go"
+        ).read_text(encoding="utf-8")
+        match = re.search(r"MaxRequestBytes int64 = (\d+) << (\d+)", handler)
+        assert match is not None
+        authoritative_bytes = int(match.group(1)) << int(match.group(2))
+
+        for path in (
+            BACKEND / "railway" / "Caddyfile",
+            BACKEND / "gateway" / "Caddyfile",
+        ):
+            text = path.read_text(encoding="utf-8")
+            normal = re.search(
+                r"request_body @bounded_body\s*\{\s*max_size (\d+)MB", text
+            )
+            kyc = re.search(
+                r"handle @kyc\s*\{.*?request_body\s*\{\s*max_size (\d+)MB",
+                text,
+                re.DOTALL,
+            )
+            assert normal is not None and int(normal.group(1)) == 12
+            assert kyc is not None and int(kyc.group(1)) * 1_000_000 >= authoritative_bytes
+            assert re.search(
+                r"@bounded_body\s*\{\s*not path /kyc/\* /api/kyc/\*\s*\}", text
+            )
 
 
 class LegacyProviderFirewallTests(SimpleTestCase):

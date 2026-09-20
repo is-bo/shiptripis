@@ -3310,13 +3310,16 @@ def system_status(request):
     jobs = ScheduledJob.objects.all()
     pending = jobs.filter(status=ScheduledJob.Status.PENDING)
     oldest = pending.order_by("run_at").values_list("run_at", flat=True).first()
-    kyc_local = os.environ.get("KYC_RATE_LIMIT_LOCAL_MODE", "").strip().lower() in {
+    kyc_local = os.environ.get("SHIPTRIP_EMBEDDED_REDIS", "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
-    kyc_shared = bool(os.environ.get("KYC_RATE_LIMIT_REDIS_URL", "").strip())
+    # K1 gives KYC the same REDIS_URL as every other combined-container child.
+    # Production-style startup rejects loopback unless embedded mode is
+    # explicit, so a configured non-embedded runtime is the shared topology.
+    kyc_shared = bool(settings.REDIS_URL) and not kyc_local
     if kyc_shared:
         limiter = "Shared Redis"
     elif kyc_local:

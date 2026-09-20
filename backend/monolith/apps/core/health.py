@@ -24,10 +24,12 @@ def healthz(_request):
 def readyz(_request):
     """Readiness: database and migration graph must be usable.
 
-    Redis, object storage and payment providers are intentionally not part of
-    this public probe. Redis is a delivery optimisation and provider outages
-    must not make the API disappear; those dependencies are surfaced by the
-    permissioned deep-health endpoint instead.
+    Redis is measured here but is not a hard HTTP readiness dependency. It
+    carries cache/throttle state and non-financial delivery transports; an
+    outage is operationally significant, but restarting Django cannot repair
+    it and would also remove otherwise-safe database-backed API operations.
+    Object storage and payment providers remain on the permissioned deep-health
+    surface rather than this orchestrator probe.
     """
 
     checks = {"database": "ok", "migrations": "ok", "rate_limit_cache": "ok"}
@@ -52,14 +54,23 @@ def readyz(_request):
         cache_key = f"readyz:{marker}"
         cache.set(cache_key, marker, timeout=5)
         if cache.get(cache_key) != marker:
-            checks["rate_limit_cache"] = "failed"
+            checks["rate_limit_cache"] = "degraded"
     except Exception:
-        checks["rate_limit_cache"] = "failed"
+        checks["rate_limit_cache"] = "degraded"
 
-    ready = all(value == "ok" for value in checks.values())
+    # Database access and the applied schema are hard dependencies for every
+    # authoritative request. Redis is different: it accelerates delivery,
+    # caches routes and holds shared throttle counters, but never owns money,
+    # capacity or a delayed financial obligation. Redis-backed security gates
+    # fail closed at their own request boundaries (notably DRF throttles and
+    # KYC upload limiting). Restarting a healthy web process cannot repair an
+    # external Redis outage and would turn a degraded subsystem into total
+    # unavailability, so readiness remains true while reporting degradation.
+    ready = checks["database"] == "ok" and checks["migrations"] == "ok"
+    degraded = ready and any(value != "ok" for value in checks.values())
     return _response(
         {
-            "status": "ready" if ready else "not_ready",
+            "status": "degraded" if degraded else ("ready" if ready else "not_ready"),
             "release": settings.RELEASE_ID,
             "checks": checks,
         },
