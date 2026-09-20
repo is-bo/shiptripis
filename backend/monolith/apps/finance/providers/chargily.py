@@ -216,7 +216,12 @@ class ChargilyGateway:
             raise ProviderNotConfigured("CHARGILY_SECRET_KEY is not configured.")
 
     def _request(
-        self, method: str, path: str, *, operation: str, payload: dict | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        operation: str = "request",
+        payload: dict | None = None,
     ) -> dict:
         self._require_configured()
         headers = {

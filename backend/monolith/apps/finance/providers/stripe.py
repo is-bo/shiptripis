@@ -235,7 +235,7 @@ class StripeGateway:
         method: str,
         path: str,
         *,
-        operation: str,
+        operation: str = "request",
         data: dict | None = None,
         idempotency_key: str = "",
     ) -> dict:
