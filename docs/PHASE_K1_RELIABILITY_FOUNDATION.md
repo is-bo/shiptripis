@@ -3,8 +3,11 @@
 **Date:** 2026-09-20
 **Starting SHA:** `8bcf1ada37614342a1bf3feec007fcea45954d29`
 **Branch:** `codex/k1-reliability-foundation`
-**State:** implementation complete; independent Gemini verification, merge,
-external Redis provisioning, and TEST deployment are pending.
+**State:** code, independent verification, CI, merge, and TEST deployment are
+complete. Shared persistent Redis is explicitly deferred because the Railway
+project's current Free plan cannot provision another resource; TEST is running
+the reviewed embedded-Redis compatibility mode and the queue-durability defect
+therefore remains open.
 
 K1 addresses the reliability foundation identified by the full-stack
 performance audit without changing financial economics, payout rules, or the
@@ -277,34 +280,106 @@ Broad Django, PostgreSQL concurrency, full Go/race/integration, Flutter,
 schema-drift, and migration checks are deliberately delegated to Gemini as
 required by the K1 test budget. K1 changes no model or migration.
 
-## 10. Independent verification and deployment state
+## 10. Independent verification, CI, merge, and TEST release
 
-- Gemini result: **pending**.
-- Merge/push/CI: **not performed before Gemini**.
-- Railway resources/variables: **not changed**.
-- Managed Redis provision/cutover: **required after Gemini GREEN**.
-- TEST deployment and post-deploy benchmark: **pending**.
-- LIVE infrastructure/provider configuration: **untouched**.
-- Money/provider actions: **none**.
+Gemini independently returned **GREEN** for exact implementation SHA
+`0de95338720eba152bc838719be33097e43eedf2`. Its PostgreSQL 16.13 run reported
+2,267 Django tests passing with 34 skipped, all Go packages passing, both Caddy
+files valid under Caddy 2.10.0, and zero migration/schema drift. Go race and
+real-Redis integration remained delegated to CI.
 
-Read-only Railway inspection confirmed Stripe/Chargily are in TEST mode. It
-also exposed a pre-existing safety discrepancy:
-`PAYOUT_DZD_EXECUTION_ENABLED` currently reads `true`, while the latest status
-record says it was disabled. K1 did not mutate the variable or initiate a
-payout. The owner must reconcile and set the TEST deployment's safe intended
-value before any post-Gemini deployment.
+PR #10's first CI run found six legacy tests that called the private Stripe or
+Chargily `_request` helper without the new timing `operation` label. K1 had made
+that keyword mandatory even though the pre-K1 helper contract permitted the
+direct calls. Commit `2be5df3d607a17f23fb3e771be2cbf36635bb334`
+restored a safe `request` default while normal checkout, fetch, and refund paths
+continue to emit their specific operation labels. The 124 affected provider and
+deployment-safety tests and Ruff passed locally. Fresh CI then passed all six
+jobs: 2,273 Django tests with 34 skipped, Flutter, schema drift, production and
+native Caddy checks, Go race/unit, and Go real-Redis integration.
 
-After Gemini GREEN, the controlled TEST cutover order is:
+PR #10 merged to `main` at
+`fdf62e95388c24b4fa556a33eb229f1650fe1e9f`. Exact runtime SHA `2be5df3` was
+deployed to Railway TEST as `v1.0.0-rc.46+2be5df3`, deployment
+`04a4d51f-4e01-4993-8928-5458284ac484` (**SUCCESS**). No migration was added.
+Stripe and Chargily remained TEST, mock payments remained disabled,
+`PAYOUT_DZD_EXECUTION_ENABLED` was reconciled from the stale `true` value to
+`false` before rollout, and no payout or other money mutation was initiated.
+LIVE was not changed.
 
-1. provision a persistent shared Redis service;
-2. set the combined app's `REDIS_URL` to the private shared URL and ensure the
-   safe TEST finance/provider variables, including DZD execution, are correct;
-3. deploy the exact reviewed K1 SHA;
-4. verify `/healthz`, `/readyz`, Redis connectivity/persistence, DRF throttles,
-   KYC limiting, route cache, email receipts/retry, FCM stream, chat,
-   notifications, and realtime behavior;
-5. record web/process memory, Gunicorn concurrency, PostgreSQL connections,
-   Redis state, provider latency events, readiness behavior, and key Admin
-   response timings as the K3 baseline.
+## 11. Explicit Redis deferral and required later cutover
 
-No K2 work begins until the owner returns Gemini's independent report.
+Provisioning Railway Redis was attempted only after Gemini GREEN. Railway
+refused it with `Free plan resource provision limit exceeded`. The owner chose
+to defer that resource change. TEST therefore sets
+`SHIPTRIP_EMBEDDED_REDIS=true` and deliberately retains loopback Redis with RDB
+saves disabled and AOF disabled. Immediately before replacement, both
+`notif:fcm` and `email:send` had zero entries and the FCM group had zero pending
+items, so that particular rollout did not discard queued TEST transport work.
+
+This is a recorded exception, not a durability fix. FCM stream work created
+between future restarts can still be lost. Email obligations remain recoverable
+from PostgreSQL `OutboundMessage`, but their in-flight Redis transport is also
+ephemeral. Shared multi-replica cache, throttle, pub/sub, and queue semantics
+are not operationally available until the later cutover.
+
+The later cutover must be controlled as follows:
+
+1. Upgrade Railway capacity or supply an approved persistent shared Redis
+   service; do not reuse an unrelated or nonpersistent endpoint.
+2. Provision Redis on the project's private network. Verify an attached volume
+   at Redis's data directory and enable/verify AOF (recommended
+   `appendfsync everysec`) and/or an owner-approved RDB policy; persistence must
+   be proved, not inferred from the template name.
+3. Before replacing embedded Redis, inspect `XLEN` and `XPENDING` for
+   `notif:fcm` and `email:send`. Schedule a quiet TEST window if either contains
+   work, because the old loopback instance cannot be reached after replacement.
+4. Stage the app variables without an intermediate deploy:
+   `REDIS_URL=${{Redis.REDIS_URL}}`, `SHIPTRIP_EMBEDDED_REDIS=false`; keep
+   `ROUTE_PROVIDER_CACHE_URL` absent or exactly equal to `REDIS_URL`.
+5. Deploy the then-current reviewed TEST SHA once. Do not combine this with a
+   provider activation or LIVE change.
+6. Verify `/healthz`, `/readyz`, both Django cache aliases, DRF throttles, the
+   KYC limiter, route caching, chat/notification pub-sub, FCM and email consumer
+   groups, pending/lag, and the worker heartbeat.
+7. Write a harmless sentinel with a TTL, restart/redeploy Redis through the
+   approved Railway workflow, and prove the sentinel and stream/group state
+   survive. Remove the sentinel, capture volume/persistence evidence, and only
+   then mark the durable Redis finding resolved.
+
+## 12. Post-deploy K3 baseline and acceptance evidence
+
+- `/healthz`: HTTP 200, release `v1.0.0-rc.46+2be5df3`.
+- `/readyz`: HTTP 200 `ready`; database, migrations, and rate-limit cache `ok`.
+- Gunicorn: two `gthread` workers with two threads; observed worker RSS was
+  114,208 KiB and 112,836 KiB (about 111.5 and 110.2 MiB).
+- Container: about 538 MB current memory and 539.5 MB five-minute peak of a
+  1,024 MB limit after rollout.
+- PostgreSQL: 12 observed active TEST connections; configured model remains
+  11 minimum / 22 peak / 44 rolling-overlap peak.
+- Redis: both Django cache aliases passed write/read/delete probes; FCM group
+  had one consumer, zero pending and zero lag; the worker heartbeat had a live
+  TTL. RDB/AOF persistence is disabled under the documented exception.
+- DRF: an isolated, cleaned-up probe allowed exactly 60 anonymous requests at
+  the configured `60/min` rate and rejected the 61st.
+- KYC: the service is listening and the public route reached it; an
+  unauthenticated submission returned 401. CI/native-Caddy checks prove the
+  27 MB KYC edge ceiling remains above the 25 MiB service cap while ordinary
+  routes remain at 12 MB.
+- Chat/notifications: both internal ports are open, dispatchers subscribed,
+  unauthenticated WebSocket upgrades fail closed with 401, and the FCM worker
+  stayed live after one transient provider gRPC `too_many_pings` reconnect
+  warning.
+- Email: the Go service is healthy but `EMAIL_ENABLED=false`; PostgreSQL held
+  97 pending and 28 cancelled durable obligations. No SMTP delivery claim is
+  made while the pre-existing feature switch is off.
+- Safe provider reads produced structured timing events without payloads or
+  credentials: Stripe success 201.88 ms; a deliberately nonexistent Chargily
+  checkout read was rejected in 550.97 ms. No payment mutation occurred.
+- Admin read-only baseline: Overview 662.2 ms, Finance Overview 2,312.4 ms,
+  People 21.9 ms. Slow-request events contained route templates, status,
+  duration, and actor class only.
+
+All K1 code/configuration objectives except operational persistent Redis are
+deployed. The durable Redis/queue risk remains explicitly **unresolved** until
+section 11 is completed.

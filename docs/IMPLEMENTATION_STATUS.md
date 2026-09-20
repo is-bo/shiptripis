@@ -3,8 +3,8 @@
 ## K1 — Reliability & Performance Safety Foundation (2026-09-20)
 
 Implemented on `codex/k1-reliability-foundation` from
-`8bcf1ada37614342a1bf3feec007fcea45954d29`; independent Gemini verification
-is pending. K1 prepares a production-style shared persistent Redis contract
+`8bcf1ada37614342a1bf3feec007fcea45954d29`. K1 prepares a production-style
+shared persistent Redis contract
 while retaining explicitly enabled embedded Redis for local use, makes Redis
 failure visible but degradable at Django readiness, aligns route-specific Caddy
 KYC allowance with the 25 MiB service cap, adds thread-local bounded provider
@@ -18,12 +18,30 @@ fields; optional query count/time capture is off by default. Stripe/Chargily
 timings contain provider, operation, duration, and outcome only. Targeted
 Codex gates passed: 73 health/performance/provider tests, 57 Stripe Connect
 adapter tests, 46 deployment-safety tests, changed KYC Go tests, Ruff, Python
-compile, static edge checks, and diff checks. No migration, merge, deploy, Railway
-resource change, provider cutover, or money operation occurred. A managed
-persistent Redis cutover remains required only after Gemini GREEN. Read-only
-diagnostics also found a pre-existing `PAYOUT_DZD_EXECUTION_ENABLED=true`
-discrepancy that must be reconciled before any post-Gemini TEST deployment.
-See [the K1 record](PHASE_K1_RELIABILITY_FOUNDATION.md).
+compile, static edge checks, and diff checks. No migration or financial
+economics change occurred.
+
+Gemini returned GREEN for exact SHA `0de9533`. PR CI then exposed a backward-
+compatibility issue in six tests that directly called provider `_request`
+without an operation label. The narrow `2be5df3` fix restored the safe default;
+124 affected tests passed locally and fresh CI passed all six jobs, including
+2,273 Django tests (34 skipped), Go race/real-Redis integration, Flutter,
+schema drift, and native Caddy validation. PR #10 merged at `fdf62e9`.
+
+Exact runtime SHA `2be5df3` is deployed to Railway TEST as
+`v1.0.0-rc.46+2be5df3` (deployment `04a4d51f-4e01-4993-8928-5458284ac484`,
+SUCCESS). Health/readiness, service ports, caches, route cache, DRF throttling,
+FCM consumer/heartbeat, chat/notification routing, provider timings, memory,
+connections, and Admin timing baselines passed. Stripe and Chargily remain
+TEST; mocks and DZD payout execution are off; no money mutation or LIVE change
+occurred.
+
+Persistent Redis remains an explicit open exception. Railway rejected the
+post-GREEN Redis create because the Free plan resource limit is reached, and
+the owner deferred provisioning. TEST uses `SHIPTRIP_EMBEDDED_REDIS=true` with
+RDB/AOF disabled; durable FCM/queue risk is therefore **not resolved**. The K1
+record contains the exact later persistent-volume/AOF cutover and verification
+steps. See [the K1 record](PHASE_K1_RELIABILITY_FOUNDATION.md).
 
 ## Post-funding DZD payout setup reconciliation (2026-09-20)
 
