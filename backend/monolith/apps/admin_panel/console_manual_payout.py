@@ -244,9 +244,6 @@ def manual_detail(request, payout):
                     accept_name_difference=request.POST.get("accept_name_difference")
                     == "on",
                 )
-                from apps.finance.payout_release import evaluate_payout_release
-
-                evaluate_payout_release(deal_id=payout.deal_id)
             elif action == "view_receipt":
                 evidence = _scoped_evidence(
                     payout, request.POST.get("evidence_reference")

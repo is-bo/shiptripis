@@ -1,5 +1,20 @@
 # ShipTrip V1 Implementation Status
 
+## Post-funding DZD payout setup reconciliation (2026-09-20)
+
+Implemented a narrow, audited transition from a funded manual-DZD placeholder
+instruction to the Traveler's later submitted and approved first usable DZD
+profile. Funding economics and the original instruction snapshot remain
+immutable. Profile approval on console or API rechecks qualifying payouts;
+replays are idempotent. An auditable dry-run/execute command supports existing
+TEST data after independent verification and deployment. The manual payout
+presenter and gate now recognize cancellation-compensation and dispute
+settlement awards without successful-delivery prerequisites while retaining
+award, source-funding, hold, evidence and DZD execution checks. Payout #1's
+legacy quarantine remains outside this path. No TEST data repair, merge,
+deployment or live financial activation has been performed. See the
+[reconciliation record](PAYOUT_POST_FUNDING_SETUP_RECONCILIATION.md).
+
 ## Public landing hero — dimensional Mediterranean globe (2026-09-20)
 
 Implemented the hero on `/`, `/en/`, `/fr/`, and `/ar/` using native WebGL

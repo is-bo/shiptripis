@@ -422,12 +422,12 @@ def _lock_payout_aggregate(payout_id: int):
 
     seed = Payout.objects.get(pk=payout_id)
     lock_deal_lifecycle(seed.deal_id)
-    balance = (
-        PaymentOrder.objects.filter(deal_id=seed.deal_id, purpose="deal_balance")
-        .exclude(status="cancelled")
-        .order_by("-pk")
-        .first()
+    balance_orders = PaymentOrder.objects.filter(
+        deal_id=seed.deal_id, purpose="deal_balance"
     )
+    if seed.eligibility_basis not in ("cancellation_compensation", "dispute_settlement"):
+        balance_orders = balance_orders.exclude(status="cancelled")
+    balance = balance_orders.order_by("-pk").first()
     if balance is None:
         raise PayoutBlocked(
             "This Deal has no live balance obligation.", code="balance_order_missing"
