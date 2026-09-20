@@ -38,8 +38,25 @@ pass 8/8, Admin/Finance 587/587, full PostgreSQL Django 1,656 passed with 34
 skipped, and full Flutter 974/974. Analyzer, formatter, localization, Ruff,
 deployment safety, schema drift and deploy/static checks passed. All eight
 J9.3 defects and J9.1/J9.2 regressions were reconfirmed closed, with 0
-CRITICAL, 0 MAJOR and 0 MINOR findings. A new green PostgreSQL PR CI run remains
-required before merge and TEST deployment. No APK has been built.
+CRITICAL, 0 MAJOR and 0 MINOR findings.
+
+[PR #7 CI run 35480881618](https://github.com/is-bo/shiptripis/actions/runs/35480881618)
+passed all six jobs on final branch head `8222eb4629e4007e266cf3ab9c92b9074e7923bc`:
+PostgreSQL Django 2,245 passed with 34 skipped; Flutter 974 passed; Go
+unit/race and real-Redis integration, schema drift, analyzer, formatter and
+production/static checks were green. PR #7 merged as
+`61d4419eedb11b864f0efadb14c89978fab38067`.
+
+Exact merge SHA `61d4419eedb11b864f0efadb14c89978fab38067` was deployed
+from a byte-verified archive to Railway TEST as deployment
+`62c02882-d625-4c80-a8e0-d15517a32623`, release
+`v1.0.0-rc.44+61d4419`: **SUCCESS**. `/healthz` and `/readyz` returned 200;
+database, migrations and rate-limit cache reported `ok`.
+`PAYMENTS_ENVIRONMENT=test`, Stripe and Chargily TEST credentials,
+`PAYMENTS_ALLOW_MOCK_PROVIDER=false` and `PAYOUT_DZD_EXECUTION_ENABLED=false`
+were verified after deployment. No provider or real-money operation occurred.
+No APK was built. All known J9 remediation is complete; the next step is final
+post-J9 release-candidate verification/build.
 See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
 
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
