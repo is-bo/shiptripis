@@ -30,11 +30,16 @@ follow-up fix retains the existing enabled-route authorization and checks
 capability separately only for the disabled-feature 503 path. Focused SQLite
 query-budget and J9.3 Admin tests now pass 8/8, and the J9.1 banned-admin
 regression passes 1/1; changed-file Ruff passes. Local
-PostgreSQL test authentication was unavailable, so renewed independent GREEN
-verification and a green PostgreSQL CI run are required before merge and TEST
-deployment. No APK has been built. The original verified J9 product-defect
-count was 0 CRITICAL, 0 MAJOR and 0 MINOR; the CI regression is not yet closed
-by release gates.
+PostgreSQL test authentication was unavailable locally. Follow-up independent
+Gemini verification returned GREEN on clean SHA
+`24fefb3a66f1520a03877c5e7c95c933765c59f9`: the queue cost is 13 queries
+for one and ten submissions on PostgreSQL (limit 14), J9.3 Admin/banned tests
+pass 8/8, Admin/Finance 587/587, full PostgreSQL Django 1,656 passed with 34
+skipped, and full Flutter 974/974. Analyzer, formatter, localization, Ruff,
+deployment safety, schema drift and deploy/static checks passed. All eight
+J9.3 defects and J9.1/J9.2 regressions were reconfirmed closed, with 0
+CRITICAL, 0 MAJOR and 0 MINOR findings. A new green PostgreSQL PR CI run remains
+required before merge and TEST deployment. No APK has been built.
 See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
 
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
