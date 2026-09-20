@@ -806,19 +806,6 @@ def _detail_redirect(request, reference):
     return redirect(url)
 
 
-def _release_waiting_payouts(profile):
-    """An approval can be the last thing a waiting payout needed."""
-
-    from apps.finance.models import Payout
-    from apps.finance.payout_release import evaluate_payout_release
-
-    for deal_id in Payout.objects.filter(
-        dzd_profile_revision_id=profile.pk,
-        status__in=("blocked", "eligible", "scheduled"),
-    ).values_list("deal_id", flat=True):
-        evaluate_payout_release(deal_id=deal_id)
-
-
 @sensitive_variables()
 def _decide(request, profile, *, decision, accept_name_difference):
     if decision not in REVIEW_DECISIONS:
@@ -840,8 +827,6 @@ def _decide(request, profile, *, decision, accept_name_difference):
         decision=decision,
         accept_name_difference=accept_name_difference,
     )
-    if review.status == "approved":
-        _release_waiting_payouts(profile)
     return review
 
 

@@ -21,6 +21,7 @@ from .payout_execution import _lock_payout_aggregate
 from .payout_profiles import require_capabilities
 from .payout_reconciliation import notify_payout_state
 from .money import convert_eur_cents
+from .payout_setup_reconciliation import SETTLEMENT_BASES
 
 
 def authorize(actor):
@@ -59,15 +60,29 @@ def _gate(payout, balance):
     gate = payout_release_gate_at(deal)
     if gate is not None and timezone.now() < gate:
         raise ValidationError("The funded arrival floor is still open.")
-    if (
+    settlement_award = payout.eligibility_basis in SETTLEMENT_BASES
+    if settlement_award:
+        if (
+            not payout.eligibility_decision_reference
+            or not payout.amount_revisions.filter(
+                settlement_reference=payout.eligibility_decision_reference,
+                amount_eur_cents=payout.amount_eur_cents,
+            ).exists()
+        ):
+            raise ValidationError("Reviewed settlement award required.")
+        if deal.delivery_confirmed_at and (
+            not deal.protection_ends_at or deal.protection_ends_at > timezone.now()
+        ):
+            raise ValidationError("Protection period is still open.")
+    elif (
         not deal.delivery_confirmed_at
         or not deal.protection_ends_at
         or deal.protection_ends_at > timezone.now()
-        or deal.disputes.filter(status__in=Dispute.ACTIVE_STATUSES).exists()
-        or active_holds(payout).exists()
     ):
-        raise ValidationError("Delivery, protection or hold gate prevents progression.")
-    if balance.outstanding_eur_cents or balance.refunded_eur_cents:
+        raise ValidationError("Delivery and protection gate prevents progression.")
+    if deal.disputes.filter(status__in=Dispute.ACTIVE_STATUSES).exists() or active_holds(payout).exists():
+        raise ValidationError("A dispute or hold prevents progression.")
+    if not settlement_award and (balance.outstanding_eur_cents or balance.refunded_eur_cents):
         raise ValidationError("Funding is not settled.")
     if not payout.fx_rate_micros or payout.payout_amount_minor != convert_eur_cents(
         payout.amount_eur_cents, to_currency="DZD", rate_micros=payout.fx_rate_micros

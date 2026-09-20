@@ -99,7 +99,7 @@ REVIEW_DECISIONS = {
 
 
 @transaction.atomic
-def review_profile(
+def _record_profile_review(
     *, actor, reference, approve=None, accept_name_difference=False, decision=None
 ):
     """Record one reviewer decision against one immutable profile revision.
@@ -152,6 +152,15 @@ def review_profile(
         and not accept_name_difference
     ):
         status = "needs_attention"
+    latest = profile.reviews.order_by("-pk").first()
+    if (
+        status == "approved"
+        and latest
+        and latest.status == status
+        and latest.identity_attestation_id == identity.pk
+        and latest.reason_code == result["classification"]
+    ):
+        return latest
     review = PayoutProfileReview.objects.create(
         profile=profile,
         reviewer=actor,
@@ -182,6 +191,24 @@ def review_profile(
             "name_difference_accepted": accept_name_difference,
         },
     )
+    return review
+
+
+def review_profile(
+    *, actor, reference, approve=None, accept_name_difference=False, decision=None
+):
+    """Commit the review before acquiring any Deal/Payout reconciliation lock."""
+    review = _record_profile_review(
+        actor=actor,
+        reference=reference,
+        approve=approve,
+        accept_name_difference=accept_name_difference,
+        decision=decision,
+    )
+    if review.status == "approved":
+        from .payout_setup_reconciliation import release_after_profile_approval
+
+        release_after_profile_approval(profile=review.profile, actor=actor)
     return review
 
 

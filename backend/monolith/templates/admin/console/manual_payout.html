@@ -135,8 +135,8 @@ skips any of them.
     </dl>
 
     <div class="st-readonly-note">
-      <span><strong>This destination was locked when the shipment was funded{% if manual.destination.locked_at %} on {{ manual.destination.locked_at|date:"d M Y" }}{% endif %}.</strong>
-      It is version&nbsp;#{{ manual.destination.version_sequence }} of the Traveler's payout method, and it is the only account this payout may be sent to.</span>
+      <span>{% if manual.destination.initial_setup_reconciled %}<strong>The funding snapshot had no destination; this approved initial setup was attached through an audited reconciliation.</strong>{% else %}<strong>This destination was locked when the shipment was funded{% if manual.destination.locked_at %} on {{ manual.destination.locked_at|date:"d M Y" }}{% endif %}.</strong>{% endif %}
+      Version&nbsp;#{{ manual.destination.version_sequence }} is the only account this payout may be sent to.</span>
     </div>
 
     {% if manual.destination.newer_version %}
@@ -194,7 +194,10 @@ skips any of them.
     {% endif %}
 
     {% else %}
-    <p class="st-alert st-alert-bad" role="status"><strong>This payout has no frozen destination.</strong> There is nothing to send to, and no instruction can be prepared.</p>
+    <p class="st-alert st-alert-bad" role="status"><strong>Destination setup was incomplete when this payout was funded.</strong> There is no account bound to this payout yet, and no instruction can be prepared.</p>
+    {% if manual.destination.setup_followup %}
+    <p class="st-alert st-alert-info" role="status"><strong>Traveler's current DZD method: version #{{ manual.destination.setup_followup.sequence }}.</strong> {{ manual.destination.setup_followup.status }}. This is context only; it is not this payout's destination. An approved initial setup is attached only by the audited reconciliation transition. If it remains blocked after approval, Finance must run the dry-run reconciliation command and review its refusal reason.</p>
+    {% endif %}
     {% endif %}
   </section>
 

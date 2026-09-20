@@ -34,6 +34,7 @@ from apps.finance.models import PaymentOrder, PayoutProfileReview
 from apps.finance.payout_domain import active_holds
 from apps.finance.payout_evidence import CHEQUE_LABELS, RECEIPT_LABELS
 from apps.finance.payout_manual_profiles import approved_profile
+from apps.finance.payout_setup_reconciliation import SETTLEMENT_BASES
 from .permissions import has_admin_permission
 from .console_presenters import age_label, format_minor_amount
 
@@ -145,6 +146,10 @@ EVENT_LABELS: dict[str, tuple[str, str]] = {
     "instruction_amended": (
         "Instruction amended",
         "An audited pre-commit amendment was applied.",
+    ),
+    "initial_payout_setup_completed": (
+        "Initial payout setup reconciled",
+        "The Traveler's first approved DZD setup was bound through an audited amendment.",
     ),
     "dispute_active_at_protection_expiry": (
         "Dispute froze the payout",
@@ -301,6 +306,7 @@ def destination_of(payout, profile, version) -> dict:
         getattr(review, "status", ""), ("Pending review", "wait")
     )
     newer = None
+    setup_followup = None
     if profile is not None:
         current = profile.method.current_version
         if current and current.dzd_profile_revision_id != profile.pk:
@@ -308,6 +314,25 @@ def destination_of(payout, profile, version) -> dict:
                 "sequence": current.sequence,
                 "submitted_at": getattr(
                     current.dzd_profile_revision, "submitted_at", None
+                ),
+            }
+    elif version and payout.block_reason == "payout_setup_required":
+        current = version.method.current_version
+        if current and current.pk != version.pk and current.dzd_profile_revision_id:
+            current_profile = current.dzd_profile_revision
+            latest = _latest_review(current_profile)
+            setup_followup = {
+                "sequence": current.sequence,
+                "status": (
+                    "Approved; reconciliation required"
+                    if approved_profile(current_profile)
+                    else "Awaiting approval"
+                    if latest is None
+                    else "Correction required"
+                    if latest.status == "needs_attention"
+                    else "Rejected"
+                    if latest.status == "rejected"
+                    else "Approval no longer valid"
                 ),
             }
     return {
@@ -331,6 +356,10 @@ def destination_of(payout, profile, version) -> dict:
             "approved": approved_profile(profile, funded_payout=payout),
         },
         "newer_version": newer,
+        "setup_followup": setup_followup,
+        "initial_setup_reconciled": payout.instruction_amendments.filter(
+            reason_code="initial_payout_setup_completed"
+        ).exists(),
     }
 
 
@@ -421,7 +450,8 @@ def blockers_of(payout, destination, *, holds) -> list[dict]:
             }
         )
     deal = payout.deal
-    if not deal.delivery_confirmed_at:
+    settlement_award = payout.eligibility_basis in SETTLEMENT_BASES
+    if not settlement_award and not deal.delivery_confirmed_at:
         found.append(
             {
                 "title": "Delivery is not confirmed",
@@ -445,13 +475,15 @@ def blockers_of(payout, destination, *, holds) -> list[dict]:
                 "code": "dispute_active",
             }
         )
-    balance = (
-        PaymentOrder.objects.filter(deal_id=payout.deal_id, purpose="deal_balance")
-        .exclude(status="cancelled")
-        .order_by("-pk")
-        .first()
-    )
-    if balance is None:
+    balance = None
+    if not settlement_award:
+        balance = (
+            PaymentOrder.objects.filter(deal_id=payout.deal_id, purpose="deal_balance")
+            .exclude(status="cancelled")
+            .order_by("-pk")
+            .first()
+        )
+    if not settlement_award and balance is None:
         found.append(
             {
                 "title": "No live balance obligation",
@@ -459,7 +491,7 @@ def blockers_of(payout, destination, *, holds) -> list[dict]:
                 "code": "balance_order_missing",
             }
         )
-    elif balance.outstanding_eur_cents or balance.refunded_eur_cents:
+    elif balance and (balance.outstanding_eur_cents or balance.refunded_eur_cents):
         found.append(
             {
                 "title": "Funding is not settled",
