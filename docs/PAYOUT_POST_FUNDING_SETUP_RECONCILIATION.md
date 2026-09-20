@@ -99,6 +99,15 @@ profile joins, which PostgreSQL rejects for `FOR NO KEY UPDATE`. The follow-up
 restricts the lock to the method row with `of=("self",)` while retaining the
 related reads and Deal-first lock order. The existing lifecycle and concurrency
 tests cover the affected call; PostgreSQL re-verification of the follow-up SHA
-is required before merge, deployment, or TEST repair. Local recheck: 9 scoped
+was required before merge, deployment, or TEST repair. Local recheck: 9 scoped
 tests passed, with the PostgreSQL-only race test skipped on SQLite; changed-file
 Ruff, Python compilation, and diff checks passed.
+
+Gemini re-verified `3bc2a98e69d18f9a321e566ca21203765fdf82c7` on
+PostgreSQL 16 and returned GREEN. The scoped reconciliation suite passed 10/10,
+including the concurrent single-amendment race and command dry-run/execute.
+Admin manual-console tests passed 37/37; cancellation/dispute suites passed
+69/69. The full Django suite passed 2,164 tests, 34 skipped, 0 failed. Ruff,
+missing-migration, schema-drift, production deployment, deployment safety (40
+passed), Go unit, and static web checks passed. CI, merge, TEST deployment, and
+TEST record reconciliation remain pending.

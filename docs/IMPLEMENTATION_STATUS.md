@@ -17,10 +17,13 @@ deployment or live financial activation has been performed. See the
 
 Gemini's PostgreSQL verification of the initial finance SHA `05251e5` returned
 RED: the reconciliation method lock included nullable joined rows. A follow-up
-scopes `FOR NO KEY UPDATE` to the method row. PostgreSQL re-verification is
-pending. Local recheck: 9 passed, 1 PostgreSQL-only skip; Ruff, compilation,
-and diff checks passed. No merge, deployment, TEST data repair, or payout
-execution occurred.
+at `3bc2a98e69d18f9a321e566ca21203765fdf82c7` scopes `FOR NO KEY UPDATE`
+to the method row. Gemini's PostgreSQL 16 re-verification returned GREEN: all
+10 scoped tests passed, including the row-lock race and dry-run/execute test;
+the full Django suite passed 2,164 tests with 34 skips and no failures. Ruff,
+migrations, schema drift, deployment safety, Go unit, and static web gates
+passed. CI, merge, TEST deployment, and existing-data repair are next. No
+payout execution or LIVE financial activation occurred.
 
 ## Public landing hero — dimensional Mediterranean globe (2026-09-20)
 
