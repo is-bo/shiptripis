@@ -3,7 +3,12 @@
 	auto_https off
 }
 :{$PORT:8080} {
-	request_body {
+	# Keep the ordinary API ceiling tight. KYC has a separate upstream cap of
+	# 25 MiB (three 8 MiB images plus multipart framing), so it is excluded here.
+	@bounded_body {
+		not path /kyc/* /api/kyc/*
+	}
+	request_body @bounded_body {
 		max_size 12MB
 	}
 	header {
@@ -36,6 +41,10 @@
 
 	@kyc path /kyc/* /api/kyc/*
 	handle @kyc {
+		# 27 decimal MB > the authoritative 25 MiB (26,214,400-byte) service cap.
+		request_body {
+			max_size 27MB
+		}
 		# The Go service registers /kyc/submit. Normalize the public /api/kyc
 		# alias before proxying so both documented forms reach the handler.
 		uri strip_prefix /api

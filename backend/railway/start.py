@@ -1,9 +1,8 @@
 """Run ShipTrip's production processes in one Railway service.
 
-This launcher preserves the normal ports and gateway routing inside one
-container. Pub/sub/stream Redis listens only on loopback and is intentionally
-ephemeral in this constrained layout. KYC upload limiting is storage-abuse
-control, so it separately requires Redis shared by every application replica.
+Railway uses one externally managed Redis for cache, throttling, realtime and
+stream transport.  An embedded loopback Redis remains available only through
+an explicit local-development switch; it is never the production default.
 """
 
 from __future__ import annotations
@@ -24,6 +23,24 @@ from urllib.parse import urlparse
 
 ROOT = "/app"
 STOP_REQUESTED = False
+LOCAL_REDIS_URL = "redis://127.0.0.1:6379/0"
+
+# The combined 1 GiB Railway container cannot safely buy concurrency by adding
+# Python processes. Two gthread workers keep the measured worker RSS bounded
+# while allowing one slow provider call per worker without starving all HTTP.
+WEB_WORKERS_DEFAULT = 2
+WEB_THREADS_DEFAULT = 2
+GRPC_WORKERS_DEFAULT = 4
+
+# Standalone Go defaults were sized for separate pods. These smaller ceilings
+# are authoritative for the combined container and leave rolling-deploy room
+# under the current PostgreSQL max_connections=100 budget.
+CHAT_DB_MAX_CONNS_DEFAULT = 5
+NOTIF_DB_MAX_CONNS_DEFAULT = 5
+EMAIL_DB_MAX_CONNS_DEFAULT = 2
+GO_DB_MIN_CONNS = 2
+POSTGRES_CONNECTION_LIMIT_DEFAULT = 100
+POSTGRES_CONNECTION_RESERVE_DEFAULT = 10
 
 
 @dataclass
@@ -196,49 +213,64 @@ def install_fcm_credentials() -> None:
     )
 
 
-def kyc_env() -> dict[str, str]:
-    shared_redis_url = os.environ.get("KYC_RATE_LIMIT_REDIS_URL", "").strip()
-    local_mode = os.environ.get("KYC_RATE_LIMIT_LOCAL_MODE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    if local_mode:
-        # Private pre-launch fallback only: Railway must keep this service at
-        # one replica because the limiter state is held by this container's
-        # loopback Redis. Shared Redis remains the normal/public requirement.
-        if shared_redis_url:
-            raise RuntimeError(
-                "KYC_RATE_LIMIT_LOCAL_MODE requires KYC_RATE_LIMIT_REDIS_URL to be empty"
-            )
-        shared_redis_url = "redis://127.0.0.1:6379/0"
-    elif not shared_redis_url:
-        raise RuntimeError(
-            "KYC_RATE_LIMIT_REDIS_URL must point at Redis shared by every KYC replica"
-        )
-    parsed = urlparse(shared_redis_url)
+def _enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = os.environ.get(name, str(default)).strip()
     try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer") from exc
+    if not minimum <= value <= maximum:
+        raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _validate_redis_url(value: str, *, allow_loopback: bool) -> str:
+    try:
+        parsed = urlparse(value)
         parsed.port
     except ValueError as exc:
-        raise RuntimeError("KYC_RATE_LIMIT_REDIS_URL has an invalid port") from exc
+        raise RuntimeError("REDIS_URL is malformed") from exc
     if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
-        raise RuntimeError(
-            "KYC_RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL"
-        )
-    hostname = parsed.hostname.lower()
+        raise RuntimeError("REDIS_URL must be a redis:// or rediss:// URL")
+    hostname = parsed.hostname.lower().rstrip(".")
     try:
         loopback = ipaddress.ip_address(hostname).is_loopback
     except ValueError:
-        loopback = hostname == "localhost"
-    if loopback and not local_mode:
+        loopback = hostname in {"localhost", "localhost.localdomain"}
+    if loopback and not allow_loopback:
         raise RuntimeError(
-            "KYC_RATE_LIMIT_REDIS_URL must not use per-container loopback Redis"
+            "REDIS_URL must use shared external Redis; loopback is local mode only"
         )
+    return value
+
+
+def redis_topology() -> tuple[str, bool]:
+    """Resolve the one Redis URL every process in this container must use."""
+
+    embedded = _enabled("SHIPTRIP_EMBEDDED_REDIS")
+    configured = os.environ.get("REDIS_URL", "").strip()
+    if embedded:
+        if configured not in {"", LOCAL_REDIS_URL, "redis://localhost:6379/0"}:
+            raise RuntimeError(
+                "SHIPTRIP_EMBEDDED_REDIS requires REDIS_URL to be empty or local"
+            )
+        return LOCAL_REDIS_URL, True
+    if not configured:
+        raise RuntimeError("REDIS_URL must point at shared external Redis")
+    return _validate_redis_url(configured, allow_loopback=False), False
+
+
+def kyc_env(redis_url: str) -> dict[str, str]:
+    """Give KYC the same Redis used by Django and every Go transport."""
+
     env = child_env(
         KYC_HTTP_ADDR="127.0.0.1:8083",
         KYC_GRPC_TARGET="127.0.0.1:50051",
-        REDIS_URL=shared_redis_url,
+        REDIS_URL=redis_url,
     )
     # The combined container still gives KYC its own bucket credentials.
     # Mapping is per child, so Django continues to use the parcel-media bucket.
@@ -253,6 +285,71 @@ def kyc_env() -> dict[str, str]:
         if value := os.environ.get(source):
             env[target] = value
     return env
+
+
+def connection_budget() -> dict[str, int]:
+    """Return the configured per-container PostgreSQL connection ceiling.
+
+    Django opens one connection per active thread. The gRPC server has its own
+    four-thread executor and the two durable Python loops each use one. Go's
+    chat/notification/email pools have two idle connections apiece. KYC has no
+    direct database dependency; its authenticated gRPC recorder owns writes.
+    """
+
+    workers = _bounded_int("WEB_CONCURRENCY", WEB_WORKERS_DEFAULT, minimum=1, maximum=4)
+    threads = _bounded_int("WEB_THREADS", WEB_THREADS_DEFAULT, minimum=1, maximum=4)
+    grpc_workers = _bounded_int(
+        "KYC_GRPC_WORKERS", GRPC_WORKERS_DEFAULT, minimum=1, maximum=8
+    )
+    chat_max = _bounded_int(
+        "CHAT_DB_MAX_CONNS", CHAT_DB_MAX_CONNS_DEFAULT, minimum=2, maximum=15
+    )
+    notif_max = _bounded_int(
+        "NOTIF_DB_MAX_CONNS", NOTIF_DB_MAX_CONNS_DEFAULT, minimum=2, maximum=10
+    )
+    email_max = _bounded_int(
+        "EMAIL_DB_MAX_CONNS", EMAIL_DB_MAX_CONNS_DEFAULT, minimum=2, maximum=5
+    )
+    connection_limit = _bounded_int(
+        "POSTGRES_CONNECTION_LIMIT",
+        POSTGRES_CONNECTION_LIMIT_DEFAULT,
+        minimum=20,
+        maximum=10_000,
+    )
+    connection_reserve = _bounded_int(
+        "POSTGRES_CONNECTION_RESERVE",
+        POSTGRES_CONNECTION_RESERVE_DEFAULT,
+        minimum=1,
+        maximum=1_000,
+    )
+    if connection_reserve >= connection_limit:
+        raise RuntimeError(
+            "POSTGRES_CONNECTION_RESERVE must be below POSTGRES_CONNECTION_LIMIT"
+        )
+    django_peak = workers * threads + grpc_workers + 2
+    go_peak = chat_max + notif_max + email_max
+    # At idle, one connection per long-lived Django process is the observed
+    # conservative floor: two web workers, gRPC, and the two job loops.
+    steady_min = workers + 3 + (3 * GO_DB_MIN_CONNS)
+    steady_peak = django_peak + go_peak
+    rolling_peak = steady_peak * 2
+    if rolling_peak > connection_limit - connection_reserve:
+        raise RuntimeError(
+            "configured rolling deployment database peak "
+            f"{rolling_peak} exceeds safe budget "
+            f"{connection_limit - connection_reserve}"
+        )
+    return {
+        "web_workers": workers,
+        "web_threads": threads,
+        "grpc_workers": grpc_workers,
+        "chat_max": chat_max,
+        "notif_max": notif_max,
+        "email_max": email_max,
+        "steady_min": steady_min,
+        "steady_peak": steady_peak,
+        "rolling_peak": rolling_peak,
+    }
 
 
 def apply_geography_catalogue(base_env: dict[str, str]) -> None:
@@ -306,35 +403,40 @@ def apply_geography_catalogue(base_env: dict[str, str]) -> None:
 
 
 def run() -> int:
-    # Resolve the external KYC limiter dependency before migrations or child
-    # processes start. The loopback Redis below remains intentionally local for
-    # the constrained combined topology; it must never back a cross-replica
-    # storage-abuse budget.
     install_fcm_credentials()
-    kyc_process_env = kyc_env()
+    redis_url, embedded_redis = redis_topology()
+    budget = connection_budget()
+    kyc_process_env = kyc_env(redis_url)
     base_env = child_env(
-        REDIS_URL="redis://127.0.0.1:6379/0",
+        REDIS_URL=redis_url,
         DJANGO_SETTINGS_MODULE="config.settings.prod",
     )
-
-    redis = spawn(
-        "redis",
-        [
-            "redis-server",
-            "--bind",
-            "127.0.0.1",
-            "--protected-mode",
-            "yes",
-            "--save",
-            "",
-            "--appendonly",
-            "no",
-            "--port",
-            "6379",
-        ],
-        env=base_env,
+    print(
+        "postgres connection budget "
+        f"steady_min={budget['steady_min']} steady_peak={budget['steady_peak']} "
+        f"rolling_peak={budget['rolling_peak']}",
+        flush=True,
     )
-    wait_for_port(redis, 6379)
+
+    if embedded_redis:
+        redis = spawn(
+            "redis",
+            [
+                "redis-server",
+                "--bind",
+                "127.0.0.1",
+                "--protected-mode",
+                "yes",
+                "--save",
+                "",
+                "--appendonly",
+                "no",
+                "--port",
+                "6379",
+            ],
+            env=base_env,
+        )
+        wait_for_port(redis, 6379)
 
     print("applying database migrations", flush=True)
     subprocess.run(
@@ -359,7 +461,11 @@ def run() -> int:
             "--bind",
             "127.0.0.1:8000",
             "--workers",
-            os.environ.get("WEB_CONCURRENCY", "2"),
+            str(budget["web_workers"]),
+            "--worker-class",
+            "gthread",
+            "--threads",
+            str(budget["web_threads"]),
             "--timeout",
             "120",
             "--access-logfile",
@@ -373,7 +479,15 @@ def run() -> int:
 
     grpc = spawn(
         "django-grpc",
-        [sys.executable, "manage.py", "runkycgrpc", "--addr", "127.0.0.1:50051"],
+        [
+            sys.executable,
+            "manage.py",
+            "runkycgrpc",
+            "--addr",
+            "127.0.0.1:50051",
+            "--max-workers",
+            str(budget["grpc_workers"]),
+        ],
         env=base_env,
     )
     wait_for_port(grpc, 50051)
@@ -410,14 +524,19 @@ def run() -> int:
     chat = spawn(
         "chat",
         ["/usr/local/bin/chat"],
-        env=child_env(REDIS_URL=base_env["REDIS_URL"], CHAT_HTTP_ADDR="127.0.0.1:8081"),
+        env=child_env(
+            REDIS_URL=redis_url,
+            CHAT_HTTP_ADDR="127.0.0.1:8081",
+            CHAT_DB_MAX_CONNS=str(budget["chat_max"]),
+        ),
     )
     notification = spawn(
         "notification",
         ["/usr/local/bin/notification"],
         env=child_env(
-            REDIS_URL=base_env["REDIS_URL"],
+            REDIS_URL=redis_url,
             NOTIF_HTTP_ADDR="127.0.0.1:8082",
+            NOTIF_DB_MAX_CONNS=str(budget["notif_max"]),
         ),
     )
     kyc = spawn("kyc", ["/usr/local/bin/kyc"], env=kyc_process_env)
@@ -425,7 +544,9 @@ def run() -> int:
         "email",
         ["/usr/local/bin/email"],
         env=child_env(
-            REDIS_URL=base_env["REDIS_URL"], EMAIL_HTTP_ADDR="127.0.0.1:8085"
+            REDIS_URL=redis_url,
+            EMAIL_HTTP_ADDR="127.0.0.1:8085",
+            EMAIL_DB_MAX_CONNS=str(budget["email_max"]),
         ),
     )
     for child, port in (

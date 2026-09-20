@@ -9,7 +9,12 @@
 }
 
 :{$PORT:80} {
-	request_body {
+	# Ordinary API requests stay bounded at 12 MB. KYC is excluded and gets a
+	# route-specific allowance matching its upstream 25 MiB hard cap below.
+	@bounded_body {
+		not path /kyc/* /api/kyc/*
+	}
+	request_body @bounded_body {
 		max_size 12MB
 	}
 	header {
@@ -36,6 +41,10 @@
 
 	@kyc path /kyc/* /api/kyc/*
 	handle @kyc {
+		# 27 decimal MB > the authoritative 25 MiB (26,214,400-byte) service cap.
+		request_body {
+			max_size 27MB
+		}
 		reverse_proxy {$KYC_UPSTREAM:kyc-service:8083}
 	}
 

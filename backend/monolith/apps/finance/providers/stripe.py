@@ -48,6 +48,7 @@ from .base import (
     RefundRequest,
     RefundResult,
 )
+from .http import log_provider_timing, provider_session, provider_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -170,12 +171,8 @@ class StripeGateway:
             if api_version is not None
             else getattr(settings, "STRIPE_API_VERSION", "")
         )
-        self.timeout_seconds = (
-            timeout_seconds
-            if timeout_seconds is not None
-            else getattr(settings, "PAYMENTS_PROVIDER_TIMEOUT_SECONDS", 15)
-        )
-        self._session = session or requests
+        self.timeout = provider_timeout(timeout_seconds)
+        self._session = session if session is not None else provider_session("stripe")
 
     # -- configuration ----------------------------------------------------
 
@@ -238,6 +235,7 @@ class StripeGateway:
         method: str,
         path: str,
         *,
+        operation: str = "request",
         data: dict | None = None,
         idempotency_key: str = "",
     ) -> dict:
@@ -251,50 +249,69 @@ class StripeGateway:
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         url = f"{self.api_base}{path}"
+        started = time.monotonic()
+        outcome = "internal_error"
         try:
-            response = self._session.request(
-                method,
-                url,
-                headers=headers,
-                data=urlencode(data or {}, doseq=True),
-                timeout=self.timeout_seconds,
-            )
-        except requests.RequestException as exc:
-            # Never log the body or the key; the URL and class are enough.
-            logger.warning("stripe transport failure on %s %s", method, path)
-            raise ProviderUnavailable(f"Stripe request failed: {type(exc).__name__}") from exc
+            try:
+                response = self._session.request(
+                    method,
+                    url,
+                    headers=headers,
+                    data=urlencode(data or {}, doseq=True),
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                outcome = "transport_error"
+                # Never log the body, URL, identifiers or key.
+                logger.warning("stripe transport failure operation=%s", operation)
+                raise ProviderUnavailable(
+                    f"Stripe request failed: {type(exc).__name__}"
+                ) from exc
 
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise ProviderUnavailable("Stripe returned a non-JSON response.") from exc
+            try:
+                body = response.json()
+            except ValueError as exc:
+                outcome = "invalid_response"
+                raise ProviderUnavailable("Stripe returned a non-JSON response.") from exc
 
-        if response.status_code >= 500:
-            raise ProviderUnavailable(
-                f"Stripe returned {response.status_code}.",
-                provider_code=str(response.status_code),
+            if response.status_code >= 500:
+                outcome = "provider_unavailable"
+                raise ProviderUnavailable(
+                    f"Stripe returned {response.status_code}.",
+                    provider_code=str(response.status_code),
+                )
+            if response.status_code == 429:
+                outcome = "rate_limited"
+                raise ProviderUnavailable(
+                    "Stripe rate limited the request.", provider_code="429"
+                )
+            error = body.get("error", {}) if isinstance(body, dict) else {}
+            if response.status_code in (401, 403):
+                outcome = "auth_rejected"
+                logger.error(
+                    "stripe auth rejected status=%s credential_mode=%s",
+                    response.status_code,
+                    self.credential_mode(),
+                )
+                raise ProviderNotConfigured(
+                    "Stripe rejected this deployment's API credentials.",
+                    provider_code=str(response.status_code),
+                )
+            if response.status_code >= 400:
+                outcome = "rejected"
+                raise ProviderCheckoutRejected(
+                    error.get("message", "Stripe rejected the request."),
+                    provider_code=error.get("code", str(response.status_code)),
+                )
+            outcome = "success"
+            return body if isinstance(body, dict) else {}
+        finally:
+            log_provider_timing(
+                provider="stripe",
+                operation=operation,
+                started=started,
+                outcome=outcome,
             )
-        if response.status_code == 429:
-            raise ProviderUnavailable("Stripe rate limited the request.", provider_code="429")
-        error = body.get("error", {}) if isinstance(body, dict) else {}
-        if response.status_code in (401, 403):
-            # Stripe refused this deployment's key. That is a configuration
-            # fact, not a transient one; "try again in a moment" would be false.
-            logger.error(
-                "stripe auth rejected status=%s credential_mode=%s",
-                response.status_code,
-                self.credential_mode(),
-            )
-            raise ProviderNotConfigured(
-                "Stripe rejected this deployment's API credentials.",
-                provider_code=str(response.status_code),
-            )
-        if response.status_code >= 400:
-            raise ProviderCheckoutRejected(
-                error.get("message", "Stripe rejected the request."),
-                provider_code=error.get("code", str(response.status_code)),
-            )
-        return body if isinstance(body, dict) else {}
 
     # -- checkout ---------------------------------------------------------
 
@@ -343,6 +360,7 @@ class StripeGateway:
             "/v1/checkout/sessions",
             data=data,
             idempotency_key=request.idempotency_key,
+            operation="checkout_create",
         )
         session_id = body.get("id", "")
         checkout_url = body.get("url", "")
@@ -367,7 +385,11 @@ class StripeGateway:
 
         if not provider_session_id:
             raise ProviderError("No Stripe session to reconcile.")
-        body = self._request("GET", f"/v1/checkout/sessions/{provider_session_id}")
+        body = self._request(
+            "GET",
+            f"/v1/checkout/sessions/{provider_session_id}",
+            operation="checkout_fetch",
+        )
         payment_status = body.get("payment_status", "")
         session_status = body.get("status", "")
         payment_intent = body.get("payment_intent") or ""
@@ -405,6 +427,7 @@ class StripeGateway:
                 "metadata[shiptrip_reason]": request.reason[:64],
             },
             idempotency_key=request.idempotency_key,
+            operation="refund_create",
         )
         refund_id = body.get("id", "")
         status = body.get("status", "")
@@ -515,7 +538,9 @@ class StripeGateway:
         if not account_id:
             return PayoutCapability(available=False, reason="no_connected_account")
         try:
-            body = self._request("GET", f"/v1/accounts/{account_id}")
+            body = self._request(
+                "GET", f"/v1/accounts/{account_id}", operation="account_capability"
+            )
         except ProviderError as exc:
             return PayoutCapability(
                 available=False,

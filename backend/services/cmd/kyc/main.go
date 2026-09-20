@@ -6,6 +6,10 @@
 //     KYCSubmissionService.RecordSubmission via gRPC for the durable row.
 //   - /healthz, /readyz for K3s probes.
 //
+// KYC does not open PostgreSQL itself. The authenticated Django gRPC recorder
+// is the database boundary for submissions, so a local pool used only for a
+// readiness ping would waste connections without protecting product work.
+//
 // The gRPC Recorder client (kyc.GRPCClient) is dialled at boot from
 // KYC_GRPC_TARGET + GRPC_AUTH_MODE + GRPC_BEARER_TOKEN. Missing config
 // fails the service start — half-built deploys should never reach prod
@@ -37,7 +41,6 @@ import (
 	"shiptrip/internal/kyc"
 	"shiptrip/pkg/auth"
 	"shiptrip/pkg/config"
-	"shiptrip/pkg/db"
 	"shiptrip/pkg/health"
 	"shiptrip/pkg/logger"
 	"shiptrip/pkg/redisbus"
@@ -46,12 +49,6 @@ import (
 
 const (
 	serviceName = "kyc"
-
-	// CLAUDE.md §3 reserves 5 Postgres conns for the Go kyc-service.
-	// Override at deploy time via KYC_DB_MAX_CONNS if the pod count or
-	// the global budget changes.
-	dbMaxConnsKey     = "KYC_DB_MAX_CONNS"
-	dbMaxConnsDefault = int32(5)
 
 	httpAddrKey      = "KYC_HTTP_ADDR"
 	httpAddrFallback = ":8083"
@@ -74,10 +71,6 @@ func main() {
 func run() error {
 	log := logger.New(logger.Config(config.LoadLogger(serviceName)))
 
-	pgCfg, err := config.LoadPostgres(dbMaxConnsKey, dbMaxConnsDefault)
-	if err != nil {
-		return err
-	}
 	jwtCfg, err := config.LoadJWT()
 	if err != nil {
 		return err
@@ -103,16 +96,6 @@ func run() error {
 	defer stop()
 	rootCtx, rootCancel := context.WithCancel(signalCtx)
 	defer rootCancel()
-
-	pool, err := db.NewPool(rootCtx, db.Config{
-		URL:      pgCfg.URL,
-		MaxConns: pgCfg.MaxConns,
-		Logger:   log,
-	})
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
 
 	rdb, err := redisbus.NewClient(rootCtx, redisbus.Config{
 		URL:          redisCfg.URL,
@@ -181,7 +164,6 @@ func run() error {
 	}
 
 	healthH := health.New(health.Config{Logger: log})
-	healthH.Register("postgres", func(ctx context.Context) error { return pool.Ping(ctx) })
 	healthH.Register("redis", func(ctx context.Context) error {
 		return rdb.SetEX(ctx, "healthz:kyc", "1", 5*time.Second)
 	})

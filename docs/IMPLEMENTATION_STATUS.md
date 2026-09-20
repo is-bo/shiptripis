@@ -1,5 +1,30 @@
 # ShipTrip V1 Implementation Status
 
+## K1 — Reliability & Performance Safety Foundation (2026-09-20)
+
+Implemented on `codex/k1-reliability-foundation` from
+`8bcf1ada37614342a1bf3feec007fcea45954d29`; independent Gemini verification
+is pending. K1 prepares a production-style shared persistent Redis contract
+while retaining explicitly enabled embedded Redis for local use, makes Redis
+failure visible but degradable at Django readiness, aligns route-specific Caddy
+KYC allowance with the 25 MiB service cap, adds thread-local bounded provider
+connection reuse and explicit 3.05-second connect/15-second read timeouts with
+no automatic mutation retry, changes Gunicorn from 2 sync slots to 2 workers ×
+2 threads, removes KYC's readiness-only PostgreSQL pool, and reduces the
+per-container connection model from 13/43 minimum/peak to 11/22 (44 rolling).
+
+Slow-request logs now use safe route templates and allow-listed structured
+fields; optional query count/time capture is off by default. Stripe/Chargily
+timings contain provider, operation, duration, and outcome only. Targeted
+Codex gates passed: 73 health/performance/provider tests, 57 Stripe Connect
+adapter tests, 46 deployment-safety tests, changed KYC Go tests, Ruff, Python
+compile, static edge checks, and diff checks. No migration, merge, deploy, Railway
+resource change, provider cutover, or money operation occurred. A managed
+persistent Redis cutover remains required only after Gemini GREEN. Read-only
+diagnostics also found a pre-existing `PAYOUT_DZD_EXECUTION_ENABLED=true`
+discrepancy that must be reconciled before any post-Gemini TEST deployment.
+See [the K1 record](PHASE_K1_RELIABILITY_FOUNDATION.md).
+
 ## Post-funding DZD payout setup reconciliation (2026-09-20)
 
 Implemented a narrow, audited transition from a funded manual-DZD placeholder

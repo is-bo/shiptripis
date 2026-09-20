@@ -1,6 +1,6 @@
 # ShipTrip Deployment Runbook
 
-This is an operator-controlled procedure. It does not authorize a production deployment. The root `railway.json` currently selects the combined `backend/railway/Dockerfile` topology: one application service (Django, gRPC, Go services, durable workers, local ephemeral Redis, Caddy/static web) plus managed PostgreSQL. The per-service Railway files are a future split topology and must not be mixed into the same release accidentally.
+This is an operator-controlled procedure. It does not authorize a production deployment. The root `railway.json` currently selects the combined `backend/railway/Dockerfile` topology: one application service (Django, gRPC, Go services, durable workers, and Caddy/static web) plus managed PostgreSQL and one shared persistent Redis. The per-service Railway files are a future split topology and must not be mixed into the same release accidentally.
 
 ## 1. Release record and freeze
 
@@ -31,8 +31,8 @@ Compare the plan to a restored production snapshot. Measure every data migration
 - [ ] Verify root `railway.json` and Dockerfile path in the release artifact.
 - [ ] Reconcile Railway variables against `backend/.env.example`; check presence and safe shape, never print values.
 - [ ] `SHIPTRIP_ENVIRONMENT=production`, `DJANGO_DEBUG=false`, explicit hosts/origins, immutable `RELEASE_ID`.
-- [ ] Database, HTTPS S3, Redis/topology, JWT, handover, transactional-email, and gRPC secrets are distinct and stored only in the platform secret store. The current combined launcher intentionally supplies a loopback ephemeral Redis URL; do not mistake it for durable authority or a split-topology managed Redis service.
-- [ ] **Private pre-launch exception:** when shared Redis is not yet available, set `KYC_RATE_LIMIT_LOCAL_MODE=true`, leave `KYC_RATE_LIMIT_REDIS_URL` empty, and keep the combined Railway service at exactly one replica. This keeps KYC enabled with a loopback fixed-window limiter for controlled testing only. Shared non-loopback Redis is still mandatory before public launch; unset local mode and provide `KYC_RATE_LIMIT_REDIS_URL` before scaling or opening access.
+- [ ] Database, HTTPS S3, Redis/topology, JWT, handover, transactional-email, and gRPC secrets are distinct and stored only in the platform secret store. `REDIS_URL` must point at the shared persistent non-loopback service used by Django and all Go children.
+- [ ] `SHIPTRIP_EMBEDDED_REDIS` is unset/false. It is an explicit local-development compatibility path, not a Railway exception; the launcher refuses production-style startup without shared Redis.
 - [ ] Mock/legacy payment switches are false. Stripe/Chargily/Sender.net remain disabled unless this release explicitly includes their separately approved activation.
 - [ ] Confirm public domain/TLS, bucket privacy/CORS/encryption, database connection ceiling, disk/memory/CPU, restart policy, health timeout, and alert destinations in the Railway dashboard.
 - [ ] Confirm the current plan’s backup feature, retention, point-in-time recovery, and restore mechanism. Do not infer these from repository configuration.
