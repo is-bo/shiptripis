@@ -15,6 +15,13 @@ legacy quarantine remains outside this path. No TEST data repair, merge,
 deployment or live financial activation has been performed. See the
 [reconciliation record](PAYOUT_POST_FUNDING_SETUP_RECONCILIATION.md).
 
+Gemini's PostgreSQL verification of the initial finance SHA `05251e5` returned
+RED: the reconciliation method lock included nullable joined rows. A follow-up
+scopes `FOR NO KEY UPDATE` to the method row. PostgreSQL re-verification is
+pending. Local recheck: 9 passed, 1 PostgreSQL-only skip; Ruff, compilation,
+and diff checks passed. No merge, deployment, TEST data repair, or payout
+execution occurred.
+
 ## Public landing hero — dimensional Mediterranean globe (2026-09-20)
 
 Implemented the hero on `/`, `/en/`, `/fr/`, and `/ar/` using native WebGL

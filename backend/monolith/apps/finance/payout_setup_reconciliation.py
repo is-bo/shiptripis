@@ -132,7 +132,7 @@ def complete_initial_dzd_setup(*, payout_id, actor):
     if not old:
         return "not_initial_setup_placeholder"
     method = (
-        TravelerPayoutMethod.objects.select_for_update(no_key=True)
+        TravelerPayoutMethod.objects.select_for_update(of=("self",), no_key=True)
         .select_related("current_version__dzd_profile_revision")
         .get(pk=old.method_id)
     )

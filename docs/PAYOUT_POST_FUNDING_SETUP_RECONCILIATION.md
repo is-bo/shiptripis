@@ -92,3 +92,13 @@ Codex gates. Gemini must run the PostgreSQL race/trigger path, full Finance,
 Admin and Django regressions, schema drift, CI and deployment checks before
 approval. CI, merge, TEST deployment, affected-record scan, and final account
 repair are pending that handoff.
+
+Gemini's first PostgreSQL verification of `05251e5750625320d4581af885144b8121e7778a`
+returned RED: the method row lock also selected nullable `current_version` and
+profile joins, which PostgreSQL rejects for `FOR NO KEY UPDATE`. The follow-up
+restricts the lock to the method row with `of=("self",)` while retaining the
+related reads and Deal-first lock order. The existing lifecycle and concurrency
+tests cover the affected call; PostgreSQL re-verification of the follow-up SHA
+is required before merge, deployment, or TEST repair. Local recheck: 9 scoped
+tests passed, with the PostgreSQL-only race test skipped on SQLite; changed-file
+Ruff, Python compilation, and diff checks passed.
