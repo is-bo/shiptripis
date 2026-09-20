@@ -2,7 +2,7 @@
 
 ## J9.3 — Final Remaining Defect Remediation (2026-09-20)
 
-Implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` is staged
+Initial implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` was staged
 on `codex/j93-final-defects` from
 `35b3d4fbafb07a9e55489e5ca39622cb369a20a8`. Independent Gemini
 verification returned GREEN. `J9-BE-01` is classified MAJOR and addressed with
@@ -22,9 +22,19 @@ schema drift (none). Gemini reported full Flutter 974 passed, Admin/Finance 100
 passed, Journey/matching 133 passed and 10 skipped, six adversarial probes,
 Ruff, analyzer, formatter, localization, deploy checks and schema drift green.
 Its broader SQLite Django discovery had one PostgreSQL-only assertion failure;
-that test passed on PostgreSQL, while the complete PostgreSQL Django CI job is
-still the merge gate. CI, Railway TEST and APK are not yet run. The remaining
-known J9 count is 0 CRITICAL, 0 MAJOR and 0 MINOR after independent verification.
+that test passed on PostgreSQL. [PR #7 CI](https://github.com/is-bo/shiptripis/actions/runs/35477127627)
+then passed five jobs but exposed one PostgreSQL Django payout-review queue
+query-budget regression (16 queries, limit 14; 2,244 other tests passed, 34
+skipped). The enabled route had duplicated the fresh capability check; the
+follow-up fix retains the existing enabled-route authorization and checks
+capability separately only for the disabled-feature 503 path. Focused SQLite
+query-budget and J9.3 Admin tests now pass 8/8, and the J9.1 banned-admin
+regression passes 1/1; changed-file Ruff passes. Local
+PostgreSQL test authentication was unavailable, so renewed independent GREEN
+verification and a green PostgreSQL CI run are required before merge and TEST
+deployment. No APK has been built. The original verified J9 product-defect
+count was 0 CRITICAL, 0 MAJOR and 0 MINOR; the CI regression is not yet closed
+by release gates.
 See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
 
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)

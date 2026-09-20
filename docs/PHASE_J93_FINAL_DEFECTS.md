@@ -3,7 +3,7 @@
 Date: 2026-09-20
 Starting `main`: `35b3d4fbafb07a9e55489e5ca39622cb369a20a8`
 Implementation branch: `codex/j93-final-defects`
-Implementation SHA: `e0e9b5ff062dcb93a9ca9e6821163d935826d2af`.
+Initial independently verified implementation SHA: `e0e9b5ff062dcb93a9ca9e6821163d935826d2af`. A CI-discovered queue-cost follow-up is described below.
 
 ## Scope and outcomes
 
@@ -35,9 +35,9 @@ The narrow adjacent misuse audit found the CCP and code cases above. No other ad
 
 - Independent Gemini verification: **GREEN** on the exact implementation SHA with a clean tree. Full Flutter **974 passed**, analyzer **0 issues**, Dart formatter **188 files unchanged**, EN/FR/AR localization parity `{}`, Journey/matching **133 passed and 10 skipped**, Admin/Finance **100 passed**, deployment safety **40 passed**, and six adversarial probes passed. Ruff, schema drift, production deployment check, and static/Caddy checks passed. All eight J9.3 findings and prior J9.1/J9.2 fixes were independently judged closed with no new regression.
 - Full Django caveat: the `test_local` SQLite discovery reported **1,590 passed, 100 skipped, 1 failure**: a test explicitly requiring PostgreSQL. Gemini reran that test on PostgreSQL and it passed. The PostgreSQL-backed CI full-Django job remains the merge gate; this report does not claim a full PostgreSQL Django suite pass.
-- CI: **PENDING** on the verified implementation plus documentation-only verification record.
-- Railway TEST deployment, `/healthz`, `/readyz`: **PENDING** CI, merge and exact merged-SHA deploy. Stripe/Chargily TEST and `PAYOUT_DZD_EXECUTION_ENABLED=false` must remain unchanged.
+- [PR #7 CI run 35477127627](https://github.com/is-bo/shiptripis/actions/runs/35477127627) on the verified implementation plus documentation-only record had five green jobs, but its PostgreSQL Django job found one performance regression: `test_the_review_queue_stays_cheap_and_bounded_as_it_fills` measured 16 queries against a limit of 14 (2,244 passed, 34 skipped, 1 failed). The enabled payout-review route had performed two fresh capability checks after the J9.3 feature-gate change. The follow-up fix keeps the existing `require_capabilities()` check on enabled routes and performs the explicit capability check in `_require_console_profiles()` only when the feature is disabled. Thus enabled and disabled paths still deny unauthorized/banned staff, while the enabled queue avoids the duplicate reads. Focused SQLite tests (the failing query-budget test plus all seven J9.3 Admin tests) passed **8/8** after the fix, and the J9.1 banned-admin direct-URL regression passed **1/1**; changed-file Ruff passed. A local PostgreSQL rerun could not authenticate to the local development database, so the PostgreSQL CI result remains the required gate. The new implementation SHA needs independent verification before CI rerun, merge or deployment.
+- Railway TEST deployment, `/healthz`, `/readyz`: **PENDING** renewed independent verification, green CI, merge and exact merged-SHA deploy. Stripe/Chargily TEST and `PAYOUT_DZD_EXECUTION_ENABLED=false` must remain unchanged.
 - APK: **NOT BUILT**; final release-candidate packaging remains after J9.3 verification, merge and deployment.
-- Remaining known J9 defects after independent verification: **0 CRITICAL, 0 MAJOR, 0 MINOR**. CI and TEST runtime release gates remain.
+- Remaining known J9 product defects after the original independent verification: **0 CRITICAL, 0 MAJOR, 0 MINOR**. The CI-discovered performance regression is fixed locally but remains unverified on PostgreSQL and independently; CI and TEST runtime release gates remain.
 
 The previous J9.1 banned-admin, account isolation and discovery-race fixes and J9.2 quote identity, exact-money, transaction guard, re-entrancy and mobile departure protections were not intentionally changed. Directly affected tests above passed and Gemini independently reconfirmed the broader regression matrix.

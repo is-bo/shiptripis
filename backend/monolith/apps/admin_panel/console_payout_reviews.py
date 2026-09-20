@@ -84,10 +84,12 @@ BUCKET_LABELS = {key: label for key, label, _ in BUCKETS}
 def _require_console_profiles(request, *capabilities):
     """Separate operator authority from deployment feature availability."""
 
-    if not has_all_admin_permissions(request.user, *capabilities):
-        raise PermissionDenied("Payout capability required.")
+    # Enabled routes run the existing fresh capability gate below. Only the
+    # disabled path needs to check authority here before rendering a 503.
     if settings.PAYOUT_PROFILES_ENABLED:
         return None
+    if not has_all_admin_permissions(request.user, *capabilities):
+        raise PermissionDenied("Payout capability required.")
 
     from .console_views import _render
 
