@@ -20,6 +20,13 @@ syntax and diff checks pass. No backend runtime, financial configuration,
 migration, LIVE activation or deployment changed. Existing J9.4 documentation
 edits are preserved. See [implementation record](LANDING_HERO_IMPLEMENTATION.md).
 
+## J9.4 — Final Post-J9 Release Candidate Verification & TEST APK Build (2026-09-20)
+
+Phase J9.4 consolidation, cross-system regression verification, and packaging completed on clean `main` HEAD `5bf55f1e665e69551ec428570bcb05975ae987f4` (runtime source identical to deployed `61d4419eedb11b864f0efadb14c89978fab38067`). All J9 findings across J9.1, J9.2, and J9.3 remain verified and resolved: 0 CRITICAL, 0 MAJOR, 0 MINOR remaining.
+All quality gates verified: full Flutter suite passed (974/974), analyzer reported 0 issues, dart format reported 188 files unchanged, EN/FR/AR localization catalogues 100% complete (`mobile/l10n_untranslated.json` is `{}`). Full Django PostgreSQL suite passed in CI (2,245 passed, 34 skipped, 0 failed), J9 targeted tests (15/15 passed), deployment safety (40/40 passed), Ruff clean, schema drift clean (0 drift), production deployment checks clean. Go unit, race, and real-Redis integration tests passed. Static web and Caddy checks passed. Deployed Railway TEST backend (`v1.0.0-rc.44+61d4419`) verified: `/healthz` 200 OK, `/readyz` 200 OK, `/terms` 200 OK, `/privacy` 200 OK. Financial safety reconfirmed: Stripe TEST, Chargily TEST, `PAYOUT_DZD_EXECUTION_ENABLED=false`, 0 real-money operations.
+Official J9.4 TEST Release Candidate APK compiled and staged via GitHub Actions workflow run 35511147551: `shiptrip-v1.0.0-j94-test-5bf55f1-profile-arm64.apk` (36,785,781 bytes, SHA-256 `af844feb64f2c93bc315a9d49aa21f1434d08ee2d008b27d7d76a778c04aadbe`, artifact ID 10605397360). Supersedes the J8.3 APK. Testing rule: uninstall previous APKs before installing J9.4; matching verification requires a NEW Journey with explicit valid arrival times. Release candidate accepted; safe to proceed to controlled LIVE operational checklist.
+See [J9.4 record](PHASE_J94_FINAL_RELEASE_CANDIDATE.md).
+
 ## J9.3 — Final Remaining Defect Remediation (2026-09-20)
 
 Initial implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` was staged
