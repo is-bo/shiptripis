@@ -73,13 +73,13 @@ locks and records the normal audit. It never marks a payout paid or starts a
 transfer. Payout #1 (`snapshot_version=0`, `legacy_instruction_required`) is
 excluded and must remain quarantined. No SQL data repair is needed.
 
-No TEST inventory or account mutation has been run in this implementation
-phase. After independent GREEN verification, merge, and exact TEST deployment,
-run the system-wide dry run, inspect skips, then execute the reviewed repair.
-Confirm Payout #8 points to the approved instruction, cheque and mask appear
-only through the authorized Admin view, and its status follows the release
-gate. Do not reveal full CCP/RIP values in reports. Leave
-`PAYOUT_DZD_EXECUTION_ENABLED=false`; do not perform a bank payout.
+After independent GREEN verification, merge, and exact TEST deployment, the
+system-wide dry run found one candidate with `safe_to_reconcile`, one Traveler,
+one approved current profile, zero skips, and zero mutations. The target-only
+dry run confirmed Payout #8 was that candidate. An authorized reviewer actor
+then ran `--payout-id 8 --execute --actor-id 1`: one payout reconciled, zero
+skipped. The follow-up system-wide dry run found zero candidates and zero
+interrupted readiness rechecks. No raw SQL repair was used.
 
 ## Verification status
 
@@ -91,7 +91,7 @@ triggers or row-lock contention. Changed-file Ruff and targeted tests are the
 Codex gates. Gemini must run the PostgreSQL race/trigger path, full Finance,
 Admin and Django regressions, schema drift, CI and deployment checks before
 approval. CI, merge, TEST deployment, affected-record scan, and final account
-repair are pending that handoff.
+repair were pending that handoff.
 
 Gemini's first PostgreSQL verification of `05251e5750625320d4581af885144b8121e7778a`
 returned RED: the method row lock also selected nullable `current_version` and
@@ -110,4 +110,36 @@ Admin manual-console tests passed 37/37; cancellation/dispute suites passed
 69/69. The full Django suite passed 2,164 tests, 34 skipped, 0 failed. Ruff,
 missing-migration, schema-drift, production deployment, deployment safety (40
 passed), Go unit, and static web checks passed. CI, merge, TEST deployment, and
-TEST record reconciliation remain pending.
+TEST record reconciliation followed this handoff.
+
+## TEST release and account verification (2026-09-20)
+
+[PR #9 CI](https://github.com/is-bo/shiptripis/actions/runs/35521405759)
+passed all six jobs. PR #9 merged at
+`05c9b3fe91595c33cc4838094f70660e869ac5e8`; landing PR #8 had already
+merged separately. A `git archive` of exact reviewed SHA
+`3bc2a98e69d18f9a321e566ca21203765fdf82c7` was checked against Git blob
+hashes for the finance service, Dockerfile, Caddyfile, landing HTML, and globe
+module, then uploaded to TEST Railway. Deployment
+`16b65066-aea6-412e-b93a-3d3a677371fd` reached SUCCESS as
+`v1.0.0-rc.45+3bc2a98`. `/healthz` and `/readyz` returned 200; database,
+migrations and rate-limit cache checks were `ok`.
+
+For the intended TEST Traveler, identity KYC and current profile approval
+remained valid, and the crossed-cheque evidence was complete. Before repair,
+Payout #8 was blocked with `payout_setup_required`, active and initial
+instruction version 14, null frozen profile, and no amendment or attempt.
+After the scoped command, active instruction is version 48 with approved
+profile revision 4; the original version 14 and null profile snapshot remain
+unchanged. Exactly one `initial_payout_setup_completed` amendment and one
+Admin audit record exist. The funding snapshot/economics digest matched before
+and after. Payout #8 is `eligible` with empty `block_reason`; the Admin presenter
+shows the masked destination, cheque, and audited reconciliation notice.
+`delivery_unconfirmed` and `balance_order_missing` are absent for its
+`cancellation_compensation` basis. Its only presented blocker is
+`dzd_execution_disabled`; reveal and evidence actions remain available.
+Payout #1 is unchanged with `legacy_instruction_required` and no amendment.
+Payout #8 has zero payout attempts. `PAYMENTS_ENVIRONMENT=test`, Stripe uses a
+TEST secret, Chargily points to `/test/api/v2`, and
+`PAYOUT_DZD_EXECUTION_ENABLED=false`. No transfer, receipt, mark-paid, or LIVE
+financial configuration change was performed.

@@ -11,8 +11,8 @@ TEST data after independent verification and deployment. The manual payout
 presenter and gate now recognize cancellation-compensation and dispute
 settlement awards without successful-delivery prerequisites while retaining
 award, source-funding, hold, evidence and DZD execution checks. Payout #1's
-legacy quarantine remains outside this path. No TEST data repair, merge,
-deployment or live financial activation has been performed. See the
+legacy quarantine remains outside this path. At implementation, no TEST data
+repair, merge, deployment or live financial activation had occurred. See the
 [reconciliation record](PAYOUT_POST_FUNDING_SETUP_RECONCILIATION.md).
 
 Gemini's PostgreSQL verification of the initial finance SHA `05251e5` returned
@@ -22,8 +22,19 @@ to the method row. Gemini's PostgreSQL 16 re-verification returned GREEN: all
 10 scoped tests passed, including the row-lock race and dry-run/execute test;
 the full Django suite passed 2,164 tests with 34 skips and no failures. Ruff,
 migrations, schema drift, deployment safety, Go unit, and static web gates
-passed. CI, merge, TEST deployment, and existing-data repair are next. No
-payout execution or LIVE financial activation occurred.
+passed. [PR #9 CI](https://github.com/is-bo/shiptripis/actions/runs/35521405759)
+passed all six jobs; PR #9 merged at `05c9b3fe91595c33cc4838094f70660e869ac5e8`.
+Exact reviewed SHA `3bc2a98` was deployed to TEST Railway as
+`v1.0.0-rc.45+3bc2a98` (deployment `16b65066-aea6-412e-b93a-3d3a677371fd`,
+SUCCESS). `/healthz` and `/readyz` returned 200 with database, migrations and
+rate-limit cache ready. TEST dry run found one safe candidate, Payout #8;
+targeted execution reconciled one and skipped zero. Its active instruction
+moved from version 14 to approved version 48/profile revision 4, with one
+amendment and one Admin audit record. It is `eligible`, its setup block is
+cleared, and Admin now presents the masked destination and crossed cheque.
+The original funding snapshot and economics are unchanged; Payout #1 remains
+quarantined. A post-repair dry run found zero candidates. Stripe and Chargily
+remain in TEST, DZD execution remains disabled, and no payout was initiated.
 
 ## Public landing hero — dimensional Mediterranean globe (2026-09-20)
 
@@ -44,6 +55,12 @@ browser assertions, static/module/CSP checks, changed-file Ruff, JavaScript
 syntax and diff checks pass. No backend runtime, financial configuration,
 migration, LIVE activation or deployment changed. Existing J9.4 documentation
 edits are preserved. See [implementation record](LANDING_HERO_IMPLEMENTATION.md).
+
+The landing commit `91753678577381daa58748cab0703583910d9e45` was merged
+separately through PR #8 at `5b7e3f0b5dd38c71c524165af81d390614238e2b`.
+The same TEST Railway release above now serves the approved hero on `/`, `/en/`,
+`/fr/`, and `/ar/`; each route and `/assets/hero-globe.mjs` returned HTTP 200.
+The landing implementation was not modified during the finance repair.
 
 ## J9.4 — Final Post-J9 Release Candidate Verification & TEST APK Build (2026-09-20)
 

@@ -126,3 +126,14 @@ are preserved.
 The documentation subagent was unavailable during closeout; the primary
 agent completed the public-web design record directly. Root Flutter design
 documents were not changed.
+
+## Publication (2026-09-20)
+
+The approved implementation commit `91753678577381daa58748cab0703583910d9e45`
+was merged to `main` through PR #8, merge SHA
+`5b7e3f0b5dd38c71c524165af81d390614238e2b`. Its separate PR CI passed all
+six jobs. It was published unchanged in the TEST Railway release built from
+`3bc2a98e69d18f9a321e566ca21203765fdf82c7` (deployment
+`16b65066-aea6-412e-b93a-3d3a677371fd`, SUCCESS). `/`, `/en/`, `/fr/`,
+`/ar/`, and `/assets/hero-globe.mjs` each returned HTTP 200 with the new hero.
+This release kept Stripe and Chargily in TEST and DZD execution disabled.
