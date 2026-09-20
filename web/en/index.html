@@ -22,6 +22,8 @@
   <link rel="preload" href="/assets/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/dmsans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/hero.css">
+  <script type="module" src="/assets/hero-globe.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -55,18 +57,12 @@
     <!-- Hero ------------------------------------------------------------- -->
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-grid">
-        <div>
-          <p class="eyebrow">Europe ↔ Algeria · delivery only</p>
-          <h1 id="hero-title">Your parcel is <em>already</em> on someone’s route.</h1>
-          <p class="lede">
-            ShipTrip puts a sender and an identity-checked traveler on the same
-            journey between Europe and Algeria. Agree a reward, keep the payment
-            held until delivery is confirmed — or carry a parcel on the trip you
-            were taking anyway.
-          </p>
+        <div class="hero-copy">
+          <h1 id="hero-title">Your package<br>already has <em>a ride.</em></h1>
+          <p class="lede">Send parcels between Algeria and Europe with trusted travelers already making the journey — or earn by carrying on a trip you were taking anyway.</p>
           <div class="hero-actions">
-            <a class="button button-sun" href="#sender">I need to send a parcel</a>
-            <a class="button button-ghost" href="#traveler">I have room to carry</a>
+            <a class="button button-sun" href="#sender">Send a package<svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg></a>
+            <a class="button button-ghost" href="#traveler">I’m traveling</a>
           </div>
           <ul class="hero-trust">
             <li>Travelers pass identity checks</li>
@@ -74,73 +70,23 @@
             <li>Exact addresses private until funded</li>
           </ul>
         </div>
-
-        <div class="postcard">
-          <div class="airmail">
-            <div class="postcard-inner">
-              <div class="postcard-head">
-                <div>
-                  <p class="postcard-title">Paris → Alger → Jijel</p>
-                  <p class="postcard-sub">One journey, two legs</p>
-                </div>
-              </div>
-              <div class="postage" aria-hidden="true">
-                <span class="postage-value">EUR</span>
-                <span class="postage-label">Par avion</span>
-              </div>
-
-              <svg class="route-art" viewBox="0 0 520 262" role="img"
-                   aria-label="One journey in two legs: Paris to Alger by flight, then Alger to Jijel by road.">
-                <g class="mirror">
-                  <!-- Arrival is the moment the product exists for, so it is the
-                       one thing on the drawing wearing terracotta. -->
-                  <circle class="halo" cx="452" cy="168" r="24"/>
-
-                  <path class="leg-flight" d="M66 186 C 120 96 208 60 272 92"/>
-                  <path class="leg-drive" d="M272 92 C 330 120 356 176 452 168"/>
-                  <path class="leg-trace" pathLength="100"
-                        d="M66 186 C 120 96 208 60 272 92 C 330 120 356 176 452 168"/>
-
-                  <!-- The plane sits on the flight leg’s own tangent at its
-                       midpoint, on a small patch of paper so the dashes do not
-                       read through it. -->
-                  <g transform="translate(165 93) rotate(-24)">
-                    <circle class="plane-ground" cx="0" cy="0" r="12"/>
-                    <path class="plane" d="M-11 -6 L11 0 L-11 6 L-5 0 Z"/>
-                  </g>
-
-                  <g transform="translate(20 168)">
-                    <rect class="parcel" x="0" y="0" width="21" height="16" rx="2.5"/>
-                    <path class="parcel-tape" d="M10.5 0 V16 M0 8 H21"/>
-                  </g>
-
-                  <circle class="node" cx="66" cy="186" r="8.5"/>
-                  <circle class="node-core" cx="66" cy="186" r="3.5"/>
-                  <circle class="node" cx="272" cy="92" r="8.5"/>
-                  <circle class="node-core" cx="272" cy="92" r="3.5"/>
-                  <circle class="node" cx="452" cy="168" r="9.5"/>
-                  <circle class="node-live" cx="452" cy="168" r="4.2"/>
-
-                  <text class="city" x="66" y="164" text-anchor="middle">Paris</text>
-                  <text class="role" x="66" y="212" text-anchor="middle">Departure</text>
-                  <text class="city" x="272" y="70" text-anchor="middle">Alger</text>
-                  <text class="role" x="272" y="118" text-anchor="middle">Transfer</text>
-                  <text class="city" x="452" y="146" text-anchor="middle">Jijel</text>
-                  <text class="role" x="452" y="194" text-anchor="middle">Arrival</text>
-                </g>
-              </svg>
-
-              <div class="postcard-legend">
-                <span class="chip chip-flight">Flight leg · proof required</span>
-                <span class="chip chip-drive">Drive leg</span>
-              </div>
-              <p class="postcard-note">
-                Capacity is held per leg, so a traveler can carry on the part of
-                the journey that fits — not only the whole trip.
-              </p>
-            </div>
+        <figure class="hero-globe" data-hero-globe aria-label="A dimensional globe centred on Algeria and Western Europe, with illustrative journeys by air and road. Morocco and Tunisia are geographic context only.">
+          <div class="globe-stage" aria-hidden="true">
+            <img class="globe-fallback" src="/assets/globe/fallback.webp" width="960" height="960" alt="" fetchpriority="high">
+            <canvas class="globe-terrain"></canvas>
+            <svg class="globe-labels"></svg>
+            <canvas class="globe-journeys"></canvas>
           </div>
-        </div>
+          <div class="journey-card">
+            <p class="journey-card-label">A trip already planned</p>
+            <p class="journey-card-route"><bdi data-journey-from>Algiers</bdi><svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg><bdi data-journey-to>Paris</bdi></p>
+            <p class="journey-card-note">Room for a package</p>
+          </div>
+          <button class="globe-pause" type="button" aria-pressed="false" aria-label="Pause journey animation" data-pause="Pause journey animation" data-resume="Resume journey animation" hidden>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path class="pause-symbol" d="M4 2h3v12H4zM10 2h3v12h-3z"/><path class="play-symbol" d="m4 2 10 6-10 6z"/></svg>
+          </button>
+          <figcaption class="globe-caption"><strong>Algeria ↔ Europe</strong><span>Illustrative journeys</span></figcaption>
+        </figure>
       </div>
     </section>
 

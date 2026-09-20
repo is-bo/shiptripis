@@ -303,6 +303,13 @@ jobs:
       - name: Static routes, links, and CSP compatibility
         run: python tools/check_static_web.py
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Public hero geography and ambient journey rules
+        run: node --test tools/web/globe.test.mjs
+
       - name: Validate Caddy configurations
         run: |
           docker run --rm \

@@ -1,5 +1,25 @@
 # ShipTrip V1 Implementation Status
 
+## Public landing hero — dimensional Mediterranean globe (2026-09-20)
+
+Implemented the hero on `/`, `/en/`, `/fr/`, and `/ar/` using native WebGL
+perspective sphere rendering, locally bundled Natural Earth geography, and a
+separate ambient journey canvas. Algeria is emphasized in emerald; Morocco
+and Tunisia remain map context only. Controlled plane/car routes randomize
+selection, direction, progress, duration and respawn timing, with duplicate
+and immediate-repeat guards. Existing header, brand, fonts, buttons, section
+anchors and downstream content remain. No runtime dependency or build step.
+
+Reduced motion, pause/resume, offscreen suspension, WebGL fallback, DOM-removal
+cleanup and BFCache restoration are implemented. Rendered at 1440×900,
+1024×768, 390×844, 320×640 and 844×390, with FR and Arabic RTL checks.
+Independent visual review returned **ship**. Eight scoped Node tests, 40
+existing deployment/public-routing tests, 54 animated and 51 reduced-motion
+browser assertions, static/module/CSP checks, changed-file Ruff, JavaScript
+syntax and diff checks pass. No backend runtime, financial configuration,
+migration, LIVE activation or deployment changed. Existing J9.4 documentation
+edits are preserved. See [implementation record](LANDING_HERO_IMPLEMENTATION.md).
+
 ## J9.3 — Final Remaining Defect Remediation (2026-09-20)
 
 Initial implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` was staged
