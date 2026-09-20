@@ -1,5 +1,47 @@
 # ShipTrip V1 Implementation Status
 
+## J9.3 — Final Remaining Defect Remediation (2026-09-20)
+
+Initial implementation SHA `e0e9b5ff062dcb93a9ca9e6821163d935826d2af` was staged
+on `codex/j93-final-defects` from
+`35b3d4fbafb07a9e55489e5ca39622cb369a20a8`. Independent Gemini
+verification returned GREEN. `J9-BE-01` is classified MAJOR and addressed with
+strict future first-departure checks on Journey route writes and publication.
+The remaining known Admin and mobile J9 findings (`DEF-ADM-02`, `DEF-ADM-03`,
+`DEF-MOB-13`, `DEF-MOB-04`, `DEF-MOB-10`, `DEF-MOB-11`, `DEF-MOB-12`) have
+implementation fixes. Finance PostgreSQL snapshot guarantees are unchanged;
+unsupported environments receive a controlled unavailable result. Journey
+leg capacity is bounded at the inherited 0.01–200.00 kg server limit and
+mirrored by mobile. Deal privacy and EN/FR/AR validation/error copy are covered.
+
+Codex ran only targeted checks: 14 new and 22 existing Journey/Admin Django
+tests, 31 matching tests, 1 J9.1 banned-admin regression, 18 new and 59
+existing Flutter tests, changed-file
+Ruff/analyzer, localization generation, changed-screen design detection and
+schema drift (none). Gemini reported full Flutter 974 passed, Admin/Finance 100
+passed, Journey/matching 133 passed and 10 skipped, six adversarial probes,
+Ruff, analyzer, formatter, localization, deploy checks and schema drift green.
+Its broader SQLite Django discovery had one PostgreSQL-only assertion failure;
+that test passed on PostgreSQL. [PR #7 CI](https://github.com/is-bo/shiptripis/actions/runs/35477127627)
+then passed five jobs but exposed one PostgreSQL Django payout-review queue
+query-budget regression (16 queries, limit 14; 2,244 other tests passed, 34
+skipped). The enabled route had duplicated the fresh capability check; the
+follow-up fix retains the existing enabled-route authorization and checks
+capability separately only for the disabled-feature 503 path. Focused SQLite
+query-budget and J9.3 Admin tests now pass 8/8, and the J9.1 banned-admin
+regression passes 1/1; changed-file Ruff passes. Local
+PostgreSQL test authentication was unavailable locally. Follow-up independent
+Gemini verification returned GREEN on clean SHA
+`24fefb3a66f1520a03877c5e7c95c933765c59f9`: the queue cost is 13 queries
+for one and ten submissions on PostgreSQL (limit 14), J9.3 Admin/banned tests
+pass 8/8, Admin/Finance 587/587, full PostgreSQL Django 1,656 passed with 34
+skipped, and full Flutter 974/974. Analyzer, formatter, localization, Ruff,
+deployment safety, schema drift and deploy/static checks passed. All eight
+J9.3 defects and J9.1/J9.2 regressions were reconfirmed closed, with 0
+CRITICAL, 0 MAJOR and 0 MINOR findings. A new green PostgreSQL PR CI run remains
+required before merge and TEST deployment. No APK has been built.
+See [J9.3 record](PHASE_J93_FINAL_DEFECTS.md).
+
 ## J9.1 — Critical Security, Privacy and State Isolation (2026-09-19)
 
 J9.1 fixes only `DEF-ADM-01`, `DEF-MOB-07`, and `DEF-MOB-08` on

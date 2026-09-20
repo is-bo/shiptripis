@@ -13,10 +13,14 @@ from .queries import MetricQuery, Queries
 from .reconciliation import reconcile
 
 
+class FinanceSnapshotUnavailable(RuntimeError):
+    """The strict reporting snapshot cannot be opened in this environment."""
+
+
 @contextmanager
 def consistent_read():
     if connection.vendor != "postgresql" or connection.in_atomic_block:
-        raise RuntimeError(
+        raise FinanceSnapshotUnavailable(
             "Finance reporting requires a standalone PostgreSQL snapshot."
         )
     with transaction.atomic():

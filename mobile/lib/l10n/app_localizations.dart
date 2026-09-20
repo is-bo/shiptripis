@@ -477,6 +477,30 @@ abstract class L {
   /// **'This is required'**
   String get validationRequired;
 
+  /// No description provided for @validationCodeSixDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'Code must be 6 digits'**
+  String get validationCodeSixDigits;
+
+  /// No description provided for @validationCcpNumberDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP account number must contain 1 to 20 digits'**
+  String get validationCcpNumberDigits;
+
+  /// No description provided for @validationCcpKeyDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'CCP key must be exactly 2 digits'**
+  String get validationCcpKeyDigits;
+
+  /// No description provided for @validationRipDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'RIP must be exactly 20 digits'**
+  String get validationRipDigits;
+
   /// No description provided for @validationEmailInvalid.
   ///
   /// In en, this message translates to:
@@ -992,6 +1016,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Deliveries'**
   String get deliveriesTitle;
+
+  /// No description provided for @dealUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery unavailable'**
+  String get dealUnavailableTitle;
+
+  /// No description provided for @dealUnavailableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This delivery is not available for this account. It may have changed, or the link may be out of date.'**
+  String get dealUnavailableBody;
 
   /// No description provided for @deliveriesFilterActive.
   ///
@@ -1800,7 +1836,7 @@ abstract class L {
   /// No description provided for @journeyCapacityInvalid.
   ///
   /// In en, this message translates to:
-  /// **'Enter at least 0.01 kg, to two decimal places.'**
+  /// **'Enter between 0.01 and 200 kg, to two decimal places.'**
   String get journeyCapacityInvalid;
 
   /// No description provided for @journeyLegDepartRequired.

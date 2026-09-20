@@ -14,6 +14,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
 import '../../design/components/codes.dart';
 import '../../design/components/feedback.dart';
+import '../../design/components/forms.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
@@ -43,8 +44,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
 
   Future<void> _submit() async {
     final l = L.of(context);
-    if (_code.text.length != 6) {
-      setState(() => _error = l.validationRequired);
+    final codeError = Validators.of(context).sixDigitCode(_code.text);
+    if (codeError != null) {
+      setState(() => _error = codeError);
       return;
     }
     setState(() {

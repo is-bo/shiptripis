@@ -9,7 +9,10 @@ from django.views.decorators.http import require_GET
 
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
-from apps.finance.control_plane.snapshot import build_snapshot
+from apps.finance.control_plane.snapshot import (
+    FinanceSnapshotUnavailable,
+    build_snapshot,
+)
 from .permissions import has_all_admin_permissions, staff_member_required
 
 
@@ -38,7 +41,7 @@ def finance_control_plane(request):
         return JsonResponse(
             {"code": "invalid_finance_query", "errors": exc.messages}, status=400
         )
-    except OperationalError:
+    except (OperationalError, FinanceSnapshotUnavailable):
         return JsonResponse(
             {"code": "finance_snapshot_temporarily_unavailable"}, status=503
         )

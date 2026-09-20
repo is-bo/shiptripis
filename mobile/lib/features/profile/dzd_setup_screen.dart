@@ -187,6 +187,7 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
     final l = L.of(context);
     final text = Theme.of(context).textTheme;
     final c = context.colors;
+    final validators = Validators.of(context);
 
     return AppScaffold(
       topBar: AppTopBar(title: l.dzdFormTitle, showBack: true),
@@ -240,12 +241,12 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
                 errorText: _fieldErrors['ccp_number'],
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return l.validationRequired;
-                  }
-                  return null;
-                },
+                validator: (v) => validators.digits(
+                  v,
+                  minLength: 1,
+                  maxLength: 20,
+                  malformedMessage: l.validationCcpNumberDigits,
+                ),
               ),
               const SizedBox(height: AppSpace.lg),
 
@@ -261,15 +262,12 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(2),
                 ],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return l.validationRequired;
-                  }
-                  if (v.trim().length != 2) {
-                    return l.validationRequired;
-                  }
-                  return null;
-                },
+                validator: (v) => validators.digits(
+                  v,
+                  minLength: 2,
+                  maxLength: 2,
+                  malformedMessage: l.validationCcpKeyDigits,
+                ),
               ),
               const SizedBox(height: AppSpace.lg),
 
@@ -285,15 +283,12 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(20),
                 ],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return l.validationRequired;
-                  }
-                  if (v.trim().length != 20) {
-                    return l.validationRequired;
-                  }
-                  return null;
-                },
+                validator: (v) => validators.digits(
+                  v,
+                  minLength: 20,
+                  maxLength: 20,
+                  malformedMessage: l.validationRipDigits,
+                ),
               ),
               const SizedBox(height: AppSpace.xl),
 

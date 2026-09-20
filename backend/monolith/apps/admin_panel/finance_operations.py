@@ -52,7 +52,10 @@ from apps.admin_panel import finance_dashboard_labels as words
 from apps.core.admin_display import format_eur
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
-from apps.finance.control_plane.snapshot import build_snapshot
+from apps.finance.control_plane.snapshot import (
+    FinanceSnapshotUnavailable,
+    build_snapshot,
+)
 
 from .console_presenters import format_minor_amount
 from .finance_dashboard import (
@@ -105,6 +108,7 @@ def _scope_only(params, **overrides):
         values[key] = item
     return values
 
+
 # ---------------------------------------------------------------------------
 # Operator language
 # ---------------------------------------------------------------------------
@@ -147,7 +151,11 @@ METHODS = {
 #: Finance health in one line. The six comparisons live on the reconciliation
 #: page; this is the only reading the operational surfaces carry.
 HEALTH = {
-    "ok": ("Finance reconciled", "ok", "Every comparison agrees and the ledger balances."),
+    "ok": (
+        "Finance reconciled",
+        "ok",
+        "Every comparison agrees and the ledger balances.",
+    ),
     "warning": (
         "Finance warning — review",
         "wait",
@@ -195,19 +203,61 @@ PAID_STAGES = ("settled",)
 
 #: `(key, label, blurb, tone, stages)`. Only the first cohort may shout.
 PAYOUT_COHORTS = (
-    ("attention", "Needs attention", "Stuck, refused or frozen. A person has to act.", "bad", ATTENTION_STAGES),
+    (
+        "attention",
+        "Needs attention",
+        "Stuck, refused or frozen. A person has to act.",
+        "bad",
+        ATTENTION_STAGES,
+    ),
     ("ready", "Ready", "Due now, with nothing blocking them.", "attn", READY_STAGES),
-    ("moving", "Processing", "On their way. Worth watching, not worth touching.", "", MOVING_STAGES),
-    ("not_due", "Not due yet", "Delivery or the protection window still to run.", "", NOT_DUE_STAGES),
+    (
+        "moving",
+        "Processing",
+        "On their way. Worth watching, not worth touching.",
+        "",
+        MOVING_STAGES,
+    ),
+    (
+        "not_due",
+        "Not due yet",
+        "Delivery or the protection window still to run.",
+        "",
+        NOT_DUE_STAGES,
+    ),
     ("paid", "Paid", "Money has reached the Traveler.", "ok", PAID_STAGES),
 )
 
 #: The manual dinar queue, in the order one payout travels it.
 DZD_COHORTS = (
-    ("waiting", "Waiting for Finance", "Released, and nobody has picked them up.", "attn", ("waiting_for_finance",)),
-    ("claimed", "Claimed / in progress", "An operator has taken these and is sending them.", "", ("claimed", "transfer_processing")),
-    ("sent", "Sent / awaiting settlement", "Recorded as sent, not yet attested as paid.", "", ("transfer_sent",)),
-    ("completed", "Completed", "Attested as paid. The euro obligation is discharged.", "ok", ("settled",)),
+    (
+        "waiting",
+        "Waiting for Finance",
+        "Released, and nobody has picked them up.",
+        "attn",
+        ("waiting_for_finance",),
+    ),
+    (
+        "claimed",
+        "Claimed / in progress",
+        "An operator has taken these and is sending them.",
+        "",
+        ("claimed", "transfer_processing"),
+    ),
+    (
+        "sent",
+        "Sent / awaiting settlement",
+        "Recorded as sent, not yet attested as paid.",
+        "",
+        ("transfer_sent",),
+    ),
+    (
+        "completed",
+        "Completed",
+        "Attested as paid. The euro obligation is discharged.",
+        "ok",
+        ("settled",),
+    ),
 )
 
 #: The Overview's needs-attention list. Each row is one authoritative H5 value,
@@ -340,7 +390,14 @@ def _scope_bar(params, scope, *, here, health=None, refine=()):
     # A refine control renders its own input, so it must not ALSO ride along as
     # a hidden field: `Scope.parse` refuses a filter submitted twice rather than
     # guessing which value was meant.
-    visible = {"mode", "search", "period", "start", "end", *(name for name, *_ in refine)}
+    visible = {
+        "mode",
+        "search",
+        "period",
+        "start",
+        "end",
+        *(name for name, *_ in refine),
+    }
     return {
         "mode": params.get("mode", ""),
         "mode_label": words.MODES.get(params.get("mode", ""), "—"),
@@ -394,7 +451,11 @@ REFINE_PAYOUTS = (
     (
         "rail",
         "Payout method",
-        (("", "Any method"), ("stripe_eur", "Stripe EUR"), ("manual_dzd", "Manual DZD")),
+        (
+            ("", "Any method"),
+            ("stripe_eur", "Stripe EUR"),
+            ("manual_dzd", "Manual DZD"),
+        ),
     ),
     ("held", "Holds and disputes", words.HELD_CHOICES),
 )
@@ -493,13 +554,16 @@ def _cohorts(snapshot, specs, *, rail=None, here="", params=None):
                         "help": words.STAGE_HELP.get(row["operation_stage"], ""),
                         "count": row["count"],
                         "amount": format_eur(row["amount_eur_cents"]),
-                        "method": METHODS.get(row["rail"]) or words.humanise(row["rail"]),
+                        "method": METHODS.get(row["rail"])
+                        or words.humanise(row["rail"]),
                         "dzd": _dzd_text(row),
                         "dzd_missing": row.get("dzd_missing_count") or 0,
                     }
                     for row in rows
                 ],
-                "url": f"{here}?{_link(params or {}, cohort=key, page='')}" if here else "",
+                "url": f"{here}?{_link(params or {}, cohort=key, page='')}"
+                if here
+                else "",
             }
         )
     return out
@@ -624,7 +688,8 @@ def _queue_rows(params, *, stage, user, limit=50, manual=False, rail=None):
                 )
                 if manual and raw.get("payout_amount_minor") is not None
                 else "",
-                "method": METHODS.get(raw.get("rail")) or words.humanise(raw.get("rail")),
+                "method": METHODS.get(raw.get("rail"))
+                or words.humanise(raw.get("rail")),
                 "stage": STAGES.get(raw.get("operation_stage"))
                 or words.humanise(raw.get("operation_stage")),
                 "age": _age(fact.get("eligible_at") or fact.get("created_at"), now=now),
@@ -675,15 +740,22 @@ def _activity(limit=6, *, mode="test"):
         from apps.finance.models import PaymentRefund, Payout
 
         def targets(model):
-            return model.objects.filter(provider_mode=mode).annotate(
-                audit_id=Cast("pk", CharField())
-            ).filter(audit_id=OuterRef("target_id"))
+            return (
+                model.objects.filter(provider_mode=mode)
+                .annotate(audit_id=Cast("pk", CharField()))
+                .filter(audit_id=OuterRef("target_id"))
+            )
 
         entries = list(
             AdminAuditLog.objects.filter(action__in=tuple(ACTIVITY))
-            .annotate(payout_in_mode=Exists(targets(Payout)), refund_in_mode=Exists(targets(PaymentRefund)))
-            .filter(Q(target_type="finance.payout", payout_in_mode=True)
-                    | Q(target_type="finance.paymentrefund", refund_in_mode=True))
+            .annotate(
+                payout_in_mode=Exists(targets(Payout)),
+                refund_in_mode=Exists(targets(PaymentRefund)),
+            )
+            .filter(
+                Q(target_type="finance.payout", payout_in_mode=True)
+                | Q(target_type="finance.paymentrefund", refund_in_mode=True)
+            )
             .exclude(action__in=ACTIVITY_EXCLUDED)
             .select_related("actor")
             .order_by("-created_at")[:limit]
@@ -725,11 +797,17 @@ def build_overview(snapshot, params, scope, *, user):
     }
     for group in (payout_attention or {}).get("groups", []):
         label, owner = owner_words[group["attention_owner"]]
-        attention.append({
-            "label": label, "owner": owner, "count": group["count"],
-            "says": "Review the payout's next required action.", "tone": "bad", "amount": "",
-            "url": f"{_url('finance-rows')}?{_link(params, metric='payout_attention', operation='', page='')}",
-        })
+        attention.append(
+            {
+                "label": label,
+                "owner": owner,
+                "count": group["count"],
+                "says": "Review the payout's next required action.",
+                "tone": "bad",
+                "amount": "",
+                "url": f"{_url('finance-rows')}?{_link(params, metric='payout_attention', operation='', page='')}",
+            }
+        )
     for spec in ATTENTION:
         # Payout groups above are exclusive. Refund executions are independent
         # issues and never added to the unique payout headline.
@@ -800,12 +878,18 @@ def build_overview(snapshot, params, scope, *, user):
     # cohorts. Without this the lane reads 0 / 0 / 0 while a transfer is stuck,
     # which is the most misleading thing this page could say.
     dzd_stuck = sum(
-        row["count"] for row in _cohort_rows(_stage_index(snapshot, rail="manual_dzd"), ATTENTION_STAGES)
+        row["count"]
+        for row in _cohort_rows(
+            _stage_index(snapshot, rail="manual_dzd"), ATTENTION_STAGES
+        )
     )
     return {
         "attention": attention,
-        "attention_total": payout_attention["count"] if payout_attention is not None else None,
-        "attention_available": payout_attention is not None and payout_attention.get("status") == "available",
+        "attention_total": payout_attention["count"]
+        if payout_attention is not None
+        else None,
+        "attention_available": payout_attention is not None
+        and payout_attention.get("status") == "available",
         "dzd": {
             "cohorts": dzd,
             "waiting": next((row for row in dzd if row["key"] == "waiting"), None),
@@ -815,7 +899,9 @@ def build_overview(snapshot, params, scope, *, user):
         },
         "stripe": {
             "moving": next((row for row in stripe if row["key"] == "moving"), None),
-            "attention": next((row for row in stripe if row["key"] == "attention"), None),
+            "attention": next(
+                (row for row in stripe if row["key"] == "attention"), None
+            ),
             "ready": next((row for row in stripe if row["key"] == "ready"), None),
             "total": sum(row["count"] for row in stripe),
             "url": f"{payouts_url}?{_link(params, cohort='moving', page='')}",
@@ -864,7 +950,9 @@ def build_payouts(snapshot, params, scope, *, user, requested):
 
 def build_dzd(snapshot, params, scope, *, user, requested):
     here = _url("finance-dzd")
-    cohorts = _cohorts(snapshot, DZD_COHORTS, rail="manual_dzd", here=here, params=params)
+    cohorts = _cohorts(
+        snapshot, DZD_COHORTS, rail="manual_dzd", here=here, params=params
+    )
     selected = _pick(cohorts, requested, fallback="waiting")
     current = next(row for row in cohorts if row["key"] == selected)
     groups = [
@@ -1069,8 +1157,10 @@ def build_reconciliation(snapshot, params, scope):
     split = [
         {
             "rail": words.RAILS.get(row["rail"]) or words.humanise(row["rail"]),
-            "bucket": words.LIABILITY_LABELS.get(row["bucket"]) or words.humanise(row["bucket"]),
-            "funding": words.FUNDING_MIX.get(row["funding_mix"]) or words.humanise(row["funding_mix"]),
+            "bucket": words.LIABILITY_LABELS.get(row["bucket"])
+            or words.humanise(row["bucket"]),
+            "funding": words.FUNDING_MIX.get(row["funding_mix"])
+            or words.humanise(row["funding_mix"]),
             "is_manual": row["rail"] == "manual_dzd",
             "value": value(row, "traveler_outstanding"),
         }
@@ -1090,17 +1180,24 @@ def build_reconciliation(snapshot, params, scope):
             for code in integrity["warnings"]
         ],
         "data_issues": [
-            {"label": words.DATA_ISSUE_LABELS.get(key) or words.humanise(key), "count": count}
+            {
+                "label": words.DATA_ISSUE_LABELS.get(key) or words.humanise(key),
+                "count": count,
+            }
             for key, count in integrity["data_issues"].items()
             if count
         ],
-        "attributed_legacy_entries": integrity.get("source_attributed_legacy_entry_count", 0),
+        "attributed_legacy_entries": integrity.get(
+            "source_attributed_legacy_entry_count", 0
+        ),
         "provenance": [
             {"label": words.humanise(key), **row}
             for key, row in (integrity.get("provenance") or {}).items()
         ],
         "revenue_basis": words.humanise(integrity.get("revenue_basis", "")),
-        "provider_cash": words.humanise(integrity.get("provider_cash_reconciliation", "")),
+        "provider_cash": words.humanise(
+            integrity.get("provider_cash_reconciliation", "")
+        ),
         "buckets": buckets,
         "split": split,
         "providers": providers,
@@ -1113,7 +1210,10 @@ def build_reconciliation(snapshot, params, scope):
         "revenue_categories_available": categories.get("status") == "available",
         "revenue_categories_reason": categories.get("reason", ""),
         "definitions": sorted(
-            ({"key": key, "label": row["name"], **row} for key, row in snapshot["definitions"].items()),
+            (
+                {"key": key, "label": row["name"], **row}
+                for key, row in snapshot["definitions"].items()
+            ),
             key=lambda row: row["label"],
         ),
         "snapshot": {
@@ -1131,7 +1231,10 @@ def build_reconciliation(snapshot, params, scope):
 # Views
 # ---------------------------------------------------------------------------
 
-def _page(request, template, *, title, eyebrow, current, build, refine=(), status_on_error=400):
+
+def _page(
+    request, template, *, title, eyebrow, current, build, refine=(), status_on_error=400
+):
     """One bounded snapshot per view, and one shape for every failure."""
 
     _guard(request)
@@ -1144,14 +1247,23 @@ def _page(request, template, *, title, eyebrow, current, build, refine=(), statu
     try:
         scope = Scope.parse(_scope_only(params))
     except ValidationError as exc:
-        return _render(request, template, {**base, "errors": list(exc.messages)}, status=status_on_error)
-    try:
-        snapshot = build_snapshot(scope)
-    except OperationalError:
         return _render(
             request,
             template,
-            {**base, "scope": _scope_bar(params, scope, here=_url(current), refine=refine), "unavailable": True},
+            {**base, "errors": list(exc.messages)},
+            status=status_on_error,
+        )
+    try:
+        snapshot = build_snapshot(scope)
+    except (OperationalError, FinanceSnapshotUnavailable):
+        return _render(
+            request,
+            template,
+            {
+                **base,
+                "scope": _scope_bar(params, scope, here=_url(current), refine=refine),
+                "unavailable": True,
+            },
             status=503,
         )
     health = _health(snapshot)
@@ -1160,7 +1272,9 @@ def _page(request, template, *, title, eyebrow, current, build, refine=(), statu
         template,
         {
             **base,
-            "scope": _scope_bar(params, scope, here=_url(current), health=health, refine=refine),
+            "scope": _scope_bar(
+                params, scope, here=_url(current), health=health, refine=refine
+            ),
             "health": health,
             "in_legacy_mode": scope.mode == "legacy_unknown",
             "legacy_url": f"{_url(current)}?{_link(params, mode='legacy_unknown')}",

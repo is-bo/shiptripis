@@ -52,6 +52,9 @@ import '../../domain/transport_rules.dart';
 /// to have the whole journey refused.
 const int maxJourneyLegs = 20;
 
+/// The V1 per-leg ceiling shared with the server.
+const double maxJourneyLegCapacityKg = 200.0;
+
 /// One stop on the route.
 class RouteStopDraft {
   RouteStopDraft({required this.place, this.airport});
@@ -496,11 +499,17 @@ class JourneyRouteDraft extends ChangeNotifier {
       arrive = null;
     }
 
-    // The wire format is two decimal places, so the check is on what will
-    // actually be sent — 0.004 kg rounds to 0.00 and would be refused.
-    final capacityValue = parseDecimalInput(segment.capacity.text);
+    // The server accepts 0.01–200.00 kg with at most two decimal places.
+    // Check the typed precision too: rounding 0.005 on-device would make a
+    // value appear valid that the authoritative DecimalField rejects.
+    final capacityText = segment.capacity.text.trim();
+    final capacityValue = parseDecimalInput(capacityText);
     final capacity =
-        (capacityValue == null || (capacityValue * 100).round() < 1)
+        (capacityValue == null ||
+            !RegExp(r'^\d+(?:[.,]\d{1,2})?$').hasMatch(capacityText) ||
+            !capacityValue.isFinite ||
+            capacityValue < 0.01 ||
+            capacityValue > maxJourneyLegCapacityKg)
         ? copy.capacityInvalid
         : null;
 

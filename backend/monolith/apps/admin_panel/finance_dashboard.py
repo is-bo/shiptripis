@@ -40,6 +40,7 @@ from apps.admin_panel import finance_dashboard_labels as words
 from apps.core.admin_display import format_eur
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
+from apps.finance.control_plane.snapshot import FinanceSnapshotUnavailable
 from apps.finance.models import Payout
 
 from .console_presenters import decimal_micros, format_minor_amount
@@ -574,7 +575,7 @@ def finance_rows(request):
             {**context, "errors": list(exc.messages)},
             status=400,
         )
-    except OperationalError:
+    except (OperationalError, FinanceSnapshotUnavailable):
         return _render(
             request,
             "admin/console/finance_rows.html",

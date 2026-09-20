@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Unavailable</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <h1>{{ heading }}</h1>
+      <p>{{ message }}</p>
+    </div>
+  </header>
+  <div class="st-alert st-alert-info" role="status">
+    <strong>Configuration unavailable.</strong>
+    <span>An authorized operator can return when payout profiles are enabled for this deployment.</span>
+  </div>
+  <p><a class="button" href="{{ back_url }}">{{ back_label }}</a></p>
+</main>
+{% endblock %}

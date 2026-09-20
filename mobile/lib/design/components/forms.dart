@@ -129,6 +129,29 @@ class Validators {
     return value.length < 8 ? _l.validationPasswordTooShort : null;
   }
 
+  /// Digits-only input with distinct empty and malformed copy.
+  String? digits(
+    String? value, {
+    required int minLength,
+    required int maxLength,
+    required String malformedMessage,
+  }) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return _l.validationRequired;
+    final isValid =
+        RegExp(r'^\d+$').hasMatch(v) &&
+        v.length >= minLength &&
+        v.length <= maxLength;
+    return isValid ? null : malformedMessage;
+  }
+
+  String? sixDigitCode(String? value) => digits(
+    value,
+    minLength: 6,
+    maxLength: 6,
+    malformedMessage: _l.validationCodeSixDigits,
+  );
+
   String? maxLength(String? value, int max) =>
       (value != null && value.characters.length > max)
       ? _l.validationTooLong(max)

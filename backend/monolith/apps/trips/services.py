@@ -14,6 +14,11 @@ from apps.kyc.models import KycSubmission
 
 from apps.locations.models import AirportLocalityMapping, Place
 
+from .constraints import (
+    DEPARTURE_NOT_FUTURE_CODE,
+    DEPARTURE_NOT_FUTURE_MESSAGE,
+    first_departure_is_future,
+)
 from .models import Journey, JourneyLeg, JourneyLegProof
 from .transport_rules import (
     MODE_UNAVAILABLE_CODE,
@@ -52,7 +57,7 @@ def has_current_kyc_approval(user, *, at=None) -> bool:
     )
 
 
-def validate_journey_verification_gates(journey: Journey) -> None:
+def validate_journey_verification_gates(journey: Journey, *, at=None) -> None:
     """Recheck the mutable KYC/proof gates for a published journey.
 
     Publication is not a permanent authorization grant: KYC can expire and a
@@ -60,7 +65,7 @@ def validate_journey_verification_gates(journey: Journey) -> None:
     helper again while holding their aggregate locks.
     """
 
-    if not has_current_kyc_approval(journey.traveler):
+    if not has_current_kyc_approval(journey.traveler, at=at):
         raise JourneyDomainError(
             "traveler_kyc_not_approved",
             "Current traveler KYC approval is required for this journey.",
@@ -87,7 +92,9 @@ def validate_journey_verification_gates(journey: Journey) -> None:
         )
 
 
-def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
+def _validate_leg_sequence(
+    journey: Journey, legs: list[JourneyLeg], *, at=None
+) -> None:
     if not legs:
         raise JourneyDomainError(
             "journey_has_no_legs",
@@ -99,6 +106,12 @@ def _validate_leg_sequence(journey: Journey, legs: list[JourneyLeg]) -> None:
         raise JourneyDomainError(
             "journey_leg_positions_invalid",
             "Journey leg positions must be contiguous and start at zero.",
+        )
+
+    if not first_departure_is_future(legs[0].depart_at, at=at):
+        raise JourneyDomainError(
+            DEPARTURE_NOT_FUTURE_CODE,
+            DEPARTURE_NOT_FUTURE_MESSAGE,
         )
 
     canonical = journey.schema_version >= 2
@@ -241,14 +254,15 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
         .select_for_update(no_key=True)
         .order_by("position", "pk")
     )
-    _validate_leg_sequence(locked, legs)
-    validate_journey_verification_gates(locked)
+    at = timezone.now()
+    _validate_leg_sequence(locked, legs, at=at)
+    validate_journey_verification_gates(locked, at=at)
 
     if locked.status == Journey.Status.ACTIVE:
         return locked
 
     locked.status = Journey.Status.ACTIVE
-    locked.published_at = locked.published_at or timezone.now()
+    locked.published_at = locked.published_at or at
     locked.save(update_fields=["status", "published_at", "updated_at"])
     return locked
 

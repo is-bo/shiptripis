@@ -27,6 +27,7 @@ review page only, inside one deliberate, audited reveal.
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
@@ -78,6 +79,37 @@ BUCKETS = (
     ("approved", "Approved", "ok"),
 )
 BUCKET_LABELS = {key: label for key, label, _ in BUCKETS}
+
+
+def _require_console_profiles(request, *capabilities):
+    """Separate operator authority from deployment feature availability."""
+
+    # Enabled routes run the existing fresh capability gate below. Only the
+    # disabled path needs to check authority here before rendering a 503.
+    if settings.PAYOUT_PROFILES_ENABLED:
+        return None
+    if not has_all_admin_permissions(request.user, *capabilities):
+        raise PermissionDenied("Payout capability required.")
+
+    from .console_views import _render
+
+    return _render(
+        request,
+        "admin/console/feature_unavailable.html",
+        {
+            "title": "Payout method reviews unavailable",
+            "heading": "Payout method reviews are not enabled",
+            "message": (
+                "This deployment has payout profiles disabled. No review data "
+                "or financial state was changed."
+            ),
+            "back_url": reverse("admin_console:finance-dashboard"),
+            "back_label": "Back to Finance",
+        },
+        status=503,
+    )
+
+
 BUCKET_TONES = {key: tone for key, _, tone in BUCKETS}
 
 #: A decision as a verb on its button, and as a fact once it is recorded.
@@ -509,9 +541,7 @@ def reviewer_choices():
     User = get_user_model()
     return [
         user
-        for user in User.objects.filter(is_staff=True, is_active=True).order_by(
-            "email"
-        )
+        for user in User.objects.filter(is_staff=True, is_active=True).order_by("email")
         if has_all_admin_permissions(user, "attest_payout_identity")
     ]
 
@@ -644,7 +674,8 @@ def review_view(profile, *, user, revealed=None, request=None):
             "kyc_submission": kyc["submission"],
             "kyc_url": (
                 reverse("admin_console:kyc-detail", args=(kyc["submission"].pk,))
-                if kyc["submission"] is not None and has_admin_permission(user, "view_kyc")
+                if kyc["submission"] is not None
+                and has_admin_permission(user, "view_kyc")
                 else ""
             ),
             "assignments": [
@@ -728,6 +759,9 @@ def payout_reviews(request):
 
     from .console_views import _render
 
+    unavailable = _require_console_profiles(request, "review_payout_profiles")
+    if unavailable is not None:
+        return unavailable
     require_capabilities(request.user, "review_payout_profiles")
     counts = bucket_counts()
     requested = request.GET.get("bucket", "")
@@ -795,9 +829,9 @@ def _decide(request, profile, *, decision, accept_name_difference):
         # Approve and would then see the Traveler asked to resubmit. The console
         # says so instead and records nothing. The domain rule is untouched.
         if current_attestation(profile.method.traveler_id) is not None:
-            comparison = profile_name_consistency(
-                actor=request.user, profile=profile
-            )["classification"]
+            comparison = profile_name_consistency(actor=request.user, profile=profile)[
+                "classification"
+            ]
             if comparison != "consistent":
                 raise ValidationError("name_difference_unaccepted")
     review = review_profile(
@@ -818,6 +852,11 @@ def payout_review_detail(request, reference):
 
     from .console_views import _render
 
+    unavailable = _require_console_profiles(
+        request, "review_payout_profiles", "view_payout_sensitive"
+    )
+    if unavailable is not None:
+        return unavailable
     require_capabilities(
         request.user, "review_payout_profiles", "view_payout_sensitive"
     )
@@ -917,9 +956,7 @@ def payout_review_detail(request, reference):
             }.get(action, "The decision")
             _refuse(request, label, exc)
     profile = _profile_or_404(reference)
-    review = review_view(
-        profile, user=request.user, revealed=revealed, request=request
-    )
+    review = review_view(profile, user=request.user, revealed=revealed, request=request)
     from_person = request.GET.get("from") == "person"
     response = _render(
         request,
@@ -928,7 +965,9 @@ def payout_review_detail(request, reference):
             "title": f"{review['traveler']['name']} · payout method review",
             "review": review,
             "decisions": {key: label for key, (label, _, _) in DECISIONS.items()},
-            "reviewers": reviewer_choices() if review["stage"] in ("assign", "waiting") else [],
+            "reviewers": reviewer_choices()
+            if review["stage"] in ("assign", "waiting")
+            else [],
             "from_person": from_person,
             "confirm": request.GET.get("confirm", ""),
             "waiting_count": (
@@ -952,6 +991,14 @@ def payout_review_evidence(request, reference):
     from apps.core.storage import StorageNotConfigured
     from botocore.exceptions import BotoCoreError, ClientError
 
+    unavailable = _require_console_profiles(
+        request,
+        "review_payout_profiles",
+        "view_payout_sensitive",
+        "view_payout_evidence",
+    )
+    if unavailable is not None:
+        return unavailable
     require_capabilities(
         request.user,
         "review_payout_profiles",

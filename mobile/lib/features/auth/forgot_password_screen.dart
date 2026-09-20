@@ -80,8 +80,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   Future<void> _confirm() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_code.text.length != 6) {
-      setState(() => _codeError = L.of(context).validationRequired);
+    final codeError = Validators.of(context).sixDigitCode(_code.text);
+    if (codeError != null) {
+      setState(() => _codeError = codeError);
       return;
     }
     setState(() {
