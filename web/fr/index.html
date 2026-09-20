@@ -22,6 +22,8 @@
   <link rel="preload" href="/assets/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/dmsans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/hero.css">
+  <script type="module" src="/assets/hero-globe.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Aller au contenu</a>
@@ -55,18 +57,12 @@
     <!-- Hero ------------------------------------------------------------- -->
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-grid">
-        <div>
-          <p class="eyebrow">Europe ↔ Algérie · livraison uniquement</p>
-          <h1 id="hero-title">Votre colis est <em>déjà</em> sur le trajet de quelqu’un.</h1>
-          <p class="lede">
-            ShipTrip réunit un expéditeur et un voyageur vérifié sur le même
-            trajet entre l’Europe et l’Algérie. Convenez d’une récompense, gardez
-            le paiement bloqué jusqu’à la confirmation de livraison — ou
-            transportez un colis sur le voyage que vous faisiez déjà.
-          </p>
+        <div class="hero-copy">
+          <h1 id="hero-title">Votre colis a<br>déjà <em>son voyage.</em></h1>
+          <p class="lede">Envoyez vos colis entre l’Algérie et l’Europe avec des voyageurs de confiance qui font déjà le trajet — ou gagnez de l’argent en transportant un colis lors d’un voyage déjà prévu.</p>
           <div class="hero-actions">
-            <a class="button button-sun" href="#sender">Je veux envoyer un colis</a>
-            <a class="button button-ghost" href="#traveler">J’ai de la place</a>
+            <a class="button button-sun" href="#sender">Envoyer un colis<svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg></a>
+            <a class="button button-ghost" href="#traveler">Je voyage</a>
           </div>
           <ul class="hero-trust">
             <li>Identité des voyageurs vérifiée</li>
@@ -74,69 +70,23 @@
             <li>Adresses exactes privées jusqu’au financement</li>
           </ul>
         </div>
-
-        <div class="postcard">
-          <div class="airmail">
-            <div class="postcard-inner">
-              <div class="postcard-head">
-                <div>
-                  <p class="postcard-title">Paris → Alger → Jijel</p>
-                  <p class="postcard-sub">Un trajet, deux étapes</p>
-                </div>
-              </div>
-              <div class="postage" aria-hidden="true">
-                <span class="postage-value">EUR</span>
-                <span class="postage-label">Par avion</span>
-              </div>
-
-              <svg class="route-art" viewBox="0 0 520 262" role="img"
-                   aria-label="Un trajet en deux étapes : Paris–Alger en avion, puis Alger–Jijel par la route.">
-                <g class="mirror">
-                  <circle class="halo" cx="452" cy="168" r="24"/>
-
-                  <path class="leg-flight" d="M66 186 C 120 96 208 60 272 92"/>
-                  <path class="leg-drive" d="M272 92 C 330 120 356 176 452 168"/>
-                  <path class="leg-trace" pathLength="100"
-                        d="M66 186 C 120 96 208 60 272 92 C 330 120 356 176 452 168"/>
-
-                  <g transform="translate(165 93) rotate(-24)">
-                    <circle class="plane-ground" cx="0" cy="0" r="12"/>
-                    <path class="plane" d="M-11 -6 L11 0 L-11 6 L-5 0 Z"/>
-                  </g>
-
-                  <g transform="translate(20 168)">
-                    <rect class="parcel" x="0" y="0" width="21" height="16" rx="2.5"/>
-                    <path class="parcel-tape" d="M10.5 0 V16 M0 8 H21"/>
-                  </g>
-
-                  <circle class="node" cx="66" cy="186" r="8.5"/>
-                  <circle class="node-core" cx="66" cy="186" r="3.5"/>
-                  <circle class="node" cx="272" cy="92" r="8.5"/>
-                  <circle class="node-core" cx="272" cy="92" r="3.5"/>
-                  <circle class="node" cx="452" cy="168" r="9.5"/>
-                  <circle class="node-live" cx="452" cy="168" r="4.2"/>
-
-                  <text class="city" x="66" y="164" text-anchor="middle">Paris</text>
-                  <text class="role" x="66" y="212" text-anchor="middle">Départ</text>
-                  <text class="city" x="272" y="70" text-anchor="middle">Alger</text>
-                  <text class="role" x="272" y="118" text-anchor="middle">Escale</text>
-                  <text class="city" x="452" y="146" text-anchor="middle">Jijel</text>
-                  <text class="role" x="452" y="194" text-anchor="middle">Arrivée</text>
-                </g>
-              </svg>
-
-              <div class="postcard-legend">
-                <span class="chip chip-flight">Étape en avion · preuve requise</span>
-                <span class="chip chip-drive">Étape en voiture</span>
-              </div>
-              <p class="postcard-note">
-                La capacité est réservée par étape : un voyageur peut transporter
-                sur la portion qui lui convient, et pas seulement sur tout le
-                trajet.
-              </p>
-            </div>
+        <figure class="hero-globe" data-hero-globe aria-label="Un globe en relief centré sur l’Algérie et l’Europe occidentale, avec des trajets illustratifs en avion et en voiture. Le Maroc et la Tunisie servent uniquement de contexte géographique.">
+          <div class="globe-stage" aria-hidden="true">
+            <img class="globe-fallback" src="/assets/globe/fallback.webp" width="960" height="960" alt="" fetchpriority="high">
+            <canvas class="globe-terrain"></canvas>
+            <svg class="globe-labels"></svg>
+            <canvas class="globe-journeys"></canvas>
           </div>
-        </div>
+          <div class="journey-card">
+            <p class="journey-card-label">Un voyage déjà prévu</p>
+            <p class="journey-card-route"><bdi data-journey-from>Alger</bdi><svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg><bdi data-journey-to>Paris</bdi></p>
+            <p class="journey-card-note">De la place pour un colis</p>
+          </div>
+          <button class="globe-pause" type="button" aria-pressed="false" aria-label="Mettre l’animation en pause" data-pause="Mettre l’animation en pause" data-resume="Reprendre l’animation" hidden>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path class="pause-symbol" d="M4 2h3v12H4zM10 2h3v12h-3z"/><path class="play-symbol" d="m4 2 10 6-10 6z"/></svg>
+          </button>
+          <figcaption class="globe-caption"><strong>Algérie ↔ Europe</strong><span>Trajets illustratifs</span></figcaption>
+        </figure>
       </div>
     </section>
 

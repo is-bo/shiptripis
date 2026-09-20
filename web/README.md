@@ -50,6 +50,34 @@ headless Edge. Note the floor documented in that script: Edge on Windows will
 not lay out below ~492 CSS px, so phone widths have to be reviewed in a browser
 that emulates the viewport properly.
 
+## Landing hero
+
+The root and EN/FR/AR pages share `assets/hero.css` and native ES modules.
+`hero-globe.mjs` manages lifecycle, motion, labels and the featured route;
+`globe-renderer.mjs` renders an actual perspective sphere using WebGL;
+`globe-math.mjs` shares the projection with `globe-network.mjs`'s ambient
+journeys. No globe library, framework, runtime API or build step is required.
+
+The geography source, license, pinned digest, camera and asset regeneration
+instructions are in [assets/globe/README.md](assets/globe/README.md). Public-web
+design decisions are recorded in [DESIGN.md](DESIGN.md); the root design
+document remains scoped to the Flutter app.
+
+Run the scoped checks from the repository root:
+
+```sh
+python tools/check_static_web.py
+node --test tools/web/globe.test.mjs
+```
+
+The static check follows local module imports and script-owned assets as well
+as HTML, CSS and existing legal edge routes. CI runs the journey/geography
+tests without installing an npm dependency. `tools/web/check_hero_browser.js`
+can be piped into an isolated agent-browser session's `eval --stdin` on `/en/`
+for animated and reduced-motion lifecycle checks. Use a local server sending
+the production CSP when validating browser behavior; a plain Python server
+does not attach those headers or rewrite clean legal URLs.
+
 ## Email boundary
 
 The website only links to support mailboxes. Transactional email remains on

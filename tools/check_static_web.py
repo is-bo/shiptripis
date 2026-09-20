@@ -177,6 +177,27 @@ def check_edge_routing() -> list[str]:
     return errors
 
 
+def check_scripts() -> list[str]:
+    """Follow native module imports and local script-owned assets under the CSP.
+
+    HTML alone cannot catch an import typo or a missing geographic texture.
+    Production serves these files directly, without a bundler resolving paths.
+    """
+    errors: list[str] = []
+    for source in sorted([*WEB.rglob("*.js"), *WEB.rglob("*.mjs")]):
+        text = source.read_text(encoding="utf-8")
+        imports = re.findall(r"(?:from\s+|import\s*(?:\(\s*)?)[\"']([^\"']+)[\"']", text)
+        assets = re.findall(r"[\"'](/assets/[^\"']+)[\"']", text)
+        for reference in imports + assets:
+            if not reference.startswith(("./", "../", "/assets/")):
+                errors.append(f"{source.relative_to(ROOT)}: non-local module dependency: {reference}")
+                continue
+            target = (WEB / reference.lstrip("/") if reference.startswith("/") else source.parent / reference).resolve()
+            if not target.is_relative_to(WEB.resolve()) or not target.is_file():
+                errors.append(f"{source.relative_to(ROOT)}: missing or out-of-tree script asset: {reference}")
+    return errors
+
+
 def main() -> int:
     errors: list[str] = []
     pages = sorted(WEB.rglob("*.html"))
@@ -189,6 +210,7 @@ def main() -> int:
             if required not in text:
                 errors.append(f"{source.relative_to(ROOT)}: does not reference {required}")
     errors.extend(check_stylesheets())
+    errors.extend(check_scripts())
     errors.extend(check_edge_routing())
     if errors:
         print("\n".join(errors), file=sys.stderr)

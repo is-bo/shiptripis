@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-20T14:35:00Z",
+  "title": "Design System: ShipTrip public web",
+  "extensions": {
+    "typographyMeta": {
+      "display": { "displayName": "Editorial display", "purpose": "Headlines and featured journey names." },
+      "body": { "displayName": "UI and body", "purpose": "Latin body copy and controls." },
+      "arabic": { "displayName": "Arabic", "purpose": "Arabic text without synthetic Latin-face fallback." }
+    },
+    "motion": [
+      { "name": "control-transition", "value": "160ms ease", "purpose": "Existing button hover feedback." },
+      { "name": "ambient-frame-limit", "value": "30fps", "purpose": "Visible journey overlay only; zero continuous motion with reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "hero-stack", "value": "760px" },
+      { "name": "compact-controls", "value": "360px" },
+      { "name": "short-landscape", "value": "max-height: 500px and min-width: 600px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Sender action", "kind": "button", "refersTo": "button-primary",
+      "description": "The existing yellow action takes a visitor to the sender explanation.",
+      "html": "<a class=\"ds-primary\" href=\"#sender\">Send a package</a>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;min-height:48px;padding:0 1.2rem;background:var(--accent);color:var(--text-primary);border-radius:999px;font:700 .97rem var(--font-ui);text-decoration:none;transition:background-color .16s ease}.ds-primary:hover{background:var(--accent-strong)}.ds-primary:focus-visible{outline:3px solid var(--focus);outline-offset:4px}"
+    },
+    {
+      "name": "Traveler action", "kind": "button", "refersTo": "button-secondary",
+      "description": "Quiet companion action for visitors already planning a journey.",
+      "html": "<a class=\"ds-secondary\" href=\"#traveler\">I’m traveling</a>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;min-height:48px;padding:0 1.2rem;background:var(--surface);color:var(--text-primary);border:1.5px solid var(--hairline-strong);border-radius:999px;font:700 .97rem var(--font-ui);text-decoration:none;transition:background-color .16s ease}.ds-secondary:hover{background:var(--surface-raised)}.ds-secondary:focus-visible{outline:3px solid var(--focus);outline-offset:4px}"
+    },
+    {
+      "name": "Brand", "kind": "nav",
+      "description": "The existing serif wordmark and terracotta identity seal.",
+      "html": "<a class=\"ds-brand\" href=\"/en/\"><span class=\"ds-seal\" aria-hidden=\"true\">S</span>ShipTrip</a>",
+      "css": ".ds-brand{display:inline-flex;align-items:center;gap:.6rem;font:700 1.22rem var(--font-display);color:var(--text-primary);text-decoration:none}.ds-seal{display:grid;place-items:center;width:2.1rem;height:2.1rem;border-radius:50%;background:var(--attention-vivid);font-size:.95rem}.ds-brand:hover{color:var(--brand)}.ds-brand:focus-visible{outline:3px solid var(--focus);outline-offset:4px}"
+    },
+    {
+      "name": "Featured journey", "kind": "card", "refersTo": "card",
+      "description": "One small paper card names a current illustrative route.",
+      "html": "<div class=\"ds-journey\"><small>A trip already planned</small><p>Algiers <svg width=\"20\" height=\"16\" viewBox=\"0 0 20 16\" fill=\"none\" stroke=\"currentColor\" aria-hidden=\"true\"><path d=\"M2 8h15m-5-5 5 5-5 5\"/></svg> Paris</p><span>Room for a package</span></div>",
+      "css": ".ds-journey{padding:1rem 1.15rem;background:var(--surface-raised);border:1px solid var(--hairline);border-radius:var(--radius);color:var(--text-primary);font-family:var(--font-ui)}.ds-journey small{font-size:.7rem;color:var(--text-tertiary)}.ds-journey p{display:flex;align-items:center;gap:.5rem;margin:.35rem 0 .2rem;font:600 1.15rem var(--font-display)}.ds-journey span{color:var(--brand);font-size:.74rem}"
+    },
+    {
+      "name": "Pause journeys", "kind": "button",
+      "description": "Labeled motion control with a pressed state and a resume icon.",
+      "html": "<button class=\"ds-pause\" type=\"button\" aria-label=\"Pause journey animation\" aria-pressed=\"false\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M4 2h3v12H4zM10 2h3v12h-3z\"/></svg></button>",
+      "css": ".ds-pause{display:grid;place-items:center;width:44px;height:44px;border:1px solid var(--hairline-strong);border-radius:50%;background:var(--surface);color:var(--text-secondary);cursor:pointer}.ds-pause:hover{background:var(--surface-raised);color:var(--brand)}.ds-pause:focus-visible{outline:3px solid var(--focus);outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Editorial Mediterranean travel.",
+    "keyCharacteristics": [
+      "Warm, human, travel-oriented typography and materials.",
+      "Geographic illustration grounded in real coastlines and country shapes.",
+      "Restrained borders, supporting captions, and clear sender/traveler actions."
+    ],
+    "dos": [
+      "Do reuse the existing wordmark, paper, fonts, colors, and buttons.",
+      "Do label synthetic journeys as illustrative in each locale.",
+      "Do keep Algeria prominent and route density subordinate to geography.",
+      "Do preserve local assets and the existing self-only CSP."
+    ],
+    "donts": [
+      "Don't present simulated routes as actual bookings or departures.",
+      "Don't mirror country geometry in RTL or add active Morocco/Tunisia routes.",
+      "Don't replace flight/car symbols with people, emoji, or unrelated vehicles."
+    ]
+  }
+}

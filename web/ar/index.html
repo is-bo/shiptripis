@@ -21,6 +21,8 @@
   <meta property="og:site_name" content="ShipTrip">
   <link rel="preload" href="/assets/fonts/notosansarabic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/hero.css">
+  <script type="module" src="/assets/hero-globe.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">تخطّي إلى المحتوى</a>
@@ -54,17 +56,12 @@
     <!-- الواجهة ---------------------------------------------------------- -->
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-grid">
-        <div>
-          <p class="eyebrow">أوروبا ↔ الجزائر · توصيل فقط</p>
-          <h1 id="hero-title">طردك <em>مسبقاً</em> على طريق أحدهم.</h1>
-          <p class="lede">
-            يجمع ShipTrip بين مرسل ومسافر موثّق على الرحلة نفسها بين أوروبا
-            والجزائر. اتّفقا على مكافأة، وابقَ الدفع محجوزاً حتى تأكيد التسليم —
-            أو احمل طرداً في رحلة كنت ستقوم بها على أي حال.
-          </p>
+        <div class="hero-copy">
+          <h1 id="hero-title">طردك له رحلة<br><em>بالفعل.</em></h1>
+          <p class="lede">أرسل طرودك بين الجزائر وأوروبا مع مسافرين موثوقين يقومون بالرحلة بالفعل — أو اكسب مقابل حمل طرد في رحلة كنت ستقوم بها على أي حال.</p>
           <div class="hero-actions">
-            <a class="button button-sun" href="#sender">أريد إرسال طرد</a>
-            <a class="button button-ghost" href="#traveler">لديّ مساحة للحمل</a>
+            <a class="button button-sun" href="#sender">أرسل طرداً<svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg></a>
+            <a class="button button-ghost" href="#traveler">أنا مسافر</a>
           </div>
           <ul class="hero-trust">
             <li>هوية المسافرين موثّقة</li>
@@ -72,68 +69,23 @@
             <li>العناوين الدقيقة خاصة حتى التمويل</li>
           </ul>
         </div>
-
-        <div class="postcard">
-          <div class="airmail">
-            <div class="postcard-inner">
-              <div class="postcard-head">
-                <div>
-                  <p class="postcard-title">باريس ← الجزائر ← جيجل</p>
-                  <p class="postcard-sub">رحلة واحدة، مرحلتان</p>
-                </div>
-              </div>
-              <div class="postage" aria-hidden="true">
-                <span class="postage-value ltr">EUR</span>
-                <span class="postage-label">بريد جوي</span>
-              </div>
-
-              <svg class="route-art" viewBox="0 0 520 262" role="img"
-                   aria-label="رحلة واحدة من مرحلتين: باريس إلى الجزائر جوّاً، ثم الجزائر إلى جيجل برّاً.">
-                <g class="mirror">
-                  <circle class="halo" cx="452" cy="168" r="24"/>
-
-                  <path class="leg-flight" d="M66 186 C 120 96 208 60 272 92"/>
-                  <path class="leg-drive" d="M272 92 C 330 120 356 176 452 168"/>
-                  <path class="leg-trace" pathLength="100"
-                        d="M66 186 C 120 96 208 60 272 92 C 330 120 356 176 452 168"/>
-
-                  <g transform="translate(165 93) rotate(-24)">
-                    <circle class="plane-ground" cx="0" cy="0" r="12"/>
-                    <path class="plane" d="M-11 -6 L11 0 L-11 6 L-5 0 Z"/>
-                  </g>
-
-                  <g transform="translate(20 168)">
-                    <rect class="parcel" x="0" y="0" width="21" height="16" rx="2.5"/>
-                    <path class="parcel-tape" d="M10.5 0 V16 M0 8 H21"/>
-                  </g>
-
-                  <circle class="node" cx="66" cy="186" r="8.5"/>
-                  <circle class="node-core" cx="66" cy="186" r="3.5"/>
-                  <circle class="node" cx="272" cy="92" r="8.5"/>
-                  <circle class="node-core" cx="272" cy="92" r="3.5"/>
-                  <circle class="node" cx="452" cy="168" r="9.5"/>
-                  <circle class="node-live" cx="452" cy="168" r="4.2"/>
-
-                  <text class="city" x="66" y="164" text-anchor="middle">باريس</text>
-                  <text class="role" x="66" y="212" text-anchor="middle">الانطلاق</text>
-                  <text class="city" x="272" y="70" text-anchor="middle">الجزائر</text>
-                  <text class="role" x="272" y="118" text-anchor="middle">محطة</text>
-                  <text class="city" x="452" y="146" text-anchor="middle">جيجل</text>
-                  <text class="role" x="452" y="194" text-anchor="middle">الوصول</text>
-                </g>
-              </svg>
-
-              <div class="postcard-legend">
-                <span class="chip chip-flight">مرحلة جوية · تتطلّب إثباتاً</span>
-                <span class="chip chip-drive">مرحلة برّية</span>
-              </div>
-              <p class="postcard-note">
-                السعة محجوزة لكل مرحلة على حدة، فيمكن للمسافر أن يحمل على الجزء
-                الذي يناسبه من الرحلة، لا على الرحلة كاملة فقط.
-              </p>
-            </div>
+        <figure class="hero-globe" data-hero-globe aria-label="كرة أرضية مجسّمة تركز على الجزائر وأوروبا الغربية، مع أمثلة توضيحية لرحلات بالطائرة والسيارة. يظهر المغرب وتونس للسياق الجغرافي فقط.">
+          <div class="globe-stage" aria-hidden="true">
+            <img class="globe-fallback" src="/assets/globe/fallback.webp" width="960" height="960" alt="" fetchpriority="high">
+            <canvas class="globe-terrain"></canvas>
+            <svg class="globe-labels"></svg>
+            <canvas class="globe-journeys"></canvas>
           </div>
-        </div>
+          <div class="journey-card">
+            <p class="journey-card-label">رحلة مخطّط لها بالفعل</p>
+            <p class="journey-card-route"><bdi data-journey-from>الجزائر</bdi><svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h15m-5-5 5 5-5 5"/></svg><bdi data-journey-to>باريس</bdi></p>
+            <p class="journey-card-note">مساحة لطردك</p>
+          </div>
+          <button class="globe-pause" type="button" aria-pressed="false" aria-label="إيقاف حركة الرحلات مؤقتاً" data-pause="إيقاف حركة الرحلات مؤقتاً" data-resume="استئناف حركة الرحلات" hidden>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path class="pause-symbol" d="M4 2h3v12H4zM10 2h3v12h-3z"/><path class="play-symbol" d="m4 2 10 6-10 6z"/></svg>
+          </button>
+          <figcaption class="globe-caption"><strong>الجزائر ↔ أوروبا</strong><span>رحلات توضيحية</span></figcaption>
+        </figure>
       </div>
     </section>
 
