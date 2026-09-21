@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
 import pytest
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.admin_panel.finance_operations import _payout_detail_url
@@ -14,6 +14,21 @@ from .test_phase8fh4_manual import (  # noqa: F401
     configured_h4,
     image_upload,
 )
+
+
+@pytest.fixture(autouse=True)
+def unhashed_static(settings):
+    """Admin rendering in CI does not collect a staticfiles manifest."""
+
+    with override_settings(
+        STORAGES={
+            **settings.STORAGES,
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    ):
+        yield
 
 
 def _url(payout, cohort="waiting"):
