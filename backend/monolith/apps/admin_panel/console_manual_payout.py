@@ -12,7 +12,6 @@ instead of listing all of them.
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404, HttpResponse
-from django.shortcuts import redirect
 from django.contrib import messages
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 
@@ -22,6 +21,35 @@ from apps.finance.payout_profiles import require_capabilities
 from apps.finance.payout_manual_profiles import reveal_profile, review_profile
 from apps.finance.payout_evidence import upload_evidence, read_evidence
 from .console_manual_presenter import manual_view
+from .utils import admin_redirect, admin_url
+
+
+ACTION_FRAGMENTS = {
+    "review": "st-proof-head",
+    "prepare": "st-transfer-head",
+    "begin": "st-transfer-head",
+    "release": "st-transfer-head",
+    "receipt": "st-receipts-head",
+    "hold": "st-holds-head",
+    "clear_hold": "st-holds-head",
+}
+
+ACTION_SUCCESS = {
+    "review": "Payout profile evidence approved. Continue with the manual transfer workflow.",
+    "prepare": "Transfer instruction claimed. Continue in the Execution section.",
+    "begin": "Transfer started. Record the bank receipt before leaving this payout.",
+    "release": "Transfer claim released. This payout is available to the queue again.",
+    "receipt": "Transfer evidence recorded. Review the append-only Receipts section.",
+    "hold": "Financial hold placed. Review the Holds section before continuing.",
+    "clear_hold": "Financial hold released. Review the Holds section before continuing.",
+}
+
+
+def _cohort_rules():
+    from .finance_operations import DZD_COHORTS
+
+    return {"cohort": frozenset(key for key, *_ in DZD_COHORTS)}
+
 
 def _queue_return(request):
     """Where "back" goes, when the operator arrived from the H5.2 dinar queue.
@@ -38,8 +66,6 @@ def _queue_return(request):
     reviewed and attested on its own.
     """
 
-    from django.urls import reverse
-
     from .finance_operations import DZD_COHORTS
 
     cohort = request.GET.get("cohort", "")
@@ -47,7 +73,11 @@ def _queue_return(request):
         return None
     label = next(row[1] for row in DZD_COHORTS if row[0] == cohort)
     return {
-        "url": f"{reverse('admin_console:finance-dzd')}?cohort={cohort}",
+        "url": admin_url(
+            request,
+            "admin_console:finance-dzd",
+            preserve_query=_cohort_rules(),
+        ),
         "label": label,
     }
 
@@ -313,7 +343,14 @@ def manual_detail(request, payout):
             else:
                 raise ValidationError("Unknown manual payout action.")
             if action != "reveal":
-                return redirect("admin_console:payout-detail", pk=payout.pk)
+                messages.success(request, ACTION_SUCCESS[action])
+                return admin_redirect(
+                    request,
+                    "admin_console:payout-detail",
+                    route_kwargs={"pk": payout.pk},
+                    fragment=ACTION_FRAGMENTS[action],
+                    preserve_query=_cohort_rules(),
+                )
         except (StorageNotConfigured, BotoCoreError, ClientError):
             messages.error(
                 request,

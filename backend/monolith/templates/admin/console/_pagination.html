@@ -1,0 +1,19 @@
+{% load shiptrip_admin %}
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+<nav class="st-pagination" aria-label="{{ pagination_aria_label|default:'Results pagination' }}">
+  <span class="st-pagination-summary">{{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}</span>
+  <div class="st-pagination-actions">
+    {% if page_obj.has_previous %}
+      <a class="button st-button-quiet" rel="prev" aria-label="Previous page, page {{ page_obj.previous_page_number }}" href="?{% admin_querystring page=page_obj.previous_page_number %}">Previous</a>
+    {% else %}
+      <span class="button st-button-quiet is-disabled" aria-disabled="true">Previous</span>
+    {% endif %}
+    <span class="st-pagination-current" aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a class="button st-button-quiet" rel="next" aria-label="Next page, page {{ page_obj.next_page_number }}" href="?{% admin_querystring page=page_obj.next_page_number %}">Next</a>
+    {% else %}
+      <span class="button st-button-quiet is-disabled" aria-disabled="true">Next</span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}

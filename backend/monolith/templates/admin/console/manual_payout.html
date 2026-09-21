@@ -40,6 +40,18 @@ skips any of them.
     </div>
   </header>
 
+  <nav class="st-anchor-nav" aria-label="Payout sections">
+    <span><strong>{{ manual.reference|slice:":8" }}</strong> &middot; {{ manual.state.label }} &middot; {{ manual.amounts.dzd_number }} {{ manual.amounts.currency }}</span>
+    <div>
+      <a href="#st-amount-head">Amount</a>
+      <a href="#st-destination-head">Destination</a>
+      <a href="#st-proof-head">Proof</a>
+      <a href="#st-transfer-head">Execution</a>
+      {% if manual.receipts %}<a href="#st-receipts-head">Receipts</a>{% endif %}
+      <a href="#st-holds-head">Holds</a>
+    </div>
+  </nav>
+
   <p class="st-state-meaning">{{ manual.state.meaning }}</p>
 
   {% for step in manual.steps %}{% if step.state == "current" %}
@@ -184,12 +196,12 @@ skips any of them.
       <p class="st-muted" data-reveal-countdown>These details hide automatically after five minutes. Reveal them again if you need longer &mdash; each reveal is recorded against your account.</p>
     </div>
     {% elif manual.may.reveal %}
-    <form method="post" class="st-reveal-ask" data-once>{% csrf_token %}
+    <form method="post" action="#st-destination-head" class="st-reveal-ask" data-once>{% csrf_token %}
       <div>
         <strong>The full CCP number, CCP key and RIP are hidden.</strong>
         <span>Reveal them only when you are about to perform the transfer. The reveal is recorded against your account, appears on this page only, and is never cached.</span>
       </div>
-      <button name="action" value="reveal" type="submit">Reveal payout details</button>
+      <button class="button st-button-quiet" name="action" value="reveal" type="submit">Reveal payout details</button>
     </form>
     {% endif %}
 
@@ -238,7 +250,7 @@ skips any of them.
     {% endif %}
 
     {% if manual.may.review %}
-    <form method="post" class="st-form st-review-form" data-once>{% csrf_token %}
+    <form method="post" action="#st-proof-head" class="st-form st-review-form" data-once>{% csrf_token %}
       <p class="st-eyebrow">Review</p>
       <p>Approve the profile only after opening the cheque and checking that the account holder matches the Traveler's attested identity.</p>
       {% if manual.destination.review.reason and manual.destination.review.reason != "Consistent" %}
@@ -248,7 +260,7 @@ skips any of them.
         <input type="checkbox" name="accept_name_difference" id="st-accept-name">
         <label for="st-accept-name">I reviewed and accept the attested name difference</label>
       </div>
-      <button name="action" value="review" type="submit">Approve profile evidence</button>
+      <button class="button st-button-ok" name="action" value="review" type="submit">Approve profile evidence</button>
     </form>
     {% endif %}
   </section>
@@ -290,19 +302,19 @@ skips any of them.
 
     <div class="st-split-actions">
       {% if manual.may.prepare %}
-      <form method="post" data-once>{% csrf_token %}
+      <form method="post" action="#st-transfer-head" data-once>{% csrf_token %}
         <input type="hidden" name="state_version" value="{{ manual.state_version }}">
-        <button name="action" value="prepare" type="submit">Claim and prepare transfer</button>
+        <button class="button" name="action" value="prepare" type="submit">Claim and prepare transfer</button>
       </form>
       {% endif %}
       {% if manual.may.begin %}
-      <form method="post" data-once>{% csrf_token %}
+      <form method="post" action="#st-transfer-head" data-once>{% csrf_token %}
         <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
-        <button name="action" value="begin" type="submit">Start the transfer</button>
+        <button class="button st-button-confirm" name="action" value="begin" type="submit">Start the transfer</button>
       </form>
       {% endif %}
       {% if manual.may.release %}
-      <form method="post" data-once>{% csrf_token %}
+      <form method="post" action="#st-transfer-head" data-once>{% csrf_token %}
         <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
         <button name="action" value="release" class="button st-button-quiet" type="submit">Release the claim</button>
       </form>
@@ -328,7 +340,7 @@ skips any of them.
         <li><span>EN</span><b lang="en">{{ manual.receipt_labels.en }}</b></li>
       </ul>
       <p>Proof of the DZD transfer <em>you</em> performed &mdash; not the Traveler's cheque. JPEG, PNG or WebP, up to 8&nbsp;MB. Recorded receipts are never replaced; a correction adds a new revision.</p>
-      <form method="post" enctype="multipart/form-data" class="st-form" data-once>{% csrf_token %}
+      <form method="post" action="#st-transfer-head" enctype="multipart/form-data" class="st-form" data-once>{% csrf_token %}
         <input type="hidden" name="sequence" value="{{ manual.claim.instruction }}">
         <div class="st-field">
           <label for="st-receipt-file">Receipt image</label>
@@ -342,7 +354,7 @@ skips any of them.
           <input type="checkbox" name="settled" id="st-receipt-settled">
           <label for="st-receipt-settled">The receipt proves the transfer completed &mdash; record settlement as well. Leave this unticked if the transfer is still in progress.</label>
         </div>
-        <button name="action" value="receipt" type="submit">Record transfer evidence</button>
+        <button class="button st-button-confirm" name="action" value="receipt" type="submit">Record transfer evidence</button>
       </form>
       <p class="st-muted">Without settlement ticked this records <strong>Transfer sent</strong>. With it ticked the payout also becomes <strong>Paid</strong> and the euro obligation is discharged in the ledger. There is no other way to reach either state.</p>
     </div>
@@ -391,7 +403,7 @@ skips any of them.
           <small>{{ hold.kind }} &middot; {{ hold.reason_code }} &middot; opened {{ hold.opened_at|date:"d M Y, H:i" }}{% if hold.opened_by %} by {{ hold.opened_by }}{% endif %}</small>
         </div>
         {% if hold.mine and manual.may.hold %}
-        <form method="post" data-once>{% csrf_token %}
+        <form method="post" action="#st-holds-head" data-once>{% csrf_token %}
           <input type="hidden" name="hold_id" value="{{ hold.id }}">
           <input type="hidden" name="generation" value="{{ hold.generation }}">
           <button class="button st-button-quiet" name="action" value="clear_hold" type="submit">Release this hold</button>
@@ -404,7 +416,7 @@ skips any of them.
     <p>No hold is stopping this payout.</p>
     {% endif %}
     {% if manual.may.hold %}
-    <form method="post" class="st-hold-form" data-once>{% csrf_token %}
+    <form method="post" action="#st-holds-head" class="st-hold-form" data-once>{% csrf_token %}
       <button class="button st-button-quiet" name="action" value="hold" type="submit">Hold for correction or recovery review</button>
       <span class="st-muted">A hold stops progression. It does not reverse a transfer that has already left a bank &mdash; nothing in this system can.</span>
     </form>

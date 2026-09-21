@@ -29,8 +29,8 @@
         </select>
       </div>
     {% endif %}
-    <button type="submit">Apply</button>
-    {% if query or current_status %}<a class="st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
+    <button class="button" type="submit">Apply</button>
+    {% if query or current_status %}<a class="button st-button-quiet st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
   </form>
 
   {% if bulk_action_url %}<form method="post" action="{{ bulk_action_url }}" class="st-table-card" aria-label="{{ title }} results">{% csrf_token %}{% else %}<section class="st-table-card" aria-label="{{ title }} results">{% endif %}
@@ -69,15 +69,7 @@
         <button type="submit">Apply audited action</button>
       </div>
       {% endif %}
-      {% if page_obj.paginator.num_pages > 1 %}
-        <nav class="st-pagination" aria-label="Pagination">
-          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &middot; {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}</span>
-          <div>
-            {% if page_obj.has_previous %}<a href="?{% if query_without_page %}{{ query_without_page }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
-            {% if page_obj.has_next %}<a href="?{% if query_without_page %}{{ query_without_page }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
-          </div>
-        </nav>
-      {% endif %}
+      {% include "admin/console/_pagination.html" with pagination_aria_label=title|add:" pagination" %}
     {% else %}
       <div class="st-empty"><span aria-hidden="true">&#10003;</span><h2>{{ empty_title }}</h2><p>{{ empty_text }}</p></div>
     {% endif %}

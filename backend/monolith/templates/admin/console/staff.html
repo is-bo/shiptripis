@@ -14,7 +14,7 @@
   </header>
 
   <div class="st-grid st-grid-2">
-    <section class="st-card">
+    <section class="st-card" id="st-invite-head">
       <p class="st-eyebrow">Step 1</p>
       <h2>Invite a staff member</h2>
       <p>ShipTrip emails them a one-time link through the durable email queue. The link never appears in this browser and cannot be recovered from this page.</p>
@@ -39,9 +39,9 @@
     </section>
   </div>
 
-  <section class="st-card">
+  <section class="st-card" aria-labelledby="st-staff-head">
     <div class="st-card-head">
-      <div><p class="st-eyebrow">Current access</p><h2>People who can sign in</h2></div>
+      <div><p class="st-eyebrow">Current access</p><h2 id="st-staff-head">People who can sign in</h2></div>
       <span class="st-muted">{{ staff_users|length }} shown</span>
     </div>
     <div class="st-table-scroll">
@@ -49,22 +49,22 @@
         <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Sign-in</th><th scope="col">Joined</th><th scope="col">Change</th></tr></thead>
         <tbody>
         {% for member in staff_users %}
-        <tr>
+        <tr id="staff-{{ member.pk }}">
           <td><strong>{{ member.full_name|default:"Name not provided" }}</strong><small>{{ member.email }}</small></td>
           <td>{% if member.is_superuser %}<span class="st-chip st-info">Super Admin</span>{% else %}{% for group in member.groups.all %}<span class="st-chip st-info">{{ group.name }}</span>{% empty %}<span class="st-chip st-mute">No fixed role</span>{% endfor %}{% endif %}</td>
           <td><span class="st-chip {% if member.is_active %}st-ok">Enabled{% else %}st-bad">Blocked{% endif %}</span></td>
           <td>{{ member.date_joined|date:"d M Y" }}</td>
           <td>
-            <details class="st-disclosure">
+            <details class="st-disclosure"{% if member.console_open %} open{% endif %}>
               <summary>Change role or access</summary>
               <div class="st-staff-actions">
-                <form method="post" action="{% url 'admin_console:staff-role' member.pk %}" class="st-form">{% csrf_token %}
+                <form method="post" action="{% url 'admin_console:staff-role' member.pk %}?edit={{ member.pk }}#staff-{{ member.pk }}" class="st-form">{% csrf_token %}
                   <label for="role-{{ member.pk }}">Role</label>
                   <select id="role-{{ member.pk }}" name="role">{% for role in roles %}<option value="{{ role.slug }}"{% if role.slug == member.console_role %} selected{% endif %}>{{ role.name }}</option>{% endfor %}</select>
                   <div class="st-check"><input id="confirm-role-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-role-{{ member.pk }}">Replace this person's current role.</label></div>
                   <div class="st-split-actions"><button type="submit">Set role</button></div>
                 </form>
-                <form method="post" action="{% url 'admin_console:staff-access' member.pk %}" class="st-form">{% csrf_token %}
+                <form method="post" action="{% url 'admin_console:staff-access' member.pk %}?edit={{ member.pk }}#staff-{{ member.pk }}" class="st-form">{% csrf_token %}
                   <input type="hidden" name="enabled" value="{% if member.is_active %}False{% else %}True{% endif %}">
                   <div class="st-check"><input id="confirm-access-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-access-{{ member.pk }}">{% if member.is_active %}Block this person from signing in.{% else %}Let this person sign in again.{% endif %}</label></div>
                   <div class="st-split-actions"><button type="submit"{% if member.is_active %} class="st-button-danger"{% endif %}{% if member.pk == request.user.pk and member.is_active %} disabled title="You cannot block your own account"{% endif %}>{% if member.is_active %}Block sign-in{% else %}Restore sign-in{% endif %}</button></div>
@@ -81,16 +81,16 @@
     </div>
   </section>
 
-  <section class="st-card">
+  <section class="st-card" aria-labelledby="st-invitations-head">
     <div class="st-card-head">
-      <div><p class="st-eyebrow">Not yet accepted</p><h2>Invitations</h2></div>
+      <div><p class="st-eyebrow">Not yet accepted</p><h2 id="st-invitations-head">Invitations</h2></div>
     </div>
     <div class="st-table-scroll">
       <table class="st-data-table">
         <thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">State</th><th scope="col">Expires</th><th scope="col">Action</th></tr></thead>
         <tbody>
         {% for invitation in invitations %}
-        <tr>
+        <tr id="invitation-{{ invitation.pk }}">
           <td><strong>{{ invitation.email }}</strong></td>
           <td>{{ invitation.get_role_display }}</td>
           <td>{% if invitation.is_active %}<span class="st-chip st-wait">Pending acceptance</span>{% elif invitation.used_at %}<span class="st-chip st-ok">Accepted</span>{% elif invitation.revoked_at %}<span class="st-chip st-bad">Revoked</span>{% else %}<span class="st-chip st-mute">Expired</span>{% endif %}</td>

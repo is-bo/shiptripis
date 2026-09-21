@@ -16,6 +16,10 @@ admin.site.site_header = "ShipTrip Operations"
 admin.site.site_title = "ShipTrip Admin"
 admin.site.index_title = "Operations dashboard"
 
+# Preserve Django's 403 semantics while giving staff a useful way back into
+# the console. API permission responses keep their normal JSON handling.
+handler403 = "apps.admin_panel.console_views.permission_denied"
+
 
 urlpatterns = [
     # Human-facing operations routes intentionally precede Django's technical

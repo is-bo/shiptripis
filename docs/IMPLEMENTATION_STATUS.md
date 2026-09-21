@@ -1,5 +1,23 @@
 # ShipTrip V1 Implementation Status
 
+## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
+
+Implemented on `codex/k2-admin-ux` from exact `main`
+`5f562a96c8176a5d3aa15ecf73234201520fae73`. Server-rendered Admin
+redirects now use named routes, stable fragments, and per-queue query
+allowlists. Manual DZD payout, dispute, KYC, Flight Proof, Settings, and Staff
+retain relevant section and safe operator context. Shared query-preserving
+pagination, Finance Scope Apply styling, scoped buttons/forms/file inputs,
+long-page navigation, Person subnav overflow, and a friendly 403 are in place.
+Sensitive payout reveal deliberately remains request-scoped POST rendering.
+
+Targeted K2 tests passed (14); the one affected legacy visibility regression
+was fixed and its exact test passed. Independent Gemini visual/role/broad
+regression verification is pending, as are CI, merge, TEST deployment, and
+post-merge branch cleanup. No financial/domain rules, permissions, migrations,
+provider modes, or Railway architecture changed. See
+[the K2 record](PHASE_K2_ADMIN_UX.md).
+
 ## K1 — Reliability & Performance Safety Foundation (2026-09-20)
 
 Implemented on `codex/k1-reliability-foundation` from

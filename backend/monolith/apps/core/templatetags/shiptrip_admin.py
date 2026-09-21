@@ -44,6 +44,27 @@ register.filter("eur", format_eur)
 register.filter("status_tone", tone_for)
 
 
+@register.simple_tag(takes_context=True)
+def admin_querystring(context, **replacements):
+    """Copy the current query and replace only explicitly supplied keys.
+
+    ``QueryDict.urlencode`` performs the escaping; repeated filters are kept,
+    while pagination callers replace only ``page``.  Passing ``None`` removes
+    a key, which also gives list templates a deterministic reset primitive.
+    """
+
+    request = context.get("request")
+    if request is None:
+        return ""
+    query = request.GET.copy()
+    for key, value in replacements.items():
+        if value is None or value == "":
+            query.pop(key, None)
+        else:
+            query[key] = str(value)
+    return query.urlencode()
+
+
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
