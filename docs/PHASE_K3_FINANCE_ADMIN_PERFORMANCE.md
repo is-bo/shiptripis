@@ -1,6 +1,7 @@
 # K3 — Finance & Admin Performance Remediation
 
-Status: **implemented; awaiting independent Gemini verification**.
+Status: **implemented; awaiting Gemini re-verification after a test-only
+follow-up**.
 
 K3 started from exact `main` SHA
 `e462dc5469955e255378208616b6109987112b4b` on branch
@@ -246,7 +247,15 @@ Gemini/CI. Codex does not wait on CI for this phase.
 
 ## Pending release record
 
-- Gemini: pending
+- Gemini: initial verification on exact `a56e455` returned RED solely because
+  three H5.2 tests still asserted the pre-K3 implicit-Overview-reconciliation
+  behavior. Gemini independently confirmed financial parity, authorization,
+  transaction consistency, all 12 query budgets, the measured performance
+  gains, plan/index conclusions, and the application architecture.
+- Gemini follow-up remediation: the three stale assertions/mocks in
+  `test_phase8fh52_finance_operator_ux.py` now target the narrow operational
+  snapshot and explicit Reconciliation link. The complete H5.2 file plus the
+  K3 suite passes locally: 17 passed. Re-verification is pending.
 - CI: pending; do not wait in the Codex implementation task
 - Merge: pending
 - Railway TEST deployment and telemetry: pending

@@ -20,6 +20,14 @@ short Codex gate passed 12 targeted cases; full PostgreSQL, broad regression,
 scale, CI, and deployment checks are explicitly handed to Gemini/CI. See
 [the K3 record](PHASE_K3_FINANCE_ADMIN_PERFORMANCE.md).
 
+Gemini's first independent pass on exact `a56e455` confirmed financial parity,
+authorization, transaction consistency, all query ceilings, the major latency
+reductions, and the no-index conclusion, but returned RED because three H5.2
+tests still expected the removed implicit Overview reconciliation. The
+test-only follow-up aligns those assertions and its operational-snapshot mock
+with K3; the full H5.2 file plus K3 suite now passes 17 tests locally. Gemini
+re-verification is pending. CI has not been started or awaited.
+
 ## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
 
 Implemented on `codex/k2-admin-ux` from exact `main`

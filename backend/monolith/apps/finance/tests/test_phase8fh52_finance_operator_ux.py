@@ -261,8 +261,10 @@ def test_overview_is_five_calm_zones_in_operator_words(world):
     for jargon in ("Gross funded volume", "Recognised ShipTrip revenue", "Rail"):
         assert jargon not in markup, jargon
 
-    # Health is one line, and it opens the audit surface.
-    assert "Finance reconciled" in markup
+    # K3 does not claim a reconciliation verdict it did not compute. The
+    # operational page makes the comprehensive audit an explicit destination.
+    assert "Finance reconciled" not in markup
+    assert "Full accounting detail" in markup
     assert f'href="{RECONCILIATION}"' in markup
 
     # Nothing to do is a stated sentence, not an absence and not empty cards.
@@ -389,18 +391,18 @@ def test_exceptions_page_names_the_owner_and_stays_calm_when_there_is_nothing(wo
 
 def test_an_amount_h5_refuses_to_assert_is_words_and_never_zero(world, monkeypatch):
     s, _, _, _ = world
-    real = ops.build_snapshot
+    real = ops.build_operational_snapshot
 
-    def partial(scope):
-        snapshot = real(scope)
+    def partial(scope, **kwargs):
+        snapshot, queries = real(scope, **kwargs)
         snapshot["metrics"]["held_payouts"] = {
             "count": 3,
             "amount_eur_cents": None,
             "status": "partial",
         }
-        return snapshot
+        return snapshot, queries
 
-    monkeypatch.setattr(ops, "build_snapshot", partial)
+    monkeypatch.setattr(ops, "build_operational_snapshot", partial)
     markup = main(get(signed_in(s.admin), EXCEPTIONS))
     assert "Partial" in markup
     assert "st-unknown" in markup
@@ -443,10 +445,12 @@ def test_reconciliation_keeps_every_comparison_and_a_mismatch_escalates(
     audit = main(get(client, RECONCILIATION))
     assert "Disagrees" in audit and format_eur(1234) in audit
 
-    # The operator surfaces carry the alarm without carrying the evidence.
+    # The narrow Overview does not publish a stale or uncomputed alarm. The
+    # mismatch and its evidence remain explicit on Reconciliation.
     overview = main(get(client, OVERVIEW))
-    assert "investigation required" in overview
+    assert "investigation required" not in overview
     assert "Rows that disagree" not in overview
+    assert "Full accounting detail" in overview
 
 
 # ---------------------------------------------------------------------------
