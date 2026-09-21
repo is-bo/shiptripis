@@ -3,8 +3,8 @@
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`
-`e462dc5469955e255378208616b6109987112b4b`; independent Gemini verification is
-GREEN, while CI, merge, and Railway TEST deployment are pending. Finance
+`e462dc5469955e255378208616b6109987112b4b`; independently verified, merged,
+and released to Railway TEST. Finance
 operational pages now use narrow request-scoped projections while comprehensive
 reconciliation remains intact on its explicit surface. Local PostgreSQL medians improved from
 3,861 ms/88 queries to 605 ms/27 for Finance Overview, 5,910 ms/101 to
@@ -29,7 +29,27 @@ with K3; the full H5.2 file plus K3 suite now passes 17 tests locally. Gemini
 re-verification returned GREEN on exact SHA
 `fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`: the three previous failures are
 resolved, Ruff and both focused suites pass, and application behavior remains
-unchanged. The branch is ready for CI; CI has not yet been awaited.
+unchanged.
+
+[PR #14 CI](https://github.com/is-bo/shiptripis/actions/runs/35627721395)
+passed all six jobs on final branch head `a460dd5`: Django PostgreSQL reported
+2,293 passed and 34 skipped, Flutter reported 974 passed, and Go unit/race,
+real-Redis integration, Ruff, migrations, schema drift, production/static, and
+native Caddy checks passed. PR #14 merged to `main` at
+`80100463edfbf1d03a0f3add32bce433069954bc`.
+
+The clean exact reviewed application tree at `fe1e5bf` is deployed to Railway
+TEST as `v1.0.0-rc.48+fe1e5bf`, deployment
+`bfa3336f-e0ce-42d2-90b9-a8f2fb42fbc1` (**SUCCESS**). `/healthz` and
+`/readyz` returned 200 with database, migrations, and rate-limit cache ready;
+there were no post-deploy 5xx responses. Read-only authenticated TEST medians
+were 420 ms/23 queries for Finance Overview, 785 ms/29 for Payouts Hub,
+577 ms/17 for Manual DZD, 22 ms/4 for Payout Reviews, 24 ms/3 for People,
+36 ms/13 for Person detail, 22 ms/13 for Admin Overview, and 9 ms/2 for
+Disputes. Permission checks passed, all K3 query ceilings remained satisfied,
+and no financial/provider mutation was performed. Stripe and Chargily remain
+TEST, mock payments and DZD execution remain off. The merged application
+branch was deleted locally and remotely.
 
 ## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
 

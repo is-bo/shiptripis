@@ -1,13 +1,13 @@
 # K3 — Finance & Admin Performance Remediation
 
-Status: **implemented; Gemini re-verification GREEN; awaiting CI**.
+Status: **released to Railway TEST**.
 
 K3 started from exact `main` SHA
 `e462dc5469955e255378208616b6109987112b4b` on branch
-`codex/k3-finance-admin-performance`. This record describes the Codex
-implementation, local PostgreSQL measurements, and independent Gemini
-verification. CI, merge, and Railway TEST deployment remain deliberately
-pending.
+`codex/k3-finance-admin-performance`. The exact implementation independently
+verified by Gemini and deployed to TEST is
+`fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`. PR #14 merged to `main` at
+`80100463edfbf1d03a0f3add32bce433069954bc`.
 
 ## Measurement method
 
@@ -242,25 +242,90 @@ auditing, Admin capabilities, and Stripe/Chargily modes are unchanged.
 
 The full Django PostgreSQL suite, broad Finance/Admin/payment/dispute groups,
 large 100/500-user and 100/1,000-payout scale verification, schema drift,
-production/static checks, CI, and deployment are intentionally handed off to
-Gemini/CI. Codex does not wait on CI for this phase.
+production/static checks, CI, and deployment were intentionally handed off to
+Gemini/CI under the K3 test budget. Their results are recorded below.
 
-## Pending release record
+## Independent verification, CI, and merge
 
-- Gemini: initial verification on exact `a56e455` returned RED solely because
-  three H5.2 tests still asserted the pre-K3 implicit-Overview-reconciliation
-  behavior. Gemini independently confirmed financial parity, authorization,
-  transaction consistency, all 12 query budgets, the measured performance
-  gains, plan/index conclusions, and the application architecture.
-- Gemini follow-up remediation: the three stale assertions/mocks in
-  `test_phase8fh52_finance_operator_ux.py` now target the narrow operational
-  snapshot and explicit Reconciliation link. The complete H5.2 file plus the
-  K3 suite passes locally: 17 passed.
-- Gemini re-verification: GREEN on exact SHA
-  `fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`. The H5.2 suite passed 11 tests,
-  the K3 suite passed 6 tests, and Ruff passed. All three previous failures are
-  resolved; application behavior did not change; the branch is ready for CI.
-- CI: pending; do not wait in the Codex implementation task
-- Merge: pending
-- Railway TEST deployment and telemetry: pending
-- Branch cleanup: only after Gemini GREEN, CI GREEN, merge, and TEST verification
+Gemini's initial pass on exact `a56e455` returned RED solely because three
+H5.2 tests still asserted the pre-K3 implicit-Overview-reconciliation behavior.
+It independently confirmed financial parity, authorization, transaction
+consistency, all 12 query budgets, the measured performance gains, plan/index
+conclusions, and the application architecture. The test-only follow-up aligned
+those assertions with the approved design. Gemini re-verification returned
+**GREEN** on exact SHA `fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`:
+the H5.2 suite passed 11 tests, the K3 suite passed 6, Ruff passed, all three
+previous failures were resolved, and application behavior remained unchanged.
+
+[PR #14 CI](https://github.com/is-bo/shiptripis/actions/runs/35627721395)
+passed all six required jobs on final branch head `a460dd5`:
+
+- Django PostgreSQL: 2,293 passed, 34 skipped; Ruff clean; no missing
+  migrations.
+- Production configuration: 46 tests passed; static/edge and native Caddy
+  checks passed.
+- Flutter: 974 tests passed; analyzer clean; 188 files correctly formatted.
+- Go build, vet, unit/race, and real-Redis integration passed; the integration
+  tier reported 287 executed tests and zero skips.
+- Schema drift passed with no drift.
+
+[PR #14](https://github.com/is-bo/shiptripis/pull/14) merged at
+`80100463edfbf1d03a0f3add32bce433069954bc`. The commit after the exact Gemini
+SHA contains only the two release documents; the deployed application tree is
+the exact reviewed tree.
+
+## Railway TEST release and telemetry
+
+A clean 1,166-file `git archive` of exact SHA
+`fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb` was uploaded to the existing
+ShipTrip TEST service as `v1.0.0-rc.48+fe1e5bf`. Deployment
+`bfa3336f-e0ce-42d2-90b9-a8f2fb42fbc1` reached **SUCCESS** with image digest
+`sha256:7981da428d5632b08f755729b7106b3db64bee32c3a1e3b2b2891439050a0684`.
+SHA-256 hashes for the five central K3 runtime files matched between the exact
+archive and the running container. Startup reported no migrations to apply,
+all required child services ready, and the bundled geography catalogue already
+current.
+
+Public checks returned:
+
+- `/healthz`: HTTP 200, release `v1.0.0-rc.48+fe1e5bf`.
+- `/readyz`: HTTP 200; database, migrations, and rate-limit cache all `ok`.
+- Railway HTTP metrics over the deployment window: 10 requests, zero errors,
+  p50/p95 56 ms. There were no HTTP 5xx responses. One early `/healthz`
+  request took 565 ms and still returned 200.
+- Railway resource snapshot: 543.5 MB average / 592.0 MB maximum memory from a
+  1,024 MB limit; maximum CPU 0.382 vCPU from a 2-vCPU limit.
+
+The read-only authenticated smoke used the running container and deployed
+PostgreSQL state. Each result is a median of three warmed Django requests with
+query capture; these deployed-data timings are acceptance evidence rather than
+a replacement for the controlled local before/after data above.
+
+| TEST surface | Median ms | Queries | Result |
+| --- | ---: | ---: | --- |
+| Admin Overview | 22.2 | 13 | 200 |
+| Finance Overview | 420.0 | 23 | 200 |
+| Payouts Hub | 784.7 | 29 | 200 |
+| Manual DZD | 577.4 | 17 | 200 |
+| Payout Reviews | 22.1 | 4 | 200 |
+| Payout Review detail | 49.2 | 21 | 200 |
+| Payments | 25.7 | 3 | 200 |
+| People | 23.9 | 3 | 200 |
+| Person detail | 36.4 | 13 | 200 |
+| Disputes | 9.4 | 2 | 200 |
+
+All deployed query counts remain beneath the K3 ceilings. An unauthenticated
+Finance request redirected to Admin login, and an active restricted staff
+account received HTTP 403 on Payout Reviews. No financial POST or provider
+operation was performed. Stripe and Chargily remain TEST, mock payments and
+DZD payout execution remain off, and EUR/ledger/FX/payout/dispute behavior is
+unchanged. The FCM stream has one consumer with zero pending and zero lag;
+both transport streams contain zero entries. Embedded Redis remains the
+documented K1 TEST exception.
+
+The merged application branch was deleted locally and remotely after TEST
+verification. No migration or index was added. The remaining performance work
+is limited to monitoring the deliberately comprehensive reconciliation path
+and re-evaluating plan-driven indexes only if larger real data makes one
+selective. K3 requires no Redis snapshot cache, materialized view, CQRS, read
+replica, or sharding.
