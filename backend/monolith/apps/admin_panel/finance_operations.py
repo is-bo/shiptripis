@@ -52,9 +52,11 @@ from apps.admin_panel import finance_dashboard_labels as words
 from apps.core.admin_display import format_eur
 from apps.finance.control_plane.drilldown import drilldown
 from apps.finance.control_plane.filters import Scope
+from apps.finance.control_plane.operations import build_operational_snapshot
 from apps.finance.control_plane.snapshot import (
     FinanceSnapshotUnavailable,
     build_snapshot,
+    consistent_read,
 )
 
 from .console_presenters import format_minor_amount
@@ -653,7 +655,16 @@ def _blocker(code):
     return BLOCK_REASONS.get(code, (words.humanise(code), ""))[0]
 
 
-def _queue_rows(params, *, stage, user, limit=50, manual=False, rail=None):
+def _queue_rows(
+    params,
+    *,
+    stage,
+    user,
+    limit=50,
+    manual=False,
+    rail=None,
+    queries=None,
+):
     """One H5 drilldown, rendered as a queue rather than as a ledger extract.
 
     The drilldown is the authority for every reference and every amount here.
@@ -669,6 +680,10 @@ def _queue_rows(params, *, stage, user, limit=50, manual=False, rail=None):
         metric="payout_operations",
         page=1,
         page_size=limit,
+        queries=queries,
+        as_of=queries.as_of if queries is not None else None,
+        include_totals=False,
+        compact=True,
     )
     facts = _operational_facts(row.get("row_reference") for row in result["rows"])
     may_open = has_admin_permission(user, "view_payouts")
@@ -935,7 +950,7 @@ def build_overview(snapshot, params, scope, *, user):
     }
 
 
-def build_payouts(snapshot, params, scope, *, user, requested):
+def build_payouts(snapshot, params, scope, *, user, requested, queries=None):
     here = _url("finance-payouts")
     cohorts = _cohorts(snapshot, PAYOUT_COHORTS, here=here, params=params)
     selected = _pick(cohorts, requested, fallback="attention")
@@ -944,7 +959,9 @@ def build_payouts(snapshot, params, scope, *, user, requested):
         {
             **stage,
             "rows_url": _drilldown_url(params, stage=stage["stage"]),
-            "queue": _queue_rows(params, stage=stage["stage"], user=user),
+            "queue": _queue_rows(
+                params, stage=stage["stage"], user=user, queries=queries
+            ),
         }
         for stage in current["stages"]
     ]
@@ -960,7 +977,7 @@ def build_payouts(snapshot, params, scope, *, user, requested):
     }
 
 
-def build_dzd(snapshot, params, scope, *, user, requested):
+def build_dzd(snapshot, params, scope, *, user, requested, queries=None):
     here = _url("finance-dzd")
     cohorts = _cohorts(
         snapshot, DZD_COHORTS, rail="manual_dzd", here=here, params=params
@@ -977,6 +994,7 @@ def build_dzd(snapshot, params, scope, *, user, requested):
                 user=user,
                 manual=True,
                 rail="manual_dzd",
+                queries=queries,
             ),
         }
         for stage in current["stages"]
@@ -1245,7 +1263,18 @@ def build_reconciliation(snapshot, params, scope):
 
 
 def _page(
-    request, template, *, title, eyebrow, current, build, refine=(), status_on_error=400
+    request,
+    template,
+    *,
+    title,
+    eyebrow,
+    current,
+    build,
+    refine=(),
+    status_on_error=400,
+    operational_metrics=None,
+    include_rail_operations=False,
+    include_payout_attention=False,
 ):
     """One bounded snapshot per view, and one shape for every failure."""
 
@@ -1266,7 +1295,23 @@ def _page(
             status=status_on_error,
         )
     try:
-        snapshot = build_snapshot(scope)
+        if operational_metrics is None:
+            snapshot = build_snapshot(scope)
+            page_body = build(snapshot, params, scope)
+            health = _health(snapshot)
+        else:
+            # One short consistent snapshot covers the counts and the bounded
+            # first rows displayed together.  Reconciliation remains the only
+            # page that evaluates the comprehensive accounting snapshot.
+            with consistent_read():
+                snapshot, queries = build_operational_snapshot(
+                    scope,
+                    metric_names=operational_metrics,
+                    include_rail_operations=include_rail_operations,
+                    include_payout_attention=include_payout_attention,
+                )
+                page_body = build(snapshot, params, scope, queries)
+            health = None
     except (OperationalError, FinanceSnapshotUnavailable):
         return _render(
             request,
@@ -1278,7 +1323,6 @@ def _page(
             },
             status=503,
         )
-    health = _health(snapshot)
     return _render(
         request,
         template,
@@ -1291,7 +1335,7 @@ def _page(
             "in_legacy_mode": scope.mode == "legacy_unknown",
             "legacy_url": f"{_url(current)}?{_link(params, mode='legacy_unknown')}",
             "as_of": _read_at(snapshot["as_of"]),
-            **build(snapshot, params, scope),
+            **page_body,
         },
     )
 
@@ -1306,7 +1350,10 @@ def finance_overview(request):
         title="Finance",
         eyebrow="Finance · operations",
         current="finance-dashboard",
-        build=lambda snapshot, params, scope: build_overview(
+        operational_metrics=(*[key for key, *_ in HEADLINE], "refunds_failed"),
+        include_rail_operations=True,
+        include_payout_attention=True,
+        build=lambda snapshot, params, scope, queries=None: build_overview(
             snapshot, params, scope, user=request.user
         ),
     )
@@ -1324,8 +1371,15 @@ def finance_payouts(request):
         eyebrow="Finance · payout operations",
         current="finance-payouts",
         refine=REFINE_PAYOUTS,
-        build=lambda snapshot, params, scope: build_payouts(
-            snapshot, params, scope, user=request.user, requested=requested
+        operational_metrics=(),
+        include_rail_operations=True,
+        build=lambda snapshot, params, scope, queries=None: build_payouts(
+            snapshot,
+            params,
+            scope,
+            user=request.user,
+            requested=requested,
+            queries=queries,
         ),
     )
 
@@ -1342,8 +1396,15 @@ def finance_dzd(request):
         eyebrow="Finance · manual dinar queue",
         current="finance-dzd",
         refine=REFINE_DZD,
-        build=lambda snapshot, params, scope: build_dzd(
-            snapshot, params, scope, user=request.user, requested=requested
+        operational_metrics=(),
+        include_rail_operations=True,
+        build=lambda snapshot, params, scope, queries=None: build_dzd(
+            snapshot,
+            params,
+            scope,
+            user=request.user,
+            requested=requested,
+            queries=queries,
         ),
     )
 
@@ -1359,7 +1420,17 @@ def finance_exceptions(request):
         eyebrow="Finance · exceptions",
         current="finance-exceptions",
         refine=REFINE_EXCEPTIONS,
-        build=lambda snapshot, params, scope: build_exceptions(
+        operational_metrics=(
+            "refunds_failed",
+            "refunds_requested",
+            "refunds_processing",
+            "refunds_finalized",
+            "held_payouts",
+            "user_disputed_payouts",
+            "provider_disputed_payouts",
+            "provider_disputes",
+        ),
+        build=lambda snapshot, params, scope, queries=None: build_exceptions(
             snapshot, params, scope, user=request.user
         ),
     )

@@ -20,7 +20,7 @@ from apps.finance.providers import ProviderConfigurationInvalid
 from apps.finance.payout_profiles import require_capabilities
 from apps.finance.payout_manual_profiles import reveal_profile, review_profile
 from apps.finance.payout_evidence import upload_evidence, read_evidence
-from .console_manual_presenter import manual_view
+from .console_manual_presenter import manual_payout_for_view, manual_view
 from .utils import admin_redirect, admin_url
 
 
@@ -247,6 +247,8 @@ def manual_detail(request, payout):
     require_capabilities(
         request.user, "view_payouts", "view_payout_sensitive", "view_payout_evidence"
     )
+    payout_id = payout.pk
+    payout = manual_payout_for_view(payout_id)
     profile = (
         payout.active_instruction_version.dzd_profile_revision
         if payout.active_instruction_version_id
@@ -365,7 +367,10 @@ def manual_detail(request, payout):
             )
         except (ValidationError, PermissionDenied, ProviderConfigurationInvalid) as exc:
             _refuse(request, action, exc)
-    payout.refresh_from_db()
+        # Write services reload and lock authoritative rows independently.
+        # Rebuild the read graph afterwards so this same response never renders
+        # stale attempts, events, holds, reviews, or payout state.
+        payout = manual_payout_for_view(payout_id)
     view = manual_view(payout, user=request.user, revealed=revealed)
     response = _render(
         request,

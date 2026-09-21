@@ -1,9 +1,10 @@
 {% extends "admin/base_site.html" %}
 
 {% comment %}
-  The Finance operator's homepage. Five zones, in the order the questions get
-  asked: is the data trustworthy, does anything need me, what is queued, what
-  are the totals, what just happened.
+  The Finance operator's homepage. Four zones, in the order the questions get
+  asked: does anything need me, what is queued, what are the totals, what just
+  happened. Comprehensive reconciliation is explicit on its dedicated page;
+  opening this operational summary does not run it implicitly.
 
   What is deliberately *not* here: the liability-by-state table, the rail and
   funding permutations, the Stripe stage table, the manual stage table, the
@@ -145,7 +146,7 @@
   {% endif %}
 
   <footer class="st-finops-foot">
-    <p>Read at {{ as_of }} under one consistent database snapshot. This page observes and navigates; payouts, refunds, transfers and holds are acted on from their own authorised screens.</p>
+    <p>Read at {{ as_of }} under one short, consistent database snapshot. Full accounting verification runs on <a href="{{ reconciliation_url }}">Reconciliation</a>. This page observes and navigates; payouts, refunds, transfers and holds are acted on from their own authorised screens.</p>
   </footer>
   {% endif %}
 </main>

@@ -1,5 +1,25 @@
 # ShipTrip V1 Implementation Status
 
+## K3 — Finance & Admin Performance Remediation (2026-09-21)
+
+Implemented on `codex/k3-finance-admin-performance` from exact `main`
+`e462dc5469955e255378208616b6109987112b4b`; independent Gemini verification,
+CI, merge, and Railway TEST deployment are pending. Finance operational pages
+now use narrow request-scoped projections while comprehensive reconciliation
+remains intact on its explicit surface. Local PostgreSQL medians improved from
+3,861 ms/88 queries to 605 ms/27 for Finance Overview, 5,910 ms/101 to
+648 ms/22 for Payouts Hub, and 5,742 ms/101 to 640 ms/22 for Manual DZD.
+Payout-review detail fell from 842 ms/780 queries to 43 ms/24. The People
+multi-relation Cartesian aggregate was replaced with page-bounded correlated
+counts; manual detail, Admin Overview, and disputes shed confirmed query waste.
+
+No financial/domain rule, permission, cache, schema, migration, index,
+provider mode, Go, Flutter, or infrastructure change was made. PostgreSQL plan
+evidence did not justify any candidate index on the measured data. The final
+short Codex gate passed 12 targeted cases; full PostgreSQL, broad regression,
+scale, CI, and deployment checks are explicitly handed to Gemini/CI. See
+[the K3 record](PHASE_K3_FINANCE_ADMIN_PERFORMANCE.md).
+
 ## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
 
 Implemented on `codex/k2-admin-ux` from exact `main`

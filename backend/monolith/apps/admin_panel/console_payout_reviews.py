@@ -67,7 +67,11 @@ from apps.kyc.models import KycSubmission
 
 from .console_presenters import age_label
 from .people_links import display_name, initials, may_open_people, person_href
-from .permissions import has_admin_permission, has_all_admin_permissions
+from .permissions import (
+    has_admin_permission,
+    has_all_admin_permissions,
+    users_with_admin_permission,
+)
 
 
 #: One bucket per row. `waiting` is the only one that is Finance's move; the
@@ -536,14 +540,7 @@ def identity_form_values(post):
 def reviewer_choices():
     """Staff who can actually attest an identity, for the assignment control."""
 
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
-    return [
-        user
-        for user in User.objects.filter(is_staff=True, is_active=True).order_by("email")
-        if has_all_admin_permissions(user, "attest_payout_identity")
-    ]
+    return list(users_with_admin_permission("attest_payout_identity").order_by("email"))
 
 
 # ---------------------------------------------------------------------------

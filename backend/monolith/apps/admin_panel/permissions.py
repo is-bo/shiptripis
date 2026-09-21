@@ -13,6 +13,7 @@ from collections.abc import Iterable
 
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import Group
+from django.db.models import Q
 from rest_framework.permissions import BasePermission
 
 
@@ -265,6 +266,37 @@ def has_admin_permission(user, codename: str) -> bool:
     except ValueError:
         return False
     return bool(user.has_perm(permission))
+
+
+def users_with_admin_permission(codename: str):
+    """Active staff who hold one capability, evaluated in one fresh query.
+
+    This is the set-valued equivalent of :func:`has_admin_permission` for
+    request-scoped assignment controls.  It deliberately does not populate or
+    reuse Django's per-user permission cache: a downgrade, ban, deactivation,
+    or direct permission change is reflected by the next request.
+    """
+
+    from django.contrib.auth import get_user_model
+
+    permission = admin_permission(codename)
+    app_label, permission_codename = permission.split(".", 1)
+    return (
+        get_user_model()
+        .objects.filter(is_staff=True, is_active=True, is_banned=False)
+        .filter(
+            Q(is_superuser=True)
+            | Q(
+                user_permissions__content_type__app_label=app_label,
+                user_permissions__codename=permission_codename,
+            )
+            | Q(
+                groups__permissions__content_type__app_label=app_label,
+                groups__permissions__codename=permission_codename,
+            )
+        )
+        .distinct()
+    )
 
 
 def has_admin_access(user) -> bool:

@@ -8,7 +8,6 @@ from apps.finance.models import Payout
 from apps.finance.payout_mobile import page_context, payout_attention, payout_read_rows
 
 MAX_PAYOUTS = 5000
-BATCH_SIZE = 200
 
 
 def attention_projection(queryset):
@@ -23,18 +22,19 @@ def attention_projection(queryset):
         raise ValidationError(
             "Attention scope exceeds 5,000 payouts; narrow the filters."
         )
+    # The blocker classifier is shared with the Traveler read model and
+    # deliberately remains the authority.  Load its related facts once for the
+    # bounded set rather than repeating the same prefetch/context queries every
+    # 200 payouts.  Query count is therefore constant through the 5,000-row
+    # safety bound without duplicating payout-safety predicates in a second SQL
+    # implementation.
+    rows = list(payout_read_rows(Payout.objects.filter(pk__in=ids)))
+    context = page_context(rows, include_actions=False)
     result = {}
-    for offset in range(0, len(ids), BATCH_SIZE):
-        rows = list(
-            payout_read_rows(
-                Payout.objects.filter(pk__in=ids[offset : offset + BATCH_SIZE])
-            )
-        )
-        context = page_context(rows, include_actions=False)
-        for payout in rows:
-            facts = payout_attention(payout, context=context)
-            if facts["needs_attention"]:
-                result[payout.pk] = facts
+    for payout in rows:
+        facts = payout_attention(payout, context=context)
+        if facts["needs_attention"]:
+            result[payout.pk] = facts
     return result
 
 

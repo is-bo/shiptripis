@@ -86,6 +86,22 @@ def operational_groups(queries):
     return result
 
 
+def snapshot_metadata(scope, *, as_of):
+    """Shared scope metadata for both operational and reconciliation reads."""
+
+    return {
+        "definition_version": VERSION,
+        "as_of": as_of.isoformat(),
+        "scope": {
+            key: value.isoformat() if hasattr(value, "isoformat") else value
+            for key, value in asdict(scope).items()
+        },
+        "reporting_timezone": "Europe/Paris",
+        "balance_basis": "current",
+        "provider_filter_semantics": "Exact source for cash/refunds/reservations; any-source Deal cohort for revenue/liability. Mixed cohorts overlap and are not additive.",
+    }
+
+
 def build_snapshot(scope):
     with consistent_read():
         as_of = timezone.now()
@@ -132,15 +148,7 @@ def build_snapshot(scope):
                 },
             }
         return {
-            "definition_version": VERSION,
-            "as_of": as_of.isoformat(),
-            "scope": {
-                key: value.isoformat() if hasattr(value, "isoformat") else value
-                for key, value in asdict(scope).items()
-            },
-            "reporting_timezone": "Europe/Paris",
-            "balance_basis": "current",
-            "provider_filter_semantics": "Exact source for cash/refunds/reservations; any-source Deal cohort for revenue/liability. Mixed cohorts overlap and are not additive.",
+            **snapshot_metadata(scope, as_of=as_of),
             "metrics": metrics,
             "definitions": definitions(),
             "payouts": payout_groups(queries),

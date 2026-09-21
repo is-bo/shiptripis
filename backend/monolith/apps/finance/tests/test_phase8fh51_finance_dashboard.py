@@ -257,7 +257,7 @@ def test_unknown_amounts_are_words_and_never_zero(world):
     assert "Provider-reported balance unavailable" not in page
 
 
-def test_integrity_is_surfaced_in_both_its_states(world):
+def test_integrity_is_explicit_on_the_reconciliation_surface(world):
     from apps.finance import ledger
 
     s, _, _, capture = world
@@ -267,8 +267,10 @@ def test_integrity_is_surfaced_in_both_its_states(world):
         overview = body(client.get(DASHBOARD, {"mode": "test"}))
     assert build_snapshot(scope())["integrity"]["status"] == "ok"
     assert "Finance data reconciles" in healthy
-    # The operator reads one line of the same verdict, never the table.
-    assert "Finance reconciled" in overview
+    # K3 makes the operational Overview a narrow read. It links to the
+    # comprehensive proof without claiming that proof was run implicitly.
+    assert "Finance reconciled" not in overview
+    assert "Full accounting detail" in overview
     assert "Payout state vs ledger payable" not in overview
     assert "is-ok" in healthy
     assert "Payout state vs ledger payable" in healthy
@@ -302,10 +304,9 @@ def test_integrity_is_surfaced_in_both_its_states(world):
     assert "Finance data does not reconcile" in broken_audit
     assert "is-bad" in broken_audit
     assert "Disagrees" in broken_audit
-    # The operator surfaces escalate the same verdict without the evidence: a
-    # mismatch is the one state allowed to become a banner, because a total
-    # nobody can trust is worse than no total.
-    assert "investigation required" in broken
+    # The narrow page does not publish a stale or uncomputed verdict. The
+    # mismatch and its evidence remain explicit on Reconciliation.
+    assert "investigation required" not in broken
     assert "Disagrees" not in broken
     # And the page keeps working: a mismatch is disclosed, not a dead console.
     assert "Money processed" in broken

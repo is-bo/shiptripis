@@ -21,7 +21,16 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import (
+    Count,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+)
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -92,7 +101,7 @@ from apps.locations.models import (
     Place,
 )
 from apps.notifications.models import OutboundMessage
-from apps.parcels.models import DeliveryRequest
+from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
@@ -338,9 +347,7 @@ def _table(
             (cell for cell in row["cells"] if cell.get("kind") == "open"), None
         )
         if opener is not None:
-            row["cells"] = tuple(
-                cell for cell in row["cells"] if cell is not opener
-            )
+            row["cells"] = tuple(cell for cell in row["cells"] if cell is not opener)
         row["open"] = opener
         row["openable"] = bool(primaries)
         has_row_links = has_row_links or row["openable"]
@@ -573,7 +580,7 @@ def _provider_rows() -> list[dict]:
     return rows
 
 
-def _attention_items(user) -> list[dict]:
+def _attention_items(user, *, provider_rows=()) -> list[dict]:
     items: list[dict] = []
 
     def add(permission, title, hint, count, route, query="", tone="attn"):
@@ -697,7 +704,7 @@ def _attention_items(user) -> list[dict]:
         "bad",
     )
     if has_admin_permission(user, "view_provider_health"):
-        warnings = sum(1 for row in _provider_rows() if row["tone"] == "bad")
+        warnings = sum(1 for row in provider_rows if row["tone"] == "bad")
         add(
             "view_provider_health",
             "Provider configuration warnings",
@@ -712,7 +719,12 @@ def _attention_items(user) -> list[dict]:
 
 @capability_required("view_dashboard")
 def overview(request):
-    attention = _attention_items(request.user)
+    provider_rows = (
+        _provider_rows()
+        if has_admin_permission(request.user, "view_provider_health")
+        else []
+    )
+    attention = _attention_items(request.user, provider_rows=provider_rows)
     # "Nothing to do" and "not checked" must never look the same, so a cleared
     # queue stays on the page - filed below the work rather than mixed into it.
     raised_items = [item for item in attention if item["count"]]
@@ -730,11 +742,7 @@ def overview(request):
             "raised_items": raised_items,
             "clear_items": clear_items,
             "raised": raised,
-            "providers": (
-                _provider_rows()
-                if has_admin_permission(request.user, "view_provider_health")
-                else []
-            ),
+            "providers": provider_rows,
             "recent_audit": recent,
         },
     )
@@ -742,15 +750,31 @@ def overview(request):
 
 @capability_required("view_users")
 def users(request):
-    queryset = _search(
-        User.objects.prefetch_related("kyc_submissions")
-        .annotate(
-            request_count=Count("parcel_requests", distinct=True),
-            journey_count=Count("journeys", distinct=True),
-            sent_deal_count=Count("deals_as_sender", distinct=True),
-            carried_deal_count=Count("deals_as_traveler", distinct=True),
+    def related_count(model, field):
+        rows = (
+            model.objects.filter(**{field: OuterRef("pk")})
+            .order_by()
+            .values(field)
+            .annotate(total=Count("pk"))
+            .values("total")[:1]
         )
-        .order_by("-date_joined"),
+        return Coalesce(
+            Subquery(rows, output_field=IntegerField()),
+            Value(0),
+            output_field=IntegerField(),
+        )
+
+    latest_kyc = KycSubmission.objects.filter(user_id=OuterRef("pk")).order_by(
+        "-created_at", "-pk"
+    )
+    queryset = _search(
+        User.objects.annotate(
+            request_count=related_count(ParcelRequest, "sender_id"),
+            journey_count=related_count(Journey, "traveler_id"),
+            sent_deal_count=related_count(Deal, "sender_id"),
+            carried_deal_count=related_count(Deal, "traveler_id"),
+            latest_kyc_status=Subquery(latest_kyc.values("status")[:1]),
+        ).order_by("-date_joined"),
         request,
         ("email", "full_name"),
     )
@@ -761,11 +785,9 @@ def users(request):
         queryset = queryset.filter(Q(is_active=False) | Q(is_banned=True))
     page_obj = _page(request, queryset)
     rows = []
+    kyc_labels = dict(KycSubmission.Status.choices)
     for user in page_obj.object_list:
-        submissions = sorted(
-            user.kyc_submissions.all(), key=lambda item: item.created_at, reverse=True
-        )
-        latest = submissions[0] if submissions else None
+        latest_status = user.latest_kyc_status
         account_value = (
             "banned" if user.is_banned else ("active" if user.is_active else "disabled")
         )
@@ -794,8 +816,8 @@ def users(request):
                     text_cell(user.get_role_display()),
                     status_cell(account_value),
                     status_cell(
-                        latest.status if latest else "none",
-                        latest.get_status_display() if latest else "Not submitted",
+                        latest_status or "none",
+                        kyc_labels.get(latest_status, "Not submitted"),
                     ),
                     text_cell(activity),
                     datetime_cell(user.date_joined, relative=True),
@@ -864,7 +886,9 @@ def kyc_evidence_slots(submission, *, user, request=None):
                 "label": label,
                 "previewable": reachable,
                 "available": reachable,
-                "url": reverse("admin_console:kyc-evidence", args=(submission.pk, slot)),
+                "url": reverse(
+                    "admin_console:kyc-evidence", args=(submission.pk, slot)
+                ),
             }
         )
     return evidence, unavailable
@@ -1644,7 +1668,7 @@ def _dispute_queryset(request=None):
             "opened_by",
             "resolved_by",
         )
-        .prefetch_related("evidence", "events", "deal__payment_orders")
+        .prefetch_related("evidence")
         .order_by("-opened_at")
     )
     if request is None:
@@ -1786,6 +1810,7 @@ def _dispute_money(dispute):
 def dispute_detail(request, pk: int):
     dispute = get_object_or_404(
         _dispute_queryset().prefetch_related(
+            "events",
             "deal__events__actor",
             "deal__payment_orders__attempts",
             "deal__payment_orders__refunds",
@@ -2561,7 +2586,9 @@ def _stripe_payout_panel(payout: Payout) -> dict | None:
     version = payout.active_instruction_version
     account = version.stripe_account if version else None
     allocations = list(
-        payout.funding_allocations.select_related("source_attempt__order").order_by("pk")
+        payout.funding_allocations.select_related("source_attempt__order").order_by(
+            "pk"
+        )
     )
     operations = list(
         PayoutProviderOperation.objects.filter(attempt__payout=payout)
@@ -2634,9 +2661,7 @@ def _stripe_payout_panel(payout: Payout) -> dict | None:
             }
             for event in payout.events.order_by("-sequence")[:30]
         ],
-        "unresolved": any(
-            operation.status == "unknown" for operation in operations
-        ),
+        "unresolved": any(operation.status == "unknown" for operation in operations),
     }
 
 
@@ -2774,7 +2799,12 @@ def _payout_recovery_action(request, payout: Payout, action: str):
                 request,
                 "A Finance hold was opened. The reservation is unchanged.",
             )
-    except (PayoutExecutionError, PermissionDenied, ValidationError, ProviderConfigurationInvalid) as exc:
+    except (
+        PayoutExecutionError,
+        PermissionDenied,
+        ValidationError,
+        ProviderConfigurationInvalid,
+    ) as exc:
         _operation_error(request, "Payout recovery", exc)
     return redirect("admin_console:payout-detail", pk=payout.pk)
 
