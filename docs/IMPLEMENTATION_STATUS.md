@@ -11,11 +11,17 @@ pagination, Finance Scope Apply styling, scoped buttons/forms/file inputs,
 long-page navigation, Person subnav overflow, and a friendly 403 are in place.
 Sensitive payout reveal deliberately remains request-scoped POST rendering.
 
-Targeted K2 tests passed (14); the one affected legacy visibility regression
-was fixed and its exact test passed. Independent Gemini visual/role/broad
-regression verification is pending, as are CI, merge, TEST deployment, and
-post-merge branch cleanup. No financial/domain rules, permissions, migrations,
-provider modes, or Railway architecture changed. See
+Targeted K2 tests passed (14); Gemini independently returned GREEN on exact
+application SHA `c47eac7`. A test-only follow-up `87a4c53` fixed two initial
+CI compatibility checks; fresh PR #12 CI passed all six jobs, including 2,287
+Django tests (34 skipped), Ruff, schema drift, and production/static checks.
+PR #12 merged at `bf8dd8b`. The exact reviewed application tree is deployed
+to Railway TEST as `v1.0.0-rc.47+c47eac7`, deployment
+`5b0f10e6-2661-45af-8c92-ac930a8b6e10` **SUCCESS**. Health/readiness and
+read-only authenticated Admin/Finance/Manual DZD/Disputes/KYC/Flight Proof/
+People/Payments/Staff/Settings smoke checks passed. No financial action was
+executed. Post-merge branch cleanup is recorded separately. No financial/domain
+rules, permissions, migrations, provider modes, or Railway architecture changed. See
 [the K2 record](PHASE_K2_ADMIN_UX.md).
 
 ## K1 — Reliability & Performance Safety Foundation (2026-09-20)
