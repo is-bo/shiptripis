@@ -1,5 +1,36 @@
 # ShipTrip V1 Implementation Status
 
+## K3 — Finance & Admin Performance Remediation (2026-09-21)
+
+Implemented on `codex/k3-finance-admin-performance` from exact `main`
+`e462dc5469955e255378208616b6109987112b4b`; independent Gemini verification is
+GREEN, while CI, merge, and Railway TEST deployment are pending. Finance
+operational pages now use narrow request-scoped projections while comprehensive
+reconciliation remains intact on its explicit surface. Local PostgreSQL medians improved from
+3,861 ms/88 queries to 605 ms/27 for Finance Overview, 5,910 ms/101 to
+648 ms/22 for Payouts Hub, and 5,742 ms/101 to 640 ms/22 for Manual DZD.
+Payout-review detail fell from 842 ms/780 queries to 43 ms/24. The People
+multi-relation Cartesian aggregate was replaced with page-bounded correlated
+counts; manual detail, Admin Overview, and disputes shed confirmed query waste.
+
+No financial/domain rule, permission, cache, schema, migration, index,
+provider mode, Go, Flutter, or infrastructure change was made. PostgreSQL plan
+evidence did not justify any candidate index on the measured data. The final
+short Codex gate passed 12 targeted cases; full PostgreSQL, broad regression,
+scale, CI, and deployment checks are explicitly handed to Gemini/CI. See
+[the K3 record](PHASE_K3_FINANCE_ADMIN_PERFORMANCE.md).
+
+Gemini's first independent pass on exact `a56e455` confirmed financial parity,
+authorization, transaction consistency, all query ceilings, the major latency
+reductions, and the no-index conclusion, but returned RED because three H5.2
+tests still expected the removed implicit Overview reconciliation. The
+test-only follow-up aligns those assertions and its operational-snapshot mock
+with K3; the full H5.2 file plus K3 suite now passes 17 tests locally. Gemini
+re-verification returned GREEN on exact SHA
+`fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`: the three previous failures are
+resolved, Ruff and both focused suites pass, and application behavior remains
+unchanged. The branch is ready for CI; CI has not yet been awaited.
+
 ## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
 
 Implemented on `codex/k2-admin-ux` from exact `main`

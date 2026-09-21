@@ -27,16 +27,91 @@ rather than after.
 from __future__ import annotations
 
 from django.conf import settings
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from apps.disputes.models import Dispute
-from apps.finance.models import PaymentOrder, PayoutProfileReview
+from apps.finance.models import (
+    PaymentOrder,
+    Payout,
+    PayoutAttempt,
+    PayoutEvent,
+    PayoutInstructionAmendment,
+    PayoutProfileReview,
+)
 from apps.finance.payout_domain import active_holds
 from apps.finance.payout_evidence import CHEQUE_LABELS, RECEIPT_LABELS
 from apps.finance.payout_manual_profiles import approved_profile
 from apps.finance.payout_setup_reconciliation import SETTLEMENT_BASES
 from .permissions import has_admin_permission
 from .console_presenters import age_label, format_minor_amount
+
+
+def manual_payout_for_view(payout_id):
+    """One request-scoped graph containing every manual-detail relation.
+
+    The write services still reload and lock their own rows.  This projection
+    is read-only presentation data and intentionally carries no decrypted
+    destination value.
+    """
+
+    active_reviews = PayoutProfileReview.objects.select_related(
+        "reviewer",
+        "identity_attestation__kyc_submission",
+        "identity_attestation__revocation",
+    ).prefetch_related("identity_attestation__successors")
+    active_disputes = Dispute.objects.filter(status__in=Dispute.ACTIVE_STATUSES)
+    live_balance = (
+        PaymentOrder.objects.filter(purpose="deal_balance")
+        .exclude(status="cancelled")
+        .order_by("-pk")
+    )
+    return (
+        Payout.objects.select_related(
+            "traveler",
+            "deal",
+            "active_instruction_version__dzd_profile_revision__evidence",
+            "active_instruction_version__dzd_profile_revision__method__traveler",
+            "active_instruction_version__dzd_profile_revision__method__current_version__dzd_profile_revision",
+        )
+        .prefetch_related(
+            "funding_allocations",
+            Prefetch(
+                "active_instruction_version__dzd_profile_revision__reviews",
+                queryset=active_reviews,
+            ),
+            Prefetch(
+                "attempts",
+                queryset=PayoutAttempt.objects.select_related("operator").order_by(
+                    "-sequence"
+                ),
+                to_attr="_view_attempts",
+            ),
+            Prefetch(
+                "events",
+                queryset=PayoutEvent.objects.select_related(
+                    "actor", "evidence"
+                ).order_by("-sequence"),
+                to_attr="_view_events",
+            ),
+            Prefetch(
+                "instruction_amendments",
+                queryset=PayoutInstructionAmendment.objects.order_by("pk"),
+                to_attr="_view_amendments",
+            ),
+            Prefetch(
+                "deal__disputes",
+                queryset=active_disputes,
+                to_attr="_active_disputes",
+            ),
+            Prefetch(
+                "deal__payment_orders",
+                queryset=live_balance,
+                to_attr="_balance_orders",
+            ),
+        )
+        .get(pk=payout_id)
+    )
 
 #: The operator-facing name for every state this rail can be in, with the
 #: sentence that says what it means for the money. Deliberately not
@@ -289,7 +364,7 @@ def amounts_of(payout) -> dict:
 def _latest_review(profile):
     if profile is None:
         return None
-    return PayoutProfileReview.objects.filter(profile=profile).order_by("-pk").first()
+    return max(profile.reviews.all(), key=lambda row: row.pk, default=None)
 
 
 def destination_of(payout, profile, version) -> dict:
@@ -357,9 +432,14 @@ def destination_of(payout, profile, version) -> dict:
         },
         "newer_version": newer,
         "setup_followup": setup_followup,
-        "initial_setup_reconciled": payout.instruction_amendments.filter(
-            reason_code="initial_payout_setup_completed"
-        ).exists(),
+        "initial_setup_reconciled": any(
+            row.reason_code == "initial_payout_setup_completed"
+            for row in getattr(
+                payout,
+                "_view_amendments",
+                payout.instruction_amendments.all(),
+            )
+        ),
     }
 
 
@@ -467,7 +547,12 @@ def blockers_of(payout, destination, *, holds) -> list[dict]:
                 "code": "protection_open",
             }
         )
-    if deal.disputes.filter(status__in=Dispute.ACTIVE_STATUSES).exists():
+    active_disputes = getattr(deal, "_active_disputes", None)
+    if (
+        bool(active_disputes)
+        if active_disputes is not None
+        else deal.disputes.filter(status__in=Dispute.ACTIVE_STATUSES).exists()
+    ):
         found.append(
             {
                 "title": "Active dispute",
@@ -477,8 +562,15 @@ def blockers_of(payout, destination, *, holds) -> list[dict]:
         )
     balance = None
     if not settlement_award:
+        balance_rows = getattr(deal, "_balance_orders", None)
         balance = (
-            PaymentOrder.objects.filter(deal_id=payout.deal_id, purpose="deal_balance")
+            balance_rows[0]
+            if balance_rows is not None and balance_rows
+            else None
+            if balance_rows is not None
+            else PaymentOrder.objects.filter(
+                deal_id=payout.deal_id, purpose="deal_balance"
+            )
             .exclude(status="cancelled")
             .order_by("-pk")
             .first()
@@ -620,7 +712,7 @@ def timeline_of(payout, profile=None) -> list[dict]:
                 "settled": False,
             }
         )
-        for review in profile.reviews.select_related("reviewer").order_by("pk"):
+        for review in sorted(profile.reviews.all(), key=lambda row: row.pk):
             label, _tone = REVIEW_STATES.get(review.status, ("Reviewed", "mute"))
             entries.append(
                 {
@@ -637,7 +729,11 @@ def timeline_of(payout, profile=None) -> list[dict]:
                 }
             )
 
-    rows = payout.events.select_related("actor", "evidence").order_by("-sequence")
+    rows = getattr(
+        payout,
+        "_view_events",
+        payout.events.select_related("actor", "evidence").order_by("-sequence"),
+    )
     for event in rows:
         title, detail = EVENT_LABELS.get(
             event.reason_code, (_humanize(event.reason_code), "")
@@ -673,7 +769,14 @@ def manual_view(payout, *, user, revealed=None) -> dict:
         else None
     )
     profile = version.dzd_profile_revision if version else None
-    attempt = payout.attempts.select_related("operator").order_by("-sequence").first()
+    attempts = getattr(payout, "_view_attempts", None)
+    attempt = (
+        attempts[0]
+        if attempts is not None and attempts
+        else None
+        if attempts is not None
+        else payout.attempts.select_related("operator").order_by("-sequence").first()
+    )
     holds = list(active_holds(payout).select_related("opened_by").order_by("pk"))
     destination = destination_of(payout, profile, version)
     receipts = receipts_of(payout)

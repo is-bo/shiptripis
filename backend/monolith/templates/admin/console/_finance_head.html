@@ -1,13 +1,13 @@
 {% comment %}
-  The band every Finance page opens with: what page this is, whether the money
-  can be trusted, and what is in scope.
+  The band every Finance page opens with: what page this is and what is in
+  scope. The reconciliation verdict appears only when that comprehensive read
+  was explicitly requested; operational pages do not imply that they ran it.
 
-  Health is one line here and never a table. H5's six comparisons are the right
-  answer to "prove this reconciles" and the wrong answer to "can I start work",
-  so the verdict travels with the operator on every page and the evidence lives
-  on the reconciliation surface one click away. A mismatch is the one state
-  allowed to break out of the line and become a banner, because a total nobody
-  can trust is worse than no total.
+  Health is one line here and never a table when the page owns a comprehensive
+  snapshot. H5's six comparisons are the right answer to "prove this
+  reconciles" and the wrong answer to "can I start work", so both the verdict
+  and its evidence live on the reconciliation surface. A mismatch there is the
+  one state allowed to break out of the line and become a banner.
 {% endcomment %}
 <header class="st-finops-head">
   <div class="st-finops-title">
