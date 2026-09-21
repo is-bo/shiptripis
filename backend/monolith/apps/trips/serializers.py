@@ -886,3 +886,34 @@ class JourneySerializer(serializers.ModelSerializer):
 
     def get_destination_place(self, obj: Journey) -> dict | None:
         return self._place_summary(obj.destination_place)
+
+
+class JourneyLegListSerializer(JourneyLegSerializer):
+    """Route facts used by cards, without detail-only evidence and geometry."""
+
+    class Meta(JourneyLegSerializer.Meta):
+        fields = tuple(
+            field
+            for field in JourneyLegSerializer.Meta.fields
+            if field
+            not in {
+                "route_polyline",
+                "route_provider",
+                "route_profile",
+                "route_captured_at",
+                "allowed_detour_meters",
+                "route_metadata",
+                "departure_airport_metadata",
+                "arrival_airport_metadata",
+                "proofs",
+                "created_at",
+                "updated_at",
+            }
+        )
+        read_only_fields = fields
+
+
+class JourneyListSerializer(JourneySerializer):
+    """Collection projection sharing Journey's authoritative field helpers."""
+
+    legs = JourneyLegListSerializer(many=True, read_only=True)

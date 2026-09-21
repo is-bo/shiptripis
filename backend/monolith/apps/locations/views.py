@@ -8,6 +8,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.pagination import paginated_array_response
+
 from .models import Location
 from .permissions import IsLocationCreatorOrReadOnly
 from .serializers import PrivateLocationSerializer, serialize_location_for_user
@@ -31,12 +33,15 @@ class LocationListCreateView(APIView):
                 kind=Location.Kind.AIRPORT,
                 coordinates_trusted=True,
             )
-        )[:100]
-        data = [
-            serialize_location_for_user(location, request.user)
-            for location in locations
-        ]
-        return Response(data)
+        ).order_by("-created_at", "-pk")
+        return paginated_array_response(
+            request,
+            locations,
+            serialize=lambda rows: [
+                serialize_location_for_user(location, request.user)
+                for location in rows
+            ],
+        )
 
     def post(self, request: Request) -> Response:
         serializer = PrivateLocationSerializer(

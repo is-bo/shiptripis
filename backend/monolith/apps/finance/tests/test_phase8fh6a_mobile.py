@@ -222,7 +222,10 @@ def test_history_detail_deal_and_notifications_authorization():
     s, payout, _, _ = build_stripe_payout(prefix="h6auth")
     client = client_for(s.traveler)
     ref = payout.public_reference
-    assert isinstance(client.get("/api/payouts").data, list)
+    default_history = client.get("/api/payouts")
+    assert default_history.status_code == 200
+    assert default_history.data["count"] == 1
+    assert default_history.data["results"][0]["mobile"]["reference"] == str(ref)
     history = client.get("/api/payouts?page=1&page_size=999")
     assert history.status_code == 200 and history.data["count"] == 1
     assert history.data["results"][0]["mobile"]["reference"] == str(ref)

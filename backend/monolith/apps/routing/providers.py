@@ -130,6 +130,11 @@ class CachedRouteProvider:
     def __init__(self, provider: RouteProvider) -> None:
         self.provider = provider
         self.name = provider.name
+        # This decorator instance is request-scoped at every matching call.
+        # Keep successful lookups here as well as in the configured shared
+        # cache, so an unavailable Redis/cache backend cannot turn equivalent
+        # candidate routes into repeated provider calls within one request.
+        self._request_cache: dict[str, object] = {}
         self.cache_namespace = str(
             getattr(settings, "ROUTE_PROVIDER_CACHE_NAMESPACE", "v1")
         )
@@ -154,14 +159,20 @@ class CachedRouteProvider:
         )
 
     def _get(self, key: str):
+        if key in self._request_cache:
+            return self._request_cache[key]
         if self.cache is None:
             return None
         try:
-            return self.cache.get(key)
+            value = self.cache.get(key)
         except Exception:
             return None
+        if value is not None:
+            self._request_cache[key] = value
+        return value
 
     def _set(self, key: str, value: object) -> None:
+        self._request_cache[key] = value
         if self.cache is None:
             return
         try:

@@ -35,6 +35,7 @@ from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
 from apps.core.business_settings import NoActiveBusinessSettings
+from apps.core.pagination import paginated_array_response
 from apps.core.phase4_policy import InvalidPhase4Policy, phase4_policy
 from apps.core.storage import (
     ext_for_content_type,
@@ -229,7 +230,11 @@ class ParcelListView(APIView):
             qs = qs.filter(lifecycle_status=s)
         if k := request.query_params.get("kind"):
             qs = qs.filter(kind=k)
-        return Response(_serialize(qs[:100], request, many=True).data)
+        return paginated_array_response(
+            request,
+            qs,
+            serialize=lambda rows: _serialize(rows, request, many=True).data,
+        )
 
 
 class OpenParcelSearchView(APIView):
@@ -286,8 +291,12 @@ class OpenParcelSearchView(APIView):
                 )
             except (InvalidOperation, ValueError):
                 pass
-        qs = qs.order_by("-created_at")[:100]
-        return Response(_serialize(qs, request, many=True).data)
+        qs = qs.order_by("-created_at", "-pk")
+        return paginated_array_response(
+            request,
+            qs,
+            serialize=lambda rows: _serialize(rows, request, many=True).data,
+        )
 
 
 class DeliveryCreateView(APIView):

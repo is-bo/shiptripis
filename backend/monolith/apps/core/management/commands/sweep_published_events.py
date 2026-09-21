@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.core import redis_bus
@@ -33,20 +33,29 @@ class Command(BaseCommand):
             default=5 * 60,
             help="Only sweep rows older than this many seconds (default: 300).",
         )
+        parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=500,
+            help="Maximum old events inspected in one run (default: 500).",
+        )
 
     def handle(self, *args, **opts) -> None:  # noqa: ANN002, ANN003
         cutoff = timezone.now() - timedelta(seconds=opts["age_seconds"])
+        batch_size = opts["batch_size"]
+        if not 1 <= batch_size <= 10_000:
+            raise CommandError("batch-size must be between 1 and 10,000.")
         client = redis_bus.get_client()
 
         qs = PublishedEvent.objects.filter(
             delivered_at__isnull=True,
             published_at__lt=cutoff,
-        ).order_by("published_at")
+        ).order_by("published_at", "id")[:batch_size]
 
         total = 0
         recovered = 0
         missing = 0
-        for ev in qs.iterator():
+        for ev in qs.iterator(chunk_size=min(batch_size, 500)):
             total += 1
             legacy_key = f"delivered:{ev.event_id}"
             has_receipt = bool(client.exists(legacy_key))

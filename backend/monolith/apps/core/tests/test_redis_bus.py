@@ -229,3 +229,29 @@ class SweepDeliveredTests(TestCase):
         event.refresh_from_db()
         assert event.delivered_at is not None
         assert "recovered=1" in output.getvalue()
+
+    @patch.object(redis_bus, "get_client")
+    def test_sweep_is_bounded_and_oldest_first(self, get_client):
+        older = PublishedEvent.objects.create(
+            channel="offer.created", event_id="older", payload_hash="x" * 64
+        )
+        newer = PublishedEvent.objects.create(
+            channel="offer.created", event_id="newer", payload_hash="x" * 64
+        )
+        PublishedEvent.objects.filter(pk=older.pk).update(
+            published_at=timezone.now() - timedelta(minutes=20)
+        )
+        PublishedEvent.objects.filter(pk=newer.pk).update(
+            published_at=timezone.now() - timedelta(minutes=10)
+        )
+        client = MagicMock()
+        client.exists.return_value = 0
+        client.scan_iter.return_value = iter(())
+        get_client.return_value = client
+
+        output = StringIO()
+        call_command("sweep_published_events", batch_size=1, stdout=output)
+
+        assert "swept=1" in output.getvalue()
+        checked = client.exists.call_args.args[0]
+        assert checked == "delivered:older"

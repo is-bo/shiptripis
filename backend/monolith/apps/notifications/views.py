@@ -53,7 +53,7 @@ class NotificationListView(ListAPIView):
         ch = self.request.query_params.get("channel")
         if ch:
             qs = qs.filter(Q(channel=ch) | Q(channel__startswith=f"{ch}."))
-        return qs.order_by("-created_at")
+        return qs.order_by("-created_at", "-id")
 
 
 @api_view(["POST"])

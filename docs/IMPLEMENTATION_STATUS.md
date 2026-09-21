@@ -1,5 +1,30 @@
 # ShipTrip V1 Implementation Status
 
+## K4 — General Backend & API Performance Remediation (2026-09-21)
+
+Implemented on `codex/k4-backend-api-performance` from exact `main`
+`9dac1d37b0d79f603bba54eec65c3c8a53b05738`; independent Gemini verification,
+CI, merge, and deployment are pending. PostgreSQL measurement confirmed the chat
+inbox Deal N+1 and reduced five funded threads from 14.77 ms/11 queries to
+7.72 ms/1 query. Journey lists now omit detail-only route/proof data, reducing the
+representative payload from 15,532 to 10,991 bytes, while Journey detail lost one
+hidden lifecycle query.
+
+Active hard-sliced collections gained backward-compatible pagination, payout
+history now has one envelope contract, route-provider work is request-memoized,
+FCM fanout uses one Redis pipeline, and the delivered-event sweeper is bounded.
+Public country/airport catalogues have ETag/conditional caching. Live Railway TEST
+evidence rejected the stale compression finding: `/api/airports` is already gzip
+encoded exactly once at the platform edge (13,683 identity bytes versus 3,611
+transferred), so no duplicate Django/Caddy layer was added. Matching/locality,
+Request, Deal, unread badge, language fanout, reservation `SKIP LOCKED`, and index
+suggestions were retained or rejected where measurement did not support change.
+
+Short Codex gates passed 96 targeted PostgreSQL tests plus changed-file Ruff and
+diff checks. No domain behavior, permission, throttle, financial rule, schema,
+migration, index, Go, Flutter, or required-Redis architecture changed. See
+[the K4 implementation record](PHASE_K4_BACKEND_API_PERFORMANCE.md).
+
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`
