@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load shiptrip_admin %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; {% if kind == 'kyc' %}<a href="{% url 'admin_console:kyc-queue' %}">KYC review</a>{% else %}<a href="{% url 'admin_console:proof-queue' %}">Flight proofs</a>{% endif %} &rsaquo; {{ title }}</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">{% if kind == 'kyc' %}KYC review{% else %}Flight proofs{% endif %}</a> &rsaquo; {{ title }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console">
@@ -25,10 +25,10 @@
 
   <div class="st-grid st-grid-main">
     <div>
-      <section class="st-card">
+      <section class="st-card" aria-labelledby="st-evidence-head">
         <p class="st-eyebrow">Private evidence</p>
         <div class="st-card-head">
-          <div><h2>What was submitted</h2></div>
+          <div><h2 id="st-evidence-head">What was submitted</h2></div>
           {% if may_view_evidence %}<span class="st-chip st-info">Every open is audited</span>{% endif %}
         </div>
 
@@ -129,9 +129,9 @@
       </section>
 
       {% if previous %}
-      <section class="st-card">
+      <section class="st-card" aria-labelledby="st-history-head">
         <p class="st-eyebrow">History</p>
-        <h2>Earlier submissions from this person</h2>
+        <h2 id="st-history-head">Earlier submissions from this person</h2>
         <ol class="st-timeline">
           {% for item in previous %}
           <li>
@@ -145,12 +145,12 @@
     </div>
 
     <aside>
-      <section class="st-card st-sticky{% if may_review and record.status == 'pending' %} st-decision-card{% endif %}">
+      <section class="st-card st-sticky{% if may_review and record.status == 'pending' %} st-decision-card{% endif %}" aria-labelledby="st-decision-head">
         <p class="st-eyebrow">Decision</p>
-        <h2>{% if kind == 'kyc' %}Approve or reject this identity{% else %}Approve or reject this proof{% endif %}</h2>
+        <h2 id="st-decision-head">{% if kind == 'kyc' %}Approve or reject this identity{% else %}Approve or reject this proof{% endif %}</h2>
         {% if may_review and record.status == 'pending' %}
         <p>Approving lets this {% if kind == 'kyc' %}Traveler publish journeys{% else %}flight leg be matched{% endif %}. Rejecting sends the reason below to them. Both decisions are audited.</p>
-        <form method="post" class="st-form">{% csrf_token %}
+        <form method="post" action="#st-decision-head" class="st-form">{% csrf_token %}
           {{ form.non_field_errors }}
           <div class="st-field">
             <label for="{{ form.reason.id_for_label }}">Reason, required to reject</label>

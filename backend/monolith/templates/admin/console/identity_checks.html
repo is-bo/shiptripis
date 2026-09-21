@@ -38,15 +38,7 @@
       </li>
       {% endfor %}
     </ul>
-    {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="st-pagination" aria-label="Pagination">
-      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-      <span class="st-inline-actions">
-        {% if page_obj.has_previous %}<a href="?scope={{ scope }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
-        {% if page_obj.has_next %}<a href="?scope={{ scope }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
-      </span>
-    </nav>
-    {% endif %}
+    {% include "admin/console/_pagination.html" with pagination_aria_label="Identity checks pagination" %}
     {% else %}
     <div class="st-empty"><span aria-hidden="true">&#10003;</span><h2>{% if scope == 'mine' %}No identity checks are waiting on you.{% else %}No identity checks are open.{% endif %}</h2><p>Finance asks for one when a Traveler's payout method cannot be decided without it.</p></div>
     {% endif %}

@@ -157,7 +157,7 @@
       <div class="st-split-actions">
         <a class="button st-button-quiet" href="{% if kind == 'refund' %}{% url 'admin_console:refunds' %}{% else %}{% url 'admin_console:payouts' %}{% endif %}">Cancel</a>
         <span class="st-spacer"></span>
-        <button class="st-button-danger" type="submit">{% if kind == 'refund' %}Mark refund settled{% else %}Mark payout paid{% endif %}</button>
+        <button class="button st-button-confirm" type="submit">{% if kind == 'refund' %}Mark refund settled{% else %}Mark payout paid{% endif %}</button>
       </div>
     </form>
   </section>

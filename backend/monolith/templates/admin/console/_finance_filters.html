@@ -79,8 +79,8 @@
       <small id="fin-search-help">Exact references only. There is no search over names, emails or account details.</small>
     </div>
     <div class="st-fin-filter-actions">
-      <button type="submit">Apply</button>
-      <a class="st-filter-clear" href="{{ reset_url }}">Reset</a>
+      <button class="button" type="submit">Apply</button>
+      <a class="button st-button-quiet st-filter-clear" href="{{ reset_url }}">Reset</a>
     </div>
   </div>
   {% if metric %}<input type="hidden" name="metric" value="{{ metric }}">{% endif %}

@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load shiptrip_admin %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:disputes' %}">Disputes</a> &rsaquo; {{ dispute.get_category_display }}</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">Disputes</a> &rsaquo; {{ dispute.get_category_display }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console">
@@ -16,6 +16,16 @@
       <span class="st-chip st-{{ dispute.status|status_tone }}">{{ dispute.get_status_display }}</span>
     </div>
   </header>
+
+  <nav class="st-anchor-nav" aria-label="Dispute sections">
+    <span><strong>{{ dispute.public_reference|stringformat:"s"|slice:":8" }}</strong> &middot; {{ dispute.get_status_display }} &middot; {{ terms.sender_total_minor|eur }}</span>
+    <div>
+      <a href="#st-dispute-evidence">Evidence</a>
+      <a href="#st-dispute-timeline">Timeline</a>
+      <a href="#st-dispute-resolution">Resolution</a>
+      <a href="#st-dispute-ledger">Ledger</a>
+    </div>
+  </nav>
 
   <div class="st-alert {% if dispute.payout_frozen %}st-alert-bad{% else %}st-alert-info{% endif %}">
     <strong>{% if dispute.payout_frozen %}Payout frozen{% elif dispute.payout_already_settled %}Payout already settled{% else %}Payout state recorded{% endif %}</strong>
@@ -58,7 +68,7 @@
         <div class="st-split-actions"><a class="button st-button-quiet" href="{% url 'admin_console:deal-detail' dispute.deal_id %}">Open the full Deal</a></div>
       </section>
 
-      <section class="st-card">
+      <section class="st-card" id="st-dispute-evidence">
         <div class="st-card-head">
           <div><p class="st-eyebrow">Evidence</p><h2>{{ dispute.evidence.all|length }} submitted item{{ dispute.evidence.all|length|pluralize }}</h2></div>
           {% if may_view_evidence %}<span class="st-chip st-info">Every open is audited</span>{% endif %}
@@ -81,7 +91,7 @@
         {% endif %}
       </section>
 
-      <section class="st-card">
+      <section class="st-card" id="st-dispute-timeline">
         <p class="st-eyebrow">History</p>
         <h2>Case and admin activity</h2>
         <ol class="st-timeline">
@@ -97,13 +107,19 @@
       </section>
     </div>
 
-    <aside>
+    <aside id="st-dispute-resolution">
+      {% if may_resolve %}<ol class="st-workflow-map" aria-label="Dispute resolution workflow">
+        <li class="{% if dispute.status == 'resolved' or dispute.status == 'closed' or resolution_preview %}is-done{% else %}is-current{% endif %}">Review evidence</li>
+        <li class="{% if dispute.status == 'resolved' or dispute.status == 'closed' %}is-done{% elif resolution_preview %}is-done{% endif %}">Preview consequence</li>
+        <li class="{% if dispute.status == 'resolved' or dispute.status == 'closed' %}is-done{% elif resolution_preview %}is-current{% endif %}">Confirm decision</li>
+        <li class="{% if dispute.status == 'resolved' or dispute.status == 'closed' %}is-done{% endif %}">Resolution recorded</li>
+      </ol>{% endif %}
       {% if may_manage and dispute.status != 'resolved' and dispute.status != 'closed' %}
       <section class="st-card">
         <p class="st-eyebrow">Workflow</p>
         <h2>Move the review along</h2>
         <p>Changing the review state does not move any money.</p>
-        <form method="post" class="st-form">{% csrf_token %}
+        <form method="post" action="#st-dispute-resolution" class="st-form">{% csrf_token %}
           <input type="hidden" name="action" value="status">
           {{ status_form.as_p }}
           <div class="st-split-actions"><button type="submit">Update state</button></div>
@@ -116,7 +132,7 @@
         <p class="st-eyebrow">Irreversible financial decision</p>
         <h2>Resolve this dispute</h2>
         <p>The server calculates and validates the split. You will see the exact consequence in euro before anything is committed.</p>
-        <form method="post" class="st-form">{% csrf_token %}
+        <form method="post" action="#st-dispute-resolution" class="st-form">{% csrf_token %}
           <input type="hidden" name="action" value="preview-resolution">
           {{ resolution_form.as_p }}
           <div class="st-split-actions"><button type="submit">Preview consequence</button></div>
@@ -131,14 +147,14 @@
             <div><dt>Pay Traveler</dt><dd>{{ resolution_preview.traveler_payout_eur_cents|eur }}</dd></div>
             <div><dt>ShipTrip keeps</dt><dd>{{ resolution_preview.platform_fee_eur_cents|eur }}</dd></div>
           </dl>
-          <form method="post" class="st-form">{% csrf_token %}
+          <form method="post" action="#st-dispute-resolution" class="st-form">{% csrf_token %}
             <input type="hidden" name="action" value="confirm-resolution">
             <input type="hidden" name="resolution" value="{{ resolution_form.cleaned_data.resolution }}">
             <input type="hidden" name="sender_refund_eur" value="{{ resolution_form.cleaned_data.sender_refund_eur|default_if_none:'' }}">
             <input type="hidden" name="traveler_payout_eur" value="{{ resolution_form.cleaned_data.traveler_payout_eur|default_if_none:'' }}">
             <input type="hidden" name="note" value="{{ resolution_form.cleaned_data.note }}">
             <div class="st-check"><input id="confirm-resolution" type="checkbox" name="confirm_resolution" value="yes" required><label for="confirm-resolution">I understand this creates irreversible financial obligations.</label></div>
-            <div class="st-split-actions"><button class="st-button-danger" type="submit">Confirm resolution</button></div>
+            <div class="st-split-actions"><button class="button st-button-confirm" type="submit">Confirm resolution</button></div>
           </form>
         </div>
         {% endif %}
@@ -156,7 +172,7 @@
       </section>
       {% endif %}
 
-      <section class="st-card">
+      <section class="st-card" id="st-dispute-ledger">
         <p class="st-eyebrow">Payments and refunds</p>
         <h2>What has moved so far</h2>
         <ul class="st-reading-list">

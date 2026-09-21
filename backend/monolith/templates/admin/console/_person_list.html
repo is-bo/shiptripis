@@ -29,15 +29,7 @@
       {% endfor %}
     </ul>
   </div>
-  {% if list.page_obj and list.page_obj.paginator.num_pages > 1 %}
-  <nav class="st-pagination" aria-label="Pagination">
-    <span>Page {{ list.page_obj.number }} of {{ list.page_obj.paginator.num_pages }} &middot; {{ list.page_obj.paginator.count }} record{{ list.page_obj.paginator.count|pluralize }}</span>
-    <span class="st-inline-actions">
-      {% if list.page_obj.has_previous %}<a href="?{{ page_query }}&amp;page={{ list.page_obj.previous_page_number }}">Previous</a>{% endif %}
-      {% if list.page_obj.has_next %}<a href="?{{ page_query }}&amp;page={{ list.page_obj.next_page_number }}">Next</a>{% endif %}
-    </span>
-  </nav>
-  {% endif %}
+  {% include "admin/console/_pagination.html" with page_obj=list.page_obj pagination_aria_label=list.title|default:"Profile records"|add:" pagination" %}
   {% else %}
   <p class="st-plist-empty">{{ list.empty }}</p>
   {% endif %}

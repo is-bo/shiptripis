@@ -164,8 +164,9 @@ def test_dashboard_is_read_only(world):
         content = main(response)
         assert 'method="post"' not in content.lower()
         assert "csrfmiddlewaretoken" not in content
+        # A GET-only scope Apply button is navigation, not a money action.
         assert "<button" not in content.lower().replace(
-            '<button type="submit">apply</button>', ""
+            '<button class="button" type="submit">apply</button>', ""
         )
         assert "no-store" in response["Cache-Control"]
 

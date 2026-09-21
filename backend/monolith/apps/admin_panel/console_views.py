@@ -159,9 +159,28 @@ from .services import (
     revoke_admin_invitation,
     set_admin_access,
 )
+from .utils import admin_redirect, admin_url, bounded_query_text, positive_page
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+KYC_QUEUE_QUERY = {
+    "q": bounded_query_text,
+    "status": frozenset(value for value, _ in KycSubmission.Status.choices),
+    "page": positive_page,
+}
+PROOF_QUEUE_QUERY = {
+    "q": bounded_query_text,
+    "status": frozenset(value for value, _ in JourneyLegProof.Status.choices),
+    "page": positive_page,
+}
+DISPUTE_QUEUE_QUERY = {
+    "q": bounded_query_text,
+    "status": frozenset(value for value, _ in Dispute.Status.choices),
+    "attention": frozenset({"1"}),
+    "user_id": lambda value: value.isascii() and value.isdigit(),
+    "page": positive_page,
+}
 
 
 ROLE_DESCRIPTIONS = {
@@ -222,6 +241,26 @@ def _render(request, template: str, context: dict | None = None, *, status=200):
     response = render(request, template, payload, status=status)
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+def permission_denied(request, exception=None):
+    """Render an operator-facing 403 for Admin HTML without exposing grants."""
+
+    if request.path.startswith("/admin/"):
+        return _render(
+            request,
+            "admin/console/403.html",
+            {
+                "title": "Permission required",
+                "permission_message": (
+                    "Your staff role does not include access to this area or action."
+                ),
+            },
+            status=403,
+        )
+    from django.views.defaults import permission_denied as django_permission_denied
+
+    return django_permission_denied(request, exception)
 
 
 def _operation_error(request, label: str, exc: Exception) -> None:
@@ -864,7 +903,12 @@ def kyc_queue(request):
                     text_cell(
                         submission.user.full_name or submission.user.email,
                         submission.user.email,
-                        href=reverse("admin_console:kyc-detail", args=(submission.pk,)),
+                        href=admin_url(
+                            request,
+                            "admin_console:kyc-detail",
+                            route_kwargs={"pk": submission.pk},
+                            preserve_query=KYC_QUEUE_QUERY,
+                        ),
                         opens_row=True,
                         kind="strong",
                     ),
@@ -924,7 +968,6 @@ def _handle_review(request, form, *, kind: str, object_id: int):
     except Exception as exc:
         _operation_error(request, "Review decision", exc)
         return False
-    messages.success(request, "The review decision was saved and audited.")
     return True
 
 
@@ -936,7 +979,17 @@ def kyc_detail(request, pk: int):
         if not has_admin_permission(request.user, "review_kyc"):
             raise PermissionDenied("KYC review permission is required.")
         if _handle_review(request, form, kind="kyc", object_id=submission.pk):
-            return redirect("admin_console:kyc-detail", pk=submission.pk)
+            messages.success(
+                request,
+                "KYC decision saved and audited. Review the Decision section for the current status.",
+            )
+            return admin_redirect(
+                request,
+                "admin_console:kyc-detail",
+                route_kwargs={"pk": submission.pk},
+                fragment="st-decision-head",
+                preserve_query=KYC_QUEUE_QUERY,
+            )
     # Identity slots are always stored images, so each one gets a real preview
     # rather than a link an operator has to open before they can judge it.
     #
@@ -965,6 +1018,11 @@ def kyc_detail(request, pk: int):
             "form": form,
             "may_review": has_admin_permission(request.user, "review_kyc"),
             "may_view_evidence": may_view_evidence,
+            "queue_url": admin_url(
+                request,
+                "admin_console:kyc-queue",
+                preserve_query=KYC_QUEUE_QUERY,
+            ),
             "previous": submission.user.kyc_submissions.exclude(
                 pk=submission.pk
             ).order_by("-created_at")[:8],
@@ -989,11 +1047,13 @@ def _evidence_unavailable(request, *, target, action: str):
         "Evidence is temporarily unavailable. The submission is intact; the "
         f"secure document store could not be reached.{suffix}",
     )
-    return redirect(
-        "admin_console:kyc-detail"
-        if action.startswith("kyc.")
-        else "admin_console:proof-detail",
-        pk=target.pk,
+    is_kyc = action.startswith("kyc.")
+    return admin_redirect(
+        request,
+        "admin_console:kyc-detail" if is_kyc else "admin_console:proof-detail",
+        route_kwargs={"pk": target.pk},
+        fragment="st-evidence-head",
+        preserve_query=KYC_QUEUE_QUERY if is_kyc else PROOF_QUEUE_QUERY,
     )
 
 
@@ -1068,7 +1128,7 @@ def kyc_evidence(request, pk: int, slot: str):
     )
 
 
-def _proof_queryset(request):
+def _proof_queryset(request=None):
     queryset = JourneyLegProof.objects.select_related(
         "leg__journey__traveler",
         "leg__origin_place__parent",
@@ -1078,6 +1138,8 @@ def _proof_queryset(request):
         "leg__origin",
         "leg__destination",
     ).order_by("-created_at")
+    if request is None:
+        return queryset
     queryset = _filter_choice(queryset, request)
     return _search(
         queryset,
@@ -1102,7 +1164,12 @@ def flight_proof_queue(request):
                     text_cell(
                         leg.journey.traveler.full_name or leg.journey.traveler.email,
                         leg.journey.traveler.email,
-                        href=reverse("admin_console:proof-detail", args=(proof.pk,)),
+                        href=admin_url(
+                            request,
+                            "admin_console:proof-detail",
+                            route_kwargs={"pk": proof.pk},
+                            preserve_query=PROOF_QUEUE_QUERY,
+                        ),
                         opens_row=True,
                         kind="strong",
                     ),
@@ -1137,13 +1204,23 @@ def flight_proof_queue(request):
 
 @capability_required("view_flight_proofs")
 def flight_proof_detail(request, pk: int):
-    proof = get_object_or_404(_proof_queryset(request), pk=pk)
+    proof = get_object_or_404(_proof_queryset(), pk=pk)
     form = ReviewDecisionForm(request.POST or None)
     if request.method == "POST":
         if not has_admin_permission(request.user, "review_flight_proofs"):
             raise PermissionDenied("Flight-proof review permission is required.")
         if _handle_review(request, form, kind="proof", object_id=proof.pk):
-            return redirect("admin_console:proof-detail", pk=proof.pk)
+            messages.success(
+                request,
+                "Flight-proof decision saved and audited. Review the Decision section for the current status.",
+            )
+            return admin_redirect(
+                request,
+                "admin_console:proof-detail",
+                route_kwargs={"pk": proof.pk},
+                fragment="st-decision-head",
+                preserve_query=PROOF_QUEUE_QUERY,
+            )
     may_view_evidence = has_admin_permission(request.user, "view_evidence")
     proof_available = (
         store_for_bucket(proof.bucket, default="proof").readable(proof.object_key)
@@ -1195,6 +1272,11 @@ def flight_proof_detail(request, pk: int):
             "form": form,
             "may_review": has_admin_permission(request.user, "review_flight_proofs"),
             "may_view_evidence": may_view_evidence,
+            "queue_url": admin_url(
+                request,
+                "admin_console:proof-queue",
+                preserve_query=PROOF_QUEUE_QUERY,
+            ),
         },
     )
 
@@ -1552,7 +1634,7 @@ def deal_detail(request, pk: int):
     )
 
 
-def _dispute_queryset(request):
+def _dispute_queryset(request=None):
     queryset = (
         Dispute.objects.select_related(
             "deal__sender",
@@ -1565,6 +1647,8 @@ def _dispute_queryset(request):
         .prefetch_related("evidence", "events", "deal__payment_orders")
         .order_by("-opened_at")
     )
+    if request is None:
+        return queryset
     if request.GET.get("attention") == "1":
         queryset = queryset.filter(status__in=Dispute.ACTIVE_STATUSES)
     else:
@@ -1601,8 +1685,11 @@ def disputes(request):
                     text_cell(
                         dispute.public_reference,
                         f"Deal {dispute.deal_id}",
-                        href=reverse(
-                            "admin_console:dispute-detail", args=(dispute.pk,)
+                        href=admin_url(
+                            request,
+                            "admin_console:dispute-detail",
+                            route_kwargs={"pk": dispute.pk},
+                            preserve_query=DISPUTE_QUEUE_QUERY,
                         ),
                         opens_row=True,
                         kind="strong",
@@ -1679,6 +1766,11 @@ def _dispute_context(
         "audits": audits,
         "terms": getattr(dispute.deal, "terms", None),
         "money": _dispute_money(dispute),
+        "queue_url": admin_url(
+            request,
+            "admin_console:disputes",
+            preserve_query=DISPUTE_QUEUE_QUERY,
+        ),
     }
 
 
@@ -1693,7 +1785,7 @@ def _dispute_money(dispute):
 @capability_required("view_disputes")
 def dispute_detail(request, pk: int):
     dispute = get_object_or_404(
-        _dispute_queryset(request).prefetch_related(
+        _dispute_queryset().prefetch_related(
             "deal__events__actor",
             "deal__payment_orders__attempts",
             "deal__payment_orders__refunds",
@@ -1729,8 +1821,17 @@ def dispute_detail(request, pk: int):
                             after={"status": updated.status},
                             reason=status_form.cleaned_data.get("note", ""),
                         )
-                    messages.success(request, "The dispute review state was updated.")
-                    return redirect("admin_console:dispute-detail", pk=dispute.pk)
+                    messages.success(
+                        request,
+                        "Dispute review state updated and audited. Continue in Resolution.",
+                    )
+                    return admin_redirect(
+                        request,
+                        "admin_console:dispute-detail",
+                        route_kwargs={"pk": dispute.pk},
+                        fragment="st-dispute-resolution",
+                        preserve_query=DISPUTE_QUEUE_QUERY,
+                    )
                 except Exception as exc:  # domain errors are sanitized for the operator
                     _operation_error(request, "Dispute state update", exc)
         elif action in ("preview-resolution", "confirm-resolution"):
@@ -1776,9 +1877,15 @@ def dispute_detail(request, pk: int):
                             )
                         messages.success(
                             request,
-                            "The dispute was resolved and the settlement was audited.",
+                            "Dispute resolved and settlement audited. Review the result and financial ledger.",
                         )
-                        return redirect("admin_console:dispute-detail", pk=dispute.pk)
+                        return admin_redirect(
+                            request,
+                            "admin_console:dispute-detail",
+                            route_kwargs={"pk": dispute.pk},
+                            fragment="st-dispute-resolution",
+                            preserve_query=DISPUTE_QUEUE_QUERY,
+                        )
                     else:
                         messages.error(
                             request,
@@ -1812,7 +1919,13 @@ def dispute_evidence(request, pk: int, evidence_id: int):
         )
     except DisputeError as exc:
         _operation_error(request, "Evidence access", exc)
-        return redirect("admin_console:dispute-detail", pk=pk)
+        return admin_redirect(
+            request,
+            "admin_console:dispute-detail",
+            route_kwargs={"pk": pk},
+            fragment="st-dispute-evidence",
+            preserve_query=DISPUTE_QUEUE_QUERY,
+        )
     record_admin_action(
         actor=request.user,
         action="dispute.evidence_viewed",
@@ -2815,7 +2928,11 @@ def staff(request):
                 request,
                 "Invitation created. The one-time link is in the durable email queue; it is never shown in the browser.",
             )
-            return redirect("admin_console:staff")
+            return admin_redirect(
+                request,
+                "admin_console:staff",
+                fragment="st-invitations-head",
+            )
         except Exception as exc:
             _operation_error(request, "Staff invitation", exc)
     staff_users = list(
@@ -2830,6 +2947,7 @@ def staff(request):
         # Fixed-role accounts normally have one role; retaining an empty value
         # keeps legacy/unassigned staff visibly actionable without guessing.
         member.console_role = roles[0] if roles else ""
+        member.console_open = request.GET.get("edit") == str(member.pk)
     invitations = AdminInvitation.objects.select_related(
         "invited_by", "accepted_by"
     ).order_by("-created_at")[:100]
@@ -2872,7 +2990,12 @@ def staff_role(request, pk: int):
             _operation_error(request, "Staff role change", exc)
     else:
         messages.error(request, "Confirm the role change and try again.")
-    return redirect("admin_console:staff")
+    return admin_redirect(
+        request,
+        "admin_console:staff",
+        fragment=f"staff-{member.pk}",
+        preserve_query={"edit": {str(member.pk)}},
+    )
 
 
 @capability_required("manage_admins")
@@ -2895,7 +3018,12 @@ def staff_access(request, pk: int):
             _operation_error(request, "Staff access change", exc)
     else:
         messages.error(request, "Confirm the access change and try again.")
-    return redirect("admin_console:staff")
+    return admin_redirect(
+        request,
+        "admin_console:staff",
+        fragment=f"staff-{member.pk}",
+        preserve_query={"edit": {str(member.pk)}},
+    )
 
 
 @capability_required("manage_admins")
@@ -2905,7 +3033,11 @@ def staff_invitation_action(request, pk, action: str):
     invitation = get_object_or_404(AdminInvitation, pk=pk)
     if request.POST.get("confirm") != "yes":
         messages.error(request, "Confirm the invitation action and try again.")
-        return redirect("admin_console:staff")
+        return admin_redirect(
+            request,
+            "admin_console:staff",
+            fragment=f"invitation-{invitation.pk}",
+        )
     try:
         if action == "revoke":
             revoke_admin_invitation(actor=request.user, invitation_id=invitation.pk)
@@ -2932,7 +3064,11 @@ def staff_invitation_action(request, pk, action: str):
             raise Http404
     except Exception as exc:
         _operation_error(request, "Invitation action", exc)
-    return redirect("admin_console:staff")
+    return admin_redirect(
+        request,
+        "admin_console:staff",
+        fragment=f"invitation-{invitation.pk}",
+    )
 
 
 def _dig(policy: dict, path: str):
@@ -3119,7 +3255,11 @@ def business_settings(request):
                 messages.success(
                     request, "Pricing settings were saved as a new audited version."
                 )
-                return redirect("admin_console:settings")
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-pricing",
+                )
             if action == "boost_economics" and boost_form.is_valid():
                 _save_settings_revision(
                     request,
@@ -3136,7 +3276,11 @@ def business_settings(request):
                     "The boost commission was saved as a new audited version. "
                     "It applies to future commitments only.",
                 )
-                return redirect("admin_console:settings")
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-boost",
+                )
             if action == "fx" and fx_form.is_valid():
                 _save_settings_revision(
                     request,
@@ -3149,7 +3293,11 @@ def business_settings(request):
                 messages.success(
                     request, "The Chargily FX rate was saved for future attempts."
                 )
-                return redirect("admin_console:settings")
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-fx",
+                )
             if action == "providers" and provider_form.is_valid():
                 _save_settings_revision(
                     request,
@@ -3170,7 +3318,11 @@ def business_settings(request):
                 messages.success(
                     request, "Provider availability was saved as a new audited version."
                 )
-                return redirect("admin_console:settings")
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-providers",
+                )
         except Exception as exc:
             _operation_error(request, "Business settings change", exc)
     active = get_active_business_settings()

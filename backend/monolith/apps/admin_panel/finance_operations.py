@@ -85,6 +85,18 @@ def _link(params, **overrides):
     return urlencode({key: item for key, item in values.items() if item})
 
 
+def _payout_detail_url(pk: int, params, *, manual: bool) -> str:
+    """Link a queue row to its payout, retaining only a valid DZD cohort."""
+
+    url = reverse("admin_console:payout-detail", args=[pk])
+    cohort = params.get("cohort", "") if manual else ""
+    if cohort not in {key for key, *_ in DZD_COHORTS}:
+        return url
+    from urllib.parse import urlencode
+
+    return f"{url}?{urlencode({'cohort': cohort})}"
+
+
 #: Query keys that belong to the page rather than to H5.
 _PAGE_ONLY = ("cohort", "page", "page_size", "metric")
 
@@ -695,7 +707,7 @@ def _queue_rows(params, *, stage, user, limit=50, manual=False, rail=None):
                 "age": _age(fact.get("eligible_at") or fact.get("created_at"), now=now),
                 "blocker": _blocker(raw.get("block_reason")),
                 "markers": markers,
-                "url": reverse("admin_console:payout-detail", args=[pk])
+                "url": _payout_detail_url(pk, params, manual=manual)
                 if pk and may_open
                 else "",
             }

@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Permission required</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow">
+  <section class="st-empty st-permission-denied" aria-labelledby="st-permission-title">
+    <span aria-hidden="true">!</span>
+    <h1 id="st-permission-title">This area is not available to your role</h1>
+    <p>{{ permission_message }}</p>
+    <a class="button st-button-quiet" href="{% url 'admin_console:overview' %}">Return to Admin</a>
+  </section>
+</main>
+{% endblock %}

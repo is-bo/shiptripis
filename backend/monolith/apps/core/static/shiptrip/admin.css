@@ -828,7 +828,15 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   border-radius: var(--st-r-3);
   background: var(--st-surface);
 }
-.st-table-scroll { overflow-x: auto; }
+.st-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--st-line-2) var(--st-surface-2);
+  scrollbar-gutter: stable;
+}
+.st-table-scroll::-webkit-scrollbar { height: 10px; }
+.st-table-scroll::-webkit-scrollbar-track { background: var(--st-surface-2); }
+.st-table-scroll::-webkit-scrollbar-thumb { border: 2px solid var(--st-surface-2); border-radius: var(--st-r-pill); background: var(--st-line-2); }
 
 .st-data-table {
   width: 100%;
@@ -900,7 +908,10 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   color: var(--st-ink-3);
   font-size: var(--st-fs-xs);
 }
-.st-pagination div { display: flex; gap: var(--st-4); }
+.st-pagination-actions { display: flex; align-items: center; gap: var(--st-2); }
+.st-pagination-current { min-width: 92px; color: var(--st-ink-2); font-weight: 650; text-align: center; }
+.st-pagination .button { padding: 7px 11px; }
+.st-pagination .is-disabled { opacity: .52; cursor: not-allowed; }
 
 .st-keyvalues {
   width: 100%;
@@ -2615,7 +2626,8 @@ a.st-cohort.is-current { border-color: var(--st-btn); background: var(--st-btn);
 .st-form select,
 .st-form textarea,
 .st-field input, .st-field textarea, .st-field select,
-.st-filters input, .st-filters select {
+.st-filters input, .st-filters select,
+.st-scope input:not([type="hidden"]), .st-scope select {
   display: block;
   box-sizing: border-box;
   /* No `max-width` here: `border-box` already keeps the control inside its
@@ -2634,7 +2646,7 @@ a.st-cohort.is-current { border-color: var(--st-btn); background: var(--st-btn);
   line-height: 1.4;
 }
 .st-form textarea, .st-field textarea { min-height: 76px; resize: vertical; }
-.st-form select, .st-filters select { padding-right: 30px; }
+.st-form select, .st-filters select, .st-scope select { padding-right: 30px; }
 /* A field should be about as wide as the longest thing it can hold. A
    percentage stretched across a 1300px card looks like a text area and reads
    as one; the value it wants is two digits. Prose keeps a comfortable measure,
@@ -2649,7 +2661,34 @@ a.st-cohort.is-current { border-color: var(--st-btn); background: var(--st-btn);
 .st-form input[type="search"],
 .st-form select { max-width: 32rem; }
 .st-form input:focus, .st-form select:focus, .st-form textarea:focus,
-.st-filters input:focus, .st-filters select:focus { border-color: var(--st-focus); }
+.st-filters input:focus, .st-filters select:focus,
+.st-scope input:focus, .st-scope select:focus { border-color: var(--st-focus); }
+
+.st-console input[type="radio"],
+.st-console input[type="checkbox"] { accent-color: var(--st-accent); }
+
+.st-form input[type="file"], .st-field input[type="file"] {
+  max-width: 100%;
+  padding: 6px;
+  border-style: dashed;
+  background: var(--st-surface-2);
+  cursor: pointer;
+}
+.st-form input[type="file"]::file-selector-button,
+.st-field input[type="file"]::file-selector-button {
+  margin-right: var(--st-3);
+  padding: 7px 11px;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+  color: var(--st-ink);
+  font: inherit;
+  font-size: var(--st-fs-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+.st-form input[type="file"]:hover::file-selector-button,
+.st-field input[type="file"]:hover::file-selector-button { background: var(--st-surface-3); }
 .st-form .helptext, .st-form small, .st-field small {
   display: block;
   max-width: 68ch;
@@ -2711,7 +2750,7 @@ a.st-cohort.is-current { border-color: var(--st-btn); background: var(--st-btn);
 }
 .st-split-actions .st-spacer { flex: 1 1 auto; }
 
-.st-filters button, .st-form button, .st-inline-actions button, .button,
+.st-console :where(button:not(.st-copy)), .st-filters button, .st-form button, .st-inline-actions button, .button,
 a.button, input[type="submit"].st-button {
   display: inline-flex;
   align-items: center;
@@ -2728,7 +2767,7 @@ a.button, input[type="submit"].st-button {
   text-decoration: none;
   cursor: pointer;
 }
-.st-filters button:hover, .st-form button:hover,
+.st-console :where(button:not(.st-copy):hover), .st-filters button:hover, .st-form button:hover,
 .st-inline-actions button:hover, .button:hover,
 a.button:hover { background: var(--st-btn-hover); color: var(--st-btn-fg); }
 
@@ -2775,6 +2814,12 @@ a.button.st-button-quiet.is-current::before {
 
 .st-button-ok { background: var(--approve-button-bg) !important; color: #fff !important; }
 .st-button-ok:hover { background: var(--approve-button-hover-bg) !important; }
+.st-button-confirm {
+  border-color: var(--st-attn-line) !important;
+  background: var(--st-btn) !important;
+  color: var(--st-btn-fg) !important;
+}
+.st-button-confirm:hover { background: var(--st-btn-hover) !important; }
 .st-button-danger { background: var(--delete-button-bg) !important; color: #fff !important; }
 .st-button-danger:hover { background: var(--delete-button-hover-bg) !important; }
 button[disabled], .st-form button[disabled] {
@@ -2805,6 +2850,83 @@ button[disabled], .st-form button[disabled] {
   white-space: nowrap;
 }
 .st-filter-clear { color: var(--st-ink-2); font-weight: 600; }
+
+/* Compact in-page orientation for long, consequential operator workflows. */
+.st-anchor-nav {
+  position: sticky;
+  top: var(--st-2);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin: calc(var(--st-3) * -1) 0 var(--st-4);
+  padding: 9px var(--st-3);
+  overflow-x: auto;
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+  box-shadow: var(--st-shadow-1);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+  white-space: nowrap;
+}
+.st-anchor-nav > div { display: flex; align-items: center; gap: 4px; }
+.st-anchor-nav a {
+  padding: 6px 9px;
+  border-radius: var(--st-r-1);
+  color: var(--st-ink-2);
+  font-weight: 650;
+  text-decoration: none;
+}
+.st-anchor-nav a:hover { background: var(--st-surface-2); color: var(--st-ink); }
+.st-console [id^="st-"] { scroll-margin-top: 76px; }
+
+.st-workflow-map {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  counter-reset: workflow;
+  list-style: none;
+}
+.st-workflow-map li {
+  display: flex;
+  align-items: center;
+  gap: var(--st-2);
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+  font-weight: 600;
+  counter-increment: workflow;
+}
+.st-workflow-map li::before {
+  content: counter(workflow);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border: 1px solid var(--st-line-2);
+  border-radius: 50%;
+  background: var(--st-surface);
+  font-size: var(--st-fs-micro);
+}
+.st-workflow-map li.is-current { color: var(--st-ink); }
+.st-workflow-map li.is-current::before { border-color: var(--st-accent); color: var(--st-accent); font-weight: 800; }
+.st-workflow-map li.is-done { color: var(--st-ok); }
+.st-workflow-map li.is-done::before { content: "\2713"; border-color: var(--st-ok-line); background: var(--st-ok-bg); }
+
+.st-permission-denied h1 {
+  margin: 0 0 var(--st-2);
+  color: var(--st-ink);
+  font-family: var(--st-serif);
+  font-size: var(--st-fs-h1);
+  font-weight: 600;
+}
+.st-permission-denied .button { margin-top: var(--st-4); }
 
 /* ==========================================================================
    15. Django's own screens
@@ -3502,11 +3624,15 @@ a.st-person-link:hover { color: var(--st-accent); text-decoration-color: current
 
 .st-person-tabs {
   display: flex;
+  max-width: 100%;
   gap: 2px;
   margin: 0 0 var(--st-5);
+  overflow-x: auto;
+  scrollbar-width: thin;
   border-bottom: 1px solid var(--st-line-2);
 }
 .st-person-tab {
+  flex: none;
   margin-bottom: -1px;
   padding: 10px 14px;
   border-bottom: 2px solid transparent;
@@ -3742,7 +3868,7 @@ a.st-person-fact-label:hover { color: var(--st-accent); }
   .st-review-history li { grid-template-columns: max-content minmax(0, 1fr); }
   .st-review-history time { grid-column: 2; }
   .st-person-avatar { width: 48px; height: 48px; font-size: 1.1rem; }
-  .st-person-tabs { flex-wrap: wrap; gap: 6px; border-bottom: 0; }
+  .st-person-tabs { gap: 6px; border-bottom: 0; }
   .st-person-tab {
     margin: 0;
     padding: 6px 12px;

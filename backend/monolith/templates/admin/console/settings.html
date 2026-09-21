@@ -51,11 +51,11 @@
     </div>
   </section>
 
-  <section class="st-card">
+  <section class="st-card" id="st-settings-pricing">
     <p class="st-eyebrow">Change pricing</p>
     <h2>Commission, deposit and floors</h2>
     <p>Saving publishes a new immutable settings version and records who changed it and why.</p>
-    <form method="post" class="st-form">{% csrf_token %}
+    <form method="post" action="#st-settings-pricing" class="st-form">{% csrf_token %}
       <input type="hidden" name="action" value="pricing">
       {{ pricing_form.as_p }}
       {% if may_manage %}<div class="st-split-actions"><button type="submit">Save as a new pricing version</button></div>{% endif %}
@@ -64,7 +64,7 @@
 
   <div class="st-grid st-grid-2">
     {# --- Chargily FX: readable units, and a visible read-back ------------- #}
-    <section class="st-card st-decision-card">
+    <section class="st-card st-decision-card" id="st-settings-fx">
       <p class="st-eyebrow">High-impact setting</p>
       <div class="st-card-head">
         <div><h2>Chargily exchange rate</h2></div>
@@ -72,15 +72,15 @@
       </div>
       <p>Chargily charges in Algerian dinars. This rate converts the canonical euro obligation into the dinar amount a payer is shown. <strong>EUR stays the business currency</strong>: nothing about the Deal changes when this rate changes.</p>
       <p class="st-muted">A new rate applies only to Chargily attempts started after it is saved. Attempts already made keep the rate they were snapshotted with.</p>
-      <form method="post" class="st-form">{% csrf_token %}
+      <form method="post" action="#st-settings-fx" class="st-form">{% csrf_token %}
         <input type="hidden" name="action" value="fx">
         {{ fx_form.as_p }}
-        {% if may_manage %}<div class="st-split-actions"><button class="st-button-danger" type="submit">Save a new exchange rate</button></div>{% endif %}
+        {% if may_manage %}<div class="st-split-actions"><button class="button st-button-confirm" type="submit">Save a new exchange rate</button></div>{% endif %}
       </form>
     </section>
 
     {# --- Providers ------------------------------------------------------- #}
-    <section class="st-card">
+    <section class="st-card" id="st-settings-providers">
       <p class="st-eyebrow">Payments and communication</p>
       <h2>Provider availability</h2>
       <p>These switches say whether ShipTrip <em>offers</em> a rail. Credentials and webhook secrets live in deployment configuration and are never editable or visible here.</p>
@@ -92,7 +92,7 @@
         </li>
         {% endfor %}
       </ul>
-      <form method="post" class="st-form">{% csrf_token %}
+      <form method="post" action="#st-settings-providers" class="st-form">{% csrf_token %}
         <input type="hidden" name="action" value="providers">
         {{ provider_form.as_p }}
         {% if may_manage %}<div class="st-split-actions"><button type="submit">Save provider availability</button></div>{% endif %}
@@ -101,7 +101,7 @@
   </div>
 
   <div class="st-grid st-grid-2">
-    <section class="st-card">
+    <section class="st-card" id="st-settings-boost">
       <p class="st-eyebrow">Protection &amp; handover</p>
       <h2>Lifecycle guardrails</h2>
       <table class="st-keyvalues">
@@ -121,7 +121,7 @@
         <div class="is-lead"><span>ShipTrip commission</span><strong>{{ boost_economics.commission }}</strong></div>
         <div><span>Traveler receives</span><strong>{{ boost_economics.traveler_share }}</strong></div>
       </div>
-      <form method="post" class="st-form">{% csrf_token %}
+      <form method="post" action="#st-settings-boost" class="st-form">{% csrf_token %}
         <input type="hidden" name="action" value="boost_economics">
         {{ boost_form.as_p }}
         {% if may_manage %}<div class="st-split-actions"><button type="submit">Save a new boost commission</button></div>{% endif %}

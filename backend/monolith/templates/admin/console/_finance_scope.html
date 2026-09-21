@@ -68,8 +68,8 @@
     </div>
 
     <div class="st-scope-actions">
-      <button type="submit">Apply</button>
-      {% if scope.search or scope.refine %}<a class="st-scope-clear" href="{{ scope.reset_url }}">Reset</a>{% endif %}
+      <button class="button" type="submit">Apply</button>
+      {% if scope.search or scope.refine %}<a class="button st-button-quiet st-scope-clear" href="{{ scope.reset_url }}">Reset</a>{% endif %}
     </div>
     <p id="fin-search-help" class="st-visually-hidden">Exact references only. There is no search over names, emails or account details.</p>
     <p id="fin-mode-help" class="st-visually-hidden">{{ scope.mode_help }}</p>
