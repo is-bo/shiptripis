@@ -3,10 +3,10 @@
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`
-`e462dc5469955e255378208616b6109987112b4b`; independent Gemini verification,
-CI, merge, and Railway TEST deployment are pending. Finance operational pages
-now use narrow request-scoped projections while comprehensive reconciliation
-remains intact on its explicit surface. Local PostgreSQL medians improved from
+`e462dc5469955e255378208616b6109987112b4b`; independent Gemini verification is
+GREEN, while CI, merge, and Railway TEST deployment are pending. Finance
+operational pages now use narrow request-scoped projections while comprehensive
+reconciliation remains intact on its explicit surface. Local PostgreSQL medians improved from
 3,861 ms/88 queries to 605 ms/27 for Finance Overview, 5,910 ms/101 to
 648 ms/22 for Payouts Hub, and 5,742 ms/101 to 640 ms/22 for Manual DZD.
 Payout-review detail fell from 842 ms/780 queries to 43 ms/24. The People
@@ -26,7 +26,10 @@ reductions, and the no-index conclusion, but returned RED because three H5.2
 tests still expected the removed implicit Overview reconciliation. The
 test-only follow-up aligns those assertions and its operational-snapshot mock
 with K3; the full H5.2 file plus K3 suite now passes 17 tests locally. Gemini
-re-verification is pending. CI has not been started or awaited.
+re-verification returned GREEN on exact SHA
+`fe1e5bffcf09b52a2bf6bfba7bf949114bc8a1bb`: the three previous failures are
+resolved, Ruff and both focused suites pass, and application behavior remains
+unchanged. The branch is ready for CI; CI has not yet been awaited.
 
 ## K2 — Admin UX Foundation & Workflow Continuity (2026-09-21)
 
