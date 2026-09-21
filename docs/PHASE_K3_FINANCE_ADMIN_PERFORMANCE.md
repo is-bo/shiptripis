@@ -21,6 +21,29 @@ SQL statements and normalized duplicate-query groups for every surface.
 The data and measurement scripts are local ignored artifacts under
 `.codex-temp`; no production or Railway data was read or changed.
 
+Baseline SQL diagnostics were captured before implementation edits:
+
+| Surface | Slowest SQL ms | Slowest SQL shape | Duplicate groups |
+| --- | ---: | --- | ---: |
+| Finance Overview | 63 | payable `COUNT/SUM` over the universally annotated payout/ledger projection | 10 |
+| Payouts Hub | 104 | full payout queue projection including FX, funding, holds, disputes, exposure, and stage annotations | 10 |
+| Manual DZD list | 106 | the same full payout queue projection | 10 |
+| Manual DZD detail | 1 | payout-event history with actor/evidence joins | 5 |
+| Payout Reviews list | 6 | payout-method/revision review queue projection | 2 |
+| Payout Review detail | 2 | profile/revision base select; the dominant waste was hundreds of individually small repeated permission queries | 5 |
+| Payments | 4 | payment-attempt list projection | 0 |
+| Finance reconciliation | 56 | payable `COUNT/SUM` over the comprehensive projection | 10 |
+| People list | 5 | User plus four joined `COUNT(DISTINCT ...)` relations | 0 |
+| Person detail | 2 | request-state projection | 1 |
+| Admin Overview | 3 | pending payout-method count | 1 |
+| Disputes list | 34 | dispute base list; unused collections followed as separate prefetches | 0 |
+
+Duplicate groups are normalized SQL shapes, not merely identical literal SQL.
+The Finance pages repeated the payable aggregate up to 11 times; payout-review
+detail repeated staff, direct-permission, and group-permission lookups once per
+candidate reviewer. The post-change JSON retained the same five-slowest and
+duplicate-group capture for comparison.
+
 ## Before and after
 
 | Surface | Before ms | After ms | Improvement | Before queries | After queries | Before DB ms | After DB ms |
