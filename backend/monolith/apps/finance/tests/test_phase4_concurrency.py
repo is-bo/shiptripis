@@ -25,7 +25,6 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import timedelta
-from importlib import import_module
 from threading import Barrier
 from unittest.mock import patch
 
@@ -37,6 +36,7 @@ from django.test import TransactionTestCase
 
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
+from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.deals.cancellation import CancellationError, cancel_funded_deal
 from apps.deals.models import Deal, DealEvent
 from apps.deals.recipient import set_recipient
@@ -68,31 +68,14 @@ RELEASABLE_PAYOUT_STATUSES = (
 def _seed_phase4_settings() -> BusinessSettingsVersion:
     """`TransactionTestCase` truncates tables; re-seed the active revision.
 
-    The Phase 4 revision, not the Phase 3 one: these tests are about buffers,
-    protection windows and cancellation policy, and every one of those numbers
-    comes from the revision a Deal was funded under.
+    Through the Phase 4 revision and past it, not up to the Phase 3 one: these
+    tests are about buffers, protection windows and cancellation policy, and
+    every one of those numbers comes from the revision a Deal was funded
+    under. The later seeds only add to that document, so restoring the whole
+    chain gives those numbers and the boost economics a fresh database has.
     """
 
-    active = BusinessSettingsVersion.objects.filter(status="active").first()
-    if active is not None and "handover" in (active.policy or {}):
-        return active
-    document = import_module(
-        "apps.core.migrations.0006_seed_phase4_business_settings"
-    ).PHASE4_POLICY
-    BusinessSettingsVersion.objects.filter(status="active").update(status="retired")
-    row, _ = BusinessSettingsVersion.objects.get_or_create(
-        version=4,
-        defaults={
-            "canonical_currency": "EUR",
-            "commission_rate_bps": 2_500,
-            "pricing_version": "v1-lifecycle-1",
-            "policy": deepcopy(document),
-        },
-    )
-    BusinessSettingsVersion.objects.filter(pk=row.pk).update(
-        status="active", activated_at=timezone.now()
-    )
-    return BusinessSettingsVersion.objects.get(pk=row.pk)
+    return seed_business_settings()
 
 
 def _enable_mock_rail() -> None:

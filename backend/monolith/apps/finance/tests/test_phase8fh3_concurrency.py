@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
 from datetime import timedelta
 from threading import Barrier
 
@@ -31,6 +30,7 @@ from django.utils import timezone
 from unittest.mock import patch
 
 from apps.core.models import BusinessSettingsVersion
+from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.finance import ledger
 from apps.finance.models import (
     FinanceHold,
@@ -89,23 +89,7 @@ def _seed_admin_roles() -> None:
 def _seed_settings() -> BusinessSettingsVersion:
     """TransactionTestCase truncates tables; re-seed the active revision."""
 
-    active = BusinessSettingsVersion.objects.filter(status="active").first()
-    if active is not None:
-        return active
-    from importlib import import_module
-
-    document = import_module(
-        "apps.core.migrations.0005_seed_phase3_payment_settings"
-    ).PHASE3_POLICY
-    return BusinessSettingsVersion.objects.create(
-        version=3,
-        status=BusinessSettingsVersion.Status.ACTIVE,
-        canonical_currency="EUR",
-        commission_rate_bps=2_500,
-        pricing_version="v1-payments-1",
-        policy=deepcopy(document),
-        activated_at=timezone.now(),
-    )
+    return seed_business_settings()
 
 
 class ThreadSafeConnect(FakeConnect):

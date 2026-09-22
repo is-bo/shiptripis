@@ -1,8 +1,6 @@
 """J1.3: real acceptance/handover plus historical and replay boundaries."""
 
-from importlib import import_module
 
-from django.apps import apps
 from django.contrib.admin import AdminSite
 from django.db import transaction
 from django.test import RequestFactory, TestCase
@@ -36,12 +34,9 @@ from .phase4_factories import (
 class ParcelLifecycleTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
+        from apps.core.tests.business_settings_seed import seed_business_settings
 
-        _seed_phase4_settings()
-        import_module(
-            "apps.core.migrations.0009_seed_boost_economics"
-        ).seed_boost_economics(apps, None)
+        seed_business_settings()
         cls.scenario = fund_scenario(APIClient(), prefix="j13")
 
     def setUp(self):

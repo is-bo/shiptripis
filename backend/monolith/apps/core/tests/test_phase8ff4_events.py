@@ -43,11 +43,8 @@ class LivePublicationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         # TransactionTestCase runs can deplete a reused database's seeds.
-        from importlib import import_module
-        from django.apps import apps
-        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
-        _seed_phase4_settings()
-        import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(apps, None)
+        from apps.core.tests.business_settings_seed import seed_business_settings
+        seed_business_settings()
 
     def setUp(self):
         enable_mock_rail()

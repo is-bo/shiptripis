@@ -28,6 +28,7 @@ from django.utils import timezone
 
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
+from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.deals.models import Deal
 from apps.finance import jobs, ledger
 from apps.finance.models import (
@@ -67,23 +68,7 @@ POSTGRES_ONLY = unittest.skipUnless(
 def _seed_settings() -> BusinessSettingsVersion:
     """TransactionTestCase truncates tables; re-seed the active revision."""
 
-    active = BusinessSettingsVersion.objects.filter(status="active").first()
-    if active is not None:
-        return active
-    from importlib import import_module
-
-    document = import_module(
-        "apps.core.migrations.0005_seed_phase3_payment_settings"
-    ).PHASE3_POLICY
-    return BusinessSettingsVersion.objects.create(
-        version=3,
-        status=BusinessSettingsVersion.Status.ACTIVE,
-        canonical_currency="EUR",
-        commission_rate_bps=2_500,
-        pricing_version="v1-payments-1",
-        policy=deepcopy(document),
-        activated_at=timezone.now(),
-    )
+    return seed_business_settings()
 
 
 def _enable_mock_rail() -> None:
