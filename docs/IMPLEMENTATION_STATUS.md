@@ -53,6 +53,15 @@ boost economics. CI cannot reproduce them and ran green on the K4 pull request. 
 format and analyze; Go build, vet and tests are clean; Ruff, migration check,
 production `check --deploy` and the static-web check all pass.
 
+K4 merged as `89de1ece5077cafe48131e731f7ab1ab8b796246` with all six required CI
+jobs green, and is released to Railway TEST as `v1.0.0-rc.49+89de1ec`
+(deployment `c05b4a53-f994-4e3a-8a74-09a09e6f002a`). `/healthz` and `/readyz`
+both report that release, with database, migrations and rate-limit cache ok.
+Unauthenticated smoke probes confirmed the reference catalogues now revalidate
+to 304 and every authenticated K4 surface still answers 401. The merged branch
+was deleted locally and on `origin`; no APK was built, in line with the batched
+release practice.
+
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`
