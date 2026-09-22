@@ -45,9 +45,11 @@ asserting the old bare array; those assertions now read the envelope with the
 same authorization meaning.
 
 Full local verification: 2,298 Django PostgreSQL tests passed with 4 failures —
-the two payout-shape ones fixed here, and two pre-existing boost-seed failures
-proved pre-existing by reproducing them identically at pre-K4
-`9dac1d37b0d79f603bba54eec65c3c8a53b05738`. Flutter ran 974 tests green with
+the two payout-shape ones fixed here, and two boost-seed failures that reproduce
+identically at pre-K4 `9dac1d37b0d79f603bba54eec65c3c8a53b05738` and were then
+traced to this workstation's gitignored `config/settings/test_pg.py`, which
+fabricates a business-settings revision labelled as the J2 one while carrying no
+boost economics. CI cannot reproduce them and ran green on the K4 pull request. Flutter ran 974 tests green with
 format and analyze; Go build, vet and tests are clean; Ruff, migration check,
 production `check --deploy` and the static-web check all pass.
 

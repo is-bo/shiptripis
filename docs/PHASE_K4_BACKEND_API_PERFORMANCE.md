@@ -343,35 +343,43 @@ module, so the two tests failed on shape. The assertions now read `count` and
 `results`. What the tests protect is unchanged: the traveler still sees exactly
 their own payout and the sender still sees none.
 
-Two are pre-existing and order-dependent, not K4's:
+Two are neither K4's nor, as it turned out, the repository's:
 `test_j2_h5_regression.py::test_j2_economics_reconcile_in_the_finance_control_plane`
 and
 `test_phase8fh5_control_plane.py::test_f1_boost_is_funded_once_and_recognised_only_at_close`
 both fail inside `set_boost_intent` with
 `InvalidPhase4Policy: Business setting 'boost.minimum_amount_eur_cents' must be
-an integer`. The active `BusinessSettingsVersion` they read has no boost block:
-`TransactionTestCase` classes in the finance suite truncate the tables, and the
-`_seed_settings` helpers re-create the revision from
-`0005_seed_phase3_payment_settings`, which predates
-`0009_seed_boost_economics`. The suite already knows about this —
-`apps/core/tests/test_phase8ff4_events.py` re-seeds both migrations with the
-comment "TransactionTestCase runs can deplete a reused database's seeds", and
-commit `fbe54c8` fixed the same class of problem for the H5 query-plan gate.
+an integer`.
 
 That was not taken on trust. The same three modules, in the same order, were run
 in a detached worktree at the exact pre-K4 `main` SHA
 `9dac1d37b0d79f603bba54eec65c3c8a53b05738`: **1 failed, 63 passed**, the failing
 test being `test_f1_boost_is_funded_once_and_recognised_only_at_close` — the same
 test, the same count, before any K4 code existed. On the K4 branch the identical
-slice gives the identical **1 failed, 63 passed**. K4 touches no boost, business
-settings, `phase4_policy`, or `TransactionTestCase` code, and adds no
-transactional test class. The pre-existing order dependence is recorded as a
-follow-up rather than patched inside a performance phase, where changing finance
-test seeding would be unrelated behavior changed to make a test green.
+slice gives the identical **1 failed, 63 passed**.
 
-CI is the authority on the full suite: it runs with `pytest-randomly` active
-rather than this deterministic alphabetical order, and prior phases merged green
-under it.
+The cause was then traced rather than guessed, with a `post_save` receiver
+printing the stack of whoever inserted the offending row. It is not repository
+code at all. `backend/monolith/config/settings/test_pg.py` — the gitignored,
+untracked local PostgreSQL test settings this workstation uses — monkey-patches
+`TransactionTestCase._fixture_teardown` and re-seeds after every transactional
+test. Its business-settings branch inserted one row labelled
+`version=7, pricing_version="v1-j2-boost-reward-1"` while carrying the raw
+`PHASE4_POLICY`: a row claiming to be the J2 revision with none of the boost
+economics `0009` and `0010` add, written behind an `except Exception: pass`.
+Every later test that read the boost policy then failed. Repairing that local
+shim to replay `0006 → 0008 → 0009 → 0010` turns the same three-module slice
+green at **64 passed**.
+
+So these two failures are an artifact of one workstation's harness, not a defect
+in ShipTrip, and not K4's. CI runs `--ds=config.settings.dev` against a real
+PostgreSQL service with no such shim and cannot reproduce them, which the green
+run on this phase's pull request confirms. An earlier draft of this record
+blamed the finance `_seed_settings` helpers; that explanation was wrong and is
+corrected here. Those helpers do carry genuine duplication — three rebuild from
+`0005_seed_phase3_payment_settings` and four more stop at `0009` — which is
+being removed separately as test hygiene rather than as a fix for anything K4
+observed.
 
 Edge compression was re-verified directly against Railway TEST at the pre-K4
 release `v1.0.0-rc.48+fe1e5bf` before deploying: `/api/airports` returned 13,683
