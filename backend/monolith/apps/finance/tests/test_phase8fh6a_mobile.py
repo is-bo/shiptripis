@@ -38,9 +38,8 @@ def setup(settings):
         from django.db import connection
         from importlib import import_module
         from types import SimpleNamespace
-        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
-        _seed_phase4_settings()
-        import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(apps, None)
+        from apps.core.tests.business_settings_seed import seed_business_settings
+        seed_business_settings()
         import_module("apps.admin_panel.migrations.0002_seed_roles").seed_roles(apps, None)
         import_module("apps.admin_panel.migrations.0005_seed_payout_capabilities").seed(apps, SimpleNamespace(connection=connection))
         cache.clear()

@@ -24,11 +24,8 @@ from .phase4_factories import fund_scenario
 class J1Contracts(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from apps.finance.tests.test_phase4_concurrency import _seed_phase4_settings
-        _seed_phase4_settings()
-        from importlib import import_module
-        from django.apps import apps
-        import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(apps, None)
+        from apps.core.tests.business_settings_seed import seed_business_settings
+        seed_business_settings()
         cls.scenario = fund_scenario(APIClient(), prefix="j1")
         cls.deal_id = cls.scenario.deal.pk
 

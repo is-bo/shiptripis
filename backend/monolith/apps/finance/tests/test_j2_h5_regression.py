@@ -76,33 +76,11 @@ def seeded_business_settings():
     the migration does not actually produce.
     """
 
-    from copy import deepcopy
-    from importlib import import_module
+    from apps.core.tests.business_settings_seed import seed_business_settings
 
-    from django.apps import apps as django_apps
-
-    from apps.core.models import BusinessSettingsVersion
-
-    if BusinessSettingsVersion.objects.filter(status="active").exists():
-        return
-    phase4 = import_module("apps.core.migrations.0006_seed_phase4_business_settings")
-    BusinessSettingsVersion.objects.create(
-        version=1,
-        status=BusinessSettingsVersion.Status.ACTIVE,
-        canonical_currency="EUR",
-        commission_rate_bps=2_500,
-        pricing_version="v1-lifecycle-1",
-        policy=deepcopy(phase4.PHASE4_POLICY),
-        activated_at=timezone.now(),
-    )
-    # The whole tail of the chain, in order: the Phase 4 base carries no Boost
-    # economics at all, and J2 layers its commission onto those.
-    import_module("apps.core.migrations.0009_seed_boost_economics").seed_boost_economics(
-        django_apps, None
-    )
-    import_module("apps.core.migrations.0010_seed_j2_boost_commission").seed_j2(
-        django_apps, None
-    )
+    # Testing "is anything active?" is not enough: a revision restored from
+    # part-way along the chain is active and still has no J2 boost commission.
+    seed_business_settings()
 
 
 def _scope(**values) -> Scope:
