@@ -56,7 +56,10 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    // Only the id: a profile refresh must not rebuild every row (K5).
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final role = ref.watch(roleContextProvider);
     final deals = switch (_filter) {
       _Filter.active || _Filter.awaitingYou => ref.watch(activeDealsProvider),
@@ -64,7 +67,9 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     };
     final attention = ref.watch(attentionProvider);
 
-    if (account == null) return const AppScaffold(body: SkeletonCardList());
+    if (accountId == null) {
+      return const AppScaffold(body: SkeletonCardList());
+    }
 
     final attentionDealIds = attention
         .map((item) => item.dealId)
@@ -144,7 +149,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                               ),
                               child: DeliveryCard(
                                 deal: deal,
-                                viewerId: account.id,
+                                viewerId: accountId,
                                 needsYou: needsYou,
                                 needsYouLabel: needsYou
                                     ? l.offerAwaitingYou
@@ -270,9 +275,11 @@ class _OpenNegotiations extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final matches = ref.watch(matchesProvider);
-    if (account == null) return const SizedBox.shrink();
+    if (accountId == null) return const SizedBox.shrink();
 
     return AsyncView<List<Match>>(
       value: matches,
@@ -296,7 +303,7 @@ class _OpenNegotiations extends ConsumerWidget {
             // one thing they are not: over.
             SectionHeader(title: l.deliveriesOpenOffersSection),
             for (final match in open) ...[
-              _NegotiationRow(match: match, viewerId: account.id),
+              _NegotiationRow(match: match, viewerId: accountId),
               const SizedBox(height: AppSpace.md),
             ],
           ],

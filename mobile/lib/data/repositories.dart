@@ -1719,6 +1719,9 @@ class RatingRepository {
 // Notifications
 // ---------------------------------------------------------------------------
 
+/// The bell's count and the unread-active count, as one response states them.
+typedef BadgeCounts = ({int active, int unreadActive});
+
 class NotificationRepository {
   const NotificationRepository(this._api);
 
@@ -1751,20 +1754,27 @@ class NotificationRepository {
   /// does not. The server exposes that as `active`, and keeps aliasing it onto
   /// the legacy `unread` key for installed clients — prefer the explicit name
   /// and fall back so an older deployment still answers.
-  Future<int> activeCount({CancelToken? cancelToken}) async {
-    final body = await _badgeCounts(cancelToken: cancelToken);
-    return (body['active'] as num?)?.toInt() ??
-        (body['unread'] as num?)?.toInt() ??
-        0;
-  }
+  Future<int> activeCount({CancelToken? cancelToken}) async =>
+      (await badgeCounts(cancelToken: cancelToken)).active;
 
   /// Active notifications the user has not opened yet.
   ///
   /// Only this number justifies offering "Mark all read"; the badge total does
   /// not, because a fully-read inbox can still be full of live actions.
-  Future<int> unreadActiveCount({CancelToken? cancelToken}) async {
+  Future<int> unreadActiveCount({CancelToken? cancelToken}) async =>
+      (await badgeCounts(cancelToken: cancelToken)).unreadActive;
+
+  /// Both numbers above, from the one response that carries them — so the
+  /// bell and the inbox never read it twice (K5).
+  Future<BadgeCounts> badgeCounts({CancelToken? cancelToken}) async {
     final body = await _badgeCounts(cancelToken: cancelToken);
-    return (body['unread_active'] as num?)?.toInt() ?? 0;
+    return (
+      active:
+          (body['active'] as num?)?.toInt() ??
+          (body['unread'] as num?)?.toInt() ??
+          0,
+      unreadActive: (body['unread_active'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<Map<String, dynamic>> _badgeCounts({CancelToken? cancelToken}) => _api

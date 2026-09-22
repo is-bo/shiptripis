@@ -17,11 +17,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/app/app.dart';
 import 'package:shiptrip/app/app_state.dart';
+import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/domain/deal.dart';
 import 'package:shiptrip/features/common/delivery_card.dart';
+import 'package:shiptrip/features/shell/app_shell.dart';
 
 import 'support/fake_api.dart';
 
@@ -119,6 +121,9 @@ final _idsOfB = {for (final d in _dealsOfB()) d['id'] as int};
 class _Server {
   int accountId = 42;
 
+  /// Account A's name as `/api/me` states it, for a profile that changes.
+  String? fullName;
+
   final backend = FakeBackend();
 
   _Server() {
@@ -135,11 +140,18 @@ class _Server {
   }
 
   Map<String, dynamic> _me() => accountId == 42
-      ? meFixture()
+      ? {...meFixture(), 'full_name': ?fullName}
       : {...meFixture(), 'id': 77, 'email': 'b@example.com'};
 
   FakeResponse _answer(RecordedRequest r) {
     if (r.path == '/api/me') return FakeResponse(200, _me());
+    if (r.path == '/api/notifications') {
+      return const FakeResponse(200, {
+        'count': 0,
+        'next': null,
+        'results': <Object>[],
+      });
+    }
     if (r.path == '/api/deals') {
       var rows = accountId == 42 ? _dealsOfA() : _dealsOfB();
       final scope = r.query['scope'];
@@ -240,14 +252,17 @@ Future<void> _openTab(WidgetTester tester, IconData icon) async {
   await _settle(tester);
 }
 
-Future<void> _openHistoryFilter(WidgetTester tester) async {
+Future<void> _openFilter(WidgetTester tester, String label) async {
   final choice = find.byWidgetPredicate(
     (w) => w.runtimeType.toString().startsWith('AppSegmentedChoice'),
   );
   expect(choice, findsOneWidget);
-  await tester.tap(find.descendant(of: choice, matching: find.text('History')));
+  await tester.tap(find.descendant(of: choice, matching: find.text(label)));
   await _settle(tester);
 }
+
+Future<void> _openHistoryFilter(WidgetTester tester) =>
+    _openFilter(tester, 'History');
 
 Finder _cardFor(int dealId) => find.byWidgetPredicate(
   (w) => w is DeliveryCard && w.deal.id == dealId,
@@ -406,18 +421,7 @@ void main() {
     expect(_ids(container.read(historyDealsProvider)), hasLength(20));
 
     final session = container.read(sessionProvider.notifier);
-    // `signOut` ends by invalidating `roleContextProvider`, which depends on
-    // the session, and debug-mode Riverpod rejects that as a circular
-    // dependency *after* the session, tokens and snapshot are already gone.
-    // A pre-existing defect outside K5, reported separately; tolerated here
-    // so this test keeps asserting what it is about.
-    await _drive(
-      tester,
-      session.signOut().catchError(
-        (_) {},
-        test: (e) => e.runtimeType.toString() == 'CircularDependencyError',
-      ),
-    );
+    await _drive(tester, session.signOut());
     await _drive(
       tester,
       session.signIn(email: 'b@example.com', password: 'secret'),
@@ -440,6 +444,91 @@ void main() {
     expect(_renderedDealIds(tester), containsAll(<int>[500, 501]));
     expect(_renderedDealIds(tester).intersection(_idsOfA), isEmpty);
     expect(_idsOfB.intersection(_idsOfA), isEmpty);
+
+    await _shutdown(tester);
+  });
+
+  testWidgets('tab and filter round trips re-read nothing; a Deal detail is '
+      'always read afresh', (tester) async {
+    final server = _Server();
+    final container = await _boot(tester, server);
+
+    await _openTab(tester, Icons.inventory_2_outlined);
+    await _openHistoryFilter(tester);
+    expect(_history(server.since(0)), hasLength(1));
+
+    // Home and back, then Active and back to History, inside the history's
+    // grace period: every answer is still on screen, so nothing is re-read.
+    final settled = server.backend.requests.length;
+    await _openTab(tester, Icons.home_outlined);
+    await _openTab(tester, Icons.inventory_2_outlined);
+    await _openFilter(tester, 'Active');
+    await _openHistoryFilter(tester);
+    expect(
+      server.since(settled),
+      isEmpty,
+      reason: 'round trips sent ${server.since(settled).map((r) => r.path)}',
+    );
+    expect(_ids(container.read(historyDealsProvider)), hasLength(20));
+
+    // Past it, history starts again from page one.
+    await _openFilter(tester, 'Active');
+    await tester.pump(DealHistoryController.keptFor);
+    await _settle(tester, 2);
+    await _openHistoryFilter(tester);
+    expect(_history(server.since(settled)), hasLength(1));
+
+    // A Deal detail carries money and handover state; it is never kept.
+    final beforeDetail = server.backend.requests.length;
+    for (var visit = 0; visit < 2; visit++) {
+      await tester.tap(_cardFor(97));
+      await _settle(tester);
+      container.read(routerProvider).pop();
+      await _settle(tester);
+    }
+    expect(server.since(beforeDetail).where(_isDealDetail), hasLength(2));
+
+    await _shutdown(tester);
+  });
+
+  testWidgets('opening the inbox reads its page, not the badge again', (
+    tester,
+  ) async {
+    final server = _Server();
+    await _boot(tester, server);
+
+    final before = server.backend.requests.length;
+    await tester.tap(find.byType(NotificationBell).first);
+    await _settle(tester);
+
+    final opened = server.since(before);
+    expect(opened.where((r) => r.path == '/api/notifications'), hasLength(1));
+    expect(
+      opened.where((r) => r.path == '/api/notifications/unread-count'),
+      isEmpty,
+      reason: 'the bell already read both badge numbers',
+    );
+
+    await _shutdown(tester);
+  });
+
+  testWidgets('a profile refresh rebuilds no Deal row', (tester) async {
+    final server = _Server();
+    final container = await _boot(tester, server);
+    final homeRow = tester.widget(_cardFor(99));
+    await _openTab(tester, Icons.inventory_2_outlined);
+    final deliveriesRow = tester.widget(_cardFor(99));
+
+    server.fullName = 'Amina B.';
+    await _drive(
+      tester,
+      container.read(sessionProvider.notifier).refreshAccount(),
+    );
+    expect(container.read(accountProvider)?.fullName, 'Amina B.');
+
+    expect(identical(tester.widget(_cardFor(99)), deliveriesRow), isTrue);
+    await _openTab(tester, Icons.home_outlined);
+    expect(identical(tester.widget(_cardFor(99)), homeRow), isTrue);
 
     await _shutdown(tester);
   });

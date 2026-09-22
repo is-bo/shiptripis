@@ -205,6 +205,52 @@ synchronous pass, so ≥ ~25 current Deals or ≥ ~50 own requests would cross 8
 there. Revisit with `Isolate.run` around those two mappings if field data shows
 such accounts.
 
+## Package B — request lifetime (13.7, 13.8, 13.12–13.14)
+
+Measured with the same harness (plus a 40 ms-latency variant for overlap) and
+`mobile/test/k5_request_lifetime_test.dart`. Every new test failed on
+checkpoint 1 before the change.
+
+| Scenario | Before | After |
+| --- | ---: | ---: |
+| Deliveries History → Active → History (inside 1 min), requests | 1 | 0 |
+| Opening the inbox, badge-count reads | 1 | 0 |
+| Bell + "Mark all read" counts, reads per refresh | 2 | 1 |
+| Profile refresh + two socket token probes at once, `/api/me` | 3 | 1 |
+| Deal detail opened and left mid-read, GET cancelled | no | yes |
+| Read superseded by a live event, GET cancelled | no | yes |
+| Traveller search superseded or left, GET cancelled | no | yes |
+| Profile refresh recomputes attention / rebuilds Deal rows | yes | no |
+| Sign-out / session expiry in debug | `CircularDependencyError` | clean |
+| Account B inherits account A's in-memory traveller role | yes | no |
+
+- **Cancellation.** `cancelOnDispose(ref)` gives a read a Dio `CancelToken`
+  cancelled by `ref.onDispose` (dispose or rebuild). `_liveRead` passes one to
+  every projection read; detail/search providers in features use it too
+  (cancellation quote, request pricing, Boost state, dispute, compatible
+  requests, inbox page). Riverpod has already dropped that read by then, so no
+  error state is shown. Writes never get one. `FindTravelersController` cancels
+  a superseded sort/refresh/page and everything on dispose, and no longer
+  notifies after dispose. Checkout/payment polling was left to package D.
+- **Sharing.** `ApiClient.getObject(share: true)` joins an identical read in
+  flight, keyed by identity generation, a write epoch (moved at the start and
+  end of every write) and path + query. Each caller gets its own copy, can leave
+  on its own token, and the read is cancelled only when all have left; failures
+  are never remembered. Only `/api/me` opts in; `refreshAccount` reads `fresh`
+  (a live KYC event lands there and must not join an older read). The two badge
+  providers now project one `_badgeCountsQuery`. Rejected: active Deals (already
+  one provider), payout methods (one provider; the imperative pre-mutation reads
+  need current revisions), catalogs (one consumer each).
+- **Lifetime.** Only finished Deal history is kept, one minute after its last
+  viewer and never past the sign-in that read it. No keepAlive on any detail,
+  amount, allowed action, KYC or handover state. Tab switches already cost 0.
+- **Granularity.** `attentionProvider`, Deliveries, Home "in progress" and the
+  Deal screen watch the account id, not the whole account.
+- **Role bug.** `_invalidateEverything` is gone. `RoleContextController` keys
+  its remembered choice to the `AccountSession`, so any new sign-in starts from
+  what that sign-in stored. Invalidating it had never reset that choice, because
+  Riverpod 3 keeps the notifier instance across an invalidate.
+
 ## Remaining K5 work
 
 Delegated as bounded packages, each reviewed before integration:

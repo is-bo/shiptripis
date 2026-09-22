@@ -45,7 +45,10 @@ import 'journey_labels.dart';
 final _compatibleRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryResults, int>((ref, journeyId) async {
       final repo = ref.watch(matchingRepositoryProvider);
-      return repo.compatibleRequests(journeyId: journeyId);
+      return repo.compatibleRequests(
+        journeyId: journeyId,
+        cancelToken: cancelOnDispose(ref),
+      );
     });
 
 class JourneyDetailScreen extends ConsumerStatefulWidget {

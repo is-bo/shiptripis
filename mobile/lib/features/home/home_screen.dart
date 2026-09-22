@@ -365,10 +365,13 @@ class _InProgressSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    // Only the id: a profile refresh must not rebuild these rows (K5).
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final deals = ref.watch(activeDealsProvider);
 
-    if (account == null) return const SizedBox.shrink();
+    if (accountId == null) return const SizedBox.shrink();
 
     return AsyncView<List<Deal>>(
       value: deals,
@@ -399,7 +402,7 @@ class _InProgressSection extends ConsumerWidget {
             for (final deal in active.take(3)) ...[
               DeliveryCard(
                 deal: deal,
-                viewerId: account.id,
+                viewerId: accountId,
                 onTap: () => context.openDeal(deal.id),
               ),
               const SizedBox(height: AppSpace.md),

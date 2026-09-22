@@ -39,6 +39,9 @@ class RecordedRequest {
   final Map<String, dynamic> body;
   final Map<String, dynamic> query;
 
+  /// True once the client cancelled this request while it was in flight.
+  bool cancelled = false;
+
   @override
   String toString() => '$method $path $body';
 }
@@ -138,6 +141,7 @@ class _FakeAdapter implements HttpClientAdapter {
       },
       query: Map<String, dynamic>.from(options.queryParameters),
     );
+    unawaited(cancelFuture?.then((_) => request.cancelled = true));
 
     final response = await backend._dispatch(request);
     return ResponseBody.fromString(

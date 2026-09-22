@@ -86,8 +86,15 @@ class AuthRepository {
     expectedIdentityGeneration: expectedIdentityGeneration,
   );
 
-  Future<Account> me() async =>
-      Account.fromJson(await _api.getObject('/api/me'));
+  /// The signed-in profile.
+  ///
+  /// Launch confirmation, a profile refresh and the sockets' token probes can
+  /// all ask at once; an identical read already in flight is shared (K5).
+  /// [fresh] starts a new one instead, for a caller that may be answering a
+  /// live event the read in flight could predate.
+  Future<Account> me({bool fresh = false}) async => Account.fromJson(
+    await _api.getObject('/api/me', share: true, fresh: fresh),
+  );
 
   /// The one writable field on the profile contract.
   ///

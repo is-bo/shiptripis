@@ -5,6 +5,7 @@
 /// * attach the access token, and refresh it exactly once per burst of 401s
 /// * normalise every non-2xx response into an [ApiException]
 /// * retry idempotent reads on transient network failure, with jitter
+/// * send an opted-in read once when several callers ask for it at once
 /// * never log anything that could carry a handover code, a guest token, a
 ///   recipient's details or an auth token
 ///
@@ -67,6 +68,14 @@ class ApiClient {
   final TokenStore _tokens;
   late final _AuthInterceptor _auth;
 
+  /// Shared reads in flight, by identity, write epoch, path and query.
+  final Map<String, _SharedRead> _sharedReads = {};
+
+  /// Moves when any write starts and again when it ends, so a read asked for
+  /// after a write never shares one that began before it and may have missed
+  /// its effect.
+  int _writeEpoch = 0;
+
   /// Escape hatch for the two places that need the raw client: multipart
   /// uploads built elsewhere, and tests that install a mock adapter.
   Dio get raw => _dio;
@@ -75,24 +84,36 @@ class ApiClient {
   // Reads
   // ---------------------------------------------------------------------------
 
+  /// [share] lets identical reads in flight at the same time go out as one
+  /// request (K5): the read joins one already in flight for the same identity,
+  /// or starts one later shared reads may join. [fresh] still starts a new
+  /// one, for a caller whose reason to ask — a live event — may postdate the
+  /// read in flight. Only for small reads several callers ask for at once.
   Future<Json> getObject(
     String path, {
     Json? query,
     CancelToken? cancelToken,
-  }) async => _expectObject(
-    await _send(
+    bool share = false,
+    bool fresh = false,
+  }) async {
+    Future<dynamic> read(CancelToken? token) => _send(
       (identity) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
-        cancelToken: cancelToken,
+        cancelToken: token,
         options: _requestOptions(identity),
       ),
       // Only reads are retried. Replaying a POST could double-charge a card
       // or burn one of five handover-code attempts.
       retries: 2,
-    ),
-    path,
-  );
+    );
+    return _expectObject(
+      share
+          ? await _shared(path, query, cancelToken, read, fresh: fresh)
+          : await read(cancelToken),
+      path,
+    );
+  }
 
   /// Several V1 list endpoints return a bare JSON array rather than a
   /// paginated envelope; others return `{"count", "results"}`. This unwraps
@@ -195,7 +216,7 @@ class ApiClient {
     Json? query,
     CancelToken? cancelToken,
   }) async => _expectObject(
-    await _send(
+    await _write(
       (identity) => _dio.post<dynamic>(
         path,
         data: body,
@@ -213,7 +234,7 @@ class ApiClient {
     Object? body,
     CancelToken? cancelToken,
   }) async {
-    await _send(
+    await _write(
       (identity) => _dio.post<dynamic>(
         path,
         data: body,
@@ -228,7 +249,7 @@ class ApiClient {
     Object? body,
     CancelToken? cancelToken,
   }) async => _expectObject(
-    await _send(
+    await _write(
       (identity) => _dio.patch<dynamic>(
         path,
         data: body,
@@ -244,7 +265,7 @@ class ApiClient {
     Object? body,
     CancelToken? cancelToken,
   }) async => _expectObject(
-    await _send(
+    await _write(
       (identity) => _dio.put<dynamic>(
         path,
         data: body,
@@ -256,7 +277,7 @@ class ApiClient {
   );
 
   Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
-    await _send(
+    await _write(
       (identity) => _dio.delete<dynamic>(
         path,
         cancelToken: cancelToken,
@@ -275,7 +296,7 @@ class ApiClient {
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async => _expectObject(
-    await _send(
+    await _write(
       (identity) => _dio.post<dynamic>(
         path,
         data: form,
@@ -301,6 +322,53 @@ class ApiClient {
     Future<Response<dynamic>> Function(int identityGeneration) call, {
     int retries = 0,
   }) async => (await _sendResponse(call, retries: retries)).data;
+
+  /// Every write goes through here, never retried and never shared.
+  Future<dynamic> _write(
+    Future<Response<dynamic>> Function(int identityGeneration) call,
+  ) async {
+    _writeEpoch++;
+    try {
+      return await _send(call);
+    } finally {
+      _writeEpoch++;
+    }
+  }
+
+  /// Joins an identical shared read in flight, or starts one.
+  ///
+  /// The read runs on its own token. Each caller may leave on its own
+  /// [caller] token without cancelling it for the others; it is cancelled
+  /// only once every caller has left, and then forgotten, so the next caller
+  /// starts afresh. A failure reaches every caller and is never remembered.
+  /// The key carries the identity generation, so a read begun for one sign-in
+  /// is never handed to the next.
+  Future<dynamic> _shared(
+    String path,
+    Json? query,
+    CancelToken? caller,
+    Future<dynamic> Function(CancelToken token) read, {
+    required bool fresh,
+  }) {
+    final key =
+        '${_tokens.identityGeneration}:$_writeEpoch $path ${_clean(query)}';
+    var shared = fresh ? null : _sharedReads[key];
+    if (shared == null) {
+      final created = shared = _SharedRead(CancelToken());
+      _sharedReads[key] = created;
+      created.result = read(created.token).whenComplete(() {
+        if (identical(_sharedReads[key], created)) _sharedReads.remove(key);
+      });
+    }
+    final joined = shared;
+    return joined.join(
+      caller,
+      path: path,
+      onAbandoned: () {
+        if (identical(_sharedReads[key], joined)) _sharedReads.remove(key);
+      },
+    );
+  }
 
   Future<Response<dynamic>> _sendResponse(
     Future<Response<dynamic>> Function(int identityGeneration) call, {
@@ -382,6 +450,63 @@ class ApiClient {
       Options(extra: {'st.identity_generation': identityGeneration});
 
   static final _random = Random();
+}
+
+/// One shared read in flight and the callers waiting on it.
+class _SharedRead {
+  _SharedRead(this.token);
+
+  final CancelToken token;
+  late final Future<dynamic> result;
+  int _waiting = 0;
+  int _joined = 0;
+
+  Future<dynamic> join(
+    CancelToken? caller, {
+    required String path,
+    required void Function() onAbandoned,
+  }) {
+    final done = Completer<dynamic>();
+    _waiting++;
+    _joined++;
+    result.then(
+      (data) {
+        if (done.isCompleted) return;
+        _waiting--;
+        // Decoded JSON is mutable; callers of one read must not share it.
+        done.complete(_joined > 1 ? _copy(data) : data);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (done.isCompleted) return;
+        _waiting--;
+        done.completeError(error, stack);
+      },
+    );
+    caller?.whenCancel.then((_) {
+      if (done.isCompleted) return;
+      done.completeError(
+        ApiException.from(
+          DioException(
+            requestOptions: RequestOptions(path: path),
+            type: DioExceptionType.cancel,
+          ),
+        ),
+      );
+      if (--_waiting == 0) {
+        onAbandoned();
+        token.cancel();
+      }
+    });
+    return done.future;
+  }
+
+  static dynamic _copy(dynamic value) => switch (value) {
+    final Map<dynamic, dynamic> map => <String, dynamic>{
+      for (final entry in map.entries) '${entry.key}': _copy(entry.value),
+    },
+    final List<dynamic> list => [for (final item in list) _copy(item)],
+    _ => value,
+  };
 }
 
 // ---------------------------------------------------------------------------

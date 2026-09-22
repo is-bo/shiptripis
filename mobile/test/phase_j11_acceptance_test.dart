@@ -156,6 +156,11 @@ void main() {
           .map((r) => r.query['scope'])
           .toSet();
       expect(scopes, {'history'});
+
+      // History outlives its last viewer briefly (K5); let that run out
+      // before the test's pending-timer check.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(DealHistoryController.keptFor);
     });
   });
 

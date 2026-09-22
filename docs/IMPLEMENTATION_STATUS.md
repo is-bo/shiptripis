@@ -13,6 +13,13 @@ open the app without waiting for `/api/me`. Not yet merged or released. Details,
 decisions and remaining packages:
 [the K5 record](PHASE_K5_MOBILE_PERFORMANCE.md).
 
+Package B (request lifetime): reads are cancelled when their provider is
+disposed or superseded, never writes; concurrent `/api/me` reads share one
+request; the bell and inbox counts share one read; finished Deal history
+survives a one-minute filter round trip; a profile refresh no longer rebuilds
+Deal rows; sign-out no longer throws in debug, and a new sign-in no longer
+inherits the previous account's in-memory role.
+
 ## K4 — General Backend & API Performance Remediation (2026-09-21)
 
 Implemented on `codex/k4-backend-api-performance` from exact `main`

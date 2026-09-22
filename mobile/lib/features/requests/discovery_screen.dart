@@ -14,6 +14,7 @@
 /// - Safe state handling for `results`, `no_candidates`, `request_ineligible`, and errors.
 library;
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show ChangeNotifierProvider;
@@ -117,8 +118,31 @@ class FindTravelersController extends ChangeNotifier {
   int _queryGeneration = 0;
   String _requestedSort = 'best_match';
 
+  /// The first-page read in flight, and the next-page one. A new query
+  /// cancels both; the generation guards still decide what may land, since a
+  /// response can arrive before its cancellation does (K5).
+  CancelToken? _queryRead;
+  CancelToken? _pageRead;
+
+  CancelToken _supersede() {
+    _queryRead?.cancel();
+    _pageRead?.cancel();
+    return _queryRead = CancelToken();
+  }
+
+  @override
+  void dispose() {
+    // The screen is gone: drop its reads, and make every pending response
+    // stale so none of them notifies a disposed controller.
+    _queryGeneration++;
+    _queryRead?.cancel();
+    _pageRead?.cancel();
+    super.dispose();
+  }
+
   Future<void> loadInitial() async {
     final generation = ++_queryGeneration;
+    final cancel = _supersede();
     isLoading = true;
     initialError = null;
     notifyListeners();
@@ -129,6 +153,7 @@ class FindTravelersController extends ChangeNotifier {
         limit: 10,
         offset: 0,
         sort: 'best_match',
+        cancelToken: cancel,
       );
       if (generation != _queryGeneration) return;
       state = FindTravelersState(
@@ -155,6 +180,7 @@ class FindTravelersController extends ChangeNotifier {
 
   Future<void> refresh() async {
     final generation = ++_queryGeneration;
+    final cancel = _supersede();
     final sort = _requestedSort;
     isLoading = false;
     if (state?.isLoadingMore == true) {
@@ -167,6 +193,7 @@ class FindTravelersController extends ChangeNotifier {
         limit: 10,
         offset: 0,
         sort: sort,
+        cancelToken: cancel,
       );
       if (generation != _queryGeneration) return;
       state = FindTravelersState(
@@ -196,6 +223,7 @@ class FindTravelersController extends ChangeNotifier {
     if (current == null || (current.sort == newSort && !isLoading)) return;
 
     final generation = ++_queryGeneration;
+    final cancel = _supersede();
     _requestedSort = newSort;
     isLoading = true;
     if (current.isLoadingMore) {
@@ -209,6 +237,7 @@ class FindTravelersController extends ChangeNotifier {
         limit: 10,
         offset: 0,
         sort: newSort,
+        cancelToken: cancel,
       );
       if (generation != _queryGeneration) return;
       state = FindTravelersState(
@@ -243,6 +272,8 @@ class FindTravelersController extends ChangeNotifier {
     }
 
     final generation = _queryGeneration;
+    _pageRead?.cancel();
+    final cancel = _pageRead = CancelToken();
     final loadingState = current.copyWith(
       isLoadingMore: true,
       clearPaginationError: true,
@@ -256,6 +287,7 @@ class FindTravelersController extends ChangeNotifier {
         limit: 10,
         offset: current.nextOffset,
         sort: current.sort,
+        cancelToken: cancel,
       );
 
       if (generation != _queryGeneration || !identical(state, loadingState)) {

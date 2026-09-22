@@ -386,13 +386,16 @@ class SessionController extends Notifier<SessionState> {
   /// Failure is deliberately swallowed: this is a refresh of something the UI
   /// already has, and dropping the user to a sign-in screen because one
   /// background poll timed out would be worse than a slightly stale badge.
+  ///
+  /// Always a new read: a live KYC event lands here, and a read already in
+  /// flight may predate it.
   Future<void> refreshAccount() async {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
     try {
-      final account = await _auth.me();
+      final account = await _auth.me(fresh: true);
       if (generation == _generation &&
           state is SessionSignedIn &&
           (state as SessionSignedIn).account.id == current.account.id &&
@@ -419,22 +422,22 @@ class SessionController extends Notifier<SessionState> {
       // The credential clear below deletes it too.
     }
     await _auth.signOut();
-    _invalidateEverything();
   }
 
   /// Called by the API client when refresh has failed terminally.
+  ///
+  /// Nothing else needs resetting here. Private reads bind to
+  /// [accountSessionProvider] and switch away from the old cache as soon as
+  /// session state changes, and [RoleContextController] forgets a sign-in's
+  /// choice the same way. (It used to be invalidated from here, which debug
+  /// Riverpod rejects as a circular dependency — it depends on this session —
+  /// and which never reset the remembered choice anyway, because invalidating
+  /// a notifier keeps the same instance.)
   void handleSessionExpired() {
     if (state is SessionSignedOut) return;
     _generation++;
     _revalidation?.cancel();
     state = const SessionSignedOut(becauseExpired: true);
-    _invalidateEverything();
-  }
-
-  /// Resets local role context. Private reads bind to [accountSessionProvider]
-  /// and switch away from the old cache as soon as session state changes.
-  void _invalidateEverything() {
-    ref.invalidate(roleContextProvider);
   }
 
   /// Picks the starting context for a freshly authenticated account: the
@@ -457,9 +460,19 @@ class RoleContextController extends Notifier<RoleContext> {
   /// profile refreshes.
   RoleContext? _remembered;
 
+  /// The sign-in [_remembered] belongs to. Sign-out, another account, or the
+  /// same account signing in again all start over from what that sign-in
+  /// stored, never from the previous one's choice.
+  AccountSession? _rememberedFor;
+
   @override
   RoleContext build() {
-    final role = ref.watch(accountProvider)?.role;
+    final role = ref.watch(accountProvider.select((account) => account?.role));
+    final session = ref.watch(accountSessionProvider);
+    if (session != _rememberedFor) {
+      _rememberedFor = session;
+      _remembered = null;
+    }
 
     // Server role is authority. Only `both` defers to the stored preference.
     if (role == AccountRole.sender) return RoleContext.sender;
@@ -471,15 +484,16 @@ class RoleContextController extends Notifier<RoleContext> {
     // First build for a dual-role account: show sending immediately and let
     // the keystore read land a frame or two later. Blocking the first frame
     // on disk would be a worse trade than a brief default.
-    unawaited(_hydrate());
+    unawaited(_hydrate(session));
     return RoleContext.sender;
   }
 
-  Future<void> _hydrate() async {
+  Future<void> _hydrate(AccountSession? session) async {
     final stored = RoleContext.tryParse(
       await ref.read(tokenStoreProvider).readRoleContext(),
     );
-    if (stored == null) return;
+    // A read begun for an earlier sign-in says nothing about this one.
+    if (stored == null || session != _rememberedFor) return;
     _remembered = stored;
     if (stored != state) state = stored;
   }

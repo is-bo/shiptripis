@@ -49,7 +49,9 @@ import 'request_labels.dart';
 
 final _requestPricingProvider = FutureProvider.autoDispose
     .family<RequestPricing, int>((ref, id) async {
-      return ref.watch(requestRepositoryProvider).requestPricing(id);
+      return ref
+          .watch(requestRepositoryProvider)
+          .requestPricing(id, cancelToken: cancelOnDispose(ref));
     });
 
 class RequestDetailScreen extends ConsumerStatefulWidget {
