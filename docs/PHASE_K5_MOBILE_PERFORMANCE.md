@@ -251,6 +251,45 @@ checkpoint 1 before the change.
   what that sign-in stored. Invalidating it had never reset that choice, because
   Riverpod 3 keeps the notifier instance across an invalidate.
 
+## Resume here (state at 2026-09-22 session end)
+
+Branch `claude/k5-mobile-performance` (pushed to origin). Commits on top of
+`main` `b5e33e4`:
+
+- `c1c2cbb` checkpoint 1 (Deal list attention/pagination, root rebuild,
+  session snapshot) — full Flutter suite 1005 passed at this point.
+- `3d43820` doc fix; `0a42245` package A; `c83f696` package C; `b2760b2`
+  package B; `e5fe0fb` test fix (drain history grace timer).
+- Integrated tree: `flutter analyze` clean; all `test/k5_*` +
+  `phase_j11_acceptance_test` + `handover_isolation_test` pass (88). The FULL
+  Flutter suite has **not** been run on the integrated tree yet.
+
+Package D (resume / sockets / badge / checkout polling) was still being
+implemented by a subagent when the session ended. Its uncommitted work lives in
+worktree `.claude/worktrees/agent-ad985a078e4e848db` (branch
+`worktree-agent-ad985a078e4e848db`, base `c1c2cbb`), touching `app_state.dart`,
+`notification_socket.dart`, `push_coordinator.dart`, `repositories.dart`,
+`guest_payment_sheet.dart`, `checkout_section.dart`, new tests
+`k5_polling_test.dart`, `k5_realtime_test.dart`. A backup patch of that WIP is at
+`D:\Code\Shiptrip-k5-backup\packageD-wip.patch`. It is unreviewed and
+possibly incomplete: on resume, inspect it, finish or re-delegate package D
+(brief = section D below; package B already made the badge a single
+`badgeCounts()` read and left "cold start sends 2 badge reads because the
+socket-connect catch-up supersedes the first" to D), then cherry-pick onto the
+branch. Expect conflicts in `app_state.dart` / `repositories.dart` with
+package B and in this doc.
+
+Then finish K5: full Flutter suite (PATH needs `/d/flutter/bin`); full Django
+PG suite (backend changed in checkpoint 1; ~35 min, never in parallel with
+another pytest); Ruff; `makemigrations --check` (none expected); independent
+Opus review of the whole K5 diff (focus: ApiClient shared reads/cancellation,
+session snapshot, role reset, deferred Firebase, list attention parity); update
+this record's status/tests and `IMPLEMENTATION_STATUS.md`; PR to main, CI,
+merge; Railway TEST release `v1.0.0-rc.50+<sha>`; `/healthz`, `/readyz`, smoke
+(`/api/deals?scope=current` → 401 unauthenticated); branch/worktree cleanup;
+K5 phase report. Then K6 (persistent Redis cutover is mandatory) and K7, then
+the K-Series Master Report.
+
 ## Remaining K5 work
 
 Delegated as bounded packages, each reviewed before integration:
