@@ -97,6 +97,14 @@ class _NotificationSettingsScreenState
 
   Widget _permissionNotice(BuildContext context, PushRuntimeState runtime) {
     final l = L.of(context);
+    // Firebase starts just after the first frame; until it settles this is
+    // the same neutral notice as a permission that has not been read yet.
+    if (runtime.availability == PushAvailability.initializing) {
+      return InfoNotice(
+        message: l.pushPermissionBody,
+        icon: Icons.notifications_none_rounded,
+      );
+    }
     if (!runtime.available) {
       return InfoNotice(
         message:

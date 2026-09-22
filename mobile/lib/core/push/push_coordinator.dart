@@ -27,10 +27,11 @@ class PushRuntimeState {
   bool get available => availability == PushAvailability.available;
 
   PushRuntimeState copyWith({
+    PushAvailability? availability,
     PushPermission? permission,
     PushRegistrationState? registration,
   }) => PushRuntimeState(
-    availability: availability,
+    availability: availability ?? this.availability,
     permission: permission ?? this.permission,
     registration: registration ?? this.registration,
   );
@@ -138,6 +139,16 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   Future<void> retryRegistration() => _syncRegistration();
 
   Future<void> _restoreMessagingState() async {
+    // Firebase starts after the first frame (K5). Until it settles every step
+    // below would only wait on it, and the registration gate reads
+    // `available`, so the whole restore waits here instead.
+    final messaging = _messaging;
+    if (messaging is DeferredPushMessaging &&
+        messaging.availability == PushAvailability.initializing) {
+      await messaging.ready;
+      if (!ref.mounted) return;
+      state = state.copyWith(availability: messaging.availability);
+    }
     if (!_messaging.available) return;
     // Nothing awaits this, so an escaping exception used to be invisible: the
     // permission stayed `unavailable` for the whole app run, which closes the

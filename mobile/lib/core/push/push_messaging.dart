@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +19,8 @@ enum PushPermission {
 }
 
 enum PushAvailability {
+  /// Firebase has not finished starting yet. See [DeferredPushMessaging].
+  initializing,
   available,
   configurationIncomplete,
   initializationFailed,
@@ -161,6 +164,88 @@ class FirebasePushMessaging implements PushMessaging {
       androidRuntimePermissionSupported: androidRuntimePermissionSupported,
     );
   }
+}
+
+/// Push messaging whose Firebase start waits until the first frame is drawn.
+///
+/// `main` used to await Firebase initialisation — platform-channel work —
+/// before `runApp`, so every cold start held its first frame on it (K5). This
+/// stands in until the real implementation exists: it reports
+/// [PushAvailability.initializing], each call waits for the real
+/// implementation, and the streams forward the real ones once they exist. A
+/// start that fails resolves to a [DisabledPushMessaging] rather than an
+/// error, so push stays optional exactly as before.
+class DeferredPushMessaging implements PushMessaging {
+  final Completer<PushMessaging> _ready = Completer<PushMessaging>();
+  PushMessaging? _resolved;
+  bool _started = false;
+
+  /// Completes, never with an error, once the start has settled.
+  Future<PushMessaging> get ready => _ready.future;
+
+  /// Runs [initialize] after the next frame. `runApp` has already scheduled
+  /// the first one, so this is the frame after the app's first paint.
+  void startAfterFirstFrame(Future<PushMessaging> Function() initialize) {
+    SchedulerBinding.instance.addPostFrameCallback(
+      (_) => unawaited(start(initialize)),
+    );
+  }
+
+  /// Runs [initialize] now. Only the first call has any effect.
+  Future<void> start(Future<PushMessaging> Function() initialize) async {
+    if (_started) return;
+    _started = true;
+    PushMessaging messaging;
+    try {
+      messaging = await initialize();
+    } on Object {
+      messaging = const DisabledPushMessaging(
+        availability: PushAvailability.initializationFailed,
+      );
+    }
+    _resolved = messaging;
+    _ready.complete(messaging);
+  }
+
+  Stream<T> _forward<T>(Stream<T> Function(PushMessaging messaging) select) {
+    final resolved = _resolved;
+    if (resolved != null) return select(resolved);
+    return (() async* {
+      yield* select(await ready);
+    })();
+  }
+
+  @override
+  bool get available => _resolved?.available ?? false;
+
+  @override
+  PushAvailability get availability =>
+      _resolved?.availability ?? PushAvailability.initializing;
+
+  @override
+  Stream<PushMessage> get foregroundMessages =>
+      _forward((messaging) => messaging.foregroundMessages);
+
+  @override
+  Stream<PushMessage> get openedMessages =>
+      _forward((messaging) => messaging.openedMessages);
+
+  @override
+  Stream<String> get tokenRefresh =>
+      _forward((messaging) => messaging.tokenRefresh);
+
+  @override
+  Future<String?> token() async => (await ready).token();
+
+  @override
+  Future<PushMessage?> initialMessage() async => (await ready).initialMessage();
+
+  @override
+  Future<PushPermission> permission() async => (await ready).permission();
+
+  @override
+  Future<PushPermission> requestPermission() async =>
+      (await ready).requestPermission();
 }
 
 const _notificationPermissionChannel = MethodChannel(

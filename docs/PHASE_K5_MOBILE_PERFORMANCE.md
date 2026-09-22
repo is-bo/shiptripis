@@ -122,6 +122,36 @@ tap, app resume, and a push-permission refresh (checking whether the
   `CircularDependencyError` at the end of sign-out/expiry (release builds skip
   the check; sign-out still completes). Assigned to package B.
 
+## Package A — cold start, offline start, push init (13.5)
+
+Before `runApp`, `main` awaited, in order: `SystemChrome.setEnabledSystemUIMode`
+(one platform call), `LocaleFormats.ensureInitialized` (in-memory date symbols;
+must precede the first `DateFormat`), and `FirebasePushMessaging.initialize`
+(`Firebase.initializeApp` + `setForegroundNotificationPresentationOptions`,
+platform-channel work that paints nothing), then registered
+`onBackgroundMessage`. Secure storage, session restore, `/api/me`, locale and
+role context were already off the pre-frame path (provider builds, async).
+
+- **Firebase now starts after the first frame.** `DeferredPushMessaging` is
+  handed to the app unresolved; `startAfterFirstFrame` runs the same
+  initialiser from a post-frame callback. It reports
+  `PushAvailability.initializing`, each call waits for the real implementation,
+  streams forward once it exists, and any failure resolves to
+  `DisabledPushMessaging(initializationFailed)`. `onBackgroundMessage` is still
+  registered on a successful start, in the same turn; it needs only the method
+  channel, and the handle it persists is what wakes a terminated app.
+- **Coordinator waits for readiness.** `_restoreMessagingState` awaits
+  `ready`, adopts the resolved availability, then reads permission, the launch
+  message and registers as before. The root still only `ref.listen`s.
+  Notification settings show the neutral "not read yet" notice while
+  initialising rather than "could not start".
+- **Confirmed good, unchanged.** Offline launch without a snapshot holds the
+  splash, which shows progress after 0.6 s and the offline copy plus Try again
+  after 8 s; credentials are kept. With a snapshot the app opens. Role context
+  is read from the keystore only (no round trip), server role wins, and the key
+  is wiped on every credential clear, so it cannot leak across accounts.
+- Tests: `k5_cold_start_test.dart` (5 cases).
+
 ## Remaining K5 work
 
 Delegated as bounded packages, each reviewed before integration:

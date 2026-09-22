@@ -31,10 +31,10 @@ Future<void> main() async {
   // first DateFormat call, so it is awaited rather than fired and forgotten.
   await LocaleFormats.ensureInitialized();
 
-  final pushMessaging = await FirebasePushMessaging.initialize();
-  if (pushMessaging.available) {
-    FirebaseMessaging.onBackgroundMessage(shipTripFirebaseBackgroundHandler);
-  }
+  // Push is not needed to paint anything, so Firebase starts after the first
+  // frame instead of in front of it (K5). The coordinator waits on it and
+  // treats a failed start as "push unavailable", as it always has.
+  final pushMessaging = DeferredPushMessaging();
 
   runApp(
     ProviderScope(
@@ -42,4 +42,16 @@ Future<void> main() async {
       child: const ShipTripApp(),
     ),
   );
+
+  pushMessaging.startAfterFirstFrame(() async {
+    final messaging = await FirebasePushMessaging.initialize();
+    // Registered in the same turn as the successful start, as before. It
+    // needs only the method channel, and the handle it stores is what a
+    // terminated app is woken with, so a later registration loses nothing: a
+    // fresh install has no FCM token for anyone to send to until this start.
+    if (messaging.available) {
+      FirebaseMessaging.onBackgroundMessage(shipTripFirebaseBackgroundHandler);
+    }
+    return messaging;
+  });
 }
