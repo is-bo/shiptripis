@@ -1,6 +1,6 @@
 # K4 — General Backend & API Performance Remediation
 
-Status: **implemented, reviewed and locally verified; CI, merge, and Railway TEST deployment in progress**.
+Status: **complete** — merged to `main` at `89de1ece5077cafe48131e731f7ab1ab8b796246` and released to Railway TEST as `v1.0.0-rc.49+89de1ec`.
 
 K4 started from exact `main` SHA
 `9dac1d37b0d79f603bba54eec65c3c8a53b05738` on branch
@@ -389,3 +389,71 @@ scopes its `encode gzip` to the static site, and the API catch-all
 `reverse_proxy` adds none, so the compression is the platform edge's and is
 applied once. Codex's rejection of the stale "API JSON is uncompressed" finding
 is confirmed.
+
+## CI, merge and release
+
+All six required CI jobs passed on pull request #16 — Go build/vet/unit, Go
+integration against real Redis, Django migrations/tests/lint, production config
+and static web, schema drift, and Flutter format/analyze/tests. K4 merged as
+`89de1ece5077cafe48131e731f7ab1ab8b796246`, and local `main` matches
+`origin/main`.
+
+Railway TEST deployment `c05b4a53-f994-4e3a-8a74-09a09e6f002a` was uploaded from
+a worktree extracted with `git -c core.autocrlf=false archive` at that exact SHA;
+the changed runtime files were SHA-256 compared against `git cat-file blob`
+before upload. `RELEASE_ID` was set with `skip_deploys` first, so one deployment
+carries both.
+
+`/healthz` returns `{"status": "ok", "release": "v1.0.0-rc.49+89de1ec"}`.
+`/readyz` returns `ready` with `database`, `migrations` and `rate_limit_cache`
+all `ok`.
+
+### Deployed smoke evidence
+
+The probes were unauthenticated reads; nothing was created on the deployed
+database and no financial operation was performed. This environment holds no
+TEST credentials, so the authenticated read paths were exercised against local
+PostgreSQL through the real endpoints, as in earlier phases.
+
+| Surface | Result |
+| --- | --- |
+| `/api/geography/countries` | `Cache-Control: public, max-age=3600`, strong ETag, `If-None-Match` → **304** |
+| `/api/airports` | `Cache-Control: public, max-age=3600`, ETag, `If-None-Match` → **304** |
+| `/api/chat/threads`, `/api/journeys`, `/api/parcels`, `/api/deals` | **401** for anonymous |
+| `/api/notifications`, `/api/notifications/unread-count` | **401** for anonymous |
+| `/api/payouts`, `/api/matches` | **401** for anonymous |
+
+Every K4 surface is routed and still gated. The reference catalogues are the
+only ones made publicly cacheable, as intended.
+
+### Before and after on TEST
+
+Measured against `v1.0.0-rc.48+fe1e5bf` before the deployment and
+`v1.0.0-rc.49+89de1ec` after.
+
+| Measurement | rc.48 | rc.49 |
+| --- | --- | --- |
+| `/api/airports`, identity encoding | 13,683 bytes | 13,683 bytes |
+| `/api/airports`, `Accept-Encoding: gzip` | 3,611 bytes | 3,612 bytes |
+| `/api/airports`, repeat fetch | 3,611 bytes (200) | **0 bytes (304)** |
+| `/api/geography/countries`, repeat fetch | 178 bytes (200) | **0 bytes (304)** |
+| `Content-Encoding` headers on `/api/airports` | exactly one `gzip` | exactly one `gzip` |
+
+Compression is unchanged, which is the point: the edge already did it once and
+K4 deliberately added no second layer. The repeat-fetch rows are the new saving
+— a revalidated catalogue now transfers no body at all. Round-trip latency over
+the public internet (~0.32-0.34 s) is dominated by network distance to the
+region and is not a useful measure of server execution here; the query, payload
+and latency work is evidenced by the PostgreSQL profile above.
+
+The `/api/airports` ETag arrives weakened to `W/"..."` because the platform edge
+re-encodes that response; the strong validator the application emits still
+revalidates correctly, as the 304 shows.
+
+### Branch cleanup
+
+`codex/k4-backend-api-performance` was fully merged into `main` and was deleted
+locally with `git branch -d` and on `origin`; stale remote refs were pruned.
+`main`, the owner's stash, the unmerged `fix/finance-business-settings-seed`
+(open as a separate test-hygiene pull request) and every `upstream/*` branch were
+preserved.
