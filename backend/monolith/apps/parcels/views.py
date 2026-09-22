@@ -232,7 +232,9 @@ class ParcelListView(APIView):
             qs = qs.filter(kind=k)
         return paginated_array_response(
             request,
-            qs,
+            # Same stable tie-break the open search uses, so paging a sender's
+            # own requests cannot repeat or skip a row.
+            qs.order_by("-created_at", "-pk"),
             serialize=lambda rows: _serialize(rows, request, many=True).data,
         )
 

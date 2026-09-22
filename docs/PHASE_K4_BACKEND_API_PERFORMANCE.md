@@ -1,6 +1,6 @@
 # K4 — General Backend & API Performance Remediation
 
-Status: **implemented; independent Gemini verification, CI, merge, and deployment pending**.
+Status: **implemented, reviewed and locally verified; CI, merge, and Railway TEST deployment in progress**.
 
 K4 started from exact `main` SHA
 `9dac1d37b0d79f603bba54eec65c3c8a53b05738` on branch
@@ -215,8 +215,169 @@ reserved for Gemini/CI.
 
 ## Independent verification and deployment
 
-Gemini result: **pending**.
+Gemini returned **GREEN** for exact implementation SHA
+`e0721bf9ba7a44e6ac63d51602d33a0f6aab2a79`. Its independent PostgreSQL run
+reproduced the central result: five chat threads fell from 11 queries to 1 and
+from 14.56 ms to 8.17 ms, Journey list payload fell from 15,579 to 10,912
+bytes, Journey detail fell from 8 queries to 7, and matching remained at 9
+queries with identical ordering and explanations. It also confirmed matching,
+Journey/privacy, payout-contract, notification, route-cache, ETag, outbox, edge
+compression, migration, lint, production-check, static-web, Caddy, Go, finance,
+and Admin gates as GREEN.
 
-CI, merge, Railway TEST deployment, health/readiness, authenticated production-
-style benchmarks, and branch cleanup: **pending**. K4 must not merge or deploy
-until Gemini independently verifies the exact implementation SHA.
+The supplied narrative contained several label/count slips that are not code
+findings: the committed K4 module contains 5 tests rather than 18, Find
+Travelers lives under `apps.matching.tests`, the implementation consumes the
+joined Deal relation rather than a nonexistent `_annotate_chat_eligibility`
+helper, and unpaid V1 chat history remains correctly hidden until funding.
+This record retains the authoritative code/spec semantics while accepting the
+reported benchmark and gate result.
+
+## Claude takeover
+
+Codex stopped after recording the Gemini result, leaving the implementation
+committed at `e0721bf9ba7a44e6ac63d51602d33a0f6aab2a79` and this record's
+verification paragraph uncommitted in the working tree. Nothing was discarded:
+that commit and those edits are the base of everything below.
+
+The whole Codex diff was re-reviewed against the repository rather than trusted
+because it existed. Three claims were re-derived from the code rather than
+accepted: `Deal.match` is a `OneToOneField`, so consuming `match.deal` and
+catching `Deal.DoesNotExist` is exactly equivalent to the two removed Deal
+queries; `get_route_provider()` builds a fresh `CachedRouteProvider` per call,
+so the new `_request_cache` is genuinely short lived rather than a process-wide
+cache of mutable state; and the locality/Request "already prefetched" rejections
+hold, because every `AirportLocalityMapping` prefetch carries
+`select_related("locality", "locality__parent")` and `_read_queryset()` prefetches
+`deliveryrequest__deals`.
+
+Flutter compatibility was checked at the call sites rather than asserted.
+`JourneyLeg.fromJson` decides `isOwnerView` from `distance_meters`, `proofs` or
+`route_metadata`; the list projection keeps `distance_meters` for the owner, so
+that flag is unchanged. `proofStatus` and `latestProof`, the only readers of the
+dropped `proofs` rows, are used solely by the journey detail and leg proof
+screens, and both read `journeyDetailProvider`, which calls
+`GET /api/journeys/<id>` and still receives the full serializer. `ApiClient.getList`
+unwraps a bare array or a `results` envelope, and the payout history screen reads
+the envelope directly, so normalizing the payout list breaks neither path.
+
+### Corrections made during takeover
+
+Two defects were found in the inherited work and fixed.
+
+The bounded outbox sweeper could stop covering new events. V1 delivery detection
+never clears a genuine miss, so a row reported as missing stays
+`delivered_at IS NULL` for ever. Taking the oldest 500 such rows each run means
+that once 500 unrecoverable rows exist, every later publication is invisible to
+the sweep — work disappearing permanently, which is precisely what a bounded
+worker must not do. The sweep now also takes an upper age bound
+(`--max-age-seconds`, default seven days, validated to exceed `--age-seconds`),
+so a miss is reported for every run inside the window and then ages out, leaving
+the bounded batch free to move forward. A regression test publishes one
+thirty-day-old miss and one ten-minute-old miss with `batch_size=1` and asserts
+the recent one is the row inspected.
+
+Two newly paginated collections had no deterministic tie-break. `Journey` and
+`ParcelRequest` both default to `ordering = ["-created_at"]`, so two rows created
+in the same instant could swap between pages and be duplicated or skipped. The
+sender's Journey list and Request list now order by `-created_at, -pk`, matching
+what the open Request search, Match list, address book, and PaymentOrder list
+already do.
+
+### Findings recorded rather than changed
+
+- The chat inbox still evaluates every one of a viewer's matches in Python
+  before paginating the eligible list. Bounding it in SQL means restating
+  `chat_history_visible` — party, retired-ProductRequest, legacy PaymentIntent
+  and funded-Deal rules — inside the queryset, which duplicates domain rules
+  across two places for a collection that is small per user. Left as is.
+- `chat_history_visible` and `_legacy_chat_eligibility` still issue per-row Offer
+  and PaymentIntent reads for legacy, pre-Journey matches. That branch is a
+  retired V1 surface and no longer produces new rows.
+- `AdminDisputeListView` still hard-slices `[:100]`, so dispute 101 is
+  unreachable through that API. It is an operations surface, which belongs to
+  K3's Finance/Admin scope rather than K4's, and it is recorded here as a
+  follow-up rather than widened into this phase.
+- The wallet, legacy Trip, and PaymentIntent list slices remain. Flutter calls
+  none of them and the specification lists the wallet as an idea to reuse, not a
+  V1 surface.
+- `unread_count` remains three queries whose correlated predicates run over all
+  of a viewer's active notifications. Making it cheaper means changing what the
+  badge counts, so it was left alone, as Codex concluded.
+- The additive `X-Total-Count`/`X-Page` family is readable by the Flutter client,
+  which is native and not subject to CORS, but no `CORS_EXPOSE_HEADERS` is
+  configured. A future browser client that wants to read those headers will need
+  one; nothing in the repository reads them from a browser today.
+
+### Claude verification
+
+Run locally against the embedded PostgreSQL cluster, serially:
+
+- Full Django PostgreSQL suite (`pytest -q --ds=config.settings.test_pg
+  -p no:randomly`): **2,298 passed, 34 skipped, 4 failed in 40m 59s**. All four
+  failures are analysed below; two were K4's and are fixed, two are pre-existing
+  and were proved so at the pre-K4 baseline.
+- Focused tiers before that: 30 routing/Redis-bus, 60 K4/push/payout-mobile,
+  20 chat, 253 trips/parcels/locations, 328 matching/notifications.
+  The legacy chat/matching module Codex reported as unable to reach its
+  assertions needs no fixture repair: `apps/matching/tests/test_matching.py`
+  carries three explicit `@skip` decorators retiring the traveler-first, DZD
+  sender-matching, and DZD counter/accept contracts, and those account for the
+  suite's skips. Everything not deliberately retired runs and passes.
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes.
+- Production profile `manage.py check --deploy --fail-level WARNING`: no issues.
+  `tools/check_static_web.py`: passed. Deployment fail-closed tests: 46 passed.
+- Go `build`, `vet`, and `go test ./...` in `backend/services`: clean. The
+  `-race` and real-Redis tiers cannot run on this workstation; CI covers both.
+- Flutter `dart format --set-exit-if-changed`, `analyze --fatal-infos`, and
+  `flutter test`: **974 tests, all passed**. The Journey list projection is the
+  only contract change reaching mobile, so the full suite was run.
+
+### The four full-suite failures
+
+Two were caused by K4 and are fixed here. `PayoutVisibilityTests` in
+`apps/finance/tests/test_api_contracts.py` asserted the payout list's old bare
+array (`len(response.data) == 1`, `response.data == []`). Codex normalized that
+endpoint onto the envelope and updated `test_phase8fh6a_mobile.py` but not this
+module, so the two tests failed on shape. The assertions now read `count` and
+`results`. What the tests protect is unchanged: the traveler still sees exactly
+their own payout and the sender still sees none.
+
+Two are pre-existing and order-dependent, not K4's:
+`test_j2_h5_regression.py::test_j2_economics_reconcile_in_the_finance_control_plane`
+and
+`test_phase8fh5_control_plane.py::test_f1_boost_is_funded_once_and_recognised_only_at_close`
+both fail inside `set_boost_intent` with
+`InvalidPhase4Policy: Business setting 'boost.minimum_amount_eur_cents' must be
+an integer`. The active `BusinessSettingsVersion` they read has no boost block:
+`TransactionTestCase` classes in the finance suite truncate the tables, and the
+`_seed_settings` helpers re-create the revision from
+`0005_seed_phase3_payment_settings`, which predates
+`0009_seed_boost_economics`. The suite already knows about this —
+`apps/core/tests/test_phase8ff4_events.py` re-seeds both migrations with the
+comment "TransactionTestCase runs can deplete a reused database's seeds", and
+commit `fbe54c8` fixed the same class of problem for the H5 query-plan gate.
+
+That was not taken on trust. The same three modules, in the same order, were run
+in a detached worktree at the exact pre-K4 `main` SHA
+`9dac1d37b0d79f603bba54eec65c3c8a53b05738`: **1 failed, 63 passed**, the failing
+test being `test_f1_boost_is_funded_once_and_recognised_only_at_close` — the same
+test, the same count, before any K4 code existed. On the K4 branch the identical
+slice gives the identical **1 failed, 63 passed**. K4 touches no boost, business
+settings, `phase4_policy`, or `TransactionTestCase` code, and adds no
+transactional test class. The pre-existing order dependence is recorded as a
+follow-up rather than patched inside a performance phase, where changing finance
+test seeding would be unrelated behavior changed to make a test green.
+
+CI is the authority on the full suite: it runs with `pytest-randomly` active
+rather than this deterministic alphabetical order, and prior phases merged green
+under it.
+
+Edge compression was re-verified directly against Railway TEST at the pre-K4
+release `v1.0.0-rc.48+fe1e5bf` before deploying: `/api/airports` returned 13,683
+bytes under `Accept-Encoding: identity` and 3,611 bytes with exactly one
+`Content-Encoding: gzip`. The `@public` handler in `backend/railway/Caddyfile`
+scopes its `encode gzip` to the static site, and the API catch-all
+`reverse_proxy` adds none, so the compression is the platform edge's and is
+applied once. Codex's rejection of the stale "API JSON is uncompressed" finding
+is confirmed.

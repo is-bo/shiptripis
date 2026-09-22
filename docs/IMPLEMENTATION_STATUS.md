@@ -25,6 +25,32 @@ diff checks. No domain behavior, permission, throttle, financial rule, schema,
 migration, index, Go, Flutter, or required-Redis architecture changed. See
 [the K4 implementation record](PHASE_K4_BACKEND_API_PERFORMANCE.md).
 
+Gemini independently returned **GREEN** on exact implementation SHA
+`e0721bf9ba7a44e6ac63d51602d33a0f6aab2a79`, reproducing the 11-to-1 chat
+query reduction, Journey payload/query improvements, matching parity, and edge
+compression finding. It reported focused backend, Go, Ruff, migration,
+production, static-web, and native Caddy gates green. A few descriptive labels
+in the supplied report were corrected in the K4 record without changing its
+substantive GREEN verdict.
+
+Claude then took the phase over from the repository's actual state, preserving
+Codex's commit and uncommitted record edits rather than restarting, re-derived
+the risky claims from the code, and ran the gates directly. Two defects in the
+inherited work were fixed: the bounded outbox sweeper could permanently starve
+newer events once enough unrecoverable rows accumulated, so it gained a
+validated trailing window; and the newly paginated Journey and Request lists had
+no primary-key tie-break, so rows could swap between pages. Codex's payout
+envelope change had also left `apps/finance/tests/test_api_contracts.py`
+asserting the old bare array; those assertions now read the envelope with the
+same authorization meaning.
+
+Full local verification: 2,298 Django PostgreSQL tests passed with 4 failures —
+the two payout-shape ones fixed here, and two pre-existing boost-seed failures
+proved pre-existing by reproducing them identically at pre-K4
+`9dac1d37b0d79f603bba54eec65c3c8a53b05738`. Flutter ran 974 tests green with
+format and analyze; Go build, vet and tests are clean; Ruff, migration check,
+production `check --deploy` and the static-web check all pass.
+
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`

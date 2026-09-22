@@ -39,17 +39,38 @@ class Command(BaseCommand):
             default=500,
             help="Maximum old events inspected in one run (default: 500).",
         )
+        parser.add_argument(
+            "--max-age-seconds",
+            type=int,
+            default=7 * 24 * 60 * 60,
+            help=(
+                "Ignore rows older than this many seconds (default: 7 days). "
+                "Detection-only sweeps never clear a genuine miss, so without "
+                "an upper bound the oldest permanently-missing rows would "
+                "occupy the whole batch and newer events would never be "
+                "inspected."
+            ),
+        )
 
     def handle(self, *args, **opts) -> None:  # noqa: ANN002, ANN003
-        cutoff = timezone.now() - timedelta(seconds=opts["age_seconds"])
+        now = timezone.now()
+        cutoff = now - timedelta(seconds=opts["age_seconds"])
         batch_size = opts["batch_size"]
         if not 1 <= batch_size <= 10_000:
             raise CommandError("batch-size must be between 1 and 10,000.")
+        max_age_seconds = opts["max_age_seconds"]
+        if max_age_seconds <= opts["age_seconds"]:
+            raise CommandError("max-age-seconds must exceed age-seconds.")
+        # A miss is reported for every run inside the window and then ages out.
+        # That keeps the bounded batch moving forward instead of re-reading the
+        # same unrecoverable head of the queue for ever.
+        window_start = now - timedelta(seconds=max_age_seconds)
         client = redis_bus.get_client()
 
         qs = PublishedEvent.objects.filter(
             delivered_at__isnull=True,
             published_at__lt=cutoff,
+            published_at__gte=window_start,
         ).order_by("published_at", "id")[:batch_size]
 
         total = 0

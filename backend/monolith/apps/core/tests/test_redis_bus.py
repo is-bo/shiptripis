@@ -11,6 +11,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import transaction
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
@@ -255,3 +256,42 @@ class SweepDeliveredTests(TestCase):
         assert "swept=1" in output.getvalue()
         checked = client.exists.call_args.args[0]
         assert checked == "delivered:older"
+
+    @patch.object(redis_bus, "get_client")
+    def test_bounded_sweep_still_reaches_newer_events(self, get_client):
+        """A detection-only sweep never clears a genuine miss.
+
+        Without an upper age bound the oldest unrecoverable rows would fill the
+        batch on every run and a newly published event would never be checked.
+        """
+
+        stale = PublishedEvent.objects.create(
+            channel="offer.created", event_id="stale-miss", payload_hash="x" * 64
+        )
+        recent = PublishedEvent.objects.create(
+            channel="offer.created", event_id="recent-miss", payload_hash="x" * 64
+        )
+        PublishedEvent.objects.filter(pk=stale.pk).update(
+            published_at=timezone.now() - timedelta(days=30)
+        )
+        PublishedEvent.objects.filter(pk=recent.pk).update(
+            published_at=timezone.now() - timedelta(minutes=10)
+        )
+        client = MagicMock()
+        client.exists.return_value = 0
+        client.scan_iter.return_value = iter(())
+        get_client.return_value = client
+
+        output = StringIO()
+        call_command("sweep_published_events", batch_size=1, stdout=output)
+
+        assert "swept=1" in output.getvalue()
+        assert client.exists.call_args.args[0] == "delivered:recent-miss"
+
+    @patch.object(redis_bus, "get_client")
+    def test_sweep_window_must_be_wider_than_the_delivery_grace(self, get_client):
+        get_client.return_value = MagicMock()
+        with self.assertRaises(CommandError):
+            call_command(
+                "sweep_published_events", age_seconds=600, max_age_seconds=600
+            )

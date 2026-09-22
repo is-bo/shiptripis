@@ -328,7 +328,9 @@ class JourneyListCreateView(APIView):
             queryset = queryset.filter(lifecycle_status=status_filter)
         return paginated_array_response(
             request,
-            queryset,
+            # Journey's default ordering has no tie-break, so two journeys
+            # created in the same instant could swap between pages.
+            queryset.order_by("-created_at", "-pk"),
             serialize=lambda rows: JourneyListSerializer(
                 rows, many=True, context={"request": request}
             ).data,
