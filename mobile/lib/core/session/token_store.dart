@@ -2,9 +2,10 @@
 ///
 /// ## What is allowed on this device, and what is not
 ///
-/// Stored: the access token, the refresh token, and the user's chosen role
-/// context. All three go in the platform keystore, and all three are wiped on
-/// sign-out.
+/// Stored: the access token, the refresh token, the user's chosen role
+/// context, and a snapshot of the last server-confirmed profile (presentation
+/// fields only — see `Account.toSnapshotJson`). All four go in the platform
+/// keystore, and all four are wiped on sign-out.
 ///
 /// **Never stored, at any layer:** a pickup code, a delivery code, a guest
 /// payment token, recipient contact details, or a payment provider secret.
@@ -55,12 +56,21 @@ class TokenStore {
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
 
+  /// The last profile the server confirmed for the stored credentials.
+  ///
+  /// Bound to them, not merely stored beside them: it is written only under
+  /// the identity generation that fetched it, and every credential change —
+  /// a new sign-in, a sign-out, a terminal expiry — deletes it. So a launch
+  /// can never show one account's snapshot over another account's tokens.
+  static const _kAccountSnapshot = 'auth.account_snapshot';
+
   /// Keys written by the retired build. Removed on every start.
   static const _legacyKeys = <String>['handover.codes', 'app.role'];
 
   Future<void> save({required String access, required String refresh}) {
     _identityGeneration++;
     return _serializeCredentialWrite(() async {
+      await _storage.delete(key: _kAccountSnapshot);
       await _storage.write(key: _kAccess, value: access);
       await _storage.write(key: _kRefresh, value: refresh);
     });
@@ -103,11 +113,31 @@ class TokenStore {
     required String refresh,
   }) => _serializeCredentialWrite(() async {
     if (_identityGeneration != expectedIdentityGeneration) return false;
+    await _storage.delete(key: _kAccountSnapshot);
     await _storage.write(key: _kAccess, value: access);
     if (_identityGeneration != expectedIdentityGeneration) return false;
     await _storage.write(key: _kRefresh, value: refresh);
     return _identityGeneration == expectedIdentityGeneration;
   });
+
+  /// The stored profile snapshot, read behind any pending credential write so
+  /// it can never be one account's profile over another account's tokens.
+  Future<String?> readAccountSnapshot() => _readCredential(_kAccountSnapshot);
+
+  /// Stores [json] only if no credential change happened since
+  /// [expectedIdentityGeneration] — the generation the profile was read under.
+  Future<bool> writeAccountSnapshotIfCurrent({
+    required int expectedIdentityGeneration,
+    required String json,
+  }) => _serializeCredentialWrite(() async {
+    if (_identityGeneration != expectedIdentityGeneration) return false;
+    await _storage.write(key: _kAccountSnapshot, value: json);
+    return _identityGeneration == expectedIdentityGeneration;
+  });
+
+  /// Deleted at the very start of a sign-out, ahead of the network call.
+  Future<void> deleteAccountSnapshot() =>
+      _storage.delete(key: _kAccountSnapshot);
 
   /// Which side of the marketplace a dual-role user last worked from. A
   /// preference, not a permission — the server's role is always authoritative
@@ -167,6 +197,7 @@ class TokenStore {
   Future<void> _clearCredentials() async {
     await _storage.delete(key: _kAccess);
     await _storage.delete(key: _kRefresh);
+    await _storage.delete(key: _kAccountSnapshot);
     await _storage.delete(key: _kRoleContext);
     await purgeLegacyArtifacts();
   }

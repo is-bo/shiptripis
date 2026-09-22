@@ -1,5 +1,18 @@
 # ShipTrip V1 Implementation Status
 
+## K5 — Mobile Performance (in progress, 2026-09-22)
+
+On `claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
+list row now carries the viewer's pending actions (`attention`), so Home no
+longer fetches every Deal's detail (cold start 26 → 6 requests); `/api/deals`
+gains `scope=current|history` and the app reads current Deals in full and history
+lazily, fixing Deals beyond the first 20 being unreachable; own requests,
+journeys and matches read beyond 100 rows (bounded); push-state changes no longer
+rebuild the app root; a presentation-only account snapshot lets a signed-in user
+open the app without waiting for `/api/me`. Not yet merged or released. Details,
+decisions and remaining packages:
+[the K5 record](PHASE_K5_MOBILE_PERFORMANCE.md).
+
 ## K4 — General Backend & API Performance Remediation (2026-09-21)
 
 Implemented on `codex/k4-backend-api-performance` from exact `main`

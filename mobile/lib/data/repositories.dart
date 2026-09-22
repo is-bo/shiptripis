@@ -261,7 +261,10 @@ class JourneyRepository {
     JourneyStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    // Every page: a traveller's own journeys and a sender's own requests are
+    // what Home and Deliveries are built from, and stopping at the first page
+    // hid everything older (K5).
+    final rows = await _api.getAllPages(
       '/api/journeys',
       query: {if (status != null) 'status': _statusWire(status)},
       cancelToken: cancelToken,
@@ -559,7 +562,10 @@ class RequestRepository {
     RequestStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    // Every page: a traveller's own journeys and a sender's own requests are
+    // what Home and Deliveries are built from, and stopping at the first page
+    // hid everything older (K5).
+    final rows = await _api.getAllPages(
       '/api/parcels',
       query: {if (status != null) 'status': _statusWire(status)},
       cancelToken: cancelToken,
@@ -892,7 +898,7 @@ class MatchingRepository {
     MatchStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    final rows = await _api.getAllPages(
       '/api/matches',
       query: {
         'role': ?role,
@@ -963,6 +969,49 @@ class DealRepository {
         .whereType<Map>()
         .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
+  }
+
+  /// Every Deal that is still live, plus delivered ones whose review window
+  /// may be open: the bounded set Home, "needs you" and active Deliveries are
+  /// derived from. Each row carries the server's `attention` flags, so no
+  /// per-Deal detail read is needed to know what waits on this user (K5).
+  Future<List<Deal>> current({CancelToken? cancelToken}) async {
+    final rows = await _api.getAllPages(
+      '/api/deals',
+      query: {'scope': 'current'},
+      cancelToken: cancelToken,
+    );
+    return rows
+        .whereType<Map>()
+        .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
+        .toList(growable: false);
+  }
+
+  /// One page of finished Deals — completed or cancelled — newest first.
+  ///
+  /// History grows without bound, so it is read a page at a time as the user
+  /// scrolls rather than all at once.
+  Future<DealPage> historyPage({
+    required int page,
+    int pageSize = 20,
+    CancelToken? cancelToken,
+  }) async {
+    final result = await _api.getListPage(
+      '/api/deals',
+      query: {
+        'scope': 'history',
+        'page_size': pageSize,
+        if (page > 1) 'page': page,
+      },
+      cancelToken: cancelToken,
+    );
+    return DealPage(
+      deals: result.rows
+          .whereType<Map>()
+          .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
+          .toList(growable: false),
+      hasNext: result.hasNext,
+    );
   }
 
   /// Exact server-side count for a filtered Deal set. Unlike [list], this
@@ -2020,3 +2069,11 @@ final boostRepositoryProvider = Provider<BoostRepository>(
 final kycRepositoryProvider = Provider<KycRepository>(
   (ref) => KycRepository(ref.watch(apiClientProvider)),
 );
+
+/// One page of Deals and whether another follows.
+class DealPage {
+  const DealPage({required this.deals, required this.hasNext});
+
+  final List<Deal> deals;
+  final bool hasNext;
+}

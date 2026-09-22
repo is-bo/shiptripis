@@ -91,67 +91,125 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
           ),
           data: (all) {
             final visible = _apply(all, attentionDealIds);
+            final history = _filter == _Filter.history
+                ? ref.watch(dealHistoryProvider).value
+                : null;
 
-            return ListView(
-              padding: AppScrollPadding.page(context),
-              children: [
-                AppSegmentedChoice<_Filter>(
-                  selected: _filter,
-                  onSelect: (value) => setState(() => _filter = value),
-                  options: [
-                    AppChoice(
-                      value: _Filter.active,
-                      label: l.deliveriesFilterActive,
-                    ),
-                    AppChoice(
-                      value: _Filter.awaitingYou,
-                      label: l.deliveriesFilterAwaitingYou,
-                    ),
-                    AppChoice(
-                      value: _Filter.history,
-                      label: l.deliveriesFilterHistory,
-                    ),
-                  ],
+            // Lazily built: a long history is laid out only as far as the
+            // user scrolls, and nearing its end asks for the next page.
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: AppScrollPadding.page(context),
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: AppSegmentedChoice<_Filter>(
+                          selected: _filter,
+                          onSelect: (value) => setState(() => _filter = value),
+                          options: [
+                            AppChoice(
+                              value: _Filter.active,
+                              label: l.deliveriesFilterActive,
+                            ),
+                            AppChoice(
+                              value: _Filter.awaitingYou,
+                              label: l.deliveriesFilterAwaitingYou,
+                            ),
+                            AppChoice(
+                              value: _Filter.history,
+                              label: l.deliveriesFilterHistory,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: AppSpace.xl),
+                      ),
+                      if (visible.isEmpty && !(history?.hasMore ?? false))
+                        SliverToBoxAdapter(child: _emptyFor(context, _filter))
+                      else
+                        SliverList.builder(
+                          itemCount: visible.length,
+                          itemBuilder: (context, index) {
+                            if (history != null &&
+                                index >= visible.length - _prefetchWithin) {
+                              _requestNextHistoryPage(history);
+                            }
+                            final deal = visible[index];
+                            final needsYou = attentionDealIds.contains(deal.id);
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpace.md,
+                              ),
+                              child: DeliveryCard(
+                                deal: deal,
+                                viewerId: account.id,
+                                needsYou: needsYou,
+                                needsYouLabel: needsYou
+                                    ? l.offerAwaitingYou
+                                    : null,
+                                onTap: () => context.openDeal(deal.id),
+                              ),
+                            );
+                          },
+                        ),
+                      if (history != null)
+                        SliverToBoxAdapter(
+                          child: _HistoryFooter(
+                            history: history,
+                            onRetry: () => loadMoreDealHistory(ref),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Negotiations have no Deal yet, so they would
+                            // otherwise be invisible here, and a pending offer
+                            // is exactly what a user comes here to find.
+                            if (_filter != _Filter.history) ...[
+                              const SizedBox(height: AppSpace.lg),
+                              const _OpenNegotiations(),
+                            ],
+                            if (_filter != _Filter.awaitingYou) ...[
+                              const SizedBox(height: AppSpace.lg),
+                              if (role == RoleContext.sender)
+                                _RequestsSection(
+                                  showFinished: _filter == _Filter.history,
+                                )
+                              else
+                                _JourneysSection(
+                                  showFinished: _filter == _Filter.history,
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: AppSpace.xl),
-
-                if (visible.isEmpty)
-                  _emptyFor(context, _filter)
-                else
-                  for (final deal in visible) ...[
-                    DeliveryCard(
-                      deal: deal,
-                      viewerId: account.id,
-                      needsYou: attentionDealIds.contains(deal.id),
-                      needsYouLabel: attentionDealIds.contains(deal.id)
-                          ? l.offerAwaitingYou
-                          : null,
-                      onTap: () => context.openDeal(deal.id),
-                    ),
-                    const SizedBox(height: AppSpace.md),
-                  ],
-
-                // Negotiations have no Deal yet, so they would otherwise be
-                // invisible here — and a pending offer is exactly the sort of
-                // thing a user comes to this screen to find.
-                if (_filter != _Filter.history) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  const _OpenNegotiations(),
-                ],
-
-                if (_filter != _Filter.awaitingYou) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  if (role == RoleContext.sender)
-                    _RequestsSection(showFinished: _filter == _Filter.history)
-                  else
-                    _JourneysSection(showFinished: _filter == _Filter.history),
-                ],
               ],
             );
           },
         ),
       ),
     );
+  }
+
+  /// How close to the end of the loaded history the next page is requested.
+  static const _prefetchWithin = 3;
+
+  void _requestNextHistoryPage(DealHistory history) {
+    if (!history.hasMore ||
+        history.loadingMore ||
+        history.loadMoreError != null) {
+      return;
+    }
+    // Never change provider state from inside a build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) loadMoreDealHistory(ref);
+    });
   }
 
   List<Deal> _apply(List<Deal> all, Set<int> attentionDealIds) =>
@@ -332,7 +390,6 @@ class _RequestsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final requests = ref.watch(myRequestsProvider);
-    final settled = ref.watch(settledRequestIdsProvider);
 
     return AsyncView<List<DeliveryRequest>>(
       value: requests,
@@ -343,15 +400,10 @@ class _RequestsSection extends ConsumerWidget {
         onRetry: () => ref.invalidate(myRequestsProvider),
       ),
       data: (all) {
-        // A matched request keeps its `matched` status for the whole life of
-        // the delivery, so finishing is read from the linked Deal's activity
-        // state rather than from the request's own status.
+        // The server projects a request's status from its latest Deal, so
+        // whether it is finished is read from the request itself.
         final rows = all
-            .where(
-              (r) =>
-                  (r.status.isFinished || settled.contains(r.id)) ==
-                  showFinished,
-            )
+            .where((r) => r.status.isSettled == showFinished)
             .toList(growable: false);
         if (rows.isEmpty) return const SizedBox.shrink();
 
@@ -474,6 +526,37 @@ class _JourneysSection extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// The end of the loaded history: a quiet spinner while the next page is on
+/// its way, the failure and a retry if it did not arrive, otherwise nothing.
+class _HistoryFooter extends StatelessWidget {
+  const _HistoryFooter({required this.history, required this.onRetry});
+
+  final DealHistory history;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = history.loadMoreError;
+    if (error != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: AppSpace.sm),
+        child: InlineFailure(error: error, onRetry: onRetry),
+      );
+    }
+    if (!history.loadingMore) return const SizedBox.shrink();
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
+      child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.2),
+        ),
+      ),
     );
   }
 }

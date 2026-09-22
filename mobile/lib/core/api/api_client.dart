@@ -119,6 +119,72 @@ class ApiClient {
     throw _malformed('a list', data, path);
   }
 
+  /// One page of a collection, in either of the server's two paging shapes.
+  ///
+  /// DRF envelopes (`{"count", "next", "results"}`) say whether more follows
+  /// in the body; the K4 bare-array collections say it in `X-Next-Page`.
+  /// [getList] reads only the first page of either, which is how a user with
+  /// more than one page of Deals silently lost the older ones (K5).
+  Future<ListPage> getListPage(
+    String path, {
+    Json? query,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _sendResponse(
+      (identity) => _dio.get<dynamic>(
+        path,
+        queryParameters: _clean(query),
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
+      retries: 2,
+    );
+    final data = response.data;
+    if (data is List) {
+      return ListPage(
+        rows: data,
+        hasNext: response.headers.value('x-next-page') != null,
+        total: int.tryParse(response.headers.value('x-total-count') ?? ''),
+      );
+    }
+    if (data is Map && data['results'] is List) {
+      final count = data['count'];
+      return ListPage(
+        rows: data['results'] as List,
+        hasNext: data['next'] != null,
+        total: count is int ? count : null,
+      );
+    }
+    throw _malformed('a list', data, path);
+  }
+
+  /// Every row of an account's own, naturally bounded collection.
+  ///
+  /// For sets that stay small by construction — current Deals, a sender's own
+  /// requests, a traveller's own journeys — where a screen needs the whole set
+  /// to be correct. Not for history or search: those page lazily. [maxPages]
+  /// is a safety bound against a server that never stops saying "next"; at
+  /// 100 rows a page it is far past any real account.
+  Future<List<dynamic>> getAllPages(
+    String path, {
+    Json? query,
+    int pageSize = 100,
+    int maxPages = 10,
+    CancelToken? cancelToken,
+  }) async {
+    final rows = <dynamic>[];
+    for (var page = 1; page <= maxPages; page++) {
+      final result = await getListPage(
+        path,
+        query: {...?query, 'page_size': pageSize, if (page > 1) 'page': page},
+        cancelToken: cancelToken,
+      );
+      rows.addAll(result.rows);
+      if (!result.hasNext) break;
+    }
+    return rows;
+  }
+
   // ---------------------------------------------------------------------------
   // Writes
   // ---------------------------------------------------------------------------
@@ -234,6 +300,11 @@ class ApiClient {
   Future<dynamic> _send(
     Future<Response<dynamic>> Function(int identityGeneration) call, {
     int retries = 0,
+  }) async => (await _sendResponse(call, retries: retries)).data;
+
+  Future<Response<dynamic>> _sendResponse(
+    Future<Response<dynamic>> Function(int identityGeneration) call, {
+    int retries = 0,
   }) async {
     final identityGeneration = _tokens.identityGeneration;
     final budget = Stopwatch()..start();
@@ -248,7 +319,7 @@ class ApiClient {
           throw _AuthInterceptor.sessionChanged(response.requestOptions);
         }
         final status = response.statusCode ?? 0;
-        if (status >= 200 && status < 300) return response.data;
+        if (status >= 200 && status < 300) return response;
         throw ApiException.fromResponse(response);
       } on ApiException {
         rethrow;
@@ -530,4 +601,15 @@ class _AuthInterceptor extends Interceptor {
       _onExpired?.call();
     }
   }
+}
+
+/// One page of rows and whether the server has another after it.
+class ListPage {
+  const ListPage({required this.rows, required this.hasNext, this.total});
+
+  final List<dynamic> rows;
+  final bool hasNext;
+
+  /// The server's count of the whole collection, when it states one.
+  final int? total;
 }

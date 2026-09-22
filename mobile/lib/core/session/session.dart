@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -143,7 +144,17 @@ class SessionController extends Notifier<SessionState> {
   /// device — but bounded, because a platform channel that never answers must
   /// not be able to hold the app on its splash screen indefinitely.
   static const _storageBudget = Duration(seconds: 5);
+
+  /// When a launch that started on the snapshot could not reach the server,
+  /// how long to wait before asking again. Bounded: after the last one, a
+  /// resume or any screen's own read does the revalidating.
+  static const _revalidateAfter = <Duration>[
+    Duration(seconds: 10),
+    Duration(seconds: 30),
+    Duration(seconds: 90),
+  ];
   int _generation = 0;
+  Timer? _revalidation;
 
   @override
   SessionState build() {
@@ -152,6 +163,7 @@ class SessionController extends Notifier<SessionState> {
     // the splash mounted would leave the very first redirect deciding on a
     // value nothing had yet produced. The splash's retry re-enters the same
     // method.
+    ref.onDispose(() => _revalidation?.cancel());
     unawaited(restore());
     return const SessionRestoring();
   }
@@ -159,13 +171,21 @@ class SessionController extends Notifier<SessionState> {
   AuthRepository get _auth => ref.read(authRepositoryProvider);
   TokenStore get _tokens => ref.read(tokenStoreProvider);
 
-  /// Reads stored credentials and, if present, confirms them against the
-  /// server before declaring the user signed in.
+  /// Reads stored credentials and confirms them against the server.
   ///
-  /// A token that parses is not the same as a token the server still honours;
-  /// entering the app on a blacklisted refresh token means every screen fails
-  /// at once. One `/api/me` up front is worth that.
+  /// With a snapshot of the last server-confirmed profile, the user enters the
+  /// app on it at once and `/api/me` confirms it in the background (K5): a
+  /// cold start no longer waits on a round trip before Home can start loading,
+  /// and a launch without network reaches the app instead of the splash. The
+  /// snapshot is display state only. Every screen still reads the server, every
+  /// action is still decided there, and a credential the server no longer
+  /// honours still ends the session — through the same 401 path as any read.
+  ///
+  /// Without a snapshot (first launch after sign-in on an older build, or a
+  /// keystore that lost it) the previous contract holds: one `/api/me` up
+  /// front, and an offline launch holds the splash with its retry.
   Future<void> restore() async {
+    _revalidation?.cancel();
     final generation = ++_generation;
     final String? refresh;
     try {
@@ -189,22 +209,88 @@ class SessionController extends Notifier<SessionState> {
       return;
     }
 
+    final cached = await _readSnapshot();
+    if (generation != _generation) return;
+    if (cached != null) {
+      state = SessionSignedIn(cached, generation: generation);
+    }
+    await _confirm(generation: generation, cached: cached, attempt: 0);
+  }
+
+  /// Asks the server who the stored credentials belong to.
+  Future<void> _confirm({
+    required int generation,
+    required Account? cached,
+    required int attempt,
+  }) async {
+    final identity = _tokens.identityGeneration;
     try {
       final account = await _auth.me();
-      if (generation == _generation) {
+      if (generation != _generation) return;
+      if (cached != null && account.id != cached.id) {
+        // Only a damaged snapshot can get here. Move every account-scoped
+        // read to a fresh generation rather than let one survive the swap.
+        _generation++;
+        state = SessionSignedIn(account, generation: _generation);
+      } else {
         state = SessionSignedIn(account, generation: generation);
       }
+      unawaited(_remember(account, identity));
     } on ApiException catch (error) {
       if (generation != _generation) return;
       // Offline at launch is not a signed-out user. Keeping the credentials
       // and surfacing the network state lets the app recover when
       // connectivity returns instead of demanding a password in a tunnel.
       if (error.isRetryable) {
-        state = const SessionRestoring();
+        if (cached == null) {
+          state = const SessionRestoring();
+        } else if (attempt < _revalidateAfter.length) {
+          _revalidation?.cancel();
+          _revalidation = Timer(_revalidateAfter[attempt], () {
+            if (generation != _generation) return;
+            unawaited(
+              _confirm(
+                generation: generation,
+                cached: cached,
+                attempt: attempt + 1,
+              ),
+            );
+          });
+        }
         return;
       }
       await _tokens.clear();
-      if (generation == _generation) state = const SessionSignedOut();
+      if (generation == _generation) {
+        _generation++;
+        state = const SessionSignedOut();
+      }
+    }
+  }
+
+  Future<Account?> _readSnapshot() async {
+    try {
+      final raw = await _tokens.readAccountSnapshot().timeout(_storageBudget);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final account = Account.fromJson(Map<String, dynamic>.from(decoded));
+      return account.id > 0 ? account : null;
+    } on Object {
+      // Unreadable or malformed: launch as if there were none.
+      return null;
+    }
+  }
+
+  /// Keeps the snapshot current. Best effort: failing to write it only costs
+  /// the next launch its head start.
+  Future<void> _remember(Account account, int identity) async {
+    try {
+      await _tokens.writeAccountSnapshotIfCurrent(
+        expectedIdentityGeneration: identity,
+        json: jsonEncode(account.toSnapshotJson()),
+      );
+    } on Object {
+      // Ignored on purpose.
     }
   }
 
@@ -220,6 +306,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    unawaited(_remember(account, _tokens.identityGeneration));
   }
 
   Future<void> signUp({
@@ -245,6 +332,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    unawaited(_remember(account, _tokens.identityGeneration));
   }
 
   Future<void> signInWithGoogle({
@@ -266,6 +354,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    unawaited(_remember(account, _tokens.identityGeneration));
   }
 
   /// Changes the language ShipTrip writes to this account in.
@@ -280,12 +369,14 @@ class SessionController extends Notifier<SessionState> {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
+    final identity = _tokens.identityGeneration;
     final account = await _auth.updatePreferredLanguage(language);
     if (generation == _generation &&
         state is SessionSignedIn &&
         (state as SessionSignedIn).account.id == current.account.id &&
         account.id == current.account.id) {
       state = SessionSignedIn(account, generation: current.generation);
+      unawaited(_remember(account, identity));
     }
   }
 
@@ -299,6 +390,7 @@ class SessionController extends Notifier<SessionState> {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
+    final identity = _tokens.identityGeneration;
     try {
       final account = await _auth.me();
       if (generation == _generation &&
@@ -306,6 +398,7 @@ class SessionController extends Notifier<SessionState> {
           (state as SessionSignedIn).account.id == current.account.id &&
           account.id == current.account.id) {
         state = SessionSignedIn(account, generation: current.generation);
+        unawaited(_remember(account, identity));
       }
     } on ApiException {
       // Keep the previous account.
@@ -316,7 +409,15 @@ class SessionController extends Notifier<SessionState> {
     // Clear locally first. If the network call hangs, the user is still out —
     // a sign-out that can fail is not a sign-out.
     _generation++;
+    _revalidation?.cancel();
     state = const SessionSignedOut();
+    // Before the network call: the profile must not outlive the user's
+    // decision to leave, even if the app is killed mid sign-out.
+    try {
+      await _tokens.deleteAccountSnapshot();
+    } on Object {
+      // The credential clear below deletes it too.
+    }
     await _auth.signOut();
     _invalidateEverything();
   }
@@ -325,6 +426,7 @@ class SessionController extends Notifier<SessionState> {
   void handleSessionExpired() {
     if (state is SessionSignedOut) return;
     _generation++;
+    _revalidation?.cancel();
     state = const SessionSignedOut(becauseExpired: true);
     _invalidateEverything();
   }

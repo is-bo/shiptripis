@@ -120,6 +120,7 @@ class DealSummarySerializer(serializers.ModelSerializer):
     terms = DealTermsSnapshotSerializer(read_only=True)
     leg_allocations = DealLegAllocationSerializer(many=True, read_only=True)
     activity_state = serializers.SerializerMethodField()
+    attention = serializers.SerializerMethodField()
 
     class Meta:
         model = Deal
@@ -140,8 +141,32 @@ class DealSummarySerializer(serializers.ModelSerializer):
             "leg_allocations",
             "created_at",
             "updated_at",
+            "attention",
         )
         read_only_fields = fields
+
+    def get_attention(self, deal: Deal) -> dict:
+        """The viewer's pending Deal actions, as the detail would state them.
+
+        K5: the app's "needs your attention" list used to fetch every Deal's
+        detail just to read these five booleans -- one request per Deal on
+        every Home load. They come from the same functions the detail's
+        `handover` and `ratings` blocks use, over rows the list view
+        prefetches, so the list can neither offer an action the detail would
+        refuse nor hide one it would allow. Booleans only: no code material,
+        no availability instant.
+        """
+
+        from apps.handover.services import handover_permissions_for
+        from apps.ratings.services import viewer_can_rate
+
+        request = self.context.get("request")
+        viewer_id = getattr(getattr(request, "user", None), "id", None)
+        at = self.context.get("now")
+        return {
+            **handover_permissions_for(deal=deal, viewer_id=viewer_id, at=at),
+            "can_rate": viewer_can_rate(deal=deal, viewer_id=viewer_id, at=at),
+        }
 
     def get_activity_state(self, deal: Deal) -> str:
         """Whether this Deal is still a live shipment. Server-owned.

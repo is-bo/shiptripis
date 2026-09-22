@@ -177,13 +177,13 @@ void main() {
     final container = containerFor(backend);
     addTearDown(container.dispose);
     final subscription = container.listen(
-      dealsProvider,
+      currentDealsProvider,
       (_, _) {},
       fireImmediately: true,
     );
     addTearDown(subscription.close);
 
-    await _waitFor(() => container.read(dealsProvider).hasValue);
+    await _waitFor(() => container.read(currentDealsProvider).hasValue);
     await Future<void>.delayed(const Duration(milliseconds: 20));
     final beforeEvent = reads;
     final live = container.read(liveUpdatesProvider)..bindAccount(42);

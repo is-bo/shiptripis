@@ -17,7 +17,10 @@ class ShipTripApp extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(routerProvider);
-    ref.watch(pushCoordinatorProvider);
+    // Listened to, not watched: the coordinator has to exist for the whole
+    // app run, but its state — permission, registration — changes on every
+    // resume, and watching it rebuilt MaterialApp.router each time (K5).
+    ref.listen(pushCoordinatorProvider, (_, _) {});
 
     // The theme is locale-dependent: Arabic swaps the whole type stack rather
     // than falling back glyph-by-glyph, so it has to be rebuilt when the

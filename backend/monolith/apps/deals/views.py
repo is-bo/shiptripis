@@ -26,8 +26,10 @@ import logging
 
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status as http
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -35,8 +37,9 @@ from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.phase4_policy import InvalidPhase4Policy
+from apps.handover.services import live_handover_codes_prefetch
 
-from .activity import ACTIVITY_STATES, activity_q
+from .activity import ACTIVE, ACTIVITY_STATES, COMPLETED, activity_q
 from .arrival import ArrivalError, decide_early_arrival, report_early_arrival
 from .cancellation import CancellationError, cancel_funded_deal, quote_cancellation
 from .lifecycle import DealLifecycleError, PRE_PICKUP_STATUSES
@@ -120,6 +123,35 @@ def _detail_deals(user_id: int):
     )
 
 
+class DealListPagination(PageNumberPagination):
+    """The historic 20-row page, with an opt-in larger page for app clients."""
+
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+#: `current`: every active Deal, plus delivered Deals whose review window may
+#: still be open -- the bounded set the app's Home and "needs you" read.
+#: `history`: everything no longer active, for lazily paged history screens.
+DEAL_LIST_SCOPES = ("current", "history")
+
+
+def _scope_q(scope: str, *, at) -> Q:
+    active = activity_q(ACTIVE)
+    if scope == "history":
+        return ~active
+    # A superset on purpose: each row's `attention.can_rate` is the authority,
+    # so this only has to never exclude a Deal that could still be rated. A
+    # row confirmed before `rating_window_ends_at` existed has no stored end
+    # and is kept rather than guessed at.
+    rating_may_be_open = activity_q(COMPLETED) & (
+        Q(rating_window_ends_at__gt=at)
+        | Q(rating_window_ends_at__isnull=True, delivery_confirmed_at__isnull=False)
+    )
+    return active | rating_may_be_open
+
+
 class DealListView(generics.ListAPIView):
     """The party's Deals, optionally narrowed to one activity bucket.
 
@@ -135,9 +167,30 @@ class DealListView(generics.ListAPIView):
 
     serializer_class = DealSummarySerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = DealListPagination
+
+    def get_serializer_context(self):
+        # One instant for the whole page, so two rows on either side of a
+        # deadline cannot be judged against different clocks.
+        return {**super().get_serializer_context(), "now": timezone.now()}
 
     def get_queryset(self):
-        queryset = _party_deals(self.request.user.id)
+        queryset = _party_deals(self.request.user.id).prefetch_related(
+            live_handover_codes_prefetch(), "ratings"
+        )
+        scope = self.request.query_params.get("scope")
+        if scope:
+            if scope not in DEAL_LIST_SCOPES:
+                raise ValidationError(
+                    {
+                        "scope": (
+                            "Unknown Deal scope. Expected one of: "
+                            + ", ".join(DEAL_LIST_SCOPES)
+                            + "."
+                        )
+                    }
+                )
+            queryset = queryset.filter(_scope_q(scope, at=timezone.now()))
         if requested_status := self.request.query_params.get("status"):
             queryset = queryset.filter(status=requested_status)
         activity = self.request.query_params.get("activity")
@@ -153,7 +206,9 @@ class DealListView(generics.ListAPIView):
                     }
                 )
             queryset = queryset.filter(activity_q(activity))
-        return queryset
+        # A primary-key tie-break: Deals created in the same instant must not
+        # swap between pages, or a paging client repeats one and skips another.
+        return queryset.order_by("-created_at", "-pk")
 
 
 class DealDetailView(APIView):

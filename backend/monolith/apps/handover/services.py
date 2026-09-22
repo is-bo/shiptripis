@@ -1085,21 +1085,8 @@ def handover_state(*, deal: Deal, viewer_id: int, at: datetime | None = None) ->
     """
 
     at = at or timezone.now()
-    is_sender = viewer_id == deal.sender_id
-    is_traveler = viewer_id == deal.traveler_id
-    codes = {
-        row.kind: row
-        for row in DealHandoverCode.objects.filter(
-            deal_id=deal.pk, status__in=DealHandoverCode.LIVE_STATUSES
-        ).order_by("pk")
-    }
-    pickup = codes.get(DealHandoverCode.Kind.PICKUP)
-    delivery = codes.get(DealHandoverCode.Kind.DELIVERY)
-
-    buffer_open = bool(
-        deal.delivery_code_available_at is not None
-        and at < deal.delivery_code_available_at
-    )
+    pickup, delivery = _live_codes(deal)
+    buffer_open = _delivery_buffer_open(deal, at=at)
     state = {
         "deal_status": deal.status,
         "pickup_confirmed_at": deal.pickup_confirmed_at,
@@ -1123,6 +1110,90 @@ def handover_state(*, deal: Deal, viewer_id: int, at: datetime | None = None) ->
             "locked_until": delivery.locked_until if delivery else None,
             "rotation": delivery.rotation if delivery else None,
         },
+    }
+    permissions = handover_permissions(
+        deal=deal, viewer_id=viewer_id, pickup=pickup, delivery=delivery, at=at
+    )
+    state["can_reveal_pickup_code"] = permissions["can_reveal_pickup_code"]
+    state["can_reveal_delivery_code"] = permissions["can_reveal_delivery_code"]
+    # Stated explicitly and always false. It is a contract the client can
+    # assert against, and a line a future change has to consciously edit.
+    state["traveler_can_view_delivery_code"] = False
+    state["can_submit_pickup_code"] = permissions["can_submit_pickup_code"]
+    state["can_submit_delivery_code"] = permissions["can_submit_delivery_code"]
+    return state
+
+
+#: `to_attr` for a list queryset that prefetches each Deal's live codes, so the
+#: list projection answers the same four questions without a query per row.
+LIVE_CODES_PREFETCH_ATTR = "prefetched_live_handover_codes"
+
+
+def live_handover_codes_prefetch():
+    from django.db.models import Prefetch
+
+    return Prefetch(
+        "handover_codes",
+        queryset=DealHandoverCode.objects.filter(
+            status__in=DealHandoverCode.LIVE_STATUSES
+        ).order_by("pk"),
+        to_attr=LIVE_CODES_PREFETCH_ATTR,
+    )
+
+
+def _live_codes(deal: Deal):
+    rows = getattr(deal, LIVE_CODES_PREFETCH_ATTR, None)
+    if rows is None:
+        rows = DealHandoverCode.objects.filter(
+            deal_id=deal.pk, status__in=DealHandoverCode.LIVE_STATUSES
+        ).order_by("pk")
+    codes = {row.kind: row for row in rows}
+    return codes.get(DealHandoverCode.Kind.PICKUP), codes.get(
+        DealHandoverCode.Kind.DELIVERY
+    )
+
+
+def handover_permissions_for(
+    *, deal: Deal, viewer_id: int, at: datetime | None = None
+) -> dict[str, bool]:
+    """`handover_permissions` reading the Deal's live codes itself.
+
+    Uses the list queryset's prefetch when present, so a page of Deals costs
+    one codes query in total rather than one per row.
+    """
+
+    pickup, delivery = _live_codes(deal)
+    return handover_permissions(
+        deal=deal, viewer_id=viewer_id, pickup=pickup, delivery=delivery, at=at
+    )
+
+
+def _delivery_buffer_open(deal: Deal, *, at: datetime) -> bool:
+    return bool(
+        deal.delivery_code_available_at is not None
+        and at < deal.delivery_code_available_at
+    )
+
+
+def handover_permissions(
+    *,
+    deal: Deal,
+    viewer_id: int,
+    pickup,
+    delivery,
+    at: datetime | None = None,
+) -> dict[str, bool]:
+    """The four handover actions one viewer may take now. Booleans only.
+
+    The single definition behind both `handover_state` (the Deal detail) and
+    the Deal list's `attention` block, so the list can never offer an action
+    the detail would refuse, or hide one it would allow. Never code material.
+    """
+
+    at = at or timezone.now()
+    is_sender = viewer_id == deal.sender_id
+    is_traveler = viewer_id == deal.traveler_id
+    return {
         "can_reveal_pickup_code": bool(
             is_sender
             and pickup is not None
@@ -1133,13 +1204,10 @@ def handover_state(*, deal: Deal, viewer_id: int, at: datetime | None = None) ->
         "can_reveal_delivery_code": bool(
             is_sender
             and delivery is not None
-            and not buffer_open
+            and not _delivery_buffer_open(deal, at=at)
             and deal.delivery_confirmed_at is None
             and deal.pickup_confirmed_at is not None
         ),
-        # Stated explicitly and always false. It is a contract the client can
-        # assert against, and a line a future change has to consciously edit.
-        "traveler_can_view_delivery_code": False,
         "can_submit_pickup_code": bool(
             is_traveler and _deal_accepts(deal, DealHandoverCode.Kind.PICKUP)
         ),
@@ -1147,4 +1215,3 @@ def handover_state(*, deal: Deal, viewer_id: int, at: datetime | None = None) ->
             is_traveler and _deal_accepts(deal, DealHandoverCode.Kind.DELIVERY)
         ),
     }
-    return state

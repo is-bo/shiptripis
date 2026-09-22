@@ -14,6 +14,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderBase;
@@ -196,88 +197,168 @@ final activeJourneysProvider = Provider.autoDispose<List<Journey>>((ref) {
 // Shared
 // ---------------------------------------------------------------------------
 
-final _dealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
+final _currentDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
   ref,
   accountId,
 ) async {
   final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.deals(), repo.list);
+  return _liveRead(ref, accountId, const LiveResource.deals(), repo.current);
 });
-final dealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _dealsQuery(_watchAccountId(ref))),
+
+/// Every live Deal, plus delivered ones whose review window may still be open.
+///
+/// The one Deal read Home and active Deliveries share. It is bounded by
+/// construction — finished history is paged separately — and complete: every
+/// page is read, so an account with more Deals than one page no longer loses
+/// the older ones (K5). Each row carries the server's `attention` flags.
+final currentDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
+  (ref) => _projectLiveQuery(ref, _currentDealsQuery(_watchAccountId(ref))),
 );
 
-final _activeDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
-  ref,
-  accountId,
-) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(
-    ref,
-    accountId,
-    const LiveResource.deals(),
-    () => repo.list(activity: ActivityState.active),
-  );
+/// Live shipments only.
+///
+/// Derived from [currentDealsProvider] by each row's server-owned
+/// `activity_state` — the same rule the server's `?activity=active` filter
+/// applies — so this is that set without a second request.
+final activeDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>((ref) {
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(currentDealsProvider));
+  return ref
+      .watch(currentDealsProvider)
+      .whenData(
+        (deals) => deals
+            .where((deal) => deal.activityState == ActivityState.active)
+            .toList(growable: false),
+      );
 });
-final activeDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _activeDealsQuery(_watchAccountId(ref))),
-);
 
-final _historyDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
-  ref,
-  accountId,
-) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.deals(), () async {
-    // History is everything the server no longer counts as active, which is
-    // two server buckets, not one. Asking only for `completed` left every
-    // cancelled or refunded delivery fetched by no provider at all and so
-    // invisible in every list on the client.
-    final buckets = await Future.wait([
-      repo.list(activity: ActivityState.completed),
-      repo.list(activity: ActivityState.cancelled),
-    ]);
-    final byId = <int, Deal>{};
-    for (final bucket in buckets) {
-      for (final deal in bucket) {
-        byId[deal.id] = deal;
-      }
-    }
-    return byId.values.toList(growable: false)
-      ..sort((a, b) => b.id.compareTo(a.id));
+/// Finished Deals read so far, and whether the server has more.
+@immutable
+class DealHistory {
+  const DealHistory({
+    this.deals = const [],
+    this.pagesLoaded = 0,
+    this.hasMore = false,
+    this.loadingMore = false,
+    this.loadMoreError,
   });
-});
-final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _historyDealsQuery(_watchAccountId(ref))),
-);
 
-/// Delivery requests whose shipment the server no longer counts as active.
+  final List<Deal> deals;
+  final int pagesLoaded;
+  final bool hasMore;
+  final bool loadingMore;
+
+  /// Why the last next-page read failed, until the next attempt starts.
+  final Object? loadMoreError;
+
+  DealHistory _loading() => DealHistory(
+    deals: deals,
+    pagesLoaded: pagesLoaded,
+    hasMore: hasMore,
+    loadingMore: true,
+  );
+
+  DealHistory _failed(Object error) => DealHistory(
+    deals: deals,
+    pagesLoaded: pagesLoaded,
+    hasMore: hasMore,
+    loadMoreError: error,
+  );
+}
+
+/// Completed and cancelled Deals, a page at a time.
 ///
-/// `ParcelRequest.status` is not a lifecycle signal for a matched shipment: the
-/// backend advances it to `matched` when a Deal is created and never moves it
-/// again, so `delivered` and `completed` are choices no row ever reaches. A
-/// sender's own request therefore stays "live" forever by its own status, which
-/// is why finished deliveries kept sitting in Home and never reached History.
-///
-/// The Deal is the authority. Every Deal row already carries the server-derived
-/// `activity_state` and its `delivery_request_id`, so settlement is read from
-/// there rather than re-derived locally. An unloaded or failed deal list yields
-/// an empty set, which degrades to the previous behaviour rather than hiding a
-/// shipment that may still be running.
-final settledRequestIdsProvider = Provider.autoDispose<Set<int>>((ref) {
-  final deals = ref.watch(dealsProvider).value;
-  if (deals == null || deals.isEmpty) return const <int>{};
-  final settled = <int>{};
-  for (final deal in deals) {
-    final requestId = deal.deliveryRequestId;
-    if (requestId == null) continue;
-    if (deal.activityState == ActivityState.completed ||
-        deal.activityState == ActivityState.cancelled) {
-      settled.add(requestId);
+/// History only grows, so it is never read whole: the first page when the
+/// user opens it, the next as they scroll toward the end. A live Deal event
+/// starts it again from the first page, like every other projection here.
+class DealHistoryController extends AsyncNotifier<DealHistory> {
+  DealHistoryController(this.accountId);
+
+  final int? accountId;
+  int _generation = 0;
+  CancelToken? _loadMore;
+
+  @override
+  Future<DealHistory> build() async {
+    final generation = ++_generation;
+    ref.onDispose(() {
+      _generation++;
+      _loadMore?.cancel();
+    });
+    final repo = ref.watch(dealRepositoryProvider);
+    final page = await _liveRead(
+      ref,
+      accountId,
+      const LiveResource.deals(),
+      () => repo.historyPage(page: 1),
+    );
+    if (generation != _generation) throw const _StaleSessionRead();
+    return DealHistory(
+      deals: page.deals,
+      pagesLoaded: 1,
+      hasMore: page.hasNext,
+    );
+  }
+
+  /// Reads the next page. A no-op while one is already in flight, when the
+  /// server said there is nothing more, or before the first page landed.
+  Future<void> loadMore() async {
+    final current = state.value;
+    if (current == null || !current.hasMore || current.loadingMore) return;
+    final generation = _generation;
+    state = AsyncData(current._loading());
+    final cancel = _loadMore = CancelToken();
+    try {
+      final page = await ref
+          .read(dealRepositoryProvider)
+          .historyPage(page: current.pagesLoaded + 1, cancelToken: cancel);
+      if (generation != _generation ||
+          ref.read(accountProvider)?.id != accountId) {
+        return;
+      }
+      // Offset paging over a newest-first list: a Deal finishing meanwhile
+      // pushes every row down one, so the next page can repeat the last row
+      // of this one. It can never skip one.
+      final seen = {for (final deal in current.deals) deal.id};
+      state = AsyncData(
+        DealHistory(
+          deals: [
+            ...current.deals,
+            ...page.deals.where((deal) => seen.add(deal.id)),
+          ],
+          pagesLoaded: current.pagesLoaded + 1,
+          hasMore: page.hasNext,
+        ),
+      );
+    } on Object catch (error) {
+      if (generation != _generation) return;
+      state = AsyncData(current._failed(error));
     }
   }
-  return settled;
+}
+
+final _dealHistoryQuery = AsyncNotifierProvider.autoDispose
+    .family<DealHistoryController, DealHistory, int?>(
+      DealHistoryController.new,
+    );
+final dealHistoryProvider = Provider.autoDispose<AsyncValue<DealHistory>>(
+  (ref) => _projectLiveQuery(ref, _dealHistoryQuery(_watchAccountId(ref))),
+);
+
+/// The finished Deals read so far, for surfaces that only need the rows.
+final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>((
+  ref,
+) {
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(dealHistoryProvider));
+  return ref.watch(dealHistoryProvider).whenData((history) => history.deals);
 });
+
+/// Asks the current account's history for its next page.
+void loadMoreDealHistory(WidgetRef ref) {
+  final accountId = ref.read(accountProvider)?.id;
+  unawaited(ref.read(_dealHistoryQuery(accountId).notifier).loadMore());
+}
 
 final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
   ref,
@@ -605,9 +686,11 @@ class AttentionItem {
 
 /// Everything currently waiting on this user, assembled from server booleans.
 ///
-/// Reads the deal **list**, which carries no `handover` block, plus whatever
-/// detail is already in cache. It therefore surfaces the reasons it can see
-/// and never invents the rest; a deal screen shows the full picture.
+/// Reads the current Deal list, whose rows carry the server's `attention`
+/// flags — the same answers the detail's `handover` and `ratings` blocks give.
+/// It used to watch every Deal's *detail* to read them, which fetched one
+/// detail per Deal on every Home load (K5); nothing here decides anything the
+/// server did not state.
 final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
   final account = ref.watch(accountProvider);
   if (account == null) return const [];
@@ -627,7 +710,7 @@ final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
     }
   }
 
-  for (final deal in ref.watch(dealsProvider).value ?? const []) {
+  for (final deal in ref.watch(currentDealsProvider).value ?? const []) {
     final isSender = deal.isSender(account.id);
 
     if (deal.status.needsFunding && isSender) {
@@ -642,44 +725,21 @@ final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
       continue;
     }
 
-    // The detail projection is richer; use it when this deal happens to be
-    // loaded. Nothing here fabricates a permission the server did not send.
-    final detail = ref.watch(dealDetailProvider(deal.id)).value;
-    final handover = detail?.handover;
-    if (handover != null) {
-      if (handover.canRevealDeliveryCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.revealDeliveryCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canSubmitDeliveryCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.submitDeliveryCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canSubmitPickupCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.submitPickupCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canRevealPickupCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.revealPickupCode,
-            dealId: deal.id,
-          ),
-        );
-      }
+    final flags = deal.attention;
+    if (flags == null) continue;
+    final handoverReason = flags.canRevealDeliveryCode
+        ? AttentionReason.revealDeliveryCode
+        : flags.canSubmitDeliveryCode
+        ? AttentionReason.submitDeliveryCode
+        : flags.canSubmitPickupCode
+        ? AttentionReason.submitPickupCode
+        : flags.canRevealPickupCode
+        ? AttentionReason.revealPickupCode
+        : null;
+    if (handoverReason != null) {
+      items.add(AttentionItem(reason: handoverReason, dealId: deal.id));
     }
-
-    final ratings = detail?.ratings;
-    if (ratings != null && ratings.canRate && !ratings.submitted) {
+    if (flags.canRate) {
       items.add(
         AttentionItem(reason: AttentionReason.ratingOpen, dealId: deal.id),
       );
@@ -763,9 +823,8 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
 /// optimistic.
 void refreshVolatileState(WidgetRef ref) {
   ref
-    ..invalidate(dealsProvider)
-    ..invalidate(activeDealsProvider)
-    ..invalidate(historyDealsProvider)
+    ..invalidate(currentDealsProvider)
+    ..invalidate(dealHistoryProvider)
     ..invalidate(completedDealsCountProvider)
     ..invalidate(dealDetailProvider)
     ..invalidate(matchesProvider)

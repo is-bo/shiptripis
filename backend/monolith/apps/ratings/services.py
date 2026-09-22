@@ -279,6 +279,39 @@ def _both_sides_submitted(deal: Deal) -> bool:
     return len({row.rater_role for row in deal.ratings.all()}) >= 2
 
 
+def _viewer_role(deal: Deal, viewer_id: int) -> str | None:
+    if viewer_id == deal.sender_id:
+        return Rating.RaterRole.SENDER
+    if viewer_id == deal.traveler_id:
+        return Rating.RaterRole.TRAVELER
+    return None
+
+
+def _window_open(deal: Deal, *, at: datetime) -> bool:
+    window_end = _window_end(deal)
+    return bool(
+        deal.delivery_confirmed_at is not None
+        and deal.status in RATABLE_STATUSES
+        and window_end is not None
+        and at < window_end
+    )
+
+
+def viewer_can_rate(*, deal: Deal, viewer_id: int, at: datetime | None = None) -> bool:
+    """`rating_state(...)["can_rate"]`, without building the projection.
+
+    The one rule behind both the Deal detail and the Deal list's `attention`
+    block. Reads `deal.ratings.all()`, so a list that prefetches `ratings`
+    answers it for a whole page without a query per row.
+    """
+
+    at = at or timezone.now()
+    viewer_role = _viewer_role(deal, viewer_id)
+    if viewer_role is None or not _window_open(deal, at=at):
+        return False
+    return not any(row.rater_role == viewer_role for row in deal.ratings.all())
+
+
 def is_revealed(rating: Rating, *, deal: Deal, at: datetime | None = None) -> bool:
     """Is this rating visible to the counterparty?
 
@@ -467,19 +500,9 @@ def rating_state(
     rows = list(deal.ratings.all())
     by_role = {row.rater_role: row for row in rows}
 
-    viewer_role = None
-    if viewer_id == deal.sender_id:
-        viewer_role = Rating.RaterRole.SENDER
-    elif viewer_id == deal.traveler_id:
-        viewer_role = Rating.RaterRole.TRAVELER
-
+    viewer_role = _viewer_role(deal, viewer_id)
     window_end = _window_end(deal)
-    window_open = bool(
-        deal.delivery_confirmed_at is not None
-        and deal.status in RATABLE_STATUSES
-        and window_end is not None
-        and at < window_end
-    )
+    window_open = _window_open(deal, at=at)
     mine = by_role.get(viewer_role) if viewer_role else None
     counterpart = by_role.get(_OTHER_ROLE[viewer_role]) if viewer_role else None
 
