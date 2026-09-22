@@ -54,7 +54,7 @@ tap, app resume, and a push-permission refresh (checking whether the
 7. **Reopened requests hidden.** The client inferred "settled" requests from Deal
    history, so a request whose unfunded reservation lapsed (and reopened) was
    wrongly hidden. It now trusts the server's lifecycle status
-   (`DeliveryRequestStatus.isSettled`).
+   (`RequestStatus.isSettled`).
 8. **Cold start blocked on `/api/me` (13.5/13.6).** A slow or offline network kept
    users on the restore screen. See the session snapshot below.
 
