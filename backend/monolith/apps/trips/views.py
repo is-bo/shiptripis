@@ -41,6 +41,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.core.http_cache import public_catalog_response
+from apps.core.pagination import paginated_array_response
 from apps.core.storage import (
     ext_for_content_type,
     image_bytes_match_extension,
@@ -62,6 +64,7 @@ from .models import (
 from .serializers import (
     AirportSerializer,
     JourneyCreateSerializer,
+    JourneyListSerializer,
     JourneyLegProofSerializer,
     JourneySearchFilterSerializer,
     JourneySerializer,
@@ -89,7 +92,9 @@ class AirportListView(APIView):
         country = request.query_params.get("country")
         if country:
             qs = qs.filter(country=country.upper())
-        return Response(AirportSerializer(qs, many=True).data)
+        return public_catalog_response(
+            request, AirportSerializer(qs, many=True).data
+        )
 
 
 class TripListCreateView(APIView):
@@ -187,7 +192,7 @@ class TripMediaUploadView(APIView):
         )
 
 
-def _journey_queryset():
+def _journey_queryset(*, include_proofs: bool = True):
     active_mapping = AirportLocalityMapping.objects.filter(
         active=True,
         is_primary=True,
@@ -197,23 +202,29 @@ def _journey_queryset():
     proof_queryset = JourneyLegProof.objects.select_related("leg__journey").order_by(
         "-created_at"
     )
+    leg_prefetches = [
+        Prefetch(
+            "origin_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+        Prefetch(
+            "destination_place__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        ),
+    ]
+    if include_proofs:
+        leg_prefetches.insert(0, Prefetch("proofs", queryset=proof_queryset))
+    approved_proof = JourneyLegProof.objects.filter(
+        leg_id=OuterRef("pk"), status=JourneyLegProof.Status.APPROVED
+    )
     leg_queryset = (
         JourneyLeg.objects.select_related(
             "journey", "origin", "destination", "origin_place", "destination_place"
         )
-        .prefetch_related(
-            Prefetch("proofs", queryset=proof_queryset),
-            Prefetch(
-                "origin_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
-            Prefetch(
-                "destination_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
-        )
+        .annotate(has_approved_proof_value=Exists(approved_proof))
+        .prefetch_related(*leg_prefetches)
         .order_by("position")
     )
     return Journey.objects.select_related(
@@ -303,7 +314,9 @@ class JourneyListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         from .lifecycle import with_lifecycle
-        queryset = with_lifecycle(_journey_queryset().filter(traveler=request.user))
+        queryset = with_lifecycle(
+            _journey_queryset(include_proofs=False).filter(traveler=request.user)
+        )
         status_filter = request.query_params.get("status")
         if status_filter:
             allowed_statuses = {choice for choice, _ in Journey.Status.choices}
@@ -313,12 +326,14 @@ class JourneyListCreateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             queryset = queryset.filter(lifecycle_status=status_filter)
-        return Response(
-            JourneySerializer(
-                queryset[:100],
-                many=True,
-                context={"request": request},
-            ).data
+        return paginated_array_response(
+            request,
+            # Journey's default ordering has no tie-break, so two journeys
+            # created in the same instant could swap between pages.
+            queryset.order_by("-created_at", "-pk"),
+            serialize=lambda rows: JourneyListSerializer(
+                rows, many=True, context={"request": request}
+            ).data,
         )
 
     def post(self, request: Request) -> Response:
@@ -339,8 +354,8 @@ class JourneySearchView(APIView):
     """Search public, active V1 Journeys using coarse domain filters.
 
     ``min_capacity_kg`` applies to every leg because capacity is segment
-    scoped. Results are ordered by the first departure and capped until the
-    shared API pagination contract is introduced.
+    scoped. Results are ordered by the first departure and exposed through the
+    backward-compatible bare-array pagination contract.
     """
 
     permission_classes = (IsAuthenticated,)
@@ -425,13 +440,13 @@ class JourneySearchView(APIView):
                 )
             ).filter(has_under_capacity=False)
 
-        queryset = queryset.order_by("first_departure", "pk")[:100]
-        return Response(
-            JourneySerializer(
-                queryset,
-                many=True,
-                context={"request": request},
-            ).data
+        queryset = queryset.order_by("first_departure", "pk")
+        return paginated_array_response(
+            request,
+            queryset,
+            serialize=lambda rows: JourneyListSerializer(
+                rows, many=True, context={"request": request}
+            ).data,
         )
 
 
@@ -442,8 +457,10 @@ class JourneyDetailView(APIView):
         # Draft and verification details belong to their traveler. Active
         # journeys are discoverable to authenticated marketplace users, with
         # coarse Location serialization and private proof fields redacted.
+        from .lifecycle import with_lifecycle
+
         journey = get_object_or_404(
-            _journey_queryset().filter(
+            with_lifecycle(_journey_queryset()).filter(
                 Q(traveler=request.user) | Q(status__in=[Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS])
             ),
             pk=pk,

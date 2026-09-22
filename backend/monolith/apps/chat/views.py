@@ -355,7 +355,12 @@ class ChatThreadsView(APIView):
             key=lambda m: m.last_at or m.created_at, reverse=True
         )
 
+        paginator = _Pagination()
+        # Preserve the historic first-page reach while making later threads
+        # addressable through the envelope shape this endpoint already uses.
+        paginator.page_size = 100
+        page = paginator.paginate_queryset(eligible, request, view=self)
         data = ChatThreadSerializer(
-            eligible[:100], many=True, context={"viewer_id": uid}
+            page, many=True, context={"viewer_id": uid}
         ).data
-        return Response({"results": data})
+        return paginator.get_paginated_response(data)

@@ -35,6 +35,7 @@ from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
+from apps.core.pagination import paginated_array_response
 from apps.core.permissions import CanSettlePayouts
 from apps.admin_panel.permissions import CanIssueRefunds, CanSettleManualRefunds
 from apps.admin_panel.services import record_admin_action
@@ -217,7 +218,11 @@ class PaymentOrderListView(APIView):
             queryset = queryset.filter(purpose=purpose)
         if order_status := request.query_params.get("status"):
             queryset = queryset.filter(status=order_status)
-        return Response(PaymentOrderSummarySerializer(queryset[:100], many=True).data)
+        return paginated_array_response(
+            request,
+            queryset.order_by("-created_at", "-pk"),
+            serialize=lambda rows: PaymentOrderSummarySerializer(rows, many=True).data,
+        )
 
 
 class PaymentOrderDetailView(APIView):
@@ -614,19 +619,16 @@ class PayoutListView(APIView):
         queryset = payouts_for(request.user)
         if payout_status := request.query_params.get("status"):
             queryset = queryset.filter(status=payout_status)
-        paginator = None
-        if "page" in request.query_params or "page_size" in request.query_params:
-            paginator = _Pagination()
-            page = list(paginator.paginate_queryset(queryset, request))
-        else:
-            page = list(queryset[:100])
+        paginator = _Pagination()
+        # Keep the old first-page reach while normalizing the response shape.
+        # Explicit page_size remains bounded by the paginator's max_page_size.
+        paginator.page_size = 100
+        page = list(paginator.paginate_queryset(queryset, request))
         # The page's dispute, hold and setup facts are read once for the whole
         # list, so a hundred rows cost the same queries as one.
         context = {"payout_page": page_context(page, user=request.user)}
         data = PayoutSerializer(page, many=True, context=context).data
-        response = (
-            paginator.get_paginated_response(data) if paginator else Response(data)
-        )
+        response = paginator.get_paginated_response(data)
         response["Cache-Control"] = "no-store, private"
         return response
 

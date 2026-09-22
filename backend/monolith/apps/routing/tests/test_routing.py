@@ -190,6 +190,26 @@ class RouteProviderTests(SimpleTestCase):
         assert fixture.call_counts["geocode"] == 1
         assert fixture.call_counts["directions"] == 1
 
+    @override_settings(
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.dummy.DummyCache"
+            }
+        }
+    )
+    def test_request_cache_deduplicates_when_shared_cache_cannot_store(self):
+        fixture = DeterministicFixtureRouteProvider(geocodes={"Setif": (36.19, 5.41)})
+        provider = CachedRouteProvider(fixture)
+        points = (GeoPoint(36.75, 3.04), GeoPoint(36.19, 5.41))
+
+        assert provider.geocode("Setif") == provider.geocode("Setif")
+        assert provider.directions(points, profile="drive") == provider.directions(
+            points, profile="drive"
+        )
+
+        assert fixture.call_counts["geocode"] == 1
+        assert fixture.call_counts["directions"] == 1
+
     def test_cache_boundary_rejects_negative_provider_route_values(self):
         provider = CachedRouteProvider(_NegativeRouteProvider())
 

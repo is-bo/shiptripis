@@ -376,8 +376,11 @@ class PayoutVisibilityTests(FinanceApiTestCase):
         )
 
         assert response.status_code == 200
-        assert len(response.data) == 1
-        row = response.data[0]
+        # K4 normalized this list onto the paginated envelope it already
+        # returned whenever ``?page=`` was supplied. What the traveler may see
+        # is unchanged: exactly their own payout.
+        assert response.data["count"] == 1
+        row = response.data["results"][0]
         assert row["status"] == "not_eligible"
         assert row["amount_eur_cents"] == int(self.payout.amount_eur_cents)
 
@@ -385,7 +388,8 @@ class PayoutVisibilityTests(FinanceApiTestCase):
         response = self.client_for(self.scenario.sender).get(reverse("finance-payouts"))
 
         assert response.status_code == 200
-        assert response.data == []
+        assert response.data["count"] == 0
+        assert response.data["results"] == []
 
     def test_the_payout_payload_hides_operational_internals(self):
         response = self.client_for(self.scenario.traveler).get(

@@ -523,8 +523,7 @@ def enqueue_fcm_for_event(
     category, android_channel, collapse_key, localized = spec
     status = str(payload.get("status", "")).strip().lower()
     localized = _STATUS_PUSH_COPY.get((channel, status), localized)
-    client = None
-    entries = 0
+    pending_entries: list[dict[str, str]] = []
     for user_id, user_devices in by_user.items():
         if not _preference_allows(user_id, category, preferences):
             continue
@@ -554,22 +553,30 @@ def enqueue_fcm_for_event(
                 "collapse_key": collapse_key,
                 "data": data,
             }
-            if client is None:
-                from apps.core.redis_bus import get_client
-
-                client = get_client()
-            client.xadd(
-                settings.FCM_STREAM,
+            pending_entries.append(
                 {
                     "event_id": event_id,
                     "user_id": str(user_id),
                     "payload": json.dumps(fcm_payload, separators=(",", ":")),
-                },
-                maxlen=_STREAM_MAXLEN,
-                approximate=True,
+                }
             )
-            entries += 1
-    return entries
+    if not pending_entries:
+        return 0
+
+    from apps.core.redis_bus import get_client
+
+    # One network round trip for a fanout. Notification rows remain the durable
+    # per-recipient audit; batching changes only transport enqueue mechanics.
+    pipeline = get_client().pipeline(transaction=False)
+    for fields in pending_entries:
+        pipeline.xadd(
+            settings.FCM_STREAM,
+            fields,
+            maxlen=_STREAM_MAXLEN,
+            approximate=True,
+        )
+    pipeline.execute()
+    return len(pending_entries)
 
 
 def consume_fcm_results(*, limit: int = 100) -> int:

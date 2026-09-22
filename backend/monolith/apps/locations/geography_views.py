@@ -4,11 +4,13 @@ import math
 
 from django.db.models import Case, IntegerField, Prefetch, Q, Subquery, When
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.pagination import PageNumberPagination
+
+from apps.core.http_cache import public_catalog_response
 
 from .geography import normalize_search_name
 from .geography_serializers import GeographyCountrySerializer, GeographyPlaceSerializer
@@ -236,8 +238,12 @@ class GeographyCountryListView(APIView):
     permission_classes = (AllowAny,)
 
     def get(self, request: Request) -> Response:
-        countries = Country.objects.filter(active=True).order_by("name", "code")[:100]
-        return Response(GeographyCountrySerializer(countries, many=True).data)
+        # ISO countries are a naturally small, stable reference catalogue;
+        # return the whole active set rather than silently hiding row 101.
+        countries = Country.objects.filter(active=True).order_by("name", "code")
+        return public_catalog_response(
+            request, GeographyCountrySerializer(countries, many=True).data
+        )
 
 
 class GeographyPlaceSearchView(APIView):

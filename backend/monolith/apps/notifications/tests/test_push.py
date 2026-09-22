@@ -25,6 +25,15 @@ class _RedisRecorder:
         self.entries = []
         self.acked = []
         self.read_result = []
+        self.pipeline_calls = 0
+
+    def pipeline(self, *, transaction=True):
+        self.pipeline_calls += 1
+        self.pipeline_transaction = transaction
+        return self
+
+    def execute(self):
+        return ["1-0"] * len(self.entries)
 
     def xadd(self, stream, fields, **kwargs):
         self.entries.append((stream, fields, kwargs))
@@ -272,6 +281,8 @@ class PushPublicationTests(TestCase):
             targets=[user.pk for user in users],
         )
         self.assertEqual(count, 3)
+        self.assertEqual(recorder.pipeline_calls, 1)
+        self.assertFalse(recorder.pipeline_transaction)
         payloads = [json.loads(entry[1]["payload"]) for entry in recorder.entries]
         self.assertEqual(
             {payload["event_id"] for payload in payloads}, {"event-localized"}

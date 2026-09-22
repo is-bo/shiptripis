@@ -80,11 +80,13 @@ def _v1_chat_eligibility(match: Match) -> tuple[bool, str]:
     # Lazy import: deals depends on matching, not the other way round.
     from apps.deals.models import Deal
 
-    deal = (
-        Deal.objects.filter(match_id=match.id)
-        .only("id", "status", "funded_at")
-        .first()
-    )
+    try:
+        # Honor ``select_related("deal")`` and Django's relation cache. The
+        # inbox asks both helpers about every row; explicit Deal queries here
+        # previously cost two reads per V1 thread despite the joined relation.
+        deal = match.deal
+    except Deal.DoesNotExist:
+        deal = None
     if deal is None:
         # An accepted offer creates the Deal in the same transaction, so no
         # Deal means no acceptance yet.
@@ -154,7 +156,9 @@ def chat_history_visible(match: Match, user_id: int) -> tuple[bool, str]:
 
     from apps.deals.models import Deal
 
-    funded = Deal.objects.filter(
-        match_id=match.id, funded_at__isnull=False
-    ).exists()
+    try:
+        deal = match.deal
+    except Deal.DoesNotExist:
+        deal = None
+    funded = deal is not None and deal.funded_at is not None
     return (True, REASON_OK) if funded else (False, REASON_PAYMENT_PENDING)

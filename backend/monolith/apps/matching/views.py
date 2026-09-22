@@ -44,6 +44,7 @@ from rest_framework.views import APIView
 
 from apps.core import channels, redis_bus
 from apps.core.event_resources import match_resources
+from apps.core.pagination import paginated_array_response
 from apps.core.pricing import quote_delivery, quote_product
 from apps.parcels.models import ParcelRequest
 from apps.trips.models import Trip
@@ -190,17 +191,22 @@ class MatchListView(APIView):
             qs = qs.filter(sender=request.user) | qs.filter(traveler=request.user)
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
-        matches = list(qs.distinct()[:100])
-        # One read of the retired paid-package rows for every open negotiation
-        # on the page, instead of one per request as each offer is projected.
-        economics = OfferEconomicsReader()
-        economics.prime(matches)
-        return Response(
-            MatchSerializer(
+        def serialize(page):
+            matches = list(page)
+            # One read of the retired paid-package rows for every open
+            # negotiation on this page, instead of one per serialized row.
+            economics = OfferEconomicsReader()
+            economics.prime(matches)
+            return MatchSerializer(
                 matches,
                 many=True,
                 context={"request": request, "offer_economics": economics},
             ).data
+
+        return paginated_array_response(
+            request,
+            qs.distinct().order_by("-created_at", "-pk"),
+            serialize=serialize,
         )
 
 

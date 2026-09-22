@@ -1,5 +1,58 @@
 # ShipTrip V1 Implementation Status
 
+## K4 — General Backend & API Performance Remediation (2026-09-21)
+
+Implemented on `codex/k4-backend-api-performance` from exact `main`
+`9dac1d37b0d79f603bba54eec65c3c8a53b05738`; independent Gemini verification,
+CI, merge, and deployment are pending. PostgreSQL measurement confirmed the chat
+inbox Deal N+1 and reduced five funded threads from 14.77 ms/11 queries to
+7.72 ms/1 query. Journey lists now omit detail-only route/proof data, reducing the
+representative payload from 15,532 to 10,991 bytes, while Journey detail lost one
+hidden lifecycle query.
+
+Active hard-sliced collections gained backward-compatible pagination, payout
+history now has one envelope contract, route-provider work is request-memoized,
+FCM fanout uses one Redis pipeline, and the delivered-event sweeper is bounded.
+Public country/airport catalogues have ETag/conditional caching. Live Railway TEST
+evidence rejected the stale compression finding: `/api/airports` is already gzip
+encoded exactly once at the platform edge (13,683 identity bytes versus 3,611
+transferred), so no duplicate Django/Caddy layer was added. Matching/locality,
+Request, Deal, unread badge, language fanout, reservation `SKIP LOCKED`, and index
+suggestions were retained or rejected where measurement did not support change.
+
+Short Codex gates passed 96 targeted PostgreSQL tests plus changed-file Ruff and
+diff checks. No domain behavior, permission, throttle, financial rule, schema,
+migration, index, Go, Flutter, or required-Redis architecture changed. See
+[the K4 implementation record](PHASE_K4_BACKEND_API_PERFORMANCE.md).
+
+Gemini independently returned **GREEN** on exact implementation SHA
+`e0721bf9ba7a44e6ac63d51602d33a0f6aab2a79`, reproducing the 11-to-1 chat
+query reduction, Journey payload/query improvements, matching parity, and edge
+compression finding. It reported focused backend, Go, Ruff, migration,
+production, static-web, and native Caddy gates green. A few descriptive labels
+in the supplied report were corrected in the K4 record without changing its
+substantive GREEN verdict.
+
+Claude then took the phase over from the repository's actual state, preserving
+Codex's commit and uncommitted record edits rather than restarting, re-derived
+the risky claims from the code, and ran the gates directly. Two defects in the
+inherited work were fixed: the bounded outbox sweeper could permanently starve
+newer events once enough unrecoverable rows accumulated, so it gained a
+validated trailing window; and the newly paginated Journey and Request lists had
+no primary-key tie-break, so rows could swap between pages. Codex's payout
+envelope change had also left `apps/finance/tests/test_api_contracts.py`
+asserting the old bare array; those assertions now read the envelope with the
+same authorization meaning.
+
+Full local verification: 2,298 Django PostgreSQL tests passed with 4 failures —
+the two payout-shape ones fixed here, and two boost-seed failures that reproduce
+identically at pre-K4 `9dac1d37b0d79f603bba54eec65c3c8a53b05738` and were then
+traced to this workstation's gitignored `config/settings/test_pg.py`, which
+fabricates a business-settings revision labelled as the J2 one while carrying no
+boost economics. CI cannot reproduce them and ran green on the K4 pull request. Flutter ran 974 tests green with
+format and analyze; Go build, vet and tests are clean; Ruff, migration check,
+production `check --deploy` and the static-web check all pass.
+
 ## K3 — Finance & Admin Performance Remediation (2026-09-21)
 
 Implemented on `codex/k3-finance-admin-performance` from exact `main`
