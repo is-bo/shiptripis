@@ -152,6 +152,59 @@ role context were already off the pre-frame path (provider builds, async).
   is wiped on every credential clear, so it cannot leak across accounts.
 - Tests: `k5_cold_start_test.dart` (5 cases).
 
+## Package C — lists, images, JSON (13.9–13.11)
+
+**Lists (13.9).** Audited every growing list; converted only where rows were
+built eagerly and the list can grow. Appearance is unchanged: a layout probe
+compared every visible row's position and size before and after, in English
+and Arabic, and they matched.
+
+| List | Before | Action |
+| --- | --- | --- |
+| Deliveries → own requests / journeys | `Column` of every row in one `SliverToBoxAdapter` (up to 1000 rows since checkpoint 1) | Converted: each section returns slivers (`SliverList.builder`) |
+| Journey detail → compatible requests | `Column` of every candidate (server `result_limit` 50, max 100) | Converted: `ListView` → `CustomScrollView`, candidates `SliverList.builder` |
+| Ratings received | `ListView(children:)` (lazy per element, but allocates every row widget) | Converted to `ListView.builder` |
+| Deliveries → Deal history | lazy since checkpoint 1 | Left |
+| Notifications, chat list, payouts, discovery results | already `ListView.builder/separated` | Left |
+| Chat thread | `ListView.builder(reverse: true)` + anchoring | Left (anchoring untouched) |
+| Home attention/active (`take(3)`), open negotiations, request's matches, journey legs, dispute evidence/events, saved places, offer history | bounded by product rules | Left bounded |
+
+**Images (13.10).** Three rendered images in the app; all now decode at the
+drawn width (`cacheWidth` = layout width × device pixel ratio, aspect kept, never
+upscaled) via `design/components/images.dart`. In-memory decode only: no disk
+cache or package was added, and uploads still send the original file.
+
+| Image | Decoded before | Decoded after (411 dp @ 2.625) |
+| --- | ---: | ---: |
+| Request item photo (`Image.network`, 200 dp strip) | 2048×1536 = 12.6 MB (a 12 MP upload from an older client: 48.8 MB) | 974×731 = 2.8 MB (portrait: 5.1 MB) |
+| Request form item preview (`Image.file`, 180 dp) | 2048×1536 = 12.6 MB | ≈ 2.8 MB |
+| DZD cheque preview (`Image.file`, 180 dp) | 2400×1800 = 17.3 MB | ≈ 2.4 MB |
+
+Known limit: `BoxFit.cover` into a ~2:1 strip slightly upscales only images
+wider than ~2:1 (panoramas).
+
+**JSON (13.11).** Dio 5.11's default `FusedTransformer` already decodes bodies
+≥ 50 KiB in a background isolate; smaller bodies and every model `fromJson` run
+on the UI isolate. `test/k5_json_decode_budget_test.dart` times both halves on
+current API shapes (median of 80 runs after warm-up), scaled with the
+Dio/Flutter reference of 50 KB ≈ 0.4 ms (Pixel 4) / 2.5 ms (Moto G4):
+
+| Payload | Bytes | Decoded on | UI isolate, Pixel 4 est. | Moto G4 est. |
+| --- | ---: | --- | ---: | ---: |
+| Deals, 20 rows (the app's page size) | 67.6 k | isolate | 1.0 ms | 6.1 ms |
+| Deals, 100 rows | 337.6 k | isolate | 5.2 ms | 32.7 ms |
+| Own requests, 100 rows | 167.7 k | isolate | 2.5 ms | 15.7 ms |
+| Notifications, 100 rows | 33.7 k | UI | 0.7 ms | 4.2 ms |
+| Chat history, 200 messages | 51.5 k | isolate | 1.2 ms | 7.4 ms |
+
+Decision: **isolate parsing rejected — measured.** Every page the app actually
+reads (Deals 20, notifications 30, chat 50) stays under 8 ms even on the Moto G4
+estimate. The only cases above it are unusual accounts on 2016-class hardware:
+current Deals and own requests are read across all pages and mapped in one
+synchronous pass, so ≥ ~25 current Deals or ≥ ~50 own requests would cross 8 ms
+there. Revisit with `Isolate.run` around those two mappings if field data shows
+such accounts.
+
 ## Remaining K5 work
 
 Delegated as bounded packages, each reviewed before integration:

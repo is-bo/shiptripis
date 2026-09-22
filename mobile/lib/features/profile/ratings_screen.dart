@@ -52,16 +52,22 @@ class RatingsScreen extends ConsumerWidget {
               );
             }
 
-            return ListView(
+            // Built lazily: ratings accumulate with every completed Deal.
+            return ListView.builder(
               padding: AppScrollPadding.page(context),
-              children: [
-                _Summary(ratings: all),
-                const SizedBox(height: AppSpace.xl),
-                for (final rating in all) ...[
-                  _RatingCard(rating: rating),
-                  const SizedBox(height: AppSpace.md),
-                ],
-              ],
+              itemCount: all.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xl),
+                    child: _Summary(ratings: all),
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpace.md),
+                  child: _RatingCard(rating: all[index - 1]),
+                );
+              },
             );
           },
         ),

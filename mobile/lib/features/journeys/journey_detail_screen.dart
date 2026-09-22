@@ -178,73 +178,96 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
             final needProof = data.legsNeedingProof;
             final kycOk = account?.isKycVerified ?? false;
 
-            return ListView(
-              padding: AppScrollPadding.pageWithFooter(context),
-              children: [
-                _Header(journey: data),
-                const SizedBox(height: AppSpace.xl),
+            // Slivers rather than one ListView: the compatible requests can
+            // run to the server's result limit, and are built as they scroll
+            // into view.
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: AppScrollPadding.pageWithFooter(context),
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      SliverList.list(
+                        children: [
+                          _Header(journey: data),
+                          const SizedBox(height: AppSpace.xl),
 
-                if (isOwner && data.status.isEditable) ...[
-                  _Blockers(
-                    legsNeedingProof: needProof,
-                    kycVerified: kycOk,
-                    journeyId: data.id,
-                  ),
-                  const SizedBox(height: AppSpace.xl),
-                ],
+                          if (isOwner && data.status.isEditable) ...[
+                            _Blockers(
+                              legsNeedingProof: needProof,
+                              kycVerified: kycOk,
+                              journeyId: data.id,
+                            ),
+                            const SizedBox(height: AppSpace.xl),
+                          ],
 
-                Row(
-                  children: [
-                    Expanded(child: SectionHeader(title: l.journeyRouteShape)),
-                    if (isOwner && data.editable != null)
-                      AppButton(
-                        label: l.journeyEditAction,
-                        icon: Icons.edit_outlined,
-                        variant: AppButtonVariant.tertiary,
-                        expand: false,
-                        // Present but inert when the server says no, with the
-                        // reason underneath. A button that vanishes explains
-                        // nothing to the traveller looking for it.
-                        onPressed: data.canEdit && !_busy
-                            ? () => context.openJourneyEdit(data.id)
-                            : null,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SectionHeader(
+                                  title: l.journeyRouteShape,
+                                ),
+                              ),
+                              if (isOwner && data.editable != null)
+                                AppButton(
+                                  label: l.journeyEditAction,
+                                  icon: Icons.edit_outlined,
+                                  variant: AppButtonVariant.tertiary,
+                                  expand: false,
+                                  // Present but inert when the server says
+                                  // no, with the reason underneath. A button
+                                  // that vanishes explains nothing to the
+                                  // traveller looking for it.
+                                  onPressed: data.canEdit && !_busy
+                                      ? () => context.openJourneyEdit(data.id)
+                                      : null,
+                                ),
+                            ],
+                          ),
+                          if (isOwner && data.editable == false) ...[
+                            InfoNotice(
+                              message: _editBlockedReason(data),
+                              tone: StatusTone.neutral,
+                              icon: Icons.lock_outline_rounded,
+                            ),
+                            const SizedBox(height: AppSpace.md),
+                          ],
+                          _Route(journey: data),
+
+                          if (data.notes.isNotEmpty) ...[
+                            const SizedBox(height: AppSpace.xl),
+                            SectionHeader(title: l.journeyNotesLabel),
+                            AppInsetGroup(
+                              child: Text(
+                                data.notes,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                  ],
+
+                      if (isOwner && data.status.isLive) ...[
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: AppSpace.xl),
+                        ),
+                        _CompatibleRequests(journeyId: data.id),
+                      ],
+
+                      if (isOwner && !data.status.isFinished)
+                        SliverList.list(
+                          children: [
+                            const SizedBox(height: AppSpace.xxl),
+                            AppButton(
+                              label: l.journeyCancel,
+                              variant: AppButtonVariant.destructive,
+                              onPressed: _busy ? null : _cancel,
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
-                if (isOwner && data.editable == false) ...[
-                  InfoNotice(
-                    message: _editBlockedReason(data),
-                    tone: StatusTone.neutral,
-                    icon: Icons.lock_outline_rounded,
-                  ),
-                  const SizedBox(height: AppSpace.md),
-                ],
-                _Route(journey: data),
-
-                if (data.notes.isNotEmpty) ...[
-                  const SizedBox(height: AppSpace.xl),
-                  SectionHeader(title: l.journeyNotesLabel),
-                  AppInsetGroup(
-                    child: Text(
-                      data.notes,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-
-                if (isOwner && data.status.isLive) ...[
-                  const SizedBox(height: AppSpace.xl),
-                  _CompatibleRequests(journeyId: data.id),
-                ],
-
-                if (isOwner && !data.status.isFinished) ...[
-                  const SizedBox(height: AppSpace.xxl),
-                  AppButton(
-                    label: l.journeyCancel,
-                    variant: AppButtonVariant.destructive,
-                    onPressed: _busy ? null : _cancel,
-                  ),
-                ],
               ],
             );
           },
@@ -513,6 +536,8 @@ class _Route extends StatelessWidget {
 /// Read-only by design: in V1 the sender proposes first, so there is nothing
 /// for the traveller to press here. Saying that plainly is better than an
 /// affordance that does not exist.
+///
+/// Returns slivers, so a long result list is built lazily.
 class _CompatibleRequests extends ConsumerWidget {
   const _CompatibleRequests({required this.journeyId});
 
@@ -523,41 +548,59 @@ class _CompatibleRequests extends ConsumerWidget {
     final l = L.of(context);
     final results = ref.watch(_compatibleRequestsProvider(journeyId));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(title: l.discoveryRequestsTitle),
-        InfoNotice(
-          title: l.journeyMatchesInfoTitle,
-          message: l.journeyMatchesInfoBody,
-          icon: Icons.info_outline_rounded,
+    // Every state but the result list keeps the section's start-aligned
+    // column, exactly as it was laid out before the list went lazy.
+    Widget inSection(Widget child) => SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [child],
+      ),
+    );
+
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionHeader(title: l.discoveryRequestsTitle),
+              InfoNotice(
+                title: l.journeyMatchesInfoTitle,
+                message: l.journeyMatchesInfoBody,
+                icon: Icons.info_outline_rounded,
+              ),
+              const SizedBox(height: AppSpace.md),
+            ],
+          ),
         ),
-        const SizedBox(height: AppSpace.md),
         AsyncView<DiscoveryResults>(
           value: results,
           onRetry: () => ref.invalidate(_compatibleRequestsProvider(journeyId)),
-          loading: () => const SkeletonCardList(count: 2),
-          error: (error) => InlineFailure(
-            error: error,
-            onRetry: () =>
-                ref.invalidate(_compatibleRequestsProvider(journeyId)),
+          loading: () => inSection(const SkeletonCardList(count: 2)),
+          error: (error) => inSection(
+            InlineFailure(
+              error: error,
+              onRetry: () =>
+                  ref.invalidate(_compatibleRequestsProvider(journeyId)),
+            ),
           ),
           data: (data) {
             if (data.candidates.isEmpty) {
-              return AppEmptyState(
-                title: l.discoveryEmptyRequestsTitle,
-                body: l.discoveryEmptyRequestsBody,
-                icon: Icons.inventory_2_outlined,
-                compact: true,
+              return inSection(
+                AppEmptyState(
+                  title: l.discoveryEmptyRequestsTitle,
+                  body: l.discoveryEmptyRequestsBody,
+                  icon: Icons.inventory_2_outlined,
+                  compact: true,
+                ),
               );
             }
-            return Column(
-              children: [
-                for (final candidate in data.candidates) ...[
-                  _CandidateCard(candidate: candidate),
-                  const SizedBox(height: AppSpace.md),
-                ],
-              ],
+            return SliverList.builder(
+              itemCount: data.candidates.length,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.md),
+                child: _CandidateCard(candidate: data.candidates[index]),
+              ),
             );
           },
         ),

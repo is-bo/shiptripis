@@ -545,6 +545,40 @@ void main() {
       expect(_button(l.requestItemPhotoRemove), findsOneWidget);
     });
 
+    testWidgets('the preview decodes at its drawn width, not the file size', (
+      tester,
+    ) async {
+      final backend = FakeBackend()
+        ..handle('POST', _stagePath, (_) => FakeResponse(201, _stagedMedia()));
+      final harness = _FormHarness(
+        backend,
+        picker: _pickerReturning(_photoFile()),
+      );
+      await harness.pump(tester);
+      await _completeRouteStep(tester, harness);
+      final l = harness.l(tester);
+
+      await _tapPhotoAction(
+        tester,
+        _button(l.requestItemPhotoFromGallery),
+        until: () => _present(find.text(l.requestItemPhotoReady)),
+      );
+
+      // K5: a 2048 px pick is ~12 MB decoded; the 180 dp preview needs a
+      // fraction of that.
+      final preview = find.byWidgetPredicate(
+        (w) =>
+            w is Image &&
+            w.image is ResizeImage &&
+            (w.image as ResizeImage).imageProvider is FileImage,
+      );
+      expect(preview, findsOneWidget);
+      final resize = tester.widget<Image>(preview).image as ResizeImage;
+      // The harness runs at a device pixel ratio of 1.
+      expect(resize.width, tester.getSize(preview).width.ceil());
+      expect(resize.height, isNull);
+    });
+
     testWidgets('camera: the same path, asked of the other source', (
       tester,
     ) async {

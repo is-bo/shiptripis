@@ -25,6 +25,7 @@ import '../../core/api/api_exception.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
+import '../../design/components/images.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -325,18 +326,26 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
                     if (_chequeFile != null) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(_chequeFile!.path),
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            height: 120,
-                            color: c.surfaceSunken,
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.broken_image_rounded,
-                              color: c.textTertiary,
+                        // Decoded at the preview's width; the upload still
+                        // sends the picked file itself.
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Image.file(
+                            File(_chequeFile!.path),
+                            height: 180,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            cacheWidth: decodeWidthFor(
+                              context,
+                              constraints.maxWidth,
+                            ),
+                            errorBuilder: (_, _, _) => Container(
+                              height: 120,
+                              color: c.surfaceSunken,
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.broken_image_rounded,
+                                color: c.textTertiary,
+                              ),
                             ),
                           ),
                         ),
