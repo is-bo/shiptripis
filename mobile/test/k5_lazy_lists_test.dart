@@ -216,6 +216,11 @@ void main() {
       );
       expect(find.text('Origin ${_rows - 1}'), findsOneWidget);
       expect(_built('Origin'), lessThan(20));
+
+      // History outlives its last viewer briefly (K5); let that run out
+      // before the test's pending-timer check.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(DealHistoryController.keptFor);
     });
   });
 
