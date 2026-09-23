@@ -1,8 +1,10 @@
 # K5 — Mobile Performance
 
-Status: **in progress** — checkpoint 1 (Deal list projection, attention,
-pagination, root rebuild, session snapshot). Remaining packages are listed at the
-end so a later context can resume without re-deriving anything.
+Status: **implemented and verified; pull request pending** — K5 plan items
+13.1–13.18 are addressed below; 13.19 (perceived performance) relies on the
+existing skeleton, inline-failure and background-refresh states, which K5 kept
+intact (history adds a quiet page spinner and a retry footer). Two independent
+Opus reviews ran and every confirmed finding is fixed.
 
 K5 started from exact `main` SHA `b5e33e4` (K4 released as
 `v1.0.0-rc.49+89de1ec`) on branch `claude/k5-mobile-performance`.
@@ -332,38 +334,37 @@ checkout, 1 guest sheet.
   run here); Flutter: 2 paging, 4 session/snapshot, 1 history; every new
   Flutter test except the history one fails on the previous code.
 
+## Verification (final K5 tree)
+
+- Flutter: `flutter analyze` clean; full suite **1069 passed**.
+- Django (PostgreSQL): full suite 2307 passed, 1 failed on the pre-review tree —
+  the V1 matching test's Deal-list budget (≤ 4 queries) caught the list at 5
+  after `attention` added a ratings prefetch. Fixed by turning that prefetch
+  into `Exists` annotations (back to 4, budget unchanged). After that and the
+  review fixes: `apps/matching apps/deals apps/ratings apps/handover
+  apps/notifications` 282 passed. `ruff check` clean; `makemigrations --check`
+  reports no changes (no schema change in K5).
+- Independent reviews: one over checkpoint 1 + packages A–C (one medium, five
+  low findings), one over package D (one medium, four low, two nits). All fixed
+  except one rejected with evidence (history grace leak does not occur on
+  Riverpod 3.4.2; covered by a test).
+- Not verifiable here: the 20 s socket ping and real phone lifecycle order need
+  a device check.
+
+## Deferred
+
+- JSON parse of the full current-Deals / own-requests set runs on the UI thread;
+  on Moto G4-class phones it crosses 8 ms above ~25 current Deals or ~50 own
+  requests. Wrap those two mappings in `Isolate.run` if field data shows such
+  accounts.
+- No app-wide offline/stale banner (design addition, not a K5 defect); failing
+  reads already show `InlineFailure` with offline copy and retry.
+- Pre-existing, few-ms window: a sign-in started during sign-out's snapshot
+  delete could be invalidated by `_auth.signOut()`.
+
 ## Resume here
 
-All four packages are integrated on `claude/k5-mobile-performance`
-(A `0a42245`, C `c83f696`, B `b2760b2`, D `740c50d`, plus a test fix
-`e5fe0fb`). `flutter analyze` is clean and all `test/k5_*` pass together (80).
-Still to do: full Flutter suite on the integrated tree; full Django PG suite
-(a restart was running at session end — it was cut off once at 79% and the
-cluster needed a fresh `SHIPTRIP_TEST_PGDATA`); independent Opus review of
-`b5e33e4..HEAD` (was launched; re-run if no result is recorded here); then PR,
-CI, merge, Railway TEST release `v1.0.0-rc.50+<sha>`, `/healthz`, `/readyz`,
-smoke, cleanup of the four `.claude/worktrees/agent-*` worktrees and their
-branches, the K5 phase report. Then K6 (persistent Redis cutover is mandatory)
-and K7, then the K-Series Master Report. Ruff check passes; no migrations
-missing.
-
-## Remaining K5 work
-
-Delegated as bounded packages, each reviewed before integration:
-
-- **A. Cold start / offline startup / push init (13.5).** Defer Firebase/push
-  initialisation until after the first frame without losing background-message
-  registration; offline start never hangs; clear offline/stale indication with
-  authority actions disabled.
-- **B. Request cancellation / duplicates / provider lifetime (13.7, 13.8, 13.12–13.14).**
-  Cancel abandoned GETs on provider disposal (never mutations); in-flight
-  coalescing for `/api/me`, unread count, payout account, catalogs; short
-  keepAlive only for list-type presentation data; generation guards intact.
-- **C. Lists / images / JSON (13.9–13.11).** Virtualise growing lists
-  (notifications, chat, payouts, discovery results); decode-size remote
-  thumbnails; measure JSON decode cost before any isolate work.
-- **D. Resume / sockets / badge / polling (13.15–13.18).** Selective resume
-  refresh, socket lifecycle on logout/account switch/token refresh, unread-badge
-  refresh driven by events, checkout polling bounded and cancelled.
-- Then: full Flutter and Django suites, Ruff, migrations and drift checks,
-  independent review of the whole K5 diff, PR, CI, merge, Railway TEST release.
+Remaining for K5: PR from `claude/k5-mobile-performance` to `main`, CI (six
+jobs), merge, Railway TEST release `v1.0.0-rc.50+<sha>`, `/healthz`, `/readyz`,
+smoke, cleanup of the `.claude/worktrees/agent-*` worktrees and branches, then
+the K5 phase report. Then K6 and K7.

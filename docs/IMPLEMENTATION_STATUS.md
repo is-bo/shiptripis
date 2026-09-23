@@ -1,6 +1,6 @@
 # ShipTrip V1 Implementation Status
 
-## K5 — Mobile Performance (in progress, 2026-09-22)
+## K5 — Mobile Performance (verified, PR pending, 2026-09-23)
 
 On `claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
 list row now carries the viewer's pending actions (`attention`), so Home no
@@ -9,7 +9,14 @@ gains `scope=current|history` and the app reads current Deals in full and histor
 lazily, fixing Deals beyond the first 20 being unreachable; own requests,
 journeys and matches read beyond 100 rows (bounded); push-state changes no longer
 rebuild the app root; a presentation-only account snapshot lets a signed-in user
-open the app without waiting for `/api/me`. Not yet merged or released. Details,
+open the app without waiting for `/api/me`. Later packages: Firebase starts
+after the first frame; abandoned reads are cancelled and simultaneous `/api/me`
+reads shared; growing lists render lazily and photos decode at display size;
+returning from the notification shade no longer redials sockets, a dead socket
+is detected by ping, and checkout polling runs one bounded loop. Flutter 1069
+passed; Django matching/deals/ratings/handover/notifications 282 passed after the
+one full-suite failure (Deal-list query budget) was fixed. Not yet merged or
+released. Details,
 decisions and remaining packages:
 [the K5 record](PHASE_K5_MOBILE_PERFORMANCE.md).
 
