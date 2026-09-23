@@ -28,7 +28,7 @@ import (
 // reclaim PEL entries idle longer than `SweepMinIdle` — covers the case
 // where a pod crashed after XReadGroup but before XAck.
 type Consumer struct {
-	rdb            *redisbus.Client
+	rdb            streamClient
 	sender         FCMSender
 	stream         string
 	group          string
@@ -46,6 +46,19 @@ type Consumer struct {
 	// ctx would re-deliver via the sweeper.
 	sem chan struct{}
 	wg  sync.WaitGroup
+}
+
+// streamClient is the Redis surface the consumer drives (satisfied by
+// *redisbus.Client). Unit tests substitute a fake to exercise group recovery
+// and the sweeper's cursor without a live Redis.
+type streamClient interface {
+	XGroupCreate(ctx context.Context, stream, group, start string) error
+	XReadGroup(ctx context.Context, args redisbus.XReadGroupArgs) ([]redisbus.StreamMessage, error)
+	XAutoClaim(ctx context.Context, args redisbus.XAutoClaimArgs) ([]redisbus.StreamMessage, string, error)
+	XAck(ctx context.Context, stream, group string, ids ...string) error
+	XAddCapped(ctx context.Context, stream string, maxLen int64, fields map[string]any) (string, error)
+	Exists(ctx context.Context, key string) (bool, error)
+	SetEX(ctx context.Context, key string, value any, ttl time.Duration) error
 }
 
 // ConsumerConfig wires the runtime knobs. Defaults match CLAUDE.md G1
@@ -91,8 +104,8 @@ const (
 	handleConcurrency = 32
 )
 
-// NewConsumer builds a Consumer with sensible defaults. Caller must
-// XGroupCreate the stream/group before Run (idempotent — see redisbus).
+// NewConsumer builds a Consumer with sensible defaults. Run creates the
+// stream/group if missing (idempotent, starting at redisbus.GroupStartID).
 func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Consumer {
 	if log == nil {
 		log = slog.Default()
@@ -134,7 +147,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 // goroutine via Sweep — they share the consumer name but read the
 // stream independently (XAUTOCLAIM reassigns to the caller's consumer).
 func (c *Consumer) Run(ctx context.Context) error {
-	if err := c.rdb.XGroupCreate(ctx, c.stream, c.group, "$"); err != nil {
+	if err := c.ensureGroup(ctx); err != nil {
 		return fmt.Errorf("fcm: xgroup create: %w", err)
 	}
 	c.log.Info("fcm consumer started",
@@ -158,6 +171,15 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
 			}
+			if redisbus.IsNoGroup(err) {
+				// The shared Redis lost the stream or group under a running
+				// worker. Recreate it; the next read resumes immediately.
+				c.log.Warn("fcm consumer group missing; recreating",
+					"stream", c.stream, "group", c.group)
+				if err = c.ensureGroup(ctx); err == nil {
+					continue
+				}
+			}
 			c.log.Error("fcm xreadgroup", "err", err)
 			// Tight loop on a broken Redis would be wasteful — pause briefly
 			// before retrying so we don't burn CPU during an outage.
@@ -175,6 +197,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// ensureGroup creates the stream and group if either is missing. See
+// redisbus.GroupStartID for why the start is neither "$" nor "0".
+func (c *Consumer) ensureGroup(ctx context.Context) error {
+	return c.rdb.XGroupCreate(ctx, c.stream, c.group, redisbus.GroupStartID(time.Now()))
 }
 
 // Sweep runs XAUTOCLAIM on a fixed interval, reclaiming PEL entries from

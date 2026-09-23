@@ -548,6 +548,95 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
             with self.assertRaisesRegex(RuntimeError, "SHIPTRIP_EMBEDDED_REDIS"):
                 self.launcher["redis_topology"]()
 
+    def shared_redis(self, *, policy="noeviction", appendonly="yes", save="60 1"):
+        import redis
+
+        client = mock.MagicMock()
+        values = {
+            "maxmemory-policy": policy,
+            "maxmemory": "0",
+            "appendonly": appendonly,
+            "appendfsync": "everysec",
+            "save": save,
+        }
+
+        def config_get(name):
+            if values[name] is None:
+                raise redis.ResponseError("unknown command 'CONFIG'")
+            return {name: values[name]}
+
+        client.config_get.side_effect = config_get
+        return client
+
+    def probe(self, client, **kwargs):
+        stdout, stderr = mock.MagicMock(), mock.MagicMock()
+        with mock.patch("redis.Redis.from_url", return_value=client), mock.patch(
+            "sys.stdout", stdout
+        ), mock.patch("sys.stderr", stderr):
+            try:
+                self.launcher["probe_shared_redis"](
+                    "redis://default:do-not-print@redis.internal.invalid:6379", **kwargs
+                )
+            finally:
+                printed = "".join(
+                    str(call.args[0])
+                    for stream in (stdout, stderr)
+                    for call in stream.write.call_args_list
+                )
+        return printed
+
+    def test_shared_redis_is_proven_before_anything_depends_on_it(self):
+        source = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+        probe = source.index("probe_shared_redis(redis_url)")
+        assert probe < source.index('print("applying database migrations"')
+        # The probe belongs to the shared branch; embedded mode never dials out.
+        assert source.index("if embedded_redis:") < probe
+
+    def test_unreachable_shared_redis_fails_startup_without_leaking_the_url(self):
+        import redis
+
+        client = self.shared_redis()
+        client.ping.side_effect = redis.ConnectionError("connection refused")
+        with self.assertRaisesRegex(RuntimeError, "unreachable") as raised:
+            self.probe(client, timeout=0)
+        assert "redis.internal.invalid:6379" in str(raised.exception)
+        assert "do-not-print" not in str(raised.exception)
+        client.close.assert_called_once()
+
+    def test_rejected_credentials_fail_immediately(self):
+        import redis
+
+        client = self.shared_redis()
+        client.ping.side_effect = redis.AuthenticationError("WRONGPASS")
+        with self.assertRaisesRegex(RuntimeError, "credentials"):
+            self.probe(client, timeout=60)
+        assert client.ping.call_count == 1
+
+    def test_an_evicting_policy_fails_startup(self):
+        with self.assertRaisesRegex(RuntimeError, "allkeys-lru"):
+            self.probe(self.shared_redis(policy="allkeys-lru"))
+
+    def test_a_durable_instance_is_accepted_and_reported(self):
+        printed = self.probe(self.shared_redis(policy="noeviction"))
+        assert "maxmemory-policy=noeviction" in printed
+        assert "appendonly=yes" in printed
+        assert "WARNING" not in printed
+        assert "do-not-print" not in printed
+
+    def test_volatile_policies_cannot_touch_ttl_less_streams(self):
+        printed = self.probe(self.shared_redis(policy="volatile-lru"))
+        assert "maxmemory-policy=volatile-lru" in printed
+
+    def test_missing_persistence_or_hidden_config_is_loud_not_fatal(self):
+        printed = self.probe(self.shared_redis(appendonly="no", save=""))
+        assert "no AOF and no RDB" in printed
+
+        printed = self.probe(
+            self.shared_redis(policy=None, appendonly=None, save=None)
+        )
+        assert "maxmemory-policy=unverifiable" in printed
+        assert "hides its configuration" in printed
+
     def test_default_combined_database_budget_is_rolling_deploy_safe(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             budget = self.launcher["connection_budget"]()

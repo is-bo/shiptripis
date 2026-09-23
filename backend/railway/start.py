@@ -24,6 +24,9 @@ from urllib.parse import urlparse
 ROOT = "/app"
 STOP_REQUESTED = False
 LOCAL_REDIS_URL = "redis://127.0.0.1:6379/0"
+# Railway's private network can take a few seconds to route after a container
+# starts; a shared Redis that is still silent after this is a real outage.
+REDIS_PREFLIGHT_TIMEOUT_SECONDS = 30.0
 
 # The combined 1 GiB Railway container cannot safely buy concurrency by adding
 # Python processes. Two gthread workers keep the measured worker RSS bounded
@@ -264,6 +267,96 @@ def redis_topology() -> tuple[str, bool]:
     return _validate_redis_url(configured, allow_loopback=False), False
 
 
+def probe_shared_redis(
+    redis_url: str, *, timeout: float = REDIS_PREFLIGHT_TIMEOUT_SECONDS
+) -> None:
+    """Prove the shared Redis can hold durable streams before anything uses it.
+
+    The Go workers already refuse to start without Redis, but only after the
+    migrations and the Django processes; this names the failure first and
+    plainly. Three outcomes:
+
+    * **Unreachable or rejected credentials fail startup.** There is no
+      fallback to the embedded daemon: a silent fallback would split cache,
+      throttles and queues across two Redis servers.
+    * **An `allkeys-*` eviction policy fails startup.** Stream keys carry no
+      TTL, so only those policies can evict `notif:fcm` or `email:send`, which
+      would drop queued work without an error anywhere.
+    * **Missing persistence is a loud warning, not a failure.** The instance is
+      still shared; the runbook's restart proof is what certifies durability.
+
+    Only the host and port are printed; the URL carries the password.
+    """
+
+    import redis  # Django's requirement, installed in the image.
+
+    parsed = urlparse(redis_url)
+    endpoint = f"{parsed.hostname}:{parsed.port or 6379}"
+    client = redis.Redis.from_url(
+        redis_url,
+        decode_responses=True,
+        socket_connect_timeout=2,
+        socket_timeout=2,
+    )
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                client.ping()
+                break
+            except redis.AuthenticationError as exc:
+                raise RuntimeError(
+                    f"shared Redis at {endpoint} rejected the REDIS_URL credentials"
+                ) from exc
+            except redis.RedisError as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"shared Redis at {endpoint} is unreachable "
+                        f"({type(exc).__name__}); refusing to start"
+                    ) from exc
+                time.sleep(1)
+
+        def config(name: str) -> str | None:
+            try:
+                return str(client.config_get(name).get(name, ""))
+            except redis.ResponseError:
+                # Some managed providers disable CONFIG; report, never guess.
+                return None
+
+        policy = config("maxmemory-policy")
+        if policy is not None and policy.startswith("allkeys-"):
+            raise RuntimeError(
+                f"shared Redis at {endpoint} uses maxmemory-policy={policy}, "
+                "which can evict durable streams; set noeviction"
+            )
+        appendonly = config("appendonly")
+        save = config("save")
+        print(
+            f"shared redis {endpoint} "
+            f"maxmemory-policy={policy if policy is not None else 'unverifiable'} "
+            f"maxmemory={config('maxmemory')} appendonly={appendonly} "
+            f"appendfsync={config('appendfsync')} save={save!r}",
+            flush=True,
+        )
+        if policy is None:
+            print(
+                f"WARNING: shared Redis at {endpoint} hides its configuration; "
+                "confirm noeviction and persistence before trusting streams",
+                file=sys.stderr,
+                flush=True,
+            )
+        if appendonly == "no" and save == "":
+            print(
+                f"WARNING: shared Redis at {endpoint} has no AOF and no RDB "
+                "snapshots; queued push and email transport will not survive "
+                "a Redis restart",
+                file=sys.stderr,
+                flush=True,
+            )
+    finally:
+        client.close()
+
+
 def kyc_env(redis_url: str) -> dict[str, str]:
     """Give KYC the same Redis used by Django and every Go transport."""
 
@@ -437,6 +530,8 @@ def run() -> int:
             env=base_env,
         )
         wait_for_port(redis, 6379)
+    else:
+        probe_shared_redis(redis_url)
 
     print("applying database migrations", flush=True)
     subprocess.run(

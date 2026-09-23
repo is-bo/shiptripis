@@ -435,6 +435,36 @@ func (c *Client) XGroupCreate(ctx context.Context, stream, group, start string) 
 	return err
 }
 
+// GroupCreateLookback is how far back a newly created consumer group starts.
+const GroupCreateLookback = 10 * time.Minute
+
+// GroupStartID is the start ID for creating a durable consumer group: entries
+// appended during the last GroupCreateLookback are delivered, older history
+// is not. It only matters when the group does not exist yet — an existing
+// group keeps its last-delivered ID and pending entries (BUSYGROUP).
+//
+// Neither classic choice is safe for a transport that carries obligations.
+// "$" skips whatever a producer appended before the worker created its group,
+// and Django's job loops start before the Go workers, so the first entries on
+// a fresh or emptied Redis were never delivered. "0" replays the whole capped
+// history (up to 10,000 entries) whenever a group is renamed or destroyed,
+// which for push means re-sending notifications days after the fact.
+func GroupStartID(now time.Time) string {
+	ms := now.Add(-GroupCreateLookback).UnixMilli()
+	if ms < 0 {
+		ms = 0
+	}
+	return strconv.FormatInt(ms, 10) + "-0"
+}
+
+// IsNoGroup reports Redis's NOGROUP reply: the stream key or its consumer
+// group no longer exists, typically because a shared Redis came back without
+// its data. A consumer recreates the group rather than retrying a read that
+// can never succeed.
+func IsNoGroup(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "NOGROUP")
+}
+
 type XAutoClaimArgs struct {
 	Stream   string
 	Group    string
