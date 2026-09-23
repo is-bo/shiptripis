@@ -322,8 +322,9 @@ func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage,
 // sendTimeout caps a single FCM Send. Detached from the parent ctx so a
 // graceful shutdown mid-send still completes — a cancelled Send returns
 // without acking the PEL entry, and the next pod's sweeper would push a
-// duplicate to the same user.
-const sendTimeout = 15 * time.Second
+// duplicate to the same user. Send plus ack (12 s + 3 s) fits the
+// notification service's 15 s shutdown budget, as the email consumer does.
+const sendTimeout = 12 * time.Second
 
 // ackTimeout caps the detached XAck after a send.
 const ackTimeout = 3 * time.Second
