@@ -251,44 +251,58 @@ checkpoint 1 before the change.
   what that sign-in stored. Invalidating it had never reset that choice, because
   Riverpod 3 keeps the notifier instance across an invalidate.
 
-## Resume here (state at 2026-09-22 session end)
+## Package D — resume, sockets, badge, checkout polling (13.15–13.18)
 
-Branch `claude/k5-mobile-performance` (pushed to origin). Commits on top of
-`main` `b5e33e4`:
+- **Resume.** The five resume reads (`/api/me`, chat threads, matches,
+  `deals?scope=current`, parcels) are all needed: sockets are closed while the
+  app is hidden, so no live event covers them. Two phone-lifecycle defects were
+  fixed. A trip to the notification shade, app switcher or a system dialog
+  (`inactive` only) used to tear both sockets down, redial them and send five
+  catch-up reads; it now does nothing. A real return passes through `hidden`,
+  which reset the away timer, so `/api/me` was never re-read on resume; it is now
+  read once. The first `resumed` at launch no longer adds a second `/api/me` next
+  to session restore.
+- **Sockets.** `/ws/notifications` and `/ws/chat` are both owned by
+  `NotificationSocket`. Login, logout, account switch, background and rapid
+  background/foreground ×6 each leave exactly one socket per endpoint and no
+  stray timers (tested). Fixed: backoff used to reset on every successful
+  handshake, so a server that accepted and then dropped was redialled every
+  0.5–1 s with a catch-up each time; it now resets only after 30 s of uptime.
+  Fixed: no client liveness check, so a half-open socket after a network change
+  could lose events for minutes; the client now pings every 20 s. No SSE.
+- **Badge.** The bell and "Mark all read" share one `/unread-count` read
+  (packages B and D fixed this independently; B's `badgeCounts()` was kept at
+  integration). Counts stay exact and reset on read.
+- **Checkout polling.** Stripe/Chargily checkout: stops on paid, part-paid,
+  failed, cancelled; an orphaned timer that could fire after the screen closed
+  is gone; a second loop (back out and pay again mid-read, or resume mid-read)
+  can no longer start, and `onSettled` fires once; cadence
+  3,3,5,5,10,10,20,20,20 s. Guest-link sheet: a return mid-read no longer starts
+  a second loop; 3→20 s, 10-minute budget. Both now pause while the app is in
+  the background (the payer is usually on the payment page) and read at once on
+  return. The client still never decides success; only the server order status
+  does.
+- **Not fixed, recorded:** if a checkout's order reference changes while a read
+  is in flight, the old result can still be applied (pre-existing, narrow).
+- **Tests.** `k5_realtime_test.dart` (8), `k5_polling_test.dart` (6), one more
+  resume case in `k5_request_budget_test.dart`; all but the socket-backoff test
+  fail on the previous code. The 20 s ping lives in `_connectIO` and is not
+  unit-testable; it needs a device check.
 
-- `c1c2cbb` checkpoint 1 (Deal list attention/pagination, root rebuild,
-  session snapshot) — full Flutter suite 1005 passed at this point.
-- `3d43820` doc fix; `0a42245` package A; `c83f696` package C; `b2760b2`
-  package B; `e5fe0fb` test fix (drain history grace timer).
-- Integrated tree: `flutter analyze` clean; all `test/k5_*` +
-  `phase_j11_acceptance_test` + `handover_isolation_test` pass (88). The FULL
-  Flutter suite has **not** been run on the integrated tree yet.
+## Resume here
 
-Package D (resume / sockets / badge / checkout polling) was still being
-implemented by a subagent when the session ended. Its uncommitted work lives in
-worktree `.claude/worktrees/agent-ad985a078e4e848db` (branch
-`worktree-agent-ad985a078e4e848db`, base `c1c2cbb`), touching `app_state.dart`,
-`notification_socket.dart`, `push_coordinator.dart`, `repositories.dart`,
-`guest_payment_sheet.dart`, `checkout_section.dart`, new tests
-`k5_polling_test.dart`, `k5_realtime_test.dart`. A backup patch of that WIP is at
-`D:\Code\Shiptrip-k5-backup\packageD-wip.patch`. It is unreviewed and
-possibly incomplete: on resume, inspect it, finish or re-delegate package D
-(brief = section D below; package B already made the badge a single
-`badgeCounts()` read and left "cold start sends 2 badge reads because the
-socket-connect catch-up supersedes the first" to D), then cherry-pick onto the
-branch. Expect conflicts in `app_state.dart` / `repositories.dart` with
-package B and in this doc.
-
-Then finish K5: full Flutter suite (PATH needs `/d/flutter/bin`); full Django
-PG suite (backend changed in checkpoint 1; ~35 min, never in parallel with
-another pytest); Ruff; `makemigrations --check` (none expected); independent
-Opus review of the whole K5 diff (focus: ApiClient shared reads/cancellation,
-session snapshot, role reset, deferred Firebase, list attention parity); update
-this record's status/tests and `IMPLEMENTATION_STATUS.md`; PR to main, CI,
-merge; Railway TEST release `v1.0.0-rc.50+<sha>`; `/healthz`, `/readyz`, smoke
-(`/api/deals?scope=current` → 401 unauthenticated); branch/worktree cleanup;
-K5 phase report. Then K6 (persistent Redis cutover is mandatory) and K7, then
-the K-Series Master Report.
+All four packages are integrated on `claude/k5-mobile-performance`
+(A `0a42245`, C `c83f696`, B `b2760b2`, D `740c50d`, plus a test fix
+`e5fe0fb`). `flutter analyze` is clean and all `test/k5_*` pass together (80).
+Still to do: full Flutter suite on the integrated tree; full Django PG suite
+(a restart was running at session end — it was cut off once at 79% and the
+cluster needed a fresh `SHIPTRIP_TEST_PGDATA`); independent Opus review of
+`b5e33e4..HEAD` (was launched; re-run if no result is recorded here); then PR,
+CI, merge, Railway TEST release `v1.0.0-rc.50+<sha>`, `/healthz`, `/readyz`,
+smoke, cleanup of the four `.claude/worktrees/agent-*` worktrees and their
+branches, the K5 phase report. Then K6 (persistent Redis cutover is mandatory)
+and K7, then the K-Series Master Report. Ruff check passes; no migrations
+missing.
 
 ## Remaining K5 work
 
