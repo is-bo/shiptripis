@@ -45,6 +45,12 @@ GO_DB_MIN_CONNS = 2
 POSTGRES_CONNECTION_LIMIT_DEFAULT = 100
 POSTGRES_CONNECTION_RESERVE_DEFAULT = 10
 
+# How long children get between SIGTERM and SIGKILL. Go services drain within
+# 15s and Gunicorn finishes in-flight requests; Railway must allow at least
+# this much (`drainingSeconds` in railway.json) or it SIGKILLs first -- its
+# default is zero seconds.
+CHILD_STOP_TIMEOUT_SECONDS = 20
+
 
 @dataclass
 class Child:
@@ -120,7 +126,7 @@ def terminate_children() -> None:
             except ProcessLookupError:
                 pass
 
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + CHILD_STOP_TIMEOUT_SECONDS
     for child in reversed(CHILDREN):
         remaining = max(0.0, deadline - time.monotonic())
         try:
@@ -563,8 +569,9 @@ def run() -> int:
             str(budget["web_threads"]),
             "--timeout",
             "120",
-            "--access-logfile",
-            "-",
+            # No Gunicorn access log: its request line holds the concrete
+            # path and query string, guest payment capabilities included.
+            # RequestIDMiddleware writes the allow-listed `http_request` line.
             "--error-logfile",
             "-",
         ],

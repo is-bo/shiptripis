@@ -30,6 +30,32 @@ type EmailSender interface {
 	Send(ctx context.Context, p EmailPayload) error
 }
 
+// PermanentError marks a send failure that retrying the same stream entry
+// cannot fix: the SMTP server answered with a 5xx reply, or the message could
+// not be built at all. The consumer acks such an entry instead of leaving it
+// for the sweeper, which would otherwise resend it every ~60-90s for as long
+// as the stream holds it. Django's OutboundMessage keeps its own bounded
+// attempt budget and re-enqueues or fails the obligation, so the durable
+// retry policy stays in one place.
+type PermanentError struct {
+	Err error
+	// Code is the SMTP reply code, or 0 when the message never reached the
+	// server. Logged instead of Err: go-mail's error text names recipients.
+	Code int
+}
+
+func (e *PermanentError) Error() string { return e.Err.Error() }
+func (e *PermanentError) Unwrap() error { return e.Err }
+
+// AsPermanent returns the PermanentError err carries, if any.
+func AsPermanent(err error) (*PermanentError, bool) {
+	var permanent *PermanentError
+	if errors.As(err, &permanent) {
+		return permanent, true
+	}
+	return nil, false
+}
+
 // EmailPayload is the wire shape Django writes onto the stream, rendered.
 // Kept here as the contract since the Go side reads it (mirrors fcm.go's
 // FCMPayload). Subject and Body are produced by Django; Go does not template.

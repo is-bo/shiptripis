@@ -20,9 +20,11 @@
 package metrics
 
 import (
+	"context"
 	"expvar"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Group is a namespaced bag of metrics for a single service. All names
@@ -80,6 +82,39 @@ func (g *Group) Gauge(name string, v float64) {
 // counters.
 func (g *Group) GaugeAdd(name string, delta float64) {
 	g.floatVar(name).Add(delta)
+}
+
+// Snapshot returns every metric this Group has written, keyed by its
+// unprefixed sanitized name. /debug/vars is served only on each service's
+// loopback admin port, which nothing on Railway scrapes, so services also
+// log this map periodically (see Every) — the log stream is the one sink
+// that is always collected.
+func (g *Group) Snapshot() map[string]any {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make(map[string]any, len(g.ints)+len(g.floats))
+	for name, v := range g.ints {
+		out[sanitize(name)] = v.Value()
+	}
+	for name, v := range g.floats {
+		out[sanitize(name)] = v.Value()
+	}
+	return out
+}
+
+// Every calls fn once per interval until ctx is cancelled. It never calls
+// fn immediately, so a crash-looping process does not flood the log.
+func Every(ctx context.Context, interval time.Duration, fn func()) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			fn()
+		}
+	}
 }
 
 func (g *Group) intVar(name string) *expvar.Int {

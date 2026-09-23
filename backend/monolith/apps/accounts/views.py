@@ -15,7 +15,7 @@ from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import enqueue_secret_message
 from apps.notifications.push import unregister_push_device
 
-from .google import GoogleAuthError, verify_id_token
+from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
 from .serializers import (
     GoogleSignInSerializer,
@@ -128,6 +128,12 @@ class GoogleSignInView(APIView):
         except GoogleAuthError as exc:
             return Response(
                 {"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED
+            )
+        except GoogleAuthUnavailable as exc:
+            # Google could not be reached; the token was never judged, so this
+            # is a retryable outage, not a rejected credential.
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
         # Keep the policy at the view boundary as well as in the verifier. The

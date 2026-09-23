@@ -13,6 +13,7 @@ from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger("shiptrip.request")
 performance_logger = logging.getLogger("shiptrip.performance")
+access_logger = logging.getLogger("shiptrip.access")
 
 
 class _QueryMetrics:
@@ -80,6 +81,26 @@ class RequestIDMiddleware:
             response = self.get_response(request)
         elapsed_ms = round((time.monotonic() - started) * 1000, 2)
         response["X-Request-ID"] = request_id
+        if settings.PERFORMANCE_ACCESS_LOG_ENABLED:
+            # The access log. It replaces Gunicorn's, whose request line
+            # carries the concrete path and query string -- guest payment
+            # capabilities included. One allow-listed line per request is
+            # also what per-route latency percentiles are computed from.
+            access_fields = {
+                "event": "http_request",
+                "request_id": request_id,
+                "method": request.method,
+                "path": _safe_route(request),
+                "status": response.status_code,
+                "duration_ms": elapsed_ms,
+                "actor_class": _actor_class(request),
+            }
+            if settings.PERFORMANCE_DB_METRICS_ENABLED:
+                access_fields.update(
+                    db_queries=query_metrics.count,
+                    db_time_ms=round(query_metrics.duration_ms, 2),
+                )
+            access_logger.info("http request", extra=access_fields)
         if response.status_code >= 400:
             logger.warning(
                 "request completed with error",

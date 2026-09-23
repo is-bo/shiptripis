@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
 	"shiptrip/pkg/redisbus"
+	"shiptrip/pkg/retry"
 )
 
 // Consumer is the G1 FCM-fallback worker (CLAUDE.md §2 G1).
@@ -39,6 +41,12 @@ type Consumer struct {
 	sweepInterval  time.Duration
 	feedbackStream string
 	heartbeatKey   string
+
+	// maxEntryAge, retryBase and retryCeiling bound retries; see the
+	// constants of the same names. Fields only so tests can shrink them.
+	maxEntryAge  time.Duration
+	retryBase    time.Duration
+	retryCeiling time.Duration
 
 	// sem bounds concurrent handle() goroutines so a slow FCM endpoint
 	// can't grow goroutines without limit. wg tracks them so Run/Sweep
@@ -102,6 +110,26 @@ const (
 	// one FCM HTTP call's worth of memory. 32 gives ~16 batch + a small
 	// buffer; raise if FCM RTT dominates and throughput falls behind.
 	handleConcurrency = 32
+
+	// MaxEntryAge is how long a stream entry keeps being retried. Nothing
+	// else bounds a PEL retry: the sweeper reclaims a failing entry every
+	// ~60-90s for as long as the stream holds it. A push is a best-effort
+	// nudge beside the durable in-app notification row, and one that is an
+	// hour late is noise, so an older entry is acked and dropped (logged).
+	MaxEntryAge = time.Hour
+
+	// maxPartialRetries caps the chain of smaller entries a partially failed
+	// multicast re-enqueues for its transiently failed tokens. Without it a
+	// token that fails with a non-permanent code on every try (a sender-ID
+	// mismatch, an APNs credential fault) loops every grace period forever.
+	maxPartialRetries = 5
+
+	// retryBase and retryCeiling space those re-enqueued attempts: 5s, 10s,
+	// 20s, then 30s, each with jitter. The ceiling plus sendTimeout must stay
+	// under SweepMinIdle, or the sweeper would reclaim an entry this worker
+	// is still waiting on and push it twice; a unit test pins that.
+	retryBase    = 5 * time.Second
+	retryCeiling = 30 * time.Second
 )
 
 // NewConsumer builds a Consumer with sensible defaults. Run creates the
@@ -138,6 +166,9 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		sweepInterval:  SweepInterval,
 		feedbackStream: cfg.FeedbackStream,
 		heartbeatKey:   "fcm:worker:" + cfg.ConsumerName,
+		maxEntryAge:    MaxEntryAge,
+		retryBase:      retryBase,
+		retryCeiling:   retryCeiling,
 		sem:            make(chan struct{}, handleConcurrency),
 	}
 }
@@ -295,13 +326,26 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		return
 	}
 
+	if age, ok := retry.EntryAge(m.ID, time.Now()); ok && age > c.maxEntryAge {
+		c.log.Warn("fcm: entry outlived its retry window; acking to drop",
+			"event_id", eventID, "id", m.ID, "age_seconds", int64(age.Seconds()))
+		c.ack(m.ID)
+		return
+	}
+
 	// Grace period — give the WS-owning pod a chance to mark delivered.
-	// This is the one point we honor parent ctx: a fast shutdown here is
-	// free (entry stays in PEL, next pod handles).
+	// A re-enqueued partial retry waits out its backoff instead. This is
+	// the one point we honor parent ctx: a fast shutdown here is free
+	// (entry stays in PEL, next pod handles).
+	attempt := retryAttempt(m.Values)
+	wait := c.deliverGrace
+	if attempt > 0 {
+		wait = retry.Backoff(attempt, c.retryBase, c.retryCeiling)
+	}
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(c.deliverGrace):
+	case <-time.After(wait):
 	}
 
 	// From here on the parent ctx is replaced with a detached, bounded
@@ -338,7 +382,13 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	result, err := c.sender.Send(sendCtx, payload)
-	if err == nil && len(result.RetryTokenIndexes) > 0 {
+	if err == nil && len(result.RetryTokenIndexes) > 0 && attempt >= maxPartialRetries {
+		// The retry budget is spent. Ack below rather than re-enqueue: the
+		// in-app notification row is the durable record, and these tokens
+		// have failed on every try.
+		c.log.Warn("fcm: partial-retry budget exhausted; dropping failed tokens",
+			"event_id", eventID, "attempt", attempt, "tokens", len(result.RetryTokenIndexes))
+	} else if err == nil && len(result.RetryTokenIndexes) > 0 {
 		retryPayload, retryErr := transientRetryPayload(payload, result.RetryTokenIndexes)
 		if retryErr != nil {
 			c.log.Warn("fcm: invalid partial-retry result; leaving original in PEL",
@@ -355,6 +405,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 			"event_id": eventID,
 			"user_id":  payload.UserID,
 			"payload":  string(raw),
+			"attempt":  attempt + 1,
 		}); retryErr != nil {
 			c.log.Warn("fcm: partial-retry enqueue failed; leaving original in PEL",
 				"event_id", eventID, "err", retryErr)
@@ -467,6 +518,17 @@ func decodePayload(values map[string]any) (FCMPayload, error) {
 		return FCMPayload{}, errors.New("token batch exceeds FCM multicast limit")
 	}
 	return p, nil
+}
+
+// retryAttempt reads the `attempt` field this worker sets on a re-enqueued
+// partial retry. Django never writes it, so an original entry is attempt 0;
+// an unreadable value is also treated as 0 rather than dropped.
+func retryAttempt(values map[string]any) int {
+	n, err := strconv.Atoi(stringField(values, "attempt"))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 func stringField(values map[string]any, key string) string {

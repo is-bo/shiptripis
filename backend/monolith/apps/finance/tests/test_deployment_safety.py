@@ -237,6 +237,42 @@ class ProductionEntrypointTests(SimpleTestCase):
             document = json.loads(path.read_text(encoding="utf-8"))
             assert document["deploy"]["healthcheckPath"] == "/readyz", path
 
+    def test_railway_lets_the_combined_launcher_drain_before_sigkill(self):
+        """Railway's default gap between SIGTERM and SIGKILL is zero seconds,
+        which would make every in-process drain unreachable."""
+
+        document = json.loads((REPO / "railway.json").read_text(encoding="utf-8"))
+        launcher = load_combined_launcher()
+        assert (
+            document["deploy"]["drainingSeconds"]
+            > launcher.CHILD_STOP_TIMEOUT_SECONDS
+        )
+
+    def test_production_bounds_django_smtp_and_logs_access_safely(self):
+        """A stalled SMTP relay must not wedge the finance worker's loop, and
+        the access/ops loggers must reach the production JSON handler."""
+
+        result = boot_production(
+            "from config.wsgi import application; "
+            "from django.conf import settings; "
+            "assert 0 < settings.EMAIL_TIMEOUT <= 60, settings.EMAIL_TIMEOUT; "
+            "assert settings.PERFORMANCE_ACCESS_LOG_ENABLED; "
+            "loggers = settings.LOGGING['loggers']; "
+            "assert loggers['shiptrip.access']['level'] == 'INFO'; "
+            "assert loggers['shiptrip.ops']['level'] == 'INFO'"
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_no_gunicorn_access_log_writes_concrete_paths(self):
+        """Gunicorn's request line carries guest payment capabilities; the
+        middleware's route-template `http_request` line is the access log."""
+
+        launcher = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+        web = (MONOLITH / "railway.web.json").read_text(encoding="utf-8")
+        for source in (launcher, web):
+            assert "--access-logfile" not in source
+            assert "--access-logformat" not in source
+
     def test_container_images_pin_production_settings(self):
         """The image itself carries the module, not just the start command."""
 

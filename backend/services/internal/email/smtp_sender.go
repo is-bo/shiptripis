@@ -106,19 +106,38 @@ func NewSMTPSender(cfg SMTPConfig, log *slog.Logger) (EmailSender, error) {
 func (s *smtpSender) Send(ctx context.Context, p EmailPayload) error {
 	msg, err := s.buildMessage(p)
 	if err != nil {
-		// A malformed address can't be fixed by retrying — but the consumer
-		// already validated `to` in decodePayload, so this is rare. Surface
-		// it; handle() logs and the sweeper will keep retrying (the daily
-		// G6b audit catches a permanently-stuck entry).
-		return fmt.Errorf("email: build message (event %s): %w", p.EventID, err)
+		// A malformed address can't be fixed by retrying — the consumer
+		// already validated `to` in decodePayload, so this is rare. It is
+		// permanent: the consumer acks it and Django's obligation keeps the
+		// bounded retry budget.
+		return &PermanentError{Err: fmt.Errorf("email: build message (event %s): %w", p.EventID, err)}
 	}
 	if err := s.client.DialAndSendWithContext(ctx, msg); err != nil {
-		return fmt.Errorf("email: smtp send (event %s): %w", p.EventID, err)
+		err = fmt.Errorf("email: smtp send (event %s): %w", p.EventID, err)
+		if code := permanentReplyCode(err); code != 0 {
+			return &PermanentError{Err: err, Code: code}
+		}
+		return err
 	}
 	// Recipient addresses are PII. Event id + template kind are sufficient for
 	// correlation with the PostgreSQL outbox and provider diagnostics.
 	s.log.Debug("email sent", "event_id", p.EventID, "kind", p.Kind)
 	return nil
+}
+
+// permanentReplyCode returns the 5xx reply code when the SMTP server itself
+// rejected a send command (unknown mailbox, rejected content, message too
+// large), and 0 otherwise. Only a server reply counts: dial, TLS, auth and
+// connection failures carry no reply code and stay retryable, as do 4xx.
+func permanentReplyCode(err error) int {
+	var sendErr *mail.SendError
+	if !errors.As(err, &sendErr) {
+		return 0
+	}
+	if code := sendErr.ErrorCode(); code >= 500 && code < 600 {
+		return code
+	}
+	return 0
 }
 
 // buildMessage is the pure (no-network) half of Send — unit-testable without

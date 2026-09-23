@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.ops_snapshot import stream_backlog
 from apps.core.storage import storage_for
 from apps.finance.models import PaymentProviderEvent, ScheduledJob
 from apps.finance.providers import ChargilyGateway, StripeGateway
@@ -112,27 +113,23 @@ class AdminDeepHealthView(APIView):
                 worker_healthy = bool(client.exists("fcm:worker:active"))
                 push_health["worker_healthy"] = worker_healthy
                 push_health["status"] = "ready" if worker_healthy else "degraded"
-                push_health["stream_length"] = int(client.xlen(settings.FCM_STREAM))
-                try:
-                    group = next(
-                        (
-                            row
-                            for row in client.xinfo_groups(settings.FCM_STREAM)
-                            if row.get("name") == settings.FCM_CONSUMER_GROUP
-                        ),
-                        None,
-                    )
-                    push_health["stream_pending"] = (
-                        int(group.get("pending", 0)) if group else None
-                    )
-                    push_health["stream_lag"] = (
-                        int(group["lag"])
-                        if group and group.get("lag") is not None
-                        else None
-                    )
-                except redis.RedisError:
-                    push_health["stream_pending"] = None
-                    push_health["stream_lag"] = None
+                # The shared helper also decodes this client's byte replies;
+                # comparing a bytes group name with the str setting never
+                # matched, so pending/lag used to read as unknown.
+                backlog = stream_backlog(
+                    client, settings.FCM_STREAM, settings.FCM_CONSUMER_GROUP
+                )
+                push_health["stream_length"] = backlog["length"]
+                push_health["stream_pending"] = backlog["pending"]
+                push_health["stream_lag"] = backlog["lag"]
+                push_health["stream_oldest_pending_age_seconds"] = backlog[
+                    "oldest_pending_age_seconds"
+                ]
+            # Email obligations are durable in PostgreSQL, but a wedged Go
+            # worker shows up here first, as unacknowledged stream entries.
+            checks["email_stream"] = stream_backlog(
+                client, settings.EMAIL_STREAM, settings.EMAIL_CONSUMER_GROUP
+            )
         except Exception:
             checks["redis"] = "degraded"
             push_health["status"] = (

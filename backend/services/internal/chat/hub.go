@@ -26,6 +26,11 @@ import (
 type Hub struct {
 	mu    sync.RWMutex
 	conns map[int64]map[*wsproto.Conn]struct{}
+	// sockets and connects feed the periodic ws_stats log line: live
+	// sockets now, and every registration since boot (a reconnect storm
+	// shows up as connects climbing while sockets stays flat).
+	sockets  int
+	connects uint64
 }
 
 func NewHub() *Hub {
@@ -41,6 +46,10 @@ func (h *Hub) Register(c *wsproto.Conn) {
 		set = make(map[*wsproto.Conn]struct{}, 1)
 		h.conns[c.UserID] = set
 	}
+	if _, dup := set[c]; !dup {
+		h.sockets++
+		h.connects++
+	}
 	set[c] = struct{}{}
 }
 
@@ -52,10 +61,21 @@ func (h *Hub) Unregister(c *wsproto.Conn) {
 	if !ok {
 		return
 	}
+	if _, present := set[c]; present {
+		h.sockets--
+	}
 	delete(set, c)
 	if len(set) == 0 {
 		delete(h.conns, c.UserID)
 	}
+}
+
+// Stats reports live sockets, distinct connected users, and total
+// registrations since the process started.
+func (h *Hub) Stats() (sockets, users int, connects uint64) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.sockets, len(h.conns), h.connects
 }
 
 // Send fans an envelope to every socket this pod holds for userID.

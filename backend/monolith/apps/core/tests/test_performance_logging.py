@@ -63,3 +63,62 @@ class PerformanceLoggingTests(TestCase):
         assert record.path == "/api/payments/guest/<str:token>"
         assert capability not in str(record.__dict__)
         assert "private-query-token" not in str(record.__dict__)
+
+
+class AccessLogTests(TestCase):
+    @override_settings(
+        PERFORMANCE_ACCESS_LOG_ENABLED=True,
+        PERFORMANCE_SLOW_REQUEST_MS=60_000,
+        PERFORMANCE_DB_METRICS_ENABLED=False,
+    )
+    def test_every_request_gets_one_allow_listed_access_line(self):
+        capability = "private-guest-capability"
+
+        with self.assertLogs("shiptrip.access", level="INFO") as captured:
+            fast = self.client.get("/healthz")
+            guest = self.client.get(
+                f"/api/payments/guest/{capability}?token=private-query-token"
+            )
+
+        assert fast.status_code == 200
+        assert guest.status_code == 404
+        assert [r.event for r in captured.records] == ["http_request", "http_request"]
+        healthz, guest_record = captured.records
+        assert healthz.path == "/healthz"
+        assert healthz.status == 200
+        assert healthz.request_id == fast["X-Request-ID"]
+        assert healthz.duration_ms >= 0
+        assert healthz.actor_class == "anonymous"
+        assert not hasattr(healthz, "db_queries")
+        assert guest_record.path == "/api/payments/guest/<str:token>"
+        assert guest_record.status == 404
+        assert capability not in str(guest_record.__dict__)
+        assert "private-query-token" not in str(guest_record.__dict__)
+
+    @override_settings(
+        PERFORMANCE_ACCESS_LOG_ENABLED=True,
+        PERFORMANCE_SLOW_REQUEST_MS=60_000,
+        PERFORMANCE_DB_METRICS_ENABLED=True,
+    )
+    def test_access_line_carries_query_counts_when_db_metrics_are_on(self):
+        request = RequestFactory().get("/admin/users/")
+        request.resolver_match = SimpleNamespace(
+            route="admin/users/", namespaces=("admin_console",)
+        )
+        request.user = SimpleNamespace(is_authenticated=True)
+
+        def response(_request):
+            get_user_model().objects.count()
+            return HttpResponse(status=200)
+
+        with self.assertLogs("shiptrip.access", level="INFO") as captured:
+            RequestIDMiddleware(response)(request)
+
+        record = captured.records[0]
+        assert record.db_queries == 1
+        assert record.actor_class == "admin"
+
+    @override_settings(PERFORMANCE_ACCESS_LOG_ENABLED=False)
+    def test_access_log_can_be_switched_off(self):
+        with self.assertNoLogs("shiptrip.access"):
+            self.client.get("/healthz")

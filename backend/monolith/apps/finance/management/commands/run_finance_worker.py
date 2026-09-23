@@ -12,6 +12,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
+from apps.core.ops_snapshot import log_ops_snapshot
 from apps.finance.jobs import requeue_stuck_jobs, run_due_jobs
 from apps.notifications.outbox import dispatch_due_messages
 from apps.notifications.push import consume_fcm_results
@@ -24,6 +25,9 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=int, default=30)
         parser.add_argument("--limit", type=int, default=50)
         parser.add_argument("--stale-after-seconds", type=int, default=900)
+        # One `ops_snapshot` log line (backlogs, stream lag, DB connections,
+        # container memory) per interval; 0 disables it.
+        parser.add_argument("--ops-snapshot-seconds", type=int, default=300)
 
     def handle(self, *args, **options):
         interval = max(5, int(options["interval"]))
@@ -37,6 +41,8 @@ class Command(BaseCommand):
             if handler is not None:
                 signal.signal(handler, _stop)
 
+        snapshot_every = max(0, int(options["ops_snapshot_seconds"]))
+        next_snapshot = time.monotonic() + snapshot_every
         self.stdout.write(f"finance worker started (interval={interval}s)")
         while running["value"]:
             try:
@@ -60,6 +66,12 @@ class Command(BaseCommand):
                     )
             except Exception as exc:  # noqa: BLE001 - the loop must survive
                 self.stderr.write(f"finance worker iteration failed: {exc!r}")
+            if snapshot_every and time.monotonic() >= next_snapshot:
+                next_snapshot = time.monotonic() + snapshot_every
+                try:
+                    log_ops_snapshot()
+                except Exception as exc:  # noqa: BLE001 - telemetry never stops jobs
+                    self.stderr.write(f"ops snapshot failed: {exc!r}")
             for _ in range(interval):
                 if not running["value"]:
                     break

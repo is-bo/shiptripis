@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"shiptrip/pkg/redisbus"
+	"shiptrip/pkg/retry"
 )
 
 // Consumer drains the `email:send` Redis Stream and sends each entry over
@@ -37,6 +38,7 @@ type Consumer struct {
 	log           *slog.Logger
 	sweepMinIdle  time.Duration
 	sweepInterval time.Duration
+	maxEntryAge   time.Duration
 
 	// sem bounds concurrent handle() goroutines so a slow SMTP endpoint can't
 	// grow goroutines without limit. wg tracks them so Run/Sweep don't return
@@ -98,6 +100,15 @@ const (
 	// Long enough to cover any realistic sweeper-retry window; short enough
 	// not to accumulate. 10 minutes mirrors the OTP validity ballpark.
 	sentKeyTTL = 10 * time.Minute
+
+	// MaxEntryAge is how long one stream entry keeps being retried. Nothing
+	// else bounds a PEL retry: the sweeper reclaims a failing entry every
+	// ~60-90s for as long as the stream holds it. Every entry is backed by a
+	// Django OutboundMessage that re-enqueues the same event id after its
+	// two-minute receipt timeout and fails the obligation once its attempt
+	// budget is spent, so an entry this old has either been superseded by a
+	// fresh one or belongs to an obligation Django already gave up on.
+	MaxEntryAge = 30 * time.Minute
 )
 
 // NewConsumer builds a Consumer with sensible defaults. Caller need not
@@ -134,6 +145,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		log:           log,
 		sweepMinIdle:  SweepMinIdle,
 		sweepInterval: SweepInterval,
+		maxEntryAge:   MaxEntryAge,
 		sem:           make(chan struct{}, handleConcurrency),
 	}
 }
@@ -271,6 +283,12 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		c.ack(m.ID)
 		return
 	}
+	if age, ok := retry.EntryAge(m.ID, time.Now()); ok && age > c.maxEntryAge {
+		c.log.Warn("email: entry outlived its retry window; acking to drop",
+			"event_id", p.EventID, "id", m.ID, "age_seconds", int64(age.Seconds()))
+		c.ack(m.ID)
+		return
+	}
 
 	// Detach from the parent ctx: once we're past decode we've committed to
 	// either acking or leaving in PEL, and Run's defer wg.Wait() already holds
@@ -315,6 +333,13 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	if err := c.sender.Send(sendCtx, p); err != nil {
+		if permanent, ok := AsPermanent(err); ok {
+			// The reply code, not err: go-mail's error text names recipients.
+			c.log.Error("email send rejected permanently; acking (Django owns the retry budget)",
+				"event_id", p.EventID, "kind", p.Kind, "smtp_code", permanent.Code)
+			c.ack(m.ID)
+			return
+		}
 		c.log.Warn("email send failed; leaving in PEL for sweep",
 			"event_id", p.EventID, "kind", p.Kind, "err", err)
 		return

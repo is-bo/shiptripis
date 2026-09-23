@@ -311,6 +311,10 @@ EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)  # noqa: F405
 EMAIL_HOST_USER = env.str("EMAIL_SMTP_USERNAME", default="")  # noqa: F405
 EMAIL_HOST_PASSWORD = env.str("EMAIL_SMTP_PASSWORD", default="")  # noqa: F405
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
+# Django's default is no socket timeout. Secret-bearing mail is sent from the
+# finance worker's serial loop, so one stalled SMTP connection would otherwise
+# stop payout, refund and expiry jobs behind it indefinitely.
+EMAIL_TIMEOUT = env.int("EMAIL_SMTP_TIMEOUT_SECONDS", default=20)  # noqa: F405
 if from_addr := env.str("EMAIL_FROM_ADDR", default=""):  # noqa: F405
     DEFAULT_FROM_EMAIL = from_addr  # noqa: F405
 if TRANSACTIONAL_EMAIL_PROVIDER not in {"smtp", "sender_net", "sender.net"}:  # noqa: F405
@@ -354,6 +358,8 @@ class _JsonFormatter(logging.Formatter):
         "provider",
         "operation",
         "outcome",
+        # Aggregate counts/ages from the periodic ops snapshot; numbers only.
+        "ops",
     )
 
     def format(self, record):
@@ -396,6 +402,8 @@ LOGGING = {  # noqa: F405
     },
     "loggers": {
         "shiptrip.request": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "shiptrip.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "shiptrip.ops": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "shiptrip.performance": {
             "handlers": ["console"],
             "level": "INFO",

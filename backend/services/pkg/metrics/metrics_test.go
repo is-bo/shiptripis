@@ -1,9 +1,11 @@
 package metrics
 
 import (
+	"context"
 	"expvar"
 	"strconv"
 	"testing"
+	"time"
 )
 
 // readInt pulls the current value of a published expvar.Int by its full
@@ -112,5 +114,47 @@ func TestFoldedChannelLabelNames(t *testing.T) {
 	g.Counter("pubsub_drops_"+"offer.accepted", 1)
 	if got := readInt(t, "svc_folded_pubsub_drops_offer_accepted"); got != 1 {
 		t.Errorf("folded counter = %d, want 1", got)
+	}
+}
+
+func TestSnapshotReturnsThisGroupsUnprefixedValues(t *testing.T) {
+	g := Register("svc-snapshot")
+	g.Counter("pubsub_drops_"+"offer.accepted", 2)
+	g.GaugeAdd("inflight", 3)
+	other := Register("svc-snapshot-other")
+	other.Counter("not_mine", 1)
+
+	got := g.Snapshot()
+	if got["pubsub_drops_offer_accepted"] != int64(2) || got["inflight"] != float64(3) {
+		t.Fatalf("Snapshot() = %v", got)
+	}
+	if _, leaked := got["not_mine"]; leaked || len(got) != 2 {
+		t.Fatalf("Snapshot() carried another group's metrics: %v", got)
+	}
+}
+
+func TestEveryTicksUntilCancelledAndNeverFiresImmediately(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := make(chan struct{}, 16)
+	done := make(chan struct{})
+	go func() {
+		Every(ctx, 50*time.Millisecond, func() { calls <- struct{}{} })
+		close(done)
+	}()
+	select {
+	case <-calls:
+		t.Fatal("Every fired before its first interval")
+	case <-time.After(10 * time.Millisecond):
+	}
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Every never fired")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Every did not return after cancellation")
 	}
 }
