@@ -151,10 +151,10 @@ class DealSummarySerializer(serializers.ModelSerializer):
         K5: the app's "needs your attention" list used to fetch every Deal's
         detail just to read these five booleans -- one request per Deal on
         every Home load. They come from the same functions the detail's
-        `handover` and `ratings` blocks use, over rows the list view
-        prefetches, so the list can neither offer an action the detail would
-        refuse nor hide one it would allow. Booleans only: no code material,
-        no availability instant.
+        `handover` and `ratings` blocks use, over live codes the list view
+        prefetches and rated-by-role flags it annotates, so the list can
+        neither offer an action the detail would refuse nor hide one it would
+        allow. Booleans only: no code material, no availability instant.
         """
 
         from apps.handover.services import handover_permissions_for
