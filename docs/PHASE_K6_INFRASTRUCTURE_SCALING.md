@@ -29,9 +29,12 @@ provision limit exceeded`.
 - **O — workers, retries, breakers, background work, caching, observability,
   alerts (14.4, 14.7–14.14).** Findings:
   `docs/k6-notes/reliability-observability.md`.
-- **At the final TEST release (end of K7):** provision managed Redis with
-  proven persistence, cut over per the package R runbook, prove restart
-  survival, and run the failure drills (14.17) on TEST.
+- **Managed Redis provisioning and cutover: deferred to pre-launch by owner
+  decision (2026-09-23).** K6 makes the code, configuration and runbook ready
+  (package R) so the cutover is one variable change plus the restart proof; the
+  owner will provision persistent Redis before launch. The TEST release at the
+  end of K7 keeps embedded Redis. Failure drills that need shared Redis (14.17
+  Redis restart) run at that cutover.
 
 ## Resume here
 
@@ -41,6 +44,6 @@ session ends before they report: check `git worktree list` for
 and integrate them onto this branch, assemble the `docs/k6-notes/*` findings
 into this record, then start K7.
 
-**Possible owner action:** provisioning Redis may again hit the Railway free
-plan limit. If it does, the owner must upgrade the Railway plan (or supply an
-approved persistent Redis) before the final release can complete the cutover.
+**Owner action before launch:** provision persistent managed Redis (the
+Railway free plan refused it in K1, so a plan upgrade may be needed) and run the
+package R cutover runbook. Do not provision it during K6/K7.
