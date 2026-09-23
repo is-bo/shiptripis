@@ -16,7 +16,13 @@ run and one Railway TEST release after K7, then merge).
   resilience certification mapped to evidence, acceptance-criteria check.
   Findings: `docs/k7-notes/certification.md`.
 
+- **D — measured defects from C:** bounded/concurrent storage checks on admin
+  KYC + Payout Review detail, admin dispute list reachable beyond 100 rows,
+  trimmed Offers list payload (only provably unused fields).
+
 ## Resume here
+
+C is integrated (`41fc5fb`). A, B and D are running in helper worktrees.
 
 Packages A, B and C run in helper worktrees from `f77ae0e` (check
 `git worktree list`; review and cherry-pick their commits onto the stack).
