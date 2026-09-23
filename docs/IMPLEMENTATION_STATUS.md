@@ -9,8 +9,8 @@ restart proof are deferred to pre-launch by owner decision. Worker retries are
 now bounded, Railway gets a 30 s drain window, Google sign-in and SMTP calls
 have timeouts, and a per-request log line replaces Gunicorn's access log.
 Local load: 100 active users fit today's shape (p95 450 ms); one service,
-no PgBouncer and no caching needed yet. Mobile page-size fix (package P) in
-progress. Not merged or released. See
+no PgBouncer and no caching needed yet (load numbers provisional: the model's
+traffic mix is being corrected). Not merged or released. See
 [the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
 
 ## K5 — Mobile Performance (verified, PR pending, 2026-09-23)

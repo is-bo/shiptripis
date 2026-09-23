@@ -3,7 +3,8 @@
 Status: **in progress; not merged or released.** Branch
 `claude/k6-infrastructure-scaling`, stacked on the K5 branch head `b5e1118`
 (K5 is complete locally; see its record). Packages R, O and L are integrated;
-package P (mobile page size) is in progress. Nothing in K6 was deployed and
+package P is integrated; the capacity numbers are provisional pending a
+re-run with a corrected traffic mix. Nothing in K6 was deployed and
 LIVE was not touched.
 
 This record is the summary. The detailed findings, runbooks and raw evidence
@@ -66,12 +67,16 @@ active user. Nothing ran against TEST or LIVE.
 - 500 and 1,000 users saturated the shared test box. They are not certified;
   90 RPS is a lower bound for 4 workers.
 - Cost: about 40 ms web CPU per request, 32 ms with 20-row pages.
-- **Page-size finding.** `GET /api/journeys/search` (browse, 100 rows, 241 KB)
-  and `GET /api/parcels/open` (100 rows, 157 KB), both called by the app
-  without `page_size`, are 4.4 % of requests but about 40 % of web server
-  time. 20-row pages raised throughput per core by about 38 % and cut p95 at
-  250 users from 2.4 s to 0.95 s. This is being fixed in the mobile client as
-  package P.
+- **Correction — traffic mix.** The load model included
+  `GET /api/journeys/search` and `GET /api/parcels/open` (100 rows each) as app
+  traffic, and found them to be ~40 % of web server time. Package P then
+  established that **no app screen calls either endpoint**: discovery uses
+  `find-travelers` and journey detail uses `compatible-requests`. The
+  "page-size finding" is an artefact of the model, and every number in this
+  section is **provisional** until the capacity runs are repeated with a
+  corrected mix (scheduled after the K7 packages, so runs don't compete for the
+  box). Package P still made the two unused repository methods request 20-row
+  pages.
 
 **Capacity envelope (extrapolated,** assuming a Railway vCPU costs 40–60 ms
 per request): today's 1 replica 2x2 is safe to about 20–30 RPS, which is
@@ -169,8 +174,10 @@ No drill ran on TEST or staging in K6. Coverage today:
 5. **Operator rules.** Never run `cache.clear()`, `FLUSHDB` or `FLUSHALL`
    against a shared Redis (it deletes streams, groups and pending entries).
    Use one Redis per environment.
-6. **Page size (package P).** Mobile lazy paging for journeys search and
-   parcels open, in progress. Results to be added here.
+6. **Page size (package P) — premise invalid.** No app screen calls the two
+   endpoints; the unused repository methods now request 20-row pages
+   (`5606529`). Lowering the server's 100-row default is a contract change
+   left to Codex; capacity is being re-measured with a corrected mix.
 7. Smaller items recorded in the appendices: unexplained TEST 1.14 GB memory
    peak (check against the deploy timeline); Railway restart budget of 5
    (worth an alert); `unread-count` is the next web CPU target; untested
@@ -178,11 +185,12 @@ No drill ran on TEST or staging in K6. Coverage today:
 
 ## Resume here
 
-K6 has integrated packages R, O and L (plus the `3966d46` test fix). Package P
-(mobile lazy paging for journeys search and parcels open) is in progress in a
-helper worktree; review it, integrate it, add its results under "Load and
-capacity" and follow-up 6, then K6 is complete and K7 starts. No CI or deploy
-until the end of K7.
+K6 has integrated packages R, O, L and P (plus the `3966d46` test fix). One
+item remains: re-run the capacity measurements with a corrected traffic mix
+(replace journeys search / parcels open with `find-travelers` and
+`compatible-requests`) once the K7 packages have finished, and replace the
+provisional numbers. K7 packages A–C are running. No CI or deploy until the end
+of K7.
 
 **Owner action before launch:** provision persistent managed Redis (the
 Railway free plan refused it in K1, so a plan upgrade may be needed) and run the
