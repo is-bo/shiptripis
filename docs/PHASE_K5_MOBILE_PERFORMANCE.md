@@ -326,6 +326,8 @@ checkout, 1 guest sheet.
   the snapshot under the identity they captured.
 - **Paging.** `getAllPages` keeps the first copy of a row repeated across pages
   by an insert between reads (rows with an `id` only).
+- **Deal list query budget.** Back to its K4 budget (≤ 4): the `ratings`
+  prefetch became per-role `Exists` annotations read by `viewer_can_rate`.
 - **Tests.** Three backend tests in `test_phase_k5_list_attention.py` (not yet
   run here); Flutter: 2 paging, 4 session/snapshot, 1 history; every new
   Flutter test except the history one fails on the previous code.

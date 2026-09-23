@@ -38,7 +38,11 @@ from rest_framework.views import APIView
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.phase4_policy import InvalidPhase4Policy
 from apps.handover.services import live_handover_codes_prefetch
-from apps.ratings.services import review_window_open_q, with_review_deadline
+from apps.ratings.services import (
+    review_window_open_q,
+    with_review_deadline,
+    with_viewer_rated_flags,
+)
 
 from .activity import ACTIVE, ACTIVITY_STATES, activity_q
 from .arrival import ArrivalError, decide_early_arrival, report_early_arrival
@@ -175,8 +179,10 @@ class DealListView(generics.ListAPIView):
         return {**super().get_serializer_context(), "now": timezone.now()}
 
     def get_queryset(self):
-        queryset = _party_deals(self.request.user.id).prefetch_related(
-            live_handover_codes_prefetch(), "ratings"
+        queryset = with_viewer_rated_flags(
+            _party_deals(self.request.user.id).prefetch_related(
+                live_handover_codes_prefetch()
+            )
         )
         scope = self.request.query_params.get("scope")
         if scope:

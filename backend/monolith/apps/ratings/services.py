@@ -34,7 +34,7 @@ import logging
 from datetime import datetime
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 
 from apps.core.financial_locks import lock_deal_lifecycle
@@ -315,15 +315,45 @@ def viewer_can_rate(*, deal: Deal, viewer_id: int, at: datetime | None = None) -
     """`rating_state(...)["can_rate"]`, without building the projection.
 
     The one rule behind both the Deal detail and the Deal list's `attention`
-    block. Reads `deal.ratings.all()`, so a list that prefetches `ratings`
-    answers it for a whole page without a query per row.
+    block. A list annotated by `with_viewer_rated_flags` answers it for a whole
+    page without a query per row; any other Deal reads `deal.ratings.all()`.
     """
 
     at = at or timezone.now()
     viewer_role = _viewer_role(deal, viewer_id)
     if viewer_role is None or not _window_open(deal, at=at):
         return False
-    return not any(row.rater_role == viewer_role for row in deal.ratings.all())
+    already_rated = getattr(deal, _RATED_FLAG[viewer_role], _NOT_ANNOTATED)
+    if already_rated is _NOT_ANNOTATED:
+        already_rated = any(
+            row.rater_role == viewer_role for row in deal.ratings.all()
+        )
+    return not already_rated
+
+
+#: The annotation each role's "already rated" flag lives under.
+_RATED_FLAG = {
+    Rating.RaterRole.SENDER: "sender_has_rated",
+    Rating.RaterRole.TRAVELER: "traveler_has_rated",
+}
+_NOT_ANNOTATED = object()
+
+
+def with_viewer_rated_flags(queryset):
+    """Annotate whether each side has rated, for `viewer_can_rate`.
+
+    Two correlated `EXISTS` in the list's own query, instead of prefetching
+    every rating row in a query of its own.
+    """
+
+    return queryset.annotate(
+        **{
+            flag: Exists(
+                Rating.objects.filter(deal=OuterRef("pk"), rater_role=role)
+            )
+            for role, flag in _RATED_FLAG.items()
+        }
+    )
 
 
 def is_revealed(rating: Rating, *, deal: Deal, at: datetime | None = None) -> bool:
