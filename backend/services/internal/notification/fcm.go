@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/retry"
 )
@@ -36,6 +37,7 @@ type Consumer struct {
 	group          string
 	name           string
 	log            *slog.Logger
+	metrics        *metrics.Group
 	deliverGrace   time.Duration
 	sweepMinIdle   time.Duration
 	sweepInterval  time.Duration
@@ -47,6 +49,11 @@ type Consumer struct {
 	maxEntryAge  time.Duration
 	retryBase    time.Duration
 	retryCeiling time.Duration
+
+	// sendBudget is the longest a handler can still hold an entry once it
+	// commits to sending (sendTimeout + ackTimeout). A field only so tests
+	// that shrink sweepMinIdle can shrink it too; see handle.
+	sendBudget time.Duration
 
 	// sem bounds concurrent handle() goroutines so a slow FCM endpoint
 	// can't grow goroutines without limit. wg tracks them so Run/Sweep
@@ -79,6 +86,9 @@ type ConsumerConfig struct {
 	// Sender is the actual FCM HTTP backend. Pass nil to install the
 	// LogOnlySender stub for local stream-flow tests.
 	Sender FCMSender
+	// Metrics receives the drop/defer counters. Optional: nil disables them.
+	// cmd/notification passes the service group its ws_stats line logs.
+	Metrics *metrics.Group
 }
 
 // Default timings — tracked here so changes are diff-reviewable.
@@ -161,6 +171,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		group:          cfg.ConsumerGroup,
 		name:           cfg.ConsumerName,
 		log:            log,
+		metrics:        cfg.Metrics,
 		deliverGrace:   DeliverGracePeriod,
 		sweepMinIdle:   SweepMinIdle,
 		sweepInterval:  SweepInterval,
@@ -169,6 +180,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		maxEntryAge:    MaxEntryAge,
 		retryBase:      retryBase,
 		retryCeiling:   retryCeiling,
+		sendBudget:     sendTimeout + ackTimeout,
 		sem:            make(chan struct{}, handleConcurrency),
 	}
 }
@@ -222,8 +234,11 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 		c.heartbeat(ctx)
+		// XREADGROUP starts each entry's PEL idle clock now, not when a
+		// handler slot frees up; handle measures its sweeper deadline from here.
+		readAt := time.Now()
 		for _, m := range msgs {
-			if !c.dispatchHandle(ctx, m) {
+			if !c.dispatchHandle(ctx, m, readAt) {
 				return nil
 			}
 		}
@@ -270,8 +285,10 @@ func (c *Consumer) sweepOnce(ctx context.Context) {
 			}
 			return
 		}
+		// XAUTOCLAIM resets each claimed entry's idle clock.
+		claimedAt := time.Now()
 		for _, m := range msgs {
-			if !c.dispatchHandle(ctx, m) {
+			if !c.dispatchHandle(ctx, m, claimedAt) {
 				return
 			}
 		}
@@ -287,8 +304,9 @@ func (c *Consumer) sweepOnce(ctx context.Context) {
 // dispatchHandle acquires a slot in the semaphore and spawns a handler.
 // Returns false iff ctx was cancelled while waiting for a slot — the
 // caller should stop pulling new work in that case. The PEL entry stays
-// claimed and the sweeper on the next pod will reclaim it.
-func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage) bool {
+// claimed and the sweeper on the next pod will reclaim it. readAt is when
+// Redis handed the entry to this consumer.
+func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage, readAt time.Time) bool {
 	select {
 	case <-ctx.Done():
 		return false
@@ -296,7 +314,7 @@ func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage)
 	}
 	c.wg.Go(func() {
 		defer func() { <-c.sem }()
-		c.handle(ctx, m)
+		c.handle(ctx, m, readAt)
 	})
 	return true
 }
@@ -306,6 +324,9 @@ func (c *Consumer) dispatchHandle(ctx context.Context, m redisbus.StreamMessage)
 // without acking the PEL entry, and the next pod's sweeper would push a
 // duplicate to the same user.
 const sendTimeout = 15 * time.Second
+
+// ackTimeout caps the detached XAck after a send.
+const ackTimeout = 3 * time.Second
 
 // handle processes a single stream entry: wait, check delivered, send, ack.
 // All errors are logged; only XAck failures leave the entry in the PEL
@@ -318,7 +339,14 @@ const sendTimeout = 15 * time.Second
 // that point we've committed to either acking or leaving in PEL, and a
 // shutdown-cancelled Send would surface as a duplicate push on the next
 // pod's sweep.
-func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
+//
+// readAt anchors the sweeper race. An entry can queue for a handler slot
+// while all 32 are busy (some sleeping out a partial-retry backoff), and its
+// PEL idle time keeps growing meanwhile. If the send could still be in
+// flight when the entry passes SweepMinIdle, the sweeper would reclaim it and
+// push the same notification again, so such an entry is left for the sweeper
+// to hand to a fresh handler instead.
+func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage, readAt time.Time) {
 	eventID := stringField(m.Values, "event_id")
 	if eventID == "" {
 		c.log.Warn("fcm: stream entry missing event_id; acking to drop", "id", m.ID)
@@ -327,6 +355,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	if age, ok := retry.EntryAge(m.ID, time.Now()); ok && age > c.maxEntryAge {
+		c.count("fcm_stale_drops_total")
 		c.log.Warn("fcm: entry outlived its retry window; acking to drop",
 			"event_id", eventID, "id", m.ID, "age_seconds", int64(age.Seconds()))
 		c.ack(m.ID)
@@ -342,10 +371,18 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	if attempt > 0 {
 		wait = retry.Backoff(attempt, c.retryBase, c.retryCeiling)
 	}
+	// Checked before the wait too, so an entry that cannot make it does not
+	// hold a slot for the whole backoff first.
+	if c.sweeperWouldReclaim(eventID, m.ID, readAt, wait) {
+		return
+	}
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(wait):
+	}
+	if c.sweeperWouldReclaim(eventID, m.ID, readAt, 0) {
+		return
 	}
 
 	// From here on the parent ctx is replaced with a detached, bounded
@@ -386,6 +423,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		// The retry budget is spent. Ack below rather than re-enqueue: the
 		// in-app notification row is the durable record, and these tokens
 		// have failed on every try.
+		c.count("fcm_partial_retry_exhausted_total")
 		c.log.Warn("fcm: partial-retry budget exhausted; dropping failed tokens",
 			"event_id", eventID, "attempt", attempt, "tokens", len(result.RetryTokenIndexes))
 	} else if err == nil && len(result.RetryTokenIndexes) > 0 {
@@ -421,6 +459,28 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		return
 	}
 	c.ack(m.ID)
+}
+
+// sweeperWouldReclaim reports whether waiting another `wait` and then
+// sending could still be running when the entry's PEL idle time reaches
+// sweepMinIdle. It logs and counts the deferral; the caller returns without
+// acking so the sweeper redelivers the entry with a fresh idle clock.
+func (c *Consumer) sweeperWouldReclaim(eventID, id string, readAt time.Time, wait time.Duration) bool {
+	idle := time.Since(readAt)
+	if idle+wait+c.sendBudget < c.sweepMinIdle {
+		return false
+	}
+	c.count("fcm_send_deferred_total")
+	c.log.Warn("fcm: too close to the sweeper's reclaim window; leaving in PEL",
+		"event_id", eventID, "id", id, "idle_ms", idle.Milliseconds(), "wait_ms", wait.Milliseconds())
+	return true
+}
+
+// count bumps a consumer counter when a metrics group is wired.
+func (c *Consumer) count(name string) {
+	if c.metrics != nil {
+		c.metrics.Counter(name, 1)
+	}
 }
 
 const feedbackStreamMaxLen = int64(10_000)
@@ -463,7 +523,7 @@ func (c *Consumer) heartbeat(ctx context.Context) {
 // shutdown, sweep abort) doesn't leave a delivered push un-ack'd —
 // which would surface as a duplicate FCM on next sweep.
 func (c *Consumer) ack(id string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ackTimeout)
 	defer cancel()
 	if err := c.rdb.XAck(ctx, c.stream, c.group, id); err != nil {
 		c.log.Warn("fcm xack failed", "id", id, "err", err)

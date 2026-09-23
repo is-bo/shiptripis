@@ -147,7 +147,15 @@ Implemented (cheap, no vendor):
 - Deep health: `email_stream` backlog, FCM `stream_oldest_pending_age_seconds`,
   and the bytes/str fix that made FCM pending/lag always `null`.
 - Go: `ws_stats` line every minute from chat and notification (sockets, users,
-  connects since boot, plus every expvar counter such as pub/sub drops).
+  connects since boot, plus every expvar counter such as pub/sub drops), and
+  an `email_stats` line every minute from the email worker (its expvar
+  counters). K7 review added drop counters that used to be warn-log only (expvar names;
+  the log lines carry them unprefixed under `metrics`):
+  `notification_fcm_stale_drops_total` (entry > 1 h, acked unsent),
+  `notification_fcm_partial_retry_exhausted_total` (tokens still failing after
+  5 re-enqueues), `notification_fcm_send_deferred_total` (entry left for the
+  sweeper because its send could outlive the 60 s reclaim window) and
+  `email_stale_drops_total` (entry > 30 min, acked unsent).
 
 | Metric | Source on Railway (no paid vendor) | Alert threshold |
 | --- | --- | --- |
@@ -162,6 +170,10 @@ Implemented (cheap, no vendor):
 | Worker backlog | `ops_snapshot` `jobs_oldest_overdue_seconds`, `outbound_oldest_overdue_seconds`, `jobs_failed_unresolved` | overdue > 600 s; any new unresolved failure |
 | Worker liveness | absence of `ops_snapshot` (finance) / `ws_stats` (Go) lines | none for 15 min |
 | WebSocket churn | `ws_stats` `connects_total` delta vs `sockets` | connects/min > 3 × sockets |
+| Realtime relay drops | `ws_stats.metrics` `dispatch_drops_total`, `receipt_drops_total` (chat and notification lines) | any increase (the relay only drops after a 250 ms wait for a worker) |
+| Push given up | `ws_stats.metrics` `fcm_stale_drops_total`, `fcm_partial_retry_exhausted_total` (notification line) | any increase in 15 min (stale ⇒ FCM or the worker was down > 1 h) |
+| Push deferred to sweeper | `ws_stats.metrics` `fcm_send_deferred_total` (notification line) | > 10 in 15 min (handler pool saturated; pushes are late) |
+| Email given up | `email_stats.metrics` `stale_drops_total` | any increase (SMTP relay failing > 30 min; Django obligations will FAIL) |
 | `/readyz` degraded | External free uptime monitor on `/readyz` (body `status`) | 503 twice in a row; `degraded` > 5 min |
 | Container restarts | Railway deploy/crash events | any crash; restart budget (5) near exhaustion |
 

@@ -163,7 +163,32 @@ func (c *Conn) Read(ctx context.Context) (Envelope, error) {
 // and the client's reconnect re-reads the durable inbox. The false return
 // keeps callers from writing a delivery receipt for a message that never
 // left, so the FCM fallback still fires.
+//
+// A cancelled connCtx or a closed conn refuses the envelope up front, even
+// when the buffer has room: the writer is already exiting and its drain
+// discards whatever is queued, so reporting "queued" would write a receipt
+// for a push that never left. The pre-check narrows that window to the
+// instant between check and enqueue; it cannot be closed without a lock on
+// every Send.
 func (c *Conn) Send(env Envelope) bool {
+	if c.connCtx.Err() != nil {
+		c.log.Debug("ws send after connection teardown; dropping message",
+			"event_id", env.EventID,
+			"type", env.Type,
+		)
+		return false
+	}
+	// A select picks randomly among ready cases, so done gets its own
+	// non-blocking check first rather than racing a free buffer slot.
+	select {
+	case <-c.done:
+		c.log.Debug("ws send after close; dropping message",
+			"event_id", env.EventID,
+			"type", env.Type,
+		)
+		return false
+	default:
+	}
 	select {
 	case <-c.done:
 		c.log.Debug("ws send after close; dropping message",

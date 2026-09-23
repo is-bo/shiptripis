@@ -20,6 +20,33 @@ run and one Railway TEST release after K7, then merge).
   KYC + Payout Review detail, admin dispute list reachable beyond 100 rows,
   trimmed Offers list payload (only provably unused fields).
 
+## Review fixes
+
+Confirmed findings from the K6+K7 runtime review, fixed with a test each:
+
+- **Email PII in logs:** send failures log a `SendFailure` (class, go-mail
+  stage, SMTP code/RFC 3463 status, relay host) — never go-mail's error text,
+  which lists recipients; the stub sender no longer logs the subject.
+- **Email duplicate send:** an error after DATA was accepted (RSET/QUIT) is
+  treated as sent (`msg.IsDelivered()`).
+- **FCM sweeper race:** a handler that could still be sending when its entry
+  passes the 60 s reclaim window (queued for a slot, or a long backoff) leaves
+  it for the sweeper instead of pushing twice; counted.
+- **WS receipt for a discarded frame:** `Conn.Send` refuses once `connCtx` is
+  cancelled and checks `done` before a free buffer slot.
+- **Shutdown budget:** email `sendTimeout` 30 s → 12 s (+3 s ack) fits the Go
+  15 s drain and the launcher's 20 s child stop (< `drainingSeconds` 30);
+  pinned by `test_deployment_safety`.
+- **Launcher Redis preflight:** a timeout/connection error during `CONFIG GET`
+  is a clean `RuntimeError` naming host:port only.
+- **SQLite test:** the K7-E prune test asserts the row lock only where the
+  backend has `SELECT … FOR UPDATE`.
+- **Alertable drops:** FCM stale/exhausted/deferred and email stale counters,
+  an `email_stats` log line, and alert rows in
+  `docs/k6-notes/reliability-observability.md`.
+- **Chat relay drop-when-busy:** same 250 ms bounded wait before
+  drop-and-count as E's notification dispatcher.
+
 ## Resume here
 
 All implementation packages are integrated: A `71dc984`, B `212c757`,

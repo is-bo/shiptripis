@@ -222,3 +222,94 @@ func TestFCMSweepReclaimsEveryPendingPageUntilTheCursorEnds(t *testing.T) {
 var streamBaseMs = time.Now().UnixMilli()
 
 func sid(n int) string { return fmt.Sprintf("%d-%d", streamBaseMs, n) }
+
+// fcmScriptedSender returns a fixed result on every call.
+type fcmScriptedSender struct {
+	mu     sync.Mutex
+	sent   int
+	result SendResult
+}
+
+func (s *fcmScriptedSender) Send(context.Context, FCMPayload) (SendResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sent++
+	return s.result, nil
+}
+
+// An entry that waited for a handler slot long enough that its send could
+// still be running when the sweeper's idle threshold passes is left in the
+// PEL, not sent: the sweeper would otherwise reclaim it mid-send and push it
+// a second time.
+func TestFCMDefersAnEntryTheSweeperCouldReclaimMidSend(t *testing.T) {
+	rdb := &fcmFakeStream{}
+	sender := &fcmCountingSender{}
+	c := fcmTestConsumer(rdb, sender)
+	m := newTestMetrics("fcm-defer-test")
+	c.metrics = m.g
+	c.sweepMinIdle = time.Second
+	c.sendBudget = 100 * time.Millisecond
+
+	// Read 950ms ago: 950ms + a 100ms send budget reaches the 1s threshold.
+	c.handle(context.Background(), fcmEntry(t, sid(1), "evt-late"), time.Now().Add(-950*time.Millisecond))
+	if sender.count() != 0 {
+		t.Fatalf("sent %d pushes for an entry the sweeper could reclaim mid-send", sender.count())
+	}
+	if _, _, acked := rdb.snapshot(); len(acked) != 0 {
+		t.Fatalf("acked %v; a deferred entry must stay in the PEL for the sweeper", acked)
+	}
+	if got := m.read(t, "fcm_send_deferred_total"); got != 1 {
+		t.Fatalf("fcm_send_deferred_total = %d, want 1", got)
+	}
+
+	// The same entry with room to spare is sent and acked.
+	c.handle(context.Background(), fcmEntry(t, sid(2), "evt-fresh"), time.Now())
+	if _, _, acked := rdb.snapshot(); sender.count() != 1 || len(acked) != 1 {
+		t.Fatalf("sent=%d acked=%v, want the fresh entry pushed and acked", sender.count(), acked)
+	}
+}
+
+// The check runs before the backoff sleep as well, so a doomed entry frees
+// its slot at once instead of sleeping first.
+func TestFCMDeferralHappensBeforeTheBackoffWait(t *testing.T) {
+	rdb := &fcmFakeStream{}
+	sender := &fcmCountingSender{}
+	c := fcmTestConsumer(rdb, sender)
+	c.sweepMinIdle = time.Second
+	c.sendBudget = 100 * time.Millisecond
+	c.deliverGrace = 5 * time.Second
+
+	start := time.Now()
+	c.handle(context.Background(), fcmEntry(t, sid(3), "evt-slow-grace"), time.Now())
+	if waited := time.Since(start); waited > time.Second {
+		t.Fatalf("handler slept %v before deferring; it should give the slot back at once", waited)
+	}
+	if sender.count() != 0 {
+		t.Fatal("sent a push whose grace wait alone overruns the sweeper window")
+	}
+}
+
+func TestFCMStaleDropAndExhaustedRetryAreCounted(t *testing.T) {
+	rdb := &fcmFakeStream{}
+	sender := &fcmScriptedSender{result: SendResult{RetryTokenIndexes: []int{0}}}
+	c := fcmTestConsumer(rdb, sender)
+	m := newTestMetrics("fcm-drop-counters-test")
+	c.metrics = m.g
+
+	stale := fcmEntry(t, "1000-1", "evt-stale")
+	c.handle(context.Background(), stale, time.Now())
+	if got := m.read(t, "fcm_stale_drops_total"); got != 1 {
+		t.Fatalf("fcm_stale_drops_total = %d, want 1", got)
+	}
+
+	exhausted := fcmEntry(t, sid(4), "evt-exhausted")
+	exhausted.Values["attempt"] = strconv.Itoa(maxPartialRetries)
+	c.retryBase, c.retryCeiling = time.Millisecond, time.Millisecond
+	c.handle(context.Background(), exhausted, time.Now())
+	if got := m.read(t, "fcm_partial_retry_exhausted_total"); got != 1 {
+		t.Fatalf("fcm_partial_retry_exhausted_total = %d, want 1", got)
+	}
+	if _, _, acked := rdb.snapshot(); len(acked) != 2 {
+		t.Fatalf("acked %v, want both dropped entries acked", acked)
+	}
+}

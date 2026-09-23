@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 )
 
@@ -212,3 +214,24 @@ func TestSweepReclaimsEveryPendingPageUntilTheCursorEnds(t *testing.T) {
 var streamBaseMs = time.Now().UnixMilli()
 
 func sid(n int) string { return fmt.Sprintf("%d-%d", streamBaseMs, n) }
+
+func TestStaleEntryDropIsCounted(t *testing.T) {
+	rdb := &fakeStream{}
+	sender := &countingSender{}
+	c := testConsumer(rdb, sender)
+	c.metrics = metrics.Register("email-stale-drop-test")
+
+	c.handle(context.Background(), entry(t, "1000-1", "evt-ancient"))
+
+	if sender.count() != 0 {
+		t.Fatal("an entry past MaxEntryAge was sent")
+	}
+	if _, _, acked := rdb.snapshot(); len(acked) != 1 {
+		t.Fatalf("acked %v, want the stale entry acked", acked)
+	}
+	full := metrics.Sanitize("email-stale-drop-test") + "_stale_drops_total"
+	root, _ := expvar.Get("shiptrip").(*expvar.Map)
+	if root == nil || root.Get(full) == nil || root.Get(full).String() != "1" {
+		t.Fatalf("expvar %s not incremented", full)
+	}
+}

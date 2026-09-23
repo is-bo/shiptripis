@@ -40,7 +40,8 @@ type EmailSender interface {
 type PermanentError struct {
 	Err error
 	// Code is the SMTP reply code, or 0 when the message never reached the
-	// server. Logged instead of Err: go-mail's error text names recipients.
+	// server. The smtpSender wraps a SendFailure here, whose text is log-safe;
+	// callers still log SendFailureLogAttrs rather than the error.
 	Code int
 }
 
@@ -131,9 +132,10 @@ func (s LogOnlySender) Send(_ context.Context, p EmailPayload) error {
 	if log == nil {
 		log = slog.Default()
 	}
+	// No subject or recipient: a subject can carry the one-time code, and
+	// the address is PII. Event id + kind correlate with the outbox.
 	log.Info("email: would-send (stub)",
 		"event_id", p.EventID,
-		"subject", p.Subject,
 		"kind", p.Kind,
 	)
 	return nil

@@ -142,6 +142,40 @@ func TestSend_DropsWhenBufferFull(t *testing.T) {
 	}
 }
 
+// Once connCtx is cancelled (slow-consumer overflow, Close) the writer is
+// on its way out and drains the buffer into the void. A Send that still found
+// buffer room used to report true, so the caller wrote a delivery receipt and
+// the FCM fallback skipped a push the client never got.
+func TestSend_RefusesAfterConnCtxCancelledEvenWithRoom(t *testing.T) {
+	c := newTestConn()
+	c.connCancel()
+
+	if c.Send(Envelope{Type: "late", EventID: "after-cancel"}) {
+		t.Fatal("Send reported queued after connCtx was cancelled")
+	}
+	select {
+	case got := <-c.send:
+		t.Fatalf("Send enqueued %+v into a buffer the writer will discard", got)
+	default:
+	}
+}
+
+// With buffer room free, a closed conn must still refuse every time — the
+// done check must not lose a coin-flip to the free queue slot.
+func TestSend_PrefersDoneOverAFreeBufferSlot(t *testing.T) {
+	c := newTestConn()
+	close(c.done) // done only: connCtx still live, isolating the done check
+
+	for i := range 200 {
+		if c.Send(Envelope{Type: "late"}) {
+			t.Fatalf("Send %d reported queued on a closed conn with a free buffer", i)
+		}
+	}
+	if n := len(c.send); n != 0 {
+		t.Fatalf("%d envelopes enqueued after close", n)
+	}
+}
+
 func TestDone_ClosedSignal(t *testing.T) {
 	c := newTestConn()
 	select {

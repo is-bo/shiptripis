@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/retry"
 )
@@ -36,6 +37,7 @@ type Consumer struct {
 	group         string
 	name          string
 	log           *slog.Logger
+	metrics       *metrics.Group
 	sweepMinIdle  time.Duration
 	sweepInterval time.Duration
 	maxEntryAge   time.Duration
@@ -73,6 +75,9 @@ type ConsumerConfig struct {
 	// Receipts is the durable PostgreSQL acknowledgement boundary. Production
 	// always supplies it; tests may omit it to use the no-op implementation.
 	Receipts ReceiptStore
+	// Metrics receives the consumer's drop counters. Optional: nil disables
+	// them. cmd/email passes the service group, which it logs periodically.
+	Metrics *metrics.Group
 }
 
 const (
@@ -91,10 +96,16 @@ const (
 	// holds one PEL entry and at most one SMTP dial's worth of memory.
 	handleConcurrency = 32
 
-	// sendTimeout caps a single SMTP send (dial + STARTTLS + auth + DATA).
+	// sendTimeout caps one handler's detached work: the receipt and dedup
+	// checks plus a single SMTP send (dial + STARTTLS + auth + DATA).
 	// Detached from the parent ctx so a graceful shutdown mid-send completes
-	// rather than leaving the entry half-sent and unacked.
-	sendTimeout = 30 * time.Second
+	// rather than leaving the entry half-sent and unacked. sendTimeout plus
+	// ackTimeout must fit cmd/email's 15s shutdownTimeout, which in turn sits
+	// inside the combined launcher's 20s SIGKILL window (start.py
+	// CHILD_STOP_TIMEOUT_SECONDS); test_deployment_safety pins both.
+	sendTimeout = 12 * time.Second
+	// ackTimeout caps the detached XAck after a send.
+	ackTimeout = 3 * time.Second
 
 	// sentKeyTTL is how long the email:sent:<event_id> dedup marker lives.
 	// Long enough to cover any realistic sweeper-retry window; short enough
@@ -143,6 +154,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		group:         cfg.ConsumerGroup,
 		name:          cfg.ConsumerName,
 		log:           log,
+		metrics:       cfg.Metrics,
 		sweepMinIdle:  SweepMinIdle,
 		sweepInterval: SweepInterval,
 		maxEntryAge:   MaxEntryAge,
@@ -284,6 +296,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		return
 	}
 	if age, ok := retry.EntryAge(m.ID, time.Now()); ok && age > c.maxEntryAge {
+		c.count("stale_drops_total")
 		c.log.Warn("email: entry outlived its retry window; acking to drop",
 			"event_id", p.EventID, "id", m.ID, "age_seconds", int64(age.Seconds()))
 		c.ack(m.ID)
@@ -333,15 +346,16 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	if err := c.sender.Send(sendCtx, p); err != nil {
-		if permanent, ok := AsPermanent(err); ok {
-			// The reply code, not err: go-mail's error text names recipients.
-			c.log.Error("email send rejected permanently; acking (Django owns the retry budget)",
-				"event_id", p.EventID, "kind", p.Kind, "smtp_code", permanent.Code)
+		// Never err itself: go-mail's error text and an SMTP reply line can
+		// both name the recipient, and a transient failure repeats this line
+		// on every sweeper retry. SendFailureLogAttrs keeps codes and classes.
+		attrs := append([]any{"event_id", p.EventID, "kind", p.Kind}, SendFailureLogAttrs(err)...)
+		if _, ok := AsPermanent(err); ok {
+			c.log.Error("email send rejected permanently; acking (Django owns the retry budget)", attrs...)
 			c.ack(m.ID)
 			return
 		}
-		c.log.Warn("email send failed; leaving in PEL for sweep",
-			"event_id", p.EventID, "kind", p.Kind, "err", err)
+		c.log.Warn("email send failed; leaving in PEL for sweep", attrs...)
 		return
 	}
 
@@ -367,9 +381,16 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 // sweep abort) doesn't leave a sent mail unacked — which would surface as a
 // duplicate on next sweep.
 func (c *Consumer) ack(id string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ackTimeout)
 	defer cancel()
 	if err := c.rdb.XAck(ctx, c.stream, c.group, id); err != nil {
 		c.log.Warn("email xack failed", "id", id, "err", err)
+	}
+}
+
+// count bumps a consumer counter when a metrics group is wired.
+func (c *Consumer) count(name string) {
+	if c.metrics != nil {
+		c.metrics.Counter(name, 1)
 	}
 }

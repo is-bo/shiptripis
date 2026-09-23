@@ -7,9 +7,9 @@ import "testing"
 // sweeper would reclaim the entry mid-wait and a second handler would push
 // the same notification again.
 func TestPartialRetryWaitStaysInsideTheSweeperIdleWindow(t *testing.T) {
-	if retryCeiling+sendTimeout >= SweepMinIdle {
-		t.Fatalf("retryCeiling (%s) + sendTimeout (%s) must stay below SweepMinIdle (%s)",
-			retryCeiling, sendTimeout, SweepMinIdle)
+	if retryCeiling+sendTimeout+ackTimeout >= SweepMinIdle {
+		t.Fatalf("retryCeiling (%s) + sendTimeout (%s) + ackTimeout (%s) must stay below SweepMinIdle (%s)",
+			retryCeiling, sendTimeout, ackTimeout, SweepMinIdle)
 	}
 	if maxPartialRetries < 1 {
 		t.Fatalf("maxPartialRetries = %d; a transient token failure deserves at least one retry", maxPartialRetries)

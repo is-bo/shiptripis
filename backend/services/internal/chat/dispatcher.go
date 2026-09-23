@@ -42,6 +42,14 @@ const receiptConcurrency = 64
 // per-pod basis.
 const dispatchConcurrency = 128
 
+// dispatchSubmitTimeout caps how long the pub/sub loop waits for a free
+// dispatch slot. While it waits, the redisbus pump keeps buffering (1024
+// slots), so a burst that briefly occupies all 128 workers is absorbed
+// rather than dropped. A pool still full after this long is stuck, not
+// bursting: drop the message so the loop keeps draining the buffer. Same
+// value and reasoning as notification's (K7-E).
+const dispatchSubmitTimeout = 250 * time.Millisecond
+
 // setEXRetryDelay matches notification's retry — one brief retry before
 // giving up so a Redis blip doesn't cause an FCM duplicate.
 const setEXRetryDelay = 100 * time.Millisecond
@@ -88,7 +96,8 @@ type Dispatcher struct {
 	metrics  *metrics.Group
 
 	// dispatchSem + dispatchWG bound and track per-message goroutines so
-	// the pump never blocks on a slow hub.Send or receipt schedule.
+	// the pump never blocks on a slow hub.Send or receipt schedule for
+	// longer than dispatchSubmitTimeout.
 	dispatchSem chan struct{}
 	dispatchWG  sync.WaitGroup
 
@@ -149,15 +158,18 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 }
 
 // scheduleDispatch fans a single message through the dispatch worker
-// pool. Saturation drops the message and logs the event_id so G6b can
-// attribute the loss — pub/sub is best-effort and the next pod (also
-// subscribed) will deliver if it has a free slot.
+// pool. A saturated pool is waited on for up to dispatchSubmitTimeout, so
+// the pump's buffer absorbs bursts instead of this loop dropping the moment
+// every worker is busy (the notification dispatcher lost 46 of 5,000 events
+// that way in K7-E; chat had the identical loop). Only a pool that stays full
+// past the timeout drops the message — pub/sub is best-effort, and the
+// client's reconnect catch-up and the FCM fallback still carry it. The drop
+// is counted and logged with event_id so G6b can attribute the loss.
 func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message) {
-	select {
-	case d.dispatchSem <- struct{}{}:
-	case <-ctx.Done():
-		return
-	default:
+	if !d.acquireDispatchSlot(ctx) {
+		if ctx.Err() != nil {
+			return
+		}
 		if d.metrics != nil {
 			d.metrics.Counter("dispatch_drops_total", 1)
 		}
@@ -169,13 +181,35 @@ func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message)
 		_ = json.Unmarshal(msg.Payload, &env)
 		d.log.Warn("chat dispatcher: pool saturated; dropping",
 			"channel", msg.Channel, "event_id", env.EventID,
-			"capacity", dispatchConcurrency)
+			"capacity", dispatchConcurrency, "waited", dispatchSubmitTimeout)
 		return
 	}
 	d.dispatchWG.Go(func() {
 		defer func() { <-d.dispatchSem }()
 		d.dispatch(msg)
 	})
+}
+
+// acquireDispatchSlot takes a dispatch slot, waiting at most
+// dispatchSubmitTimeout. It reports false on timeout or on ctx cancellation;
+// the caller tells the two apart with ctx.Err(). The non-blocking first try
+// keeps the steady state free of timer allocations.
+func (d *Dispatcher) acquireDispatchSlot(ctx context.Context) bool {
+	select {
+	case d.dispatchSem <- struct{}{}:
+		return true
+	default:
+	}
+	timer := time.NewTimer(dispatchSubmitTimeout)
+	defer timer.Stop()
+	select {
+	case d.dispatchSem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return false
+	}
 }
 
 func (d *Dispatcher) dispatch(msg redisbus.Message) {

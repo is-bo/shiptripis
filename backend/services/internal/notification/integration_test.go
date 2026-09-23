@@ -589,6 +589,10 @@ func TestG1SweeperRedeliversAfterSendFailure(t *testing.T) {
 	// the reclaim path runs in milliseconds; the code under test is identical.
 	consumer.sweepMinIdle = 50 * time.Millisecond
 	consumer.sweepInterval = 100 * time.Millisecond
+	// The handler defers any entry whose send could outlive sweepMinIdle, so
+	// its grace and send budget shrink with it.
+	consumer.deliverGrace = 5 * time.Millisecond
+	consumer.sendBudget = 10 * time.Millisecond
 
 	stopConsumer := itRunConsumer(t, consumer, true)
 	defer stopConsumer()

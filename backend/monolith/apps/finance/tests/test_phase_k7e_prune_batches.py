@@ -111,9 +111,12 @@ class ScheduledJobPruneBatchTests(TestCase):
         self.assertEqual(len(deletes), 3)
         savepoints = [sql for sql in statements if sql.startswith("SAVEPOINT")]
         self.assertEqual(len(savepoints), 4)
-        locks = [sql for sql in statements if "FOR NO KEY UPDATE" in sql]
-        self.assertEqual(len(locks), 4)
-        self.assertTrue(all("LIMIT 3" in sql for sql in locks), locks)
+        # SQLite (test_local) has no row locks, so Django drops the clause;
+        # the per-batch lock is only observable on PostgreSQL.
+        if connection.features.has_select_for_update:
+            locks = [sql for sql in statements if "FOR NO KEY UPDATE" in sql]
+            self.assertEqual(len(locks), 4)
+            self.assertTrue(all("LIMIT 3" in sql for sql in locks), locks)
 
     def test_default_batch_holds_a_small_backlog_in_one_transaction(self):
         output, statements = self.run_prune()

@@ -46,9 +46,10 @@ POSTGRES_CONNECTION_LIMIT_DEFAULT = 100
 POSTGRES_CONNECTION_RESERVE_DEFAULT = 10
 
 # How long children get between SIGTERM and SIGKILL. Go services drain within
-# 15s and Gunicorn finishes in-flight requests; Railway must allow at least
-# this much (`drainingSeconds` in railway.json) or it SIGKILLs first -- its
-# default is zero seconds.
+# their 15s shutdown budget -- the longest in-flight unit is an email send
+# (12s detached SMTP timeout plus a 3s ack) -- and Gunicorn finishes in-flight
+# requests. Railway must allow more than this (`drainingSeconds` in
+# railway.json) or it SIGKILLs first -- its default is zero seconds.
 CHILD_STOP_TIMEOUT_SECONDS = 20
 
 
@@ -328,6 +329,14 @@ def probe_shared_redis(
             except redis.ResponseError:
                 # Some managed providers disable CONFIG; report, never guess.
                 return None
+            except redis.RedisError as exc:
+                # A timeout or dropped connection after PING succeeded. Name
+                # the endpoint only; the exception text can carry the URL.
+                raise RuntimeError(
+                    f"shared Redis at {endpoint} stopped answering while its "
+                    f"configuration was read ({type(exc).__name__}); "
+                    "refusing to start"
+                ) from exc
 
         policy = config("maxmemory-policy")
         if policy is not None and policy.startswith("allkeys-"):

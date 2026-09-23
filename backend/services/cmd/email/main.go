@@ -50,7 +50,13 @@ const (
 	httpAddrKey      = "EMAIL_HTTP_ADDR"
 	httpAddrFallback = ":8085"
 
+	// shutdownTimeout must cover one in-flight handler (email.sendTimeout
+	// plus its ack); test_deployment_safety pins that.
 	shutdownTimeout = 15 * time.Second
+
+	// statsInterval paces the email_stats log line (same cadence as the
+	// realtime services' ws_stats).
+	statsInterval = time.Minute
 )
 
 func main() {
@@ -161,6 +167,7 @@ func run() error {
 			ConsumerName:  emailCfg.ConsumerName,
 			Sender:        sender,
 			Receipts:      receipts,
+			Metrics:       m,
 		}, log)
 		go func() { emailErr <- consumer.Run(rootCtx) }()
 		go func() { emailErr <- consumer.Sweep(rootCtx) }()
@@ -169,6 +176,12 @@ func run() error {
 	} else {
 		log.Info("email consumer disabled (EMAIL_ENABLED=false)")
 	}
+
+	// /debug/vars is loopback-only and unscraped on Railway, so the counters
+	// (stale drops, Redis health) also go to the log stream for alerting.
+	go metrics.Every(rootCtx, statsInterval, func() {
+		log.Info("email stats", "event", "email_stats", "metrics", m.Snapshot())
+	})
 
 	serverErr := make(chan error, 1)
 	go func() {

@@ -248,6 +248,21 @@ class ProductionEntrypointTests(SimpleTestCase):
             > launcher.CHILD_STOP_TIMEOUT_SECONDS
         )
 
+    def test_email_send_budget_fits_inside_the_child_stop_window(self):
+        """The email worker detaches each SMTP send from shutdown so it is not
+        cut mid-DATA; that send (plus its 3s ack) must finish inside both the
+        Go service's own 15s drain and the launcher's SIGKILL window, or a
+        deploy turns an accepted email into an unacked duplicate."""
+
+        source = (
+            BACKEND / "services" / "internal" / "email" / "consumer.go"
+        ).read_text(encoding="utf-8")
+        send = int(re.search(r"\bsendTimeout = (\d+) \* time\.Second", source).group(1))
+        ack = int(re.search(r"\backTimeout = (\d+) \* time\.Second", source).group(1))
+        launcher = load_combined_launcher()
+        assert send + ack <= 15
+        assert send + ack < launcher.CHILD_STOP_TIMEOUT_SECONDS
+
     def test_production_bounds_django_smtp_and_logs_access_safely(self):
         """A stalled SMTP relay must not wedge the finance worker's loop, and
         the access/ops loggers must reach the production JSON handler."""
@@ -672,6 +687,25 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
         )
         assert "maxmemory-policy=unverifiable" in printed
         assert "hides its configuration" in printed
+
+    def test_a_timeout_while_reading_config_fails_cleanly(self):
+        """PING succeeded, then CONFIG GET timed out: a named RuntimeError,
+        not a raw traceback, and never the password-bearing URL."""
+
+        import redis
+
+        for error in (
+            redis.TimeoutError("Timeout reading from redis.internal.invalid"),
+            redis.ConnectionError("Connection reset by peer"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                client = self.shared_redis()
+                client.config_get.side_effect = error
+                with self.assertRaisesRegex(RuntimeError, "stopped answering") as raised:
+                    self.probe(client)
+                assert "redis.internal.invalid:6379" in str(raised.exception)
+                assert "do-not-print" not in str(raised.exception)
+                client.close.assert_called_once()
 
     def test_default_combined_database_budget_is_rolling_deploy_safe(self):
         with mock.patch.dict(os.environ, {}, clear=True):

@@ -204,6 +204,7 @@ func run() error {
 			ConsumerName:   fcmCfg.ConsumerName,
 			FeedbackStream: fcmCfg.ResultsStream,
 			Sender:         sender,
+			Metrics:        m,
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()
