@@ -221,11 +221,7 @@ void main() {
           const FakeResponse(201, {'id': 3, 'active': true}),
         );
       final push = DeferredPushMessaging();
-      final container = _coordinatorContainer(
-        backend,
-        _PushTokenStore(),
-        push,
-      );
+      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
 
       container.read(pushCoordinatorProvider);
       // A resume can land before Firebase is up; it waits instead of failing.
@@ -258,11 +254,7 @@ void main() {
     ) async {
       final backend = FakeBackend();
       final push = DeferredPushMessaging();
-      final container = _coordinatorContainer(
-        backend,
-        _PushTokenStore(),
-        push,
-      );
+      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
       container.read(pushCoordinatorProvider);
 
       await push.start(() async => throw StateError('no google-services'));
