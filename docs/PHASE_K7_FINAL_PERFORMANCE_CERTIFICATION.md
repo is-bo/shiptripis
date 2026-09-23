@@ -22,17 +22,13 @@ run and one Railway TEST release after K7, then merge).
 
 ## Resume here
 
-A (`71dc984`), B (`212c757`) and C (`41fc5fb`) are integrated. D (measured
-defects from C) and E (contract-neutral N+1 fixes in Find Travelers,
-compatible-requests and admin users; notification dispatcher burst absorption;
-batched `prune_scheduled_jobs`) are running in helper worktrees.
-
-Packages A, B and C run in helper worktrees from `f77ae0e` (check
-`git worktree list`; review and cherry-pick their commits onto the stack).
-Then: re-run K6 capacity with a corrected traffic mix (`find-travelers`,
-`compatible-requests` instead of journeys search / parcels open); assemble this
-record; independent review of K6+K7 runtime changes; full Flutter + Django
-suites; one PR (K5–K7) → CI → merge; Railway TEST release
-`v1.0.0-rc.50+<sha>`, `/healthz`, `/readyz`, smoke, TEST-safe resilience drills
-(worker restart, rolling deploy); release record; K-Series Master Report
-(plan §20). Redis provisioning/cutover stays pre-launch (owner).
+All implementation packages are integrated: A `71dc984`, B `212c757`,
+C `41fc5fb`, D `b2326df`, E `1ed3eb4`. Running: an independent review of all
+K6+K7 runtime changes (`b5e1118..1ed3eb4`), and a capacity re-run with the
+corrected traffic mix (helper worktree; updates `docs/k6-notes/capacity.md`).
+Then: fix confirmed review findings (+ the chat relay's drop-when-busy, same
+fix as E's dispatcher), full Flutter + full Django suites, assemble this record
+and the K-Series Master Report, one PR (K5–K7) → CI → merge → Railway TEST
+release `v1.0.0-rc.50+<sha>` → `/healthz`, `/readyz`, smoke, TEST-safe drills
+(worker restart, rolling deploy) → release record. Redis provisioning/cutover
+stays pre-launch (owner).
