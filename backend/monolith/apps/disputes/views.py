@@ -42,6 +42,7 @@ from apps.core.permissions import (
     CanResolveDisputes,
     CanViewDisputes,
 )
+from apps.core.pagination import paginated_array_response
 from apps.core.phase4_policy import InvalidPhase4Policy
 from apps.admin_panel.permissions import CanManageDisputes
 from apps.admin_panel.services import record_admin_action
@@ -311,10 +312,14 @@ class AdminDisputeListView(APIView):
         queryset = _all_disputes()
         if dispute_status := request.query_params.get("status"):
             queryset = queryset.filter(status=dispute_status)
-        return Response(
-            AdminDisputeSerializer(
-                queryset[:100], many=True, context={"is_staff": True}
-            ).data
+        # Still a bare array of the newest 100 by default; `page` reaches the
+        # rest instead of the old `[:100]` hiding them (K7 D).
+        return paginated_array_response(
+            request,
+            queryset,
+            serialize=lambda page: AdminDisputeSerializer(
+                page, many=True, context={"is_staff": True}
+            ).data,
         )
 
 

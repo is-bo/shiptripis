@@ -157,6 +157,24 @@ class OfferSerializer(serializers.ModelSerializer):
         return data
 
 
+class OfferListSerializer(OfferSerializer):
+    """An offer as nested in a Match *list* row (K7 D).
+
+    Everything a card or a negotiation button reads, without `terms_snapshot`:
+    about 2.9 KB per offer of frozen pricing and a second copy of the Match's
+    compatibility, which no list consumer reads. The Match detail, the offer
+    chain and every mutation response keep the full `OfferSerializer`.
+    """
+
+    terms_snapshot = None
+
+    class Meta(OfferSerializer.Meta):
+        fields = tuple(
+            field for field in OfferSerializer.Meta.fields if field != "terms_snapshot"
+        )
+        read_only_fields = fields
+
+
 class MatchEventSerializer(serializers.ModelSerializer):
     actor_id = serializers.IntegerField(read_only=True)
 
@@ -241,6 +259,9 @@ class MatchSerializer(serializers.ModelSerializer):
     compatibility_snapshot = serializers.SerializerMethodField()
     matched_distance_band = serializers.SerializerMethodField()
 
+    #: The nested offer shape; the list projection swaps in a lighter one.
+    offer_serializer_class = OfferSerializer
+
     class Meta:
         model = Match
         fields = (
@@ -306,7 +327,9 @@ class MatchSerializer(serializers.ModelSerializer):
             offer = obj.offers.order_by("-created_at").first()
         if offer is None:
             return None
-        return OfferSerializer(offer, context=self._offer_context(obj)).data
+        return self.offer_serializer_class(
+            offer, context=self._offer_context(obj)
+        ).data
 
     def get_accepted_offer(self, obj: Match) -> dict | None:
         offers = getattr(obj, "_ordered_offers", None)
@@ -320,7 +343,31 @@ class MatchSerializer(serializers.ModelSerializer):
         )
         if offer is None:
             return None
-        return OfferSerializer(offer, context=self._offer_context(obj)).data
+        return self.offer_serializer_class(
+            offer, context=self._offer_context(obj)
+        ).data
+
+
+class MatchListSerializer(MatchSerializer):
+    """The Offers-list projection of a Match (K7 D), as K4 did for Journeys.
+
+    Drops `compatibility_snapshot` and each nested offer's `terms_snapshot`,
+    about three quarters of a row. No list consumer reads either: the app's
+    list cards and negotiation buttons read names, status, parcel route,
+    distance band, the offer economics and `allowed_actions`, all kept
+    unchanged. `GET /api/matches/<id>` still returns the full serializer.
+    """
+
+    compatibility_snapshot = None
+    offer_serializer_class = OfferListSerializer
+
+    class Meta(MatchSerializer.Meta):
+        fields = tuple(
+            field
+            for field in MatchSerializer.Meta.fields
+            if field != "compatibility_snapshot"
+        )
+        read_only_fields = fields
 
 
 class TravelerApplySerializer(serializers.Serializer):

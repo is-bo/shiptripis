@@ -1,5 +1,29 @@
 # ShipTrip V1 Implementation Status
 
+## K7 D — Three measured performance defects (2026-09-23)
+
+Stacked on K7 C `41fc5fb`. Local measurements, not Railway.
+
+* **Admin evidence storage checks.** The KYC-image HEADs on KYC detail, the
+  payout identity check and the payout-method review now make one attempt
+  (2 s connect, 3 s read, no retry) and run side by side. Three slots against
+  a hung store: 26.0 s before, 3.7 s after; with nothing listening: 13.6 s
+  before, 2.0 s after. The check, the "temporarily unavailable, try again"
+  message, the audited evidence route and every permission are unchanged.
+  The K6 note "4 s × 2 attempts" is superseded.
+* **Dispute JSON list.** The served `GET /api/admin/disputes` (admin panel
+  view) already paged, but ordered by `-opened_at` alone, so same-instant
+  disputes could be skipped between pages; it now breaks ties on id. The
+  disputes-app view on the same path, shadowed by URL order, still sliced
+  `[:100]`; it now pages with `paginated_array_response` and keeps its bare
+  array of the newest 100.
+* **Offers list.** `GET /api/matches` drops `compatibility_snapshot` and each
+  nested offer's `terms_snapshot`, which no list consumer reads (the app
+  parses them and never uses them). Detail, the offer chain and mutation
+  responses are unchanged. A redundant `DISTINCT` (about 65 ms of PostgreSQL
+  planning) is gone. Five rows: 47,941 B / 87.6 ms before, 11,869 B /
+  28.6 ms after, 3 queries both.
+
 ## K6 — Infrastructure, Caching, Workers, Observability & Load (in progress, 2026-09-23)
 
 On `claude/k6-infrastructure-scaling`, stacked on K5 `b5e1118`. Shared-Redis
