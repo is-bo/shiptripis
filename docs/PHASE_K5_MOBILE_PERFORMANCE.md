@@ -364,7 +364,7 @@ checkout, 1 guest sheet.
 
 ## Resume here
 
-Remaining for K5: PR from `claude/k5-mobile-performance` to `main`, CI (six
-jobs), merge, Railway TEST release `v1.0.0-rc.50+<sha>`, `/healthz`, `/readyz`,
-smoke, cleanup of the `.claude/worktrees/agent-*` worktrees and branches, then
-the K5 phase report. Then K6 and K7.
+K5 is complete locally (draft PR is-bo/shiptripis#19, CI cancelled). **Owner
+decision 2026-09-23: no CI and no Railway deploy per phase.** K6 and K7 stack on
+branches from this one; one CI run and one TEST release happen at the very end
+of K7 (then merge and the release record). Helper worktrees are cleaned up.
