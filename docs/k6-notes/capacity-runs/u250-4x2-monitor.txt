@@ -1,26 +1,26 @@
-57 samples -> .data\u250-4x2-monitor.csv
-             web-8001_rss_mb: min    102.5  avg    123.6  max    128.8
-            web-8001_cpu_pct: min      0.0  avg     62.4  max     93.4
-             web-8002_rss_mb: min    102.6  avg    125.5  max    130.5
-            web-8002_cpu_pct: min      0.0  avg     62.5  max     94.2
-             web-8003_rss_mb: min    102.6  avg    125.1  max    133.5
-            web-8003_cpu_pct: min      0.0  avg     62.7  max     97.1
-             web-8004_rss_mb: min    102.6  avg    126.2  max    133.4
-            web-8004_cpu_pct: min      0.0  avg     63.9  max     96.1
-                caddy_rss_mb: min     32.3  avg     52.6  max     57.8
-               caddy_cpu_pct: min      0.0  avg      6.1  max     15.2
-             releaser_rss_mb: min     99.8  avg     99.8  max     99.8
-            releaser_cpu_pct: min      0.0  avg      0.0  max      0.0
-                 chat_rss_mb: min     77.2  avg     77.2  max     77.2
-                chat_cpu_pct: min      0.0  avg      0.0  max      0.0
-         notification_rss_mb: min     45.2  avg     45.2  max     45.2
+96 samples -> .data\u250-4x2-monitor.csv
+             web-8001_rss_mb: min    117.6  avg    120.1  max    121.4
+            web-8001_cpu_pct: min     26.3  avg     44.5  max     61.5
+             web-8002_rss_mb: min    117.3  avg    119.4  max    121.2
+            web-8002_cpu_pct: min     28.4  avg     44.8  max     59.0
+             web-8003_rss_mb: min    114.9  avg    118.6  max    119.6
+            web-8003_cpu_pct: min     31.4  avg     44.5  max     58.4
+             web-8004_rss_mb: min    117.6  avg    120.9  max    122.3
+            web-8004_cpu_pct: min     31.6  avg     45.2  max     57.9
+                caddy_rss_mb: min     48.9  avg     52.7  max     53.9
+               caddy_cpu_pct: min     25.3  avg     34.1  max     47.7
+                 chat_rss_mb: min     25.7  avg     25.8  max     25.8
+                chat_cpu_pct: min      0.0  avg      0.0  max      0.5
+         notification_rss_mb: min     23.8  avg     23.8  max     23.8
         notification_cpu_pct: min      0.0  avg      0.0  max      0.0
-         finance-jobs_rss_mb: min    100.5  avg    100.5  max    100.5
+         finance-jobs_rss_mb: min     46.3  avg     46.4  max     46.4
         finance-jobs_cpu_pct: min      0.0  avg      0.0  max      0.5
-            web_rss_mb_total: min    410.4  avg    500.4  max    524.7
-             machine_cpu_pct: min     10.5  avg     63.8  max     95.9
-              db_conns_total: min     15.0  avg     15.9  max     16.0
-             db_conns_active: min      0.0  avg      1.1  max      4.0
-               db_conns_idle: min     12.0  avg     14.9  max     16.0
-            db_conns_cluster: min     16.0  avg     16.9  max     17.0
-             postgres_rss_mb: min    523.8  avg    709.6  max    775.4
+             releaser_rss_mb: min     42.0  avg     42.0  max     42.0
+            releaser_cpu_pct: min      0.0  avg      0.0  max      0.5
+            web_rss_mb_total: min    469.1  avg    479.0  max    484.2
+             machine_cpu_pct: min     44.1  avg     54.8  max     71.3
+              db_conns_total: min     14.0  avg     14.0  max     14.0
+             db_conns_active: min      0.0  avg      1.0  max      4.0
+               db_conns_idle: min     10.0  avg     13.0  max     14.0
+            db_conns_cluster: min     15.0  avg     15.0  max     15.0
+             postgres_rss_mb: min    352.4  avg    615.5  max    695.0

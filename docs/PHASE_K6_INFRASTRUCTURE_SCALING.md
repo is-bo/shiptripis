@@ -3,8 +3,8 @@
 Status: **in progress; not merged or released.** Branch
 `claude/k6-infrastructure-scaling`, stacked on the K5 branch head `b5e1118`
 (K5 is complete locally; see its record). Packages R, O and L are integrated;
-package P is integrated; the capacity numbers are provisional pending a
-re-run with a corrected traffic mix. Nothing in K6 was deployed and
+package P is integrated; the capacity numbers were re-measured with a
+screen-shaped traffic mix on `1ed3eb4`. Nothing in K6 was deployed and
 LIVE was not touched.
 
 This record is the summary. The detailed findings, runbooks and raw evidence
@@ -46,48 +46,52 @@ provision limit exceeded`.
 
 Local harness in `backend/loadtest/` (i3-10100, 4 cores; Waitress W×T behind
 Caddy 2.10.0 as the Gunicorn `gthread` stand-in; PostgreSQL 16.2; miniredis;
-finance/releaser loops and Go chat/notification running). Flutter-shaped
-traffic mix, production throttles on, 2–8 s think time, about 0.22 RPS per
-active user. Nothing ran against TEST or LIVE.
+finance/releaser loops and Go chat/notification running). The traffic mix is
+built from the Flutter screens: each task issues exactly one screen's requests
+(session catch-up, Deal detail, chat, Offers list, notification inbox, Find
+Travelers, Journey detail with `compatible-requests`, a small Admin console
+share). Production throttles stay on, 2–8 s think time, about 0.32 RPS per
+active user. Runs start only on a quiet box. Nothing ran against TEST or LIVE.
+Re-measured on `1ed3eb4`.
 
 | Users | Shape | RPS | p50 | p95 | p99 | Errors | Web CPU | DB conns (max / active) |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 100 | 2x2 | 23.0 | 45 ms | 450 ms | 1.2 s | 0 | 102 % | 12 / 3 |
-| 150 | 2x2 | 33.5 | 65 ms | 900 ms | 1.4 s | 0 | 135 % | 10 / 2 |
-| 250 | 2x2 | 46.4 | 950 ms | 2.4 s | 3.3 s | 0 | 185 % (saturated) | 12 / 3 |
-| 250 | 2x4 | 44.6 | 1.0 s | 2.6 s | 3.8 s | 0 | 201 % (saturated) | 16 / 3 |
-| 250 | 4x2 | 54.3 | 64 ms | 1.1 s | 1.8 s | 0 | 269 % | 16 / 4 |
-| 250 | 2x2, 20-row pages | 53.1 | 310 ms | 950 ms | 1.2 s | 0 | 170 % | 10 / 4 |
-| 500 | 4x2 | 55.8 | 4.2 s | 7.1 s | 8.1 s | 0 | 342 % (box at 94 %) | 16 / 4 |
-| 1,000 | 4x2, 20-row pages | 90.1 | 6.3 s | 7.8 s | 8.8 s | 0 | 357 % (box at 88 %) | 14 / 5 |
+| 100 | 2x2 | 32.1 | 27 ms | 100 ms | 160 ms | 0 | 64 % | 10 / 3 |
+| 250 | 2x2 | 79.4 | 72 ms | 240 ms | 340 ms | 0 | 159 % | 10 / 4 |
+| 400 | 2x2 | 88.3 | 1.4 s | 1.8 s | 2.1 s | 0 | 181 % (saturated) | 10 / 4 |
+| 250 | 4x2 | 79.3 | 31 ms | 130 ms | 210 ms | 0 | 179 % | 14 / 4 |
+| 350 | 4x2 | 110.6 | 53 ms | 230 ms | 350 ms | 0 | 278 % | 14 / 5 |
+| 500 | 4x2 | 128.6 | 770 ms | 1.2 s | 1.4 s | 0 | 353 % (box at 90 %) | 14 / 5 |
 
-- The 2x2 shape is healthy to about 100 active users and saturates near
-  46 RPS on the per-process GIL, not the box. Threads add nothing (2x4 ≈ 2x2);
-  workers do.
-- 500 and 1,000 users saturated the shared test box. They are not certified;
-  90 RPS is a lower bound for 4 workers.
-- Cost: about 40 ms web CPU per request, 32 ms with 20-row pages.
-- **Correction — traffic mix.** The load model included
+- The 2x2 shape is healthy to about 250 active users and saturates near
+  88 RPS on the per-process GIL, not the box (58 % busy). Four workers halve
+  p95 at 250 users and stay healthy at 350.
+- 500 users on 4x2 is this box's knee: the machine sits at 90 % CPU (95 %
+  peak) and requests queue, with no errors. 1,000 users is not certified.
+- Cost: about 20 ms web CPU per request with cores to spare (23–28 ms at 4x2
+  as the shared box fills). No endpoint dominates; the notification inbox,
+  Find Travelers and the Offers list are each 10–14 % of server time.
+- **Correction — traffic mix (resolved).** The first package L runs modelled
   `GET /api/journeys/search` and `GET /api/parcels/open` (100 rows each) as app
-  traffic, and found them to be ~40 % of web server time. Package P then
-  established that **no app screen calls either endpoint**: discovery uses
-  `find-travelers` and journey detail uses `compatible-requests`. The
-  "page-size finding" is an artefact of the model, and every number in this
-  section is **provisional** until the capacity runs are repeated with a
-  corrected mix (scheduled after the K7 packages, so runs don't compete for the
-  box). Package P still made the two unused repository methods request 20-row
-  pages.
+  traffic and found them to be ~40 % of web server time. Package P established
+  that **no app screen calls either endpoint**, so those numbers and the
+  page-size fix were withdrawn. The re-run above uses the screen-shaped mix;
+  per-request cost halved (40 → 20 ms) and the safe envelope rose. The old run
+  files are kept in
+  [`k6-notes/capacity-runs/superseded/`](k6-notes/capacity-runs/superseded/).
+  Package P still made the two unused repository methods request 20-row pages.
 
-**Capacity envelope (extrapolated,** assuming a Railway vCPU costs 40–60 ms
-per request): today's 1 replica 2x2 is safe to about 20–30 RPS, which is
-**~90–130 concurrently active users** at p95 ≤ 0.5 s (~115–170 with 20-row
-pages). `WEB_CONCURRENCY=4` roughly doubles that; two 4x2 replicas reach
-~360–540 users but need the connection-budget fix below. About 1,000 active
-users (~220 RPS) needs two 4x2 replicas, PgBouncer or smaller Go pools, and a
+**Capacity envelope (extrapolated,** assuming a Railway vCPU costs 20–30 ms
+per request): today's 1 replica 2x2 is safe to about 40–60 RPS, which is
+**~125–190 concurrently active users** (measured: 250 at p95 240 ms).
+`WEB_CONCURRENCY=4` makes that **~250–375**; two 4x2 replicas reach ~500–750
+but need the connection-budget fix below. About 1,000 active users (~320 RPS,
+6.4–9.6 vCPU of web CPU) needs three to four 4x2 replicas, PgBouncer and a
 realtime split. Sockets cost ~0.4 MiB per app-open user, so ~750 online users
 fit a 1 GiB budget. Redis load is 2–3 orders of magnitude below single-node
 capacity. The full model and scale triggers T1–T5 are in
-[capacity.md §1 and §5](k6-notes/capacity.md).
+[capacity.md §1 and §5](k6-notes/capacity.md). T1 is now simply: web CPU
+> 60 % of worker cores or core-read p95 > 800 ms → raise `WEB_CONCURRENCY`.
 
 ## Plan items
 
@@ -100,8 +104,8 @@ evidence that justified leaving it. "Deferred" states why.
 | 14.2 Responsibility map | Every key, stream, group, channel, TTL and owner | **Documented.** `notif:fcm` is the only durable obligation held solely in Redis; email is backed by `OutboundMessage`; Redis holds no locks or financial idempotency. Flags: stream `MAXLEN ~10000` is a durability boundary; `cache.clear()` is a FLUSHDB; one Redis per environment. | [redis.md §1](k6-notes/redis.md) |
 | 14.3 Topology | Per-process memory (idle sum 0.60–0.63 GB matches TEST 0.62 GB), realtime memory per socket, CPU under load | **No change: keep one combined service.** CPU is idle and memory is 60 % of a 1 GiB budget. The first split, when a trigger fires, is realtime, not workers. The TEST 1.14 GB peak is not explained by load (likely deploy overlap or a catalogue import). | [capacity.md §1](k6-notes/capacity.md) |
 | 14.4 Worker isolation | Concurrency bounds, crash recovery, shutdown path, lag visibility | **Changed.** `railway.json` `drainingSeconds: 30` (Railway's default of 0 s made every in-process drain unreachable; a test pins it above the 20 s child deadline). `EMAIL_TIMEOUT` 20 s so a stalled relay cannot wedge the finance loop. FCM pending/lag in deep health never matched (bytes vs str); fixed, and email stream backlog added. | [reliability-observability.md §2](k6-notes/reliability-observability.md) |
-| 14.5 PostgreSQL pooling | Connection budget per holder; active backends under load | **No change: no PgBouncer.** 22 steady / 44 rolling per container against a budget of 90; active backends never exceeded 5 at 90 RPS. Needed at a third replica or a lower `max_connections`; transaction-pooling constraints recorded (disable server-side cursors, pgx prepared statements). | [capacity.md §2](k6-notes/capacity.md) |
-| 14.6 Web capacity | Workers × threads, per-request CPU, memory, timeouts | **No Gunicorn change.** Keep 2 workers × 2 threads; raise `WEB_CONCURRENCY` (env only) on trigger T1. No `--max-requests` without soak evidence. The page-size finding goes to package P. | [capacity.md §3](k6-notes/capacity.md) |
+| 14.5 PostgreSQL pooling | Connection budget per holder; active backends under load | **No change: no PgBouncer.** 22 steady / 44 rolling per container against a budget of 90; active backends never exceeded 5 at 129 RPS. Needed at a third replica or a lower `max_connections`; transaction-pooling constraints recorded (disable server-side cursors, pgx prepared statements). | [capacity.md §2](k6-notes/capacity.md) |
+| 14.6 Web capacity | Workers × threads, per-request CPU, memory, timeouts | **No Gunicorn change.** Keep 2 workers × 2 threads; raise `WEB_CONCURRENCY` (env only) on trigger T1. No `--max-requests` without soak evidence. About 20 ms web CPU per request on the app mix; the earlier page-size finding was withdrawn (see the correction above). | [capacity.md §3](k6-notes/capacity.md) |
 | 14.7 Finance caching | Re-measured K3 admin surfaces locally: Finance pages 0.5–0.7 s median with ~20 queries, all within K3 ceilings | **No change: no Redis caching.** The time left is Python projection inside one short `REPEATABLE READ` snapshot, which a cache would not make safer. | [reliability-observability.md §5](k6-notes/reliability-observability.md) |
 | 14.8 Reference/route caching | K4 ETags (`/api/geography/countries`, `/api/airports` 200/304 in 1.3–1.7 ms); route cache in the responsibility map | **No change.** No measurable gain left. | [reliability-observability.md §5](k6-notes/reliability-observability.md) |
 | 14.9 Stampede protection | Whether any expensive shared cached computation exists | **No change.** There is no shared cache to stampede. | [reliability-observability.md §5](k6-notes/reliability-observability.md) |
@@ -110,7 +114,7 @@ evidence that justified leaving it. "Deferred" states why.
 | 14.12 Circuit breakers | Worst provider hold (18 s per call, ~36 s Connect onboarding) against 4 request slots | **Rejected with evidence.** All slots are held only above ~13 provider-bound requests per minute; at ≈1 checkout/min the chance is ≈3 × 10⁻⁴. Re-open conditions recorded. | [reliability-observability.md §3](k6-notes/reliability-observability.md) |
 | 14.13 Observability | Existing Sentry, logs, `/readyz`, deep health, Railway metrics | **Changed.** One allow-listed `http_request` line per request replaces Gunicorn's access log, which wrote guest capability paths to logs. Finance worker logs an `ops_snapshot` every 5 min (job and outbound backlog, DB connections, memory, stream lag). Go chat/notification log `ws_stats` every minute. No paid vendor. | [reliability-observability.md §6](k6-notes/reliability-observability.md) |
 | 14.14 Alerts | Thresholds for every listed signal | **Documented** (13 metrics with source and threshold). Zero-cost path: Railway metrics, a free external `/readyz` monitor, Sentry free tier. Not configured on Railway in K6. | [reliability-observability.md §6](k6-notes/reliability-observability.md) |
-| 14.15 Load testing | 100–1,000 users locally (table above) | **Done for early launch.** 100 users measured; 1,000 not certified (test box saturated); 10,000 not attempted. Not measured: KYC upload, payment webhooks, email, push fanout, soak beyond 5 min. | [capacity.md §4](k6-notes/capacity.md), [capacity-runs/](k6-notes/capacity-runs/) |
+| 14.15 Load testing | 100–500 users locally with the screen-shaped mix (table above) | **Done for early launch.** 100 and 250 users healthy on 2x2; the box's knee is ~130 RPS (500 users on 4x2); 1,000 not certified; 10,000 not attempted. Not measured: KYC upload, payment webhooks, email, push fanout, soak beyond 5 min. | [capacity.md §4](k6-notes/capacity.md), [capacity-runs/](k6-notes/capacity-runs/) |
 | 14.16 Capacity model | Envelope per shape and scale triggers | **Documented** (above). Measured and extrapolated figures are labelled separately. | [capacity.md §5](k6-notes/capacity.md) |
 | 14.17 Failure drills | See below | **Not run on TEST** (no deploys by owner decision). Partly covered by unit tests and code. | below |
 | 14.18 Success criteria | See below | **Partly met.** Redis criteria ready, proof pending owner cutover. | below |
@@ -139,7 +143,7 @@ No drill ran on TEST or staging in K6. Coverage today:
 | DB connection budget is safe | Met for one replica (47/90 worst case). Two replicas need the `start.py` fix below. |
 | Workers are bounded and observable | Met: bounded retries and concurrency, drain window, stream lag in deep health and `ops_snapshot`. |
 | Observability can diagnose latency and lag | Met at log/metric level: `http_request`, `slow_http_request`, `provider_http_call`, `ops_snapshot`, `ws_stats`. Alerts are defined, not yet wired. |
-| Early-launch load is measured | Met locally (100 users, 2x2, p95 450 ms). Not measured on Railway. |
+| Early-launch load is measured | Met locally (100 users, 2x2, p95 100 ms; 250 users, p95 240 ms). Not measured on Railway. |
 | Scale triggers are documented | Met (T1–T5 and PgBouncer trigger). |
 
 ## Verification
@@ -177,20 +181,21 @@ No drill ran on TEST or staging in K6. Coverage today:
 6. **Page size (package P) — premise invalid.** No app screen calls the two
    endpoints; the unused repository methods now request 20-row pages
    (`5606529`). Lowering the server's 100-row default is a contract change
-   left to Codex; capacity is being re-measured with a corrected mix.
+   left to Codex, and not needed for capacity. Capacity was re-measured with
+   the corrected mix (above).
 7. Smaller items recorded in the appendices: unexplained TEST 1.14 GB memory
    peak (check against the deploy timeline); Railway restart budget of 5
-   (worth an alert); `unread-count` is the next web CPU target; untested
-   paths (KYC upload, webhooks, push fanout, email, soak).
+   (worth an alert); the notification inbox, Find Travelers, the Offers list
+   and `unread-count` are the largest web CPU consumers (optional tuning);
+   untested paths (KYC upload, webhooks, push fanout, email, Finance console
+   under load, soak).
 
 ## Resume here
 
-K6 has integrated packages R, O, L and P (plus the `3966d46` test fix). One
-item remains: re-run the capacity measurements with a corrected traffic mix
-(replace journeys search / parcels open with `find-travelers` and
-`compatible-requests`) once the K7 packages have finished, and replace the
-provisional numbers. K7 packages A–C are running. No CI or deploy until the end
-of K7.
+K6 has integrated packages R, O, L and P (plus the `3966d46` test fix). The
+capacity measurements were re-run with the screen-shaped traffic mix on
+`1ed3eb4` (after K7-D/E) and replace the withdrawn numbers. No CI or deploy
+until the end of K7.
 
 **Owner action before launch:** provision persistent managed Redis (the
 Railway free plan refused it in K1, so a plan upgrade may be needed) and run the

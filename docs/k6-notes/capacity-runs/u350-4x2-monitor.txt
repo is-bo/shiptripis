@@ -1,0 +1,26 @@
+92 samples -> .data\u350-4x2-monitor.csv
+             web-8001_rss_mb: min    117.1  avg    120.8  max    121.9
+            web-8001_cpu_pct: min     49.7  avg     69.1  max     89.3
+             web-8002_rss_mb: min    118.6  avg    119.9  max    121.2
+            web-8002_cpu_pct: min     48.7  avg     69.4  max     92.1
+             web-8003_rss_mb: min    117.1  avg    119.0  max    120.7
+            web-8003_cpu_pct: min     46.6  avg     69.7  max     86.5
+             web-8004_rss_mb: min    116.7  avg    119.9  max    121.1
+            web-8004_cpu_pct: min     53.0  avg     69.5  max     91.2
+                caddy_rss_mb: min     55.2  avg     59.3  max     60.9
+               caddy_cpu_pct: min     25.5  avg     36.6  max     49.6
+                 chat_rss_mb: min     25.6  avg     25.7  max     25.8
+                chat_cpu_pct: min      0.0  avg      0.0  max      0.5
+         notification_rss_mb: min     23.8  avg     23.8  max     23.9
+        notification_cpu_pct: min      0.0  avg      0.0  max      0.0
+         finance-jobs_rss_mb: min     46.4  avg     46.4  max     46.4
+        finance-jobs_cpu_pct: min      0.0  avg      0.0  max      0.5
+             releaser_rss_mb: min     42.0  avg     42.0  max     42.0
+            releaser_cpu_pct: min      0.0  avg      0.0  max      1.0
+            web_rss_mb_total: min    470.2  avg    479.7  max    484.5
+             machine_cpu_pct: min     56.8  avg     74.8  max     91.0
+              db_conns_total: min     14.0  avg     14.0  max     14.0
+             db_conns_active: min      0.0  avg      1.3  max      5.0
+               db_conns_idle: min      9.0  avg     12.7  max     14.0
+            db_conns_cluster: min     15.0  avg     15.0  max     15.0
+             postgres_rss_mb: min    409.6  avg    640.2  max    703.4

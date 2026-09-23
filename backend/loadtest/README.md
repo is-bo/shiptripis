@@ -22,7 +22,7 @@ venv, and the Go tools are a separate module (`tools/`) that
 | `seed.py` | Builds the world through the real V1 offer/accept services and writes `.data/world.json` (JWTs, ids, admin sessions). |
 | `serve.py` | Gunicorn-shaped server for Windows: W Waitress processes x T threads, optionally a real Caddy in front with `least_conn`. |
 | `Caddyfile` | The harness edge; mirrors `backend/railway/Caddyfile` routing (`/ws/chat`, `/ws/notifications`, Django catch-all). |
-| `locustfile.py` | Traffic mix: senders 60 %, travelers 38 %, operators 2 %, 2-8 s think time. |
+| `locustfile.py` | Traffic mix built from the Flutter screens (one task = one screen's requests): senders 60 %, travelers 38 %, Admin console operators 2 %, 2-8 s think time. |
 | `monitor.py` | Samples per-process RSS/CPU, machine CPU, `pg_stat_activity` and Postgres memory to CSV. |
 | `ws_memory.py` + `tools/cmd/wsprobe` | Memory per idle WebSocket for a Go relay or Caddy. |
 | `tools/cmd/miniredis` | In-memory Redis stand-in for machines with no `redis-server`. Correct protocol, **not** a Redis performance proxy. |

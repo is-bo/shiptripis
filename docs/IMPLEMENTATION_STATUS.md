@@ -32,9 +32,11 @@ unsafe eviction, a read-only stream inspector, runbook); provisioning and the
 restart proof are deferred to pre-launch by owner decision. Worker retries are
 now bounded, Railway gets a 30 s drain window, Google sign-in and SMTP calls
 have timeouts, and a per-request log line replaces Gunicorn's access log.
-Local load: 100 active users fit today's shape (p95 450 ms); one service,
-no PgBouncer and no caching needed yet (load numbers provisional: the model's
-traffic mix is being corrected). Not merged or released. See
+Local load, re-measured with a traffic mix built from the app's screens:
+100 active users at p95 100 ms and 250 at p95 240 ms on today's 2x2 shape
+(about 20 ms web CPU per request); safe envelope ~125–190 active users,
+~250–375 with `WEB_CONCURRENCY=4`. One service, no PgBouncer and no caching
+needed yet. Not merged or released. See
 [the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
 
 ## K5 — Mobile Performance (verified, PR pending, 2026-09-23)
