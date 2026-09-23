@@ -156,6 +156,16 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   /// settlement twice.
   Future<void>? _reading;
 
+  /// The order [_reading] asks about, and [_leftApp] when it was sent. A read
+  /// for another order, or one sent before the payer last left the app — to
+  /// the bank's app for a 3-D Secure step, say — is not joined: its answer
+  /// may predate what they just did. A fresh read is queued behind it.
+  String? _readingReference;
+  int _readingSince = 0;
+
+  /// Bumped every time the app goes off screen.
+  int _leftApp = 0;
+
   CheckoutPhase _phase = CheckoutPhase.choosing;
   PaymentOrder? _order;
   PaymentProviderId? _selected;
@@ -224,6 +234,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
         _away = true;
+        _leftApp++;
         if (_poll != null) {
           _stopPolling();
           _pollDeferred = true;
@@ -296,24 +307,42 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     _poll = null;
   }
 
-  Future<void> _readOrder() =>
-      _reading ??= _readOrderOnce().whenComplete(() => _reading = null);
+  Future<void> _readOrder() {
+    final reference = widget.orderReference;
+    final inFlight = _reading;
+    if (inFlight != null &&
+        _readingReference == reference &&
+        _readingSince == _leftApp) {
+      return inFlight;
+    }
+    // Still one at a time: the fresh read goes out once the stale one lands,
+    // so the two can never both report a settlement.
+    late final Future<void> read;
+    read = (inFlight ?? Future<void>.value())
+        .then((_) => _readOrderOnce(reference))
+        .whenComplete(() {
+          if (identical(_reading, read)) _reading = null;
+        });
+    _reading = read;
+    _readingReference = reference;
+    _readingSince = _leftApp;
+    return read;
+  }
 
-  Future<void> _readOrderOnce() async {
+  Future<void> _readOrderOnce(String reference) async {
+    var settledNow = false;
     try {
-      final order = await ref
-          .read(paymentRepositoryProvider)
-          .order(widget.orderReference);
-      if (!mounted) return;
+      final order = await ref.read(paymentRepositoryProvider).order(reference);
+      // Another order's answer, read before the parent switched references.
+      if (!mounted || reference != widget.orderReference) return;
 
       setState(() => _order = order);
 
       if (order.status.isSettled) {
         _stopPolling();
-        final alreadySettled = _phase == CheckoutPhase.settled;
-        _setPhase(CheckoutPhase.settled);
         // Once per settlement: the parent publishes, activates or funds on it.
-        if (!alreadySettled) widget.onSettled();
+        settledNow = _phase != CheckoutPhase.settled;
+        _setPhase(CheckoutPhase.settled);
         return;
       }
       if (_phase != CheckoutPhase.confirming) return;
@@ -333,9 +362,12 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
               : CheckoutPhase.cancelled,
         );
       }
-    } on ApiException {
-      // A failed poll says nothing about the payment. Keep waiting; the
-      // budget will end this if the network really is gone.
+    } on Object {
+      // A failed poll says nothing about the payment — nor does an answer
+      // this client cannot read. Keep waiting; the budget ends this with
+      // "Check again" if it never resolves.
+    } finally {
+      if (settledNow && mounted) widget.onSettled();
     }
   }
 

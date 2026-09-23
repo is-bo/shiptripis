@@ -156,6 +156,20 @@ class SessionController extends Notifier<SessionState> {
   int _generation = 0;
   Timer? _revalidation;
 
+  /// Monotonic; [_accountReadAt] is measured on it.
+  final Stopwatch _clock = Stopwatch()..start();
+  Duration? _accountReadAt;
+
+  /// Whether this session sent or received a server read of the account in
+  /// the last [window]. A resume uses it to tell a launch — whose restore is
+  /// reading `/api/me` already — from a first real open long after one.
+  bool accountReadWithin(Duration window) {
+    final at = _accountReadAt;
+    return at != null && _clock.elapsed - at < window;
+  }
+
+  void _markAccountRead() => _accountReadAt = _clock.elapsed;
+
   @override
   SessionState build() {
     // Kicked off here rather than from a screen: the router's guard reads this
@@ -224,6 +238,7 @@ class SessionController extends Notifier<SessionState> {
     required int attempt,
   }) async {
     final identity = _tokens.identityGeneration;
+    _markAccountRead();
     try {
       final account = await _auth.me();
       if (generation != _generation) return;
@@ -314,6 +329,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    _markAccountRead();
     unawaited(_remember(account, identity));
   }
 
@@ -340,6 +356,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    _markAccountRead();
     unawaited(_remember(account, identity));
   }
 
@@ -362,6 +379,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
+    _markAccountRead();
     unawaited(_remember(account, identity));
   }
 
@@ -402,6 +420,7 @@ class SessionController extends Notifier<SessionState> {
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
+    _markAccountRead();
     try {
       final account = await _auth.me(fresh: true);
       if (generation == _generation &&

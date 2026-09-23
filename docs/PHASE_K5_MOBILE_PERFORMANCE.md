@@ -282,12 +282,25 @@ checkpoint 1 before the change.
   the background (the payer is usually on the payment page) and read at once on
   return. The client still never decides success; only the server order status
   does.
-- **Not fixed, recorded:** if a checkout's order reference changes while a read
-  is in flight, the old result can still be applied (pre-existing, narrow).
+- **Fixed in review (was recorded as not fixed):** a checkout read for a
+  previous order reference is no longer joined or applied after the reference
+  changes.
 - **Tests.** `k5_realtime_test.dart` (8), `k5_polling_test.dart` (6), one more
   resume case in `k5_request_budget_test.dart`; all but the socket-backoff test
   fail on the previous code. The 20 s ping lives in `_connectIO` and is not
   unit-testable; it needs a device check.
+
+## Package D review fixes
+
+A return from the shade now redials a socket waiting out its backoff (live
+sockets untouched); socket uptime is measured on a monotonic clock. Checkout and
+guest-link reads sent before the app was hidden are not adopted on return (one
+fresh read follows; `onSettled` still fires once); a checkout read is never
+joined or applied across an order-reference change; an unreadable order answer
+counts as a failed read, so the schedule ends in "Check again". The first
+`resumed` after a launch in an unknown lifecycle state reads `/api/me` unless
+the session read the account in the last 30 s. Tests: 1 socket, 2 resume, 3
+checkout, 1 guest sheet.
 
 ## Review fixes
 

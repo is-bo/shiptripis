@@ -10,8 +10,12 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/features/guest/guest_payment_sheet.dart';
 import 'package:shiptrip/features/requests/checkout_section.dart';
@@ -134,6 +138,34 @@ class _Server {
   void release() {
     gate?.complete();
     gate = null;
+  }
+}
+
+/// Order reads answered by hand, in the order they were sent.
+List<Completer<FakeResponse>> _holdOrderReads(
+  FakeBackend backend,
+  String path,
+) {
+  final replies = <Completer<FakeResponse>>[];
+  backend.handle('GET', path, (_) {
+    final reply = Completer<FakeResponse>();
+    replies.add(reply);
+    return reply.future;
+  });
+  return replies;
+}
+
+/// Order reads that fail in a way no `ApiException` describes: an answer the
+/// client cannot interpret.
+class _UnreadableOrders extends PaymentRepository {
+  _UnreadableOrders(super.api);
+
+  int reads = 0;
+
+  @override
+  Future<PaymentOrder> order(String reference, {CancelToken? cancelToken}) {
+    reads++;
+    throw StateError('settlement is malformed');
   }
 }
 
@@ -335,6 +367,151 @@ void main() {
       },
     );
 
+    testWidgets('a return from another app does not adopt a read sent before '
+        'it left; one fresh read follows and settles once', (tester) async {
+      var settled = 0;
+      final server = _Server();
+      final replies = _holdOrderReads(server.backend, _orderPath);
+      await _startChecking(tester, server, onSettled: () => settled++);
+
+      // A re-read leaves, then the payer goes to the bank app for 3-D Secure.
+      await tester.pump(const Duration(seconds: 3));
+      expect(replies, hasLength(1));
+      _leave(tester);
+      await _pumpFor(tester, const Duration(seconds: 20));
+      _return(tester);
+      await _settle(tester);
+      expect(replies, hasLength(1), reason: 'still one read at a time');
+
+      // The old read answers from before the 3-D Secure step.
+      replies[0].complete(
+        FakeResponse(200, _order(attempts: [_attempt('checkout_pending')])),
+      );
+      await _settle(tester);
+      expect(replies, hasLength(2), reason: 'a fresh read, straight away');
+      expect(settled, 0);
+
+      replies[1].complete(FakeResponse(200, _order(paid: true)));
+      await _settle(tester);
+      expect(settled, 1);
+      expect(find.text(_en.payResultCheckingTitle), findsNothing);
+
+      await _pumpFor(tester, const Duration(minutes: 3));
+      expect(replies, hasLength(2));
+      expect(settled, 1);
+    });
+
+    testWidgets('a read for the previous order is never joined or adopted '
+        'after the reference changes', (tester) async {
+      const refB = 'ord_k5_b';
+      const pathB = '/api/payments/orders/$refB';
+      var settled = 0;
+      final server = _Server();
+      final repliesA = _holdOrderReads(server.backend, _orderPath);
+      final repliesB = _holdOrderReads(server.backend, pathB);
+      server.backend.handle(
+        'POST',
+        '$pathB/checkout',
+        (_) => FakeResponse(201, _attempt('checkout_pending')),
+      );
+      final reference = ValueNotifier(_ref);
+      addTearDown(reference.dispose);
+      _stubBrowser(tester);
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: ValueListenableBuilder<String>(
+              valueListenable: reference,
+              builder: (_, value, _) => CheckoutSection(
+                orderReference: value,
+                order: PaymentOrder.fromJson({
+                  ..._order(),
+                  'public_reference': value,
+                }),
+                onSettled: () => settled++,
+              ),
+            ),
+          ),
+        ),
+        container: containerFor(server.backend),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(_payButton);
+      await tester.tap(_payButton);
+      await _settle(tester);
+      await tester.pump(const Duration(seconds: 3));
+      expect(repliesA, hasLength(1));
+
+      // The parent moves to order B while A's read is out, and B is paid.
+      reference.value = refB;
+      await _settle(tester);
+      await tester.ensureVisible(_payButton);
+      await tester.tap(_payButton);
+      await _settle(tester);
+      expect(find.text(_en.payResultCheckingTitle), findsOneWidget);
+
+      // A's paid answer lands. It is not B's, so nothing settles.
+      repliesA[0].complete(FakeResponse(200, _order(paid: true)));
+      await _settle(tester);
+      expect(settled, 0);
+      expect(find.text(_en.payResultCheckingTitle), findsOneWidget);
+
+      // B's own schedule reads B.
+      await _pumpFor(tester, const Duration(seconds: 3));
+      expect(repliesB, hasLength(1));
+      repliesB[0].complete(
+        FakeResponse(200, {..._order(paid: true), 'public_reference': refB}),
+      );
+      await _settle(tester);
+      expect(settled, 1);
+      expect(repliesA, hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpFor(tester, const Duration(minutes: 3));
+    });
+
+    testWidgets('an unreadable answer keeps the schedule going and ends in '
+        '"Check again", not an endless spinner', (tester) async {
+      final server = _Server();
+      _UnreadableOrders? orders;
+      final tokens = FakeTokenStore();
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokens),
+          apiClientProvider.overrideWithValue(
+            apiClientFor(server.backend, tokens),
+          ),
+          paymentRepositoryProvider.overrideWith(
+            (ref) => orders = _UnreadableOrders(ref.watch(apiClientProvider)),
+          ),
+        ],
+      );
+      _stubBrowser(tester);
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: CheckoutSection(
+              orderReference: _ref,
+              order: PaymentOrder.fromJson(_order()),
+              onSettled: () {},
+            ),
+          ),
+        ),
+        container: container,
+      );
+      await _settle(tester);
+      await tester.ensureVisible(_payButton);
+      await tester.tap(_payButton);
+      await _settle(tester);
+
+      await _pumpFor(tester, const Duration(minutes: 3));
+      expect(tester.takeException(), isNull);
+      expect(orders!.reads, 9, reason: 'the whole nine-read schedule');
+      expect(find.text(_en.paymentCheckAgain), findsOneWidget);
+    });
+
     testWidgets('a declined attempt stops the re-reads', (tester) async {
       final server = _Server();
       await _startChecking(tester, server);
@@ -380,6 +557,33 @@ void main() {
       final atDispose = server.orderReads;
       await _pumpFor(tester, const Duration(minutes: 2));
       expect(server.orderReads, atDispose);
+    });
+
+    testWidgets('a return during a read sent before leaving reads once more '
+        'when it lands', (tester) async {
+      final server = _Server();
+      await _pumpSheet(tester, server);
+
+      server.gate = Completer<void>();
+      await tester.pump(const Duration(seconds: 3));
+      expect(server.orderReads, 1);
+
+      _leave(tester);
+      await _pumpFor(tester, const Duration(seconds: 20));
+      _return(tester);
+      await _settle(tester);
+      expect(server.orderReads, 1, reason: 'one read at a time');
+
+      server.release();
+      await _settle(tester);
+      expect(
+        server.orderReads,
+        2,
+        reason: 'the answer from before is not kept',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpFor(tester, const Duration(minutes: 2));
     });
 
     testWidgets('no ticks while away; the return reads at once', (

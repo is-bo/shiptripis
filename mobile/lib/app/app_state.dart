@@ -838,7 +838,16 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
   /// all — a transient `inactive` flicker rather than a real departure.
   static const _ignoreShorterThan = Duration(seconds: 1);
 
+  /// How recent a profile read must be for the first `resumed` after a launch
+  /// in an unknown state to skip its own.
+  static const _launchReadCovers = Duration(seconds: 30);
+
   DateTime? _leftAt;
+
+  /// Built before the platform reported any on-screen state. An iOS
+  /// background launch reports none, so the first `resumed` may be the first
+  /// real open, long after the launch read the profile.
+  bool _launchStateUnknown = false;
 
   @override
   void initState() {
@@ -851,9 +860,10 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         _leftAt = DateTime.now();
+      case null:
+        _launchStateUnknown = true;
       case AppLifecycleState.resumed:
       case AppLifecycleState.inactive:
-      case null:
         break;
     }
   }
@@ -885,11 +895,22 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
   void _onResumed() {
     final away = _leftAt;
     _leftAt = null;
+    final firstAfterUnknownLaunch = _launchStateUnknown;
+    _launchStateUnknown = false;
 
-    // No `hidden`/`paused` before this `resumed`: an `inactive` flicker (the
-    // notification shade, the app switcher) or the launch itself, where the
-    // session restore is already reading the profile. Neither is a departure.
-    if (away == null || DateTime.now().difference(away) < _ignoreShorterThan) {
+    if (away == null) {
+      // No `hidden`/`paused` before this `resumed`: an `inactive` flicker (the
+      // notification shade, the app switcher) or the launch itself, where the
+      // session restore is already reading the profile. Neither is a
+      // departure — unless the launch was in the background and this is the
+      // first open, which only the age of the last profile read can tell.
+      if (!firstAfterUnknownLaunch ||
+          ref
+              .read(sessionProvider.notifier)
+              .accountReadWithin(_launchReadCovers)) {
+        return;
+      }
+    } else if (DateTime.now().difference(away) < _ignoreShorterThan) {
       return;
     }
 

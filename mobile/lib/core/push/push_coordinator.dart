@@ -102,8 +102,13 @@ class PushCoordinator extends Notifier<PushRuntimeState>
         // switcher, a system dialog — the app never left the screen and its
         // sockets never closed, so nothing was missed. Tearing both down and
         // redialling for that cost two handshakes and a full catch-up each
-        // time the shade was pulled.
-        if (_resumed) return;
+        // time the shade was pulled. An endpoint waiting out a backoff is the
+        // exception: the user may have just fixed the network from the shade,
+        // so it redials now rather than in up to 32 s.
+        if (_resumed) {
+          _socket.reconnectIdle();
+          return;
+        }
         _resumed = true;
         _reconcileCurrentScope();
         _startSocketsIfSignedIn();

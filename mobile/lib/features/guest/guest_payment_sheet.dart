@@ -30,8 +30,9 @@
 /// order's resource and the sheet re-reads within a round trip of the webhook.
 /// The fallback poll exists for a Sender whose socket is down; it runs only
 /// while a link is live and the app is on screen, backs off from 3 s to a 20 s
-/// ceiling, and stops after ten minutes. Returning to the app — typically from the messaging app the
-/// link was just shared in — re-reads straight away and restarts it.
+/// ceiling, and stops after ten minutes. Returning to the app — typically from
+/// the messaging app the link was just shared in — re-reads straight away and
+/// restarts it.
 library;
 
 import 'dart:async';
@@ -128,6 +129,15 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   bool _away = false;
   bool _settled = false;
   bool _readingOrder = false;
+
+  /// [_leftApp] when the order read in flight was sent. A read sent before
+  /// the Sender last left the app may predate what happened while they were
+  /// away, so a return during it asks once more when it lands.
+  int _orderReadSince = 0;
+  bool _rereadOrder = false;
+
+  /// Bumped every time the app goes off screen.
+  int _leftApp = 0;
   bool _readingLink = false;
   LiveUnsubscribe? _liveUnsubscribe;
 
@@ -168,6 +178,7 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
         _away = true;
+        _leftApp++;
         _cancelPoll();
         return;
       case AppLifecycleState.resumed:
@@ -333,8 +344,20 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   // -------------------------------------------------------------------------
 
   Future<void> _refreshOrder() async {
-    if (_readingOrder || !mounted) return;
+    if (!mounted) return;
+    if (_readingOrder) {
+      if (_orderReadSince != _leftApp) _rereadOrder = true;
+      return;
+    }
     _readingOrder = true;
+    _orderReadSince = _leftApp;
+    var ended = false;
+    void end() {
+      if (ended) return;
+      ended = true;
+      _endOrderRead();
+    }
+
     final before = _order.latestAttempt;
     try {
       final updated = await _repo.order(_reference);
@@ -349,14 +372,21 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
       // paying" flag changes, so re-read the link then and only then.
       final after = updated.latestAttempt;
       if (after?.id != before?.id || after?.status != before?.status) {
-        _readingOrder = false;
+        end();
         await _readLink();
       }
     } on ApiException {
       // The next tick, event or resume asks again.
     } finally {
-      _readingOrder = false;
+      end();
     }
+  }
+
+  void _endOrderRead() {
+    _readingOrder = false;
+    if (!_rereadOrder) return;
+    _rereadOrder = false;
+    if (mounted && !_settled) unawaited(_refreshOrder());
   }
 
   void _markSettled() {

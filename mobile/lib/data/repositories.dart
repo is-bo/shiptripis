@@ -1746,7 +1746,7 @@ class NotificationRepository {
     ),
   );
 
-  /// Both inbox counts, from the one response that carries them.
+  /// The bell's count: active notifications, from the shared counts read.
   ///
   /// J1 separated `resolved` from `read_at`, so the badge counts *active*
   /// rows, not unread ones: a read action that still needs doing keeps

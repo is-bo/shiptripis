@@ -53,12 +53,20 @@ class _Connection implements NotificationSocketConnection {
 class _Dialer {
   final all = <_Connection>[];
 
+  /// Endpoints whose handshake currently fails: no network.
+  final refused = <String>{};
+  int refusals = 0;
+
   Iterable<_Connection> get open => all.where((c) => !c.closed);
 
   Future<NotificationSocketConnection> connect(
     Uri uri,
     Map<String, String> headers,
   ) async {
+    if (refused.contains(uri.path)) {
+      refusals++;
+      throw StateError('unreachable');
+    }
     final connection = _Connection(uri.path);
     all.add(connection);
     return connection;
@@ -79,6 +87,23 @@ class _Session extends SessionController {
   }
 
   void signOutLocally() => state = const SessionSignedOut();
+}
+
+/// Records profile refreshes, with a chosen age for the last account read.
+class _ResumeSession extends SessionController {
+  _ResumeSession({required this.readRecently});
+
+  final bool readRecently;
+  int refreshes = 0;
+
+  @override
+  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+
+  @override
+  bool accountReadWithin(Duration window) => readRecently;
+
+  @override
+  Future<void> refreshAccount() async => refreshes++;
 }
 
 void _leave(WidgetTester tester) {
@@ -135,9 +160,17 @@ Future<(ProviderContainer, _Session, int Function())> _mount(
     ],
   );
   final session = _Session(Account.fromJson(meFixture()));
+  final tokens = FakeTokenStore();
   final container = ProviderContainer(
     overrides: [
-      tokenStoreProvider.overrideWithValue(FakeTokenStore()),
+      tokenStoreProvider.overrideWithValue(tokens),
+      // A refused handshake re-reads `/api/me` to refresh the token.
+      apiClientProvider.overrideWithValue(
+        apiClientFor(
+          FakeBackend()..on('GET', '/api/me', FakeResponse(200, meFixture())),
+          tokens,
+        ),
+      ),
       sessionProvider.overrideWith(() => session),
       routerProvider.overrideWithValue(router),
       notificationSocketProvider.overrideWithValue(
@@ -209,6 +242,45 @@ void main() {
       expect(dialer.all, opened, reason: 'no redial for a flicker');
       expect(opened.every((c) => !c.closed), isTrue);
       expect(catchUps(), before, reason: 'nothing was missed, nothing re-read');
+    });
+
+    testWidgets('an inactive return redials an endpoint stuck in backoff at '
+        'once, and leaves a live one alone', (tester) async {
+      final dialer = _Dialer();
+      await _mount(tester, dialer);
+      final notifications = dialer.open.singleWhere(
+        (c) => c.path == '/ws/notifications',
+      );
+      final chat = dialer.open.singleWhere((c) => c.path == '/ws/chat');
+
+      // Wi-Fi drops under the chat socket and stays down long enough for its
+      // backoff to reach tens of seconds.
+      dialer.refused.add('/ws/chat');
+      chat.drop();
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(dialer.refusals, greaterThanOrEqualTo(4));
+      expect(dialer.open.where((c) => c.path == '/ws/chat'), isEmpty);
+
+      // The user fixes it from the shade and comes back.
+      dialer.refused.clear();
+      final dialled = dialer.all.length;
+      tester.binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(_openPerPath(dialer), {'/ws/notifications': 1, '/ws/chat': 1});
+      expect(dialer.all, hasLength(dialled + 1), reason: 'only chat redials');
+      expect(dialer.open, contains(notifications));
+      expect(notifications.closed, isFalse);
+
+      // And its streak starts over: the next drop retries within a second.
+      final revived = dialer.open.singleWhere((c) => c.path == '/ws/chat');
+      revived.drop();
+      await tester.pump(const Duration(milliseconds: 1100));
+      expect(dialer.open.where((c) => c.path == '/ws/chat'), hasLength(1));
     });
 
     testWidgets('the background closes both; the return reconnects each once '
@@ -287,15 +359,64 @@ void main() {
     });
   });
 
+  group('resume profile read', () {
+    Future<_ResumeSession> mountLaunchedUnknown(
+      WidgetTester tester, {
+      required bool readRecently,
+    }) async {
+      // What an iOS background launch reports: no lifecycle state at all.
+      tester.binding.resetInternalState();
+      expect(tester.binding.lifecycleState, isNull);
+      final session = _ResumeSession(readRecently: readRecently);
+      final container = ProviderContainer(
+        overrides: [sessionProvider.overrideWith(() => session)],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const ResumeRefresher(child: SizedBox.shrink()),
+        ),
+      );
+      return session;
+    }
+
+    testWidgets('the first open after a background launch reads the profile '
+        'when the launch read is old; later flickers never do', (tester) async {
+      final session = await mountLaunchedUnknown(tester, readRecently: false);
+      tester.binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(session.refreshes, 1);
+
+      tester.binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(session.refreshes, 1);
+    });
+
+    testWidgets('a foreground launch whose restore just read the profile does '
+        'not read it again', (tester) async {
+      final session = await mountLaunchedUnknown(tester, readRecently: true);
+      tester.binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(session.refreshes, 0);
+    });
+  });
+
   group('reconnect backoff', () {
     testWidgets('an endpoint that accepts and drops at once backs off', (
       tester,
     ) async {
-      var now = DateTime(2026, 9, 22);
+      var now = Duration.zero;
       final connects = <String, int>{};
       final socket = NotificationSocket(
         random: Random(3),
-        now: () => now,
+        elapsed: () => now,
         connector: (uri, _) async {
           connects[uri.path] = (connects[uri.path] ?? 0) + 1;
           return _Connection(uri.path)..drop();
@@ -310,7 +431,7 @@ void main() {
 
       for (var i = 0; i < 120; i++) {
         await tester.pump(const Duration(milliseconds: 500));
-        now = now.add(const Duration(milliseconds: 500));
+        now += const Duration(milliseconds: 500);
       }
 
       // A minute. Resetting the backoff on every accepted handshake redialled
@@ -327,12 +448,12 @@ void main() {
     testWidgets(
       'a connection that stayed up reconnects promptly after a drop',
       (tester) async {
-        var now = DateTime(2026, 9, 22);
+        var now = Duration.zero;
         final attempts = <String, int>{};
         final live = <String, _Connection>{};
         final socket = NotificationSocket(
           random: Random(3),
-          now: () => now,
+          elapsed: () => now,
           connector: (uri, _) async {
             final attempt = (attempts[uri.path] ?? 0) + 1;
             attempts[uri.path] = attempt;
@@ -348,13 +469,13 @@ void main() {
         );
         for (var i = 0; i < 40 && live.length < 2; i++) {
           await tester.pump(const Duration(milliseconds: 500));
-          now = now.add(const Duration(milliseconds: 500));
+          now += const Duration(milliseconds: 500);
         }
         expect(live, hasLength(2));
 
         // Up for a minute, then the network changes under it.
         await tester.pump(const Duration(minutes: 1));
-        now = now.add(const Duration(minutes: 1));
+        now += const Duration(minutes: 1);
         final before = Map.of(attempts);
         for (final connection in live.values) {
           connection.drop();

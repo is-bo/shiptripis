@@ -23,16 +23,22 @@ abstract interface class NotificationSocketConnection {
   Future<void> close();
 }
 
+/// Monotonic time since an arbitrary fixed origin.
+typedef MonotonicClock = Duration Function();
+
 class NotificationSocket {
+  /// [elapsed] is the clock connection uptime is measured on. It must be
+  /// monotonic — a wall-clock change must not make a connection look older
+  /// or younger than it is — so by default it is a [Stopwatch].
   NotificationSocket({
     NotificationSocketConnector? connector,
     Random? random,
     Duration retryBase = const Duration(seconds: 1),
-    DateTime Function()? now,
+    MonotonicClock? elapsed,
   }) : _connector = connector ?? _connectIO,
        _random = random ?? Random(),
        _retryBase = retryBase,
-       _now = now ?? DateTime.now;
+       _elapsed = elapsed;
 
   static const paths = <String>['/ws/notifications', '/ws/chat'];
 
@@ -57,7 +63,10 @@ class NotificationSocket {
   final NotificationSocketConnector _connector;
   final Random _random;
   final Duration _retryBase;
-  final DateTime Function() _now;
+  final MonotonicClock? _elapsed;
+  final Stopwatch _clock = Stopwatch()..start();
+
+  Duration _now() => _elapsed?.call() ?? _clock.elapsed;
   final Map<String, _EndpointState> _endpoints = {
     for (final path in paths) path: _EndpointState(),
   };
@@ -81,6 +90,26 @@ class NotificationSocket {
     await _closeEndpoints();
     if (!_isCurrent(generation)) return;
     await Future.wait([for (final path in paths) _connect(path, generation)]);
+  }
+
+  /// Redials at once every endpoint that is waiting out a backoff, from a
+  /// fresh streak. Live connections, and a dial already in progress, are left
+  /// alone, so a healthy pair costs nothing.
+  ///
+  /// For a return to the app that never left the screen — the shade, Control
+  /// Center — where the user may just have fixed the network the backoff was
+  /// waiting on (up to 32 s).
+  void reconnectIdle() {
+    if (!_running) return;
+    final generation = _generation;
+    for (final MapEntry(key: path, value: endpoint) in _endpoints.entries) {
+      final retry = endpoint.retry;
+      if (endpoint.connection != null || retry == null) continue;
+      retry.cancel();
+      endpoint.retry = null;
+      endpoint.attempt = 0;
+      unawaited(_connect(path, generation));
+    }
   }
 
   Future<void> stop() async {
@@ -197,7 +226,7 @@ class NotificationSocket {
     endpoint.connection = null;
     final connectedAt = endpoint.connectedAt;
     endpoint.connectedAt = null;
-    if (connectedAt != null && _now().difference(connectedAt) >= stableAfter) {
+    if (connectedAt != null && _now() - connectedAt >= stableAfter) {
       endpoint.attempt = 0;
     }
     unawaited(connection.close());
@@ -249,7 +278,7 @@ class _EndpointState {
   NotificationSocketConnection? connection;
   StreamSubscription<dynamic>? subscription;
   Timer? retry;
-  DateTime? connectedAt;
+  Duration? connectedAt;
   int attempt = 0;
   bool refreshBeforeConnect = false;
   bool refreshedSinceConnected = false;
