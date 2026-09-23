@@ -2,7 +2,7 @@
 
 Plan §20. Date 2026-09-23. Every figure below comes from a phase record or its
 appendix; measured local figures, TEST figures and extrapolations are labelled.
-Values not yet known are marked ⟪TBD⟫ and are filled after the final release.
+Release facts are from the K5–K7 release on 2026-09-23.
 
 Phase records: [K1](PHASE_K1_RELIABILITY_FOUNDATION.md) ·
 [K2](PHASE_K2_ADMIN_UX.md) · [K3](PHASE_K3_FINANCE_ADMIN_PERFORMANCE.md) ·
@@ -26,19 +26,25 @@ Phase records: [K1](PHASE_K1_RELIABILITY_FOUNDATION.md) ·
 4. **K4 — General backend/API performance: released.** PR #16 merged at
    `89de1ec`; TEST `v1.0.0-rc.49+89de1ec`. Chat inbox 11 → 1 query, Journey
    list −29 % bytes, catalogue ETags (repeat fetch 0 bytes).
-5. **K5 — Mobile performance: complete locally, release pending.** Branch
-   `claude/k5-mobile-performance`, draft PR is-bo/shiptripis#19. Cold start
-   26 → 6 requests; Flutter full suite 1069 passed at K5 end.
-6. **K6 — Infrastructure, workers, observability, load: complete locally,
-   release pending.** Redis cutover ready (owner-deferred), bounded worker
-   retries, 30 s drain, safe access log, ops telemetry, final capacity model
+5. **K5 — Mobile performance: released.** Shipped with K6 and K7 in PR #20,
+   merged at `a08a87a`; TEST `v1.0.0-rc.50+a08a87a`. Cold start 26 → 6
+   requests; Flutter full suite 1074 passed on the final tree.
+6. **K6 — Infrastructure, workers, observability, load: released** (PR #20,
+   `a08a87a`). Redis cutover ready (owner-deferred), bounded worker retries,
+   30 s drain, safe access log, ops telemetry, final capacity model
    (`e0c9914`).
-7. **K7 — Realtime, high-scale, certification: complete locally, release
-   pending.** Packages A–E and review fixes integrated; verdicts in the K7
-   record.
-8. **Final `main` SHA:** ⟪TBD: merge SHA of the K5–K7 PR⟫ (today `b5e33e4`).
-9. **Deployed Railway TEST release:** ⟪TBD: `v1.0.0-rc.50+<sha>`, deployment
-   id, `/healthz`, `/readyz`, smoke and drill results⟫.
+7. **K7 — Realtime, high-scale, certification: released** (PR #20,
+   `a08a87a`). Packages A–E and review fixes; verdicts in the K7 record.
+8. **Final `main` SHA:** `a08a87a` — merge commit of is-bo/shiptripis#20
+   (head `84fb8d5`); CI re-run 6/6 green after a formatting-only fix.
+9. **Deployed Railway TEST release:** `v1.0.0-rc.50+a08a87a`, deployment
+   `25861ac4-91cb-48c7-92eb-bbd2f7a71a20` (SUCCESS). `/healthz` 200 with that
+   release; `/readyz` 200 ready (database, migrations, rate-limit cache ok);
+   unauthenticated smoke of seven API paths all 401, landing 200. Rolling
+   redeploy + worker restart drill (`2452e4fa-a5b9-4a79-899c-0a7804706d2b`,
+   now active): 122 `/readyz` checks, 0 non-200, old container drained within
+   30 s. Redis restart not drilled (owner-deferred); provider slowdown and
+   email/FCM outage covered by tests only.
 
 ## Verdicts by area
 
@@ -140,15 +146,17 @@ Phase records: [K1](PHASE_K1_RELIABILITY_FOUNDATION.md) ·
 34. **Unexpected product/domain changes:** NO. Matching, ranking, pricing,
     lifecycle, permissions and audit unchanged; K7-E bodies byte-identical.
 35. **LIVE financial changes:** NO. The K1–K4 records state no LIVE, provider
-    mode or money change; K5–K7 have not deployed (⟪TBD: post-release
-    confirmation⟫).
+    mode or money change; the K5–K7 release went to TEST only — LIVE
+    untouched, Stripe and Chargily remain TEST, no real payouts.
 36. **Branch cleanup:** K1–K4 branches deleted locally and on origin (none
-    remain). K5/K6 branches: ⟪TBD: after merge⟫. Owner stash, `upstream/*` and
+    remain). K5/K6 branches deleted locally and on origin after merging in
+    `a08a87a`; helper worktrees removed. Owner stash, `upstream/*` and
     unrelated branches preserved.
 37. **Documentation:** phase records K1–K7 with appendices
     (`k6-notes/`, `k7-notes/`), raw load runs in `k6-notes/capacity-runs/`,
-    `IMPLEMENTATION_STATUS.md` updated. Release record for K5–K7:
-    ⟪TBD: release record⟫.
+    `IMPLEMENTATION_STATUS.md` updated. Release record for K5–K7: the
+    "Release" section and §18 gate table of the K7 record, and the K7 entry
+    of `IMPLEMENTATION_STATUS.md`.
 38. **Recommended next engineering program:** a launch-readiness program:
     (1) Redis cutover with the restart proof; (2) alerts and uptime monitor;
     (3) schedule retention; (4) device and Admin browser QA; (5) Codex backlog
@@ -159,8 +167,8 @@ Phase records: [K1](PHASE_K1_RELIABILITY_FOUNDATION.md) ·
 
 ## Verdict
 
-The verdict lines assume the pending release gate (item 9) comes back green;
-if it does not, the K5–K7 lines revert to NO until it does.
+The release gate (item 9) came back green, so the K5–K7 lines stand as
+drafted.
 
 **K-SERIES PERFORMANCE / RELIABILITY PROGRAM PASS** — with one owner-deferred
 exception (persistent Redis cutover) carried into launch readiness.

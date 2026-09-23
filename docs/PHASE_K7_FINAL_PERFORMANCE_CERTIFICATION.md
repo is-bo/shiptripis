@@ -1,18 +1,18 @@
 # K7 — Realtime, High-Scale Tuning & Final Certification
 
-Status: **implementation complete; release gate pending.** All K7 packages,
-the independent K6+K7 review fixes and the final capacity re-run are
-integrated on `claude/k6-infrastructure-scaling`. CI, merge and the Railway
-TEST release are ⟪TBD: release gate result⟫.
+Status: **complete — merged and released.** All K7 packages, the independent
+K6+K7 review fixes and the final capacity re-run shipped with K5 and K6 in one
+PR (is-bo/shiptripis#20), merged to `main` as `a08a87a` and released to
+Railway TEST as `v1.0.0-rc.50+a08a87a`. The release gate (§18) is green.
 
 | Item | Value |
 | --- | --- |
-| Branch | `claude/k6-infrastructure-scaling` (stack: K5 `claude/k5-mobile-performance` → K6 → K7; draft PR is-bo/shiptripis#19 carries K5) |
+| Branch | `claude/k6-infrastructure-scaling` (stack: K5 `claude/k5-mobile-performance` → K6 → K7); shipped as is-bo/shiptripis#20; draft #19 (K5 only) closed as superseded; both branches deleted after merge |
 | Start SHA | branch tip `8117a63` (K6 docs); packages A–C measured from `f77ae0e` (K6 L) |
 | Implementation SHAs | A `71dc984`, B `212c757`, C `41fc5fb`, D `b2326df`, E `1ed3eb4`, review fixes `312c372` + `dbad52f`, capacity re-run `e0c9914` |
 | Baseline `main` | `b5e33e4` (K4 released as `v1.0.0-rc.49+89de1ec`) |
-| Final `main` SHA | ⟪TBD: merge SHA⟫ |
-| Railway TEST release | ⟪TBD: `v1.0.0-rc.50+<sha>`, deployment id⟫ |
+| Final `main` SHA | `a08a87a` (merge commit of is-bo/shiptripis#20, head `84fb8d5`) |
+| Railway TEST release | `v1.0.0-rc.50+a08a87a`, deployment `25861ac4-91cb-48c7-92eb-bbd2f7a71a20`; drill redeploy of the same code `2452e4fa-a5b9-4a79-899c-0a7804706d2b` is active |
 
 **Owner decisions (2026-09-23).** No per-phase CI or deploy: one CI run and
 one Railway TEST release after K7, covering K5–K7. Managed Redis provisioning
@@ -117,8 +117,11 @@ automation; chat is dispute evidence. Owner and legal decisions are listed in
   phone, real FCM delivery.
 - **15.12 Resilience.** Redis restart, worker restart, rolling deploy, provider
   slowdown, email/FCM failure, DB headroom and queue recovery are verified by
-  code-path tests. Live drills: worker restart and rolling deploy
-  ⟪TBD: TEST drill results⟫; Redis restart runs at the owner's Redis cutover.
+  code-path tests. Live drills on TEST: worker restart and rolling deploy
+  passed (122 `/readyz` checks at 1 s, 0 non-200; the old container drained
+  within the 30 s window). Provider slowdown and email/FCM outage were not
+  drilled on TEST (tests only); Redis restart runs at the owner's Redis
+  cutover.
 
 ## Before and after (K7, measured locally)
 
@@ -194,27 +197,29 @@ Confirmed findings from the K6+K7 runtime review, fixed with a test each:
   and new `test_deployment_safety` cases. Flutter: `k7_slow_network_test`.
 - **Package-level runs** (recorded in the appendices): C ran 21 + 148 Django
   tests, the Go units and 224 Flutter tests, all passing.
-- **Full suites on the final tree:** Flutter ⟪TBD: full Flutter result⟫;
-  Django (PostgreSQL) ⟪TBD: full Django result⟫; Go ⟪TBD: `go test ./...`,
-  `go vet`⟫; `-race` and real-Redis integration ⟪TBD: CI⟫.
+- **Full suites on the final tree (local):** Flutter `flutter analyze` clean,
+  1074 passed; Django (PostgreSQL) 2369 passed, 34 skipped, 0 failed (37 min);
+  Go `go vet` (including the `integration` tag) clean, `go test ./...` passes
+  in all 14 packages; Ruff clean; no migrations. `-race` and real-Redis
+  integration ran in CI (both Go jobs green).
 
 ## Release gate (§18)
 
 | Gate | State |
 | --- | --- |
 | Targeted tests green | Yes (package runs above) |
-| Full regression green | ⟪TBD: full-suite results⟫ |
+| Full regression green | Yes — Flutter 1074 passed; Django 2369 passed, 34 skipped, 0 failed; Go all 14 packages; vet and Ruff clean |
 | Parity / correctness | E bodies byte-identical; K5 list/detail parity; Finance parity test passes in C |
 | Performance improvement measured | Yes (table above) |
-| CI green | ⟪TBD: CI run and result⟫ |
-| Exact reviewed code merged | ⟪TBD: PR number, merge SHA⟫ |
-| Railway TEST deployed | ⟪TBD: release id, deployment id⟫ |
-| `/healthz` green | ⟪TBD: /healthz⟫ |
-| `/readyz` green | ⟪TBD: /readyz⟫ |
-| Representative smoke paths | ⟪TBD: smoke results⟫ |
-| TEST-safe drills (worker restart, rolling deploy) | ⟪TBD: drill results⟫ |
-| No unintended LIVE change | Nothing in K5–K7 touched LIVE so far; ⟪TBD: post-release confirmation⟫ |
-| Branch cleanup | ⟪TBD: branches deleted/kept⟫ |
+| CI green | Yes — first run 5/6 (Flutter job failed at `dart format --set-exit-if-changed` on `mobile/test/k5_cold_start_test.dart`, formatting only, tests not reached); fixed in `84fb8d5`, re-run 6/6 green |
+| Exact reviewed code merged | Yes — is-bo/shiptripis#20 (head `84fb8d5`), merge commit `a08a87a` |
+| Railway TEST deployed | Yes — `v1.0.0-rc.50+a08a87a`, deployment `25861ac4-91cb-48c7-92eb-bbd2f7a71a20` (2026-09-23 23:29 UTC, SUCCESS), from a clean `git archive a08a87a` tree, bytes verified |
+| `/healthz` green | Yes — 200 `{"status":"ok","release":"v1.0.0-rc.50+a08a87a"}` |
+| `/readyz` green | Yes — 200 `ready`; database, migrations, rate_limit_cache ok |
+| Representative smoke paths | Yes — unauthenticated `/api/deals?scope=current`, `?scope=bogus`, `/api/me`, `/api/matches`, `/api/notifications/unread-count`, `/api/admin/disputes`, `/api/admin/users` all 401; landing `/` 200 (7,418 B gzip); deploy log shows every service ready, workers started, the new `http request` log lines |
+| TEST-safe drills (worker restart, rolling deploy) | Yes — redeploy `2452e4fa-a5b9-4a79-899c-0a7804706d2b`: 122 `/readyz` checks, 0 non-200; new deployment ready 23:32:46, old container SIGTERM 23:32:53, every service stopped cleanly by 23:32:55. Redis restart not run (owner-deferred) |
+| No unintended LIVE change | Yes — LIVE untouched; Stripe and Chargily remain TEST; no real payouts |
+| Branch cleanup | Done — `claude/k5-mobile-performance` and `claude/k6-infrastructure-scaling` deleted locally and on origin (fully merged); helper worktrees removed; owner stash preserved |
 
 ## Deferred work
 
@@ -310,14 +315,17 @@ external `/readyz` monitor; retention scheduling and the owner/legal retention
 decisions; an Admin browser-QA pass (not re-run in K7). The launch-readiness
 program owns the full list; these are the ones the K-series surfaced.
 
-## Remaining release steps
+## Release
 
-1. Full Flutter, Django and Go suites on the final tree (running).
-2. One PR for K5–K7 → CI green.
-3. Merge; Railway TEST release `v1.0.0-rc.50+<sha>` of the exact reviewed tree.
-4. `/healthz`, `/readyz`, representative smoke, TEST-safe drills (worker
-   restart, rolling deploy).
-5. Fill every ⟪TBD⟫ in this record and in the
-   [K-Series Master Report](K_SERIES_MASTER_REPORT.md); branch cleanup.
-
-Redis provisioning and cutover stay pre-launch (owner).
+K5–K7 shipped as one PR, is-bo/shiptripis#20 (head `84fb8d5`), merged with a
+merge commit as `a08a87a`; draft #19 (K5 only) was closed as superseded. CI:
+the first run passed 5 of 6 jobs (Flutter formatting only); after `84fb8d5`
+the re-run passed all six. Railway TEST release `v1.0.0-rc.50+a08a87a` (previous
+`v1.0.0-rc.49+89de1ec`): `RELEASE_ID` staged without a deploy, then one
+deploy `25861ac4-91cb-48c7-92eb-bbd2f7a71a20` from a clean `git archive` of `a08a87a` whose bytes
+were checked against `git cat-file`. `/healthz` and `/readyz` are green,
+smoke and the rolling-deploy / worker-restart drill passed (see §18 above);
+the drill redeploy `2452e4fa-a5b9-4a79-899c-0a7804706d2b` is the active deployment. The email
+consumer is disabled on TEST by configuration (`EMAIL_ENABLED=false`). LIVE
+was not touched. Redis provisioning, cutover and the restart drill stay
+pre-launch (owner).

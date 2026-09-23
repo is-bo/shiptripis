@@ -1,8 +1,9 @@
 # ShipTrip V1 Implementation Status
 
-## K7 — Realtime, High-Scale Tuning & Final Certification (complete locally, release pending, 2026-09-23)
+## K7 — Realtime, High-Scale Tuning & Final Certification (merged and released, 2026-09-23)
 
-On `claude/k6-infrastructure-scaling` (K5 → K6 → K7 stack). Realtime: keep
+Merged with K5 and K6 in is-bo/shiptripis#20 as `a08a87a`; released to TEST as
+`v1.0.0-rc.50+a08a87a`. Realtime: keep
 WebSocket (no SSE); a slow client no longer loses events silently, and three
 arrival events now reach live sockets. No replicas, partitioning, `pg_trgm`,
 search engine, CQRS or sharding, each with a written trigger. Find Travelers
@@ -11,6 +12,22 @@ Offers list 47,941 → 11,869 bytes. Launch capacity ~125–190 active users tod
 ~250–375 with `WEB_CONCURRENCY=4`. Redis cutover stays pre-launch (owner).
 See [the K7 record](PHASE_K7_FINAL_PERFORMANCE_CERTIFICATION.md) and
 [the K-Series Master Report](K_SERIES_MASTER_REPORT.md).
+
+K5–K7 merged as `a08a87a` (merge commit of #20, head `84fb8d5`; draft #19
+closed as superseded). CI's first run failed only at the Flutter format check;
+after the fix all six jobs are green. Locally on the final tree: Flutter 1074
+passed with analyze clean; Django PostgreSQL 2369 passed, 34 skipped, 0 failed;
+Go vet clean and all 14 packages pass; Ruff clean, no migrations. Released to
+Railway TEST as `v1.0.0-rc.50+a08a87a` (deployment
+`25861ac4-91cb-48c7-92eb-bbd2f7a71a20`) from a byte-verified clean archive.
+`/healthz` and `/readyz` both report that release, with database, migrations
+and rate-limit cache ok. Unauthenticated smoke: seven API paths answer 401 and
+the landing page 200. Drill: a rolling redeploy with full worker restart
+(`2452e4fa-a5b9-4a79-899c-0a7804706d2b`, now active) kept `/readyz` at 200 for
+all 122 one-second checks, and the old container stopped every service cleanly
+within the 30 s drain. Redis restart was not drilled (owner-deferred cutover);
+provider slowdown and email/FCM outage are covered by tests only. LIVE was not
+touched. The K5 and K6 branches are deleted locally and on `origin`.
 
 ## K7 D — Three measured performance defects (2026-09-23)
 
@@ -36,7 +53,7 @@ Stacked on K7 C `41fc5fb`. Local measurements, not Railway.
   planning) is gone. Five rows: 47,941 B / 87.6 ms before, 11,869 B /
   28.6 ms after, 3 queries both.
 
-## K6 — Infrastructure, Caching, Workers, Observability & Load (complete locally, release with K7, 2026-09-23)
+## K6 — Infrastructure, Caching, Workers, Observability & Load (merged and released with K7, 2026-09-23)
 
 On `claude/k6-infrastructure-scaling`, stacked on K5 `b5e1118`. Shared-Redis
 cutover is ready (lost-pending-push and lost-group fixes, a boot gate on
@@ -48,12 +65,13 @@ Local load, final numbers from a traffic mix built from the app's screens:
 100 active users at p95 100 ms and 250 at p95 240 ms on today's 2x2 shape
 (about 20 ms web CPU per request); safe envelope ~125–190 active users,
 ~250–375 with `WEB_CONCURRENCY=4`; the test box's knee is ~130 RPS (500 users). One service, no PgBouncer and no caching
-needed yet. Not merged or released. See
+needed yet. Merged in #20 (`a08a87a`) and released as `v1.0.0-rc.50+a08a87a`. See
 [the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
 
-## K5 — Mobile Performance (verified, PR pending, 2026-09-23)
+## K5 — Mobile Performance (merged and released with K7, 2026-09-23)
 
-On `claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
+Merged in #20 (`a08a87a`) and released as `v1.0.0-rc.50+a08a87a`. Built on
+`claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
 list row now carries the viewer's pending actions (`attention`), so Home no
 longer fetches every Deal's detail (cold start 26 → 6 requests); `/api/deals`
 gains `scope=current|history` and the app reads current Deals in full and history

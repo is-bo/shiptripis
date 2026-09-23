@@ -1,6 +1,7 @@
 # K5 — Mobile Performance
 
-Status: **implemented and verified; pull request pending** — K5 plan items
+Status: **complete — merged and released** (with K6 and K7 in
+is-bo/shiptripis#20, `main` `a08a87a`, TEST `v1.0.0-rc.50+a08a87a`) — K5 plan items
 13.1–13.18 are addressed below; 13.19 (perceived performance) relies on the
 existing skeleton, inline-failure and background-refresh states, which K5 kept
 intact (history adds a quiet page spinner and a retry footer). Two independent
@@ -362,9 +363,12 @@ checkout, 1 guest sheet.
 - Pre-existing, few-ms window: a sign-in started during sign-out's snapshot
   delete could be invalidated by `_auth.signOut()`.
 
-## Resume here
+## Release
 
-K5 is complete locally (draft PR is-bo/shiptripis#19, CI cancelled). **Owner
-decision 2026-09-23: no CI and no Railway deploy per phase.** K6 and K7 stack on
-branches from this one; one CI run and one TEST release happen at the very end
-of K7 (then merge and the release record). Helper worktrees are cleaned up.
+Per the owner's 2026-09-23 decision (no per-phase CI or deploy), K5 shipped
+with K6 and K7 in one PR, is-bo/shiptripis#20, merged as `a08a87a`; the K5-only
+draft #19 was closed as superseded. CI went green on the re-run after a
+formatting-only fix to `mobile/test/k5_cold_start_test.dart` (`84fb8d5`).
+Released to Railway TEST as `v1.0.0-rc.50+a08a87a`; the release record is in
+[the K7 record](PHASE_K7_FINAL_PERFORMANCE_CERTIFICATION.md#release). The
+branch is deleted locally and on origin.
