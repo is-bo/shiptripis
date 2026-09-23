@@ -107,7 +107,7 @@ to 20 s with a 45 s TTL. Two minor quirks go with it:
 | Stage | Size | On overflow | Visible as |
 | --- | --- | --- | --- |
 | go-redis PubSub channel → `redisbus` pump | 100 → 1024 | drop | `pubsub_drops_total`, `pubsub_drops_<channel>`, warn with `event_id` |
-| Dispatcher pool | 128 goroutines | drop (non-blocking) | `dispatch_drops_total`, warn with `event_id` |
+| Dispatcher pool (notification) | 128 goroutines | **K7-E:** wait up to 250 ms for a slot (the pump buffer absorbs the burst), then drop | `dispatch_drops_total`, warn with `event_id` |
 | Receipt pool | 64 goroutines | drop the receipt (the frame was already sent) | `receipt_drops_total`; effect: possible duplicate push and an undelivered audit row |
 | Per-socket send buffer | 64 frames; 10 s write timeout; 10 s server ping | **now:** drop and disconnect, no receipt (defect 1) | warn log |
 
@@ -122,12 +122,18 @@ The metrics reach logs through the per-minute `ws_stats` line.
 | Paced 1,000 events/s | 5,000 | 10,000 / 10,000 | 0 | 0 |
 | Paced 3,000 events/s | 9,000 | 18,000 / 18,000 | 0 | 0 |
 
-**Tuning note (not changed):** `scheduleDispatch` drops as soon as the 128
-slots are busy, so the 1,024-slot pump buffer never fills. Its comment ("the
-buffer covers transient bursts") describes behaviour the code does not have.
-Blocking on the semaphore (with `ctx`) would let the buffer absorb bursts, and
-overflow would then surface as `pubsub_drops_total`. The drops appear only
-several orders of magnitude above V1 volume, so this is left as a recommendation.
+**Tuning note, applied in K7-E (notification relay only):** `scheduleDispatch`
+used to drop as soon as the 128 slots were busy, so the 1,024-slot pump buffer
+never filled. It now takes a free slot at once when there is one, and otherwise
+waits up to `dispatchSubmitTimeout` (250 ms, or until shutdown). While it waits,
+the pump keeps buffering, so a burst is absorbed. Only a pool still full after
+250 ms is treated as stuck: it drops and counts `dispatch_drops_total`, and
+sustained overflow beyond that surfaces as `pubsub_drops_total`. A cancelled ctx
+returns at once and is not counted as a drop. Unit evidence
+(`TestScheduleDispatch_AbsorbsABurstWithoutDropping`, 2,000 events against a
+2 ms-per-send hub): 1,278 dropped with the old non-blocking submit, 0 now. The
+chat relay has the same non-blocking submit (27 drops in the burst above). It is
+unchanged and is a one-line follow-up if wanted.
 
 **Durability (no important event is realtime-only):** every targeted
 `publish_after_commit` writes a `Notification` inbox row per recipient in the

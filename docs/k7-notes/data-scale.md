@@ -319,6 +319,72 @@ Either one is an owner and infra decision for the next ops package.
 5. **`pg_trgm`:** adopt per table on the section 1.1 trigger, jobs and audit
    log first. Verify the extension on Railway Postgres before relying on it.
 
+## K7-E fixes (contract-neutral)
+
+Package E implemented items 1-3 of section 4 and batched `prune_scheduled_jobs`.
+Nothing about ranking, matching rules, ordering, permissions, audit or money
+changed. Response bodies were compared **byte for byte** before and after, in
+one process against the same rows (the pre-fix `discovery.py` loaded next to the
+fixed one; the admin list with `get_admin_roles` patched back to the old
+lookup). Every comparison was identical, including the internal `as_dict`
+diagnostics.
+
+Measured with `CaptureQueriesContext` on the canonical CDG → ALG → Jijel test
+world, with a region parent on every place and one distinct airport per grown
+candidate (the shape of the real catalogue):
+
+| Read | Candidates | Queries before | Queries after |
+| --- | ---: | ---: | ---: |
+| Find Travelers (`compatible_journeys_for_request` + `find_travelers`) | 5 / 10 / 20 Journeys | 33 / 58 / 108 | **7 / 7 / 7** |
+| `compatible-journeys` (public payload) | 5 / 10 / 20 Journeys | 40 / 75 / 145 | **5 / 5 / 5** |
+| `compatible-requests` (public payload) | 5 / 10 / 20 requests | 34 / 56 / 101 | **8 / 8 / 8** |
+| `GET /api/admin/users`, Super Admin, full page | 50 rows | 53 | **3** |
+
+On this fixture the old cost grew by about 5 queries per Journey. It grows with
+distinct places per candidate, so the load world (package B: 218 at the cap)
+paid less per Journey. After the fix the count no longer depends on the number
+of candidates. The K4 and K7 Find Travelers budget (10) still holds.
+
+What changed:
+
+* **`apps/matching/discovery.py`.** The leg and Journey querysets
+  `select_related` each place's `parent`, which `Place.display_label` reads.
+  The mapping prefetch also selects `locality__parent`, because a Find
+  Travelers stop is labelled with the served locality. A Journey's own
+  `start_place`/`destination_place` reuses the mapping its matching leg place
+  already loaded (`_adopt_leg_place_mappings`). A Journey-level prefetch was
+  tried first. It added 2 fixed queries and pushed Find Travelers to 11 against
+  its K4/K7 budget of 10, so it was replaced. `compatible_requests_for_journey` selects
+  `pickup_place__parent`/`delivery_place__parent` and prefetches their
+  mappings. The mapping filter is the one `_matching_locality_id` falls back
+  to, and at most one active primary mapping exists per airport, so the
+  resolved locality cannot differ.
+* **`AdminUserSerializer.get_admin_roles`.** It reads the `groups` the view
+  already prefetches and applies the same `ROLE_GROUP_NAMES` selection as
+  `user_admin_roles()`. Any object without the prefetch still uses
+  `user_admin_roles()`. The shared helper itself is unchanged, so the
+  role-change audit paths still read the database directly.
+* **`prune_scheduled_jobs --execute`.** It now deletes in bounded transactions
+  of `--batch-size` rows (default 1,000), walking the primary key. The cutoff
+  is computed once, and each batch re-applies the unchanged eligibility filter
+  under `FOR NO KEY UPDATE`. The dry run and the output text are unchanged.
+* **Notification dispatcher (Go).** This is realtime, not data scale; the
+  details are in [realtime.md](realtime.md) §15.3. `scheduleDispatch` now waits
+  up to 250 ms for a worker slot before dropping, so the 1,024-slot pump buffer
+  absorbs bursts. The unit burst (2,000 events against a 2 ms-per-send hub)
+  dropped 1,278 events with the old non-blocking submit and drops 0 now.
+
+Regression tests: `apps/matching/tests/test_phase_k7e_discovery_query_counts.py`
+(N and 2N cost equal, parent-derived labels and served locality still
+present), `apps/admin_panel/tests/test_phase_k7e_admin_user_list_queries.py`
+(N and 2N cost equal, every row equals `user_admin_roles()`),
+`apps/finance/tests/test_phase_k7e_prune_batches.py` (bounded separate
+batches, exactly the eligible rows deleted), and the `TestScheduleDispatch_*`
+tests in `internal/notification/dispatcher_test.go`.
+
+Still open from section 2: the candidate SQL itself (the global-window scan)
+and page-2 re-evaluation. Neither changed; the triggers there still apply.
+
 ## Reproduce
 
 ```bash
