@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -173,7 +174,7 @@ func TestFCMRunCreatesGroupWithBoundedLookback(t *testing.T) {
 func TestFCMRunRecreatesAMissingGroupAndKeepsConsuming(t *testing.T) {
 	rdb := &fcmFakeStream{reads: []fcmFakeRead{
 		{err: errors.New("NOGROUP No such key 'notif:fcm' or consumer group 'notif-fcm-workers' in XREADGROUP with GROUP option")},
-		{msgs: []redisbus.StreamMessage{fcmEntry(t, "1-0", "evt-after-loss")}},
+		{msgs: []redisbus.StreamMessage{fcmEntry(t, sid(1), "evt-after-loss")}},
 	}}
 	sender := &fcmCountingSender{}
 	c := fcmTestConsumer(rdb, sender)
@@ -190,15 +191,15 @@ func TestFCMRunRecreatesAMissingGroupAndKeepsConsuming(t *testing.T) {
 	if len(creates) != 2 {
 		t.Fatalf("XGroupCreate calls = %d, want 2 (boot + NOGROUP recovery)", len(creates))
 	}
-	if sender.count() != 1 || acked[0] != "1-0" {
+	if sender.count() != 1 || acked[0] != sid(1) {
 		t.Fatalf("sent=%d acked=%v, want the push sent and acked once", sender.count(), acked)
 	}
 }
 
 func TestFCMSweepReclaimsEveryPendingPageUntilTheCursorEnds(t *testing.T) {
 	rdb := &fcmFakeStream{claims: []fcmFakeClaim{
-		{msgs: []redisbus.StreamMessage{fcmEntry(t, "1-0", "evt-a"), fcmEntry(t, "2-0", "evt-b")}, next: "3-0"},
-		{msgs: []redisbus.StreamMessage{fcmEntry(t, "3-0", "evt-c")}, next: "0-0"},
+		{msgs: []redisbus.StreamMessage{fcmEntry(t, sid(1), "evt-a"), fcmEntry(t, sid(2), "evt-b")}, next: sid(3)},
+		{msgs: []redisbus.StreamMessage{fcmEntry(t, sid(3), "evt-c")}, next: "0-0"},
 	}}
 	sender := &fcmCountingSender{}
 	c := fcmTestConsumer(rdb, sender)
@@ -207,10 +208,17 @@ func TestFCMSweepReclaimsEveryPendingPageUntilTheCursorEnds(t *testing.T) {
 	c.wg.Wait()
 
 	_, starts, acked := rdb.snapshot()
-	if strings.Join(starts, ",") != "0-0,3-0" {
-		t.Fatalf("XAUTOCLAIM starts = %v, want [0-0 3-0]", starts)
+	if strings.Join(starts, ",") != "0-0,"+sid(3) {
+		t.Fatalf("XAUTOCLAIM starts = %v, want [0-0 %s]", starts, sid(3))
 	}
 	if sender.count() != 3 || len(acked) != 3 {
 		t.Fatalf("sent=%d acked=%v, want every reclaimed push sent and acked", sender.count(), acked)
 	}
 }
+
+// streamBaseMs anchors fake stream IDs to now: the consumers drop entries whose
+// ID timestamp is older than their retry horizon, so epoch-era IDs such as
+// "1-0" would be discarded as stale rather than delivered.
+var streamBaseMs = time.Now().UnixMilli()
+
+func sid(n int) string { return fmt.Sprintf("%d-%d", streamBaseMs, n) }
