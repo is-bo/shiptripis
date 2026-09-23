@@ -31,6 +31,7 @@ before rendering a page whether the object can actually be fetched.
 from __future__ import annotations
 
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
@@ -132,10 +133,16 @@ def _credential_for(profile: str) -> _Credential:
 #: A health probe answers a page an operator is looking at. It must fail fast
 #: and give up: an unreachable store is the thing being reported, and taking a
 #: minute of retries to report it would make the console unusable in exactly
-#: the incident it exists for. With one retry that bounds a probe at roughly
-#: eight seconds. Uploads keep the library defaults, because a slow large PUT
-#: is not a fault.
-_PROBE_TIMEOUT_SECONDS = 4
+#: the incident it exists for. One attempt, no retry: a probe is at most one
+#: connect plus one read, about five seconds, and a page that needs several
+#: runs them side by side (`readable_many`). The operator's own Try again is
+#: the retry. Uploads keep the library defaults, because a slow large PUT is
+#: not a fault.
+_PROBE_CONNECT_TIMEOUT_SECONDS = 2
+_PROBE_READ_TIMEOUT_SECONDS = 3
+
+#: The most HEADs one page runs at once. KYC evidence has three slots.
+_PROBE_CONCURRENCY = 3
 
 
 @lru_cache(maxsize=16)
@@ -151,9 +158,9 @@ def _client_for(credential: _Credential, *, probe: bool = False):
         s3={"addressing_style": "path" if credential.use_path_style else "virtual"},
         **(
             {
-                "connect_timeout": _PROBE_TIMEOUT_SECONDS,
-                "read_timeout": _PROBE_TIMEOUT_SECONDS,
-                "retries": {"max_attempts": 1},
+                "connect_timeout": _PROBE_CONNECT_TIMEOUT_SECONDS,
+                "read_timeout": _PROBE_READ_TIMEOUT_SECONDS,
+                "retries": {"total_max_attempts": 1},
             }
             if probe
             else {}
@@ -314,6 +321,29 @@ def short_storage_error(exc: Exception) -> str:
         if code:
             return f"{code} (HTTP {http})"
     return f"{type(exc).__name__}: {str(exc)[:120]}"
+
+
+def readable_many(store: ObjectStore, keys) -> dict[str, bool]:
+    """`store.readable()` for several keys at once, run concurrently.
+
+    A page showing three documents used to spend three probe budgets in series
+    before it rendered; in a storage outage that held the request for most of
+    half a minute. Side by side, the page waits for the slowest single HEAD.
+    Each answer is still one `readable()` call with the store's own credential,
+    so an unreachable object reads exactly as it did before.
+    """
+
+    unique = [key for key in dict.fromkeys(keys) if key]
+    if len(unique) <= 1:
+        return {key: store.readable(key) for key in unique}
+    # Build the cached client here, once, rather than racing to build it from
+    # the workers. boto3 clients are safe to share across threads.
+    store.probe_client  # noqa: B018
+    with ThreadPoolExecutor(
+        max_workers=min(len(unique), _PROBE_CONCURRENCY),
+        thread_name_prefix="storage-probe",
+    ) as pool:
+        return dict(zip(unique, pool.map(store.readable, unique)))
 
 
 def storage_for(name: str) -> ObjectStore:

@@ -58,6 +58,10 @@ const (
 	httpAddrFallback = ":8082"
 
 	shutdownTimeout = 15 * time.Second
+
+	// statsInterval paces the ws_stats log line: one line a minute is
+	// negligible log volume and fine enough to see a reconnect storm.
+	statsInterval = time.Minute
 )
 
 func main() {
@@ -168,6 +172,15 @@ func run() error {
 		dispatcherErr <- dispatcher.Run(rootCtx)
 	}()
 
+	// /debug/vars is loopback-only and unscraped on Railway, so the socket
+	// count and the drop/delivery counters also go to the log stream.
+	go metrics.Every(rootCtx, statsInterval, func() {
+		sockets, users, connects := hub.Stats()
+		log.Info("ws stats", "event", "ws_stats",
+			"sockets", sockets, "users", users, "connects_total", connects,
+			"metrics", m.Snapshot())
+	})
+
 	// FCM consumer + XAUTOCLAIM sweeper. Two goroutines because the
 	// blocking XReadGroup would otherwise stall the periodic sweep.
 	// Both share the same channel so any fatal exit cancels rootCtx.
@@ -191,6 +204,7 @@ func run() error {
 			ConsumerName:   fcmCfg.ConsumerName,
 			FeedbackStream: fcmCfg.ResultsStream,
 			Sender:         sender,
+			Metrics:        m,
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()

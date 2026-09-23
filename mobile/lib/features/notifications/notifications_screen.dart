@@ -37,6 +37,7 @@ final _notificationsQuery = FutureProvider.autoDispose
       final repo = ref.watch(notificationRepositoryProvider);
       final result = await repo.page(
         bucket: key.history ? 'history' : 'active',
+        cancelToken: cancelOnDispose(ref),
       );
       if (ref.read(accountProvider)?.id != key.accountId) {
         throw StateError('Discarded an inbox read from an older session.');

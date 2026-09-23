@@ -56,7 +56,10 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    // Only the id: a profile refresh must not rebuild every row (K5).
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final role = ref.watch(roleContextProvider);
     final deals = switch (_filter) {
       _Filter.active || _Filter.awaitingYou => ref.watch(activeDealsProvider),
@@ -64,7 +67,9 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     };
     final attention = ref.watch(attentionProvider);
 
-    if (account == null) return const AppScaffold(body: SkeletonCardList());
+    if (accountId == null) {
+      return const AppScaffold(body: SkeletonCardList());
+    }
 
     final attentionDealIds = attention
         .map((item) => item.dealId)
@@ -91,67 +96,126 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
           ),
           data: (all) {
             final visible = _apply(all, attentionDealIds);
+            final history = _filter == _Filter.history
+                ? ref.watch(dealHistoryProvider).value
+                : null;
 
-            return ListView(
-              padding: AppScrollPadding.page(context),
-              children: [
-                AppSegmentedChoice<_Filter>(
-                  selected: _filter,
-                  onSelect: (value) => setState(() => _filter = value),
-                  options: [
-                    AppChoice(
-                      value: _Filter.active,
-                      label: l.deliveriesFilterActive,
-                    ),
-                    AppChoice(
-                      value: _Filter.awaitingYou,
-                      label: l.deliveriesFilterAwaitingYou,
-                    ),
-                    AppChoice(
-                      value: _Filter.history,
-                      label: l.deliveriesFilterHistory,
-                    ),
-                  ],
+            // Lazily built: a long history is laid out only as far as the
+            // user scrolls, and nearing its end asks for the next page.
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: AppScrollPadding.page(context),
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: AppSegmentedChoice<_Filter>(
+                          selected: _filter,
+                          onSelect: (value) => setState(() => _filter = value),
+                          options: [
+                            AppChoice(
+                              value: _Filter.active,
+                              label: l.deliveriesFilterActive,
+                            ),
+                            AppChoice(
+                              value: _Filter.awaitingYou,
+                              label: l.deliveriesFilterAwaitingYou,
+                            ),
+                            AppChoice(
+                              value: _Filter.history,
+                              label: l.deliveriesFilterHistory,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: AppSpace.xl),
+                      ),
+                      if (visible.isEmpty && !(history?.hasMore ?? false))
+                        SliverToBoxAdapter(child: _emptyFor(context, _filter))
+                      else
+                        SliverList.builder(
+                          itemCount: visible.length,
+                          itemBuilder: (context, index) {
+                            if (history != null &&
+                                index >= visible.length - _prefetchWithin) {
+                              _requestNextHistoryPage(history);
+                            }
+                            final deal = visible[index];
+                            final needsYou = attentionDealIds.contains(deal.id);
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpace.md,
+                              ),
+                              child: DeliveryCard(
+                                deal: deal,
+                                viewerId: accountId,
+                                needsYou: needsYou,
+                                needsYouLabel: needsYou
+                                    ? l.offerAwaitingYou
+                                    : null,
+                                onTap: () => context.openDeal(deal.id),
+                              ),
+                            );
+                          },
+                        ),
+                      if (history != null)
+                        SliverToBoxAdapter(
+                          child: _HistoryFooter(
+                            history: history,
+                            onRetry: () => loadMoreDealHistory(ref),
+                          ),
+                        ),
+                      // Negotiations have no Deal yet, so they would
+                      // otherwise be invisible here, and a pending offer is
+                      // exactly what a user comes here to find.
+                      if (_filter != _Filter.history)
+                        const SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(height: AppSpace.lg),
+                              _OpenNegotiations(),
+                            ],
+                          ),
+                        ),
+                      if (_filter != _Filter.awaitingYou) ...[
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: AppSpace.lg),
+                        ),
+                        if (role == RoleContext.sender)
+                          _RequestsSection(
+                            showFinished: _filter == _Filter.history,
+                          )
+                        else
+                          _JourneysSection(
+                            showFinished: _filter == _Filter.history,
+                          ),
+                      ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: AppSpace.xl),
-
-                if (visible.isEmpty)
-                  _emptyFor(context, _filter)
-                else
-                  for (final deal in visible) ...[
-                    DeliveryCard(
-                      deal: deal,
-                      viewerId: account.id,
-                      needsYou: attentionDealIds.contains(deal.id),
-                      needsYouLabel: attentionDealIds.contains(deal.id)
-                          ? l.offerAwaitingYou
-                          : null,
-                      onTap: () => context.openDeal(deal.id),
-                    ),
-                    const SizedBox(height: AppSpace.md),
-                  ],
-
-                // Negotiations have no Deal yet, so they would otherwise be
-                // invisible here — and a pending offer is exactly the sort of
-                // thing a user comes to this screen to find.
-                if (_filter != _Filter.history) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  const _OpenNegotiations(),
-                ],
-
-                if (_filter != _Filter.awaitingYou) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  if (role == RoleContext.sender)
-                    _RequestsSection(showFinished: _filter == _Filter.history)
-                  else
-                    _JourneysSection(showFinished: _filter == _Filter.history),
-                ],
               ],
             );
           },
         ),
       ),
     );
+  }
+
+  /// How close to the end of the loaded history the next page is requested.
+  static const _prefetchWithin = 3;
+
+  void _requestNextHistoryPage(DealHistory history) {
+    if (!history.hasMore ||
+        history.loadingMore ||
+        history.loadMoreError != null) {
+      return;
+    }
+    // Never change provider state from inside a build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) loadMoreDealHistory(ref);
+    });
   }
 
   List<Deal> _apply(List<Deal> all, Set<int> attentionDealIds) =>
@@ -211,9 +275,11 @@ class _OpenNegotiations extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final matches = ref.watch(matchesProvider);
-    if (account == null) return const SizedBox.shrink();
+    if (accountId == null) return const SizedBox.shrink();
 
     return AsyncView<List<Match>>(
       value: matches,
@@ -237,7 +303,7 @@ class _OpenNegotiations extends ConsumerWidget {
             // one thing they are not: over.
             SectionHeader(title: l.deliveriesOpenOffersSection),
             for (final match in open) ...[
-              _NegotiationRow(match: match, viewerId: account.id),
+              _NegotiationRow(match: match, viewerId: accountId),
               const SizedBox(height: AppSpace.md),
             ],
           ],
@@ -323,6 +389,8 @@ class _NegotiationRow extends StatelessWidget {
   }
 }
 
+/// The sender's own requests. Returns slivers: the finished list only grows,
+/// so rows are built as they scroll into view rather than all at once.
 class _RequestsSection extends ConsumerWidget {
   const _RequestsSection({required this.showFinished});
 
@@ -332,88 +400,38 @@ class _RequestsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final requests = ref.watch(myRequestsProvider);
-    final settled = ref.watch(settledRequestIdsProvider);
 
     return AsyncView<List<DeliveryRequest>>(
       value: requests,
       onRetry: () => ref.invalidate(myRequestsProvider),
-      loading: () => const SkeletonCardList(count: 2),
-      error: (error) => InlineFailure(
-        error: error,
-        onRetry: () => ref.invalidate(myRequestsProvider),
+      loading: () =>
+          const SliverToBoxAdapter(child: SkeletonCardList(count: 2)),
+      error: (error) => SliverToBoxAdapter(
+        child: InlineFailure(
+          error: error,
+          onRetry: () => ref.invalidate(myRequestsProvider),
+        ),
       ),
       data: (all) {
-        // A matched request keeps its `matched` status for the whole life of
-        // the delivery, so finishing is read from the linked Deal's activity
-        // state rather than from the request's own status.
+        // The server projects a request's status from its latest Deal, so
+        // whether it is finished is read from the request itself.
         final rows = all
-            .where(
-              (r) =>
-                  (r.status.isFinished || settled.contains(r.id)) ==
-                  showFinished,
-            )
+            .where((r) => r.status.isSettled == showFinished)
             .toList(growable: false);
-        if (rows.isEmpty) return const SizedBox.shrink();
+        if (rows.isEmpty) return const SliverToBoxAdapter();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionHeader(title: l.deliveriesSenderSection),
-            for (final request in rows) ...[
-              AppCard(
-                onTap: () => context.openRequest(request.id),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            request.title,
-                            style: Theme.of(context).textTheme.titleSmall,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: AppSpace.xs),
-                          if (!requestHasRoute(request))
-                            Text(
-                              l.requestRouteNotRecorded,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: context.colors.textSecondary,
-                                  ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            )
-                          else
-                            RouteSummary(
-                              from: requestPickupLabel(l, request),
-                              to: requestDeliveryLabel(l, request),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: context.colors.textSecondary,
-                                  ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpace.sm),
-                    Builder(
-                      builder: (context) {
-                        final copy = requestStatusCopy(context, request.status);
-                        return StatusPill(
-                          label: copy.label,
-                          tone: copy.tone,
-                          icon: copy.icon,
-                          compact: true,
-                        );
-                      },
-                    ),
-                  ],
-                ),
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverToBoxAdapter(
+              child: SectionHeader(title: l.deliveriesSenderSection),
+            ),
+            SliverList.builder(
+              itemCount: rows.length,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.md),
+                child: _RequestRow(request: rows[index]),
               ),
-              const SizedBox(height: AppSpace.md),
-            ],
+            ),
           ],
         );
       },
@@ -421,6 +439,70 @@ class _RequestsSection extends ConsumerWidget {
   }
 }
 
+class _RequestRow extends StatelessWidget {
+  const _RequestRow({required this.request});
+
+  final DeliveryRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+
+    return AppCard(
+      onTap: () => context.openRequest(request.id),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  request.title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpace.xs),
+                if (!requestHasRoute(request))
+                  Text(
+                    l.requestRouteNotRecorded,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                else
+                  RouteSummary(
+                    from: requestPickupLabel(l, request),
+                    to: requestDeliveryLabel(l, request),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Builder(
+            builder: (context) {
+              final copy = requestStatusCopy(context, request.status);
+              return StatusPill(
+                label: copy.label,
+                tone: copy.tone,
+                icon: copy.icon,
+                compact: true,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The traveller's own journeys. Returns slivers, for the same reason as
+/// [_RequestsSection]: finished journeys only accumulate.
 class _JourneysSection extends ConsumerWidget {
   const _JourneysSection({required this.showFinished});
 
@@ -435,45 +517,91 @@ class _JourneysSection extends ConsumerWidget {
     return AsyncView<List<Journey>>(
       value: journeys,
       onRetry: () => ref.invalidate(myJourneysProvider),
-      loading: () => const SkeletonCardList(count: 2),
-      error: (error) => InlineFailure(
-        error: error,
-        onRetry: () => ref.invalidate(myJourneysProvider),
+      loading: () =>
+          const SliverToBoxAdapter(child: SkeletonCardList(count: 2)),
+      error: (error) => SliverToBoxAdapter(
+        child: InlineFailure(
+          error: error,
+          onRetry: () => ref.invalidate(myJourneysProvider),
+        ),
       ),
       data: (all) {
         final rows = all
             .where((j) => j.status.isFinished == showFinished)
             .toList(growable: false);
-        if (rows.isEmpty) return const SizedBox.shrink();
+        if (rows.isEmpty) return const SliverToBoxAdapter();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionHeader(
-              title: l.deliveriesJourneysSection,
-              // Opens the journey composer, which creates a whole trip. "Add
-              // a leg" named a step inside that screen, not the screen.
-              actionLabel: showFinished ? null : l.journeyPostNew,
-              onAction: showFinished ? null : () => context.openJourneyCreate(),
-            ),
-            for (final journey in rows) ...[
-              JourneyCard(
-                fromLabel: journey.startLocation?.coarseLabel ?? '',
-                toLabel: journey.destinationLocation?.coarseLabel ?? '',
-                status: journeyStatusCopy(context, journey.status),
-                legCount: journey.legs.length,
-                capacityKg: journey.narrowestCapacityKg,
-                departureLabel: journey.firstDeparture == null
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverToBoxAdapter(
+              child: SectionHeader(
+                title: l.deliveriesJourneysSection,
+                // Opens the journey composer, which creates a whole trip. "Add
+                // a leg" named a step inside that screen, not the screen.
+                actionLabel: showFinished ? null : l.journeyPostNew,
+                onAction: showFinished
                     ? null
-                    : LocaleFormats.dateTime(locale, journey.firstDeparture!),
-                legsNeedingProof: journey.legsNeedingProof.length,
-                onTap: () => context.openJourney(journey.id),
+                    : () => context.openJourneyCreate(),
               ),
-              const SizedBox(height: AppSpace.md),
-            ],
+            ),
+            SliverList.builder(
+              itemCount: rows.length,
+              itemBuilder: (context, index) {
+                final journey = rows[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpace.md),
+                  child: JourneyCard(
+                    fromLabel: journey.startLocation?.coarseLabel ?? '',
+                    toLabel: journey.destinationLocation?.coarseLabel ?? '',
+                    status: journeyStatusCopy(context, journey.status),
+                    legCount: journey.legs.length,
+                    capacityKg: journey.narrowestCapacityKg,
+                    departureLabel: journey.firstDeparture == null
+                        ? null
+                        : LocaleFormats.dateTime(
+                            locale,
+                            journey.firstDeparture!,
+                          ),
+                    legsNeedingProof: journey.legsNeedingProof.length,
+                    onTap: () => context.openJourney(journey.id),
+                  ),
+                );
+              },
+            ),
           ],
         );
       },
+    );
+  }
+}
+
+/// The end of the loaded history: a quiet spinner while the next page is on
+/// its way, the failure and a retry if it did not arrive, otherwise nothing.
+class _HistoryFooter extends StatelessWidget {
+  const _HistoryFooter({required this.history, required this.onRetry});
+
+  final DealHistory history;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = history.loadMoreError;
+    if (error != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: AppSpace.sm),
+        child: InlineFailure(error: error, onRetry: onRetry),
+      );
+    }
+    if (!history.loadingMore) return const SizedBox.shrink();
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
+      child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.2),
+        ),
+      ),
     );
   }
 }

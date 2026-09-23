@@ -1,0 +1,5 @@
+21:55:03 machine 36 % [(26.9, 1696, 'svchost.exe'), (26.1, 3780, 'MsMpEng.exe')]
+21:55:25 machine 38 % [(57.0, 18584, 'SrTasks.exe')]
+21:55:37 machine 31 % [(27.3, 18584, 'SrTasks.exe')]
+21:55:48 machine 32 % [(47.9, 18584, 'SrTasks.exe')]
+22:00:22 machine 14 % [(37.9, 15956, 'claude.exe'), (25.1, 6804, 'claude.exe')]

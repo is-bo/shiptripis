@@ -30,6 +30,33 @@ type EmailSender interface {
 	Send(ctx context.Context, p EmailPayload) error
 }
 
+// PermanentError marks a send failure that retrying the same stream entry
+// cannot fix: the SMTP server answered with a 5xx reply, or the message could
+// not be built at all. The consumer acks such an entry instead of leaving it
+// for the sweeper, which would otherwise resend it every ~60-90s for as long
+// as the stream holds it. Django's OutboundMessage keeps its own bounded
+// attempt budget and re-enqueues or fails the obligation, so the durable
+// retry policy stays in one place.
+type PermanentError struct {
+	Err error
+	// Code is the SMTP reply code, or 0 when the message never reached the
+	// server. The smtpSender wraps a SendFailure here, whose text is log-safe;
+	// callers still log SendFailureLogAttrs rather than the error.
+	Code int
+}
+
+func (e *PermanentError) Error() string { return e.Err.Error() }
+func (e *PermanentError) Unwrap() error { return e.Err }
+
+// AsPermanent returns the PermanentError err carries, if any.
+func AsPermanent(err error) (*PermanentError, bool) {
+	var permanent *PermanentError
+	if errors.As(err, &permanent) {
+		return permanent, true
+	}
+	return nil, false
+}
+
 // EmailPayload is the wire shape Django writes onto the stream, rendered.
 // Kept here as the contract since the Go side reads it (mirrors fcm.go's
 // FCMPayload). Subject and Body are produced by Django; Go does not template.
@@ -105,9 +132,10 @@ func (s LogOnlySender) Send(_ context.Context, p EmailPayload) error {
 	if log == nil {
 		log = slog.Default()
 	}
+	// No subject or recipient: a subject can carry the one-time code, and
+	// the address is PII. Event id + kind correlate with the outbox.
 	log.Info("email: would-send (stub)",
 		"event_id", p.EventID,
-		"subject", p.Subject,
 		"kind", p.Kind,
 	)
 	return nil

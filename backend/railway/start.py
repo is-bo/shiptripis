@@ -24,6 +24,9 @@ from urllib.parse import urlparse
 ROOT = "/app"
 STOP_REQUESTED = False
 LOCAL_REDIS_URL = "redis://127.0.0.1:6379/0"
+# Railway's private network can take a few seconds to route after a container
+# starts; a shared Redis that is still silent after this is a real outage.
+REDIS_PREFLIGHT_TIMEOUT_SECONDS = 30.0
 
 # The combined 1 GiB Railway container cannot safely buy concurrency by adding
 # Python processes. Two gthread workers keep the measured worker RSS bounded
@@ -41,6 +44,13 @@ EMAIL_DB_MAX_CONNS_DEFAULT = 2
 GO_DB_MIN_CONNS = 2
 POSTGRES_CONNECTION_LIMIT_DEFAULT = 100
 POSTGRES_CONNECTION_RESERVE_DEFAULT = 10
+
+# How long children get between SIGTERM and SIGKILL. Go services drain within
+# their 15s shutdown budget -- the longest in-flight unit is an email send
+# (12s detached SMTP timeout plus a 3s ack) -- and Gunicorn finishes in-flight
+# requests. Railway must allow more than this (`drainingSeconds` in
+# railway.json) or it SIGKILLs first -- its default is zero seconds.
+CHILD_STOP_TIMEOUT_SECONDS = 20
 
 
 @dataclass
@@ -117,7 +127,7 @@ def terminate_children() -> None:
             except ProcessLookupError:
                 pass
 
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + CHILD_STOP_TIMEOUT_SECONDS
     for child in reversed(CHILDREN):
         remaining = max(0.0, deadline - time.monotonic())
         try:
@@ -262,6 +272,104 @@ def redis_topology() -> tuple[str, bool]:
     if not configured:
         raise RuntimeError("REDIS_URL must point at shared external Redis")
     return _validate_redis_url(configured, allow_loopback=False), False
+
+
+def probe_shared_redis(
+    redis_url: str, *, timeout: float = REDIS_PREFLIGHT_TIMEOUT_SECONDS
+) -> None:
+    """Prove the shared Redis can hold durable streams before anything uses it.
+
+    The Go workers already refuse to start without Redis, but only after the
+    migrations and the Django processes; this names the failure first and
+    plainly. Three outcomes:
+
+    * **Unreachable or rejected credentials fail startup.** There is no
+      fallback to the embedded daemon: a silent fallback would split cache,
+      throttles and queues across two Redis servers.
+    * **An `allkeys-*` eviction policy fails startup.** Stream keys carry no
+      TTL, so only those policies can evict `notif:fcm` or `email:send`, which
+      would drop queued work without an error anywhere.
+    * **Missing persistence is a loud warning, not a failure.** The instance is
+      still shared; the runbook's restart proof is what certifies durability.
+
+    Only the host and port are printed; the URL carries the password.
+    """
+
+    import redis  # Django's requirement, installed in the image.
+
+    parsed = urlparse(redis_url)
+    endpoint = f"{parsed.hostname}:{parsed.port or 6379}"
+    client = redis.Redis.from_url(
+        redis_url,
+        decode_responses=True,
+        socket_connect_timeout=2,
+        socket_timeout=2,
+    )
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                client.ping()
+                break
+            except redis.AuthenticationError as exc:
+                raise RuntimeError(
+                    f"shared Redis at {endpoint} rejected the REDIS_URL credentials"
+                ) from exc
+            except redis.RedisError as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"shared Redis at {endpoint} is unreachable "
+                        f"({type(exc).__name__}); refusing to start"
+                    ) from exc
+                time.sleep(1)
+
+        def config(name: str) -> str | None:
+            try:
+                return str(client.config_get(name).get(name, ""))
+            except redis.ResponseError:
+                # Some managed providers disable CONFIG; report, never guess.
+                return None
+            except redis.RedisError as exc:
+                # A timeout or dropped connection after PING succeeded. Name
+                # the endpoint only; the exception text can carry the URL.
+                raise RuntimeError(
+                    f"shared Redis at {endpoint} stopped answering while its "
+                    f"configuration was read ({type(exc).__name__}); "
+                    "refusing to start"
+                ) from exc
+
+        policy = config("maxmemory-policy")
+        if policy is not None and policy.startswith("allkeys-"):
+            raise RuntimeError(
+                f"shared Redis at {endpoint} uses maxmemory-policy={policy}, "
+                "which can evict durable streams; set noeviction"
+            )
+        appendonly = config("appendonly")
+        save = config("save")
+        print(
+            f"shared redis {endpoint} "
+            f"maxmemory-policy={policy if policy is not None else 'unverifiable'} "
+            f"maxmemory={config('maxmemory')} appendonly={appendonly} "
+            f"appendfsync={config('appendfsync')} save={save!r}",
+            flush=True,
+        )
+        if policy is None:
+            print(
+                f"WARNING: shared Redis at {endpoint} hides its configuration; "
+                "confirm noeviction and persistence before trusting streams",
+                file=sys.stderr,
+                flush=True,
+            )
+        if appendonly == "no" and save == "":
+            print(
+                f"WARNING: shared Redis at {endpoint} has no AOF and no RDB "
+                "snapshots; queued push and email transport will not survive "
+                "a Redis restart",
+                file=sys.stderr,
+                flush=True,
+            )
+    finally:
+        client.close()
 
 
 def kyc_env(redis_url: str) -> dict[str, str]:
@@ -437,6 +545,8 @@ def run() -> int:
             env=base_env,
         )
         wait_for_port(redis, 6379)
+    else:
+        probe_shared_redis(redis_url)
 
     print("applying database migrations", flush=True)
     subprocess.run(
@@ -468,8 +578,9 @@ def run() -> int:
             str(budget["web_threads"]),
             "--timeout",
             "120",
-            "--access-logfile",
-            "-",
+            # No Gunicorn access log: its request line holds the concrete
+            # path and query string, guest payment capabilities included.
+            # RequestIDMiddleware writes the allow-listed `http_request` line.
             "--error-logfile",
             "-",
         ],

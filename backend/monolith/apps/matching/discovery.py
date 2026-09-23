@@ -182,6 +182,32 @@ def phase2_policy() -> Phase2Policy:
     return Phase2Policy.from_settings(get_active_business_settings())
 
 
+def _place_matching_prefetches(*relations: str) -> list[Prefetch]:
+    """Prefetch the active served mapping `_matching_locality_id` reads.
+
+    Without it every airport place in a payload costs one mapping query. The
+    filter is the same one `_matching_locality_id` falls back to, and at most
+    one active primary mapping can exist per airport. `locality__parent` is
+    there because a Find Travelers stop is labelled with the served locality's
+    `display_label` (K7-E).
+    """
+
+    active_mapping = AirportLocalityMapping.objects.filter(
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality__parent")
+    return [
+        Prefetch(
+            f"{relation}__airport_mappings",
+            queryset=active_mapping,
+            to_attr="_active_matching_mappings",
+        )
+        for relation in relations
+    ]
+
+
 def _matching_leg_queryset(*, at):
     approved_proof = JourneyLegProof.objects.filter(
         leg_id=OuterRef("pk"),
@@ -195,27 +221,17 @@ def _matching_leg_queryset(*, at):
         .values("total")[:1]
     )
     decimal_field = DecimalField(max_digits=10, decimal_places=3)
-    active_mapping = AirportLocalityMapping.objects.filter(
-        active=True,
-        is_primary=True,
-        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
-        locality__active=True,
-    ).select_related("locality")
     return (
+        # K7-E: `__parent` because `Place.display_label` reads the parent for
+        # every leg stop a payload renders (one query per stop otherwise).
         JourneyLeg.objects.select_related(
-            "origin", "destination", "origin_place", "destination_place"
+            "origin",
+            "destination",
+            "origin_place__parent",
+            "destination_place__parent",
         )
         .prefetch_related(
-            Prefetch(
-                "origin_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
-            Prefetch(
-                "destination_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
+            *_place_matching_prefetches("origin_place", "destination_place")
         )
         .annotate(
             has_approved_proof_value=Exists(approved_proof),
@@ -239,8 +255,8 @@ def _matching_journey_queryset(*, at):
             "traveler",
             "start_location",
             "destination_location",
-            "start_place",
-            "destination_place",
+            "start_place__parent",
+            "destination_place__parent",
         )
         .annotate(has_current_kyc_value=Exists(approved_kyc))
         .prefetch_related(
@@ -251,6 +267,32 @@ def _matching_journey_queryset(*, at):
             )
         )
     )
+
+
+def _adopt_leg_place_mappings(journey: Journey) -> None:
+    """Give the Journey's endpoints the served mappings its legs already hold.
+
+    A Journey's `start_place`/`destination_place` is normally the same catalogue
+    row as a leg's origin or destination, whose active served mapping the leg
+    prefetch has loaded. Reusing it avoids one mapping query per airport
+    endpoint per candidate (K7-E) without a Journey-level prefetch, which would
+    cost two fixed queries on every Find Travelers read. An endpoint that is not
+    a leg place keeps `_matching_locality_id`'s direct lookup. The prefetch
+    filter is the one that lookup runs, so the resolved locality is identical.
+    """
+
+    loaded = {}
+    for leg in getattr(journey, "_matching_legs", ()):
+        for place in (leg.origin_place, leg.destination_place):
+            if place is not None and hasattr(place, "_active_matching_mappings"):
+                loaded[place.pk] = place._active_matching_mappings
+    for place in (journey.start_place, journey.destination_place):
+        if (
+            place is not None
+            and place.pk in loaded
+            and not hasattr(place, "_active_matching_mappings")
+        ):
+            place._active_matching_mappings = loaded[place.pk]
 
 
 def _canonical_node_mapping_q(*, relation: str, locality_id: int) -> Q:
@@ -441,6 +483,9 @@ def compatible_journeys_for_request(
         "-published_at",
         "pk",
     )[: policy.candidate_scan_limit]
+    journeys = list(queryset)
+    for journey in journeys:
+        _adopt_leg_place_mappings(journey)
     evaluations = [
         evaluate_candidate(
             delivery_request=delivery_request,
@@ -449,7 +494,7 @@ def compatible_journeys_for_request(
             at=at,
             route_provider=route_provider,
         )
-        for journey in queryset
+        for journey in journeys
     ]
     compatible = [row for row in evaluations if row.compatibility.compatible]
     compatible.sort(
@@ -505,11 +550,16 @@ def compatible_requests_for_journey(
         status__in=ACTIVE_DEAL_STATUSES,
     )
     queryset = (
+        # K7-E: the places (with parents and served mappings) are read for
+        # every candidate by compatibility and by the request block.
         DeliveryRequest.objects.select_related(
             "sender",
             "pickup_location",
             "delivery_location",
+            "pickup_place__parent",
+            "delivery_place__parent",
         )
+        .prefetch_related(*_place_matching_prefetches("pickup_place", "delivery_place"))
         .filter(
             schema_version=3 if canonical_journey else 2,
             status=ParcelRequest.Status.OPEN,

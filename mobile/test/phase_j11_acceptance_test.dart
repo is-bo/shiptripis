@@ -94,31 +94,15 @@ void main() {
           '/api/parcels',
           FakeResponse(200, [
             requestFixture(id: 300, title: 'Running shipment'),
-            requestFixture(id: 301, title: 'Finished shipment'),
+            // Since J1.3 the server projects a request's status from its
+            // latest Deal, so a delivered shipment says so on the request.
+            requestFixture(
+              id: 301,
+              title: 'Finished shipment',
+              status: 'delivered',
+            ),
           ]),
-        )
-        ..handle('GET', '/api/deals', (request) {
-          final activity = request.query['activity'];
-          final rows = [
-            dealRowFixture(
-              id: 10,
-              activityState: 'active',
-              deliveryRequestId: 300,
-            ),
-            dealRowFixture(
-              id: 11,
-              activityState: 'completed',
-              deliveryRequestId: 301,
-              status: 'completed',
-            ),
-          ];
-          return FakeResponse(
-            200,
-            activity == null
-                ? rows
-                : rows.where((r) => r['activity_state'] == activity).toList(),
-          );
-        });
+        );
 
       final container = containerFor(backend);
       await pumpApp(
@@ -126,10 +110,9 @@ void main() {
         Consumer(
           builder: (context, ref, _) {
             final requests = ref.watch(myRequestsProvider).value;
-            final settled = ref.watch(settledRequestIdsProvider);
             if (requests == null) return const Text('loading');
             final live = requests
-                .where((r) => !r.status.isFinished && !settled.contains(r.id))
+                .where((r) => !r.status.isSettled)
                 .map((r) => r.title)
                 .join(',');
             return Text('live:$live');
@@ -166,11 +149,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final activities = backend
+      // One `history` scope, which the server defines as everything no
+      // longer active: completed and cancelled alike (K5).
+      final scopes = backend
           .to('GET', '/api/deals')
-          .map((r) => r.query['activity'])
+          .map((r) => r.query['scope'])
           .toSet();
-      expect(activities, containsAll(<String>['completed', 'cancelled']));
+      expect(scopes, {'history'});
+
+      // History outlives its last viewer briefly (K5); let that run out
+      // before the test's pending-timer check.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(DealHistoryController.keptFor);
     });
   });
 

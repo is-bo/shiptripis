@@ -261,7 +261,10 @@ class JourneyRepository {
     JourneyStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    // Every page: a traveller's own journeys and a sender's own requests are
+    // what Home and Deliveries are built from, and stopping at the first page
+    // hid everything older (K5).
+    final rows = await _api.getAllPages(
       '/api/journeys',
       query: {if (status != null) 'status': _statusWire(status)},
       cancelToken: cancelToken,
@@ -390,9 +393,17 @@ class JourneyRepository {
     ),
   );
 
-  /// Active journeys other than the caller's own, already filtered server-side
-  /// to those whose traveller is verified and whose flight legs are proven.
-  Future<List<Journey>> search({
+  /// One page of active journeys other than the caller's own, already
+  /// filtered server-side to those whose traveller is verified and whose
+  /// flight legs are proven, in the server's order (first departure).
+  ///
+  /// Always sends `page_size`: without it the server answers its 100-row
+  /// default, which made this one of the most expensive reads under load
+  /// (K6). Search results grow with the marketplace, so a caller reads them a
+  /// page at a time as the user scrolls, never all at once.
+  Future<JourneySearchPage> searchPage({
+    required int page,
+    int pageSize = discoveryPageSize,
     int? startLocationId,
     int? destinationLocationId,
     TransportModeDraft? mode,
@@ -402,7 +413,7 @@ class JourneyRepository {
     int? destinationPlaceId,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    final result = await _api.getListPage(
       '/api/journeys/search',
       query: {
         'start_location_id': ?startLocationId,
@@ -414,10 +425,16 @@ class JourneyRepository {
           'departure_after': departureAfter.toUtc().toIso8601String(),
         if (minCapacityKg != null)
           'min_capacity_kg': minCapacityKg.toStringAsFixed(2),
+        'page_size': pageSize,
+        if (page > 1) 'page': page,
       },
       cancelToken: cancelToken,
     );
-    return _parseJourneys(rows);
+    return JourneySearchPage(
+      journeys: _parseJourneys(result.rows),
+      hasNext: result.hasNext,
+      total: result.total,
+    );
   }
 
   static List<Journey> _parseJourneys(List<dynamic> rows) => rows
@@ -559,7 +576,10 @@ class RequestRepository {
     RequestStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    // Every page: a traveller's own journeys and a sender's own requests are
+    // what Home and Deliveries are built from, and stopping at the first page
+    // hid everything older (K5).
+    final rows = await _api.getAllPages(
       '/api/parcels',
       query: {if (status != null) 'status': _statusWire(status)},
       cancelToken: cancelToken,
@@ -708,24 +728,34 @@ class RequestRepository {
     return (body['url'] as String?) ?? '';
   }
 
-  /// Open requests from other senders, for a browsing traveller.
+  /// One page of open requests from other senders, for a browsing
+  /// traveller, newest first as the server orders them.
   ///
   /// Note this is the untargeted, deadline-in-future feed. Real matching is
   /// `compatible-requests`, which is journey-aware; this is the shallower
-  /// "what is out there" list.
-  Future<List<DeliveryRequest>> openFeed({
+  /// "what is out there" list. Like [JourneyRepository.searchPage] it always
+  /// sends `page_size` and is read a page at a time (K6).
+  Future<OpenRequestPage> openFeedPage({
+    required int page,
+    int pageSize = discoveryPageSize,
     double? maxWeightKg,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    final result = await _api.getListPage(
       '/api/parcels/open',
       query: {
         if (maxWeightKg != null)
           'max_weight_kg': maxWeightKg.toStringAsFixed(2),
+        'page_size': pageSize,
+        if (page > 1) 'page': page,
       },
       cancelToken: cancelToken,
     );
-    return _parse(rows);
+    return OpenRequestPage(
+      requests: _parse(result.rows),
+      hasNext: result.hasNext,
+      total: result.total,
+    );
   }
 
   static List<DeliveryRequest> _parse(List<dynamic> rows) => rows
@@ -892,7 +922,7 @@ class MatchingRepository {
     MatchStatus? status,
     CancelToken? cancelToken,
   }) async {
-    final rows = await _api.getList(
+    final rows = await _api.getAllPages(
       '/api/matches',
       query: {
         'role': ?role,
@@ -963,6 +993,49 @@ class DealRepository {
         .whereType<Map>()
         .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
+  }
+
+  /// Every Deal that is still live, plus delivered ones whose review window
+  /// may be open: the bounded set Home, "needs you" and active Deliveries are
+  /// derived from. Each row carries the server's `attention` flags, so no
+  /// per-Deal detail read is needed to know what waits on this user (K5).
+  Future<List<Deal>> current({CancelToken? cancelToken}) async {
+    final rows = await _api.getAllPages(
+      '/api/deals',
+      query: {'scope': 'current'},
+      cancelToken: cancelToken,
+    );
+    return rows
+        .whereType<Map>()
+        .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
+        .toList(growable: false);
+  }
+
+  /// One page of finished Deals — completed or cancelled — newest first.
+  ///
+  /// History grows without bound, so it is read a page at a time as the user
+  /// scrolls rather than all at once.
+  Future<DealPage> historyPage({
+    required int page,
+    int pageSize = 20,
+    CancelToken? cancelToken,
+  }) async {
+    final result = await _api.getListPage(
+      '/api/deals',
+      query: {
+        'scope': 'history',
+        'page_size': pageSize,
+        if (page > 1) 'page': page,
+      },
+      cancelToken: cancelToken,
+    );
+    return DealPage(
+      deals: result.rows
+          .whereType<Map>()
+          .map((r) => Deal.fromJson(Map<String, dynamic>.from(r)))
+          .toList(growable: false),
+      hasNext: result.hasNext,
+    );
   }
 
   /// Exact server-side count for a filtered Deal set. Unlike [list], this
@@ -1670,6 +1743,9 @@ class RatingRepository {
 // Notifications
 // ---------------------------------------------------------------------------
 
+/// The bell's count and the unread-active count, as one response states them.
+typedef BadgeCounts = ({int active, int unreadActive});
+
 class NotificationRepository {
   const NotificationRepository(this._api);
 
@@ -1694,7 +1770,7 @@ class NotificationRepository {
     ),
   );
 
-  /// The bell count: notifications that still need attention.
+  /// The bell's count: active notifications, from the shared counts read.
   ///
   /// J1 separated `resolved` from `read_at`, so the badge counts *active*
   /// rows, not unread ones: a read action that still needs doing keeps
@@ -1702,20 +1778,27 @@ class NotificationRepository {
   /// does not. The server exposes that as `active`, and keeps aliasing it onto
   /// the legacy `unread` key for installed clients — prefer the explicit name
   /// and fall back so an older deployment still answers.
-  Future<int> activeCount({CancelToken? cancelToken}) async {
-    final body = await _badgeCounts(cancelToken: cancelToken);
-    return (body['active'] as num?)?.toInt() ??
-        (body['unread'] as num?)?.toInt() ??
-        0;
-  }
+  Future<int> activeCount({CancelToken? cancelToken}) async =>
+      (await badgeCounts(cancelToken: cancelToken)).active;
 
   /// Active notifications the user has not opened yet.
   ///
   /// Only this number justifies offering "Mark all read"; the badge total does
   /// not, because a fully-read inbox can still be full of live actions.
-  Future<int> unreadActiveCount({CancelToken? cancelToken}) async {
+  Future<int> unreadActiveCount({CancelToken? cancelToken}) async =>
+      (await badgeCounts(cancelToken: cancelToken)).unreadActive;
+
+  /// Both numbers above, from the one response that carries them — so the
+  /// bell and the inbox never read it twice (K5).
+  Future<BadgeCounts> badgeCounts({CancelToken? cancelToken}) async {
     final body = await _badgeCounts(cancelToken: cancelToken);
-    return (body['unread_active'] as num?)?.toInt() ?? 0;
+    return (
+      active:
+          (body['active'] as num?)?.toInt() ??
+          (body['unread'] as num?)?.toInt() ??
+          0,
+      unreadActive: (body['unread_active'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<Map<String, dynamic>> _badgeCounts({CancelToken? cancelToken}) => _api
@@ -2020,3 +2103,46 @@ final boostRepositoryProvider = Provider<BoostRepository>(
 final kycRepositoryProvider = Provider<KycRepository>(
   (ref) => KycRepository(ref.watch(apiClientProvider)),
 );
+
+/// One page of Deals and whether another follows.
+class DealPage {
+  const DealPage({required this.deals, required this.hasNext});
+
+  final List<Deal> deals;
+  final bool hasNext;
+}
+
+/// Rows per page for the marketplace discovery feeds (journey search, open
+/// requests). The server's default is 100; 20-row pages cut these feeds'
+/// share of server time sharply under load (K6).
+const discoveryPageSize = 20;
+
+/// One page of journey search results, whether another follows, and the
+/// server's count of every match when it states one.
+class JourneySearchPage {
+  const JourneySearchPage({
+    required this.journeys,
+    required this.hasNext,
+    this.total,
+  });
+
+  final List<Journey> journeys;
+  final bool hasNext;
+
+  /// Every match across all pages: the number to show for "how many", so a
+  /// count never needs the rows.
+  final int? total;
+}
+
+/// One page of the open-request feed; see [JourneySearchPage].
+class OpenRequestPage {
+  const OpenRequestPage({
+    required this.requests,
+    required this.hasNext,
+    this.total,
+  });
+
+  final List<DeliveryRequest> requests;
+  final bool hasNext;
+  final int? total;
+}

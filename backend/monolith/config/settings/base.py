@@ -319,6 +319,10 @@ FCM_CREDENTIALS_PATH = env.str("FCM_CREDENTIALS_PATH", default="")
 FCM_STREAM = env.str("FCM_STREAM", default="notif:fcm")
 FCM_RESULTS_STREAM = env.str("FCM_RESULTS_STREAM", default="notif:fcm:results")
 FCM_CONSUMER_GROUP = env.str("FCM_CONSUMER_GROUP", default="notif-fcm-workers")
+# Read-only here (backlog reporting); the Go email service owns the group and
+# reads the same variable names.
+EMAIL_STREAM = env.str("EMAIL_STREAM", default="email:send")
+EMAIL_CONSUMER_GROUP = env.str("EMAIL_CONSUMER_GROUP", default="email-send-workers")
 FCM_CONSUMER_NAME = env.str("FCM_CONSUMER_NAME", default="notif-fcm-1")
 FCM_RESULTS_CONSUMER_GROUP = env.str(
     "FCM_RESULTS_CONSUMER_GROUP", default="notif-fcm-results-django"
@@ -518,6 +522,12 @@ PERFORMANCE_SLOW_REQUEST_MS = env.float(
 )
 PERFORMANCE_DB_METRICS_ENABLED = env.bool(
     "PERFORMANCE_DB_METRICS_ENABLED", default=False
+)
+# One allow-listed `http_request` line per request (route template, status,
+# duration, actor class). It is the only access log: Gunicorn's own would
+# write concrete paths, and with them guest payment capabilities.
+PERFORMANCE_ACCESS_LOG_ENABLED = env.bool(
+    "PERFORMANCE_ACCESS_LOG_ENABLED", default=True
 )
 
 # Bound parsing before endpoint-level MIME/semantic validation. The private

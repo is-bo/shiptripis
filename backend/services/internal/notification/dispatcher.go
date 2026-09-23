@@ -43,6 +43,13 @@ const receiptConcurrency = 64
 // goroutines without bound.
 const dispatchConcurrency = 128
 
+// dispatchSubmitTimeout caps how long the pub/sub loop waits for a free
+// dispatch slot. While it waits, the redisbus pump keeps buffering (1024
+// slots), so a burst that briefly occupies all 128 workers is absorbed
+// rather than dropped. A pool still full after this long is stuck, not
+// bursting: drop the message so the loop keeps draining the buffer.
+const dispatchSubmitTimeout = 250 * time.Millisecond
+
 // setEXRetryDelay is the gap before retrying a failed delivered receipt
 // write. One brief retry is enough to ride a Redis blip without letting
 // the FCM consumer see a stale EXISTS=0 and push a duplicate.
@@ -88,6 +95,12 @@ var subscribeChannels = []string{
 	// funded delivery lifecycle
 	"deal.cancelled",
 	"deal.updated",
+	// I1A journey timing. Django published these from the start but this
+	// list never carried them, so arrival reports reached the inbox and FCM
+	// but never a live socket (TestSubscribeChannelsMatchDjango).
+	"deal.arrival_reported",
+	"deal.arrival_confirmed",
+	"deal.arrival_declined",
 	"dispute.opened",
 	"dispute.resolved",
 	"payout.status_changed",
@@ -124,8 +137,9 @@ type Dispatcher struct {
 	log      *slog.Logger
 	metrics  *metrics.Group
 
-	// dispatchSem bounds in-flight per-message goroutines so the pub/sub
-	// pump never blocks on a slow hub.Send or receipt schedule. dispatchWG
+	// dispatchSem bounds in-flight per-message goroutines so a slow
+	// hub.Send or receipt schedule never blocks the pub/sub loop for longer
+	// than dispatchSubmitTimeout. dispatchWG
 	// tracks them so Run drains at shutdown — letting a goroutine outlive
 	// Run would mean Send on a closed Hub or write to a closed Postgres.
 	dispatchSem chan struct{}
@@ -188,15 +202,17 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 }
 
 // scheduleDispatch fans a single message through the dispatch worker
-// pool. Saturation drops the message — pub/sub is best-effort and the
-// next pod (also subscribed) will deliver if it has a free slot. The
-// drop is logged with event_id so G6b can attribute the loss.
+// pool. A saturated pool is waited on for up to dispatchSubmitTimeout, so
+// the pump's buffer absorbs bursts instead of this loop dropping the moment
+// every worker is busy (K7-E: 46 of 5,000 events dropped at ~22k events/s).
+// Only a pool that stays full past the timeout drops the message — pub/sub
+// is best-effort and the inbox row plus the client's catch-up still carry
+// the event. The drop is logged with event_id so G6b can attribute the loss.
 func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message) {
-	select {
-	case d.dispatchSem <- struct{}{}:
-	case <-ctx.Done():
-		return
-	default:
+	if !d.acquireDispatchSlot(ctx) {
+		if ctx.Err() != nil {
+			return
+		}
 		if d.metrics != nil {
 			d.metrics.Counter("dispatch_drops_total", 1)
 		}
@@ -206,13 +222,35 @@ func (d *Dispatcher) scheduleDispatch(ctx context.Context, msg redisbus.Message)
 		_ = json.Unmarshal(msg.Payload, &env)
 		d.log.Warn("dispatcher: pool saturated; dropping",
 			"channel", msg.Channel, "event_id", env.EventID,
-			"capacity", dispatchConcurrency)
+			"capacity", dispatchConcurrency, "waited", dispatchSubmitTimeout)
 		return
 	}
 	d.dispatchWG.Go(func() {
 		defer func() { <-d.dispatchSem }()
 		d.dispatch(msg)
 	})
+}
+
+// acquireDispatchSlot takes a dispatch slot, waiting at most
+// dispatchSubmitTimeout. It reports false on timeout or on ctx cancellation;
+// the caller tells the two apart with ctx.Err(). The non-blocking first try
+// keeps the steady state free of timer allocations.
+func (d *Dispatcher) acquireDispatchSlot(ctx context.Context) bool {
+	select {
+	case d.dispatchSem <- struct{}{}:
+		return true
+	default:
+	}
+	timer := time.NewTimer(dispatchSubmitTimeout)
+	defer timer.Stop()
+	select {
+	case d.dispatchSem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return false
+	}
 }
 
 func (d *Dispatcher) dispatch(msg redisbus.Message) {

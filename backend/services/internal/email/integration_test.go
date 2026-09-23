@@ -186,11 +186,9 @@ func djangoEntry(t *testing.T, eventID, to, subject, body, kind string) map[stri
 
 // runConsumer starts Run (and optionally Sweep) and returns a stop func.
 //
-// The group is created here, before Run starts, rather than relying on Run's
-// own XGroupCreate. Run creates it at "$" (new entries only), so a test that
-// XADDs while that call is still in flight would enqueue *behind* the group's
-// start position and hang forever. Creating it up front makes Run's call a
-// no-op (it is idempotent via BUSYGROUP) and removes the race.
+// The group is created here, before Run starts, at "$" so the test owns the
+// start position. Run's own call (at redisbus.GroupStartID) then hits
+// BUSYGROUP and is a no-op.
 func runConsumer(t *testing.T, c *Consumer, withSweep bool) func() {
 	t.Helper()
 	if err := c.rdb.XGroupCreate(context.Background(), c.stream, c.group, "$"); err != nil {

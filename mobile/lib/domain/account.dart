@@ -95,6 +95,26 @@ class Account {
     dateJoined: readDate(json['date_joined']),
   );
 
+  /// The profile as [Account.fromJson] reads it, for the local launch
+  /// snapshot (K5). Exactly the keys parsed above and nothing else: no tokens,
+  /// no payout data, no KYC evidence. It is display state for the first
+  /// frames of a launch; `/api/me` replaces it as soon as the server answers.
+  Map<String, Object?> toSnapshotJson() => {
+    'id': id,
+    'email': email,
+    'full_name': fullName,
+    'phone': phone,
+    'wilaya': wilaya,
+    'role': role.name,
+    'preferred_language': preferredLanguage.wire,
+    'is_email_verified': isEmailVerified,
+    'is_phone_verified': isPhoneVerified,
+    'is_kyc_verified': isKycVerified,
+    'kyc_status': kycStatus.name,
+    'kyc_rejection_reason': kycRejectionReason,
+    'date_joined': dateJoined?.toUtc().toIso8601String(),
+  };
+
   final int id;
   final String email;
   final String fullName;

@@ -328,33 +328,139 @@ func TestScheduleReceipt_DropsWhenPoolSaturated(t *testing.T) {
 	}
 }
 
-func TestScheduleDispatch_DropsWhenPoolSaturated(t *testing.T) {
+func TestScheduleDispatch_DropsOnlyAfterTheSubmitTimeout(t *testing.T) {
 	hub := newStubRouter()
 	hub.sockets[42] = 1
 	receipts := &stubReceipts{}
 	d := newTestDispatcher(hub, receipts)
+	m := newTestMetrics("notification-dispatch-timeout-test")
+	d.metrics = m.g
 
-	// Fill the dispatch semaphore so scheduleDispatch drops the message.
+	// Fill the dispatch semaphore and never release it: a stuck pool.
 	for range dispatchConcurrency {
 		d.dispatchSem <- struct{}{}
 	}
 
 	raw := envelope(t, "evt-drop", []int64{42}, nil)
+	start := time.Now()
 	done := make(chan struct{})
 	go func() {
-		// ctx not cancelled; the default arm must fire and drop.
+		// ctx not cancelled; the timeout arm must fire and drop.
 		d.scheduleDispatch(context.Background(), redisbus.Message{Channel: "offer.accepted", Payload: raw})
 		close(done)
 	}()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("scheduleDispatch blocked on a full pool instead of dropping")
+	case <-time.After(dispatchSubmitTimeout + time.Second):
+		t.Fatal("scheduleDispatch blocked past its submit timeout instead of dropping")
+	}
+	if waited := time.Since(start); waited < dispatchSubmitTimeout {
+		t.Errorf("dropped after %v, want a wait of at least %v first", waited, dispatchSubmitTimeout)
+	}
+	if got := m.read(t, "dispatch_drops_total"); got != 1 {
+		t.Errorf("dispatch_drops_total = %d, want 1", got)
 	}
 
 	time.Sleep(20 * time.Millisecond)
 	if got := hub.callsCopy(); len(got) != 0 {
 		t.Errorf("Send called %d times, want 0 (message dropped before dispatch)", len(got))
+	}
+}
+
+// A slot that frees up inside the submit timeout is taken, not dropped: this
+// is what lets the pump's buffer absorb a burst.
+func TestScheduleDispatch_WaitsForASlotThatFreesUp(t *testing.T) {
+	hub := newStubRouter()
+	hub.sockets[42] = 1
+	receipts := &stubReceipts{}
+	d := newTestDispatcher(hub, receipts)
+	m := newTestMetrics("notification-dispatch-wait-test")
+	d.metrics = m.g
+
+	for range dispatchConcurrency {
+		d.dispatchSem <- struct{}{}
+	}
+	go func() {
+		time.Sleep(dispatchSubmitTimeout / 5)
+		<-d.dispatchSem
+	}()
+
+	d.scheduleDispatch(context.Background(), redisbus.Message{
+		Channel: "offer.accepted",
+		Payload: envelope(t, "evt-waited", []int64{42}, nil),
+	})
+	d.dispatchWG.Wait()
+	d.receiptWG.Wait()
+
+	if got := hub.callsCopy(); len(got) != 1 || got[0].Env.EventID != "evt-waited" {
+		t.Fatalf("Send calls = %+v, want the one waited-for event", got)
+	}
+	if got := m.readMaybe("dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0", got)
+	}
+}
+
+// slowRouter holds each Send for a fixed time, standing in for a busy hub.
+type slowRouter struct {
+	*stubRouter
+	delay time.Duration
+}
+
+func (s *slowRouter) Send(userID int64, env wsproto.Envelope) int {
+	time.Sleep(s.delay)
+	return s.stubRouter.Send(userID, env)
+}
+
+// A burst far faster than the pool drains is absorbed without a single drop.
+// Before K7-E the loop dropped the moment all 128 workers were busy, so this
+// burst lost most of its events.
+func TestScheduleDispatch_AbsorbsABurstWithoutDropping(t *testing.T) {
+	const events = 2_000
+	stub := newStubRouter()
+	d := newTestDispatcher(stub, &stubReceipts{})
+	d.hub = &slowRouter{stubRouter: stub, delay: 2 * time.Millisecond}
+	m := newTestMetrics("notification-dispatch-burst-test")
+	d.metrics = m.g
+
+	for i := range events {
+		d.scheduleDispatch(context.Background(), redisbus.Message{
+			Channel: "offer.accepted",
+			Payload: envelope(t, "evt-burst-"+strconv.Itoa(i), []int64{7}, nil),
+		})
+	}
+	d.dispatchWG.Wait()
+
+	if got := len(stub.callsCopy()); got != events {
+		t.Errorf("delivered %d of %d burst events", got, events)
+	}
+	if got := m.readMaybe("dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0", got)
+	}
+}
+
+// Shutdown during a wait returns at once and is not counted as a drop.
+func TestScheduleDispatch_ReturnsWhenCancelledWhileWaiting(t *testing.T) {
+	d := newTestDispatcher(newStubRouter(), &stubReceipts{})
+	m := newTestMetrics("notification-dispatch-cancel-wait-test")
+	d.metrics = m.g
+	for range dispatchConcurrency {
+		d.dispatchSem <- struct{}{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		d.scheduleDispatch(ctx, redisbus.Message{Channel: "x", Payload: envelope(t, "e", []int64{1}, nil)})
+		close(done)
+	}()
+	time.Sleep(dispatchSubmitTimeout / 10)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(dispatchSubmitTimeout / 2):
+		t.Fatal("scheduleDispatch kept waiting after ctx was cancelled")
+	}
+	if got := m.readMaybe("dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0 on shutdown", got)
 	}
 }
 

@@ -696,6 +696,38 @@ class NoShowRecord {
   final String? note;
 }
 
+/// The five booleans a Deal list row carries about what the viewer may do now.
+///
+/// The server computes them with the same functions as the detail's `handover`
+/// and `ratings` blocks, so reading them here is reading the detail's answer
+/// without fetching the detail. They carry no code material and no instants.
+class DealAttentionFlags {
+  const DealAttentionFlags({
+    this.canRevealPickupCode = false,
+    this.canSubmitPickupCode = false,
+    this.canRevealDeliveryCode = false,
+    this.canSubmitDeliveryCode = false,
+    this.canRate = false,
+  });
+
+  static DealAttentionFlags? maybe(Object? raw) {
+    if (raw is! Map) return null;
+    return DealAttentionFlags(
+      canRevealPickupCode: readBool(raw['can_reveal_pickup_code']),
+      canSubmitPickupCode: readBool(raw['can_submit_pickup_code']),
+      canRevealDeliveryCode: readBool(raw['can_reveal_delivery_code']),
+      canSubmitDeliveryCode: readBool(raw['can_submit_delivery_code']),
+      canRate: readBool(raw['can_rate']),
+    );
+  }
+
+  final bool canRevealPickupCode;
+  final bool canSubmitPickupCode;
+  final bool canRevealDeliveryCode;
+  final bool canSubmitDeliveryCode;
+  final bool canRate;
+}
+
 class Deal {
   const Deal({
     required this.id,
@@ -726,6 +758,7 @@ class Deal {
     this.dispute,
     this.cancellation,
     this.ratings,
+    this.attention,
     this.noShow,
     this.payoutSummary,
     this.activityState = ActivityState.unknown,
@@ -785,6 +818,7 @@ class Deal {
     dispute: DisputeSummary.maybe(json['dispute']),
     cancellation: CancellationAvailability.maybe(json['cancellation']),
     ratings: RatingState.maybe(json['ratings']),
+    attention: DealAttentionFlags.maybe(json['attention']),
     noShow: NoShowRecord.maybe(json['no_show']),
     payoutSummary: PayoutMobile.maybe(json['payout_summary']),
     arrival: DealArrivalInfo.maybe(json['arrival']),
@@ -848,6 +882,12 @@ class Deal {
   final DisputeSummary? dispute;
   final CancellationAvailability? cancellation;
   final RatingState? ratings;
+
+  /// The viewer's pending actions, as the **list** row states them.
+  ///
+  /// Null on a detail read (which carries the full `handover` and `ratings`
+  /// blocks instead) and from a server that predates K5.
+  final DealAttentionFlags? attention;
   final NoShowRecord? noShow;
   final PayoutMobile? payoutSummary;
   final DealArrivalInfo? arrival;

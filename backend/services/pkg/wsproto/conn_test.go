@@ -609,3 +609,55 @@ func TestPinger_KeepsIdleConnAlive(t *testing.T) {
 	}
 	c.Close(websocket.StatusNormalClosure, "test over")
 }
+
+// TestConn_SlowConsumerIsDisconnected: a client that stops reading must lose
+// its socket once its send buffer overflows, not just the overflowing frame.
+// The disconnect is what makes the drop recoverable — the client reconnects
+// and re-reads the durable inbox. Timed well under WriteTimeout so it proves
+// the overflow, not the write deadline, ended the connection.
+func TestConn_SlowConsumerIsDisconnected(t *testing.T) {
+	v := testValidator(t)
+	type result struct {
+		dropped bool
+		elapsed time.Duration
+	}
+	out := make(chan result, 1)
+	srv := upgradeServer(t, v, func(c *Conn) {
+		big := make([]byte, 64<<10)
+		for i := range big {
+			big[i] = 'x'
+		}
+		payload := []byte(fmt.Sprintf(`{"blob":%q}`, big))
+		dropped := false
+		// The writer drains frames into the socket until it stalls, so more
+		// than SendQueueSize sends are needed before the buffer is truly full.
+		for i := 0; i < SendQueueSize*4 && !dropped; i++ {
+			dropped = !c.Send(Envelope{Type: "flood", Payload: payload})
+		}
+		start := time.Now()
+		select {
+		case <-c.Done():
+		case <-time.After(WriteTimeout + 5*time.Second):
+		}
+		out <- result{dropped: dropped, elapsed: time.Since(start)}
+	})
+
+	ws, _, err := dial(t, srv, "Bearer "+signedToken(t, testSecret, nil))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	// Deliberately never read, so the server's writes stall.
+
+	select {
+	case r := <-out:
+		if !r.dropped {
+			t.Fatal("Send never reported a drop against a client that stopped reading")
+		}
+		if r.elapsed >= WriteTimeout/2 {
+			t.Fatalf("slow consumer disconnected after %v; want prompt teardown on overflow", r.elapsed)
+		}
+	case <-time.After(WriteTimeout + 10*time.Second):
+		t.Fatal("handler never finished")
+	}
+	_ = ws.CloseNow()
+}

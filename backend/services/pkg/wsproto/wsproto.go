@@ -38,7 +38,7 @@ const (
 	WriteTimeout = 10 * time.Second
 
 	// SendQueueSize is the per-conn outbound buffer. Overflow drops
-	// the message with a warn — same pattern as pkg/redisbus.
+	// the message and disconnects the slow consumer (see Send).
 	SendQueueSize = 64
 
 	// MaxMessageBytes caps inbound frame size. Flutter never sends
@@ -152,24 +152,59 @@ func (c *Conn) Read(ctx context.Context) (Envelope, error) {
 	return env, nil
 }
 
-// Send queues an envelope for delivery. Non-blocking: if the per-conn
-// buffer is full the message is dropped and a warn is logged. This is
-// the same back-pressure policy as pkg/redisbus — a slow client must
-// never stall a fan-out goroutine.
-func (c *Conn) Send(env Envelope) {
+// Send queues an envelope for delivery and reports whether it was queued.
+// Non-blocking — a slow client must never stall a fan-out goroutine.
+//
+// A full buffer drops the message AND disconnects the consumer. Dropping
+// alone lost the event silently: a client slow enough to fill 64 frames
+// but never slow enough to trip WriteTimeout kept its socket, so it never
+// reconnected and never ran its REST catch-up. Cancelling connCtx fails
+// the writer's in-flight write, the writer exits and closes the socket,
+// and the client's reconnect re-reads the durable inbox. The false return
+// keeps callers from writing a delivery receipt for a message that never
+// left, so the FCM fallback still fires.
+//
+// A cancelled connCtx or a closed conn refuses the envelope up front, even
+// when the buffer has room: the writer is already exiting and its drain
+// discards whatever is queued, so reporting "queued" would write a receipt
+// for a push that never left. The pre-check narrows that window to the
+// instant between check and enqueue; it cannot be closed without a lock on
+// every Send.
+func (c *Conn) Send(env Envelope) bool {
+	if c.connCtx.Err() != nil {
+		c.log.Debug("ws send after connection teardown; dropping message",
+			"event_id", env.EventID,
+			"type", env.Type,
+		)
+		return false
+	}
+	// A select picks randomly among ready cases, so done gets its own
+	// non-blocking check first rather than racing a free buffer slot.
 	select {
 	case <-c.done:
 		c.log.Debug("ws send after close; dropping message",
 			"event_id", env.EventID,
 			"type", env.Type,
 		)
-		return
-	case c.send <- env:
+		return false
 	default:
-		c.log.Warn("ws send buffer full; dropping message",
+	}
+	select {
+	case <-c.done:
+		c.log.Debug("ws send after close; dropping message",
 			"event_id", env.EventID,
 			"type", env.Type,
 		)
+		return false
+	case c.send <- env:
+		return true
+	default:
+		c.log.Warn("ws send buffer full; dropping message and disconnecting slow consumer",
+			"event_id", env.EventID,
+			"type", env.Type,
+		)
+		c.connCancel()
+		return false
 	}
 }
 

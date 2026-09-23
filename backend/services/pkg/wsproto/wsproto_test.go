@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -64,7 +65,9 @@ func newTestConn() *Conn {
 
 func TestSend_QueuesEnvelope(t *testing.T) {
 	c := newTestConn()
-	c.Send(Envelope{Type: "ping", EventID: "e1"})
+	if !c.Send(Envelope{Type: "ping", EventID: "e1"}) {
+		t.Fatal("Send reported a drop for an envelope it should have queued")
+	}
 
 	select {
 	case got := <-c.send:
@@ -89,7 +92,9 @@ func TestSend_DropsAfterClose(t *testing.T) {
 	}
 	close(c.done)
 
-	c.Send(Envelope{Type: "late", EventID: "should-drop"})
+	if c.Send(Envelope{Type: "late", EventID: "should-drop"}) {
+		t.Fatal("Send reported queued for a closed conn")
+	}
 
 	// Drain: the "late" envelope must be absent — it hit the done case.
 	for range SendQueueSize {
@@ -99,27 +104,75 @@ func TestSend_DropsAfterClose(t *testing.T) {
 	}
 }
 
+// TestSend_DropsWhenBufferFull: an overflow must drop without blocking,
+// report the drop (so no delivery receipt is written for it), and cancel
+// connCtx so the writer tears the slow consumer down. A slow client that
+// only lost the frame would keep its socket and never run its reconnect
+// catch-up, so the event would be gone for good rather than delayed.
 func TestSend_DropsWhenBufferFull(t *testing.T) {
 	c := newTestConn()
 	// Fill the buffer to capacity.
 	for range SendQueueSize {
-		c.Send(Envelope{Type: "fill"})
+		if !c.Send(Envelope{Type: "fill"}) {
+			t.Fatal("Send dropped before the buffer was full")
+		}
+	}
+	if err := c.connCtx.Err(); err != nil {
+		t.Fatalf("connCtx cancelled before any overflow: %v", err)
 	}
 	// One more must hit the default branch and drop, not block.
-	done := make(chan struct{})
-	go func() {
-		c.Send(Envelope{Type: "overflow", EventID: "dropped"})
-		close(done)
-	}()
+	queued := make(chan bool, 1)
+	go func() { queued <- c.Send(Envelope{Type: "overflow", EventID: "dropped"}) }()
 	select {
-	case <-done:
-	case <-context.Background().Done():
+	case ok := <-queued:
+		if ok {
+			t.Fatal("Send reported the overflow envelope as queued")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Send blocked on a full buffer")
+	}
+	if c.connCtx.Err() == nil {
+		t.Fatal("overflow did not cancel connCtx; the slow consumer would keep its socket")
 	}
 	// Drain and confirm the overflow envelope is absent.
 	for range SendQueueSize {
 		if got := <-c.send; got.EventID == "dropped" {
 			t.Fatal("overflow envelope should have been dropped, not buffered")
 		}
+	}
+}
+
+// Once connCtx is cancelled (slow-consumer overflow, Close) the writer is
+// on its way out and drains the buffer into the void. A Send that still found
+// buffer room used to report true, so the caller wrote a delivery receipt and
+// the FCM fallback skipped a push the client never got.
+func TestSend_RefusesAfterConnCtxCancelledEvenWithRoom(t *testing.T) {
+	c := newTestConn()
+	c.connCancel()
+
+	if c.Send(Envelope{Type: "late", EventID: "after-cancel"}) {
+		t.Fatal("Send reported queued after connCtx was cancelled")
+	}
+	select {
+	case got := <-c.send:
+		t.Fatalf("Send enqueued %+v into a buffer the writer will discard", got)
+	default:
+	}
+}
+
+// With buffer room free, a closed conn must still refuse every time — the
+// done check must not lose a coin-flip to the free queue slot.
+func TestSend_PrefersDoneOverAFreeBufferSlot(t *testing.T) {
+	c := newTestConn()
+	close(c.done) // done only: connCtx still live, isolating the done check
+
+	for i := range 200 {
+		if c.Send(Envelope{Type: "late"}) {
+			t.Fatalf("Send %d reported queued on a closed conn with a free buffer", i)
+		}
+	}
+	if n := len(c.send); n != 0 {
+		t.Fatalf("%d envelopes enqueued after close", n)
 	}
 }
 

@@ -9,11 +9,15 @@
 /// stale the moment the app is backgrounded, and a provider that outlives its
 /// screen is how a user ends up funding a deal against a price that moved. The
 /// shell's `IndexedStack` keeps the four tabs mounted, so this costs no
-/// refetch when switching tabs — only when a surface is genuinely left.
+/// refetch when switching tabs — only when a surface is genuinely left. The
+/// one exception is finished Deal history, kept a minute after its last viewer
+/// for a filter round trip ([DealHistoryController.keptFor]): list
+/// presentation, never a detail, an amount or an allowed action.
 library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderBase;
@@ -30,17 +34,31 @@ import '../domain/payment.dart';
 import '../domain/payout.dart';
 import '../domain/rating.dart';
 
+/// A token that cancels this provider's read once nothing wants its answer:
+/// the provider is disposed (its screen left, its filter changed) or rebuilt
+/// (a live event, a refresh or a new session superseded it). Riverpod has
+/// already stopped listening to that read by then, so its cancellation is
+/// never shown to anyone (K5).
+///
+/// For reads only. A write must finish whatever the UI does meanwhile, so it
+/// is never handed one of these.
+CancelToken cancelOnDispose(Ref ref) {
+  final token = CancelToken();
+  ref.onDispose(token.cancel);
+  return token;
+}
+
 Future<T> _liveRead<T>(
   Ref ref,
   int? expectedAccountId,
   LiveResource resource,
-  Future<T> Function() read,
+  Future<T> Function(CancelToken cancel) read,
 ) async {
   final unsubscribe = ref
       .read(liveUpdatesProvider)
       .register(resource, ref.invalidateSelf);
   ref.onDispose(unsubscribe);
-  final result = await read();
+  final result = await read(cancelOnDispose(ref));
   if (ref.read(accountProvider)?.id != expectedAccountId) {
     throw const _StaleSessionRead();
   }
@@ -73,7 +91,7 @@ final _myRequestsQuery = FutureProvider.autoDispose
         ref,
         accountId,
         const LiveResource.requests(),
-        repo.mine,
+        (cancel) => repo.mine(cancelToken: cancel),
       );
     });
 final myRequestsProvider =
@@ -88,7 +106,7 @@ final _requestDetailQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.request(key.argument),
-        () => repo.byId(key.argument),
+        (cancel) => repo.byId(key.argument, cancelToken: cancel),
       );
     });
 final requestDetailProvider = Provider.autoDispose
@@ -117,6 +135,7 @@ final _parcelPhotoUrlQuery = FutureProvider.autoDispose
       final url = await repo.photoUrl(
         requestId: key.photo.requestId,
         mediaId: key.photo.mediaId,
+        cancelToken: cancelOnDispose(ref),
       );
       if (ref.read(accountSessionProvider) != key.session) {
         throw const _StaleSessionRead();
@@ -140,7 +159,7 @@ final _postingDepositQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.deposit(key.argument),
-        () => repo.postingDeposit(key.argument),
+        (cancel) => repo.postingDeposit(key.argument, cancelToken: cancel),
       );
     });
 final postingDepositProvider = Provider.autoDispose
@@ -161,7 +180,12 @@ final postingDepositProvider = Provider.autoDispose
 final _myJourneysQuery = FutureProvider.autoDispose.family<List<Journey>, int?>(
   (ref, accountId) async {
     final repo = ref.watch(journeyRepositoryProvider);
-    return _liveRead(ref, accountId, const LiveResource.journeys(), repo.mine);
+    return _liveRead(
+      ref,
+      accountId,
+      const LiveResource.journeys(),
+      (cancel) => repo.mine(cancelToken: cancel),
+    );
   },
 );
 final myJourneysProvider = Provider.autoDispose<AsyncValue<List<Journey>>>(
@@ -175,7 +199,7 @@ final _journeyDetailQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.journey(key.argument),
-        () => repo.byId(key.argument),
+        (cancel) => repo.byId(key.argument, cancelToken: cancel),
       );
     });
 final journeyDetailProvider = Provider.autoDispose
@@ -196,18 +220,7 @@ final activeJourneysProvider = Provider.autoDispose<List<Journey>>((ref) {
 // Shared
 // ---------------------------------------------------------------------------
 
-final _dealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
-  ref,
-  accountId,
-) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.deals(), repo.list);
-});
-final dealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _dealsQuery(_watchAccountId(ref))),
-);
-
-final _activeDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
+final _currentDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
   ref,
   accountId,
 ) async {
@@ -216,68 +229,188 @@ final _activeDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
     ref,
     accountId,
     const LiveResource.deals(),
-    () => repo.list(activity: ActivityState.active),
+    (cancel) => repo.current(cancelToken: cancel),
   );
 });
-final activeDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _activeDealsQuery(_watchAccountId(ref))),
+
+/// Every live Deal, plus delivered ones whose review window may still be open.
+///
+/// The one Deal read Home and active Deliveries share. It is bounded by
+/// construction — finished history is paged separately — and complete: every
+/// page is read, so an account with more Deals than one page no longer loses
+/// the older ones (K5). Each row carries the server's `attention` flags.
+final currentDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
+  (ref) => _projectLiveQuery(ref, _currentDealsQuery(_watchAccountId(ref))),
 );
 
-final _historyDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
-  ref,
-  accountId,
-) async {
-  final repo = ref.watch(dealRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.deals(), () async {
-    // History is everything the server no longer counts as active, which is
-    // two server buckets, not one. Asking only for `completed` left every
-    // cancelled or refunded delivery fetched by no provider at all and so
-    // invisible in every list on the client.
-    final buckets = await Future.wait([
-      repo.list(activity: ActivityState.completed),
-      repo.list(activity: ActivityState.cancelled),
-    ]);
-    final byId = <int, Deal>{};
-    for (final bucket in buckets) {
-      for (final deal in bucket) {
-        byId[deal.id] = deal;
-      }
-    }
-    return byId.values.toList(growable: false)
-      ..sort((a, b) => b.id.compareTo(a.id));
-  });
+/// Live shipments only.
+///
+/// Derived from [currentDealsProvider] by each row's server-owned
+/// `activity_state` — the same rule the server's `?activity=active` filter
+/// applies — so this is that set without a second request.
+final activeDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>((ref) {
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(currentDealsProvider));
+  return ref
+      .watch(currentDealsProvider)
+      .whenData(
+        (deals) => deals
+            .where((deal) => deal.activityState == ActivityState.active)
+            .toList(growable: false),
+      );
 });
-final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>(
-  (ref) => _projectLiveQuery(ref, _historyDealsQuery(_watchAccountId(ref))),
-);
 
-/// Delivery requests whose shipment the server no longer counts as active.
+/// Finished Deals read so far, and whether the server has more.
+@immutable
+class DealHistory {
+  const DealHistory({
+    this.deals = const [],
+    this.pagesLoaded = 0,
+    this.hasMore = false,
+    this.loadingMore = false,
+    this.loadMoreError,
+  });
+
+  final List<Deal> deals;
+  final int pagesLoaded;
+  final bool hasMore;
+  final bool loadingMore;
+
+  /// Why the last next-page read failed, until the next attempt starts.
+  final Object? loadMoreError;
+
+  DealHistory _loading() => DealHistory(
+    deals: deals,
+    pagesLoaded: pagesLoaded,
+    hasMore: hasMore,
+    loadingMore: true,
+  );
+
+  DealHistory _failed(Object error) => DealHistory(
+    deals: deals,
+    pagesLoaded: pagesLoaded,
+    hasMore: hasMore,
+    loadMoreError: error,
+  );
+}
+
+/// Completed and cancelled Deals, a page at a time.
 ///
-/// `ParcelRequest.status` is not a lifecycle signal for a matched shipment: the
-/// backend advances it to `matched` when a Deal is created and never moves it
-/// again, so `delivered` and `completed` are choices no row ever reaches. A
-/// sender's own request therefore stays "live" forever by its own status, which
-/// is why finished deliveries kept sitting in Home and never reached History.
-///
-/// The Deal is the authority. Every Deal row already carries the server-derived
-/// `activity_state` and its `delivery_request_id`, so settlement is read from
-/// there rather than re-derived locally. An unloaded or failed deal list yields
-/// an empty set, which degrades to the previous behaviour rather than hiding a
-/// shipment that may still be running.
-final settledRequestIdsProvider = Provider.autoDispose<Set<int>>((ref) {
-  final deals = ref.watch(dealsProvider).value;
-  if (deals == null || deals.isEmpty) return const <int>{};
-  final settled = <int>{};
-  for (final deal in deals) {
-    final requestId = deal.deliveryRequestId;
-    if (requestId == null) continue;
-    if (deal.activityState == ActivityState.completed ||
-        deal.activityState == ActivityState.cancelled) {
-      settled.add(requestId);
+/// History only grows, so it is never read whole: the first page when the
+/// user opens it, the next as they scroll toward the end. A live Deal event
+/// starts it again from the first page, like every other projection here.
+class DealHistoryController extends AsyncNotifier<DealHistory> {
+  DealHistoryController(this.accountId);
+
+  /// How long history outlives its last viewer (K5). Switching Deliveries'
+  /// filter away and back used to start again from page one and drop every
+  /// page already scrolled through. History is list presentation only: each
+  /// Deal it shows opens onto a fresh detail read, and a live Deal event still
+  /// drops it at once.
+  static const keptFor = Duration(minutes: 1);
+
+  final int? accountId;
+  int _generation = 0;
+  CancelToken? _loadMore;
+
+  @override
+  Future<DealHistory> build() async {
+    final generation = ++_generation;
+    ref.onDispose(() {
+      _generation++;
+      _loadMore?.cancel();
+    });
+    _keepBriefly();
+    final repo = ref.watch(dealRepositoryProvider);
+    final page = await _liveRead(
+      ref,
+      accountId,
+      const LiveResource.deals(),
+      (cancel) => repo.historyPage(page: 1, cancelToken: cancel),
+    );
+    if (generation != _generation) throw const _StaleSessionRead();
+    return DealHistory(
+      deals: page.deals,
+      pagesLoaded: 1,
+      hasMore: page.hasNext,
+    );
+  }
+
+  /// Keeps this history for [keptFor] after its last viewer leaves, and never
+  /// past the sign-in that read it: the family is keyed by account id, so the
+  /// same account signing in again must not find the old pages.
+  void _keepBriefly() {
+    final link = ref.keepAlive();
+    Timer? release;
+    ref
+      ..onCancel(() => release = Timer(keptFor, link.close))
+      ..onResume(() => release?.cancel())
+      ..onDispose(() => release?.cancel());
+    final session = ref.read(accountSessionProvider);
+    ref.listen(accountSessionProvider, (_, next) {
+      if (next != session) link.close();
+    });
+  }
+
+  /// Reads the next page. A no-op while one is already in flight, when the
+  /// server said there is nothing more, or before the first page landed.
+  Future<void> loadMore() async {
+    final current = state.value;
+    if (current == null || !current.hasMore || current.loadingMore) return;
+    final generation = _generation;
+    state = AsyncData(current._loading());
+    final cancel = _loadMore = CancelToken();
+    try {
+      final page = await ref
+          .read(dealRepositoryProvider)
+          .historyPage(page: current.pagesLoaded + 1, cancelToken: cancel);
+      if (generation != _generation ||
+          ref.read(accountProvider)?.id != accountId) {
+        return;
+      }
+      // Offset paging over a newest-first list: a Deal finishing meanwhile
+      // pushes every row down one, so the next page can repeat the last row
+      // of this one. It can never skip one.
+      final seen = {for (final deal in current.deals) deal.id};
+      state = AsyncData(
+        DealHistory(
+          deals: [
+            ...current.deals,
+            ...page.deals.where((deal) => seen.add(deal.id)),
+          ],
+          pagesLoaded: current.pagesLoaded + 1,
+          hasMore: page.hasNext,
+        ),
+      );
+    } on Object catch (error) {
+      if (generation != _generation) return;
+      state = AsyncData(current._failed(error));
     }
   }
-  return settled;
+}
+
+final _dealHistoryQuery = AsyncNotifierProvider.autoDispose
+    .family<DealHistoryController, DealHistory, int?>(
+      DealHistoryController.new,
+    );
+final dealHistoryProvider = Provider.autoDispose<AsyncValue<DealHistory>>(
+  (ref) => _projectLiveQuery(ref, _dealHistoryQuery(_watchAccountId(ref))),
+);
+
+/// The finished Deals read so far, for surfaces that only need the rows.
+final historyDealsProvider = Provider.autoDispose<AsyncValue<List<Deal>>>((
+  ref,
+) {
+  // ignore: experimental_member_use
+  ref.onManualInvalidation(() => ref.invalidate(dealHistoryProvider));
+  return ref.watch(dealHistoryProvider).whenData((history) => history.deals);
 });
+
+/// Asks the current account's history for its next page.
+void loadMoreDealHistory(WidgetRef ref) {
+  final accountId = ref.read(accountProvider)?.id;
+  unawaited(ref.read(_dealHistoryQuery(accountId).notifier).loadMore());
+}
 
 final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
   ref,
@@ -288,7 +421,7 @@ final _completedDealsCountQuery = FutureProvider.autoDispose.family<int, int?>((
     ref,
     accountId,
     const LiveResource.deals(),
-    () => repo.count(status: DealStatus.completed),
+    (cancel) => repo.count(status: DealStatus.completed, cancelToken: cancel),
   );
 });
 final completedDealsCountProvider = Provider.autoDispose<AsyncValue<int>>(
@@ -303,7 +436,7 @@ final _dealDetailQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.deal(key.argument),
-        () => repo.byId(key.argument),
+        (cancel) => repo.byId(key.argument, cancelToken: cancel),
       );
       // One-shot refresh at a server deadline; this does not decide whether
       // an action is permitted and does not poll.
@@ -355,7 +488,12 @@ final _matchesQuery = FutureProvider.autoDispose.family<List<Match>, int?>((
   accountId,
 ) async {
   final repo = ref.watch(matchingRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.matches(), repo.matches);
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.matches(),
+    (cancel) => repo.matches(cancelToken: cancel),
+  );
 });
 final matchesProvider = Provider.autoDispose<AsyncValue<List<Match>>>(
   (ref) => _projectLiveQuery(ref, _matchesQuery(_watchAccountId(ref))),
@@ -368,7 +506,7 @@ final _matchDetailQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.match(key.argument),
-        () => repo.match(key.argument),
+        (cancel) => repo.match(key.argument, cancelToken: cancel),
       );
     });
 final matchDetailProvider = Provider.autoDispose.family<AsyncValue<Match>, int>(
@@ -387,7 +525,7 @@ final _matchOffersQuery = FutureProvider.autoDispose
         ref,
         key.accountId,
         LiveResource.offers(key.argument),
-        () => repo.offers(key.argument),
+        (cancel) => repo.offers(key.argument, cancelToken: cancel),
       );
     });
 final matchOffersProvider = Provider.autoDispose
@@ -405,14 +543,17 @@ final _chatThreadsQuery = FutureProvider.autoDispose
         ref,
         accountId,
         const LiveResource.threads(),
-        repo.threads,
+        (cancel) => repo.threads(cancelToken: cancel),
       );
     });
 final chatThreadsProvider = Provider.autoDispose<AsyncValue<List<ChatThread>>>(
   (ref) => _projectLiveQuery(ref, _chatThreadsQuery(_watchAccountId(ref))),
 );
 
-final _unreadNotificationsQuery = FutureProvider.autoDispose.family<int, int?>((
+/// Both badge numbers come from one endpoint, so they come from one read. Two
+/// queries used to read it once each, side by side, every time the inbox was
+/// open and on every catch-up (K5).
+final _badgeCountsQuery = FutureProvider.autoDispose.family<BadgeCounts, int?>((
   ref,
   accountId,
 ) async {
@@ -421,35 +562,26 @@ final _unreadNotificationsQuery = FutureProvider.autoDispose.family<int, int?>((
     ref,
     accountId,
     const LiveResource.unread(),
-    repo.activeCount,
+    (cancel) => repo.badgeCounts(cancelToken: cancel),
   );
 });
 
+AsyncValue<int> _projectBadge(Ref ref, int Function(BadgeCounts) count) =>
+    _projectLiveQuery(
+      ref,
+      _badgeCountsQuery(_watchAccountId(ref)),
+    ).whenData(count);
+
 /// The bell count — notifications that still need attention, not unread ones.
 final unreadNotificationsProvider = Provider.autoDispose<AsyncValue<int>>(
-  (ref) =>
-      _projectLiveQuery(ref, _unreadNotificationsQuery(_watchAccountId(ref))),
+  (ref) => _projectBadge(ref, (counts) => counts.active),
 );
-
-final _unreadActiveNotificationsQuery = FutureProvider.autoDispose
-    .family<int, int?>((ref, accountId) async {
-      final repo = ref.watch(notificationRepositoryProvider);
-      return _liveRead(
-        ref,
-        accountId,
-        const LiveResource.unread(),
-        repo.unreadActiveCount,
-      );
-    });
 
 /// Active notifications the user has not opened. Gates "Mark all read", which
 /// the badge total must not: a fully-read inbox can still be full of live
 /// actions, and offering to mark them read there does nothing the user can see.
 final unreadActiveNotificationsProvider = Provider.autoDispose<AsyncValue<int>>(
-  (ref) => _projectLiveQuery(
-    ref,
-    _unreadActiveNotificationsQuery(_watchAccountId(ref)),
-  ),
+  (ref) => _projectBadge(ref, (counts) => counts.unreadActive),
 );
 
 final _payoutsQuery = FutureProvider.autoDispose.family<List<Payout>, int?>((
@@ -457,7 +589,12 @@ final _payoutsQuery = FutureProvider.autoDispose.family<List<Payout>, int?>((
   accountId,
 ) async {
   final repo = ref.watch(paymentRepositoryProvider);
-  return _liveRead(ref, accountId, const LiveResource.payouts(), repo.payouts);
+  return _liveRead(
+    ref,
+    accountId,
+    const LiveResource.payouts(),
+    (cancel) => repo.payouts(cancelToken: cancel),
+  );
 });
 final payoutsProvider = Provider.autoDispose<AsyncValue<List<Payout>>>(
   (ref) => _projectLiveQuery(ref, _payoutsQuery(_watchAccountId(ref))),
@@ -470,7 +607,7 @@ final _payoutMethodsQuery = FutureProvider.autoDispose
         ref,
         accountId,
         const LiveResource.payouts(),
-        repo.payoutMethods,
+        (cancel) => repo.payoutMethods(cancelToken: cancel),
       );
     });
 final payoutMethodsProvider =
@@ -486,7 +623,11 @@ final _payoutHistoryQuery = FutureProvider.autoDispose
         ref,
         accountId,
         const LiveResource.payouts(),
-        () => repo.payoutHistoryPaginated(page: 1, pageSize: 50),
+        (cancel) => repo.payoutHistoryPaginated(
+          page: 1,
+          pageSize: 50,
+          cancelToken: cancel,
+        ),
       );
     });
 final payoutHistoryProvider =
@@ -501,7 +642,10 @@ final _payoutDetailQuery = FutureProvider.autoDispose
       key,
     ) async {
       final repo = ref.watch(paymentRepositoryProvider);
-      final payout = await repo.payoutDetail(key.reference);
+      final payout = await repo.payoutDetail(
+        key.reference,
+        cancelToken: cancelOnDispose(ref),
+      );
       if (ref.read(accountSessionProvider) != key.session) {
         throw const _StaleSessionRead();
       }
@@ -520,7 +664,7 @@ final payoutDetailProvider = Provider.autoDispose
 final _receivedRatingsQuery = FutureProvider.autoDispose
     .family<List<Rating>, AccountSession>((ref, session) async {
       final repo = ref.watch(ratingRepositoryProvider);
-      final ratings = await repo.received();
+      final ratings = await repo.received(cancelToken: cancelOnDispose(ref));
       if (ref.read(accountSessionProvider) != session) {
         throw const _StaleSessionRead();
       }
@@ -538,7 +682,7 @@ final paymentProvidersProvider = FutureProvider.autoDispose<ProvidersView>((
   ref,
 ) async {
   final repo = ref.watch(paymentRepositoryProvider);
-  return repo.providers();
+  return repo.providers(cancelToken: cancelOnDispose(ref));
 });
 
 // ---------------------------------------------------------------------------
@@ -605,17 +749,21 @@ class AttentionItem {
 
 /// Everything currently waiting on this user, assembled from server booleans.
 ///
-/// Reads the deal **list**, which carries no `handover` block, plus whatever
-/// detail is already in cache. It therefore surfaces the reasons it can see
-/// and never invents the rest; a deal screen shows the full picture.
+/// Reads the current Deal list, whose rows carry the server's `attention`
+/// flags — the same answers the detail's `handover` and `ratings` blocks give.
+/// It used to watch every Deal's *detail* to read them, which fetched one
+/// detail per Deal on every Home load (K5); nothing here decides anything the
+/// server did not state.
 final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
-  final account = ref.watch(accountProvider);
-  if (account == null) return const [];
+  // The id is all this reads, so a profile refresh — every resume — does not
+  // rebuild the list and everything that shows it (K5).
+  final accountId = _watchAccountId(ref);
+  if (accountId == null) return const [];
 
   final items = <AttentionItem>[];
 
   for (final match in ref.watch(matchesProvider).value ?? const []) {
-    if (match.awaitsViewer(account.id)) {
+    if (match.awaitsViewer(accountId)) {
       items.add(
         AttentionItem(
           reason: AttentionReason.offerAwaitingYou,
@@ -627,8 +775,8 @@ final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
     }
   }
 
-  for (final deal in ref.watch(dealsProvider).value ?? const []) {
-    final isSender = deal.isSender(account.id);
+  for (final deal in ref.watch(currentDealsProvider).value ?? const []) {
+    final isSender = deal.isSender(accountId);
 
     if (deal.status.needsFunding && isSender) {
       items.add(
@@ -642,44 +790,21 @@ final attentionProvider = Provider.autoDispose<List<AttentionItem>>((ref) {
       continue;
     }
 
-    // The detail projection is richer; use it when this deal happens to be
-    // loaded. Nothing here fabricates a permission the server did not send.
-    final detail = ref.watch(dealDetailProvider(deal.id)).value;
-    final handover = detail?.handover;
-    if (handover != null) {
-      if (handover.canRevealDeliveryCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.revealDeliveryCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canSubmitDeliveryCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.submitDeliveryCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canSubmitPickupCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.submitPickupCode,
-            dealId: deal.id,
-          ),
-        );
-      } else if (handover.canRevealPickupCode) {
-        items.add(
-          AttentionItem(
-            reason: AttentionReason.revealPickupCode,
-            dealId: deal.id,
-          ),
-        );
-      }
+    final flags = deal.attention;
+    if (flags == null) continue;
+    final handoverReason = flags.canRevealDeliveryCode
+        ? AttentionReason.revealDeliveryCode
+        : flags.canSubmitDeliveryCode
+        ? AttentionReason.submitDeliveryCode
+        : flags.canSubmitPickupCode
+        ? AttentionReason.submitPickupCode
+        : flags.canRevealPickupCode
+        ? AttentionReason.revealPickupCode
+        : null;
+    if (handoverReason != null) {
+      items.add(AttentionItem(reason: handoverReason, dealId: deal.id));
     }
-
-    final ratings = detail?.ratings;
-    if (ratings != null && ratings.canRate && !ratings.submitted) {
+    if (flags.canRate) {
       items.add(
         AttentionItem(reason: AttentionReason.ratingOpen, dealId: deal.id),
       );
@@ -713,12 +838,34 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
   /// all — a transient `inactive` flicker rather than a real departure.
   static const _ignoreShorterThan = Duration(seconds: 1);
 
+  /// How recent a profile read must be for the first `resumed` after a launch
+  /// in an unknown state to skip its own.
+  static const _launchReadCovers = Duration(seconds: 30);
+
   DateTime? _leftAt;
+
+  /// Built before the platform reported any on-screen state. An iOS
+  /// background launch reports none, so the first `resumed` may be the first
+  /// real open, long after the launch read the profile.
+  bool _launchStateUnknown = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Built while off screen (a launch in the background): the first
+    // `resumed` is then a real return, not the launch.
+    switch (WidgetsBinding.instance.lifecycleState) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _leftAt = DateTime.now();
+      case null:
+        _launchStateUnknown = true;
+      case AppLifecycleState.resumed:
+      case AppLifecycleState.inactive:
+        break;
+    }
   }
 
   @override
@@ -732,7 +879,11 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        _leftAt = DateTime.now();
+        // The first departure, not the latest: a device returns through
+        // `paused → hidden → inactive → resumed`, and restamping on that
+        // `hidden` made every real absence look a few milliseconds long, so
+        // the profile was never re-read on a phone.
+        _leftAt ??= DateTime.now();
       case AppLifecycleState.resumed:
         _onResumed();
       case AppLifecycleState.inactive:
@@ -744,8 +895,22 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
   void _onResumed() {
     final away = _leftAt;
     _leftAt = null;
+    final firstAfterUnknownLaunch = _launchStateUnknown;
+    _launchStateUnknown = false;
 
-    if (away != null && DateTime.now().difference(away) < _ignoreShorterThan) {
+    if (away == null) {
+      // No `hidden`/`paused` before this `resumed`: an `inactive` flicker (the
+      // notification shade, the app switcher) or the launch itself, where the
+      // session restore is already reading the profile. Neither is a
+      // departure — unless the launch was in the background and this is the
+      // first open, which only the age of the last profile read can tell.
+      if (!firstAfterUnknownLaunch ||
+          ref
+              .read(sessionProvider.notifier)
+              .accountReadWithin(_launchReadCovers)) {
+        return;
+      }
+    } else if (DateTime.now().difference(away) < _ignoreShorterThan) {
       return;
     }
 
@@ -763,9 +928,8 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
 /// optimistic.
 void refreshVolatileState(WidgetRef ref) {
   ref
-    ..invalidate(dealsProvider)
-    ..invalidate(activeDealsProvider)
-    ..invalidate(historyDealsProvider)
+    ..invalidate(currentDealsProvider)
+    ..invalidate(dealHistoryProvider)
     ..invalidate(completedDealsCountProvider)
     ..invalidate(dealDetailProvider)
     ..invalidate(matchesProvider)

@@ -237,6 +237,57 @@ class ProductionEntrypointTests(SimpleTestCase):
             document = json.loads(path.read_text(encoding="utf-8"))
             assert document["deploy"]["healthcheckPath"] == "/readyz", path
 
+    def test_railway_lets_the_combined_launcher_drain_before_sigkill(self):
+        """Railway's default gap between SIGTERM and SIGKILL is zero seconds,
+        which would make every in-process drain unreachable."""
+
+        document = json.loads((REPO / "railway.json").read_text(encoding="utf-8"))
+        launcher = load_combined_launcher()
+        assert (
+            document["deploy"]["drainingSeconds"]
+            > launcher.CHILD_STOP_TIMEOUT_SECONDS
+        )
+
+    def test_email_send_budget_fits_inside_the_child_stop_window(self):
+        """The email worker detaches each SMTP send from shutdown so it is not
+        cut mid-DATA; that send (plus its 3s ack) must finish inside both the
+        Go service's own 15s drain and the launcher's SIGKILL window, or a
+        deploy turns an accepted email into an unacked duplicate."""
+
+        source = (
+            BACKEND / "services" / "internal" / "email" / "consumer.go"
+        ).read_text(encoding="utf-8")
+        send = int(re.search(r"\bsendTimeout = (\d+) \* time\.Second", source).group(1))
+        ack = int(re.search(r"\backTimeout = (\d+) \* time\.Second", source).group(1))
+        launcher = load_combined_launcher()
+        assert send + ack <= 15
+        assert send + ack < launcher.CHILD_STOP_TIMEOUT_SECONDS
+
+    def test_production_bounds_django_smtp_and_logs_access_safely(self):
+        """A stalled SMTP relay must not wedge the finance worker's loop, and
+        the access/ops loggers must reach the production JSON handler."""
+
+        result = boot_production(
+            "from config.wsgi import application; "
+            "from django.conf import settings; "
+            "assert 0 < settings.EMAIL_TIMEOUT <= 60, settings.EMAIL_TIMEOUT; "
+            "assert settings.PERFORMANCE_ACCESS_LOG_ENABLED; "
+            "loggers = settings.LOGGING['loggers']; "
+            "assert loggers['shiptrip.access']['level'] == 'INFO'; "
+            "assert loggers['shiptrip.ops']['level'] == 'INFO'"
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_no_gunicorn_access_log_writes_concrete_paths(self):
+        """Gunicorn's request line carries guest payment capabilities; the
+        middleware's route-template `http_request` line is the access log."""
+
+        launcher = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+        web = (MONOLITH / "railway.web.json").read_text(encoding="utf-8")
+        for source in (launcher, web):
+            assert "--access-logfile" not in source
+            assert "--access-logformat" not in source
+
     def test_container_images_pin_production_settings(self):
         """The image itself carries the module, not just the start command."""
 
@@ -547,6 +598,114 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "SHIPTRIP_EMBEDDED_REDIS"):
                 self.launcher["redis_topology"]()
+
+    def shared_redis(self, *, policy="noeviction", appendonly="yes", save="60 1"):
+        import redis
+
+        client = mock.MagicMock()
+        values = {
+            "maxmemory-policy": policy,
+            "maxmemory": "0",
+            "appendonly": appendonly,
+            "appendfsync": "everysec",
+            "save": save,
+        }
+
+        def config_get(name):
+            if values[name] is None:
+                raise redis.ResponseError("unknown command 'CONFIG'")
+            return {name: values[name]}
+
+        client.config_get.side_effect = config_get
+        return client
+
+    def probe(self, client, **kwargs):
+        stdout, stderr = mock.MagicMock(), mock.MagicMock()
+        with mock.patch("redis.Redis.from_url", return_value=client), mock.patch(
+            "sys.stdout", stdout
+        ), mock.patch("sys.stderr", stderr):
+            try:
+                self.launcher["probe_shared_redis"](
+                    "redis://default:do-not-print@redis.internal.invalid:6379", **kwargs
+                )
+            finally:
+                printed = "".join(
+                    str(call.args[0])
+                    for stream in (stdout, stderr)
+                    for call in stream.write.call_args_list
+                )
+        return printed
+
+    def test_shared_redis_is_proven_before_anything_depends_on_it(self):
+        source = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+        probe = source.index("probe_shared_redis(redis_url)")
+        assert probe < source.index('print("applying database migrations"')
+        # The probe belongs to the shared branch; embedded mode never dials out.
+        assert source.index("if embedded_redis:") < probe
+
+    def test_unreachable_shared_redis_fails_startup_without_leaking_the_url(self):
+        import redis
+
+        client = self.shared_redis()
+        client.ping.side_effect = redis.ConnectionError("connection refused")
+        with self.assertRaisesRegex(RuntimeError, "unreachable") as raised:
+            self.probe(client, timeout=0)
+        assert "redis.internal.invalid:6379" in str(raised.exception)
+        assert "do-not-print" not in str(raised.exception)
+        client.close.assert_called_once()
+
+    def test_rejected_credentials_fail_immediately(self):
+        import redis
+
+        client = self.shared_redis()
+        client.ping.side_effect = redis.AuthenticationError("WRONGPASS")
+        with self.assertRaisesRegex(RuntimeError, "credentials"):
+            self.probe(client, timeout=60)
+        assert client.ping.call_count == 1
+
+    def test_an_evicting_policy_fails_startup(self):
+        with self.assertRaisesRegex(RuntimeError, "allkeys-lru"):
+            self.probe(self.shared_redis(policy="allkeys-lru"))
+
+    def test_a_durable_instance_is_accepted_and_reported(self):
+        printed = self.probe(self.shared_redis(policy="noeviction"))
+        assert "maxmemory-policy=noeviction" in printed
+        assert "appendonly=yes" in printed
+        assert "WARNING" not in printed
+        assert "do-not-print" not in printed
+
+    def test_volatile_policies_cannot_touch_ttl_less_streams(self):
+        printed = self.probe(self.shared_redis(policy="volatile-lru"))
+        assert "maxmemory-policy=volatile-lru" in printed
+
+    def test_missing_persistence_or_hidden_config_is_loud_not_fatal(self):
+        printed = self.probe(self.shared_redis(appendonly="no", save=""))
+        assert "no AOF and no RDB" in printed
+
+        printed = self.probe(
+            self.shared_redis(policy=None, appendonly=None, save=None)
+        )
+        assert "maxmemory-policy=unverifiable" in printed
+        assert "hides its configuration" in printed
+
+    def test_a_timeout_while_reading_config_fails_cleanly(self):
+        """PING succeeded, then CONFIG GET timed out: a named RuntimeError,
+        not a raw traceback, and never the password-bearing URL."""
+
+        import redis
+
+        for error in (
+            redis.TimeoutError("Timeout reading from redis.internal.invalid"),
+            redis.ConnectionError("Connection reset by peer"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                client = self.shared_redis()
+                client.config_get.side_effect = error
+                with self.assertRaisesRegex(RuntimeError, "stopped answering") as raised:
+                    self.probe(client)
+                assert "redis.internal.invalid:6379" in str(raised.exception)
+                assert "do-not-print" not in str(raised.exception)
+                client.close.assert_called_once()
 
     def test_default_combined_database_budget_is_rolling_deploy_safe(self):
         with mock.patch.dict(os.environ, {}, clear=True):

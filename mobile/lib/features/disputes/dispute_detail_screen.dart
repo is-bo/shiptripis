@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/app_state.dart' show cancelOnDispose;
 import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/live/live_updates.dart';
@@ -54,7 +55,10 @@ final _disputeQuery = FutureProvider.autoDispose
           .register(LiveResource.dispute(key.disputeId), ref.invalidateSelf);
       ref.onDispose(unsubscribe);
       final repo = ref.watch(disputeRepositoryProvider);
-      final result = await repo.byId(key.disputeId);
+      final result = await repo.byId(
+        key.disputeId,
+        cancelToken: cancelOnDispose(ref),
+      );
       if (ref.read(accountProvider)?.id != key.accountId) {
         throw StateError('Discarded a dispute read from an older session.');
       }

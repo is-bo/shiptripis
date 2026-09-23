@@ -402,11 +402,9 @@ func (s *itSender) last() (FCMPayload, bool) {
 
 // itRunConsumer starts Run (and optionally Sweep) and returns a stop func.
 //
-// The group is created here, before Run starts, rather than relying on Run's
-// own XGroupCreate. Run creates it at "$" (new entries only), so a test that
-// XADDs while that call is still in flight would enqueue *behind* the group's
-// start position and hang forever. Creating it up front makes Run's call a
-// no-op (idempotent via BUSYGROUP) and removes the race.
+// The group is created here, before Run starts, at "$" so the test owns the
+// start position. Run's own call (at redisbus.GroupStartID) then hits
+// BUSYGROUP and is a no-op.
 func itRunConsumer(t *testing.T, c *Consumer, withSweep bool) func() {
 	t.Helper()
 	if err := c.rdb.XGroupCreate(context.Background(), c.stream, c.group, "$"); err != nil {
@@ -591,6 +589,10 @@ func TestG1SweeperRedeliversAfterSendFailure(t *testing.T) {
 	// the reclaim path runs in milliseconds; the code under test is identical.
 	consumer.sweepMinIdle = 50 * time.Millisecond
 	consumer.sweepInterval = 100 * time.Millisecond
+	// The handler defers any entry whose send could outlive sweepMinIdle, so
+	// its grace and send budget shrink with it.
+	consumer.deliverGrace = 5 * time.Millisecond
+	consumer.sendBudget = 10 * time.Millisecond
 
 	stopConsumer := itRunConsumer(t, consumer, true)
 	defer stopConsumer()

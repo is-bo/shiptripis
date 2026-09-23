@@ -1,0 +1,24 @@
+{
+	admin off
+	auto_https off
+}
+# Local load-harness edge. Mirrors backend/railway/Caddyfile's routing: the Go
+# realtime relays on their loopback ports, and one reverse proxy in front of
+# the Django web processes for everything else. serve.py fills the upstream
+# list with one entry per Waitress worker.
+:{$LOADTEST_PORT:8080} {
+	@chat path /ws/chat /ws/chat/*
+	handle @chat {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	@notif path /ws/notifications /ws/notifications/*
+	handle @notif {
+		reverse_proxy 127.0.0.1:8082
+	}
+
+	reverse_proxy {$LOADTEST_UPSTREAMS} {
+		lb_policy least_conn
+		header_up X-Forwarded-Proto http
+	}
+}

@@ -26,7 +26,7 @@ from apps.matching.models import Match, Offer
 from apps.ratings.models import Rating
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
-from .permissions import has_admin_permission, user_admin_roles
+from .permissions import ROLE_GROUP_NAMES, has_admin_permission, user_admin_roles
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
@@ -53,7 +53,17 @@ class AdminUserSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_admin_roles(self, obj):
-        return user_admin_roles(obj)
+        # K7-E: the user views prefetch ``groups``. ``user_admin_roles()``
+        # filters ``user.groups`` in SQL, which bypasses that prefetch and cost
+        # one query per row; the same selection over the prefetched rows is
+        # identical and free. Anything not prefetched keeps the direct lookup.
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("groups")
+        if prefetched is None:
+            return user_admin_roles(obj)
+        names = {group.name for group in prefetched}
+        return tuple(
+            sorted(slug for slug, name in ROLE_GROUP_NAMES.items() if name in names)
+        )
 
     def get_fields(self):
         fields = super().get_fields()

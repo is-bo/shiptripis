@@ -86,6 +86,7 @@ import '../../core/money/money.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
+import '../../design/components/images.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/place.dart';
@@ -2271,18 +2272,26 @@ class _PhotoPreview extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.file(
-                      File(file.path),
-                      fit: BoxFit.cover,
-                      // A picked file can be gone by the time it is drawn —
-                      // a share-sheet temporary, a revoked permission. A grey
-                      // placeholder is a far better answer than a red box of
-                      // framework text.
-                      errorBuilder: (_, _, _) => ColoredBox(
-                        color: c.surfaceSunken,
-                        child: Icon(
-                          Icons.image_not_supported_outlined,
-                          color: c.textTertiary,
+                    // Decoded at the preview's width, not the photo's 2048 px;
+                    // the upload still sends the file itself.
+                    LayoutBuilder(
+                      builder: (context, constraints) => Image.file(
+                        File(file.path),
+                        fit: BoxFit.cover,
+                        cacheWidth: decodeWidthFor(
+                          context,
+                          constraints.maxWidth,
+                        ),
+                        // A picked file can be gone by the time it is drawn —
+                        // a share-sheet temporary, a revoked permission. A
+                        // grey placeholder is a far better answer than a red
+                        // box of framework text.
+                        errorBuilder: (_, _, _) => ColoredBox(
+                          color: c.surfaceSunken,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: c.textTertiary,
+                          ),
                         ),
                       ),
                     ),

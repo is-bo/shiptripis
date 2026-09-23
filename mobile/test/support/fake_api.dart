@@ -39,16 +39,25 @@ class RecordedRequest {
   final Map<String, dynamic> body;
   final Map<String, dynamic> query;
 
+  /// True once the client cancelled this request while it was in flight.
+  bool cancelled = false;
+
   @override
   String toString() => '$method $path $body';
 }
 
 /// What the fake should answer with.
 class FakeResponse {
-  const FakeResponse(this.statusCode, [this.body = const <String, dynamic>{}]);
+  const FakeResponse(this.statusCode, [this.body = const <String, dynamic>{}])
+    : headers = const <String, List<String>>{};
+
+  /// For a contract carried in headers — the K4 bare-array lists say whether
+  /// another page follows in `X-Next-Page`, not in the body.
+  const FakeResponse.withHeaders(this.statusCode, this.body, this.headers);
 
   final int statusCode;
   final Object body;
+  final Map<String, List<String>> headers;
 }
 
 typedef FakeHandler = FutureOr<FakeResponse> Function(RecordedRequest request);
@@ -56,6 +65,11 @@ typedef FakeHandler = FutureOr<FakeResponse> Function(RecordedRequest request);
 class FakeBackend {
   final List<RecordedRequest> requests = <RecordedRequest>[];
   final Map<String, FakeHandler> _routes = <String, FakeHandler>{};
+
+  /// Answers any request no route claims. Null keeps the default: an unrouted
+  /// call is a loud failure. A whole-app test that boots every tab sets this
+  /// rather than enumerating each endpoint the shell happens to touch.
+  FakeHandler? fallback;
 
   static String _key(String method, String path) =>
       '${method.toUpperCase()} $path';
@@ -84,7 +98,7 @@ class FakeBackend {
 
   Future<FakeResponse> _dispatch(RecordedRequest request) async {
     requests.add(request);
-    final handler = _routes[_key(request.method, request.path)];
+    final handler = _routes[_key(request.method, request.path)] ?? fallback;
     if (handler == null) {
       // Louder than a 404: an unrouted call means the test's picture of the
       // contract and the client's disagree, and that is the bug worth seeing.
@@ -127,6 +141,7 @@ class _FakeAdapter implements HttpClientAdapter {
       },
       query: Map<String, dynamic>.from(options.queryParameters),
     );
+    unawaited(cancelFuture?.then((_) => request.cancelled = true));
 
     final response = await backend._dispatch(request);
     return ResponseBody.fromString(
@@ -134,6 +149,7 @@ class _FakeAdapter implements HttpClientAdapter {
       response.statusCode,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
+        ...response.headers,
       },
     );
   }
@@ -148,18 +164,42 @@ class _FakeAdapter implements HttpClientAdapter {
 /// `SessionController.restore()` path runs exactly as it does on a device: it
 /// finds a refresh token, calls `/api/me`, and signs the user in.
 class FakeTokenStore extends TokenStore {
-  FakeTokenStore({this.refresh = 'refresh-token', String? locale})
-    : _locale = locale,
-      super(const FlutterSecureStorage());
+  FakeTokenStore({
+    this.refresh = 'refresh-token',
+    String? locale,
+    this.accountSnapshot,
+  }) : _locale = locale,
+       super(const FlutterSecureStorage());
 
   final String? refresh;
+
+  /// The launch snapshot, as secure storage would hold it. Null by default,
+  /// so a test not about K5's fast launch keeps the `/api/me`-first restore.
+  String? accountSnapshot;
   String? _locale;
   String? _roleContext;
 
   @override
   Future<void> save({required String access, required String refresh}) async {
     invalidateIdentity();
+    accountSnapshot = null;
   }
+
+  @override
+  Future<String?> readAccountSnapshot() async => accountSnapshot;
+
+  @override
+  Future<bool> writeAccountSnapshotIfCurrent({
+    required int expectedIdentityGeneration,
+    required String json,
+  }) async {
+    if (identityGeneration != expectedIdentityGeneration) return false;
+    accountSnapshot = json;
+    return true;
+  }
+
+  @override
+  Future<void> deleteAccountSnapshot() async => accountSnapshot = null;
 
   @override
   Future<String?> readAccess() async => 'access-token';
@@ -185,7 +225,11 @@ class FakeTokenStore extends TokenStore {
     required int expectedIdentityGeneration,
     required String access,
     required String refresh,
-  }) async => identityGeneration == expectedIdentityGeneration;
+  }) async {
+    if (identityGeneration != expectedIdentityGeneration) return false;
+    accountSnapshot = null;
+    return true;
+  }
 
   @override
   Future<String?> readRoleContext() async => _roleContext;
@@ -202,12 +246,14 @@ class FakeTokenStore extends TokenStore {
   @override
   Future<void> clear() async {
     invalidateIdentity();
+    accountSnapshot = null;
   }
 
   @override
   Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
     if (identityGeneration != expectedIdentityGeneration) return false;
     invalidateIdentity();
+    accountSnapshot = null;
     return true;
   }
 
@@ -234,9 +280,18 @@ ProviderContainer containerFor(FakeBackend backend, {FakeTokenStore? tokens}) {
 /// for a camera, say. `Override` is not nameable from Riverpod 3's public API,
 /// so the override list has to be written as a literal at the call site rather
 /// than passed in here.
-ApiClient apiClientFor(FakeBackend backend, FakeTokenStore tokens) => ApiClient(
+///
+/// [tokens] may be a real [TokenStore] over in-memory storage, for a test about
+/// what the store itself keeps; [onSessionExpired] wires the terminal-refresh
+/// path the way `apiClientProvider` does in the app.
+ApiClient apiClientFor(
+  FakeBackend backend,
+  TokenStore tokens, {
+  OnSessionExpired? onSessionExpired,
+}) => ApiClient(
   tokens: tokens,
   dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
+  onSessionExpired: onSessionExpired,
 );
 
 // ---------------------------------------------------------------------------

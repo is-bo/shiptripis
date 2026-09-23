@@ -53,6 +53,7 @@ from .models import Match, MatchEvent, Offer
 from .offer_economics import OfferEconomicsReader
 from .serializers import (
     CounterOfferSerializer,
+    MatchListSerializer,
     MatchSerializer,
     OfferSerializer,
     SenderApplySerializer,
@@ -197,15 +198,19 @@ class MatchListView(APIView):
             # negotiation on this page, instead of one per serialized row.
             economics = OfferEconomicsReader()
             economics.prime(matches)
-            return MatchSerializer(
+            return MatchListSerializer(
                 matches,
                 many=True,
                 context={"request": request, "offer_economics": economics},
             ).data
 
+        # No `.distinct()`: every join here is single-valued (forward foreign
+        # keys and the one-to-one Deal) and the role union is one OR'd WHERE,
+        # so a Match cannot repeat. DISTINCT over this wide select only cost
+        # PostgreSQL about 65 ms of planning per page (K7 D).
         return paginated_array_response(
             request,
-            qs.distinct().order_by("-created_at", "-pk"),
+            qs.order_by("-created_at", "-pk"),
             serialize=serialize,
         )
 

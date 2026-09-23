@@ -246,7 +246,7 @@ class _AttentionSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final items = ref.watch(attentionProvider);
-    final deals = ref.watch(dealsProvider);
+    final deals = ref.watch(currentDealsProvider);
 
     // While the first load is in flight there is no honest answer to "does
     // anything need you", so the section shows its own shape rather than
@@ -365,10 +365,13 @@ class _InProgressSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    // Only the id: a profile refresh must not rebuild these rows (K5).
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final deals = ref.watch(activeDealsProvider);
 
-    if (account == null) return const SizedBox.shrink();
+    if (accountId == null) return const SizedBox.shrink();
 
     return AsyncView<List<Deal>>(
       value: deals,
@@ -399,7 +402,7 @@ class _InProgressSection extends ConsumerWidget {
             for (final deal in active.take(3)) ...[
               DeliveryCard(
                 deal: deal,
-                viewerId: account.id,
+                viewerId: accountId,
                 onTap: () => context.openDeal(deal.id),
               ),
               const SizedBox(height: AppSpace.md),
@@ -422,7 +425,6 @@ class _MyRequestsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final requests = ref.watch(myRequestsProvider);
-    final settled = ref.watch(settledRequestIdsProvider);
 
     return AsyncView(
       value: requests,
@@ -433,11 +435,10 @@ class _MyRequestsSection extends ConsumerWidget {
         onRetry: () => ref.invalidate(myRequestsProvider),
       ),
       data: (all) {
-        // A request's own status stops at `matched` for the whole life of the
-        // delivery, so it cannot say whether the shipment is still running.
-        // The linked Deal's server-derived activity state can.
+        // The server projects a request's status from its latest Deal, so
+        // "still running" is read from the request itself.
         final live = all
-            .where((r) => !r.status.isFinished && !settled.contains(r.id))
+            .where((r) => !r.status.isSettled)
             .toList(growable: false);
 
         if (live.isEmpty) {

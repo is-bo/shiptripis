@@ -23,20 +23,50 @@ abstract interface class NotificationSocketConnection {
   Future<void> close();
 }
 
+/// Monotonic time since an arbitrary fixed origin.
+typedef MonotonicClock = Duration Function();
+
 class NotificationSocket {
+  /// [elapsed] is the clock connection uptime is measured on. It must be
+  /// monotonic — a wall-clock change must not make a connection look older
+  /// or younger than it is — so by default it is a [Stopwatch].
   NotificationSocket({
     NotificationSocketConnector? connector,
     Random? random,
     Duration retryBase = const Duration(seconds: 1),
+    MonotonicClock? elapsed,
   }) : _connector = connector ?? _connectIO,
        _random = random ?? Random(),
-       _retryBase = retryBase;
+       _retryBase = retryBase,
+       _elapsed = elapsed;
 
   static const paths = <String>['/ws/notifications', '/ws/chat'];
+
+  /// How long a connection must stay open before its drop counts as a fresh
+  /// failure rather than the next one in a streak.
+  ///
+  /// The backoff used to reset the moment a handshake succeeded. An endpoint
+  /// that accepts and then drops at once — a restarting server behind the
+  /// edge, a network that completes the upgrade and loses the flow — was then
+  /// redialled every half second forever, and every one of those connects
+  /// asked for a catch-up. Three server ping intervals is long enough to prove
+  /// the connection carried traffic.
+  static const stableAfter = Duration(seconds: 30);
+
+  /// Client-side liveness. The server pings every 10 s, but answering pings
+  /// does not tell the phone its own path died: after a network change a
+  /// half-open socket could sit silent for many minutes while events were
+  /// lost. A ping the peer does not answer within this interval closes the
+  /// connection, which enters the normal reconnect-and-catch-up path.
+  static const pingInterval = Duration(seconds: 20);
 
   final NotificationSocketConnector _connector;
   final Random _random;
   final Duration _retryBase;
+  final MonotonicClock? _elapsed;
+  final Stopwatch _clock = Stopwatch()..start();
+
+  Duration _now() => _elapsed?.call() ?? _clock.elapsed;
   final Map<String, _EndpointState> _endpoints = {
     for (final path in paths) path: _EndpointState(),
   };
@@ -62,6 +92,26 @@ class NotificationSocket {
     await Future.wait([for (final path in paths) _connect(path, generation)]);
   }
 
+  /// Redials at once every endpoint that is waiting out a backoff, from a
+  /// fresh streak. Live connections, and a dial already in progress, are left
+  /// alone, so a healthy pair costs nothing.
+  ///
+  /// For a return to the app that never left the screen — the shade, Control
+  /// Center — where the user may just have fixed the network the backoff was
+  /// waiting on (up to 32 s).
+  void reconnectIdle() {
+    if (!_running) return;
+    final generation = _generation;
+    for (final MapEntry(key: path, value: endpoint) in _endpoints.entries) {
+      final retry = endpoint.retry;
+      if (endpoint.connection != null || retry == null) continue;
+      retry.cancel();
+      endpoint.retry = null;
+      endpoint.attempt = 0;
+      unawaited(_connect(path, generation));
+    }
+  }
+
   Future<void> stop() async {
     _running = false;
     _generation++;
@@ -84,6 +134,7 @@ class NotificationSocket {
       if (connection != null) connections.add(connection);
       endpoint.connection = null;
       endpoint.attempt = 0;
+      endpoint.connectedAt = null;
       endpoint.refreshBeforeConnect = false;
       endpoint.refreshedSinceConnected = false;
     }
@@ -126,7 +177,7 @@ class NotificationSocket {
         return;
       }
       endpoint.connection = connection;
-      endpoint.attempt = 0;
+      endpoint.connectedAt = _now();
       endpoint.refreshBeforeConnect = false;
       endpoint.refreshedSinceConnected = false;
       endpoint.subscription = connection.stream.listen(
@@ -173,6 +224,11 @@ class NotificationSocket {
     }
     endpoint.subscription = null;
     endpoint.connection = null;
+    final connectedAt = endpoint.connectedAt;
+    endpoint.connectedAt = null;
+    if (connectedAt != null && _now() - connectedAt >= stableAfter) {
+      endpoint.attempt = 0;
+    }
     unawaited(connection.close());
     _scheduleRetry(path, generation);
   }
@@ -200,6 +256,7 @@ class NotificationSocket {
     final channel = IOWebSocketChannel.connect(
       uri,
       headers: headers,
+      pingInterval: pingInterval,
       connectTimeout: AppConfig.connectTimeout,
     );
     try {
@@ -221,6 +278,7 @@ class _EndpointState {
   NotificationSocketConnection? connection;
   StreamSubscription<dynamic>? subscription;
   Timer? retry;
+  Duration? connectedAt;
   int attempt = 0;
   bool refreshBeforeConnect = false;
   bool refreshedSinceConnected = false;

@@ -29,9 +29,10 @@
 /// A guest paying is a websocket event first: `payment.*` invalidates this
 /// order's resource and the sheet re-reads within a round trip of the webhook.
 /// The fallback poll exists for a Sender whose socket is down; it runs only
-/// while a link is live, backs off from 3 s to a 20 s ceiling, and stops after
-/// ten minutes. Returning to the app — typically from the messaging app the
-/// link was just shared in — re-reads straight away and restarts it.
+/// while a link is live and the app is on screen, backs off from 3 s to a 20 s
+/// ceiling, and stops after ten minutes. Returning to the app — typically from
+/// the messaging app the link was just shared in — re-reads straight away and
+/// restarts it.
 library;
 
 import 'dart:async';
@@ -116,8 +117,27 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   Timer? _copiedTimer;
   Duration _pollElapsed = Duration.zero;
   int _pollTick = 0;
+
+  /// Bumped whenever the fallback is cancelled or restarted, so a tick whose
+  /// read was in flight at that moment cannot schedule a second loop beside
+  /// the new one.
+  int _pollGeneration = 0;
+
+  /// Off screen, typically in the messaging app the link went to. The socket
+  /// is closed then too, and the return re-reads and restarts the fallback,
+  /// so ticking while away only spends requests nobody sees.
+  bool _away = false;
   bool _settled = false;
   bool _readingOrder = false;
+
+  /// [_leftApp] when the order read in flight was sent. A read sent before
+  /// the Sender last left the app may predate what happened while they were
+  /// away, so a return during it asks once more when it lands.
+  int _orderReadSince = 0;
+  bool _rereadOrder = false;
+
+  /// Bumped every time the app goes off screen.
+  int _leftApp = 0;
   bool _readingLink = false;
   LiveUnsubscribe? _liveUnsubscribe;
 
@@ -143,7 +163,7 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _pollTimer?.cancel();
+    _cancelPoll();
     _copiedTimer?.cancel();
     _liveUnsubscribe?.call();
     super.dispose();
@@ -154,7 +174,20 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
     // Back from the messaging app the link was shared in: the likeliest moment
     // for something to have changed. Ask now, and give the fallback a fresh
     // budget since the Sender is evidently still waiting.
-    if (state != AppLifecycleState.resumed || _settled) return;
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _away = true;
+        _leftApp++;
+        _cancelPoll();
+        return;
+      case AppLifecycleState.resumed:
+        _away = false;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        return;
+    }
+    if (_settled) return;
     unawaited(_refreshOrder());
     unawaited(_readLink());
     _restartPolling();
@@ -311,8 +344,20 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   // -------------------------------------------------------------------------
 
   Future<void> _refreshOrder() async {
-    if (_readingOrder || !mounted) return;
+    if (!mounted) return;
+    if (_readingOrder) {
+      if (_orderReadSince != _leftApp) _rereadOrder = true;
+      return;
+    }
     _readingOrder = true;
+    _orderReadSince = _leftApp;
+    var ended = false;
+    void end() {
+      if (ended) return;
+      ended = true;
+      _endOrderRead();
+    }
+
     final before = _order.latestAttempt;
     try {
       final updated = await _repo.order(_reference);
@@ -327,21 +372,27 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
       // paying" flag changes, so re-read the link then and only then.
       final after = updated.latestAttempt;
       if (after?.id != before?.id || after?.status != before?.status) {
-        _readingOrder = false;
+        end();
         await _readLink();
       }
     } on ApiException {
       // The next tick, event or resume asks again.
     } finally {
-      _readingOrder = false;
+      end();
     }
+  }
+
+  void _endOrderRead() {
+    _readingOrder = false;
+    if (!_rereadOrder) return;
+    _rereadOrder = false;
+    if (mounted && !_settled) unawaited(_refreshOrder());
   }
 
   void _markSettled() {
     if (_settled) return;
     _settled = true;
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    _cancelPoll();
     _liveUnsubscribe?.call();
     _liveUnsubscribe = null;
     if (mounted) setState(() {});
@@ -352,22 +403,27 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
   // Fallback polling
   // -------------------------------------------------------------------------
 
-  /// Somebody could be paying only while a link is live.
+  /// Somebody could be paying only while a link is live — and only a Sender
+  /// looking at the sheet needs the fallback to notice.
   bool get _pollingApplies =>
-      !_settled && _link?.state == GuestLinkState.active;
+      !_settled && !_away && _link?.state == GuestLinkState.active;
+
+  void _cancelPoll() {
+    _pollGeneration++;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
 
   void _syncPolling() {
     if (!_pollingApplies) {
-      _pollTimer?.cancel();
-      _pollTimer = null;
+      _cancelPoll();
       return;
     }
     if (_pollTimer == null) _schedulePoll();
   }
 
   void _restartPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    _cancelPoll();
     _pollTick = 0;
     _pollElapsed = Duration.zero;
     _syncPolling();
@@ -388,9 +444,10 @@ class _GuestPaymentSheetState extends ConsumerState<GuestPaymentSheet>
         : _pollCeiling;
     _pollTick++;
     _pollElapsed += delay;
+    final generation = _pollGeneration;
     _pollTimer = Timer(delay, () async {
       await _refreshOrder();
-      _schedulePoll();
+      if (generation == _pollGeneration) _schedulePoll();
     });
   }
 

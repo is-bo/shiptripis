@@ -57,13 +57,16 @@ class DealScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final account = ref.watch(accountProvider);
+    // Only the id: a profile refresh must not rebuild the whole Deal (K5).
+    final accountId = ref.watch(
+      accountProvider.select((account) => account?.id),
+    );
     final deal = ref.watch(dealDetailProvider(dealId));
     final loadedDeal = deal.value;
     final hasDealAccess =
-        account != null &&
+        accountId != null &&
         loadedDeal != null &&
-        loadedDeal.moneyPerspectiveFor(account.id) != null;
+        loadedDeal.moneyPerspectiveFor(accountId) != null;
 
     return AppScaffold(
       topBar: AppTopBar(
@@ -97,8 +100,8 @@ class DealScreen extends ConsumerWidget {
             children: const [SkeletonDetail()],
           ),
           data: (data) {
-            if (account == null) return const SkeletonDetail();
-            final perspective = data.moneyPerspectiveFor(account.id);
+            if (accountId == null) return const SkeletonDetail();
+            final perspective = data.moneyPerspectiveFor(accountId);
             if (perspective == null) return const _DealUnavailable();
             final isSender = perspective.isSender;
 

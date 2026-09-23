@@ -7,11 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
 	"shiptrip/pkg/wsproto"
 )
@@ -302,4 +304,131 @@ func eventuallyTrue(t *testing.T, pred func() bool) bool {
 		time.Sleep(2 * time.Millisecond)
 	}
 	return pred()
+}
+
+// chatMessage builds a pub/sub message on the one channel chat subscribes to.
+func chatMessage(t *testing.T, eventID string, targets []int64) redisbus.Message {
+	t.Helper()
+	return redisbus.Message{Channel: channelChatMessageNew, Payload: chatEnvelope(t, eventID, targets, nil)}
+}
+
+func fillDispatchPool(d *Dispatcher) {
+	for range dispatchConcurrency {
+		d.dispatchSem <- struct{}{}
+	}
+}
+
+func TestScheduleDispatch_DropsOnlyAfterTheSubmitTimeout(t *testing.T) {
+	const svc = "chat-dispatch-timeout-test"
+	hub := newStubRouter()
+	d := newTestDispatcher(hub, &stubReceipts{})
+	d.metrics = metrics.Register(svc)
+	fillDispatchPool(d) // a stuck pool: nothing ever releases
+
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		d.scheduleDispatch(context.Background(), chatMessage(t, "evt-drop", []int64{42}))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(dispatchSubmitTimeout + time.Second):
+		t.Fatal("scheduleDispatch blocked past its submit timeout instead of dropping")
+	}
+	if waited := time.Since(start); waited < dispatchSubmitTimeout {
+		t.Errorf("dropped after %v, want a wait of at least %v first", waited, dispatchSubmitTimeout)
+	}
+	if got := readCounter(svc, "dispatch_drops_total"); got != 1 {
+		t.Errorf("dispatch_drops_total = %d, want 1", got)
+	}
+	if calls := hub.callsCopy(); len(calls) != 0 {
+		t.Errorf("dropped message still reached the hub: %+v", calls)
+	}
+}
+
+// A slot that frees up inside the submit timeout is taken, not dropped.
+func TestScheduleDispatch_WaitsForASlotThatFreesUp(t *testing.T) {
+	const svc = "chat-dispatch-wait-test"
+	hub := newStubRouter()
+	hub.sockets[42] = 1
+	d := newTestDispatcher(hub, &stubReceipts{})
+	d.metrics = metrics.Register(svc)
+	fillDispatchPool(d)
+	go func() {
+		time.Sleep(dispatchSubmitTimeout / 5)
+		<-d.dispatchSem
+	}()
+
+	d.scheduleDispatch(context.Background(), chatMessage(t, "evt-waited", []int64{42}))
+	d.dispatchWG.Wait()
+	d.receiptWG.Wait()
+
+	if got := hub.callsCopy(); len(got) != 1 || got[0].Env.EventID != "evt-waited" {
+		t.Fatalf("Send calls = %+v, want the one waited-for message", got)
+	}
+	if got := readCounter(svc, "dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0", got)
+	}
+}
+
+// slowRouter holds each Send for a fixed time, standing in for a busy hub.
+type slowRouter struct {
+	*stubRouter
+	delay time.Duration
+}
+
+func (s *slowRouter) Send(userID int64, env wsproto.Envelope) int {
+	time.Sleep(s.delay)
+	return s.stubRouter.Send(userID, env)
+}
+
+// A burst far faster than the pool drains is absorbed without a drop. Before
+// the fix the loop dropped the moment all 128 workers were busy.
+func TestScheduleDispatch_AbsorbsABurstWithoutDropping(t *testing.T) {
+	const (
+		svc    = "chat-dispatch-burst-test"
+		events = 2_000
+	)
+	stub := newStubRouter()
+	d := newTestDispatcher(stub, &stubReceipts{})
+	d.hub = &slowRouter{stubRouter: stub, delay: 2 * time.Millisecond}
+	d.metrics = metrics.Register(svc)
+
+	for i := range events {
+		d.scheduleDispatch(context.Background(), chatMessage(t, "evt-burst-"+strconv.Itoa(i), []int64{7}))
+	}
+	d.dispatchWG.Wait()
+
+	if got := len(stub.callsCopy()); got != events {
+		t.Errorf("relayed %d of %d burst messages", got, events)
+	}
+	if got := readCounter(svc, "dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0", got)
+	}
+}
+
+// Shutdown during a wait returns at once and is not counted as a drop.
+func TestScheduleDispatch_ReturnsWhenCancelledWhileWaiting(t *testing.T) {
+	const svc = "chat-dispatch-cancel-wait-test"
+	d := newTestDispatcher(newStubRouter(), &stubReceipts{})
+	d.metrics = metrics.Register(svc)
+	fillDispatchPool(d)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		d.scheduleDispatch(ctx, chatMessage(t, "evt-cancel", []int64{1}))
+		close(done)
+	}()
+	time.Sleep(dispatchSubmitTimeout / 10)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(dispatchSubmitTimeout / 2):
+		t.Fatal("scheduleDispatch kept waiting after ctx was cancelled")
+	}
+	if got := readCounter(svc, "dispatch_drops_total"); got != 0 {
+		t.Errorf("dispatch_drops_total = %d, want 0 on shutdown", got)
+	}
 }

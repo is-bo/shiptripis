@@ -34,7 +34,7 @@ import '../../l10n/app_localizations.dart';
 final _quoteProvider = FutureProvider.autoDispose
     .family<CancellationQuote, int>((ref, dealId) async {
       final repo = ref.watch(dealRepositoryProvider);
-      return repo.cancellationQuote(dealId);
+      return repo.cancellationQuote(dealId, cancelToken: cancelOnDispose(ref));
     });
 
 class CancelScreen extends ConsumerStatefulWidget {

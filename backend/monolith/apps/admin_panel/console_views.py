@@ -49,7 +49,7 @@ from apps.core.business_settings import (
 )
 from apps.core.models import BusinessSettingsVersion
 from apps.core.policy_display import boost_packages, policy_rows
-from apps.core.storage import store_for_bucket, storage_for
+from apps.core.storage import readable_many, store_for_bucket, storage_for
 from apps.deals.models import Deal, DealEvent
 from apps.disputes.models import Dispute, DisputeEvidence
 from apps.disputes.services import (
@@ -856,20 +856,32 @@ def kyc_evidence_slots(submission, *, user, request=None):
     for a reviewer who may see evidence at all. Shared by KYC review, the payout
     identity check and the payout-method review page, so all three say the same
     thing about the same document.
+
+    The HEADs run side by side on a bounded, no-retry probe, so a storage
+    outage costs the page one short probe rather than three long ones in
+    series, and every slot then reads "temporarily unavailable, try again".
     """
 
     may_view_evidence = has_admin_permission(user, "view_evidence")
     store = storage_for("kyc")
     evidence = []
     unavailable = False
-    for slot, label, key in (
-        ("front", "Document front", submission.front_image_key),
-        ("back", "Document back", submission.back_image_key),
-        ("selfie", "Applicant selfie", submission.selfie_image_key),
-    ):
-        if not key:
-            continue
-        reachable = store.readable(key) if may_view_evidence else True
+    slots = [
+        (slot, label, key)
+        for slot, label, key in (
+            ("front", "Document front", submission.front_image_key),
+            ("back", "Document back", submission.back_image_key),
+            ("selfie", "Applicant selfie", submission.selfie_image_key),
+        )
+        if key
+    ]
+    reachability = (
+        readable_many(store, (key for _slot, _label, key in slots))
+        if may_view_evidence
+        else {}
+    )
+    for slot, label, key in slots:
+        reachable = reachability[key] if may_view_evidence else True
         if not reachable:
             unavailable = True
             logger.error(

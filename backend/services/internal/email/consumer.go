@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"shiptrip/pkg/metrics"
 	"shiptrip/pkg/redisbus"
+	"shiptrip/pkg/retry"
 )
 
 // Consumer drains the `email:send` Redis Stream and sends each entry over
@@ -28,15 +30,17 @@ import (
 // A separate Sweep goroutine runs XAUTOCLAIM to reclaim PEL entries from pods
 // that died after XReadGroup but before XAck.
 type Consumer struct {
-	rdb           *redisbus.Client
+	rdb           streamClient
 	sender        EmailSender
 	receipts      ReceiptStore
 	stream        string
 	group         string
 	name          string
 	log           *slog.Logger
+	metrics       *metrics.Group
 	sweepMinIdle  time.Duration
 	sweepInterval time.Duration
+	maxEntryAge   time.Duration
 
 	// sem bounds concurrent handle() goroutines so a slow SMTP endpoint can't
 	// grow goroutines without limit. wg tracks them so Run/Sweep don't return
@@ -44,6 +48,18 @@ type Consumer struct {
 	// re-deliver via the sweeper.
 	sem chan struct{}
 	wg  sync.WaitGroup
+}
+
+// streamClient is the Redis surface the consumer drives (satisfied by
+// *redisbus.Client). Unit tests substitute a fake to exercise group recovery
+// and the sweeper's cursor without a live Redis.
+type streamClient interface {
+	XGroupCreate(ctx context.Context, stream, group, start string) error
+	XReadGroup(ctx context.Context, args redisbus.XReadGroupArgs) ([]redisbus.StreamMessage, error)
+	XAutoClaim(ctx context.Context, args redisbus.XAutoClaimArgs) ([]redisbus.StreamMessage, string, error)
+	XAck(ctx context.Context, stream, group string, ids ...string) error
+	Exists(ctx context.Context, key string) (bool, error)
+	SetEX(ctx context.Context, key string, value any, ttl time.Duration) error
 }
 
 // ConsumerConfig wires the runtime knobs. Defaults match the FCM consumer's
@@ -59,6 +75,9 @@ type ConsumerConfig struct {
 	// Receipts is the durable PostgreSQL acknowledgement boundary. Production
 	// always supplies it; tests may omit it to use the no-op implementation.
 	Receipts ReceiptStore
+	// Metrics receives the consumer's drop counters. Optional: nil disables
+	// them. cmd/email passes the service group, which it logs periodically.
+	Metrics *metrics.Group
 }
 
 const (
@@ -77,19 +96,35 @@ const (
 	// holds one PEL entry and at most one SMTP dial's worth of memory.
 	handleConcurrency = 32
 
-	// sendTimeout caps a single SMTP send (dial + STARTTLS + auth + DATA).
+	// sendTimeout caps one handler's detached work: the receipt and dedup
+	// checks plus a single SMTP send (dial + STARTTLS + auth + DATA).
 	// Detached from the parent ctx so a graceful shutdown mid-send completes
-	// rather than leaving the entry half-sent and unacked.
-	sendTimeout = 30 * time.Second
+	// rather than leaving the entry half-sent and unacked. sendTimeout plus
+	// ackTimeout must fit cmd/email's 15s shutdownTimeout, which in turn sits
+	// inside the combined launcher's 20s SIGKILL window (start.py
+	// CHILD_STOP_TIMEOUT_SECONDS); test_deployment_safety pins both.
+	sendTimeout = 12 * time.Second
+	// ackTimeout caps the detached XAck after a send.
+	ackTimeout = 3 * time.Second
 
 	// sentKeyTTL is how long the email:sent:<event_id> dedup marker lives.
 	// Long enough to cover any realistic sweeper-retry window; short enough
 	// not to accumulate. 10 minutes mirrors the OTP validity ballpark.
 	sentKeyTTL = 10 * time.Minute
+
+	// MaxEntryAge is how long one stream entry keeps being retried. Nothing
+	// else bounds a PEL retry: the sweeper reclaims a failing entry every
+	// ~60-90s for as long as the stream holds it. Every entry is backed by a
+	// Django OutboundMessage that re-enqueues the same event id after its
+	// two-minute receipt timeout and fails the obligation once its attempt
+	// budget is spent, so an entry this old has either been superseded by a
+	// fresh one or belongs to an obligation Django already gave up on.
+	MaxEntryAge = 30 * time.Minute
 )
 
 // NewConsumer builds a Consumer with sensible defaults. Caller need not
-// pre-create the group — Run does it (idempotent via redisbus.XGroupCreate).
+// pre-create the group — Run does it (idempotent via redisbus.XGroupCreate,
+// starting at redisbus.GroupStartID).
 func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Consumer {
 	if log == nil {
 		log = slog.Default()
@@ -119,8 +154,10 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 		group:         cfg.ConsumerGroup,
 		name:          cfg.ConsumerName,
 		log:           log,
+		metrics:       cfg.Metrics,
 		sweepMinIdle:  SweepMinIdle,
 		sweepInterval: SweepInterval,
+		maxEntryAge:   MaxEntryAge,
 		sem:           make(chan struct{}, handleConcurrency),
 	}
 }
@@ -128,7 +165,7 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 // Run is the main consumer loop. Blocks until ctx is cancelled and every
 // in-flight handler has finished.
 func (c *Consumer) Run(ctx context.Context) error {
-	if err := c.rdb.XGroupCreate(ctx, c.stream, c.group, "$"); err != nil {
+	if err := c.ensureGroup(ctx); err != nil {
 		return fmt.Errorf("email: xgroup create: %w", err)
 	}
 	c.log.Info("email consumer started",
@@ -151,6 +188,15 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
 			}
+			if redisbus.IsNoGroup(err) {
+				// The shared Redis lost the stream or group under a running
+				// worker. Recreate it; the next read resumes immediately.
+				c.log.Warn("email consumer group missing; recreating",
+					"stream", c.stream, "group", c.group)
+				if err = c.ensureGroup(ctx); err == nil {
+					continue
+				}
+			}
 			c.log.Error("email xreadgroup", "err", err)
 			// Don't tight-loop on a broken Redis.
 			select {
@@ -166,6 +212,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// ensureGroup creates the stream and group if either is missing. See
+// redisbus.GroupStartID for why the start is neither "$" nor "0".
+func (c *Consumer) ensureGroup(ctx context.Context) error {
+	return c.rdb.XGroupCreate(ctx, c.stream, c.group, redisbus.GroupStartID(time.Now()))
 }
 
 // Sweep runs XAUTOCLAIM on a fixed interval, reclaiming PEL entries from dead
@@ -243,6 +295,13 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 		c.ack(m.ID)
 		return
 	}
+	if age, ok := retry.EntryAge(m.ID, time.Now()); ok && age > c.maxEntryAge {
+		c.count("stale_drops_total")
+		c.log.Warn("email: entry outlived its retry window; acking to drop",
+			"event_id", p.EventID, "id", m.ID, "age_seconds", int64(age.Seconds()))
+		c.ack(m.ID)
+		return
+	}
 
 	// Detach from the parent ctx: once we're past decode we've committed to
 	// either acking or leaving in PEL, and Run's defer wg.Wait() already holds
@@ -287,8 +346,16 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	}
 
 	if err := c.sender.Send(sendCtx, p); err != nil {
-		c.log.Warn("email send failed; leaving in PEL for sweep",
-			"event_id", p.EventID, "kind", p.Kind, "err", err)
+		// Never err itself: go-mail's error text and an SMTP reply line can
+		// both name the recipient, and a transient failure repeats this line
+		// on every sweeper retry. SendFailureLogAttrs keeps codes and classes.
+		attrs := append([]any{"event_id", p.EventID, "kind", p.Kind}, SendFailureLogAttrs(err)...)
+		if _, ok := AsPermanent(err); ok {
+			c.log.Error("email send rejected permanently; acking (Django owns the retry budget)", attrs...)
+			c.ack(m.ID)
+			return
+		}
+		c.log.Warn("email send failed; leaving in PEL for sweep", attrs...)
 		return
 	}
 
@@ -314,9 +381,16 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 // sweep abort) doesn't leave a sent mail unacked — which would surface as a
 // duplicate on next sweep.
 func (c *Consumer) ack(id string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ackTimeout)
 	defer cancel()
 	if err := c.rdb.XAck(ctx, c.stream, c.group, id); err != nil {
 		c.log.Warn("email xack failed", "id", id, "err", err)
+	}
+}
+
+// count bumps a consumer counter when a metrics group is wired.
+func (c *Consumer) count(name string) {
+	if c.metrics != nil {
+		c.metrics.Counter(name, 1)
 	}
 }

@@ -29,6 +29,7 @@ import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
+import '../../design/components/images.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -48,7 +49,9 @@ import 'request_labels.dart';
 
 final _requestPricingProvider = FutureProvider.autoDispose
     .family<RequestPricing, int>((ref, id) async {
-      return ref.watch(requestRepositoryProvider).requestPricing(id);
+      return ref
+          .watch(requestRepositoryProvider)
+          .requestPricing(id, cancelToken: cancelOnDispose(ref));
     });
 
 class RequestDetailScreen extends ConsumerStatefulWidget {
@@ -726,13 +729,19 @@ class _ItemPhoto extends ConsumerWidget {
                   ),
                 ),
               ),
-              data: (value) => Image.network(
-                value,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Center(
-                  child: Icon(
-                    Icons.image_not_supported_outlined,
-                    color: c.textTertiary,
+              // Decoded at the width it is drawn, not at the upload's full
+              // resolution: a 2048 px photo is ~12 MB of pixels in memory
+              // for a 200 dp strip.
+              data: (value) => LayoutBuilder(
+                builder: (context, constraints) => Image.network(
+                  value,
+                  fit: BoxFit.cover,
+                  cacheWidth: decodeWidthFor(context, constraints.maxWidth),
+                  errorBuilder: (_, _, _) => Center(
+                    child: Icon(
+                      Icons.image_not_supported_outlined,
+                      color: c.textTertiary,
+                    ),
                   ),
                 ),
               ),

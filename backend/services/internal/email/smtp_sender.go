@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strings"
 
 	"github.com/wneessen/go-mail"
 )
@@ -32,6 +34,7 @@ type SMTPConfig struct {
 // concurrent handlers.
 type smtpSender struct {
 	client *mail.Client
+	host   string // named in failure logs; never the recipient
 	from   string // formatted "Name <addr>" or bare addr — set on each Msg
 	name   string
 	log    *slog.Logger
@@ -95,6 +98,7 @@ func NewSMTPSender(cfg SMTPConfig, log *slog.Logger) (EmailSender, error) {
 	)
 	return &smtpSender{
 		client: client,
+		host:   cfg.Host,
 		from:   cfg.FromAddr,
 		name:   cfg.FromName,
 		log:    log,
@@ -106,19 +110,168 @@ func NewSMTPSender(cfg SMTPConfig, log *slog.Logger) (EmailSender, error) {
 func (s *smtpSender) Send(ctx context.Context, p EmailPayload) error {
 	msg, err := s.buildMessage(p)
 	if err != nil {
-		// A malformed address can't be fixed by retrying — but the consumer
-		// already validated `to` in decodePayload, so this is rare. Surface
-		// it; handle() logs and the sweeper will keep retrying (the daily
-		// G6b audit catches a permanently-stuck entry).
-		return fmt.Errorf("email: build message (event %s): %w", p.EventID, err)
+		// A malformed address can't be fixed by retrying — the consumer
+		// already validated `to` in decodePayload, so this is rare. It is
+		// permanent: the consumer acks it and Django's obligation keeps the
+		// bounded retry budget. go-mail's parse error quotes the address, so
+		// only the class survives into Error().
+		return &PermanentError{Err: &SendFailure{Class: "invalid_message", cause: err}}
 	}
 	if err := s.client.DialAndSendWithContext(ctx, msg); err != nil {
-		return fmt.Errorf("email: smtp send (event %s): %w", p.EventID, err)
+		failure := newSendFailure(s.host, err)
+		if msg.IsDelivered() {
+			// The server accepted DATA; the error came from the RSET or QUIT
+			// after it. Retrying would deliver the same mail a second time.
+			s.log.Warn("email: smtp error after the message was accepted; treating as sent",
+				append([]any{"event_id", p.EventID, "kind", p.Kind}, failure.LogAttrs()...)...)
+			return nil
+		}
+		if code := permanentReplyCode(err); code != 0 {
+			return &PermanentError{Err: failure, Code: code}
+		}
+		return failure
 	}
 	// Recipient addresses are PII. Event id + template kind are sufficient for
 	// correlation with the PostgreSQL outbox and provider diagnostics.
 	s.log.Debug("email sent", "event_id", p.EventID, "kind", p.Kind)
 	return nil
+}
+
+// SendFailure is the log-safe form of an SMTP send error. go-mail's own error
+// text names the affected recipients ("affected recipient(s): <address>"), and
+// a 4xx/5xx reply line or an AUTH rejection often quotes an address too, so
+// Error() carries only fixed vocabulary: the failure class, the relay host,
+// and the numeric reply codes. The raw error stays reachable through Unwrap
+// for classification, and must never be logged.
+type SendFailure struct {
+	// Class is one of: smtp_reply, dial, tls, auth, timeout, canceled,
+	// transport, invalid_message.
+	Class string
+	// Host is the configured SMTP relay. Empty when the send never dialled.
+	Host string
+	// Code and Enhanced are the SMTP reply code and RFC 3463 status (for
+	// example 451 and "4.2.2") when Class is smtp_reply.
+	Code     int
+	Enhanced string
+	// Stage is go-mail's fixed description of the step that failed (for
+	// example "SMTP RCPT TO failed").
+	Stage string
+	cause error
+}
+
+func (e *SendFailure) Error() string {
+	var b strings.Builder
+	b.WriteString("email: smtp send failed: ")
+	b.WriteString(e.Class)
+	if e.Stage != "" {
+		b.WriteString(" at ")
+		b.WriteString(e.Stage)
+	}
+	if e.Code != 0 {
+		fmt.Fprintf(&b, " (reply %d", e.Code)
+		if e.Enhanced != "" {
+			b.WriteString(" ")
+			b.WriteString(e.Enhanced)
+		}
+		b.WriteString(")")
+	}
+	if e.Host != "" {
+		b.WriteString(" host ")
+		b.WriteString(e.Host)
+	}
+	return b.String()
+}
+
+func (e *SendFailure) Unwrap() error { return e.cause }
+
+// LogAttrs returns the slog attributes for this failure. Nothing here can
+// carry a recipient address.
+func (e *SendFailure) LogAttrs() []any {
+	attrs := []any{"failure", e.Class}
+	if e.Stage != "" {
+		attrs = append(attrs, "stage", e.Stage)
+	}
+	if e.Code != 0 {
+		attrs = append(attrs, "smtp_code", e.Code)
+	}
+	if e.Enhanced != "" {
+		attrs = append(attrs, "smtp_status", e.Enhanced)
+	}
+	if e.Host != "" {
+		attrs = append(attrs, "smtp_host", e.Host)
+	}
+	return attrs
+}
+
+// enhancedStatusPattern is RFC 3463's class.subject.detail. Anything else in
+// that field is dropped rather than logged.
+var enhancedStatusPattern = regexp.MustCompile(`^[245]\.\d{1,3}\.\d{1,3}$`)
+
+// newSendFailure classifies a go-mail error without keeping any of its text.
+func newSendFailure(host string, err error) *SendFailure {
+	f := &SendFailure{Host: host, cause: err}
+	var sendErr *mail.SendError
+	switch {
+	case errors.As(err, &sendErr):
+		f.Class = "smtp_reply"
+		f.Stage = sendErr.Reason.String()
+		f.Code = sendErr.ErrorCode()
+		if status := sendErr.EnhancedStatusCode(); enhancedStatusPattern.MatchString(status) {
+			f.Enhanced = status
+		}
+	case errors.Is(err, context.DeadlineExceeded):
+		f.Class = "timeout"
+	case errors.Is(err, context.Canceled):
+		f.Class = "canceled"
+	default:
+		// go-mail wraps dial, STARTTLS and AUTH failures as plain text. Only
+		// the matched class is kept; the text itself can quote the server.
+		text := err.Error()
+		switch {
+		case strings.Contains(text, "SMTP AUTH failed"):
+			f.Class = "auth"
+		case strings.Contains(strings.ToLower(text), "tls"):
+			f.Class = "tls"
+		case strings.HasPrefix(text, "dial failed"):
+			f.Class = "dial"
+		default:
+			f.Class = "transport"
+		}
+	}
+	return f
+}
+
+// SendFailureLogAttrs returns log attributes for any EmailSender error: the
+// SendFailure fields when there is one, and otherwise only the error's Go
+// type. Send errors are never logged as text, because an SMTP error's text
+// can name the recipient.
+func SendFailureLogAttrs(err error) []any {
+	var failure *SendFailure
+	if errors.As(err, &failure) {
+		return failure.LogAttrs()
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return []any{"failure", "timeout"}
+	case errors.Is(err, context.Canceled):
+		return []any{"failure", "canceled"}
+	}
+	return []any{"failure", "unclassified", "err_type", fmt.Sprintf("%T", err)}
+}
+
+// permanentReplyCode returns the 5xx reply code when the SMTP server itself
+// rejected a send command (unknown mailbox, rejected content, message too
+// large), and 0 otherwise. Only a server reply counts: dial, TLS, auth and
+// connection failures carry no reply code and stay retryable, as do 4xx.
+func permanentReplyCode(err error) int {
+	var sendErr *mail.SendError
+	if !errors.As(err, &sendErr) {
+		return 0
+	}
+	if code := sendErr.ErrorCode(); code >= 500 && code < 600 {
+		return code
+	}
+	return 0
 }
 
 // buildMessage is the pure (no-network) half of Send — unit-testable without

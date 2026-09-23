@@ -1,5 +1,88 @@
 # ShipTrip V1 Implementation Status
 
+## K7 — Realtime, High-Scale Tuning & Final Certification (complete locally, release pending, 2026-09-23)
+
+On `claude/k6-infrastructure-scaling` (K5 → K6 → K7 stack). Realtime: keep
+WebSocket (no SSE); a slow client no longer loses events silently, and three
+arrival events now reach live sockets. No replicas, partitioning, `pg_trgm`,
+search engine, CQRS or sharding, each with a written trigger. Find Travelers
+108 → 7 queries, admin evidence checks 26.0 → 3.7 s against a hung store,
+Offers list 47,941 → 11,869 bytes. Launch capacity ~125–190 active users today,
+~250–375 with `WEB_CONCURRENCY=4`. Redis cutover stays pre-launch (owner).
+See [the K7 record](PHASE_K7_FINAL_PERFORMANCE_CERTIFICATION.md) and
+[the K-Series Master Report](K_SERIES_MASTER_REPORT.md).
+
+## K7 D — Three measured performance defects (2026-09-23)
+
+Stacked on K7 C `41fc5fb`. Local measurements, not Railway.
+
+* **Admin evidence storage checks.** The KYC-image HEADs on KYC detail, the
+  payout identity check and the payout-method review now make one attempt
+  (2 s connect, 3 s read, no retry) and run side by side. Three slots against
+  a hung store: 26.0 s before, 3.7 s after; with nothing listening: 13.6 s
+  before, 2.0 s after. The check, the "temporarily unavailable, try again"
+  message, the audited evidence route and every permission are unchanged.
+  The K6 note "4 s × 2 attempts" is superseded.
+* **Dispute JSON list.** The served `GET /api/admin/disputes` (admin panel
+  view) already paged, but ordered by `-opened_at` alone, so same-instant
+  disputes could be skipped between pages; it now breaks ties on id. The
+  disputes-app view on the same path, shadowed by URL order, still sliced
+  `[:100]`; it now pages with `paginated_array_response` and keeps its bare
+  array of the newest 100.
+* **Offers list.** `GET /api/matches` drops `compatibility_snapshot` and each
+  nested offer's `terms_snapshot`, which no list consumer reads (the app
+  parses them and never uses them). Detail, the offer chain and mutation
+  responses are unchanged. A redundant `DISTINCT` (about 65 ms of PostgreSQL
+  planning) is gone. Five rows: 47,941 B / 87.6 ms before, 11,869 B /
+  28.6 ms after, 3 queries both.
+
+## K6 — Infrastructure, Caching, Workers, Observability & Load (complete locally, release with K7, 2026-09-23)
+
+On `claude/k6-infrastructure-scaling`, stacked on K5 `b5e1118`. Shared-Redis
+cutover is ready (lost-pending-push and lost-group fixes, a boot gate on
+unsafe eviction, a read-only stream inspector, runbook); provisioning and the
+restart proof are deferred to pre-launch by owner decision. Worker retries are
+now bounded, Railway gets a 30 s drain window, Google sign-in and SMTP calls
+have timeouts, and a per-request log line replaces Gunicorn's access log.
+Local load, final numbers from a traffic mix built from the app's screens:
+100 active users at p95 100 ms and 250 at p95 240 ms on today's 2x2 shape
+(about 20 ms web CPU per request); safe envelope ~125–190 active users,
+~250–375 with `WEB_CONCURRENCY=4`; the test box's knee is ~130 RPS (500 users). One service, no PgBouncer and no caching
+needed yet. Not merged or released. See
+[the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
+
+## K5 — Mobile Performance (verified, PR pending, 2026-09-23)
+
+On `claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
+list row now carries the viewer's pending actions (`attention`), so Home no
+longer fetches every Deal's detail (cold start 26 → 6 requests); `/api/deals`
+gains `scope=current|history` and the app reads current Deals in full and history
+lazily, fixing Deals beyond the first 20 being unreachable; own requests,
+journeys and matches read beyond 100 rows (bounded); push-state changes no longer
+rebuild the app root; a presentation-only account snapshot lets a signed-in user
+open the app without waiting for `/api/me`. Later packages: Firebase starts
+after the first frame; abandoned reads are cancelled and simultaneous `/api/me`
+reads shared; growing lists render lazily and photos decode at display size;
+returning from the notification shade no longer redials sockets, a dead socket
+is detected by ping, and checkout polling runs one bounded loop. Flutter 1069
+passed; Django matching/deals/ratings/handover/notifications 282 passed after the
+one full-suite failure (Deal-list query budget) was fixed. Not yet merged or
+released. Details,
+decisions and remaining packages:
+[the K5 record](PHASE_K5_MOBILE_PERFORMANCE.md).
+
+Package B (request lifetime): reads are cancelled when their provider is
+disposed or superseded, never writes; concurrent `/api/me` reads share one
+request; the bell and inbox counts share one read; finished Deal history
+survives a one-minute filter round trip; a profile refresh no longer rebuilds
+Deal rows; sign-out no longer throws in debug, and a new sign-in no longer
+inherits the previous account's in-memory role.
+
+Review fixes: `scope=current` now keeps exactly the Deals the inbox would still
+ask to rate (including partial refunds after delivery, and legacy rows by their
+frozen policy); sign-out and launch-confirmation session races closed; paged
+reads drop a row repeated across pages.
+
 ## K4 — General Backend & API Performance Remediation (2026-09-21)
 
 Implemented on `codex/k4-backend-api-performance` from exact `main`

@@ -27,10 +27,11 @@ class PushRuntimeState {
   bool get available => availability == PushAvailability.available;
 
   PushRuntimeState copyWith({
+    PushAvailability? availability,
     PushPermission? permission,
     PushRegistrationState? registration,
   }) => PushRuntimeState(
-    availability: availability,
+    availability: availability ?? this.availability,
     permission: permission ?? this.permission,
     registration: registration ?? this.registration,
   );
@@ -62,6 +63,8 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     _messaging = ref.read(pushMessagingProvider);
     _socket = ref.read(notificationSocketProvider);
     _live = ref.read(liveUpdatesProvider);
+    // Whether the app is on screen: `inactive` still is, so only `hidden`,
+    // `paused` and `detached` stop the sockets.
     _resumed =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -92,13 +95,31 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _resumed = state == AppLifecycleState.resumed;
-    if (_resumed) {
-      unawaited(refreshPermission());
-      _reconcileCurrentScope();
-      _startSocketsIfSignedIn();
-    } else {
-      unawaited(_socket.stop());
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(refreshPermission());
+        // Back from `inactive` alone — the notification shade, the app
+        // switcher, a system dialog — the app never left the screen and its
+        // sockets never closed, so nothing was missed. Tearing both down and
+        // redialling for that cost two handshakes and a full catch-up each
+        // time the shade was pulled. An endpoint waiting out a backoff is the
+        // exception: the user may have just fixed the network from the shade,
+        // so it redials now rather than in up to 32 s.
+        if (_resumed) {
+          _socket.reconnectIdle();
+          return;
+        }
+        _resumed = true;
+        _reconcileCurrentScope();
+        _startSocketsIfSignedIn();
+      case AppLifecycleState.inactive:
+        break;
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        if (!_resumed) return;
+        _resumed = false;
+        unawaited(_socket.stop());
     }
   }
 
@@ -138,6 +159,16 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   Future<void> retryRegistration() => _syncRegistration();
 
   Future<void> _restoreMessagingState() async {
+    // Firebase starts after the first frame (K5). Until it settles every step
+    // below would only wait on it, and the registration gate reads
+    // `available`, so the whole restore waits here instead.
+    final messaging = _messaging;
+    if (messaging is DeferredPushMessaging &&
+        messaging.availability == PushAvailability.initializing) {
+      await messaging.ready;
+      if (!ref.mounted) return;
+      state = state.copyWith(availability: messaging.availability);
+    }
     if (!_messaging.available) return;
     // Nothing awaits this, so an escaping exception used to be invisible: the
     // permission stayed `unavailable` for the whole app run, which closes the

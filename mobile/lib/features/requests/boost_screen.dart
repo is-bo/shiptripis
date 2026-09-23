@@ -30,7 +30,7 @@ final _boostStateProvider = FutureProvider.autoDispose.family<BoostState, int>((
   requestId,
 ) async {
   final repo = ref.watch(boostRepositoryProvider);
-  return repo.forRequest(requestId);
+  return repo.forRequest(requestId, cancelToken: cancelOnDispose(ref));
 });
 
 class BoostScreen extends ConsumerStatefulWidget {

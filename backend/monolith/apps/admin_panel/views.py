@@ -663,7 +663,9 @@ class AdminDisputeListView(APIView):
         queryset = _status_filter(
             Dispute.objects.select_related("deal", "opened_by", "resolved_by")
             .prefetch_related("evidence")
-            .order_by("-opened_at"),
+            # The id tie-break keeps pages stable when timestamps collide, so
+            # walking `next` meets every dispute exactly once (K7 D).
+            .order_by("-opened_at", "-id"),
             request,
         )
         if deal_id := request.query_params.get("deal_id"):

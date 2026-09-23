@@ -31,6 +31,16 @@ enum RequestStatus {
   bool get isFinished =>
       this == completed || this == cancelled || this == expired;
 
+  /// No longer a live shipment: finished, or delivered and inside protection.
+  ///
+  /// The server projects a request's status from its latest Deal
+  /// (`apps.parcels.lifecycle`), so `delivered` and `cancelled` here are the
+  /// same facts as that Deal's `completed` and `cancelled` activity buckets —
+  /// and a reservation that lapsed before funding reopens the request rather
+  /// than settling it. Home and Deliveries used to rebuild this from a full
+  /// Deal list, which only ever held its first page (K5).
+  bool get isSettled => isFinished || this == delivered;
+
   /// Only these two can be cancelled through the parcel endpoint; anything
   /// later belongs to the Deal cancellation workflow.
   bool get isCancellableAsRequest => this == open || this == awaitingDeposit;
