@@ -22,7 +22,10 @@ run and one Railway TEST release after K7, then merge).
 
 ## Resume here
 
-C is integrated (`41fc5fb`). A, B and D are running in helper worktrees.
+A (`71dc984`), B (`212c757`) and C (`41fc5fb`) are integrated. D (measured
+defects from C) and E (contract-neutral N+1 fixes in Find Travelers,
+compatible-requests and admin users; notification dispatcher burst absorption;
+batched `prune_scheduled_jobs`) are running in helper worktrees.
 
 Packages A, B and C run in helper worktrees from `f77ae0e` (check
 `git worktree list`; review and cherry-pick their commits onto the stack).
