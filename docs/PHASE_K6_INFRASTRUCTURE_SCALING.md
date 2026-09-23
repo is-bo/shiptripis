@@ -1,11 +1,11 @@
 # K6 — Infrastructure, Caching, Workers, Observability & Load
 
-Status: **in progress; not merged or released.** Branch
-`claude/k6-infrastructure-scaling`, stacked on the K5 branch head `b5e1118`
-(K5 is complete locally; see its record). Packages R, O and L are integrated;
-package P is integrated; the capacity numbers were re-measured with a
-screen-shaped traffic mix on `1ed3eb4`. Nothing in K6 was deployed and
-LIVE was not touched.
+Status: **complete locally; not merged or released** (one CI run and one TEST
+release with K7). Branch `claude/k6-infrastructure-scaling`, stacked on the K5
+branch head `b5e1118` (K5 is complete locally; see its record). Packages R, O,
+L and P are integrated; the final capacity numbers were re-measured with a
+screen-shaped traffic mix on `1ed3eb4` (`e0c9914`). Nothing in K6 was deployed
+and LIVE was not touched.
 
 This record is the summary. The detailed findings, runbooks and raw evidence
 are the three package notes, which act as its appendices:
@@ -16,7 +16,7 @@ are the three package notes, which act as its appendices:
 | O — workers, retries, breakers, background work, caching, observability, alerts | `94573e0` | 14.4, 14.7–14.14 | [`k6-notes/reliability-observability.md`](k6-notes/reliability-observability.md) |
 | L — topology, pooling, web capacity, load test, capacity model | `f77ae0e` | 14.3, 14.5, 14.6, 14.15, 14.16 | [`k6-notes/capacity.md`](k6-notes/capacity.md), raw runs in [`k6-notes/capacity-runs/`](k6-notes/capacity-runs/) |
 | Integration fix (R × O) | `3966d46` | — | this record, "Verification" |
-| P — mobile lazy paging (journeys search, parcels open) | in progress | 14.6 follow-up | results to be added |
+| P — mobile lazy paging (journeys search, parcels open) | `5606529` | 14.6 follow-up | premise withdrawn (no screen calls either endpoint); see "Correction — traffic mix" |
 
 ## Owner decisions (2026-09-23)
 

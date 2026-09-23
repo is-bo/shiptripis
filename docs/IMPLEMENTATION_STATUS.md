@@ -1,5 +1,17 @@
 # ShipTrip V1 Implementation Status
 
+## K7 — Realtime, High-Scale Tuning & Final Certification (complete locally, release pending, 2026-09-23)
+
+On `claude/k6-infrastructure-scaling` (K5 → K6 → K7 stack). Realtime: keep
+WebSocket (no SSE); a slow client no longer loses events silently, and three
+arrival events now reach live sockets. No replicas, partitioning, `pg_trgm`,
+search engine, CQRS or sharding, each with a written trigger. Find Travelers
+108 → 7 queries, admin evidence checks 26.0 → 3.7 s against a hung store,
+Offers list 47,941 → 11,869 bytes. Launch capacity ~125–190 active users today,
+~250–375 with `WEB_CONCURRENCY=4`. Redis cutover stays pre-launch (owner).
+See [the K7 record](PHASE_K7_FINAL_PERFORMANCE_CERTIFICATION.md) and
+[the K-Series Master Report](K_SERIES_MASTER_REPORT.md).
+
 ## K7 D — Three measured performance defects (2026-09-23)
 
 Stacked on K7 C `41fc5fb`. Local measurements, not Railway.
@@ -24,7 +36,7 @@ Stacked on K7 C `41fc5fb`. Local measurements, not Railway.
   planning) is gone. Five rows: 47,941 B / 87.6 ms before, 11,869 B /
   28.6 ms after, 3 queries both.
 
-## K6 — Infrastructure, Caching, Workers, Observability & Load (in progress, 2026-09-23)
+## K6 — Infrastructure, Caching, Workers, Observability & Load (complete locally, release with K7, 2026-09-23)
 
 On `claude/k6-infrastructure-scaling`, stacked on K5 `b5e1118`. Shared-Redis
 cutover is ready (lost-pending-push and lost-group fixes, a boot gate on
@@ -32,10 +44,10 @@ unsafe eviction, a read-only stream inspector, runbook); provisioning and the
 restart proof are deferred to pre-launch by owner decision. Worker retries are
 now bounded, Railway gets a 30 s drain window, Google sign-in and SMTP calls
 have timeouts, and a per-request log line replaces Gunicorn's access log.
-Local load, re-measured with a traffic mix built from the app's screens:
+Local load, final numbers from a traffic mix built from the app's screens:
 100 active users at p95 100 ms and 250 at p95 240 ms on today's 2x2 shape
 (about 20 ms web CPU per request); safe envelope ~125–190 active users,
-~250–375 with `WEB_CONCURRENCY=4`. One service, no PgBouncer and no caching
+~250–375 with `WEB_CONCURRENCY=4`; the test box's knee is ~130 RPS (500 users). One service, no PgBouncer and no caching
 needed yet. Not merged or released. See
 [the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
 

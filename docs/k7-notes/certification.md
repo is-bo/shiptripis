@@ -114,29 +114,46 @@ fall inside run-to-run noise on this box.
 5. The JSON `AdminDisputeListView` still hard-slices `[:100]`. The console
    list paginates, so no operator loses records, but the API does.
 
-### Under load (cited, provisional)
+**Since fixed in K7-D (`b2326df`):** observation 1 (Offers list 47,941 B /
+87.6 ms → 11,869 B / 28.6 ms), observation 4 (evidence checks bounded: three
+slots against a hung store 26.0 s → 3.7 s) and observation 5 (the dispute JSON
+list pages with a stable order). Observations 2 and 3 remain open.
 
-The K6 package L runs (`docs/k6-notes/capacity.md`, 2x2 shape) measured:
+### Under load (cited, final K6 re-run)
 
-| Users | p50 | p95 | p99 | Errors |
-| ---: | ---: | ---: | ---: | ---: |
-| 100 | 45 ms | 450 ms | 1.2 s | 0 |
-| 150 | 65 ms | 900 ms | 1.4 s | 0 |
+When this package ran, the only load figures were the first K6 package L runs,
+whose Locust mix modelled `GET /api/journeys/search` and `GET /api/parcels/open`
+as app traffic although no Flutter screen calls them. Those figures and the
+page-size finding built on them are withdrawn (kept in
+`docs/k6-notes/capacity-runs/superseded/`).
 
-Throughput saturated at about 46 RPS, and DB connections peaked at 5 active.
-**These numbers are provisional.** The Locust mix modelled
-`GET /api/journeys/search` and `GET /api/parcels/open` as app traffic, but no
-Flutter screen calls them. The K6 page-size finding is therefore withdrawn,
-and the lead is re-running capacity with a corrected mix.
+The final figures are the lead's re-run with a screen-shaped mix on `1ed3eb4`
+(after K7-D/E), recorded in
+[`docs/k6-notes/capacity.md` §4](../k6-notes/capacity.md) and committed in
+`e0c9914`:
 
-No confirmatory 100-user run was done here. The harness world had been swept
-from disk, and this package was told not to run large loads.
+| Users | Shape | RPS | p50 | p95 | p99 | Errors |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 100 | 2x2 | 32.1 | 27 ms | 100 ms | 160 ms | 0 |
+| 250 | 2x2 | 79.4 | 72 ms | 240 ms | 340 ms | 0 |
+| 400 | 2x2 | 88.3 | 1.4 s | 1.8 s | 2.1 s | 0 |
+| 350 | 4x2 | 110.6 | 53 ms | 230 ms | 350 ms | 0 |
+| 500 | 4x2 | 128.6 | 770 ms | 1.2 s | 1.4 s | 0 |
+
+* The 2x2 shape saturates at about **88 RPS (400 users)** on the per-process
+  GIL, with the box only 58 % busy.
+* The knee of the test box is about **130 RPS (500 users on 4x2)**: the
+  machine is at 90 % CPU (95 % peak) and requests queue, with no errors. That
+  point is box-limited, so it is a lower bound.
+* Web CPU is about 20 ms per request; DB connections peaked at 5 active.
+
+No confirmatory run was done inside this package (the harness world had been
+swept from disk, and the package was told not to run large loads).
 
 Other 15.10 metrics:
 
 * CPU and memory per process, and realtime socket memory (about 0.4 MiB per
-  app-open user): cited from K6, with the same provisional caveat for
-  anything derived from the mix.
+  app-open user): cited from K6.
 * Redis lag: not measurable locally, because miniredis is not a Redis
   performance proxy. **Pending the Redis cutover.**
 * Worker lag under backlog: **not measured.** K6 measured workers at idle
@@ -174,7 +191,7 @@ passes, is formatted, and is clean under `flutter analyze --fatal-infos`.
 | Rolling deploy | `test_deployment_safety` "railway lets the combined launcher drain before sigkill", "default combined database budget is rolling deploy safe", "combined overrides cannot exhaust the rolling database budget". `k5_realtime_test` reconnect/backoff groups (the client side of a socket drop). | verified by test. Observed deploy **pending TEST release**. The connection check is not replica-aware (K6 risk). |
 | Provider slowdown | `test_provider_http` "default transport uses separate bounded connect and read timeouts"; `test_deployment_safety` "production refuses unbounded provider timeouts"; `test_google_verifier` "every certificate fetch uses the bounded timeout". Breaker rejection is reasoned in K6 O §3. | verified by test. KYC/payout-review S3 HEAD stall (8.9 s locally) remains a request-path exposure. |
 | Email/FCM failure | Go: `TestSMTP5xxRejectionIsPermanentWithItsReplyCode`, `TestSMTP4xxAndTransportFailuresStayRetryable`, `TestPartialRetryWaitStaysInsideTheSweeperIdleWindow`, `TestTransientRetryPayload`. Django: `test_outbox` "a transport failure leaves the obligation pending and retryable", "the retry after a failure sends the same code"; `test_deployment_safety` "production bounds django smtp and logs access safely". Real-Redis bounded-retry tests (`TestFCMPartialRetryChainIsBounded`, `TestFCMEntryPastItsRetryWindowIsDropped`) run in CI only. | verified by test (unit). Integration tier runs in CI. Real outage drill **pending TEST release**. |
-| DB connection headroom | Budget 22 steady / 44 rolling of 90, and at most 5 active backends under load (K6, cited). Pinned by the `test_deployment_safety` budget tests. | verified by test (budget). The load figure is cited and provisional. |
+| DB connection headroom | Budget 22 steady / 44 rolling of 90, and at most 5 active backends under load (K6, cited). Pinned by the `test_deployment_safety` budget tests. | verified by test (budget). The load figure is cited from the final K6 re-run (at most 5 active at 129 RPS). |
 | Queue recovery | `test_recovery` (durable job re-drive and exhaustion stays visible); `test_redis_bus` "sweep is bounded and oldest first", "bounded sweep still reaches newer events"; Go XAUTOCLAIM sweeps; `test_inspect_redis_streams` (drain gate). | verified by test. Stream survival across a restart is **pending the Redis cutover**. |
 
 Nothing was "verified locally" by a live drill. The box has no real Redis, and
@@ -189,10 +206,11 @@ the drills are TEST-only by plan (14.17).
    persistence off. The code, boot gate and runbook are ready. Pending the
    owner's pre-launch Redis provisioning and cutover, plus the restart proof.
 2. **Infrastructure / early-launch load measured** and **Scale / documented
-   capacity envelope.** Both are provisional: the K6 mix modelled two
-   endpoints the app does not call. They need the lead's corrected re-run. The
-   K6 scale trigger T1 cites the withdrawn page-size fix and needs restating
-   afterwards.
+   capacity envelope.** Unmet when this package ran (the K6 mix modelled two
+   endpoints the app does not call). **Since met:** the corrected re-run
+   (`e0c9914`) measured 100 users at p95 100 ms and 250 at p95 240 ms on 2x2,
+   and T1 was restated without the withdrawn page-size fix. See the table
+   above and [capacity.md §5](../k6-notes/capacity.md).
 3. **Backend / pagination exposes all records.** Partially met.
    `AdminDisputeListView` still slices at `[:100]` (the console list
    paginates). Legacy `payments/intents` and `trips` slices are retired V1
