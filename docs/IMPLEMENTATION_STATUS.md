@@ -1,5 +1,18 @@
 # ShipTrip V1 Implementation Status
 
+## K6 — Infrastructure, Caching, Workers, Observability & Load (in progress, 2026-09-23)
+
+On `claude/k6-infrastructure-scaling`, stacked on K5 `b5e1118`. Shared-Redis
+cutover is ready (lost-pending-push and lost-group fixes, a boot gate on
+unsafe eviction, a read-only stream inspector, runbook); provisioning and the
+restart proof are deferred to pre-launch by owner decision. Worker retries are
+now bounded, Railway gets a 30 s drain window, Google sign-in and SMTP calls
+have timeouts, and a per-request log line replaces Gunicorn's access log.
+Local load: 100 active users fit today's shape (p95 450 ms); one service,
+no PgBouncer and no caching needed yet. Mobile page-size fix (package P) in
+progress. Not merged or released. See
+[the K6 record](PHASE_K6_INFRASTRUCTURE_SCALING.md).
+
 ## K5 — Mobile Performance (verified, PR pending, 2026-09-23)
 
 On `claude/k5-mobile-performance` from `main` `b5e33e4`. Checkpoint 1: the Deal
