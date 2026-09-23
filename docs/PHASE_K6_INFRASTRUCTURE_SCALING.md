@@ -1,11 +1,11 @@
 # K6 — Infrastructure, Caching, Workers, Observability & Load
 
-Status: **complete locally; not merged or released** (one CI run and one TEST
-release with K7). Branch `claude/k6-infrastructure-scaling`, stacked on the K5
+Status: **complete — merged and released** with K5 and K7 (is-bo/shiptripis#20,
+`main` `a08a87a`, TEST `v1.0.0-rc.50+a08a87a`). Branch
+`claude/k6-infrastructure-scaling` (now deleted), stacked on the K5
 branch head `b5e1118` (K5 is complete locally; see its record). Packages R, O,
 L and P are integrated; the final capacity numbers were re-measured with a
-screen-shaped traffic mix on `1ed3eb4` (`e0c9914`). Nothing in K6 was deployed
-and LIVE was not touched.
+screen-shaped traffic mix on `1ed3eb4` (`e0c9914`). LIVE was not touched.
 
 This record is the summary. The detailed findings, runbooks and raw evidence
 are the three package notes, which act as its appendices:
@@ -190,12 +190,14 @@ No drill ran on TEST or staging in K6. Coverage today:
    untested paths (KYC upload, webhooks, push fanout, email, Finance console
    under load, soak).
 
-## Resume here
+## Release
 
-K6 has integrated packages R, O, L and P (plus the `3966d46` test fix). The
-capacity measurements were re-run with the screen-shaped traffic mix on
-`1ed3eb4` (after K7-D/E) and replace the withdrawn numbers. No CI or deploy
-until the end of K7.
+K6 shipped with K5 and K7 in is-bo/shiptripis#20, merged as `a08a87a` (CI 6/6
+green on the re-run), and is released to Railway TEST as
+`v1.0.0-rc.50+a08a87a`. On TEST the 30 s drain held: during the rolling
+redeploy and worker restart, 122 `/readyz` checks returned 0 non-200 and the
+old container stopped every service cleanly within the window. The release
+record is in [the K7 record](PHASE_K7_FINAL_PERFORMANCE_CERTIFICATION.md#release).
 
 **Owner action before launch:** provision persistent managed Redis (the
 Railway free plan refused it in K1, so a plan upgrade may be needed) and run the
