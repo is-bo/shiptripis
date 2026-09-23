@@ -20,6 +20,11 @@ survives a one-minute filter round trip; a profile refresh no longer rebuilds
 Deal rows; sign-out no longer throws in debug, and a new sign-in no longer
 inherits the previous account's in-memory role.
 
+Review fixes: `scope=current` now keeps exactly the Deals the inbox would still
+ask to rate (including partial refunds after delivery, and legacy rows by their
+frozen policy); sign-out and launch-confirmation session races closed; paged
+reads drop a row repeated across pages.
+
 ## K4 — General Backend & API Performance Remediation (2026-09-21)
 
 Implemented on `codex/k4-backend-api-performance` from exact `main`

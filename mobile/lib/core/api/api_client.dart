@@ -186,6 +186,10 @@ class ApiClient {
   /// to be correct. Not for history or search: those page lazily. [maxPages]
   /// is a safety bound against a server that never stops saying "next"; at
   /// 100 rows a page it is far past any real account.
+  ///
+  /// Rows carrying an `id` appear once, first read wins: over newest-first
+  /// page numbers, a row created between two reads pushes the rest down one,
+  /// so the next page can repeat the last row of this one.
   Future<List<dynamic>> getAllPages(
     String path, {
     Json? query,
@@ -194,13 +198,17 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final rows = <dynamic>[];
+    final seen = <Object>{};
     for (var page = 1; page <= maxPages; page++) {
       final result = await getListPage(
         path,
         query: {...?query, 'page_size': pageSize, if (page > 1) 'page': page},
         cancelToken: cancelToken,
       );
-      rows.addAll(result.rows);
+      for (final row in result.rows) {
+        final id = row is Map ? row['id'] : null;
+        if (id == null || seen.add(id)) rows.add(row);
+      }
       if (!result.hasNext) break;
     }
     return rows;

@@ -38,8 +38,9 @@ from rest_framework.views import APIView
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.phase4_policy import InvalidPhase4Policy
 from apps.handover.services import live_handover_codes_prefetch
+from apps.ratings.services import review_window_open_q, with_review_deadline
 
-from .activity import ACTIVE, ACTIVITY_STATES, COMPLETED, activity_q
+from .activity import ACTIVE, ACTIVITY_STATES, activity_q
 from .arrival import ArrivalError, decide_early_arrival, report_early_arrival
 from .cancellation import CancellationError, cancel_funded_deal, quote_cancellation
 from .lifecycle import DealLifecycleError, PRE_PICKUP_STATUSES
@@ -131,25 +132,24 @@ class DealListPagination(PageNumberPagination):
     max_page_size = 100
 
 
-#: `current`: every active Deal, plus delivered Deals whose review window may
-#: still be open -- the bounded set the app's Home and "needs you" read.
+#: `current`: every active Deal, plus delivered Deals whose review window is
+#: still open -- the bounded set the app's Home and "needs you" read.
 #: `history`: everything no longer active, for lazily paged history screens.
 DEAL_LIST_SCOPES = ("current", "history")
 
 
-def _scope_q(scope: str, *, at) -> Q:
+def _scoped(queryset, scope: str, *, at):
     active = activity_q(ACTIVE)
     if scope == "history":
-        return ~active
-    # A superset on purpose: each row's `attention.can_rate` is the authority,
-    # so this only has to never exclude a Deal that could still be rated. A
-    # row confirmed before `rating_window_ends_at` existed has no stored end
-    # and is kept rather than guessed at.
-    rating_may_be_open = activity_q(COMPLETED) & (
-        Q(rating_window_ends_at__gt=at)
-        | Q(rating_window_ends_at__isnull=True, delivery_confirmed_at__isnull=False)
+        return queryset.filter(~active)
+    # The review window is the inbox's own predicate, not an activity bucket:
+    # a Deal partially refunded after delivery is "cancelled" yet still
+    # ratable, and a pre-column row's deadline comes from its frozen policy.
+    # So `current` and `history` may overlap for such a Deal; the app reads
+    # history for the History tab and `activity_state` for the Active one.
+    return with_review_deadline(queryset).filter(
+        active | review_window_open_q(at=at)
     )
-    return active | rating_may_be_open
 
 
 class DealListView(generics.ListAPIView):
@@ -190,7 +190,7 @@ class DealListView(generics.ListAPIView):
                         )
                     }
                 )
-            queryset = queryset.filter(_scope_q(scope, at=timezone.now()))
+            queryset = _scoped(queryset, scope, at=timezone.now())
         if requested_status := self.request.query_params.get("status"):
             queryset = queryset.filter(status=requested_status)
         activity = self.request.query_params.get("activity")

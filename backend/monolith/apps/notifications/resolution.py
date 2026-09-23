@@ -20,7 +20,7 @@ def resolved_notifications(user, *, at=None):
     from apps.finance.models import Payout
     from apps.matching.models import Offer
     from apps.ratings.models import Rating
-    from apps.ratings.services import RATABLE_STATUSES, with_review_deadline
+    from apps.ratings.services import review_window_open_q, with_review_deadline
     from apps.deals.lifecycle import IN_CARRIAGE_STATUSES
 
     at = at or timezone.now()
@@ -39,8 +39,7 @@ def resolved_notifications(user, *, at=None):
     rated = Rating.objects.filter(deal_id=OuterRef("pk"), rater=user)
     prior_dispute = Dispute.objects.filter(deal_id=OuterRef("pk"), status__in=[*Dispute.ACTIVE_STATUSES, "resolved"])
     rateable = with_review_deadline(deals).filter(
-        delivery_confirmed_at__isnull=False, status__in=RATABLE_STATUSES,
-        review_deadline__gt=at,
+        review_window_open_q(at=at)
     ).alias(_rated=Exists(rated)).filter(_rated=False)
     disputable = deals.filter(
         Q(status__in=IN_CARRIAGE_STATUSES)

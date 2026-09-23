@@ -8,23 +8,30 @@ hold three things:
 * parity -- at every lifecycle step, for both parties, the list says exactly
   what the detail says;
 * cost -- the list's query count does not grow with the number of Deals;
-* scope -- `current` and `history` partition what the app reads, and pages are
+* scope -- `current` and `history` cover what the app reads, and pages are
   stable.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.deals.lifecycle import rating_window
 from apps.deals.models import Deal
+from apps.notifications.models import Notification
+from apps.notifications.resolution import resolved_notifications
 from apps.ratings.models import Rating
 
 from .phase4_factories import (
     confirm_delivery,
     confirm_pickup,
+    delivered_scenario,
     fund_scenario,
     record_recipient,
     release_delivery_code,
@@ -170,3 +177,79 @@ class DealListScopeTests(TestCase):
         # Above the cap DRF clamps rather than failing; the default stays 20.
         capped = self.client_.get("/api/deals?page_size=5000")
         self.assertEqual(capped.status_code, 200)
+
+
+class DealListCurrentReviewWindowTests(TestCase):
+    """`current` keeps a Deal exactly while the inbox would still ask for a rating.
+
+    The review window, not the activity bucket, decides: a Deal partially
+    refunded after delivery is "cancelled" yet ratable, and a Deal confirmed
+    before `rating_window_ends_at` existed has its deadline computed from its
+    frozen policy -- neither kept forever nor dropped.
+    """
+
+    def _current_ids(self, user) -> set[int]:
+        return {r["id"] for r in _rows(_client(user), "?scope=current")}
+
+    def _inbox_asks_to_rate(self, user, deal_id: int) -> bool:
+        notification = Notification.objects.create(
+            recipient=user,
+            channel="rating.required",
+            event_id=f"k5-rate-{deal_id}-{user.pk}",
+            payload={"deal_id": deal_id},
+        )
+        row = resolved_notifications(user).get(pk=notification.pk)
+        return not row.resolved
+
+    def test_partial_refund_after_delivery_stays_current_while_ratable(self):
+        scenario = delivered_scenario(APIClient(), prefix="k5pr")
+        Deal.objects.filter(pk=scenario.deal.pk).update(
+            status=Deal.Status.PARTIALLY_REFUNDED
+        )
+        deal_id = scenario.deal.pk
+        for party in (scenario.sender, scenario.traveler):
+            client = _client(party)
+            row = next(
+                r for r in _rows(client, "?scope=current") if r["id"] == deal_id
+            )
+            detail = client.get(f"/api/deals/{deal_id}").json()
+            self.assertTrue(row["attention"]["can_rate"])
+            self.assertEqual(
+                row["attention"]["can_rate"], detail["ratings"]["can_rate"]
+            )
+            self.assertTrue(self._inbox_asks_to_rate(party, deal_id))
+            # History stays "not active", so the two scopes overlap here.
+            history = {r["id"] for r in _rows(client, "?scope=history")}
+            self.assertIn(deal_id, history)
+
+    def test_completed_deal_leaves_current_when_its_review_window_closes(self):
+        scenario = delivered_scenario(APIClient(), prefix="k5cl")
+        Deal.objects.filter(pk=scenario.deal.pk).update(
+            status=Deal.Status.COMPLETED,
+            rating_window_ends_at=timezone.now() - timedelta(seconds=1),
+        )
+        self.assertNotIn(scenario.deal.pk, self._current_ids(scenario.sender))
+        self.assertFalse(
+            _client(scenario.sender)
+            .get(f"/api/deals/{scenario.deal.pk}")
+            .json()["ratings"]["can_rate"]
+        )
+
+    def test_legacy_deal_without_a_stored_window_follows_the_inbox_predicate(self):
+        open_ = delivered_scenario(APIClient(), prefix="k5lo")
+        closed = delivered_scenario(APIClient(), prefix="k5lc")
+        window = rating_window(closed.deal)
+        Deal.objects.filter(pk=open_.deal.pk).update(
+            status=Deal.Status.COMPLETED, rating_window_ends_at=None
+        )
+        Deal.objects.filter(pk=closed.deal.pk).update(
+            status=Deal.Status.COMPLETED,
+            rating_window_ends_at=None,
+            delivery_confirmed_at=timezone.now() - window - timedelta(days=1),
+        )
+        for scenario, expected in ((open_, True), (closed, False)):
+            user, deal_id = scenario.sender, scenario.deal.pk
+            detail = _client(user).get(f"/api/deals/{deal_id}").json()
+            self.assertEqual(detail["ratings"]["can_rate"], expected)
+            self.assertEqual(self._inbox_asks_to_rate(user, deal_id), expected)
+            self.assertEqual(deal_id in self._current_ids(user), expected)

@@ -136,8 +136,9 @@ class TokenStore {
   });
 
   /// Deleted at the very start of a sign-out, ahead of the network call.
+  /// Serialized with the writes, so one queued before it cannot land after.
   Future<void> deleteAccountSnapshot() =>
-      _storage.delete(key: _kAccountSnapshot);
+      _serializeCredentialWrite(() => _storage.delete(key: _kAccountSnapshot));
 
   /// Which side of the marketplace a dual-role user last worked from. A
   /// preference, not a permission — the server's role is always authoritative

@@ -140,6 +140,12 @@ Future<T> _drive<T>(WidgetTester tester, Future<T> work) async {
   return work;
 }
 
+/// What the auth interceptor raises for a request whose login ended.
+DioException _sessionChanged(RecordedRequest r) => DioException(
+  requestOptions: RequestOptions(path: r.path),
+  type: DioExceptionType.cancel,
+);
+
 Map<String, dynamic>? _stored(_MemoryStorage storage) {
   final raw = storage.values[_kSnapshot];
   return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
@@ -336,6 +342,76 @@ void main() {
 
     container.dispose();
   });
+
+  testWidgets('sign-out ends the login in the tap\'s own turn, and a snapshot '
+      'write queued before it cannot land after it', (tester) async {
+    final signOut = Completer<FakeResponse>();
+    final backend = FakeBackend()
+      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+      ..handle('POST', '/api/auth/sign-out', (_) => signOut.future);
+    final storage = _device(snapshot: _snapshotOf(_cachedMe));
+    final tokens = TokenStore(storage);
+    final container = _container(backend, tokens);
+    container.read(sessionProvider);
+    await _flush(tester);
+
+    // A profile refresh's snapshot write, still queued when the user taps.
+    final before = tokens.identityGeneration;
+    final queued = tokens.writeAccountSnapshotIfCurrent(
+      expectedIdentityGeneration: before,
+      json: _snapshotOf(meFixture()),
+    );
+    final leaving = container.read(sessionProvider.notifier).signOut();
+    expect(tokens.identityGeneration, isNot(before));
+
+    await _flush(tester);
+    expect(await queued, isFalse);
+    expect(backend.to('POST', '/api/auth/sign-out'), hasLength(1));
+    expect(storage.values.keys, isNot(contains(_kSnapshot)));
+
+    signOut.complete(const FakeResponse(205));
+    await _drive(tester, leaving);
+    expect(storage.values.keys, isNot(contains(_kSnapshot)));
+
+    container.dispose();
+  });
+
+  for (final (name, answer)
+      in <(String, FakeResponse Function(RecordedRequest))>[
+        ('is cancelled', (r) => throw _sessionChanged(r)),
+        ('is a stale 401', (_) => const FakeResponse(401)),
+      ]) {
+    testWidgets('a launch confirmation that $name after another request ended '
+        'the session keeps the expiry message', (tester) async {
+      final storage = _device(snapshot: _snapshotOf(_cachedMe));
+      final tokens = TokenStore(storage);
+      late final ProviderContainer container;
+      final backend = FakeBackend()
+        ..handle('GET', '/api/me', (r) {
+          // Another request's terminal refresh: it clears the credentials,
+          // and its expiry callback runs only after this answer is back.
+          unawaited(
+            tokens.clearIfIdentityCurrent(tokens.identityGeneration).then((_) {
+              Timer(const Duration(milliseconds: 30), () {
+                container.read(sessionProvider.notifier).handleSessionExpired();
+              });
+            }),
+          );
+          return answer(r);
+        });
+      container = _container(backend, tokens);
+
+      container.read(sessionProvider);
+      await _flush(tester);
+
+      final state = container.read(sessionProvider);
+      expect(state, isA<SessionSignedOut>());
+      expect((state as SessionSignedOut).becauseExpired, isTrue);
+      expect(storage.values.keys, isNot(contains(_kRefresh)));
+
+      container.dispose();
+    });
+  }
 
   testWidgets('a confirmation landing after sign-out writes nothing', (
     tester,
@@ -542,6 +618,18 @@ void main() {
       expect(written, isFalse);
       expect(storage.values.keys, isNot(contains(_kSnapshot)));
       expect(await tokens.readAccountSnapshot(), isNull);
+    });
+
+    test('a delete waits for a write queued before it', () async {
+      final storage = _device();
+      final tokens = TokenStore(storage);
+      final written = tokens.writeAccountSnapshotIfCurrent(
+        expectedIdentityGeneration: tokens.identityGeneration,
+        json: _snapshotOf(meFixture()),
+      );
+      await tokens.deleteAccountSnapshot();
+      expect(await written, isTrue);
+      expect(storage.values.keys, isNot(contains(_kSnapshot)));
     });
 
     test('a current write is kept and read back', () async {

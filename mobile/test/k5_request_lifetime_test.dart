@@ -117,6 +117,17 @@ FindTravelersPage _page(String sort, List<int> journeys) => FindTravelersPage(
   ],
 );
 
+/// Counts Deal-history controllers mounted in a container. A rebuild is not a
+/// mount, so a count that grows means the previous one was released.
+final class _HistoryMounts extends ProviderObserver {
+  int count = 0;
+
+  @override
+  void didAddProvider(ProviderObserverContext context, Object? value) {
+    if ('${context.provider}'.contains('DealHistoryController')) count++;
+  }
+}
+
 void main() {
   group('cancellation follows the provider', () {
     test('an abandoned Deal detail read is cancelled, not delivered', () async {
@@ -504,6 +515,80 @@ void main() {
       await pumpEventQueue();
 
       expect(recomputed, settled);
+    });
+  });
+
+  group('history grace period', () {
+    testWidgets('unviewed history hit by a live Deal event is still released '
+        'within its grace period', (tester) async {
+      final backend = _backend()
+        ..handle(
+          'GET',
+          '/api/deals',
+          (_) => FakeResponse(200, {
+            'count': 1,
+            'next': null,
+            'results': [dealFixture(status: 'completed')],
+          }),
+        );
+      // A widget test for the fake clock: the grace period is a minute.
+      final mounts = _HistoryMounts();
+      final tokens = FakeTokenStore();
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokens),
+          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+        ],
+        observers: [mounts],
+      );
+      addTearDown(container.dispose);
+      Future<void> settle() async {
+        for (var i = 0; i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+      }
+
+      container.read(sessionProvider);
+      await settle();
+      expect(container.read(sessionProvider), isA<SessionSignedIn>());
+      container.read(liveUpdatesProvider).bindAccount(42);
+
+      var screen = container.listen(historyDealsProvider, (_, _) {});
+      await settle();
+      expect(container.read(historyDealsProvider).value, hasLength(1));
+      expect(mounts.count, 1);
+      final reads = backend.to('GET', '/api/deals').length;
+
+      // The user switches away from History, then a Deal changes.
+      screen.close();
+      await tester.pump(const Duration(seconds: 10));
+      container.read(liveUpdatesProvider).ingest({
+        'type': 'deal.updated',
+        'event_id': 'e-history',
+        'payload': {'deal_id': 7},
+      }, source: LiveEventSource.websocket);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(
+        backend.to('GET', '/api/deals'),
+        hasLength(reads),
+        reason: 'history nobody is looking at is not re-read',
+      );
+      await tester.pump(DealHistoryController.keptFor);
+
+      // Back to History: a new controller, so the old one was released.
+      screen = container.listen(historyDealsProvider, (_, _) {});
+      await settle();
+      expect(mounts.count, 2);
+      expect(backend.to('GET', '/api/deals'), hasLength(reads + 1));
+
+      // And the grace period still ends for the new one.
+      screen.close();
+      await tester.pump(DealHistoryController.keptFor);
+      screen = container.listen(historyDealsProvider, (_, _) {});
+      await settle();
+      expect(mounts.count, 3);
+      screen.close();
+      await tester.pump(DealHistoryController.keptFor);
     });
   });
 

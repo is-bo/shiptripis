@@ -289,6 +289,34 @@ checkpoint 1 before the change.
   fail on the previous code. The 20 s ping lives in `_connectIO` and is not
   unit-testable; it needs a device check.
 
+## Review fixes
+
+- **`scope=current` uses the inbox's rating predicate.** It was "active, or
+  completed with an open or unknown window", which dropped a Deal partially
+  refunded after delivery (activity `cancelled`, still ratable) and kept a
+  pre-column completed Deal forever. It is now "active, or
+  `review_window_open_q`" over `with_review_deadline` — the same helper the
+  inbox's rating actions now use. `current` and `history` can overlap for a
+  partially refunded Deal in its window; the app shows it once (Active filters
+  by `activity_state`, History reads history pages).
+- **History grace period.** The reported leak (a live event rebuilding unviewed
+  history, which then never hears `onCancel`) does not happen on Riverpod
+  3.4.2: invalidating an inactive element disposes it instead of rebuilding
+  it. A test now pins this: unviewed history is released, not re-read, and a
+  fresh one still ends its grace period. No code change.
+- **Session.** Sign-out invalidates the login in the tap's own turn again, and
+  the snapshot delete is serialized with credential writes, so a queued
+  snapshot write can neither land after it nor be accepted. A launch
+  confirmation that lost the race to another request's session end
+  (`cancelled`, or the identity already moved) no longer clears the tokens
+  itself, so the "session expired" message survives. Sign-in paths remember
+  the snapshot under the identity they captured.
+- **Paging.** `getAllPages` keeps the first copy of a row repeated across pages
+  by an insert between reads (rows with an `id` only).
+- **Tests.** Three backend tests in `test_phase_k5_list_attention.py` (not yet
+  run here); Flutter: 2 paging, 4 session/snapshot, 1 history; every new
+  Flutter test except the history one fails on the previous code.
+
 ## Resume here
 
 All four packages are integrated on `claude/k5-mobile-performance`

@@ -162,11 +162,11 @@ void main() {
         ..handle(
           'GET',
           '/api/deals',
-          (_) => const FakeResponse(200, {
+          (r) => FakeResponse(200, {
             'count': 999999,
             'next': 'https://api/next',
             'results': [
-              {'id': 1},
+              {'id': r.query['page'] ?? 1},
             ],
           }),
         );
@@ -177,6 +177,52 @@ void main() {
 
       expect(rows, hasLength(4));
       expect(backend.to('GET', '/api/deals'), hasLength(4));
+    });
+
+    test('a row pushed onto the next page by a new one is kept once', () async {
+      // Newest first, two to a page. Deal 9 is created between the two reads,
+      // so page 2 starts with 7, which page 1 already returned.
+      final backend = FakeBackend()
+        ..handle('GET', '/api/deals', (r) {
+          final first = r.query['page'] == null;
+          return FakeResponse(200, {
+            'count': first ? 4 : 5,
+            'next': first ? 'https://api/next' : null,
+            'results': first
+                ? [
+                    {'id': 8, 'v': 'first'},
+                    {'id': 7, 'v': 'first'},
+                  ]
+                : [
+                    {'id': 7, 'v': 'second'},
+                    {'id': 6},
+                    {'id': 5},
+                  ],
+          });
+        });
+      final api = apiClientFor(backend, FakeTokenStore());
+      addTearDown(() => api.raw.close(force: true));
+
+      final rows = await api.getAllPages('/api/deals', pageSize: 2);
+
+      expect(rows.map((r) => (r as Map)['id']), [8, 7, 6, 5]);
+      expect((rows[1] as Map)['v'], 'first', reason: 'the first read wins');
+    });
+
+    test('rows without an id are never merged', () async {
+      final backend = FakeBackend()
+        ..on(
+          'GET',
+          '/api/legacy',
+          const FakeResponse(200, [
+            {'name': 'a'},
+            {'name': 'a'},
+          ]),
+        );
+      final api = apiClientFor(backend, FakeTokenStore());
+      addTearDown(() => api.raw.close(force: true));
+
+      expect(await api.getAllPages('/api/legacy'), hasLength(2));
     });
   });
 

@@ -259,6 +259,14 @@ class SessionController extends Notifier<SessionState> {
         }
         return;
       }
+      // Another request's terminal refresh already ended this login: it
+      // cleared the credentials and its expiry callback reports it, with the
+      // "session expired" message. This answer lost that race and is not a
+      // verdict on the credentials, so it must not pre-empt that message.
+      if (error.kind == ApiFailureKind.cancelled ||
+          identity != _tokens.identityGeneration) {
+        return;
+      }
       await _tokens.clear();
       if (generation == _generation) {
         _generation++;
@@ -306,7 +314,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
-    unawaited(_remember(account, _tokens.identityGeneration));
+    unawaited(_remember(account, identity));
   }
 
   Future<void> signUp({
@@ -332,7 +340,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
-    unawaited(_remember(account, _tokens.identityGeneration));
+    unawaited(_remember(account, identity));
   }
 
   Future<void> signInWithGoogle({
@@ -354,7 +362,7 @@ class SessionController extends Notifier<SessionState> {
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
     state = SessionSignedIn(account, generation: generation);
-    unawaited(_remember(account, _tokens.identityGeneration));
+    unawaited(_remember(account, identity));
   }
 
   /// Changes the language ShipTrip writes to this account in.
@@ -414,8 +422,13 @@ class SessionController extends Notifier<SessionState> {
     _generation++;
     _revalidation?.cancel();
     state = const SessionSignedOut();
+    // In the same turn as the tap: from here on no response or snapshot
+    // write started under this login is accepted.
+    _tokens.invalidateIdentity();
     // Before the network call: the profile must not outlive the user's
-    // decision to leave, even if the app is killed mid sign-out.
+    // decision to leave, even if the app is killed mid sign-out. Queued
+    // behind any credential write already in flight, so a snapshot write
+    // that was waiting cannot land after it.
     try {
       await _tokens.deleteAccountSnapshot();
     } on Object {

@@ -246,6 +246,20 @@ def with_review_deadline(queryset):
     return queryset.alias(review_deadline=Coalesce("rating_window_ends_at", legacy))
 
 
+def review_window_open_q(*, at: datetime) -> Q:
+    """`_window_open` as a predicate over a `with_review_deadline` queryset.
+
+    The one SQL answer to "may this Deal still be rated", shared by the inbox's
+    rating actions and the Deal list's `current` scope so the two cannot drift.
+    """
+
+    return Q(
+        delivery_confirmed_at__isnull=False,
+        status__in=RATABLE_STATUSES,
+        review_deadline__gt=at,
+    )
+
+
 def _assert_window_open(deal: Deal, *, at: datetime) -> datetime:
     """The state gate, returning the window the new row is frozen against."""
 
