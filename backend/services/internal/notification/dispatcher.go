@@ -88,6 +88,12 @@ var subscribeChannels = []string{
 	// funded delivery lifecycle
 	"deal.cancelled",
 	"deal.updated",
+	// I1A journey timing. Django published these from the start but this
+	// list never carried them, so arrival reports reached the inbox and FCM
+	// but never a live socket (TestSubscribeChannelsMatchDjango).
+	"deal.arrival_reported",
+	"deal.arrival_confirmed",
+	"deal.arrival_declined",
 	"dispute.opened",
 	"dispute.resolved",
 	"payout.status_changed",

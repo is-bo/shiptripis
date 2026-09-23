@@ -83,7 +83,9 @@ func (h *Hub) Stats() (sockets, users int, connects uint64) {
 // this to decide whether the user is locally present (vs another pod or
 // offline entirely).
 //
-// Sending is non-blocking — wsproto.Conn.Send drops on per-conn overflow.
+// Sending is non-blocking. A socket whose buffer is full drops the
+// envelope, is disconnected, and is not counted, so no delivery receipt
+// claims a message that never left.
 func (h *Hub) Send(userID int64, env wsproto.Envelope) int {
 	h.mu.RLock()
 	set := h.conns[userID]
@@ -93,8 +95,11 @@ func (h *Hub) Send(userID int64, env wsproto.Envelope) int {
 	}
 	h.mu.RUnlock()
 
+	queued := 0
 	for _, c := range conns {
-		c.Send(env)
+		if c.Send(env) {
+			queued++
+		}
 	}
-	return len(conns)
+	return queued
 }
