@@ -63,6 +63,8 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     _messaging = ref.read(pushMessagingProvider);
     _socket = ref.read(notificationSocketProvider);
     _live = ref.read(liveUpdatesProvider);
+    // Whether the app is on screen: `inactive` still is, so only `hidden`,
+    // `paused` and `detached` stop the sockets.
     _resumed =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -93,13 +95,26 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _resumed = state == AppLifecycleState.resumed;
-    if (_resumed) {
-      unawaited(refreshPermission());
-      _reconcileCurrentScope();
-      _startSocketsIfSignedIn();
-    } else {
-      unawaited(_socket.stop());
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(refreshPermission());
+        // Back from `inactive` alone — the notification shade, the app
+        // switcher, a system dialog — the app never left the screen and its
+        // sockets never closed, so nothing was missed. Tearing both down and
+        // redialling for that cost two handshakes and a full catch-up each
+        // time the shade was pulled.
+        if (_resumed) return;
+        _resumed = true;
+        _reconcileCurrentScope();
+        _startSocketsIfSignedIn();
+      case AppLifecycleState.inactive:
+        break;
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        if (!_resumed) return;
+        _resumed = false;
+        unawaited(_socket.stop());
     }
   }
 

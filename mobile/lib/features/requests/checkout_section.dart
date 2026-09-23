@@ -12,8 +12,9 @@
 /// `GET /api/payments/orders/<ref>` until the server's own `status` settles or
 /// the newest attempt dies. The live `payment.*` event usually answers first
 /// (the surrounding screen re-reads on it); these re-reads are the backup, on a
-/// backing-off schedule of about two minutes, after which the user is offered
-/// a manual check rather than a spinner that never ends.
+/// backing-off schedule of about two minutes of the payer being back in the
+/// app, after which the user is offered a manual check rather than a spinner
+/// that never ends.
 ///
 /// J7D: the in-flight, partial, failed and cancelled moments are drawn with the
 /// shared [PaymentResultView], and the phase is reported to the parent through
@@ -138,6 +139,23 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   int _pollStep = 0;
   bool _pollExhausted = false;
 
+  /// Bumped whenever the schedule is stopped or restarted. A re-read that was
+  /// already in flight at that moment must not schedule the next one, or a
+  /// second loop runs beside the new schedule — and outlives [dispose], since
+  /// only the newest timer is cancelled there.
+  int _pollGeneration = 0;
+
+  /// Off screen — `hidden` or `paused`, typically on the provider's page. No
+  /// webhook lands faster for being asked about, so the schedule waits here
+  /// and is not spent before the payer is back to see the answer.
+  bool _away = false;
+  bool _pollDeferred = false;
+
+  /// The re-read in flight. Every caller — the schedule, a return to the app,
+  /// "Check again" — shares it, so two can never race to report the same
+  /// settlement twice.
+  Future<void>? _reading;
+
   CheckoutPhase _phase = CheckoutPhase.choosing;
   PaymentOrder? _order;
   PaymentProviderId? _selected;
@@ -196,18 +214,43 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _poll?.cancel();
+    _stopPolling();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Returning from the browser is the single most likely moment for the
-    // answer to have arrived. Ask straight away rather than waiting out the
-    // rest of the interval.
-    if (state == AppLifecycleState.resumed &&
-        _phase == CheckoutPhase.confirming) {
-      unawaited(_readOrder());
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _away = true;
+        if (_poll != null) {
+          _stopPolling();
+          _pollDeferred = true;
+        }
+      case AppLifecycleState.resumed:
+        _away = false;
+        final deferred = _pollDeferred;
+        _pollDeferred = false;
+        // Returning from the browser is the single most likely moment for the
+        // answer to have arrived. Ask straight away rather than waiting out
+        // the rest of the interval, then carry on with the schedule where it
+        // paused.
+        if (_phase != CheckoutPhase.confirming) return;
+        final generation = _pollGeneration;
+        unawaited(
+          _readOrder().then((_) {
+            if (deferred &&
+                mounted &&
+                generation == _pollGeneration &&
+                _phase == CheckoutPhase.confirming) {
+              _scheduleRead();
+            }
+          }),
+        );
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
     }
   }
 
@@ -216,7 +259,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   // -------------------------------------------------------------------------
 
   void _startConfirming() {
-    _poll?.cancel();
+    _stopPolling();
     setState(() {
       _pollExhausted = false;
       _pollStep = 0;
@@ -227,23 +270,36 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   }
 
   void _scheduleRead() {
+    if (_away) {
+      _pollDeferred = true;
+      return;
+    }
     if (_pollStep >= pollSchedule.length) {
       _stopPolling();
       if (mounted) setState(() => _pollExhausted = true);
       return;
     }
+    final generation = _pollGeneration;
     _poll = Timer(pollSchedule[_pollStep++], () async {
       await _readOrder();
-      if (mounted && _phase == CheckoutPhase.confirming) _scheduleRead();
+      if (mounted &&
+          generation == _pollGeneration &&
+          _phase == CheckoutPhase.confirming) {
+        _scheduleRead();
+      }
     });
   }
 
   void _stopPolling() {
+    _pollGeneration++;
     _poll?.cancel();
     _poll = null;
   }
 
-  Future<void> _readOrder() async {
+  Future<void> _readOrder() =>
+      _reading ??= _readOrderOnce().whenComplete(() => _reading = null);
+
+  Future<void> _readOrderOnce() async {
     try {
       final order = await ref
           .read(paymentRepositoryProvider)
@@ -254,8 +310,10 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
 
       if (order.status.isSettled) {
         _stopPolling();
+        final alreadySettled = _phase == CheckoutPhase.settled;
         _setPhase(CheckoutPhase.settled);
-        widget.onSettled();
+        // Once per settlement: the parent publishes, activates or funds on it.
+        if (!alreadySettled) widget.onSettled();
         return;
       }
       if (_phase != CheckoutPhase.confirming) return;

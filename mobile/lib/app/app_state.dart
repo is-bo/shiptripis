@@ -844,6 +844,18 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Built while off screen (a launch in the background): the first
+    // `resumed` is then a real return, not the launch.
+    switch (WidgetsBinding.instance.lifecycleState) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _leftAt = DateTime.now();
+      case AppLifecycleState.resumed:
+      case AppLifecycleState.inactive:
+      case null:
+        break;
+    }
   }
 
   @override
@@ -857,7 +869,11 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        _leftAt = DateTime.now();
+        // The first departure, not the latest: a device returns through
+        // `paused → hidden → inactive → resumed`, and restamping on that
+        // `hidden` made every real absence look a few milliseconds long, so
+        // the profile was never re-read on a phone.
+        _leftAt ??= DateTime.now();
       case AppLifecycleState.resumed:
         _onResumed();
       case AppLifecycleState.inactive:
@@ -870,7 +886,10 @@ class _ResumeRefresherState extends ConsumerState<ResumeRefresher>
     final away = _leftAt;
     _leftAt = null;
 
-    if (away != null && DateTime.now().difference(away) < _ignoreShorterThan) {
+    // No `hidden`/`paused` before this `resumed`: an `inactive` flicker (the
+    // notification shade, the app switcher) or the launch itself, where the
+    // session restore is already reading the profile. Neither is a departure.
+    if (away == null || DateTime.now().difference(away) < _ignoreShorterThan) {
       return;
     }
 

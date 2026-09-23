@@ -409,6 +409,56 @@ void main() {
     await _shutdown(tester);
   });
 
+  testWidgets('a phone-shaped return reads the profile once; a flicker, never', (
+    tester,
+  ) async {
+    final server = _Server();
+    await _boot(tester, server);
+
+    // The notification shade: `inactive` and back, never off screen.
+    final beforeFlicker = server.backend.requests.length;
+    tester.binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+    expect(
+      server.since(beforeFlicker),
+      isEmpty,
+      reason:
+          'a flicker sent ${server.since(beforeFlicker).map((r) => r.path)}',
+    );
+
+    // A real absence, delivered the way the framework walks it on a device:
+    // out through `hidden` and `paused`, back through `hidden` and `inactive`.
+    final beforeResume = server.backend.requests.length;
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1100)),
+    );
+    for (final state in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await _settle(tester);
+
+    final resume = server.since(beforeResume);
+    // The returning `hidden` used to restamp the departure, so every real
+    // absence looked a few milliseconds long and the profile was never read.
+    expect(resume.where((r) => r.path == '/api/me'), hasLength(1));
+    expect(resume.length, lessThanOrEqualTo(_resumeBudget));
+
+    await _shutdown(tester);
+  });
+
   testWidgets('a different account sees none of the first one\'s Deals', (
     tester,
   ) async {
