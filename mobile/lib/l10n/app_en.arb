@@ -3,7 +3,7 @@
   "payoutLegalCountryTitle": "Payout account country",
   "payoutLegalCountryLabel": "Country",
   "payoutLegalCountryBody": "Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.",
-  "appName": "ShipTrip",
+  "appName": "Waçla",
   "actionContinue": "Continue",
   "actionCancel": "Cancel",
   "actionSave": "Save",
@@ -64,7 +64,7 @@
   "authForgotPassword": "Forgot your password?",
   "authResetPassword": "Reset password",
   "authResetSent": "If that email has an account, we've sent a reset code.",
-  "authNoAccount": "New to ShipTrip?",
+  "authNoAccount": "New to Waçla?",
   "authHaveAccount": "Already have an account?",
   "authVerifyEmailTitle": "Confirm your email",
   "authVerifyEmailBody": "We sent a link to {email}. Confirm it to keep your account secure.",
@@ -116,7 +116,7 @@
   "stateUnexpectedTitle": "Something unexpected happened",
   "stateUnexpectedBody": "We couldn't complete that. Try again, and tell us if it keeps happening.",
   "stateAppOutdatedTitle": "This version is out of date",
-  "stateAppOutdatedBody": "Update ShipTrip to continue. This part of the app no longer works on this version.",
+  "stateAppOutdatedBody": "Update Waçla to continue. This part of the app no longer works on this version.",
   "staleTitle": "This has changed",
   "staleRefreshAction": "Refresh",
   "staleRequestNotOpen": "This request isn't open any more.",
@@ -152,9 +152,9 @@
   "moneyYourEarnings": "Your earnings",
   "moneyTotalYouReceive": "Total you receive",
   "moneyTravelerReceives": "Traveler receives",
-  "moneyPlatformFee": "ShipTrip fee",
+  "moneyPlatformFee": "Waçla fee",
   "moneyMinimumReward": "Minimum reward",
-  "moneyRecommendedReward": "ShipTrip suggests",
+  "moneyRecommendedReward": "Waçla suggests",
   "moneyYourReward": "Your reward",
   "moneyYourOffer": "Your offer",
   "moneyTotal": "Total",
@@ -163,7 +163,7 @@
   "moneyRefundToYou": "Refund to you",
   "moneyTravelerCompensation": "Traveler compensation",
   "moneyBreakdownTitle": "How this adds up",
-  "moneyRewardNotReduced": "The traveler receives this full amount. The ShipTrip fee is added on top, not taken out of it.",
+  "moneyRewardNotReduced": "The traveler receives this full amount. The Waçla fee is added on top, not taken out of it.",
   "moneyDepositNotExtra": "This is credited towards your final payment. It isn't an extra fee.",
   "moneyAmountCharged": "You'll be charged",
   "moneyExchangeRate": "Rate: €1 = {rate} DA",
@@ -274,12 +274,12 @@
   "depositCreditedNote": "It's credited towards your final payment when a traveler accepts.",
   "depositRefundNote": "If nobody takes it, or you cancel before accepting an offer, you get it back in full.",
   "depositGuidanceTitle": "Deposit guidance",
-  "depositSuggestedTotal": "ShipTrip suggested total",
+  "depositSuggestedTotal": "Waçla suggested total",
   "depositWholeAmount": "Your total for this delivery",
   "pricingUpdating": "Updating the price",
   "depositRecommended": "Recommended deposit",
   "depositMinimumAllowed": "Minimum deposit",
-  "depositGuidanceNote": "ShipTrip calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.",
+  "depositGuidanceNote": "Waçla calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.",
   "depositPayAction": "Pay deposit and publish",
   "depositPending": "Confirming your deposit…",
   "depositPendingBody": "We're waiting for your payment provider to confirm. This usually takes a few seconds.",
@@ -827,7 +827,7 @@
   "paymentReturnedTitle": "Welcome back",
   "paymentRedirectNotProof": "We confirm every payment with the provider before marking it paid.",
   "guestPayTitle": "Payment request",
-  "guestPayExplainer": "The person who sent you this link is asking you to pay this for their ShipTrip delivery. You don’t need an account.",
+  "guestPayExplainer": "The person who sent you this link is asking you to pay this for their Waçla delivery. You don’t need an account.",
   "guestPayExpiresAt": "Expires {when}",
   "@guestPayExpiresAt": {
     "placeholders": {
@@ -951,7 +951,7 @@
   },
   "protectionEnded": "Protection window closed",
   "protectionExplainerTitle": "What this means",
-  "protectionExplainerBody": "Funds are held pending delivery confirmation and the 48-hour protection period. ShipTrip releases them only after that period ends and no dispute is open.",
+  "protectionExplainerBody": "Funds are held pending delivery confirmation and the 48-hour protection period. Waçla releases them only after that period ends and no dispute is open.",
   "payoutTitle": "Payout",
   "payoutStatusNotEligible": "Not yet",
   "payoutStatusEligible": "Ready",
@@ -1055,7 +1055,7 @@
   "boostPreviewTitle": "Review before paying",
   "boostSenderPays": "You pay",
   "boostTravelerGets": "Traveler gets if delivered",
-  "boostPlatformKeeps": "ShipTrip keeps",
+  "boostPlatformKeeps": "Waçla keeps",
   "boostEarningsCondition": "The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.",
   "boostReviewAction": "Review boost",
   "boostConfirmAction": "Continue to payment",
@@ -1126,7 +1126,7 @@
   },
   "profileTitle": "Profile",
   "profileAccount": "Account",
-  "profilePassportStamp": "SHIPTRIP · MEMBER",
+  "profilePassportStamp": "WAÇLA · MEMBER",
   "profileCompletedDeliveries": "Completed",
   "profileRecentRating": "Recent rating",
   "profileRoles": "What you do",
@@ -1137,7 +1137,7 @@
   "profileLanguage": "Language",
   "profileLanguageSystem": "Device language",
   "profileAppLanguage": "App language",
-  "profileAppLanguageHelp": "What you read inside ShipTrip. Stored on this phone.",
+  "profileAppLanguageHelp": "What you read inside Waçla. Stored on this phone.",
   "profileEmailLanguage": "Email language",
   "profileEmailLanguageHelp": "What we write to you in — payments, verification, deliveries, disputes and account security. Saved to your account.",
   "profileEmailLanguageSaved": "Email language updated",
@@ -1154,7 +1154,7 @@
   "profileAppearanceDark": "Dark",
   "profileEmailVerified": "Email verified",
   "profileEmailUnverified": "Email not verified",
-  "profileMemberSince": "With ShipTrip since {date}",
+  "profileMemberSince": "With Waçla since {date}",
   "@profileMemberSince": {
     "placeholders": {
       "date": {
@@ -1759,8 +1759,8 @@
   },
   "pickupConfirmedTravelerNext": "Carry the parcel to the recipient. They read you the delivery code at the door — you are never shown it yourself.",
   "deliverySafetyWaitingTitle": "Waiting for the safety period",
-  "deliverySafetyWaitingSenderBody": "Pickup is confirmed. Delivery confirmation becomes available after the safety period; then ShipTrip emails the delivery code to your recipient.",
-  "deliverySafetyWaitingTravelerBody": "Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — ShipTrip never shows it to you.",
+  "deliverySafetyWaitingSenderBody": "Pickup is confirmed. Delivery confirmation becomes available after the safety period; then Waçla emails the delivery code to your recipient.",
+  "deliverySafetyWaitingTravelerBody": "Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — Waçla never shows it to you.",
   "@pickupConfirmedTravelerNext": {
     "description": "Traveller copy after pickup is confirmed. States the invariant plainly."
   },
@@ -1937,7 +1937,7 @@
   "@disputeAmountsTitle": {
     "description": "Title of the settlement breakdown."
   },
-  "disputeAmountsExplainer": "These amounts are ShipTrip's decision. Nothing here is worked out on your phone.",
+  "disputeAmountsExplainer": "These amounts are Waçla's decision. Nothing here is worked out on your phone.",
   "@disputeAmountsExplainer": {
     "description": "Explainer under the settlement breakdown."
   },
@@ -1945,7 +1945,7 @@
   "@disputeCollectedTotal": {
     "description": "Breakdown line for the total the sender originally paid."
   },
-  "disputeResolutionNoteLabel": "Note from ShipTrip",
+  "disputeResolutionNoteLabel": "Note from Waçla",
   "@disputeResolutionNoteLabel": {
     "description": "Row label for the resolution note."
   },
@@ -2161,16 +2161,16 @@
   "formServerRefusedOnStep": "The server refused this request. The problem is on this step, marked below.",
   "formStepLockedUntilValid": "Finish this step first.",
   "pushPermissionHeading": "On this phone",
-  "pushPermissionBody": "Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.",
+  "pushPermissionBody": "Get timely updates about offers, payments, delivery, messages and verification. Waçla asks only when you choose Enable.",
   "pushPermissionEnabled": "Notifications are enabled.",
   "pushPermissionDeniedRequestable": "Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.",
   "pushPermissionDenied": "Notifications are off at system level. You can enable them in Settings.",
   "pushPermissionUnavailable": "Push is not configured in this build. In-app notifications still work.",
-  "pushPermissionInitializationFailed": "Push could not start on this phone. Your in-app notifications still work; reopen ShipTrip to try again.",
+  "pushPermissionInitializationFailed": "Push could not start on this phone. Your in-app notifications still work; reopen Waçla to try again.",
   "pushEnableAction": "Enable notifications",
   "pushOpenSettingsAction": "Open notification settings",
-  "pushRegistrationPending": "System notification permission is on. ShipTrip is finishing notification setup for this phone.",
-  "pushRegistrationFailed": "System notification permission is on, but ShipTrip could not finish registering this phone. Check your connection and try again.",
+  "pushRegistrationPending": "System notification permission is on. Waçla is finishing notification setup for this phone.",
+  "pushRegistrationFailed": "System notification permission is on, but Waçla could not finish registering this phone. Check your connection and try again.",
   "pushRetryRegistrationAction": "Retry notification setup",
   "pushPreferencesHeading": "Notification types",
   "pushPreferencesBody": "These choices control messages and marketplace activity. They do not change this phone's system permission, and essential delivery and account updates stay available.",
@@ -2297,7 +2297,7 @@
   "deliveryPayoutScheduledArrivalPendingExplainer": "The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.",
   "earlyArrivalAction": "I arrived early",
   "earlyArrivalConfirmSheetTitle": "Report early arrival",
-  "earlyArrivalConfirmSheetBody": "This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows ShipTrip protection rules.",
+  "earlyArrivalConfirmSheetBody": "This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows Waçla protection rules.",
   "earlyArrivalWaitingSenderTitle": "Waiting for Sender confirmation",
   "earlyArrivalWaitingSenderBody": "You reported your early arrival. The sender has been notified to confirm it. Handover and delivery remain separate.",
   "earlyArrivalSenderNoticeTitle": "Traveler says they arrived early",
@@ -2322,11 +2322,11 @@
   "routeArrivalLabel": "Arrival",
   "routeCarryingLegsOnly": "Carrying route for this delivery",
   "notificationArrivalReported": "Traveler arrived early",
-  "notificationArrivalReportedBody": "Open ShipTrip to confirm the early arrival.",
+  "notificationArrivalReportedBody": "Open Waçla to confirm the early arrival.",
   "notificationArrivalConfirmed": "Early arrival confirmed",
   "notificationArrivalConfirmedBody": "The sender confirmed your arrival. Delivery is still to come.",
   "notificationArrivalDeclined": "Early arrival not confirmed",
-  "notificationArrivalDeclinedBody": "Open ShipTrip to review the delivery.",
+  "notificationArrivalDeclinedBody": "Open Waçla to review the delivery.",
   "routeBasisSnapshot": "Frozen at booking",
   "routeBasisLive": "Live journey",
   "pricingMinimumLabel": "Minimum price",
@@ -2343,7 +2343,7 @@
     }
   },
   "pricingTravelerReceives": "Traveler receives",
-  "pricingPlatformFee": "ShipTrip fee",
+  "pricingPlatformFee": "Waçla fee",
   "pricingTotalSenderCost": "Total sender cost",
   "pricingIncrement50c": "Increase by 50 cents",
   "pricingDecrement50c": "Decrease by 50 cents",
@@ -2409,13 +2409,13 @@
   "boostNotEditable": "Boost cannot be edited once an offer has been accepted or the request has expired.",
   "guestPaymentTitle": "Someone else can pay",
   "guestCreateAction": "Create payment link",
-  "guestShareLead": "Share this secure payment link with someone you trust. They can pay without a ShipTrip account.",
+  "guestShareLead": "Share this secure payment link with someone you trust. They can pay without a Waçla account.",
   "guestShareAction": "Share link",
   "guestCopyAction": "Copy link",
   "guestCopiedAction": "Copied",
   "guestLinkCopied": "Link copied",
-  "guestShareSubject": "ShipTrip payment request",
-  "guestShareMessage": "Could you pay {amount} for my ShipTrip delivery? Here is the secure link: {link}",
+  "guestShareSubject": "Waçla payment request",
+  "guestShareMessage": "Could you pay {amount} for my Waçla delivery? Here is the secure link: {link}",
   "@guestShareMessage": {
     "placeholders": {
       "amount": {
@@ -2470,13 +2470,13 @@
   "guestPurposeRemaining": "Remaining delivery payment",
   "guestPurposeDelivery": "Delivery payment",
   "guestPurposeBoost": "Boost payment",
-  "guestPurposeOther": "ShipTrip payment",
+  "guestPurposeOther": "Waçla payment",
   "guestPayingNowTitle": "Someone else is paying this now",
   "guestPayingNowBody": "They opened your payment link. This updates as soon as their payment goes through.",
   "guestPayPurposeDeposit": "Deposit for a delivery request",
   "guestPayPurposeDelivery": "Payment for a delivery",
   "guestPayPurposeBoost": "Extra reward for a delivery",
-  "guestPayHandoff": "You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.",
+  "guestPayHandoff": "You’ll finish on our payment partner’s secure page. Waçla never sees your card details.",
   "paymentSuccessAmountPaid": "Amount paid",
   "paymentSuccessViewRequestAction": "View request",
   "paymentSuccessViewDeliveryAction": "View delivery",
@@ -2504,7 +2504,7 @@
   "@boostAddsOnTop": {
     "description": "boostAddsOnTop"
   },
-  "boostEstimateNotice": "An estimate until you save. ShipTrip confirms the final amounts.",
+  "boostEstimateNotice": "An estimate until you save. Waçla confirms the final amounts.",
   "@boostEstimateNotice": {
     "description": "boostEstimateNotice"
   },
@@ -2593,7 +2593,7 @@
       }
     }
   },
-  "findTravelersTrustTitle": "Checks ShipTrip has done",
+  "findTravelersTrustTitle": "Checks Waçla has done",
   "@findTravelersTrustTitle": {
     "description": "findTravelersTrustTitle"
   },
@@ -2751,6 +2751,6 @@
     }
   },
   "guestPayHandoffTitle": "Finish on the payment page",
-  "guestPayHandoffBody": "Complete the payment on our payment partner's secure page. That page will show you the result, and the person who asked you will see it in ShipTrip.",
+  "guestPayHandoffBody": "Complete the payment on our payment partner's secure page. That page will show you the result, and the person who asked you will see it in Waçla.",
   "payResultDepositCredited": "This deposit counts toward your delivery total when a traveler accepts."
 }

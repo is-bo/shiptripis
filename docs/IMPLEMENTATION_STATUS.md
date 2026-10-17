@@ -1,4 +1,38 @@
-# ShipTrip V1 Implementation Status
+# Waçla V1 Implementation Status
+
+## Product rename — Waçla (17 October 2026)
+
+Implemented on `codex/rebrand-waçla`. The product name is **Waçla**, with a
+cedilla (`ç`, U+00E7). Updated the Android/iOS display names and permission
+copy, Flutter title, wordmark, accessibility label, profile stamp and EN/FR/AR
+catalogues (including generated Dart), the public website and metadata,
+SVG/ICO favicons and brand seals, admin/Finance copy, hosted payment and Stripe
+Connect return pages, checkout descriptions, transactional emails and push
+notifications. Recompiled both Django translation catalogues. Current product
+documentation and example sender display names use Waçla; historical release
+records retain their original names.
+
+Railway is preserved: no deployment, resource, service, variable or domain was
+changed, and all Railway/gateway configuration and CI workflows are untouched.
+Existing `SHIPTRIP_*` environment keys, package/bundle IDs, Dart and Go module
+names, static paths, URLs, email addresses, Redis namespaces, signing salts,
+provider metadata/idempotency keys and database identifiers remain compatible.
+Existing environment overrides of email sender names are retained as configured.
+No model, migration, schema or sqlc contract changed. Runtime Python review
+confirmed that all 23 changed modules have identical ASTs after normalizing
+only the brand text; money, authorization and transactional behavior are intact.
+
+Validation: Flutter 158 targeted tests passed, including the wordmark and
+accessibility name in EN/FR/AR, profile, guest payments, payment rails,
+navigation/RTL and unchanged API configuration. Analyzer clean; all 200 Dart
+source/test files formatted; generated localizations and ARB key parity clean.
+Django 254 distinct targeted tests passed on local SQLite across notification,
+email/localization, checkout/guest payment, Stripe onboarding and admin access
+suites. All 50 Finance console/dashboard/operator tests also passed against an
+isolated local PostgreSQL cluster, covering the 39 cases SQLite skips. Ruff,
+`makemigrations --check --dry-run`, static links/CSP/edge routing (8 HTML pages),
+all 8 globe tests, modified XML/JSON parsing and `git diff --check` passed.
+No APK was built and nothing was deployed or pushed to a remote.
 
 ## K7 — Realtime, High-Scale Tuning & Final Certification (merged and released, 2026-09-23)
 

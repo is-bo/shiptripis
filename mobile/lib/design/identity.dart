@@ -1,4 +1,4 @@
-/// The ShipTrip identity kit.
+/// The Waçla identity kit.
 ///
 /// Everything in this file is decoration in the strict sense — none of it
 /// carries product state — but it is the decoration the product is recognised
@@ -39,7 +39,7 @@ import 'typography.dart';
 // Entrance choreography
 // ---------------------------------------------------------------------------
 
-/// The staggered fade-and-rise that every ShipTrip screen opens with.
+/// The staggered fade-and-rise that every Waçla screen opens with.
 ///
 /// Wrapping it rather than calling `.animate()` inline is what makes "respect
 /// reduce motion" true everywhere by construction: a screen cannot forget,
@@ -773,7 +773,7 @@ class CountryPill extends StatelessWidget {
   }
 }
 
-/// The wordmark: a tilted plane in an ink tile, then "ShipTrip" in the
+/// The wordmark: a tilted plane in an ink tile, then "Waçla" in the
 /// display serif.
 class ShipTripMark extends StatelessWidget {
   const ShipTripMark({this.size = 30, this.showWordmark = true, super.key});
@@ -785,7 +785,7 @@ class ShipTripMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Semantics(
-      label: 'ShipTrip',
+      label: 'Waçla',
       excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -811,7 +811,7 @@ class ShipTripMark extends StatelessWidget {
           if (showWordmark) ...[
             SizedBox(width: size * 0.33),
             Text(
-              'ShipTrip',
+              'Waçla',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontSize: size * 0.67,
                 color: c.textPrimary,
@@ -824,7 +824,7 @@ class ShipTripMark extends StatelessWidget {
   }
 }
 
-/// The circular back affordance the original ShipTrip auth screens used
+/// The circular back affordance the original Waçla auth screens used
 /// instead of an app bar: a disc of lighter paper on the parchment, with a
 /// hairline so it has an edge.
 ///

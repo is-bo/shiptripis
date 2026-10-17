@@ -16,7 +16,7 @@ last-four mask and a public reference.
 
 **A state is a sentence, not an enum.** ``sent`` and ``paid`` mean different
 things to a Finance operator — one says the operator attests money left the
-bank, the other says ShipTrip's own settlement completed — so they never share
+bank, the other says Waçla's own settlement completed — so they never share
 a label, a tone or a chip.
 
 **A blocked action is absent or disabled, never merely rejected.** The gate
@@ -151,13 +151,13 @@ STATE_LABELS: dict[str, tuple[str, str, str]] = {
         "Processing",
         "attn",
         "The instruction is committed. Finance is performing the DZD transfer "
-        "outside ShipTrip and owes a receipt.",
+        "outside Waçla and owes a receipt.",
     ),
     "sent": (
         "Transfer sent",
         "info",
         "An operator attested the DZD transfer was sent and attached a receipt. "
-        "ShipTrip has not recorded settlement yet.",
+        "Waçla has not recorded settlement yet.",
     ),
     "paid": (
         "Paid",
@@ -617,7 +617,7 @@ STEPS = (
     ),
     (
         "Send the exact DZD amount from your bank",
-        "ShipTrip does not perform this transfer. Reveal the destination, send "
+        "Waçla does not perform this transfer. Reveal the destination, send "
         "the exact amount shown, and keep the receipt.",
     ),
     (
@@ -636,9 +636,9 @@ STEPS = (
 def steps_of(payout, *, reviewed, blocked) -> list[dict]:
     """The five things a Finance operator actually does, in order.
 
-    Written so that no step can be read as "ShipTrip sends the money": step
+    Written so that no step can be read as "Waçla sends the money": step
     three happens in a banking application, outside this system, and every other
-    step is ShipTrip recording what a person did.
+    step is Waçla recording what a person did.
 
     Exactly one step is ever *now*. "What do I do next" has one answer or it has
     none, and a list with two highlighted rows answers it worse than a list with
@@ -745,7 +745,7 @@ def timeline_of(payout, profile=None) -> list[dict]:
                 "detail": detail,
                 "previous_state": event.previous_state,
                 "new_state": event.new_state,
-                "actor": _person(event.actor) or "ShipTrip",
+                "actor": _person(event.actor) or "Waçla",
                 "at": event.occurred_at or event.recorded_at,
                 "age": age_label(event.occurred_at or event.recorded_at),
                 "evidence_reference": (

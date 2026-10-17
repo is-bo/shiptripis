@@ -229,7 +229,7 @@ class StripeCheckoutTests(TestCase):
             "success_url": "https://shiptrip.test/pay/ok",
             "failure_url": "https://shiptrip.test/pay/no",
             "webhook_url": "https://shiptrip.test/api/payments/webhooks/stripe",
-            "description": "ShipTrip delivery payment",
+            "description": "Waçla delivery payment",
             "metadata": {"order_reference": "ref-123"},
         }
         base.update(overrides)

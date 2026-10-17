@@ -97,12 +97,12 @@ def _footer_lines(support_email: str = "") -> tuple[str, ...]:
             else _("Questions? Reply to this email.")
         ),
         _(
-            "ShipTrip will never ask you for a pickup or delivery code, and will "
+            "Waçla will never ask you for a pickup or delivery code, and will "
             "never ask you to share one before the parcel is in your hands."
         ),
         _(
             "You are receiving this because of a delivery or account action on "
-            "ShipTrip. This is a transactional message, not marketing."
+            "Waçla. This is a transactional message, not marketing."
         ),
     )
 
@@ -303,9 +303,9 @@ def to_html(
     )
     home_link = (
         f'<a href="{escape(site_url, quote=True)}" dir="ltr" style="color:{INK_MUTE};'
-        f'text-decoration:underline;direction:ltr;unicode-bidi:embed;">ShipTrip</a>'
+        f'text-decoration:underline;direction:ltr;unicode-bidi:embed;">Waçla</a>'
         if site_url
-        else "ShipTrip"
+        else "Waçla"
     )
 
     transactional_line = _(
@@ -313,7 +313,7 @@ def to_html(
         "%(shiptrip)s. This is a transactional message, not marketing."
     ) % {"shiptrip": home_link}
     safety_line = _(
-        "ShipTrip will never ask you for a pickup or delivery code, and will "
+        "Waçla will never ask you for a pickup or delivery code, and will "
         "never ask you to share one before the parcel is in your hands."
     )
 
@@ -354,7 +354,7 @@ def to_html(
           <td class="st-pad" align="{alignment}" style="padding:0 32px 14px;text-align:{alignment};">
             <span style="color:{INK};font-size:20px;font-weight:700;
                          letter-spacing:-0.3px;
-                         font-family:Georgia,'Times New Roman',Times,serif;">ShipTrip</span>
+                         font-family:Georgia,'Times New Roman',Times,serif;">Waçla</span>
             <span dir="auto" style="color:{INK_MUTE};font-size:12px;{label_style}">
               &nbsp;&nbsp;{escape(_("EU ↔ Algeria"))}</span>
           </td>

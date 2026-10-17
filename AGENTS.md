@@ -1,4 +1,4 @@
-# ShipTrip Codex Instructions
+# Waçla Codex Instructions
 
 Codex is the primary engineering owner. Before substantial work, read:
 

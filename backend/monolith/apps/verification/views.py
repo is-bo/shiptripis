@@ -38,7 +38,7 @@ class V1HandoverUnavailable(APIException):
 
 class ProductHandoverRetired(APIException):
     status_code = status.HTTP_410_GONE
-    default_detail = "ProductRequest/Kaba handover is retired in ShipTrip V1."
+    default_detail = "ProductRequest/Kaba handover is retired in Waçla V1."
     default_code = "product_request_retired"
 
 

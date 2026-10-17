@@ -19,7 +19,7 @@ class LEn extends L {
       'Select your legal Stripe account country to consent to payout setup. If your country is not listed, use DZD payouts.';
 
   @override
-  String get appName => 'ShipTrip';
+  String get appName => 'Waçla';
 
   @override
   String get actionContinue => 'Continue';
@@ -182,7 +182,7 @@ class LEn extends L {
       'If that email has an account, we\'ve sent a reset code.';
 
   @override
-  String get authNoAccount => 'New to ShipTrip?';
+  String get authNoAccount => 'New to Waçla?';
 
   @override
   String get authHaveAccount => 'Already have an account?';
@@ -310,7 +310,7 @@ class LEn extends L {
 
   @override
   String get stateAppOutdatedBody =>
-      'Update ShipTrip to continue. This part of the app no longer works on this version.';
+      'Update Waçla to continue. This part of the app no longer works on this version.';
 
   @override
   String get staleTitle => 'This has changed';
@@ -412,13 +412,13 @@ class LEn extends L {
   String get moneyTravelerReceives => 'Traveler receives';
 
   @override
-  String get moneyPlatformFee => 'ShipTrip fee';
+  String get moneyPlatformFee => 'Waçla fee';
 
   @override
   String get moneyMinimumReward => 'Minimum reward';
 
   @override
-  String get moneyRecommendedReward => 'ShipTrip suggests';
+  String get moneyRecommendedReward => 'Waçla suggests';
 
   @override
   String get moneyYourReward => 'Your reward';
@@ -446,7 +446,7 @@ class LEn extends L {
 
   @override
   String get moneyRewardNotReduced =>
-      'The traveler receives this full amount. The ShipTrip fee is added on top, not taken out of it.';
+      'The traveler receives this full amount. The Waçla fee is added on top, not taken out of it.';
 
   @override
   String get moneyDepositNotExtra =>
@@ -777,7 +777,7 @@ class LEn extends L {
   String get depositGuidanceTitle => 'Deposit guidance';
 
   @override
-  String get depositSuggestedTotal => 'ShipTrip suggested total';
+  String get depositSuggestedTotal => 'Waçla suggested total';
 
   @override
   String get depositWholeAmount => 'Your total for this delivery';
@@ -793,7 +793,7 @@ class LEn extends L {
 
   @override
   String get depositGuidanceNote =>
-      'ShipTrip calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.';
+      'Waçla calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.';
 
   @override
   String get depositPayAction => 'Pay deposit and publish';
@@ -1809,7 +1809,7 @@ class LEn extends L {
 
   @override
   String get guestPayExplainer =>
-      'The person who sent you this link is asking you to pay this for their ShipTrip delivery. You don’t need an account.';
+      'The person who sent you this link is asking you to pay this for their Waçla delivery. You don’t need an account.';
 
   @override
   String guestPayExpiresAt(String when) {
@@ -2058,7 +2058,7 @@ class LEn extends L {
 
   @override
   String get protectionExplainerBody =>
-      'Funds are held pending delivery confirmation and the 48-hour protection period. ShipTrip releases them only after that period ends and no dispute is open.';
+      'Funds are held pending delivery confirmation and the 48-hour protection period. Waçla releases them only after that period ends and no dispute is open.';
 
   @override
   String get payoutTitle => 'Payout';
@@ -2307,7 +2307,7 @@ class LEn extends L {
   String get boostTravelerGets => 'Traveler gets if delivered';
 
   @override
-  String get boostPlatformKeeps => 'ShipTrip keeps';
+  String get boostPlatformKeeps => 'Waçla keeps';
 
   @override
   String get boostEarningsCondition =>
@@ -2451,7 +2451,7 @@ class LEn extends L {
   String get profileAccount => 'Account';
 
   @override
-  String get profilePassportStamp => 'SHIPTRIP · MEMBER';
+  String get profilePassportStamp => 'WAÇLA · MEMBER';
 
   @override
   String get profileCompletedDeliveries => 'Completed';
@@ -2485,7 +2485,7 @@ class LEn extends L {
 
   @override
   String get profileAppLanguageHelp =>
-      'What you read inside ShipTrip. Stored on this phone.';
+      'What you read inside Waçla. Stored on this phone.';
 
   @override
   String get profileEmailLanguage => 'Email language';
@@ -2530,7 +2530,7 @@ class LEn extends L {
 
   @override
   String profileMemberSince(String date) {
-    return 'With ShipTrip since $date';
+    return 'With Waçla since $date';
   }
 
   @override
@@ -3586,11 +3586,11 @@ class LEn extends L {
 
   @override
   String get deliverySafetyWaitingSenderBody =>
-      'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then ShipTrip emails the delivery code to your recipient.';
+      'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then Waçla emails the delivery code to your recipient.';
 
   @override
   String get deliverySafetyWaitingTravelerBody =>
-      'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — ShipTrip never shows it to you.';
+      'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — Waçla never shows it to you.';
 
   @override
   String get pickupGoToDeliveryAction => 'Go to delivery';
@@ -3744,13 +3744,13 @@ class LEn extends L {
 
   @override
   String get disputeAmountsExplainer =>
-      'These amounts are ShipTrip\'s decision. Nothing here is worked out on your phone.';
+      'These amounts are Waçla\'s decision. Nothing here is worked out on your phone.';
 
   @override
   String get disputeCollectedTotal => 'Collected from the sender';
 
   @override
-  String get disputeResolutionNoteLabel => 'Note from ShipTrip';
+  String get disputeResolutionNoteLabel => 'Note from Waçla';
 
   @override
   String get disputeTimelineTitle => 'What\'s happened';
@@ -4074,7 +4074,7 @@ class LEn extends L {
 
   @override
   String get pushPermissionBody =>
-      'Get timely updates about offers, payments, delivery, messages and verification. ShipTrip asks only when you choose Enable.';
+      'Get timely updates about offers, payments, delivery, messages and verification. Waçla asks only when you choose Enable.';
 
   @override
   String get pushPermissionEnabled => 'Notifications are enabled.';
@@ -4093,7 +4093,7 @@ class LEn extends L {
 
   @override
   String get pushPermissionInitializationFailed =>
-      'Push could not start on this phone. Your in-app notifications still work; reopen ShipTrip to try again.';
+      'Push could not start on this phone. Your in-app notifications still work; reopen Waçla to try again.';
 
   @override
   String get pushEnableAction => 'Enable notifications';
@@ -4103,11 +4103,11 @@ class LEn extends L {
 
   @override
   String get pushRegistrationPending =>
-      'System notification permission is on. ShipTrip is finishing notification setup for this phone.';
+      'System notification permission is on. Waçla is finishing notification setup for this phone.';
 
   @override
   String get pushRegistrationFailed =>
-      'System notification permission is on, but ShipTrip could not finish registering this phone. Check your connection and try again.';
+      'System notification permission is on, but Waçla could not finish registering this phone. Check your connection and try again.';
 
   @override
   String get pushRetryRegistrationAction => 'Retry notification setup';
@@ -4482,7 +4482,7 @@ class LEn extends L {
 
   @override
   String get earlyArrivalConfirmSheetBody =>
-      'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows ShipTrip protection rules.';
+      'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows Waçla protection rules.';
 
   @override
   String get earlyArrivalWaitingSenderTitle =>
@@ -4568,7 +4568,7 @@ class LEn extends L {
 
   @override
   String get notificationArrivalReportedBody =>
-      'Open ShipTrip to confirm the early arrival.';
+      'Open Waçla to confirm the early arrival.';
 
   @override
   String get notificationArrivalConfirmed => 'Early arrival confirmed';
@@ -4582,7 +4582,7 @@ class LEn extends L {
 
   @override
   String get notificationArrivalDeclinedBody =>
-      'Open ShipTrip to review the delivery.';
+      'Open Waçla to review the delivery.';
 
   @override
   String get routeBasisSnapshot => 'Frozen at booking';
@@ -4616,7 +4616,7 @@ class LEn extends L {
   String get pricingTravelerReceives => 'Traveler receives';
 
   @override
-  String get pricingPlatformFee => 'ShipTrip fee';
+  String get pricingPlatformFee => 'Waçla fee';
 
   @override
   String get pricingTotalSenderCost => 'Total sender cost';
@@ -4714,7 +4714,7 @@ class LEn extends L {
 
   @override
   String get guestShareLead =>
-      'Share this secure payment link with someone you trust. They can pay without a ShipTrip account.';
+      'Share this secure payment link with someone you trust. They can pay without a Waçla account.';
 
   @override
   String get guestShareAction => 'Share link';
@@ -4729,11 +4729,11 @@ class LEn extends L {
   String get guestLinkCopied => 'Link copied';
 
   @override
-  String get guestShareSubject => 'ShipTrip payment request';
+  String get guestShareSubject => 'Waçla payment request';
 
   @override
   String guestShareMessage(String amount, String link) {
-    return 'Could you pay $amount for my ShipTrip delivery? Here is the secure link: $link';
+    return 'Could you pay $amount for my Waçla delivery? Here is the secure link: $link';
   }
 
   @override
@@ -4839,7 +4839,7 @@ class LEn extends L {
   String get guestPurposeBoost => 'Boost payment';
 
   @override
-  String get guestPurposeOther => 'ShipTrip payment';
+  String get guestPurposeOther => 'Waçla payment';
 
   @override
   String get guestPayingNowTitle => 'Someone else is paying this now';
@@ -4859,7 +4859,7 @@ class LEn extends L {
 
   @override
   String get guestPayHandoff =>
-      'You’ll finish on our payment partner’s secure page. ShipTrip never sees your card details.';
+      'You’ll finish on our payment partner’s secure page. Waçla never sees your card details.';
 
   @override
   String get paymentSuccessAmountPaid => 'Amount paid';
@@ -4913,7 +4913,7 @@ class LEn extends L {
 
   @override
   String get boostEstimateNotice =>
-      'An estimate until you save. ShipTrip confirms the final amounts.';
+      'An estimate until you save. Waçla confirms the final amounts.';
 
   @override
   String boostAmountAboveMaximum(String amount) {
@@ -4987,7 +4987,7 @@ class LEn extends L {
   }
 
   @override
-  String get findTravelersTrustTitle => 'Checks ShipTrip has done';
+  String get findTravelersTrustTitle => 'Checks Waçla has done';
 
   @override
   String get offerBaseRewardLabel => 'Base delivery reward';
@@ -5131,7 +5131,7 @@ class LEn extends L {
 
   @override
   String get guestPayHandoffBody =>
-      'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in ShipTrip.';
+      'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in Waçla.';
 
   @override
   String get payResultDepositCredited =>

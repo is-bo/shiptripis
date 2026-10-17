@@ -279,7 +279,7 @@ void main() {
           'amount_eur_cents': 4200,
           'currency': 'EUR',
           'purpose': 'deal_balance',
-          'description': 'ShipTrip delivery payment',
+          'description': 'Waçla delivery payment',
           'expires_at': '2026-09-21T12:00:00Z',
           'receipt_email_required': receipts,
           'providers': [

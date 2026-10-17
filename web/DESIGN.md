@@ -1,5 +1,5 @@
 ---
-name: ShipTrip public web
+name: Waçla public web
 description: Warm Mediterranean travel, with the route as the product motif.
 colors:
   canvas: "#f4efe6"
@@ -42,13 +42,13 @@ components:
     rounded: "{rounded.md}"
 ---
 
-# Design System: ShipTrip public web
+# Design System: Waçla public web
 
 ## Overview
 
 **Creative North Star: "Editorial Mediterranean travel."**
 
-The public site keeps ShipTrip's warm paper, deep ink, Algerian emerald,
+The public site keeps Waçla's warm paper, deep ink, Algerian emerald,
 terracotta identity seal, yellow primary action, and serif display voice.
 The route is a meaningful motif: people already travel, and parcels can share
 their journeys. Geographic visuals use recognizable places and restrained

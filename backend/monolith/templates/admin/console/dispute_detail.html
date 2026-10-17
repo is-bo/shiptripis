@@ -40,7 +40,7 @@
         <div class="st-money-strip">
           <div class="is-total"><span>Sender total</span><strong>{{ terms.sender_total_minor|eur }}</strong></div>
           <div><span>Traveler reward</span><strong>{{ terms.traveler_reward_minor|eur }}</strong></div>
-          <div><span>ShipTrip fee</span><strong>{{ terms.platform_fee_minor|eur }}</strong></div>
+          <div><span>Waçla fee</span><strong>{{ terms.platform_fee_minor|eur }}</strong></div>
         </div>
         <dl class="st-facts">
           <div><dt>Net collected, after committed refunds</dt><dd><span class="st-money">{{ money.collected_eur_cents|eur }}</span></dd></div>
@@ -145,7 +145,7 @@
             <div><dt>Collected</dt><dd>{{ resolution_preview.money.collected_eur_cents|eur }}</dd></div>
             <div><dt>Return to Sender</dt><dd>{{ resolution_preview.sender_refund_eur_cents|eur }}</dd></div>
             <div><dt>Pay Traveler</dt><dd>{{ resolution_preview.traveler_payout_eur_cents|eur }}</dd></div>
-            <div><dt>ShipTrip keeps</dt><dd>{{ resolution_preview.platform_fee_eur_cents|eur }}</dd></div>
+            <div><dt>Waçla keeps</dt><dd>{{ resolution_preview.platform_fee_eur_cents|eur }}</dd></div>
           </dl>
           <form method="post" action="#st-dispute-resolution" class="st-form">{% csrf_token %}
             <input type="hidden" name="action" value="confirm-resolution">
@@ -166,7 +166,7 @@
         <div class="st-money-strip st-money-stack">
           <div><span>Returned to Sender</span><strong>{{ dispute.sender_refund_eur_cents|eur }}</strong></div>
           <div><span>Paid to Traveler</span><strong>{{ dispute.traveler_payout_eur_cents|eur }}</strong></div>
-          <div><span>ShipTrip kept</span><strong>{{ dispute.platform_fee_eur_cents|eur }}</strong></div>
+          <div><span>Waçla kept</span><strong>{{ dispute.platform_fee_eur_cents|eur }}</strong></div>
         </div>
         {% if dispute.resolution_note %}<p>{{ dispute.resolution_note }}</p>{% endif %}
       </section>

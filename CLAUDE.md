@@ -1,4 +1,4 @@
-# ShipTrip Claude Code Instructions
+# Waçla Claude Code Instructions
 
 Before substantial work, read:
 

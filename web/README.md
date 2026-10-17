@@ -1,4 +1,4 @@
-# ShipTrip public website
+# Waçla public website
 
 This directory is a dependency-free static landing site for the EU ↔ Algeria
 launch scope. It contains English (`/en/`), French (`/fr/`) and Arabic

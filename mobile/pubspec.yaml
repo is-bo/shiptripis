@@ -1,5 +1,5 @@
 name: shiptrip
-description: "ShipTrip — peer-to-peer parcel delivery between the EU and Algeria."
+description: "Waçla — peer-to-peer parcel delivery between the EU and Algeria."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -46,7 +46,7 @@ dependencies:
   # PCI-scope problem we have no reason to take on.
   url_launcher: ^6.3.1
 
-  # Entrance choreography. The staggered fade/rise on every ShipTrip screen is
+  # Entrance choreography. The staggered fade/rise on every Waçla screen is
   # part of the product's identity, not decoration; `flutter_animate` is how
   # the original expressed it and keeps the call sites declarative.
   flutter_animate: ^4.5.2

@@ -201,7 +201,7 @@ class DepositQuote:
     Three numbers, and they are not the same number:
 
     ``amount_eur_cents``
-        What ShipTrip recommends: a tenth of the recommended sender total,
+        What Waçla recommends: a tenth of the recommended sender total,
         clamped into the recommendation band. It is the default, never a limit.
     ``min_eur_cents``
         The floor under a deposit the sender chooses. Enforced.
@@ -1548,11 +1548,11 @@ def _checkout_description(order: PaymentOrder) -> str:
     """
 
     labels = {
-        PaymentOrder.Purpose.POSTING_DEPOSIT: "ShipTrip posting deposit",
-        PaymentOrder.Purpose.DEAL_BALANCE: "ShipTrip delivery payment",
-        PaymentOrder.Purpose.BOOST: "ShipTrip listing boost",
+        PaymentOrder.Purpose.POSTING_DEPOSIT: "Waçla posting deposit",
+        PaymentOrder.Purpose.DEAL_BALANCE: "Waçla delivery payment",
+        PaymentOrder.Purpose.BOOST: "Waçla listing boost",
     }
-    return labels.get(order.purpose, "ShipTrip payment")
+    return labels.get(order.purpose, "Waçla payment")
 
 
 # --- provider event reconciliation -------------------------------------------
@@ -3199,7 +3199,7 @@ def revoke_guest_link(*, order_id: int, actor_id: int) -> int:
 
 
 def guest_receipt_email_required() -> bool:
-    """A guest checkout needs a receipt address only when ShipTrip sends email."""
+    """A guest checkout needs a receipt address only when Waçla sends email."""
 
     return bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False))
 
@@ -3219,7 +3219,7 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         "description": _checkout_description(order),
         "expires_at": link.expires_at.isoformat(),
         # Whether the payer is asked for an email. It exists for one reason:
-        # ShipTrip's own receipt, failure and refund messages to someone with no
+        # Waçla's own receipt, failure and refund messages to someone with no
         # account. With transactional email off none of those is ever sent, so
         # asking would be collecting an address for nothing -- the checkout
         # serializer applies the same rule, so the two cannot disagree.

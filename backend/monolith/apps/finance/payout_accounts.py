@@ -59,34 +59,34 @@ POLICY_VERSION = "payout_profile_v1"
 #: below that; past it, the answer must be *retrieved*, never re-POSTed.
 IDEMPOTENT_REPLAY_SECONDS = 23 * 3600
 
-#: What ShipTrip tells Stripe the connected account actually does, so Stripe's
+#: What Waçla tells Stripe the connected account actually does, so Stripe's
 #: hosted onboarding does not have to ask the Traveler to describe a business.
 #:
 #: Stripe requires `business_profile.url` for these accounts and accepts
 #: `business_profile.product_description` in its place when the account holder
 #: has no website of their own. A Traveler carrying parcels has no website, so
 #: this sentence is what removes the website question — not a URL invented for
-#: them, and not ShipTrip's own site presented as theirs.
+#: them, and not Waçla's own site presented as theirs.
 #:
-#: Every clause here is something ShipTrip can assert from its own records: the
+#: Every clause here is something Waçla can assert from its own records: the
 #: Traveler is independent, they transport parcels, they do so through this
 #: marketplace, and they are paid after a delivery completes. It deliberately
 #: does not call them a retailer, a merchant, a carrier company or an owner of
-#: ShipTrip, because none of that is true.
+#: Waçla, because none of that is true.
 #:
 #: The Traveler does see it. Stripe calls `product_description` "internal-only",
 #: meaning it is never shown to end customers, but hosted onboarding renders it
 #: into the Business details step as an editable, pre-filled answer the account
 #: holder confirms. Verified on the TEST flow. So this sentence has to read
 #: plainly to a Traveler as well as usefully to Stripe's underwriting, and it is
-#: theirs to correct if ShipTrip has it wrong. English because Stripe's own form
+#: theirs to correct if Waçla has it wrong. English because Stripe's own form
 #: presents it in the onboarding locale and the underwriting reader is Stripe.
 #:
 #: Changing this string changes the account-creation fingerprint, which is the
 #: point: a different assertion to Stripe is a different request.
 TRAVELER_PRODUCT_DESCRIPTION = (
     "Independent traveler providing parcel transportation services through the "
-    "ShipTrip marketplace and receiving compensation after completed deliveries."
+    "Waçla marketplace and receiving compensation after completed deliveries."
 )
 
 #: The connected-account payout schedule this application requires. "Manual"
@@ -919,7 +919,7 @@ def _state_url(base: str, state: str) -> str:
 def open_dashboard(*, actor, gateway=None) -> str:
     """A single-use Express Dashboard URL for the account's own owner.
 
-    This is how a Traveler changes their bank details without ShipTrip ever
+    This is how a Traveler changes their bank details without Waçla ever
     holding them. The URL is never stored, logged, emailed or pushed.
     """
 

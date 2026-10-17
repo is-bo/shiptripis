@@ -1,4 +1,4 @@
-# ShipTrip — visual world
+# Waçla — visual world
 
 Durable visual decisions for the Flutter V1 client. Implemented in
 `mobile/lib/design/`. A screen that needs a colour, size, radius or duration
@@ -104,7 +104,7 @@ addition toward what the sender pays:
 
 ```
 Traveler receives    €30.00
-ShipTrip fee          €7.50
+Waçla fee            €7.50
 ─────────────────────────────
 You pay              €37.50
 ```

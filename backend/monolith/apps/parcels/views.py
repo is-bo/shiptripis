@@ -624,7 +624,7 @@ class ProductCreateView(APIView):
 
     def post(self, request: Request) -> Response:
         return Response(
-            {"detail": "ProductRequest creation is retired in ShipTrip V1."},
+            {"detail": "ProductRequest creation is retired in Waçla V1."},
             status=status.HTTP_410_GONE,
         )
 
@@ -639,7 +639,7 @@ class ParcelDetailView(APIView):
         )
         if parcel.kind == ParcelRequest.Kind.PRODUCT:
             return Response(
-                {"detail": "ProductRequest history is admin-only in ShipTrip V1."},
+                {"detail": "ProductRequest history is admin-only in Waçla V1."},
                 status=status.HTTP_410_GONE,
             )
         if parcel.target_traveler_id is not None and request.user.id not in {
@@ -703,7 +703,7 @@ class DeliveryQuoteView(APIView):
         return Response(
             {
                 "code": "legacy_dzd_quote_retired",
-                "detail": "DZD pricing is not a ShipTrip V1 marketplace contract.",
+                "detail": "DZD pricing is not a Waçla V1 marketplace contract.",
             },
             status=status.HTTP_410_GONE,
         )

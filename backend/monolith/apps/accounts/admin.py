@@ -55,7 +55,7 @@ class ShipTripUserAdmin(UserAdmin):
     search_fields = ("email", "phone", "full_name", "username")
     ordering = ("email",)
     fieldsets = UserAdmin.fieldsets + (
-        ("ShipTrip", {
+        ("Waçla", {
             "fields": ("full_name", "phone", "wilaya", "role",
                        "is_phone_verified", "is_email_verified",
                        "is_kyc_verified", "is_banned"),

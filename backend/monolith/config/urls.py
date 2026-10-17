@@ -12,8 +12,8 @@ from apps.finance.payout_account_api import (
 connect_return = StripeOnboardingReturnView.as_view()
 connect_refresh = StripeOnboardingRefreshView.as_view()
 
-admin.site.site_header = "ShipTrip Operations"
-admin.site.site_title = "ShipTrip Admin"
+admin.site.site_header = "Waçla Operations"
+admin.site.site_title = "Waçla Admin"
 admin.site.index_title = "Operations dashboard"
 
 # Preserve Django's 403 semantics while giving staff a useful way back into

@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('ShipTrip Admin') }}{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Waçla Admin') }}{% endblock %}
 
 {% block extrastyle %}{{ block.super }}
   {% comment %}The two faces the console sets are the ones it always sets, on
@@ -18,8 +18,8 @@
 {% block branding %}
 <div id="site-name">
   <a href="{% url 'admin_console:overview' %}">
-    <span class="st-brand-seal" aria-hidden="true">S</span>
-    <span class="st-brand-name">{{ site_header|default:_('ShipTrip Operations') }}</span>
+    <span class="st-brand-seal" aria-hidden="true">W</span>
+    <span class="st-brand-name">{{ site_header|default:_('Waçla Operations') }}</span>
   </a>
 </div>
 {% if user.is_anonymous %}

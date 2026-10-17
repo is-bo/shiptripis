@@ -532,7 +532,7 @@ void main() {
           FakeResponse(200, {
             'amount_eur_cents': 3750,
             'currency': 'EUR',
-            'description': 'Payment for a ShipTrip delivery',
+            'description': 'Payment for a Waçla delivery',
             'expires_at': '2026-12-01T00:00:00Z',
             'providers': providers,
           }),

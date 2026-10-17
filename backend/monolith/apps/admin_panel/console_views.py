@@ -1,4 +1,4 @@
-"""Task-focused HTML operations console built on ShipTrip's audited services.
+"""Task-focused HTML operations console built on Waçla's audited services.
 
 The REST operations surface remains available for integrations. These views
 serve the nontechnical owner/operator: queues, coherent context and explicit
@@ -1624,7 +1624,7 @@ def deals(request):
             "Sender to Traveler",
             "Route",
             "Traveler reward",
-            "ShipTrip fee",
+            "Waçla fee",
             "Sender total",
             "Payment",
             "Lifecycle",
@@ -2556,7 +2556,7 @@ def payouts(request):
     return _table(
         request,
         title="Payouts",
-        description="What ShipTrip owes each Traveler, whether it can move yet, and what is holding it.",
+        description="What Waçla owes each Traveler, whether it can move yet, and what is holding it.",
         eyebrow="Finance",
         columns=(
             "Traveler",
@@ -3432,7 +3432,7 @@ def business_settings(request):
                 if row.label in protection_labels
             ],
             "boost_packages": boost_packages(active.policy),
-            # J2. The Traveler receives the whole boost; ShipTrip's commission
+            # J2. The Traveler receives the whole boost; Waçla's commission
             # is charged on top of it. The retired package's Traveler/platform
             # split is not shown, because nothing new is sold under it.
             "boost_economics": {

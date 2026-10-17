@@ -92,12 +92,12 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "deliveries",
         "shiptrip_activity",
         {
-            "en": ("Offer updated", "Open ShipTrip to review the changes."),
+            "en": ("Offer updated", "Open Waçla to review the changes."),
             "fr": (
                 "Offre mise à jour",
-                "Ouvrez ShipTrip pour consulter les modifications.",
+                "Ouvrez Waçla pour consulter les modifications.",
             ),
-            "ar": ("تم تحديث العرض", "افتح ShipTrip لمراجعة التغييرات."),
+            "ar": ("تم تحديث العرض", "افتح Waçla لمراجعة التغييرات."),
         },
     ),
     "offer.accepted": (
@@ -105,9 +105,9 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "deliveries",
         "",
         {
-            "en": ("Offer accepted", "Open ShipTrip to review the delivery."),
-            "fr": ("Offre acceptée", "Ouvrez ShipTrip pour consulter la livraison."),
-            "ar": ("تم قبول العرض", "افتح ShipTrip لمراجعة عملية التسليم."),
+            "en": ("Offer accepted", "Open Waçla to review the delivery."),
+            "fr": ("Offre acceptée", "Ouvrez Waçla pour consulter la livraison."),
+            "ar": ("تم قبول العرض", "افتح Waçla لمراجعة عملية التسليم."),
         },
     ),
     "payment.captured": (
@@ -140,13 +140,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Payment failed",
-                "Open ShipTrip to retry or choose another method.",
+                "Open Waçla to retry or choose another method.",
             ),
             "fr": (
                 "Paiement échoué",
-                "Ouvrez ShipTrip pour réessayer ou choisir un autre moyen.",
+                "Ouvrez Waçla pour réessayer ou choisir un autre moyen.",
             ),
-            "ar": ("تعذر الدفع", "افتح ShipTrip لإعادة المحاولة أو اختيار طريقة أخرى."),
+            "ar": ("تعذر الدفع", "افتح Waçla لإعادة المحاولة أو اختيار طريقة أخرى."),
         },
     ),
     "match.in_transit": (
@@ -179,13 +179,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Handover confirmed",
-                "Open ShipTrip to review the delivery status.",
+                "Open Waçla to review the delivery status.",
             ),
             "fr": (
                 "Remise confirmée",
-                "Ouvrez ShipTrip pour consulter l'état de la livraison.",
+                "Ouvrez Waçla pour consulter l'état de la livraison.",
             ),
-            "ar": ("تم تأكيد التسليم", "افتح ShipTrip لمراجعة حالة التوصيل."),
+            "ar": ("تم تأكيد التسليم", "افتح Waçla لمراجعة حالة التوصيل."),
         },
     ),
     "handover.delivery_code_available": (
@@ -195,13 +195,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Delivery code available",
-                "Open ShipTrip when the recipient is ready.",
+                "Open Waçla when the recipient is ready.",
             ),
             "fr": (
                 "Code de livraison disponible",
-                "Ouvrez ShipTrip lorsque le destinataire est prêt.",
+                "Ouvrez Waçla lorsque le destinataire est prêt.",
             ),
-            "ar": ("رمز التسليم متاح", "افتح ShipTrip عندما يكون المستلم جاهزًا."),
+            "ar": ("رمز التسليم متاح", "افتح Waçla عندما يكون المستلم جاهزًا."),
         },
     ),
     "handover.delivery_confirmed": (
@@ -224,13 +224,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Identity verification updated",
-                "Open ShipTrip to review the decision.",
+                "Open Waçla to review the decision.",
             ),
             "fr": (
                 "Vérification d'identité mise à jour",
-                "Ouvrez ShipTrip pour consulter la décision.",
+                "Ouvrez Waçla pour consulter la décision.",
             ),
-            "ar": ("تم تحديث التحقق من الهوية", "افتح ShipTrip لمراجعة القرار."),
+            "ar": ("تم تحديث التحقق من الهوية", "افتح Waçla لمراجعة القرار."),
         },
     ),
     "flight_proof.status_changed": (
@@ -238,12 +238,12 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "account",
         "",
         {
-            "en": ("Flight proof updated", "Open ShipTrip to review the decision."),
+            "en": ("Flight proof updated", "Open Waçla to review the decision."),
             "fr": (
                 "Justificatif de vol mis à jour",
-                "Ouvrez ShipTrip pour consulter la décision.",
+                "Ouvrez Waçla pour consulter la décision.",
             ),
-            "ar": ("تم تحديث إثبات الرحلة", "افتح ShipTrip لمراجعة القرار."),
+            "ar": ("تم تحديث إثبات الرحلة", "افتح Waçla لمراجعة القرار."),
         },
     ),
     "deal.cancelled": (
@@ -251,9 +251,9 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "deliveries",
         "",
         {
-            "en": ("Delivery cancelled", "Open ShipTrip to review the cancellation."),
-            "fr": ("Livraison annulée", "Ouvrez ShipTrip pour consulter l'annulation."),
-            "ar": ("تم إلغاء التوصيل", "افتح ShipTrip لمراجعة الإلغاء."),
+            "en": ("Delivery cancelled", "Open Waçla to review the cancellation."),
+            "fr": ("Livraison annulée", "Ouvrez Waçla pour consulter l'annulation."),
+            "ar": ("تم إلغاء التوصيل", "افتح Waçla لمراجعة الإلغاء."),
         },
     ),
     # Phase I1A. Essential: an early arrival needs an answer from the sender
@@ -267,13 +267,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Traveler arrived early",
-                "Open ShipTrip to confirm the early arrival.",
+                "Open Waçla to confirm the early arrival.",
             ),
             "fr": (
                 "Le voyageur est arrivé en avance",
-                "Ouvrez ShipTrip pour confirmer l'arrivée anticipée.",
+                "Ouvrez Waçla pour confirmer l'arrivée anticipée.",
             ),
-            "ar": ("وصل المسافر مبكرًا", "افتح ShipTrip لتأكيد الوصول المبكر."),
+            "ar": ("وصل المسافر مبكرًا", "افتح Waçla لتأكيد الوصول المبكر."),
         },
     ),
     "deal.arrival_confirmed": (
@@ -302,13 +302,13 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": (
                 "Early arrival not confirmed",
-                "Open ShipTrip to review the delivery.",
+                "Open Waçla to review the delivery.",
             ),
             "fr": (
                 "Arrivée anticipée non confirmée",
-                "Ouvrez ShipTrip pour consulter la livraison.",
+                "Ouvrez Waçla pour consulter la livraison.",
             ),
-            "ar": ("لم يتم تأكيد الوصول المبكر", "افتح ShipTrip لمراجعة عملية التسليم."),
+            "ar": ("لم يتم تأكيد الوصول المبكر", "افتح Waçla لمراجعة عملية التسليم."),
         },
     ),
     "dispute.opened": (
@@ -329,9 +329,9 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "deliveries",
         "",
         {
-            "en": ("Dispute resolved", "Open ShipTrip to review the outcome."),
-            "fr": ("Litige résolu", "Ouvrez ShipTrip pour consulter la décision."),
-            "ar": ("تم حل النزاع", "افتح ShipTrip لمراجعة النتيجة."),
+            "en": ("Dispute resolved", "Open Waçla to review the outcome."),
+            "fr": ("Litige résolu", "Ouvrez Waçla pour consulter la décision."),
+            "ar": ("تم حل النزاع", "افتح Waçla لمراجعة النتيجة."),
         },
     ),
     "payout.status_changed": (
@@ -352,9 +352,9 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         "messages",
         "shiptrip_messages",
         {
-            "en": ("New message", "You have a new message on ShipTrip."),
-            "fr": ("Nouveau message", "Vous avez un nouveau message sur ShipTrip."),
-            "ar": ("رسالة جديدة", "لديك رسالة جديدة على ShipTrip."),
+            "en": ("New message", "You have a new message on Waçla."),
+            "fr": ("Nouveau message", "Vous avez un nouveau message sur Waçla."),
+            "ar": ("رسالة جديدة", "لديك رسالة جديدة على Waçla."),
         },
     ),
 }
@@ -368,9 +368,9 @@ _STATUS_PUSH_COPY: dict[
         "ar": ("تمت الموافقة على التحقق", "يمكنك الآن نشر الرحلات."),
     },
     ("kyc.status_changed", "rejected"): {
-        "en": ("KYC needs attention", "Open ShipTrip to review the decision and next step."),
-        "fr": ("Votre KYC nécessite votre attention", "Ouvrez ShipTrip pour consulter la décision et la prochaine étape."),
-        "ar": ("يتطلب التحقق انتباهك", "افتح ShipTrip لمراجعة القرار والخطوة التالية."),
+        "en": ("KYC needs attention", "Open Waçla to review the decision and next step."),
+        "fr": ("Votre KYC nécessite votre attention", "Ouvrez Waçla pour consulter la décision et la prochaine étape."),
+        "ar": ("يتطلب التحقق انتباهك", "افتح Waçla لمراجعة القرار والخطوة التالية."),
     },
     ("flight_proof.status_changed", "approved"): {
         "en": ("Flight proof approved", "Your journey verification was updated."),
@@ -378,9 +378,9 @@ _STATUS_PUSH_COPY: dict[
         "ar": ("تمت الموافقة على إثبات الرحلة", "تم تحديث التحقق من رحلتك."),
     },
     ("flight_proof.status_changed", "rejected"): {
-        "en": ("Flight proof needs attention", "Open ShipTrip to review the decision."),
-        "fr": ("Votre justificatif de vol nécessite votre attention", "Ouvrez ShipTrip pour consulter la décision."),
-        "ar": ("يتطلب إثبات الرحلة انتباهك", "افتح ShipTrip لمراجعة القرار."),
+        "en": ("Flight proof needs attention", "Open Waçla to review the decision."),
+        "fr": ("Votre justificatif de vol nécessite votre attention", "Ouvrez Waçla pour consulter la décision."),
+        "ar": ("يتطلب إثبات الرحلة انتباهك", "افتح Waçla لمراجعة القرار."),
     },
 }
 

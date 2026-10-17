@@ -119,7 +119,7 @@ def _is_party(match: Match, user_id: int) -> bool:
 def _product_retired_response() -> Response:
     return _domain_error(
         code="product_request_retired",
-        detail="ProductRequest/Kaba business flows are retired in ShipTrip V1.",
+        detail="ProductRequest/Kaba business flows are retired in Waçla V1.",
         status_code=http.HTTP_410_GONE,
     )
 
@@ -225,7 +225,7 @@ class MatchDetailView(APIView):
         )
         if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
             return Response(
-                {"detail": "ProductRequest history is admin-only in ShipTrip V1."},
+                {"detail": "ProductRequest history is admin-only in Waçla V1."},
                 status=http.HTTP_410_GONE,
             )
         if not _is_party(match, request.user.id):

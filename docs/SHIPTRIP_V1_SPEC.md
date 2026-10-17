@@ -1,6 +1,11 @@
-# ShipTrip V1 — Product and Technical Specification
+# Waçla V1 — Product and Technical Specification
 
-SHIPTRIP_V1_SPEC.md is the authoritative ShipTrip V1 product and technical specification. If legacy code, README files, ARCHITECTURE.md, comments, tests, or previous product assumptions conflict with this specification, this specification wins unless the user explicitly overrides it.
+**Brand update (17 October 2026):** The product name is **Waçla**. Existing
+`shiptrip` technical identifiers, app/package IDs, environment variables, URLs,
+and Railway resources remain in place for compatibility. This specification
+keeps its existing filename so links and engineering workflows continue to work.
+
+SHIPTRIP_V1_SPEC.md is the authoritative Waçla V1 product and technical specification. If legacy code, README files, ARCHITECTURE.md, comments, tests, or previous product assumptions conflict with this specification, this specification wins unless the user explicitly overrides it.
 
 **Locked:** 24 August 2026  
 **Market:** EU ↔ Algeria  
@@ -10,7 +15,7 @@ SHIPTRIP_V1_SPEC.md is the authoritative ShipTrip V1 product and technical speci
 
 ## 1. Product definition
 
-ShipTrip is a peer-to-peer parcel-delivery marketplace connecting senders with travelers who already have spare carrying capacity.
+Waçla is a peer-to-peer parcel-delivery marketplace connecting senders with travelers who already have spare carrying capacity.
 
 V1 is **delivery only**. The existing Kaba/ProductRequest flow is removed from active product behavior.
 
@@ -159,7 +164,7 @@ The active V1 geography flow is:
 2. canonical catalogue place
 3. optional preferred exact meeting point
 
-Users do not create matching cities. A canonical `Place` is a stable ShipTrip
+Users do not create matching cities. A canonical `Place` is a stable Waçla
 catalogue locality/municipality/commune or airport. Its immutable identity, not
 its mutable display label, is authoritative.
 
@@ -312,7 +317,7 @@ proactively and never offers a mode the pair cannot have.
 
 ### Route UX: stops, not legs (locked, Phase 8F-A)
 
-Travellers build a route by naming **stops**; ShipTrip derives the legs
+Travellers build a route by naming **stops**; Waçla derives the legs
 between them. Segment *k* runs from stop *k* to stop *k+1*, which makes leg
 positions contiguous, the first leg's origin the journey's start, and every
 leg's origin the previous leg's destination — structurally, not by
@@ -440,7 +445,7 @@ Maintain an admin-configurable prohibited-goods policy.
 
 ## 8. Pricing engine
 
-ShipTrip should borrow the structure of carrier pricing—distance/zone plus chargeable weight—without copying expensive courier retail tariffs.
+Waçla should borrow the structure of carrier pricing—distance/zone plus chargeable weight—without copying expensive courier retail tariffs.
 
 ### Chargeable weight
 
@@ -500,7 +505,7 @@ No opaque dynamic surge pricing at launch.
 Show the user:
 
 - minimum
-- ShipTrip recommendation
+- Waçla recommendation
 - chosen traveler reward
 
 ### Offer economics
@@ -513,7 +518,7 @@ Example:
 
 - traveler reward: €30
 - commission: 25%
-- ShipTrip fee: €7.50
+- Waçla fee: €7.50
 - sender total: €37.50
 
 Commission is globally admin-configurable and snapshotted when the offer/deal is created.
@@ -798,7 +803,7 @@ Support third-party payment:
 
 1. sender taps “Have someone else pay”
 2. backend creates transaction-specific guest Stripe link
-3. guest needs no ShipTrip account
+3. guest needs no Waçla account
 4. webhook funds sender-owned Deal
 5. guest gets no chat/deal/dispute authority
 
@@ -813,7 +818,7 @@ Guest link:
 
 Do not hard-code “all Algerian travelers are payable by Stripe.”
 
-Use payout capability abstraction and verify actual ShipTrip account/country capability.
+Use payout capability abstraction and verify actual Waçla account/country capability.
 
 If unavailable, use manual payout fallback.
 
@@ -1050,11 +1055,11 @@ Boost:
 - is a variable sender-funded EUR-cent amount with a €5 minimum and no product
   maximum
 - allocates a configurable strict majority to the eventual Traveler and the
-  remainder to ShipTrip; the seeded split is 75% / 25%
+  remainder to Waçla; the seeded split is 75% / 25%
 - uses integer arithmetic: Traveler receives
-  `floor(amount × traveler_share_bps / 10,000)` and ShipTrip receives the
+  `floor(amount × traveler_share_bps / 10,000)` and Waçla receives the
   exact-cent remainder
-- is previewed before checkout with sender amount, Traveler bonus, ShipTrip
+- is previewed before checkout with sender amount, Traveler bonus, Waçla
   revenue and visibility duration
 - adds its Traveler portion to protected Deal earnings and payout only when a
   paid boost is bound to an accepted Deal

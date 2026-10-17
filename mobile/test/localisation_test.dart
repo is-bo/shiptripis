@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiptrip/design/identity.dart';
 import 'package:shiptrip/design/tokens.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
@@ -35,6 +36,29 @@ Future<L> _catalogue(WidgetTester tester, Locale locale) async {
 }
 
 void main() {
+  for (final locale in [Locale('en'), Locale('fr'), Locale('ar')]) {
+    testWidgets('Waçla wordmark and accessibility name in $locale', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        await pumpApp(
+          tester,
+          const Center(child: ShipTripMark()),
+          locale: locale,
+        );
+
+        expect(find.text('Waçla'), findsOneWidget);
+        expect(find.bySemanticsLabel('Waçla'), findsOneWidget);
+        final l = L.of(tester.element(find.byType(ShipTripMark)));
+        expect(l.appName, 'Waçla');
+        expect(l.profilePassportStamp, contains('WAÇLA'));
+      } finally {
+        semantics.dispose();
+      }
+    });
+  }
+
   group('every language resolves its own catalogue', () {
     testWidgets('English', (tester) async {
       final l = await _catalogue(tester, const Locale('en'));

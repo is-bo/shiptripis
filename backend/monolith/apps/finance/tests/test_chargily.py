@@ -128,7 +128,7 @@ class ChargilyCheckoutTests(TestCase):
             "success_url": "https://shiptrip.test/ok",
             "failure_url": "https://shiptrip.test/no",
             "webhook_url": "https://shiptrip.test/api/payments/webhooks/chargily",
-            "description": "ShipTrip delivery payment",
+            "description": "Waçla delivery payment",
             "metadata": {"order_reference": "ref-9"},
         }
         base.update(overrides)

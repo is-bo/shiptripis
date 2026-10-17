@@ -191,7 +191,7 @@ class SettlementCurrencyIsTheRailsTests(PolicyTestCase):
                 success_url="https://x.invalid/s",
                 failure_url="https://x.invalid/f",
                 webhook_url="https://x.invalid/w",
-                description="ShipTrip posting deposit",
+                description="Waçla posting deposit",
             )
         )
 

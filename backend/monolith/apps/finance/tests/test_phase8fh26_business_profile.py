@@ -191,14 +191,14 @@ class TestTheDescriptionItself:
         text = TRAVELER_PRODUCT_DESCRIPTION.lower()
         assert "traveler" in text
         assert "parcel" in text
-        assert "shiptrip" in text
+        assert "waçla" in text
         for forbidden in ("retailer", "e-commerce", "store", "shop", "card payment"):
             assert forbidden not in text
 
     def test_it_never_claims_the_traveler_owns_or_operates_shiptrip(self):
         text = TRAVELER_PRODUCT_DESCRIPTION.lower()
-        assert "through the shiptrip marketplace" in text
-        for forbidden in ("owner of shiptrip", "operates shiptrip", "shiptrip sarl"):
+        assert "through the waçla marketplace" in text
+        for forbidden in ("owner of waçla", "operates waçla", "waçla sarl"):
             assert forbidden not in text
 
     def test_it_contains_no_url(self):

@@ -19,7 +19,7 @@ class LFr extends L {
       'Sélectionnez le pays légal de votre compte Stripe pour consentir à la configuration. Si votre pays ne figure pas dans la liste, utilisez les versements DZD.';
 
   @override
-  String get appName => 'ShipTrip';
+  String get appName => 'Waçla';
 
   @override
   String get actionContinue => 'Continuer';
@@ -182,7 +182,7 @@ class LFr extends L {
       'Si cette adresse e-mail est associée à un compte, nous avons envoyé un code de réinitialisation.';
 
   @override
-  String get authNoAccount => 'Nouveau sur ShipTrip ?';
+  String get authNoAccount => 'Nouveau sur Waçla ?';
 
   @override
   String get authHaveAccount => 'Vous avez déjà un compte ?';
@@ -313,7 +313,7 @@ class LFr extends L {
 
   @override
   String get stateAppOutdatedBody =>
-      'Mettez à jour ShipTrip pour continuer. Cette partie de l’application ne fonctionne plus sur cette version.';
+      'Mettez à jour Waçla pour continuer. Cette partie de l’application ne fonctionne plus sur cette version.';
 
   @override
   String get staleTitle => 'Ceci a changé';
@@ -415,13 +415,13 @@ class LFr extends L {
   String get moneyTravelerReceives => 'Le voyageur reçoit';
 
   @override
-  String get moneyPlatformFee => 'Frais ShipTrip';
+  String get moneyPlatformFee => 'Frais Waçla';
 
   @override
   String get moneyMinimumReward => 'Rémunération minimale';
 
   @override
-  String get moneyRecommendedReward => 'ShipTrip suggère';
+  String get moneyRecommendedReward => 'Waçla suggère';
 
   @override
   String get moneyYourReward => 'Votre rémunération';
@@ -449,7 +449,7 @@ class LFr extends L {
 
   @override
   String get moneyRewardNotReduced =>
-      'Le voyageur reçoit ce montant en totalité. Les frais ShipTrip s’ajoutent en plus, ils ne sont pas prélevés dessus.';
+      'Le voyageur reçoit ce montant en totalité. Les frais Waçla s’ajoutent en plus, ils ne sont pas prélevés dessus.';
 
   @override
   String get moneyDepositNotExtra =>
@@ -783,7 +783,7 @@ class LFr extends L {
   String get depositGuidanceTitle => 'Repères pour l’acompte';
 
   @override
-  String get depositSuggestedTotal => 'Total suggéré par ShipTrip';
+  String get depositSuggestedTotal => 'Total suggéré par Waçla';
 
   @override
   String get depositWholeAmount => 'Votre total pour cette livraison';
@@ -799,7 +799,7 @@ class LFr extends L {
 
   @override
   String get depositGuidanceNote =>
-      'ShipTrip calcule l’acompte à partir du total suggéré et applique le minimum et le maximum en vigueur. Il sera déduit du paiement final : ce n’est pas un supplément.';
+      'Waçla calcule l’acompte à partir du total suggéré et applique le minimum et le maximum en vigueur. Il sera déduit du paiement final : ce n’est pas un supplément.';
 
   @override
   String get depositPayAction => 'Payer l’acompte et publier';
@@ -1823,7 +1823,7 @@ class LFr extends L {
 
   @override
   String get guestPayExplainer =>
-      'La personne qui vous a envoyé ce lien vous demande de régler ce montant pour sa livraison ShipTrip. Aucun compte n’est nécessaire.';
+      'La personne qui vous a envoyé ce lien vous demande de régler ce montant pour sa livraison Waçla. Aucun compte n’est nécessaire.';
 
   @override
   String guestPayExpiresAt(String when) {
@@ -2072,7 +2072,7 @@ class LFr extends L {
 
   @override
   String get protectionExplainerBody =>
-      'Les fonds sont conservés jusqu’à la confirmation de la livraison et pendant la période de protection de 48 heures. ShipTrip ne les débloque qu’à la fin de cette période si aucun litige n’est ouvert.';
+      'Les fonds sont conservés jusqu’à la confirmation de la livraison et pendant la période de protection de 48 heures. Waçla ne les débloque qu’à la fin de cette période si aucun litige n’est ouvert.';
 
   @override
   String get payoutTitle => 'Versement';
@@ -2323,7 +2323,7 @@ class LFr extends L {
   String get boostTravelerGets => 'Le voyageur reçoit si la livraison aboutit';
 
   @override
-  String get boostPlatformKeeps => 'ShipTrip conserve';
+  String get boostPlatformKeeps => 'Waçla conserve';
 
   @override
   String get boostEarningsCondition =>
@@ -2469,7 +2469,7 @@ class LFr extends L {
   String get profileAccount => 'Compte';
 
   @override
-  String get profilePassportStamp => 'SHIPTRIP · MEMBRE';
+  String get profilePassportStamp => 'WAÇLA · MEMBRE';
 
   @override
   String get profileCompletedDeliveries => 'Terminées';
@@ -2503,7 +2503,7 @@ class LFr extends L {
 
   @override
   String get profileAppLanguageHelp =>
-      'Ce que vous lisez dans ShipTrip. Enregistré sur ce téléphone.';
+      'Ce que vous lisez dans Waçla. Enregistré sur ce téléphone.';
 
   @override
   String get profileEmailLanguage => 'Langue des e-mails';
@@ -2548,7 +2548,7 @@ class LFr extends L {
 
   @override
   String profileMemberSince(String date) {
-    return 'Sur ShipTrip depuis $date';
+    return 'Sur Waçla depuis $date';
   }
 
   @override
@@ -3615,11 +3615,11 @@ class LFr extends L {
 
   @override
   String get deliverySafetyWaitingSenderBody =>
-      'La remise est confirmée. La confirmation de livraison sera disponible après la période de sécurité ; ShipTrip enverra alors le code de livraison à votre destinataire.';
+      'La remise est confirmée. La confirmation de livraison sera disponible après la période de sécurité ; Waçla enverra alors le code de livraison à votre destinataire.';
 
   @override
   String get deliverySafetyWaitingTravelerBody =>
-      'La remise est confirmée. Continuez jusqu’au destinataire. Après la période de sécurité, demandez-lui le code de livraison — ShipTrip ne vous l’affiche jamais.';
+      'La remise est confirmée. Continuez jusqu’au destinataire. Après la période de sécurité, demandez-lui le code de livraison — Waçla ne vous l’affiche jamais.';
 
   @override
   String get pickupGoToDeliveryAction => 'Aller à la livraison';
@@ -3775,13 +3775,13 @@ class LFr extends L {
 
   @override
   String get disputeAmountsExplainer =>
-      'Ces montants sont décidés par ShipTrip. Rien ici n’est calculé sur votre téléphone.';
+      'Ces montants sont décidés par Waçla. Rien ici n’est calculé sur votre téléphone.';
 
   @override
   String get disputeCollectedTotal => 'Perçu auprès de l’expéditeur';
 
   @override
-  String get disputeResolutionNoteLabel => 'Note de ShipTrip';
+  String get disputeResolutionNoteLabel => 'Note de Waçla';
 
   @override
   String get disputeTimelineTitle => 'Ce qui s’est passé';
@@ -4111,7 +4111,7 @@ class LFr extends L {
 
   @override
   String get pushPermissionBody =>
-      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. ShipTrip ne demande l’autorisation que lorsque vous choisissez Activer.';
+      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Waçla ne demande l’autorisation que lorsque vous choisissez Activer.';
 
   @override
   String get pushPermissionEnabled => 'Les notifications sont activées.';
@@ -4130,7 +4130,7 @@ class LFr extends L {
 
   @override
   String get pushPermissionInitializationFailed =>
-      'Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez ShipTrip pour réessayer.';
+      'Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez Waçla pour réessayer.';
 
   @override
   String get pushEnableAction => 'Activer les notifications';
@@ -4140,11 +4140,11 @@ class LFr extends L {
 
   @override
   String get pushRegistrationPending =>
-      'L’autorisation système des notifications est active. ShipTrip termine la configuration sur ce téléphone.';
+      'L’autorisation système des notifications est active. Waçla termine la configuration sur ce téléphone.';
 
   @override
   String get pushRegistrationFailed =>
-      'L’autorisation système des notifications est active, mais ShipTrip n’a pas pu enregistrer ce téléphone. Vérifiez votre connexion et réessayez.';
+      'L’autorisation système des notifications est active, mais Waçla n’a pas pu enregistrer ce téléphone. Vérifiez votre connexion et réessayez.';
 
   @override
   String get pushRetryRegistrationAction => 'Réessayer la configuration';
@@ -4522,7 +4522,7 @@ class LFr extends L {
 
   @override
   String get earlyArrivalConfirmSheetBody =>
-      'Cette action informe l\'expéditeur de votre arrivée avant l\'horaire prévu. Elle ne confirme pas la livraison du colis. L\'expéditeur doit confirmer votre arrivée et le calendrier de versement reste soumis aux règles de protection ShipTrip.';
+      'Cette action informe l\'expéditeur de votre arrivée avant l\'horaire prévu. Elle ne confirme pas la livraison du colis. L\'expéditeur doit confirmer votre arrivée et le calendrier de versement reste soumis aux règles de protection Waçla.';
 
   @override
   String get earlyArrivalWaitingSenderTitle =>
@@ -4610,7 +4610,7 @@ class LFr extends L {
 
   @override
   String get notificationArrivalReportedBody =>
-      'Ouvrez ShipTrip pour confirmer l\'arrivée anticipée.';
+      'Ouvrez Waçla pour confirmer l\'arrivée anticipée.';
 
   @override
   String get notificationArrivalConfirmed => 'Arrivée anticipée confirmée';
@@ -4624,7 +4624,7 @@ class LFr extends L {
 
   @override
   String get notificationArrivalDeclinedBody =>
-      'Ouvrez ShipTrip pour consulter la livraison.';
+      'Ouvrez Waçla pour consulter la livraison.';
 
   @override
   String get routeBasisSnapshot => 'Figé à la réservation';
@@ -4658,7 +4658,7 @@ class LFr extends L {
   String get pricingTravelerReceives => 'Le voyageur reçoit';
 
   @override
-  String get pricingPlatformFee => 'Frais ShipTrip';
+  String get pricingPlatformFee => 'Frais Waçla';
 
   @override
   String get pricingTotalSenderCost => 'Coût total expéditeur';
@@ -4756,7 +4756,7 @@ class LFr extends L {
 
   @override
   String get guestShareLead =>
-      'Partagez ce lien de paiement sécurisé avec une personne de confiance. Elle peut payer sans compte ShipTrip.';
+      'Partagez ce lien de paiement sécurisé avec une personne de confiance. Elle peut payer sans compte Waçla.';
 
   @override
   String get guestShareAction => 'Partager le lien';
@@ -4771,11 +4771,11 @@ class LFr extends L {
   String get guestLinkCopied => 'Lien copié';
 
   @override
-  String get guestShareSubject => 'Demande de paiement ShipTrip';
+  String get guestShareSubject => 'Demande de paiement Waçla';
 
   @override
   String guestShareMessage(String amount, String link) {
-    return 'Pourriez-vous régler $amount pour ma livraison ShipTrip ? Voici le lien sécurisé : $link';
+    return 'Pourriez-vous régler $amount pour ma livraison Waçla ? Voici le lien sécurisé : $link';
   }
 
   @override
@@ -4882,7 +4882,7 @@ class LFr extends L {
   String get guestPurposeBoost => 'Paiement du boost';
 
   @override
-  String get guestPurposeOther => 'Paiement ShipTrip';
+  String get guestPurposeOther => 'Paiement Waçla';
 
   @override
   String get guestPayingNowTitle => 'Quelqu’un d’autre est en train de payer';
@@ -4902,7 +4902,7 @@ class LFr extends L {
 
   @override
   String get guestPayHandoff =>
-      'Vous finaliserez sur la page sécurisée de notre partenaire de paiement. ShipTrip ne voit jamais vos données de carte.';
+      'Vous finaliserez sur la page sécurisée de notre partenaire de paiement. Waçla ne voit jamais vos données de carte.';
 
   @override
   String get paymentSuccessAmountPaid => 'Montant payé';
@@ -4956,7 +4956,7 @@ class LFr extends L {
 
   @override
   String get boostEstimateNotice =>
-      'Une estimation jusqu\'à l\'enregistrement. ShipTrip confirme les montants définitifs.';
+      'Une estimation jusqu\'à l\'enregistrement. Waçla confirme les montants définitifs.';
 
   @override
   String boostAmountAboveMaximum(String amount) {
@@ -5031,7 +5031,7 @@ class LFr extends L {
   }
 
   @override
-  String get findTravelersTrustTitle => 'Vérifications faites par ShipTrip';
+  String get findTravelersTrustTitle => 'Vérifications faites par Waçla';
 
   @override
   String get offerBaseRewardLabel => 'Récompense de base';
@@ -5174,7 +5174,7 @@ class LFr extends L {
 
   @override
   String get guestPayHandoffBody =>
-      'Finalisez le paiement sur la page sécurisée de notre partenaire. Elle vous indiquera le résultat, et la personne qui vous l’a demandé le verra dans ShipTrip.';
+      'Finalisez le paiement sur la page sécurisée de notre partenaire. Elle vous indiquera le résultat, et la personne qui vous l’a demandé le verra dans Waçla.';
 
   @override
   String get payResultDepositCredited =>
