@@ -97,22 +97,29 @@ reachability and provider lifecycle policy are V3 verification items.
 | `STRIPE_CONNECT_ALLOWED_COUNTRIES` | Empty until reviewed TEST onboarding evidence, within existing application country ceiling. |
 | `STRIPE_CONNECT_PLATFORM_ACCOUNT_ID` | Owner-verified platform account; blank while disabled. |
 | `STRIPE_CONNECT_ONBOARDING_RETURN_URL`, `STRIPE_CONNECT_ONBOARDING_REFRESH_URL` | Distinct HTTPS URLs on public origin; blank while disabled. |
-| `EMAIL_ENABLED` | `false`; enforced by V1 runtime. |
-| `EMAIL_PROVIDER` | Existing `smtp` interface; no new adapter. |
+| `EMAIL_ENABLED` | `false` by default; no V2 activation. |
+| `EMAIL_ACTIVATION_APPROVED` | `false`; independent VPS approval latch for eventual V3 activation. |
+| `EMAIL_ACTIVATION_NOT_BEFORE` | Empty while disabled. At V3 activation set an ISO timestamp with timezone; older rows require explicit review. |
+| `EMAIL_PROVIDER` | `sender_net`, using the existing SMTP interface. |
 | `EMAIL_USE_TLS` | `true` prepared for V2; no SMTP activation. |
 | `EMAIL_SENDING_DOMAIN_VERIFIED` | `false` until V2/V3 domain evidence. |
-| `EMAIL_SMTP_HOST`, `EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR` | Blank; owner/provider/domain details are deferred. |
+| `EMAIL_SMTP_HOST` | `smtp.sender.net`, inert while disabled. |
+| `EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR`, `EMAIL_REPLY_TO` | Blank; owner supplies verified-domain identities and a monitored support inbox. |
 | `EMAIL_SMTP_PORT` | Prepared default 587, inert. |
+| `EMAIL_SMTP_TIMEOUT_SECONDS` | 10, valid range 1–10; both senders bound SMTP connections. |
+| `EMAIL_RATE_LIMIT_PER_MINUTE` | 60 initially, valid 1–600; calibrate against the actual Sender account limit in V3. |
 | `EMAIL_FROM_NAME` | `Waçla` presentation name for eventual sending. |
 | `FRONTEND_BASE_URL` | Future HTTPS hosted origin; does not change mobile API origin. |
 | `FCM_ENABLED` | `false` initially. V3 must match server/mobile Firebase projects before enabling. |
 | `FCM_PROJECT_ID` | Optional actual Firebase project; blank while off. |
 
-V1 does not contain Sender.net/SMTP credentials or send mail. V2 must deliberately
-update the email-off boundary and review the existing trusted SMTP path, outbox,
-templates and EN/FR/AR behavior before activation is possible. Existing provider
-startup checks still validate pairs, modes and endpoints. No external provider
-calls are required merely to validate the examples.
+V2 prepares the existing SMTP path while keeping both activation switches off.
+The mounted `app.json` secret allowlist now accepts `EMAIL_SMTP_USERNAME` and
+`EMAIL_SMTP_PASSWORD`; leave them empty in V2. Never place them in `stack.env`,
+images or Git. Follow [the email runbook](EMAIL.md) for backlog review, domain
+authentication, mailbox configuration and eventual V3 activation. Existing
+financial/provider guards remain enforced. Configuration validation needs no
+external provider call.
 
 ## Secrets and generation
 

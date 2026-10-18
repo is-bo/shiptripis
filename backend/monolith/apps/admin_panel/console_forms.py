@@ -150,6 +150,10 @@ class ReviewDecisionForm(ConsoleForm):
 
 
 class InvitationForm(ConsoleForm):
+    communication_language = forms.ChoiceField(
+        choices=(("en", "English"), ("fr", "Français"), ("ar", "العربية")),
+        initial="en", required=False, label="Email language",
+    )
     email = forms.EmailField(label="Work email")
     role = forms.ChoiceField(choices=ROLE_CHOICES, label="Role")
     expires_in_hours = forms.IntegerField(

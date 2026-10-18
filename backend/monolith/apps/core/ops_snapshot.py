@@ -12,12 +12,14 @@ addresses, payloads or SQL leave this module.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 import time
 from pathlib import Path
 
 import redis
 from django.conf import settings
 from django.db import connection
+from django.db.models import Q
 from django.utils import timezone
 
 logger = logging.getLogger("shiptrip.ops")
@@ -119,6 +121,9 @@ def build_ops_snapshot() -> dict:
     overdue_messages = OutboundMessage.objects.filter(
         status=OutboundMessage.Status.PENDING, next_attempt_at__lte=now
     )
+    earliest = max(settings.EMAIL_ACTIVATION_NOT_BEFORE or now-timedelta(hours=48), now-timedelta(hours=48))
+    eligible = Q(created_at__gte=earliest) | Q(activation_reviewed_at__gte=now-timedelta(hours=24))
+    overdue_messages = overdue_messages.filter(eligible)
     oldest_message = (
         overdue_messages.order_by("next_attempt_at")
         .values_list("next_attempt_at", flat=True)
@@ -142,6 +147,9 @@ def build_ops_snapshot() -> dict:
         "outbound_failed": OutboundMessage.objects.filter(
             status=OutboundMessage.Status.FAILED
         ).count(),
+        "email_enabled": settings.TRANSACTIONAL_EMAIL_ENABLED,
+        "outbound_retrying": OutboundMessage.objects.filter(status="pending", attempts__gt=0).count(),
+        "outbound_activation_held": OutboundMessage.objects.filter(status="pending").exclude(eligible).count(),
     }
     snapshot.update(_database_connections())
     snapshot.update(_memory())

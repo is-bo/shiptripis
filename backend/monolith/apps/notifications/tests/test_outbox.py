@@ -193,6 +193,7 @@ class TransportFailureTests(TestCase):
                 outbox.dispatch_message(message_id=self.message.pk)
 
         with mock.patch.object(outbox, "_send_email_via_provider") as send:
+            OutboundMessage.objects.filter(pk=self.message.pk).update(next_attempt_at=timezone.now())
             assert outbox.dispatch_message(message_id=self.message.pk) == "dispatched"
         code = self.scenario.delivery_code
         assert code in send.call_args.kwargs["body"]

@@ -2962,6 +2962,7 @@ CREATE TABLE public.notification_outbound_message (
     deal_id bigint,
     recipient_user_id bigint,
     language character varying(2) NOT NULL,
+    activation_reviewed_at timestamp with time zone,
     CONSTRAINT notification_outbound_message_attempts_check CHECK ((attempts >= 0)),
     CONSTRAINT notification_outbound_message_max_attempts_check CHECK ((max_attempts >= 0)),
     CONSTRAINT outbound_dispatched_requires_timestamp CHECK ((((status)::text = 'pending'::text) OR ((status)::text = 'cancelled'::text) OR (dispatched_at IS NOT NULL) OR ((status)::text = 'failed'::text)))
@@ -8476,6 +8477,13 @@ CREATE INDEX offer_status_idx ON public.matching_offer USING btree (status);
 
 
 --
+-- Name: outbound_accepted_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX outbound_accepted_idx ON public.notification_outbound_message USING btree (dispatched_at);
+
+
+--
 -- Name: outbound_deal_kind_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8494,6 +8502,20 @@ CREATE INDEX outbound_due_idx ON public.notification_outbound_message USING btre
 --
 
 CREATE INDEX outbound_secret_exp_idx ON public.notification_outbound_secret USING btree (purpose, expires_at);
+
+
+--
+-- Name: outbound_smtp_failure_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX outbound_smtp_failure_idx ON public.notification_outbound_message USING btree (last_error, updated_at);
+
+
+--
+-- Name: outbound_transport_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX outbound_transport_idx ON public.notification_outbound_message USING btree (transport_event_id);
 
 
 --

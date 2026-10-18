@@ -237,6 +237,7 @@ class OutboundMessage(models.Model):
     #: with `core_published_event`.
     transport_event_id = models.CharField(max_length=64, blank=True, default="")
     dispatched_at = models.DateTimeField(null=True, blank=True)
+    activation_reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -246,6 +247,9 @@ class OutboundMessage(models.Model):
         indexes = [
             models.Index(fields=["status", "next_attempt_at"], name="outbound_due_idx"),
             models.Index(fields=["deal", "kind"], name="outbound_deal_kind_idx"),
+            models.Index(fields=["dispatched_at"], name="outbound_accepted_idx"),
+            models.Index(fields=["last_error", "updated_at"], name="outbound_smtp_failure_idx"),
+            models.Index(fields=["transport_event_id"], name="outbound_transport_idx"),
         ]
         constraints = [
             models.CheckConstraint(

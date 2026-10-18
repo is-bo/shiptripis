@@ -25,9 +25,9 @@ inbox, audit metadata, or logs.
 so arming it twice is arming it once. Dispatch claims the row, hands the
 rendered body to the transport, and only then marks it dispatched: a crash in
 between causes a resend of a byte-identical message rather than a silent loss.
-That is at-least-once transport of an exactly-once obligation, and for a code
-that does not change between attempts it is indistinguishable from exactly-once
-at the recipient.
+The obligation is unique; SMTP transport remains at-least-once. A crash after
+SMTP acceptance but before the database commit can produce a duplicate. SMTP
+acceptance is not evidence of final inbox delivery.
 """
 
 from __future__ import annotations
@@ -35,7 +35,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta
+import smtplib
+import hashlib
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone as datetime_timezone
+from urllib.parse import quote, urlsplit
+from email.utils import parseaddr
 
 import redis
 from django.conf import settings
@@ -72,6 +77,10 @@ class SecretUnavailable(RuntimeError):
     """A message referenced a secret that can no longer be resolved."""
 
 
+class EmailDeliveryError(OSError):
+    """Fixed-vocabulary error safe for the durable job runner and logs."""
+
+
 # --- arming -------------------------------------------------------------------
 
 
@@ -105,6 +114,18 @@ def enqueue_message(
             .first()
         )
     resolved_language = normalize_communication_language(language)
+    if context is not None and not isinstance(context, dict):
+        raise ValueError("Email context must be an object.")
+    def check_context(value):
+        if isinstance(value, dict):
+            for name, item in value.items():
+                if any(part in str(name).lower() for part in ("password", "token", "secret", "credential", "sealed")) or str(name).lower() in {"code", "otp", "delivery_code", "reset_code"}:
+                    raise ValueError("Secret material must use the trusted secret reference.")
+                check_context(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                check_context(item)
+    check_context(context)
     try:
         with transaction.atomic():
             message = OutboundMessage.objects.create(
@@ -175,16 +196,13 @@ def enqueue_secret_message(
         if existing is not None:
             return existing
         secret_id = uuid.uuid4()
-        vault = OutboundSecret.objects.create(
-            id=secret_id,
+        vault, _created = OutboundSecret.objects.get_or_create(
             key=key,
-            purpose=kind,
-            sealed_value=seal(
-                secret_id=secret_id,
-                purpose=kind,
-                plaintext=secret,
-            ),
-            expires_at=secret_expires_at,
+            defaults={
+                "id": secret_id, "purpose": kind,
+                "sealed_value": seal(secret_id=secret_id, purpose=kind, plaintext=secret),
+                "expires_at": secret_expires_at,
+            },
         )
         return enqueue_message(
             kind=kind,
@@ -259,6 +277,11 @@ def resolve_secret(message: OutboundMessage) -> str:
             raise SecretUnavailable("The outbound email secret has expired.")
         if vault.purpose != message.kind:
             raise SecretUnavailable("The outbound email secret purpose does not match.")
+        if vault.key != message.key:
+            raise SecretUnavailable("The outbound email secret obligation does not match.")
+        from .backlog import secret_problem
+        if secret_problem(message):
+            raise SecretUnavailable("The email capability is no longer current.")
         from .secrets import OutboundSecretError, unseal
 
         try:
@@ -281,10 +304,17 @@ def resolve_secret(message: OutboundMessage) -> str:
     code = DealHandoverCode.objects.filter(pk=int(raw_id)).first()
     if code is None:
         raise SecretUnavailable("The referenced handover code no longer exists.")
-    if code.status not in DealHandoverCode.LIVE_STATUSES:
+    if (
+        code.status != DealHandoverCode.Status.ACTIVE
+        or code.kind != DealHandoverCode.Kind.DELIVERY
+        or code.deal_id != message.deal_id
+    ):
         # The code was rotated, used or cancelled before this message went out.
         # Sending the old value would be worse than not sending at all.
-        raise SecretUnavailable(f"The handover code is {code.status}.")
+        raise SecretUnavailable("The handover code is not available for this obligation.")
+    from apps.deals.models import DealRecipient
+    if not DealRecipient.objects.filter(deal_id=message.deal_id, email=message.to_email).exists():
+        raise SecretUnavailable("The delivery recipient has changed.")
     try:
         plaintext = unseal_code(
             deal_id=code.deal_id, kind=code.kind, sealed=code.sealed_code
@@ -368,10 +398,12 @@ def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
     )
 
 
-def build_document(message: OutboundMessage) -> EmailDocument:
+def _build_document(message: OutboundMessage) -> EmailDocument:
     """Build the document for one obligation. The only place a code becomes text."""
 
-    context = dict(message.context or {})
+    if not isinstance(message.context, dict):
+        raise SecretUnavailable("Invalid email context.")
+    context = dict(message.context)
     kind = message.kind
     reference = context.get("deal_reference", "")
 
@@ -390,7 +422,7 @@ def build_document(message: OutboundMessage) -> EmailDocument:
             highlight=(_("Your verification code"), resolve_secret(message)),
             callout=(
                 _(
-                    "It expires in 15 minutes. Waçla will never ask you to share "
+                    "Use this code before it expires. Waçla will never ask you to share "
                     "this code outside the verification screen."
                 )
             ),
@@ -405,32 +437,34 @@ def build_document(message: OutboundMessage) -> EmailDocument:
             highlight=(_("Your password reset code"), resolve_secret(message)),
             callout=(
                 _(
-                    "It expires in 15 minutes. If you did not request this, ignore "
+                    "Use this code before it expires. If you did not request this, ignore "
                     "this email and keep your code private."
                 )
             ),
         )
     if kind == OutboundMessage.Kind.ADMIN_INVITATION:
         base = str(context.get("frontend_base_url", "")).rstrip("/")
+        parsed = urlsplit(base)
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username
+                or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+            raise SecretUnavailable("Invitation requires a trusted HTTPS public origin.")
         token = resolve_secret(message)
-        invite_url = f"{base}/admin/invitations/accept?token={token}" if base else ""
+        invite_url = f"{base}/admin/invitations/accept?token={quote(token, safe='')}"
+        roles = {
+            "ops": _("Operations"), "support": _("Support"), "finance": _("Finance"),
+            "trust_verification": _("Trust / Verification"), "super_admin": _("Super Admin"),
+        }
         return EmailDocument(
-            subject="You have been invited to Waçla Operations",
-            eyebrow="Operations",
-            heading="You have been invited to Waçla Operations",
+            subject=_("You have been invited to Waçla Operations"),
+            preheader=_("Use your private link to accept this invitation."),
+            eyebrow=_("Operations"),
+            heading=_("You have been invited to Waçla Operations"),
             paragraphs=(
-                "A Waçla administrator invited you to join the operations team.",
+                _("A Waçla administrator invited you to join the operations team."),
             ),
-            action=(
-                ("Accept your invitation", invite_url)
-                if invite_url
-                else ("Use the secure invitation link you were given.", "")
-            ),
-            callout=(
-                "This link expires in 24 hours and can be used once. If you were "
-                "not expecting this, contact Waçla support."
-            ),
-            facts=(("Role", str(context.get("role_label", "operations"))),),
+            action=(_("Accept your invitation"), invite_url),
+            callout=_("This private link can be used once. If you were not expecting this, contact Waçla support."),
+            facts=((_("Role"), roles.get(context.get("role"), _("Operations"))),),
         )
     if kind == OutboundMessage.Kind.RECIPIENT_DELIVERY_CODE:
         return _recipient_delivery_code(context, resolve_secret(message))
@@ -602,8 +636,8 @@ def build_document(message: OutboundMessage) -> EmailDocument:
                 )
             ),
             facts=_facts(
-                context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                {},
+                (_("Payment reference"), context.get("payment_reference", "")),
                 _amount_fact(context),
             ),
         )
@@ -898,6 +932,16 @@ def build_document(message: OutboundMessage) -> EmailDocument:
     raise SecretUnavailable(f"No template for outbound message kind {kind!r}.")
 
 
+def build_document(message: OutboundMessage) -> EmailDocument:
+    document = _build_document(message)
+    if message.secret_ref.startswith("outbound_secret:"):
+        vault = OutboundSecret.objects.filter(pk=message.secret_ref.split(":", 1)[1]).first()
+        if vault:
+            deadline = vault.expires_at.astimezone(datetime_timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            document = replace(document, facts=(*document.facts, (_("Expires at (UTC)"), deadline)))
+    return document
+
+
 def render(message: OutboundMessage) -> tuple[str, str]:
     """Build `(subject, plain-text body)`. The only place a code becomes text."""
 
@@ -962,14 +1006,14 @@ def _xadd_email(
     payload_hash = redis_bus._payload_hash(payload)
     event, created = PublishedEvent.objects.get_or_create(
         event_id=event_id,
-        defaults={"channel": _EMAIL_STREAM, "payload_hash": payload_hash},
+        defaults={"channel": settings.EMAIL_STREAM, "payload_hash": payload_hash},
     )
     if not created and (
-        event.channel != _EMAIL_STREAM or event.payload_hash != payload_hash
+        event.channel != settings.EMAIL_STREAM or event.payload_hash != payload_hash
     ):
         raise RuntimeError("Outbound email event payload changed between retries.")
     redis_bus.get_client().xadd(
-        _EMAIL_STREAM,
+        settings.EMAIL_STREAM,
         {"event_id": event_id, "payload": serialized},
         maxlen=_EMAIL_STREAM_MAXLEN,
         approximate=True,
@@ -978,7 +1022,7 @@ def _xadd_email(
 
 
 def _send_email_via_provider(
-    *, to: str, subject: str, body: str, html: str = ""
+    *, to: str, subject: str, body: str, html: str = "", obligation_id: int | None = None
 ) -> None:
     """Send a secret-bearing message at the final SMTP boundary.
 
@@ -993,7 +1037,7 @@ def _send_email_via_provider(
         # Console backends print the body, which would put the handover code in
         # logs. Local development must use MailHog/SMTP for this message.
         raise RuntimeError("Secret-bearing email requires a non-console SMTP backend.")
-    reply_to = [settings.EMAIL_SUPPORT_ADDR] if settings.EMAIL_SUPPORT_ADDR else None
+    reply_to = [settings.EMAIL_REPLY_TO] if settings.EMAIL_REPLY_TO else None
     message = EmailMultiAlternatives(
         subject=subject,
         body=body,
@@ -1001,6 +1045,10 @@ def _send_email_via_provider(
         to=[to],
         reply_to=reply_to,
     )
+    if obligation_id is not None:
+        domain = parseaddr(settings.DEFAULT_FROM_EMAIL)[1].rsplit("@", 1)[-1]
+        identity = hashlib.sha256(f"outbound:{obligation_id}".encode()).hexdigest()
+        message.extra_headers["Message-ID"] = f"<wacla-{identity}@{domain}>"
     if html:
         # The HTML part is built from the same document as the text part and in
         # the same trusted process. It is an alternative rendering, never an
@@ -1055,6 +1103,24 @@ def _consume_secret_ref(message: OutboundMessage) -> None:
 
 
 def dispatch_message(*, message_id: int) -> str:
+    """Hold the PostgreSQL send lock through SMTP/publication and state commit."""
+    from .delivery_policy import acquire_send_lock
+
+    error = None
+    with transaction.atomic():
+        if not acquire_send_lock():
+            return "busy"
+        try:
+            result = _dispatch_message_locked(message_id=message_id)
+        except EmailDeliveryError as exc:
+            # Commit safe retry state before the job runner sees a fixed error.
+            error = exc
+    if error:
+        raise error from None
+    return result
+
+
+def _dispatch_message_locked(*, message_id: int) -> str:
     """Render and transport one obligation. Idempotent and safe to retry."""
 
     with transaction.atomic():
@@ -1063,6 +1129,8 @@ def dispatch_message(*, message_id: int) -> str:
             return "already_dispatched"
         if message.status == OutboundMessage.Status.CANCELLED:
             return "cancelled"
+        if message.status == OutboundMessage.Status.FAILED:
+            return "failed"
         # EMAIL_ENABLED is the operator's kill switch for every external
         # delivery path. Secret-bearing messages bypass Redis and send from
         # Django directly, so checking only the Go consumer would let them
@@ -1070,17 +1138,24 @@ def dispatch_message(*, message_id: int) -> str:
         # untouched so an approved activation can carry it later.
         if not bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False)):
             return "disabled"
+        from .delivery_policy import activation_held, rate_limited
         if _transport_confirmed(message.transport_event_id):
             _mark_dispatched(message, event_id=message.transport_event_id)
             return "dispatched"
+        if activation_held(message):
+            return "activation_held"
         now = timezone.now()
+        if message.last_error and message.next_attempt_at and message.next_attempt_at > now:
+            return "retry_wait"
+        if message.kind in _SECRET_PROVIDER_KINDS and rate_limited():
+            return "rate_limited"
         if (
             message.transport_event_id
             and message.next_attempt_at is not None
             and message.next_attempt_at > now
         ):
             return "awaiting_receipt"
-        if message.transport_event_id and int(message.attempts) >= int(
+        if int(message.attempts) >= int(
             message.max_attempts
         ):
             message.status = OutboundMessage.Status.FAILED
@@ -1096,13 +1171,17 @@ def dispatch_message(*, message_id: int) -> str:
         max_attempts = int(message.max_attempts)
 
     try:
+        if message.kind == OutboundMessage.Kind.PROTECTION_ENDING:
+            from .backlog import classify
+            if classify(message)["category"] in {"expired", "obsolete"}:
+                raise SecretUnavailable("The protection reminder is no longer current.")
         subject, body, html = render_parts(message)
-    except SecretUnavailable as exc:
+    except (SecretUnavailable, TypeError, ValueError, KeyError):
         # The message can never become valid again, so stop retrying it and
         # leave the reason on the row for an operator.
         OutboundMessage.objects.filter(pk=message_id).update(
             status=OutboundMessage.Status.FAILED,
-            last_error=str(exc)[:500],
+            last_error="email_context_or_capability_unavailable",
             dispatched_at=None,
             updated_at=timezone.now(),
         )
@@ -1120,16 +1199,25 @@ def dispatch_message(*, message_id: int) -> str:
                 subject=subject,
                 body=body,
                 html=html,
+                obligation_id=message.pk,
             )
         except Exception as exc:  # noqa: BLE001 - provider errors are retryable
-            failed_permanently = attempts >= max_attempts
+            smtp_code = 0
+            if isinstance(exc, smtplib.SMTPRecipientsRefused):
+                codes = [reply[0] for reply in exc.recipients.values()]
+                smtp_code = codes[0] if codes and all(500 <= code < 600 for code in codes) else 0
+            elif isinstance(exc, (smtplib.SMTPDataError, smtplib.SMTPSenderRefused)):
+                smtp_code = exc.smtp_code
+            permanent = 500 <= smtp_code < 600
+            failed_permanently = permanent or attempts >= max_attempts
+            safe_error = "smtp_permanent" if permanent else "smtp_transient"
             OutboundMessage.objects.filter(pk=message_id).update(
                 status=(
                     OutboundMessage.Status.FAILED
                     if failed_permanently
                     else OutboundMessage.Status.PENDING
                 ),
-                last_error=f"{type(exc).__name__}: {exc}"[:500],
+                last_error=safe_error,
                 next_attempt_at=(
                     None
                     if failed_permanently
@@ -1144,7 +1232,7 @@ def dispatch_message(*, message_id: int) -> str:
                 message_id,
                 attempts,
             )
-            raise
+            raise EmailDeliveryError(safe_error) from None
         with transaction.atomic():
             current = OutboundMessage.objects.select_for_update().get(pk=message_id)
             if current.status != OutboundMessage.Status.DISPATCHED:
@@ -1162,7 +1250,7 @@ def dispatch_message(*, message_id: int) -> str:
             kind=message.kind,
             event_id=event_id,
         )
-    except (redis.RedisError, OSError) as exc:
+    except (redis.RedisError, OSError):
         failed_permanently = attempts >= max_attempts
         OutboundMessage.objects.filter(pk=message_id).update(
             status=(
@@ -1170,7 +1258,7 @@ def dispatch_message(*, message_id: int) -> str:
                 if failed_permanently
                 else OutboundMessage.Status.PENDING
             ),
-            last_error=f"{type(exc).__name__}: {exc}"[:500],
+            last_error="email_transport_unavailable",
             transport_event_id=event_id,
             next_attempt_at=timezone.now() + _retry_delay(attempts),
             updated_at=timezone.now(),
@@ -1181,7 +1269,7 @@ def dispatch_message(*, message_id: int) -> str:
             message_id,
             attempts,
         )
-        raise
+        raise EmailDeliveryError("email_transport_unavailable") from None
 
     # XADD is transport, not delivery. Keep the PostgreSQL obligation pending
     # until the Go worker records SMTP success on core_published_event. If the
@@ -1239,6 +1327,10 @@ def dispatch_due_messages(*, limit: int = 50, at: datetime | None = None) -> int
         queryset = OutboundMessage.objects.filter(
             status=OutboundMessage.Status.PENDING, next_attempt_at__lte=at
         ).order_by("next_attempt_at", "id")
+        cutoff = getattr(settings, "EMAIL_ACTIVATION_NOT_BEFORE", None)
+        from django.db.models import Q
+        earliest = max(cutoff, at - timedelta(hours=48)) if cutoff else at - timedelta(hours=48)
+        queryset = queryset.filter(Q(created_at__gte=earliest) | Q(activation_reviewed_at__gte=at-timedelta(hours=24)))
         if connection.features.has_select_for_update_skip_locked:
             queryset = queryset.select_for_update(skip_locked=True)
         else:

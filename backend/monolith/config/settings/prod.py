@@ -306,21 +306,13 @@ if HANDOVER_CODE_SECRET == SECRET_KEY:  # noqa: F405
 # messages that must never be serialized into Redis. Both use environment-only
 # credentials; DEFAULT_FROM_EMAIL falls back to base.py when unset.
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = env.str("EMAIL_SMTP_HOST", default="")  # noqa: F405
-EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)  # noqa: F405
-EMAIL_HOST_USER = env.str("EMAIL_SMTP_USERNAME", default="")  # noqa: F405
-EMAIL_HOST_PASSWORD = env.str("EMAIL_SMTP_PASSWORD", default="")  # noqa: F405
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
 # Django's default is no socket timeout. Secret-bearing mail is sent from the
 # finance worker's serial loop, so one stalled SMTP connection would otherwise
 # stop payout, refund and expiry jobs behind it indefinitely.
-EMAIL_TIMEOUT = env.int("EMAIL_SMTP_TIMEOUT_SECONDS", default=20)  # noqa: F405
-if from_addr := env.str("EMAIL_FROM_ADDR", default=""):  # noqa: F405
-    DEFAULT_FROM_EMAIL = from_addr  # noqa: F405
 if TRANSACTIONAL_EMAIL_PROVIDER not in {"smtp", "sender_net", "sender.net"}:  # noqa: F405
     raise RuntimeError("EMAIL_PROVIDER must be 'smtp' or 'sender_net'.")
 if TRANSACTIONAL_EMAIL_ENABLED:  # noqa: F405
-    if not EMAIL_HOST or not from_addr:
+    if not EMAIL_HOST or not EMAIL_FROM_ADDR:  # noqa: F405
         raise RuntimeError(
             "EMAIL_SMTP_HOST and EMAIL_FROM_ADDR are required when EMAIL_ENABLED=true."
         )
@@ -328,8 +320,17 @@ if TRANSACTIONAL_EMAIL_ENABLED:  # noqa: F405
         raise RuntimeError(
             "EMAIL_SENDING_DOMAIN_VERIFIED must be true before enabling production email."
         )
+    from django.core.validators import validate_email
+    for address in (EMAIL_FROM_ADDR, EMAIL_REPLY_TO, EMAIL_SUPPORT_ADDR):  # noqa: F405
+        validate_email(address)
+    if not EMAIL_ACTIVATION_NOT_BEFORE or not EMAIL_USE_TLS:  # noqa: F405
+        raise RuntimeError("Production email requires an activation cutoff and TLS.")
     if TRANSACTIONAL_EMAIL_PROVIDER in {"sender_net", "sender.net"} and (  # noqa: F405
-        not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD or not EMAIL_USE_TLS
+        EMAIL_HOST != "smtp.sender.net" or EMAIL_PORT != 587  # noqa: F405
+    ):
+        raise RuntimeError("Sender.net requires smtp.sender.net:587 with STARTTLS.")
+    if TRANSACTIONAL_EMAIL_PROVIDER in {"sender_net", "sender.net"} and (  # noqa: F405
+        not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD or not EMAIL_USE_TLS  # noqa: F405
     ):
         raise RuntimeError(
             "Sender.net requires SMTP username/password and TLS when email is enabled."

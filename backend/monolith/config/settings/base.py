@@ -282,13 +282,35 @@ EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 # invitation and delivery-code messages use Django's trusted final SMTP adapter
 # so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
 DEFAULT_FROM_EMAIL = env.str(
-    "DEFAULT_FROM_EMAIL", default="Waçla <noreply@shiptrip.dz>"
+    "DEFAULT_FROM_EMAIL", default="Waçla <noreply@example.invalid>"
 )
 # Public links and support identity used by transactional templates. These are
 # intentionally non-secret; SMTP/API credentials remain in the email worker's
 # environment and are never exposed to request handlers.
 FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="")
 EMAIL_SUPPORT_ADDR = env.str("EMAIL_SUPPORT_ADDR", default="")
+EMAIL_REPLY_TO = env.str("EMAIL_REPLY_TO", default="").strip() or EMAIL_SUPPORT_ADDR
+EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Waçla").strip() or "Waçla"
+EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="")
+if EMAIL_FROM_ADDR:
+    from email.utils import formataddr
+    DEFAULT_FROM_EMAIL = formataddr((EMAIL_FROM_NAME, EMAIL_FROM_ADDR))
+EMAIL_HOST = env.str("EMAIL_SMTP_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)
+EMAIL_HOST_USER = env.str("EMAIL_SMTP_USERNAME", default="")
+EMAIL_HOST_PASSWORD = env.str("EMAIL_SMTP_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_TIMEOUT = env.int("EMAIL_SMTP_TIMEOUT_SECONDS", default=10)
+EMAIL_RATE_LIMIT_PER_MINUTE = env.int("EMAIL_RATE_LIMIT_PER_MINUTE", default=60)
+from django.utils.dateparse import parse_datetime  # noqa: E402
+_email_cutoff = env.str("EMAIL_ACTIVATION_NOT_BEFORE", default="")
+EMAIL_ACTIVATION_NOT_BEFORE = parse_datetime(_email_cutoff) if _email_cutoff else None
+if _email_cutoff and (
+    EMAIL_ACTIVATION_NOT_BEFORE is None or EMAIL_ACTIVATION_NOT_BEFORE.tzinfo is None
+):
+    raise RuntimeError("EMAIL_ACTIVATION_NOT_BEFORE must be an ISO timestamp with timezone.")
+if not 1 <= EMAIL_TIMEOUT <= 10 or not 1 <= EMAIL_RATE_LIMIT_PER_MINUTE <= 600:
+    raise RuntimeError("Email timeout must be 1..10 seconds and rate must be 1..600 per minute.")
 TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
 TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").lower()
 # Separate encryption root for short-lived OTP/invitation delivery copies.

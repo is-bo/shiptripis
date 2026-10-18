@@ -7,6 +7,7 @@ from .permissions import ROLE_CHOICES, normalize_role
 
 
 class AdminInvitationCreateSerializer(serializers.Serializer):
+    communication_language = serializers.ChoiceField(choices=("en", "fr", "ar"), required=False, default="en")
     email = serializers.EmailField()
     role = serializers.ChoiceField(choices=ROLE_CHOICES)
     # API accepts hours so operators cannot accidentally create a multi-day

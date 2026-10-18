@@ -2965,6 +2965,7 @@ def staff(request):
                 email=form.cleaned_data["email"],
                 role=form.cleaned_data["role"],
                 ttl=timedelta(hours=form.cleaned_data["expires_in_hours"]),
+                communication_language=form.cleaned_data["communication_language"] or "en",
             )
             messages.success(
                 request,
@@ -3093,10 +3094,13 @@ def staff_invitation_action(request, pk, action: str):
                     revoke_admin_invitation(
                         actor=request.user, invitation_id=invitation.pk
                     )
+                from apps.notifications.models import OutboundMessage
+                language = OutboundMessage.objects.filter(key=f"admin_invitation:{invitation.pk}").values_list("language", flat=True).first() or "en"
                 create_admin_invitation(
                     actor=request.user,
                     email=invitation.email,
                     role=invitation.role,
+                    communication_language=language,
                 )
             messages.success(
                 request,

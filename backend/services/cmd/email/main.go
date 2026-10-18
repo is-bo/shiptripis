@@ -153,11 +153,15 @@ func run() error {
 			FromAddr: emailCfg.FromAddr,
 			FromName: emailCfg.FromName,
 			UseTLS:   emailCfg.UseTLS,
+			ReplyTo:  emailCfg.ReplyTo,
+			Timeout:  emailCfg.SMTPTimeout,
 		}, log)
 		if err != nil {
 			return err
 		}
-		receipts, err := email.NewPostgresReceiptStore(pool)
+		receipts, err := email.NewPostgresReceiptStore(pool, email.DeliveryPolicy{
+			ActivationNotBefore: emailCfg.ActivationNotBefore, RateLimitPerMinute: emailCfg.RateLimitPerMinute,
+		})
 		if err != nil {
 			return err
 		}

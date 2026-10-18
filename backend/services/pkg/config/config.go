@@ -19,6 +19,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"net/url"
 	"os"
 	"strconv"
@@ -415,13 +416,17 @@ type Email struct {
 	ConsumerGroup string
 	ConsumerName  string
 
-	SMTPHost     string // required when Enabled
-	SMTPPort     int    // required when Enabled
-	SMTPUsername string // optional (dev sinks like MailHog need no auth)
-	SMTPPassword string
-	FromAddr     string // required when Enabled
-	FromName     string // optional display name
-	UseTLS       bool   // STARTTLS (587) / implicit TLS (465); false for dev (25/1025)
+	SMTPHost            string // required when Enabled
+	SMTPPort            int    // required when Enabled
+	SMTPUsername        string // optional (dev sinks like MailHog need no auth)
+	SMTPPassword        string
+	FromAddr            string // required when Enabled
+	FromName            string // optional display name
+	UseTLS              bool   // STARTTLS (587) / implicit TLS (465); false for dev (25/1025)
+	ReplyTo             string
+	SMTPTimeout         time.Duration
+	ActivationNotBefore time.Time
+	RateLimitPerMinute  int
 }
 
 // LoadEmail reads EMAIL_* env vars. When EMAIL_ENABLED is false (the default)
@@ -450,8 +455,22 @@ func LoadEmail() (Email, error) {
 	user := optString("EMAIL_SMTP_USERNAME", "")
 	pass := optString("EMAIL_SMTP_PASSWORD", "")
 	from := optString("EMAIL_FROM_ADDR", "")
-	fromName := optString("EMAIL_FROM_NAME", "")
+	fromName := optString("EMAIL_FROM_NAME", "Waçla")
 	useTLS := optBool(&b, "EMAIL_USE_TLS", true)
+	replyTo := optString("EMAIL_REPLY_TO", optString("EMAIL_SUPPORT_ADDR", ""))
+	timeout := optInt(&b, "EMAIL_SMTP_TIMEOUT_SECONDS", 10)
+	rate := optInt(&b, "EMAIL_RATE_LIMIT_PER_MINUTE", 60)
+	if timeout < 1 || timeout > 10 || rate < 1 || rate > 600 {
+		b.addf("email timeout must be 1..10 seconds and rate 1..600 per minute")
+	}
+	var cutoff time.Time
+	if raw := optString("EMAIL_ACTIVATION_NOT_BEFORE", ""); raw != "" {
+		var err error
+		cutoff, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			b.addf("EMAIL_ACTIVATION_NOT_BEFORE must be a timestamp with timezone")
+		}
+	}
 
 	if enabled {
 		if host == "" {
@@ -463,7 +482,23 @@ func LoadEmail() (Email, error) {
 		if from == "" {
 			b.addf("EMAIL_FROM_ADDR is required when EMAIL_ENABLED=true")
 		}
+		if addr, err := mail.ParseAddress(from); err != nil || addr.Address != from {
+			b.addf("EMAIL_FROM_ADDR must be a bare email address")
+		}
+		if replyTo != "" {
+			if _, err := mail.ParseAddress(replyTo); err != nil {
+				b.addf("EMAIL_REPLY_TO must be an email address")
+			}
+		}
+		if optString("SHIPTRIP_ENVIRONMENT", "") == "production" {
+			if cutoff.IsZero() || replyTo == "" || !optBool(&b, "EMAIL_SENDING_DOMAIN_VERIFIED", false) || !useTLS {
+				b.addf("production email requires activation cutoff, Reply-To, verified domain and TLS")
+			}
+		}
 		if provider == "sender_net" {
+			if host != "smtp.sender.net" || port != 587 {
+				b.addf("Sender.net requires smtp.sender.net:587")
+			}
 			if user == "" {
 				b.addf("EMAIL_SMTP_USERNAME is required for Sender.net")
 			}
@@ -491,6 +526,8 @@ func LoadEmail() (Email, error) {
 		FromAddr:      from,
 		FromName:      fromName,
 		UseTLS:        useTLS,
+		ReplyTo:       replyTo, SMTPTimeout: time.Duration(timeout) * time.Second,
+		ActivationNotBefore: cutoff, RateLimitPerMinute: rate,
 	}, nil
 }
 

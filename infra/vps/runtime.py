@@ -20,6 +20,7 @@ SECRET_KEYS = {
     "PAYOUT_DATA_ACTIVE_KEY_ID", "PAYOUT_ACCOUNT_FINGERPRINT_KEY",
     "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_CONNECT_WEBHOOK_SECRET",
     "CHARGILY_SECRET_KEY", "CHARGILY_WEBHOOK_SECRET", "FCM_CREDENTIALS_JSON_BASE64",
+    "EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD",
 }
 
 
@@ -40,7 +41,7 @@ def v1_guards() -> None:
     for key, value in {
         "SHIPTRIP_ENVIRONMENT": "production", "DJANGO_DEBUG": "false",
         "SHIPTRIP_EMBEDDED_REDIS": "false", "PAYMENTS_ENVIRONMENT": "test",
-        "PAYMENTS_ALLOW_MOCK_PROVIDER": "false", "EMAIL_ENABLED": "false",
+        "PAYMENTS_ALLOW_MOCK_PROVIDER": "false",
         "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false", "PAYMENTS_LEGACY_MUTATIONS_ENABLED": "false",
         "PAYOUT_DZD_EXECUTION_ENABLED": "false", "STRIPE_CONNECT_PAYOUTS_ENABLED": "false",
         "STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED": "false",
@@ -48,6 +49,15 @@ def v1_guards() -> None:
     }.items():
         if os.environ.get(key, "").lower() != value:
             raise RuntimeError(f"V1 requires {key}={value}")
+    enabled = os.environ.get("EMAIL_ENABLED", "").lower()
+    if enabled not in {"true", "false"}:
+        raise RuntimeError("EMAIL_ENABLED must be explicitly true or false")
+    if enabled == "true" and (
+        os.environ.get("EMAIL_ACTIVATION_APPROVED", "false").lower() != "true"
+        or os.environ.get("EMAIL_SENDING_DOMAIN_VERIFIED", "false").lower() != "true"
+        or not os.environ.get("EMAIL_ACTIVATION_NOT_BEFORE")
+    ):
+        raise RuntimeError("Email requires explicit V3 approval, verified domain and backlog cutoff")
     if os.environ.get("DATABASE_URL") or os.environ.get("ROUTE_PROVIDER_CACHE_URL"):
         raise RuntimeError("VPS uses split POSTGRES vars and one generated Redis URL")
 
@@ -78,6 +88,7 @@ def maintenance(command: list[str]) -> None:
                 "migrate", "import_geography", "check", "showmigrations", "inspect_redis_streams",
                 "flushexpiredtokens", "prune_scheduled_jobs", "prune_push_devices",
                 "purge_staged_parcel_media", "sweep_published_events",
+                "audit_email_backlog", "review_email_backlog",
             }
             if not command or command[0] not in allowed:
                 raise RuntimeError("unsupported maintenance command")

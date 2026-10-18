@@ -1118,6 +1118,7 @@ class AdminInvitationListCreateView(APIView):
                 email=data["email"],
                 role=data["role"],
                 ttl=timedelta(hours=data["expires_in_hours"]),
+                communication_language=data["communication_language"],
             )
         except PermissionDenied as exc:
             return Response({"detail": str(exc)}, status=http.HTTP_403_FORBIDDEN)

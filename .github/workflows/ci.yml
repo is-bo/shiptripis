@@ -93,6 +93,18 @@ jobs:
       run:
         working-directory: backend/services
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wacla
+          POSTGRES_DB: wacla
+          POSTGRES_PASSWORD: local-ci-fixture-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wacla"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6399:6379"]
@@ -111,6 +123,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: backend/services/go.sum
 
+      - name: Load Django-owned schema for email delivery guards
+        run: psql 'postgresql://wacla:local-ci-fixture-only@127.0.0.1:5432/wacla' -v ON_ERROR_STOP=1 -f ../contracts/sql/schema.sql
+
       # REDIS_TEST_URL is what un-skips the tier; without it every test calls
       # t.Skip and the job proves nothing.
       #
@@ -123,6 +138,7 @@ jobs:
       - name: go test -tags integration -race
         env:
           REDIS_TEST_URL: redis://localhost:6399/0
+          EMAIL_TEST_DATABASE_URL: postgresql://wacla:local-ci-fixture-only@127.0.0.1:5432/wacla
         run: |
           set -o pipefail
           go test -tags integration -race -count=1 -v ./... 2>&1 | tee /tmp/it.log

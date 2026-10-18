@@ -507,3 +507,45 @@ msgstr "annulée par le voyageur"
 
 msgid "cancelled by an administrator"
 msgstr "annulée par un administrateur"
+
+msgid "You have been invited to Waçla Operations"
+msgstr "Vous avez été invité à rejoindre les opérations Waçla"
+
+msgid "Use your private link to accept this invitation."
+msgstr "Utilisez votre lien privé pour accepter cette invitation."
+
+msgid "Operations"
+msgstr "Opérations"
+
+msgid "Support"
+msgstr "Assistance"
+
+msgid "Finance"
+msgstr "Finance"
+
+msgid "Trust / Verification"
+msgstr "Confiance / Vérification"
+
+msgid "Super Admin"
+msgstr "Administrateur principal"
+
+msgid "A Waçla administrator invited you to join the operations team."
+msgstr "Un administrateur Waçla vous a invité à rejoindre l’équipe des opérations."
+
+msgid "Accept your invitation"
+msgstr "Accepter votre invitation"
+
+msgid "This private link can be used once. If you were not expecting this, contact Waçla support."
+msgstr "Ce lien privé ne peut être utilisé qu’une seule fois. Si vous n’attendiez pas cette invitation, contactez l’assistance Waçla."
+
+msgid "Role"
+msgstr "Rôle"
+
+msgid "Expires at (UTC)"
+msgstr "Expire le (UTC)"
+
+msgid "Use this code before it expires. Waçla will never ask you to share this code outside the verification screen."
+msgstr "Utilisez ce code avant son expiration. Waçla ne vous demandera jamais de partager ce code en dehors de l’écran de vérification."
+
+msgid "Use this code before it expires. If you did not request this, ignore this email and keep your code private."
+msgstr "Utilisez ce code avant son expiration. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail et gardez votre code privé."

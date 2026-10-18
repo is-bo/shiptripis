@@ -590,6 +590,8 @@ def handle_outbound_message(payload: dict) -> str:
             code="email_disabled",
             delay=timedelta(hours=6),
         )
+    if result in {"activation_held", "rate_limited", "busy", "retry_wait", "awaiting_receipt"}:
+        raise JobDeferred("Email delivery is waiting for its send gate.", code=f"email_{result}", delay=timedelta(minutes=1))
     return result
 
 

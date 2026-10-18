@@ -1,7 +1,7 @@
 // Package email is the Go-side transactional-email service. Django renders
-// the subject + body (signup verification, password-reset OTP, …) and XADDs
-// an entry onto the durable `email:send` Redis Stream; this service consumes
-// it and sends the mail over SMTP.
+// ordinary subject/body alternatives and XADDs a transport hint onto
+// `email:send`. Secret-bearing mail stays in Django's trusted SMTP boundary.
+// PostgreSQL OutboundMessage remains the obligation store for both paths.
 //
 // Why a durable stream (not pub/sub): Django's redis_bus.publish_after_commit
 // is fire-and-forget PUB/SUB — a message published while this consumer is down

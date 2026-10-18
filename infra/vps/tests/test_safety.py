@@ -129,6 +129,12 @@ class ReleaseRecoveryTests(unittest.TestCase):
         builds = [(args, env) for args, env in self.calls if "build" in args]
         self.assertEqual(builds[0][1]["APP_IMAGE"], self.new["APP_IMAGE"])
 
+    def test_email_audit_uses_locked_maintenance_without_starting_application(self):
+        self.execute(["email-audit", "--limit", "25"])
+        commands = [args for args, env in self.calls]
+        self.assertTrue(any(args[-3:] == ["audit_email_backlog", "--limit", "25"] for args in commands))
+        self.assertFalse(any("up" in args or "deploy" in args for args in commands))
+
     def test_incomplete_deploy_keeps_recovery_source(self):
         with self.assertRaises(subprocess.CalledProcessError):
             self.execute(["deploy", self.new["APP_IMAGE"], self.new["RELEASE_ID"]], fail_ready=True)

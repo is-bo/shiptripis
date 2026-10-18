@@ -106,6 +106,7 @@ def create_admin_invitation(
     email: str,
     role: str,
     ttl: timedelta = timedelta(hours=24),
+    communication_language: str = "en",
 ) -> tuple[AdminInvitation, str]:
     """Create and audit a role-bound invitation.
 
@@ -131,8 +132,10 @@ def create_admin_invitation(
         to_email=invitation.email,
         secret=plaintext,
         secret_expires_at=invitation.expires_at,
+        language=communication_language,
         context={
             "role_label": invitation.get_role_display(),
+            "role": invitation.role,
             "frontend_base_url": getattr(settings, "FRONTEND_BASE_URL", ""),
         },
     )

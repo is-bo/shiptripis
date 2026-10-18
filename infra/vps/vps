@@ -184,7 +184,7 @@ def diagnostics(command: str, resources: ExitStack) -> None:
 def operate(resources: ExitStack) -> None:
     args = sys.argv[1:]
     if not args:
-        raise ValueError("commands: prepare-config validate build start stop health logs migrate catalogue backup-init backup snapshots verify restore deploy rollback monitor scheduled")
+        raise ValueError("commands: prepare-config validate build start stop health logs migrate catalogue backup-init backup snapshots verify restore deploy rollback monitor scheduled email-audit email-review")
     command, *rest = args
     if command == "prepare-config":
         # These four tracked files contain no secrets. File bind mounts retain
@@ -313,6 +313,8 @@ def operate(resources: ExitStack) -> None:
         temporary.write_text(json.dumps({"current": target, "previous": previous}))
         temporary.replace(state_file)
         pending_file.unlink(missing_ok=True)
+    elif command in {"email-audit", "email-review"}:
+        maintenance("audit_email_backlog" if command == "email-audit" else "review_email_backlog", *rest)
     elif command == "scheduled":
         maintenance("flushexpiredtokens")
         maintenance("sweep_published_events")

@@ -309,6 +309,34 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	// surface as a duplicate on the next pod's sweep.
 	sendCtx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
+	if guarded, ok := c.receipts.(interface {
+		Deliver(context.Context, EmailPayload, func() error) (bool, error)
+	}); ok {
+		attempted := false
+		acknowledge, err := guarded.Deliver(sendCtx, p, func() error {
+			attempted = true
+			c.count("smtp_attempts_total")
+			return c.sender.Send(sendCtx, p)
+		})
+		if attempted {
+			if err == nil {
+				c.count("smtp_accepted_total")
+			} else if _, permanent := AsPermanent(err); permanent {
+				c.count("smtp_permanent_failures_total")
+			} else {
+				c.count("smtp_retryable_failures_total")
+			}
+		} else {
+			c.count("send_gate_skips_total")
+		}
+		if err != nil {
+			c.log.Warn("email: guarded delivery outcome", append([]any{"event_id", p.EventID}, SendFailureLogAttrs(err)...)...)
+		}
+		if acknowledge {
+			c.ack(m.ID)
+		}
+		return
+	}
 
 	sentKey := "email:sent:" + p.EventID
 	if p.EventID != "" {

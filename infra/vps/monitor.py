@@ -66,6 +66,8 @@ def main():
                 problems.append("financial_job_backlog")
             if (ops.get("outbound_oldest_overdue_seconds") or 0) > 600:
                 problems.append("email_backlog")
+            if ops.get("outbound_failed", 0):
+                problems.append("email_failed_obligations")
             for key, value in ops.items():
                 if key.endswith("stream_lag") and isinstance(value, (int, float)) and value > 100:
                     problems.append("queue_lag")

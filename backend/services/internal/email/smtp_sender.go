@@ -2,11 +2,15 @@ package email
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/wneessen/go-mail"
 )
@@ -20,6 +24,8 @@ type SMTPConfig struct {
 	Password string
 	FromAddr string
 	FromName string
+	ReplyTo  string
+	Timeout  time.Duration
 
 	// UseTLS selects the transport security policy:
 	//   - true  + port 465 → implicit TLS (SSL on connect)
@@ -33,11 +39,12 @@ type SMTPConfig struct {
 // DialAndSend call, so the client is safe to share across the consumer's
 // concurrent handlers.
 type smtpSender struct {
-	client *mail.Client
-	host   string // named in failure logs; never the recipient
-	from   string // formatted "Name <addr>" or bare addr — set on each Msg
-	name   string
-	log    *slog.Logger
+	client  *mail.Client
+	host    string // named in failure logs; never the recipient
+	from    string // formatted "Name <addr>" or bare addr — set on each Msg
+	name    string
+	replyTo string
+	log     *slog.Logger
 }
 
 // NewSMTPSender builds a real EmailSender. Fails loud on bad config (CLAUDE.md
@@ -58,7 +65,36 @@ func NewSMTPSender(cfg SMTPConfig, log *slog.Logger) (EmailSender, error) {
 		return nil, errors.New("email: from address is required")
 	}
 
-	opts := []mail.Option{mail.WithPort(cfg.Port)}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 10 * time.Second
+	}
+	opts := []mail.Option{mail.WithPort(cfg.Port), mail.WithTimeout(cfg.Timeout),
+		mail.WithDialContextFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
+			raw, err := (&net.Dialer{Timeout: cfg.Timeout}).DialContext(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			deadline := time.Now().Add(cfg.Timeout)
+			if limit, ok := ctx.Deadline(); ok && limit.Before(deadline) {
+				deadline = limit
+			}
+			bounded := &boundedSMTPConn{Conn: raw, deadline: deadline}
+			bounded.timer = time.AfterFunc(time.Until(deadline), func() { _ = raw.Close() })
+			if err := bounded.SetDeadline(deadline); err != nil {
+				_ = bounded.Close()
+				return nil, err
+			}
+			if cfg.UseTLS && cfg.Port == 465 {
+				secure := tls.Client(bounded, &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12})
+				if err := secure.HandshakeContext(ctx); err != nil {
+					_ = secure.Close()
+					return nil, err
+				}
+				return secure, nil
+			}
+			return bounded, nil
+		}),
+	}
 
 	switch {
 	case cfg.UseTLS && cfg.Port == 465:
@@ -97,13 +133,35 @@ func NewSMTPSender(cfg SMTPConfig, log *slog.Logger) (EmailSender, error) {
 		"from", cfg.FromAddr,
 	)
 	return &smtpSender{
-		client: client,
-		host:   cfg.Host,
-		from:   cfg.FromAddr,
-		name:   cfg.FromName,
-		log:    log,
+		client:  client,
+		host:    cfg.Host,
+		from:    cfg.FromAddr,
+		name:    cfg.FromName,
+		replyTo: cfg.ReplyTo,
+		log:     log,
 	}, nil
 }
+
+// go-mail's dial context does not cover the greeting, and later commands can
+// extend deadlines. Bound the entire connection, including STARTTLS and QUIT.
+type boundedSMTPConn struct {
+	net.Conn
+	deadline time.Time
+	timer    *time.Timer
+}
+
+func (c *boundedSMTPConn) cap(t time.Time) time.Time {
+	if t.IsZero() || t.After(c.deadline) {
+		return c.deadline
+	}
+	return t
+}
+func (c *boundedSMTPConn) SetDeadline(t time.Time) error     { return c.Conn.SetDeadline(c.cap(t)) }
+func (c *boundedSMTPConn) SetReadDeadline(t time.Time) error { return c.Conn.SetReadDeadline(c.cap(t)) }
+func (c *boundedSMTPConn) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(c.cap(t))
+}
+func (c *boundedSMTPConn) Close() error { c.timer.Stop(); return c.Conn.Close() }
 
 // Send renders p into a go-mail Msg and dials+sends it. A send failure returns
 // an error so the consumer leaves the entry in the PEL and the sweeper retries.
@@ -297,7 +355,17 @@ func (s *smtpSender) buildMessage(p EmailPayload) (*mail.Msg, error) {
 	if err := msg.To(p.To); err != nil {
 		return nil, fmt.Errorf("to: %w", err)
 	}
+	if s.replyTo != "" {
+		if err := msg.ReplyTo(s.replyTo); err != nil {
+			return nil, errors.New("invalid reply-to")
+		}
+	}
 	msg.Subject(p.Subject)
+	if p.EventID != "" {
+		identity := sha256.Sum256([]byte(p.EventID))
+		domain := s.from[strings.LastIndex(s.from, "@")+1:]
+		msg.SetMessageIDWithValue(fmt.Sprintf("wacla-%x@%s", identity, domain))
+	}
 	msg.SetBodyString(mail.TypeTextPlain, p.Body)
 	if p.HTML != "" {
 		msg.AddAlternativeString(mail.TypeTextHTML, p.HTML)
