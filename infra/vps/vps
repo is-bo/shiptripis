@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""Single-host operator CLI. Never sources env as shell code or prints secrets."""
+from __future__ import annotations
+
+import fcntl
+from contextlib import ExitStack
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import tarfile
+import time
+import uuid
+from urllib.parse import urlsplit
+
+HERE = Path(__file__).resolve().parent
+CONFIG = Path(os.environ.get("WACLA_CONFIG", "/etc/wacla/stack.env"))
+STATE = Path(os.environ.get("WACLA_STATE", "/var/lib/wacla"))
+
+
+def read_env(path: Path) -> dict[str, str]:
+    data = {}
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if not sep or not re.fullmatch(r"[A-Z][A-Z0-9_]*", key) or key in data:
+            raise ValueError(f"invalid/duplicate key in {path.name}")
+        # Literal values only: Docker Compose interpolation must not reinterpret secrets.
+        if any(c in value for c in ("$", "`", "\x00", "\r", "\"", "'")):
+            raise ValueError(f"unsupported env syntax for {key}")
+        data[key] = value
+    return data
+
+
+def private_file(path: Path, runtime: bool = False) -> None:
+    mode = path.stat().st_mode & 0o777
+    allowed = 0o640 if runtime else 0o600
+    if mode & ~allowed:
+        raise ValueError(f"unsafe permissions on {path.name}: use 0600 or runtime 0640")
+    if runtime and not (path.stat().st_gid == 10001 and mode & 0o040):
+        raise ValueError(f"{path.name} needs group 10001 read permission for application UID 10001")
+
+
+def immutable(image: str) -> bool:
+    return bool(re.fullmatch(r"[a-zA-Z0-9./_-]+(?::[0-9a-f]{40}|@sha256:[0-9a-f]{64})", image))
+
+
+def validate(config: dict[str, str]) -> None:
+    private_file(CONFIG)
+    if any("REPLACE_" in value for value in config.values()):
+        raise ValueError("replace all configuration placeholders")
+    for name in ("APP_IMAGE", "BACKUP_IMAGE"):
+        if not immutable(config.get(name, "")):
+            raise ValueError(f"{name} must use a full reviewed SHA tag or digest")
+    if not re.fullmatch("[0-9a-f]{40}", config.get("RELEASE_ID", "")):
+        raise ValueError("RELEASE_ID must be the reviewed 40-character Git SHA")
+    if "@sha256:" not in config["APP_IMAGE"] and config["APP_IMAGE"].rsplit(":", 1)[1] != config["RELEASE_ID"]:
+        raise ValueError("APP_IMAGE SHA tag must match RELEASE_ID")
+    for name in ("POSTGRES_DB", "POSTGRES_USER"):
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", config.get(name, "")):
+            raise ValueError(f"invalid {name}")
+    for cidr in config.get("ADMIN_CIDRS", "").split():
+        if ipaddress.ip_network(cidr).prefixlen == 0:
+            raise ValueError("Admin source must be restricted")
+    if not config.get("ADMIN_CIDRS") or not config.get("WEBSOCKET_ORIGINS"):
+        raise ValueError("Admin CIDRs and browser origins must be explicit")
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", config.get("SITE_ADDRESS", "")):
+        raise ValueError("SITE_ADDRESS must be a single hostname")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", config.get("ACME_EMAIL", "")):
+        raise ValueError("ACME_EMAIL must be the owner's certificate contact address")
+    if "localhost" not in config.get("DJANGO_ALLOWED_HOSTS", "").split(","):
+        raise ValueError("DJANGO_ALLOWED_HOSTS must include localhost for internal probes")
+    for name in ("CORS_ALLOWED_ORIGINS", "CSRF_TRUSTED_ORIGINS", "WEBSOCKET_ORIGINS"):
+        if name == "WEBSOCKET_ORIGINS" and "," in config.get(name, ""):
+            raise ValueError("WEBSOCKET_ORIGINS must use spaces, not commas")
+        for origin in re.split(r"[ ,]+", config.get(name, "")):
+            if origin and (not re.fullmatch(r"https://[a-zA-Z0-9.-]+(?::[0-9]+)?", origin)):
+                raise ValueError(f"{name} must use explicit HTTPS origins")
+    secrets_dir = Path(config["SECRETS_DIR"])
+    if not secrets_dir.is_absolute() or secrets_dir.stat().st_mode & 0o007:
+        raise ValueError("SECRETS_DIR must be an absolute private directory")
+    for name in ("app.json", "postgres-password", "redis-password", "restic-password"):
+        private_file(secrets_dir / name, runtime=True)
+    from importlib.machinery import SourceFileLoader
+    runtime = SourceFileLoader("wacla_runtime", str(HERE / "runtime.py")).load_module()
+    # Validate in a subprocess: secrets never reach this CLI's Docker environment.
+    snippet = """import importlib.util, json, os, pathlib, sys
+spec=importlib.util.spec_from_file_location('runtime',sys.argv[1]); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+p=pathlib.Path(sys.argv[2]); data=json.loads((p/'app.json').read_text())
+assert isinstance(data,dict) and not (set(data)-m.SECRET_KEYS), 'unsupported secret keys'
+assert not (set(data)&set(os.environ)), 'duplicate secret source'
+assert all(isinstance(v,str) and 'REPLACE_' not in v for v in data.values()), 'replace secret placeholders'
+for n in ['DJANGO_SECRET_KEY','JWT_HS256_SECRET','GRPC_BEARER_TOKEN','HANDOVER_CODE_SECRET','TRANSACTIONAL_EMAIL_SECRET']:
+ assert len(data[n])>=32, 'dedicated secrets need >=32 characters'
+assert len({data[n] for n in ['DJANGO_SECRET_KEY','JWT_HS256_SECRET','GRPC_BEARER_TOKEN','HANDOVER_CODE_SECRET','TRANSACTIONAL_EMAIL_SECRET']})==5, 'secrets must differ'
+for n in ['postgres-password','redis-password','restic-password']:
+ v=(p/n).read_text().strip(); assert len(v)>=64 and all(c in '0123456789abcdefABCDEF' for c in v), 'password files must be >=64 hex characters'
+if data.get('STRIPE_SECRET_KEY'): assert data['STRIPE_SECRET_KEY'].startswith('sk_test_'), 'Stripe must be TEST'
+if data.get('CHARGILY_SECRET_KEY'): assert data['CHARGILY_SECRET_KEY'].startswith('test_sk_'), 'Chargily must be TEST'
+m.v1_guards()
+"""
+    if set(config) & (runtime.SECRET_KEYS | {"REDIS_URL", "POSTGRES_PASSWORD", "DATABASE_URL"}):
+        raise ValueError("stack.env must not duplicate injected secrets/URLs")
+    subprocess.run([sys.executable, "-c", snippet, str(HERE / "runtime.py"), str(secrets_dir)],
+                   env={**os.environ, **config}, check=True, stdout=subprocess.DEVNULL)
+    private_file(Path(config["BACKUP_ENV_FILE"]))
+    backup_config = read_env(Path(config["BACKUP_ENV_FILE"]))
+    if any("REPLACE_" in value for value in backup_config.values()):
+        raise ValueError("replace all backup configuration placeholders")
+    if backup_config.get("BACKUP_TEST_MODE", "false") != "false":
+        raise ValueError("BACKUP_TEST_MODE is forbidden in operator configuration")
+    repository = backup_config.get("RESTIC_REPOSITORY", "")
+    endpoint = urlsplit(repository.removeprefix("s3:"))
+    if not repository.startswith("s3:https://") or not endpoint.hostname or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment:
+        raise ValueError("an HTTPS S3-compatible offsite repository without inline credentials is required")
+    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION"):
+        if not backup_config.get(name):
+            raise ValueError(f"backup-only {name} is required")
+    for name in ("BACKUP_KEEP_DAILY", "BACKUP_KEEP_WEEKLY", "BACKUP_KEEP_MONTHLY"):
+        if not backup_config.get(name, "").isdigit() or int(backup_config[name]) <= 0:
+            raise ValueError(f"owner must supply a positive {name}")
+    if config.get("RETENTION_ENABLED") == "true":
+        for name, minimum in (("RETENTION_JOB_DAYS", 30), ("RETENTION_PUSH_DAYS", 1), ("RETENTION_MEDIA_HOURS", 1)):
+            if int(config.get(name, "0")) < minimum:
+                raise ValueError(f"owner must set {name} >= {minimum}")
+
+
+def run(args: list[str], **kwargs):
+    return subprocess.run(args, check=True, **kwargs)
+
+
+def reviewed_source(repo: Path, sha: str, directory: Path) -> Path:
+    archive = directory / "source.tar"
+    run(["git", "archive", "--format=tar", "--output", str(archive), sha], cwd=repo)
+    context = directory / "source"
+    context.mkdir()
+    with tarfile.open(archive) as artifact:
+        artifact.extractall(context, filter="data")
+    return context
+
+
+def prepare_state() -> None:
+    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if STATE.stat().st_uid != os.geteuid():
+        raise ValueError("run VPS CLI as the deployment user owning WACLA_STATE; do not mix root and deploy-user state")
+
+
+def diagnostics(command: str, resources: ExitStack) -> None:
+    # Emergency quiescence and inspection must survive broken/missing config.
+    if command == "stop":
+        prepare_state()
+        lock = resources.enter_context((STATE / "operator.lock").open("a"))
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    for service, grace in (("caddy", 30), ("app", 40), ("redis", 60), ("postgres", 60)):
+        ids = subprocess.check_output(["docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=wacla",
+            "--filter", f"label=com.docker.compose.service={service}", "--filter", "label=com.docker.compose.oneoff=False"], text=True).split()
+        if not ids:
+            if command == "health":
+                raise ValueError(f"{service} is missing")
+            continue
+        if command == "stop":
+            run(["docker", "stop", "--time", str(grace), *ids])
+        elif command == "logs":
+            for container in ids:
+                run(["docker", "logs", "--tail", "200", container])
+        else:
+            for container in ids:
+                run(["docker", "inspect", "--format", "{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}", container])
+                if service == "app":
+                    run(["docker", "exec", container, "python", "/opt/vps/runtime.py", "health"])
+
+
+def operate(resources: ExitStack) -> None:
+    args = sys.argv[1:]
+    if not args:
+        raise ValueError("commands: validate build start stop health logs migrate catalogue backup-init backup snapshots verify restore deploy rollback monitor scheduled")
+    command, *rest = args
+    if command in {"stop", "health", "logs"}:
+        diagnostics(command, resources)
+        return
+    config = read_env(CONFIG)
+    validate(config)
+    prepare_state()
+    lock = resources.enter_context((STATE / "operator.lock").open("a"))
+    if command not in {"monitor", "health", "logs", "validate", "snapshots"}:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    state_file = STATE / "release.json"
+    pending_file = STATE / "deployment-pending.json"
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    env = {**os.environ, **config, "STACK_ENV_FILE": str(CONFIG)}
+    if state.get("current"):
+        env.update(state["current"])
+    compose = ["docker", "compose", "--project-name", "wacla", "--env-file", str(CONFIG), "-f", str(HERE / "compose.yml")]
+
+    def dc(*items, **kwargs):
+        return run([*compose, *items], env=env, **kwargs)
+
+    def maintenance(*items):
+        dc("run", "--rm", "--no-deps", "maintenance", "maintenance", *items)
+
+    def backup(*items, **kwargs):
+        dc("run", "--rm", "--no-deps", "-T", "backup", *items, **kwargs)
+
+    def ready():
+        dc("up", "-d", "--no-build", "--wait", "--wait-timeout", "180", "app", "caddy")
+        dc("exec", "-T", "app", "python", "/opt/vps/runtime.py", "health")
+
+    if command == "validate":
+        dc("config", "--quiet")
+        print("VPS configuration shape and permissions validated; runtime checks still required")
+    elif command == "build":
+        # Refuse to silently package uncommitted owner work into a release.
+        repo = HERE.parents[1]
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+        if subprocess.check_output(["git", "status", "--porcelain"], cwd=repo) or sha != config["RELEASE_ID"]:
+            raise ValueError("build requires clean worktree at RELEASE_ID")
+        # Build the requested release, never retag bytes as the running release.
+        env.update({key: config[key] for key in ("APP_IMAGE", "BACKUP_IMAGE", "RELEASE_ID")})
+        for name in ("APP_IMAGE", "BACKUP_IMAGE"):
+            if "@sha256:" in config[name]:
+                raise ValueError("build requires a reviewed SHA tag; digest references are for already-built images")
+            if config[name].rsplit(":", 1)[1] != sha:
+                raise ValueError("build image SHA tags must match the reviewed Git source")
+            if subprocess.run(["docker", "image", "inspect", config[name]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                raise ValueError("image tag already exists; review/reuse the image or choose a new immutable release")
+        # Build only committed bytes; even ignored owner files stay out.
+        with tempfile.TemporaryDirectory(prefix="wacla-reviewed-build-") as temporary:
+            context = reviewed_source(repo, sha, Path(temporary))
+            run(["docker", "build", "--platform", "linux/amd64", "--secret", "id=system_ca,src=/etc/ssl/certs/ca-certificates.crt",
+                 "-f", str(context / "infra/vps/Dockerfile"), "-t", env["APP_IMAGE"], str(context)], env=env)
+            run(["docker", "build", "--platform", "linux/amd64", "-f", str(context / "infra/vps/backup/Dockerfile"),
+                 "-t", env["BACKUP_IMAGE"], str(context / "infra/vps")], env=env)
+    elif command == "start":
+        if pending_file.exists():
+            raise ValueError("unfinished deploy: review failure and use explicit rollback recovery")
+        dc("up", "-d", "--wait", "postgres", "redis")
+        maintenance("migrate", "--check")
+        ready()
+    elif command in {"migrate", "catalogue"}:
+        dc("up", "-d", "--wait", "postgres", "redis")
+        maintenance(*(["migrate", "--noinput"] if command == "migrate" else ["import_geography", "--skip-if-current"]))
+    elif command in {"backup-init", "backup", "snapshots", "verify"}:
+        backup(*(["init"] if command == "backup-init" else [command, *rest]))
+        if command == "backup":
+            (STATE / "backup-last-success").write_text(str(int(time.time())))
+    elif command == "restore":
+        if len(rest) != 1 or not re.fullmatch("[0-9a-f]{64}", rest[0]):
+            raise ValueError("restore requires a full immutable snapshot ID")
+        isolated = ["docker", "compose", "-p", f"wacla-restore-{uuid.uuid4().hex[:12]}", "-f", str(HERE / "restore.yml")]
+        with tempfile.TemporaryDirectory(prefix="wacla-restore-") as temporary:
+            dump = Path(temporary) / "database.dump"
+            dump.touch(mode=0o600)
+            with dump.open("wb") as handle:
+                backup("export", rest[0], stdout=handle)
+            try:
+                run([*isolated, "up", "-d", "--wait", "--wait-timeout", "90"])
+                with dump.open("rb") as handle:
+                    run([*isolated, "exec", "-T", "restore", "pg_restore", "--exit-on-error", "--no-owner", "--no-privileges", "-U", "restore_verify", "-d", "restore_verify"], stdin=handle)
+                run([*isolated, "exec", "-T", "restore", "psql", "-U", "restore_verify", "-d", "restore_verify", "-c", "SELECT count(*) AS applied_migrations FROM django_migrations"])
+                print("Isolated restore succeeded; review application/financial invariants before V3 signoff")
+            finally:
+                run([*isolated, "down", "--volumes"])
+    elif command in {"deploy", "rollback"}:
+        previous = {"APP_IMAGE": env["APP_IMAGE"], "RELEASE_ID": env["RELEASE_ID"]}
+        if command == "deploy":
+            if pending_file.exists():
+                raise ValueError("recover the unfinished deploy before starting another release")
+            if len(rest) != 2 or not immutable(rest[0]) or not re.fullmatch("[0-9a-f]{40}", rest[1]):
+                raise ValueError("deploy IMAGE FULL_REVIEWED_GIT_SHA")
+            target = {"APP_IMAGE": rest[0], "RELEASE_ID": rest[1]}
+            if "@sha256:" not in rest[0] and rest[0].rsplit(":", 1)[1] != rest[1]:
+                raise ValueError("deploy image SHA tag must match its reviewed release SHA")
+        else:
+            pending = json.loads(pending_file.read_text()) if pending_file.exists() else None
+            target = pending["source"] if pending else state.get("previous")
+            if not target:
+                raise ValueError("no previous reviewed image recorded")
+            if rest != ["--schema-compatibility-reviewed"]:
+                raise ValueError("rollback requires --schema-compatibility-reviewed after rehearsal against the current database schema")
+        run(["docker", "image", "inspect", "--format", "{{.Id}}", target["APP_IMAGE"]], stdout=subprocess.DEVNULL)
+        backup("snapshots")
+        if command == "deploy":
+            pending_file.write_text(json.dumps({"source": previous, "target": target}))
+        dc("stop", "caddy", "app")
+        backup("backup")
+        (STATE / "backup-last-success").write_text(str(int(time.time())))
+        env.update(target)
+        maintenance("check", "--deploy", "--fail-level", "WARNING")
+        maintenance("migrate", *( ["--noinput"] if command == "deploy" else ["--check"] ))
+        if command == "deploy":
+            maintenance("import_geography", "--skip-if-current")
+        ready()
+        temporary = state_file.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"current": target, "previous": previous}))
+        temporary.replace(state_file)
+        pending_file.unlink(missing_ok=True)
+    elif command == "scheduled":
+        maintenance("flushexpiredtokens")
+        maintenance("sweep_published_events")
+        if config.get("RETENTION_ENABLED") == "true":
+            maintenance("prune_scheduled_jobs", "--days", config["RETENTION_JOB_DAYS"], "--execute")
+            maintenance("prune_push_devices", "--days", config["RETENTION_PUSH_DAYS"])
+            maintenance("purge_staged_parcel_media", "--older-than-hours", config["RETENTION_MEDIA_HOURS"])
+    elif command == "monitor":
+        run([sys.executable, str(HERE / "monitor.py")], env=env)
+    else:
+        raise ValueError("unknown VPS command")
+
+
+def main() -> None:
+    with ExitStack() as resources:
+        operate(resources)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, OSError, subprocess.CalledProcessError, KeyError) as error:
+        print(f"VPS command refused/failed: {error if isinstance(error, ValueError) else type(error).__name__}", file=sys.stderr)
+        raise SystemExit(1) from None

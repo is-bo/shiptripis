@@ -1,0 +1,13 @@
+[Unit]
+Description=Waçla Docker ingress port guard
+Requires=docker.service
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wacla-docker-firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=docker.service

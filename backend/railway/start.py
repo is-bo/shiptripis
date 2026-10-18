@@ -510,7 +510,7 @@ def apply_geography_catalogue(base_env: dict[str, str]) -> None:
     print(result.stderr.strip()[-4000:], file=sys.stderr, flush=True)
 
 
-def run() -> int:
+def run(*, migrate_database: bool = True, import_catalogue: bool = True) -> int:
     install_fcm_credentials()
     redis_url, embedded_redis = redis_topology()
     budget = connection_budget()
@@ -548,13 +548,14 @@ def run() -> int:
     else:
         probe_shared_redis(redis_url)
 
-    print("applying database migrations", flush=True)
-    subprocess.run(
-        [sys.executable, "manage.py", "migrate", "--noinput"],
-        cwd=ROOT,
-        env=base_env,
-        check=True,
-    )
+    if migrate_database:
+        print("applying database migrations", flush=True)
+        subprocess.run(
+            [sys.executable, "manage.py", "migrate", "--noinput"],
+            cwd=ROOT,
+            env=base_env,
+            check=True,
+        )
     print("collecting static files", flush=True)
     subprocess.run(
         [sys.executable, "manage.py", "collectstatic", "--noinput"],
@@ -677,7 +678,8 @@ def run() -> int:
     print("ShipTrip is ready", flush=True)
 
     # Deliberately after readiness. See `apply_geography_catalogue`.
-    apply_geography_catalogue(base_env)
+    if import_catalogue:
+        apply_geography_catalogue(base_env)
 
     while not STOP_REQUESTED:
         for child in CHILDREN:

@@ -531,7 +531,7 @@ class CombinedLauncherGeographyTests(SimpleTestCase):
     def test_a_failed_import_does_not_take_the_service_down(self):
         body = self.launcher[
             self.launcher.index("def apply_geography_catalogue") : self.launcher.index(
-                "def run() -> int:"
+                "def run("
             )
         ]
         # Serving without a catalogue is degraded; refusing to serve is worse.

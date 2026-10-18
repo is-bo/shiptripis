@@ -1,0 +1,5 @@
+# Backup builds need only these two files, never local operator config or dumps.
+**
+!backup/
+!backup/Dockerfile
+!backup/backup.sh

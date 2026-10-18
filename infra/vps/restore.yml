@@ -1,0 +1,22 @@
+# Intentionally has NO connection or mount shared with the application stack.
+services:
+  restore:
+    platform: linux/amd64
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: restore_verify
+      POSTGRES_USER: restore_verify
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes: [restore_data:/var/lib/postgresql/data]
+    networks: [isolated]
+    mem_limit: 1g
+    restart: 'no'
+    healthcheck:
+      test: [CMD, pg_isready, -U, restore_verify, -d, restore_verify]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+networks:
+  isolated: {internal: true}
+volumes:
+  restore_data: {}

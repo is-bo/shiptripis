@@ -1,0 +1,8 @@
+[Unit]
+Description=Waçla local infrastructure monitoring
+After=docker.service
+OnFailure=wacla-alert@%n.service
+[Service]
+Type=oneshot
+ExecStart=/opt/wacla/infra/vps/vps monitor
+TimeoutStartSec=60

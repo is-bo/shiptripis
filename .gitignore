@@ -55,3 +55,12 @@ build/phase8fa-apk/
 *firebase-adminsdk*.json
 firebase-admin.json
 **/firebase-admin.json
+
+# VPS operator configuration, credentials and recovery artifacts stay off-repo.
+/infra/vps/*.env
+/infra/vps/secrets/
+/infra/vps/*.dump
+/infra/vps/*.dump.*
+/infra/vps/release.json
+/infra/vps/deployment-pending.json
+/infra/vps/.state/

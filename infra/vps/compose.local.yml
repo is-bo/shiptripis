@@ -1,0 +1,11 @@
+# Isolated integration use only: retain production Django security, use local CA.
+services:
+  app:
+    cpus: 2
+  caddy:
+    ports: !override ['127.0.0.1:18080:80', '127.0.0.1:18443:443']
+    environment:
+      SITE_ADDRESS: localhost
+      TLS_DIRECTIVE: tls internal
+      # Inert contact placeholder; tls internal never contacts ACME.
+      ACME_EMAIL: local-testing@example.invalid

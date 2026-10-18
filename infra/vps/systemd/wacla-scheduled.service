@@ -1,0 +1,8 @@
+[Unit]
+Description=Waçla daily maintenance; never a second finance/lifecycle worker
+After=docker.service wacla-stack.service
+OnFailure=wacla-alert@%n.service
+[Service]
+Type=oneshot
+ExecStart=/opt/wacla/infra/vps/vps scheduled
+TimeoutStartSec=3600

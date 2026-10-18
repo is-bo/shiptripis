@@ -1,0 +1,7 @@
+[Unit]
+Description=Waçla local health check
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=60s
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+name: VPS readiness
+on:
+  pull_request:
+    paths: ['infra/vps/**', 'backend/railway/**', 'backend/services/**', 'backend/monolith/**', 'web/**', '.dockerignore', '.github/workflows/vps-readiness.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install -r infra/vps/requirements.lock
+      - run: python -m unittest discover -s infra/vps/tests -p 'test_*.py'
+      - name: Build reviewed test images
+        run: |
+          docker build -f infra/vps/Dockerfile -t "wacla-v1-test:$GITHUB_SHA" .
+          docker build -f infra/vps/backup/Dockerfile -t "wacla-backup-test:$GITHUB_SHA" infra/vps
+      - name: Isolated durability, TLS, routing, worker, backup and restore tests
+        run: python infra/vps/tests/integration.py

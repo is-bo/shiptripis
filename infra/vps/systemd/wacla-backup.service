@@ -1,0 +1,10 @@
+[Unit]
+Description=Waçla encrypted offsite PostgreSQL backup
+After=docker.service wacla-stack.service
+OnFailure=wacla-alert@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/wacla
+ExecStart=/opt/wacla/infra/vps/vps backup
+TimeoutStartSec=7200

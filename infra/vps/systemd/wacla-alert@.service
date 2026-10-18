@@ -1,0 +1,6 @@
+[Unit]
+Description=Waçla failed-operation alert integration point
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p daemon.err -t wacla-alert "Waçla operation failed: %i; inspect journalctl and local monitoring"
+# V3: add an approved private notification agent here. No external sending in V1.
