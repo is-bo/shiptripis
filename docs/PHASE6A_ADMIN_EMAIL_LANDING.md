@@ -2,6 +2,10 @@
 
 Status: engineering foundation implemented; external provider activation and legal review remain launch gates.
 
+V2 update: use [V2 email readiness](V2_EMAIL_READINESS.md) and the
+[VPS email runbook](../infra/vps/EMAIL.md) for current configuration, historical
+backlog gates and activation procedures. External sending defaults to disabled.
+
 Phase 5 is separately **PAUSED / IN PROGRESS**. Its Flutter rebuild is not part
 of this phase and must not be treated as complete.
 
@@ -189,7 +193,7 @@ provider can be replaced without changing marketplace state machines.
 Production variables:
 
 ```text
-EMAIL_ENABLED=true
+EMAIL_ENABLED=false
 EMAIL_PROVIDER=sender_net
 EMAIL_SMTP_HOST=smtp.sender.net
 EMAIL_SMTP_PORT=587
@@ -197,7 +201,7 @@ EMAIL_USE_TLS=true
 EMAIL_SMTP_USERNAME=<secret>
 EMAIL_SMTP_PASSWORD=<secret>
 EMAIL_FROM_ADDR=noreply@<verified-domain>
-EMAIL_FROM_NAME=ShipTrip
+EMAIL_FROM_NAME=Waçla
 EMAIL_SUPPORT_ADDR=support@<verified-domain>
 FRONTEND_BASE_URL=https://<public-origin>
 

@@ -2,6 +2,10 @@
 
 Status: **IMPLEMENTED / EXTERNAL SENDING INACTIVE**
 
+V2 supersedes the English-only invitation exception below: invitations now
+support explicit EN/FR/AR selection. The listed Flutter communication fields
+have also landed since this phase. See [the current V2 inventory and checks](V2_EMAIL_READINESS.md).
+
 Phase 6C closes the application-level transactional-email gaps identified by
 the Phase 6B review. It does not configure a provider, DNS, a production
 webhook, or a production process. PostgreSQL remains the obligation store and

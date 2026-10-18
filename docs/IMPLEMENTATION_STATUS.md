@@ -1,5 +1,45 @@
 # Waçla V1 Implementation Status
 
+## Waçla V2 — transactional email readiness (2026-10-18)
+
+Status: **PASS — local/code preparation; external sending disabled.**
+
+Prepared on `work` from verified V1 commit
+`b215c5936146e2f0045d74c801e70b1b34e7f36b`, preserving the original Waçla rename
+and VPS foundation. Reused the PostgreSQL outbox, ScheduledJobs, Redis/Go SMTP
+and trusted Django secret-email path with `EMAIL_PROVIDER=sender_net`.
+Added shared database send/rate gates, safe SMTP failure classification and
+bounded Go socket deadlines, sender/Reply-To parity, localized invitations and
+stored-expiry copy, current-capability checks and audited pre-activation backlog
+holds/review. Two additive migrations add review evidence and rate-query indexes;
+the generated PostgreSQL schema is updated. Existing Flutter language/receipt
+fields were confirmed; no mobile changes were needed. Signup/reset issuance now
+commits account/capability/outbox state atomically, and reset redemption cannot
+reactivate an older unused code after a newer reset succeeds. Added the missing
+localized browser invitation landing using the existing account-bound acceptance service,
+fragment capability URLs, CSRF, login throttling and private response headers.
+Both VPS proxy layers preserve stricter application referrer policies without
+changing Railway configuration. Local Chromium checks found/fixed French facts
+overflow and fluid inline-style fallback (432 checks across all 24 templates,
+EN/FR/AR and 320/390/800px). The non-root backup image now assigns explicit script
+read permissions, preserving backup/restore across build-context file modes.
+
+VPS defaults remain `EMAIL_ENABLED=false`, `EMAIL_ACTIVATION_APPROVED=false`,
+domain verification false and SMTP credentials empty. Financial TEST/off guards
+remain. No external email, provider activation, DNS/mailbox change, Railway
+operation, deployment, production migration, APK, push or main merge occurred.
+
+Local verification: broad Django **2,520 passed / 34 retired-contract skips**;
+final affected account/email/admin/startup suite **349 passed**, Go unit and
+integration/race **14 test packages passed** (no integration skips), VPS unit
+**29 passed**, **432** local Chromium viewport/style checks, Ruff/build/vet/
+format/static/localization/schema checks clean. VPS durability/routing/restart/
+backup/restore/corruption regression passed all nine groups on the final
+`813d4564f1d1628a6341aa458bd20974fad7a4e6` runtime images.
+Full results and scope limits: [V2_EMAIL_READINESS.md](V2_EMAIL_READINESS.md).
+See [the email operator runbook](../infra/vps/EMAIL.md) for DNS/mailboxes,
+credential injection/rotation, monitoring, per-row backlog decisions and V3 gates.
+
 ## Product rename — Waçla (17 October 2026)
 
 Implemented on `codex/rebrand-waçla`. The product name is **Waçla**, with a

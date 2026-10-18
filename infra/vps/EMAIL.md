@@ -34,6 +34,21 @@ therefore consume identical values. Duplicate sources are refused. Both
 services start without SMTP credentials while disabled. Production startup
 validates enabled configuration without dialing Sender.
 
+## Invitation browser access
+
+Invitation links resolve to `/admin/invitations/accept?language=<locale>#token=…`.
+The fragment is transferred into a CSRF-protected POST and cleared from the
+address bar. GET does not consume it; link scanners cannot accept invitations.
+Existing accounts must authenticate with their current password (or the matching
+Django session); new accounts use the existing password validators. No automatic
+login or returned credentials. EN/FR/AR follows the invitation's explicit locale.
+The page uses same-origin existing branding assets and no third-party scripts.
+Keep admin CIDRs enforced; provide invited staff the approved VPN/admin network
+before sharing the link. Do not expose the administration surface to bypass this
+boundary. Both VPS proxy layers preserve the page's no-referrer policy; the VPS-only
+internal renderer leaves Railway configuration untouched. Disable provider
+click/open tracking for capability mail, as described below.
+
 ## Historical backlog: required before every activation
 
 1. Keep both activation switches off; stop the application/consumer processes
@@ -60,7 +75,8 @@ validates enabled configuration without dialing Sender.
 
    | Class | Operator decision |
    | --- | --- |
-   | Expired/used/superseded verification or reset | Cancel pending obligation; user requests a fresh code through the existing authenticated/public throttled contract |
+   | Expired/used/superseded reset | Cancel pending obligation; user requests a fresh code through the existing public throttled reset contract |
+   | Expired/superseded signup verification | Cancel pending obligation; preserve the account's verification state. Registration is currently the only issuance endpoint; arrange a separately authorized fresh issuance through the existing trusted account helper in V3 or explicitly scope a resend support/API workflow. Do not promise a nonexistent resend endpoint, re-register an existing email, or mark it verified |
    | Expired/revoked/used invitation | Cancel; privileged operator issues a fresh role-bound invitation if still needed |
    | Used/rotated/cancelled/buffered delivery code or changed recipient | Cancel obsolete obligation; reconcile current handover state through existing authorized services. Never reveal or regenerate a code in this command |
    | Historical payment, refund, payout, trust or lifecycle notice | Inspect current provider/domain state, superseding events, recipient authority and relevance. A success receipt may remain valid evidence; an old action prompt may be obsolete. Never alter ledger/payment state to make an email eligible |
@@ -149,7 +165,9 @@ PostgreSQL serializes the bounded last-mile send across Django/Go workers and
 counts accepted/failed attempts for the shared minute budget. SMTP timeouts and
 4xx failures remain retryable with exponential backoff (60 seconds to 6 hours)
 and the existing bounded obligation budget (normally 10, recipient code 12).
-5xx failures become durable terminal failures. Worker death releases database
+Recipient/sender/DATA 5xx refusals become durable terminal failures. Dial, TLS
+and authentication/configuration failures remain retryable within the budget;
+alert and repair configuration before releasing more work. Worker death releases database
 locks; missing jobs and lost Redis entries are recovered by the outbox sweep.
 The Go PEL sweeper reclaims abandoned work; duplicate entries consult the same
 durable obligation/receipt before sending. Stable Message-ID values help
@@ -193,7 +211,8 @@ a side effect of SMTP password rotation.
 * Verified ownership, SPF/DKIM/DMARC alignment, monitored Reply-To and inbound MX.
 * Sender SMTP account capability/rate limits reviewed; credentials injected only
   through mounted secrets. Provider tracking settings reviewed for sensitive mail.
-* Current backup, completed per-row backlog audit and a current activation cutoff.
+* Current backup, completed per-row backlog audit and a current activation cutoff;
+  an approved fresh-verification support path for legacy unverified accounts.
 * Apply V2's additive migrations through the existing single-owner V1 procedure;
   validate production startup with sending still disabled.
 * Deploy only after separate owner authorization. Set both activation switches
