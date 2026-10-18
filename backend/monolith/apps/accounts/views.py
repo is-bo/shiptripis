@@ -55,6 +55,7 @@ class SignUpView(APIView):
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "registration"
 
+    @transaction.atomic
     def post(self, request: Request) -> Response:
         s = SignUpSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -191,6 +192,7 @@ class PasswordResetRequestView(APIView):
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "password_reset"
 
+    @transaction.atomic
     def post(self, request: Request) -> Response:
         s = PasswordResetRequestSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -229,8 +231,7 @@ class PasswordResetConfirmView(APIView):
                 )
 
             active = (
-                user.password_reset_codes.filter(used_at__isnull=True)
-                .order_by("-created_at")
+                user.password_reset_codes.order_by("-created_at", "-pk")
                 .first()
             )
             if active is None or not active.verify(code):
