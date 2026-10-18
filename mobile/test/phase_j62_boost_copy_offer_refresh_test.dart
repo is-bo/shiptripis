@@ -23,6 +23,7 @@ import 'package:shiptrip/app/app_state.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/live/live_updates.dart';
 import 'package:shiptrip/core/money/money.dart';
+import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/money.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/notification.dart';
@@ -471,6 +472,11 @@ void main() {
         });
       final container = containerFor(backend);
       addTearDown(container.dispose);
+      // Measure live-event reads after sign-in finishes. A 20 ms sleep could
+      // count the null -> signed-in provider rebuild as another event read on
+      // a busy runner, even though it belongs to session restoration.
+      await container.read(sessionProvider.notifier).restore();
+      expect(container.read(accountProvider)?.id, _viewerId);
       final lists = container.listen(matchesProvider, (_, _) {});
       final badge = container.listen(unreadNotificationsProvider, (_, _) {});
       addTearDown(lists.close);
