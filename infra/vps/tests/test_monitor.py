@@ -15,7 +15,7 @@ spec.loader.exec_module(monitor)
 
 
 class MonitorTests(unittest.TestCase):
-    def check(self, broken):
+    def check(self, broken, email_failed=0):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "backup-last-success"
             marker.write_text("0" if broken else str(time.time()))
@@ -29,6 +29,7 @@ class MonitorTests(unittest.TestCase):
                     return f"aof_enabled:{0 if broken else 1}\naof_last_write_status:ok\nrdb_last_bgsave_status:ok\n"
                 return json.dumps({"event": "ops_snapshot", "ops": {"jobs_oldest_overdue_seconds": None,
                     "outbound_oldest_overdue_seconds": None, "jobs_failed_unresolved": int(broken),
+                    "outbound_failed": email_failed,
                     "connections": 95 if broken else 10, "max_connections": 100}})
             output = io.StringIO()
             with patch.dict(os.environ, {"WACLA_STATE": directory, "STACK_ENV_FILE": "/unused"}), \
@@ -43,6 +44,11 @@ class MonitorTests(unittest.TestCase):
         result, report = self.check(False)
         self.assertEqual(result, 0)
         self.assertEqual(report["problems"], [])
+
+    def test_failed_email_obligations_require_operator_attention(self):
+        result, report = self.check(False, email_failed=1)
+        self.assertEqual(result, 1)
+        self.assertIn("email_failed_obligations", report["problems"])
 
     def test_persistence_backlog_memory_connections_and_backup_failure_alert(self):
         result, report = self.check(True)

@@ -250,7 +250,10 @@ def test_used_and_superseded_password_reset_capabilities_refuse_rendering():
         secret=plaintext,
         secret_expires_at=code.expires_at,
     )
-    PasswordResetCode.issue(user)
+    newer, _ = PasswordResetCode.issue(user)
+    with pytest.raises(outbox.SecretUnavailable):
+        outbox.render_parts(row)
+    PasswordResetCode.objects.filter(pk=newer.pk).update(used_at=timezone.now())
     with pytest.raises(outbox.SecretUnavailable):
         outbox.render_parts(row)
     PasswordResetCode.objects.filter(pk=code.pk).update(used_at=timezone.now())
@@ -507,6 +510,78 @@ def test_backlog_review_requires_authority():
             action="release",
             actor=actor,
         )
+
+
+@pytest.mark.django_db
+def test_audit_reports_current_guest_payment_state_without_private_deal_details(client):
+    from apps.deals.tests.phase4_factories import fund_scenario
+    from apps.finance.models import PaymentAttempt
+
+    scenario = fund_scenario(client, prefix="v2-audit-finance")
+    attempt = PaymentAttempt.objects.filter(
+        order__deal_id=scenario.deal.pk, status="succeeded"
+    ).first()
+    assert attempt
+    row = outbox.enqueue_message(
+        kind="guest_payment",
+        key=f"guest_payment:attempt:{attempt.pk}:failed",
+        to_email="guest@example.invalid",
+        context={"status": "failed"},
+    )
+    report = classify(row)
+    assert report["business_state"] == "payment_attempt:succeeded"
+    assert "guest@example.invalid" not in json.dumps(report)
+    assert attempt.status == "succeeded"
+
+
+@pytest.mark.django_db
+def test_missing_security_reference_never_reaches_smtp():
+    row = OutboundMessage.objects.create(
+        kind="password_reset", key="v2:missing-secret", to_email="only@example.invalid"
+    )
+    with (
+        override_settings(TRANSACTIONAL_EMAIL_ENABLED=True),
+        patch.object(outbox, "_send_email_via_provider") as send,
+    ):
+        assert outbox.dispatch_message(message_id=row.pk) == "unrenderable"
+        send.assert_not_called()
+    assert OutboundMessage.objects.get(pk=row.pk).status == "failed"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("language", ["fr", "ar"])
+def test_real_invitation_vault_preserves_explicit_locale_and_actual_expiry(language):
+    from apps.admin_panel.services import create_admin_invitation
+    from apps.admin_panel.serializers import AdminInvitationCreateSerializer
+
+    actor = User.objects.create_superuser(username="v2-inviter", password=None)
+    serializer = AdminInvitationCreateSerializer(
+        data={
+            "email": "only@example.invalid",
+            "role": "support",
+            "communication_language": language,
+        }
+    )
+    assert serializer.is_valid(), serializer.errors
+    invitation, token = create_admin_invitation(
+        actor=actor,
+        email=serializer.validated_data["email"],
+        role="support",
+        communication_language=serializer.validated_data["communication_language"],
+        ttl=timedelta(hours=2),
+    )
+    message = OutboundMessage.objects.get(key=f"admin_invitation:{invitation.pk}")
+    # The trusted public origin is deployment configuration, not a user URL.
+    message.context["frontend_base_url"] = "https://app.example.invalid"
+    subject, text, html = outbox.render_parts(message)
+    assert message.language == language
+    assert token in text and token in html
+    assert invitation.expires_at.strftime("%Y-%m-%d %H:%M UTC") in text
+    if language == "ar":
+        assert 'dir="rtl"' in html
+    else:
+        assert "invité" in subject.lower()
+    assert token not in str(OutboundMessage.objects.get(pk=message.pk).context)
 
 
 @pytest.mark.django_db

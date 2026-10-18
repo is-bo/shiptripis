@@ -24,7 +24,7 @@ inbox, audit metadata, or logs.
 **Delivery semantics.** One logical message is one row, deduplicated on `key`,
 so arming it twice is arming it once. Dispatch claims the row, hands the
 rendered body to the transport, and only then marks it dispatched: a crash in
-between causes a resend of a byte-identical message rather than a silent loss.
+between can resend the same logical content with a stable Message-ID.
 The obligation is unique; SMTP transport remains at-least-once. A crash after
 SMTP acceptance but before the database commit can produce a duplicate. SMTP
 acceptance is not evidence of final inbox delivery.
@@ -1171,6 +1171,8 @@ def _dispatch_message_locked(*, message_id: int) -> str:
         max_attempts = int(message.max_attempts)
 
     try:
+        if message.kind in _SECRET_PROVIDER_KINDS and not message.secret_ref:
+            raise SecretUnavailable("The required capability reference is missing.")
         if message.kind == OutboundMessage.Kind.PROTECTION_ENDING:
             from .backlog import classify
             if classify(message)["category"] in {"expired", "obsolete"}:

@@ -52,7 +52,7 @@ def secret_problem(message):
             ):
                 return "consumed_or_expired"
             latest = (
-                model.objects.filter(user_id=row.user_id, used_at__isnull=True)
+                model.objects.filter(user_id=row.user_id)
                 .order_by("-created_at", "-pk")
                 .first()
             )
@@ -112,6 +112,56 @@ def fingerprint(message):
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
+def finance_state(message):
+    """Read coarse owning state without exposing financial references or PII."""
+    from apps.finance.models import PaymentAttempt, PaymentRefund, Payout
+
+    parts = message.key.split(":")
+    model, position, label = None, 0, ""
+    if (
+        message.kind in {"payment_failed", "guest_payment"}
+        and len(parts) > 2
+        and parts[1] == "attempt"
+    ):
+        model, position, label = PaymentAttempt, 2, "payment_attempt"
+    elif message.kind == "refund_status" and len(parts) > 2 and parts[1] == "refund":
+        model, position, label = PaymentRefund, 2, "refund"
+    elif (
+        message.kind == "payout_status"
+        and len(parts) > 1
+        and parts[0] == "payout_status"
+    ):
+        model, position, label = Payout, 1, "payout"
+    if model:
+        identity = parts[position]
+        if not identity.isascii() or not identity.isdigit() or len(identity) > 18:
+            return f"{label}:invalid_reference"
+        state = (
+            model.objects.filter(pk=int(identity))
+            .values_list("status", flat=True)
+            .first()
+        )
+        return f"{label}:{state or 'missing'}"
+    if (
+        message.kind == "payout_status"
+        and len(parts) > 1
+        and parts[0] == "payout_event"
+    ):
+        import uuid
+
+        try:
+            reference = uuid.UUID(parts[1])
+        except ValueError:
+            return "payout:invalid_reference"
+        state = (
+            Payout.objects.filter(public_reference=reference)
+            .values_list("status", flat=True)
+            .first()
+        )
+        return f"payout:{state or 'missing'}"
+    return ""
+
+
 def classify(message):
     problem = secret_problem(message)
     state = ""
@@ -168,7 +218,7 @@ def classify(message):
         "age_seconds": max(
             0, int((timezone.now() - message.created_at).total_seconds())
         ),
-        "business_state": state,
+        "business_state": "/".join(filter(None, (state, finance_state(message)))),
         "category": category,
         "reason": problem,
         "fingerprint": fingerprint(message),
