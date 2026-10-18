@@ -4,6 +4,7 @@ package email
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"shiptrip/pkg/redisbus"
 )
 
 func emailDatabase(t *testing.T) *pgxpool.Pool {
@@ -196,5 +198,36 @@ func TestPostgresRejectsProtectionReminderThatExpiredInRedis(t *testing.T) {
 	pool.QueryRow(context.Background(), "SELECT status FROM notification_outbound_message WHERE transport_event_id=$1", p.EventID).Scan(&state)
 	if state != "failed" {
 		t.Fatal("expired reminder was not recorded")
+	}
+}
+
+type pacedSender struct{ sender EmailSender }
+
+func (s pacedSender) Send(ctx context.Context, p EmailPayload) error {
+	time.Sleep(20 * time.Millisecond) // force overlap if batch handlers race
+	return s.sender.Send(ctx, p)
+}
+
+func TestPostgresSMTPBurstDoesNotDeferMostOfTheBatchToRecovery(t *testing.T) {
+	pool := emailDatabase(t)
+	store := guardStore(t, pool, DeliveryPolicy{RateLimitPerMinute: 60})
+	var accepted atomic.Int32
+	host, port := fakeSMTPWith(t, "250 ok", "250 ok", &accepted)
+	sender, err := NewSMTPSender(SMTPConfig{Host: host, Port: port, FromAddr: "notifications@example.invalid"}, discardLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewConsumer(nil, ConsumerConfig{Sender: pacedSender{sender}, Receipts: store}, discardLog())
+	c.rdb = &fakeStream{}
+	for n := range 20 {
+		p := guardedObligation(t, pool)
+		payload, _ := json.Marshal(p)
+		if !c.dispatchHandle(context.Background(), redisbus.StreamMessage{ID: sid(n), Values: map[string]any{"payload": string(payload)}}) {
+			t.Fatal("dispatch refused")
+		}
+	}
+	c.wg.Wait()
+	if accepted.Load() != 20 {
+		t.Fatalf("only %d of 20 queued messages sent; batch was left waiting for recovery", accepted.Load())
 	}
 }

@@ -94,7 +94,9 @@ const (
 	xreadCount = 16
 	// handleConcurrency bounds in-flight handle() goroutines per pod. Each
 	// holds one PEL entry and at most one SMTP dial's worth of memory.
-	handleConcurrency = 32
+	// The shared PostgreSQL send gate serializes SMTP. Process each batch in
+	// order instead of draining it into competing handlers that defer to PEL.
+	handleConcurrency = 1
 
 	// sendTimeout caps one handler's detached work: the receipt and dedup
 	// checks plus a single SMTP send (dial + STARTTLS + auth + DATA).
