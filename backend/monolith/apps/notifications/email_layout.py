@@ -226,9 +226,9 @@ def _facts_block(facts: tuple[tuple[str, str], ...], *, rtl: bool) -> str:
     rows = "".join(
         f"""
         <tr>
-          <td align="{alignment}" width="1" style="width:1%;padding:{label_padding};color:{INK_MUTE};
-                     font-size:13px;line-height:20px;white-space:nowrap;">{escape(label)}</td>
-          <td align="{alignment}" dir="auto" style="padding:6px 0;color:{INK_SOFT};font-size:13px;line-height:20px;">
+          <td align="{alignment}" width="40%" style="width:40%;padding:{label_padding};color:{INK_MUTE};
+                     font-size:13px;line-height:20px;overflow-wrap:anywhere;word-wrap:break-word;">{escape(label)}</td>
+          <td align="{alignment}" dir="auto" style="padding:6px 0;color:{INK_SOFT};font-size:13px;line-height:20px;overflow-wrap:anywhere;word-wrap:break-word;">
             {escape(value)}
           </td>
         </tr>
@@ -240,7 +240,7 @@ def _facts_block(facts: tuple[tuple[str, str], ...], *, rtl: bool) -> str:
         return ""
     return f"""
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-             style="margin:0 0 8px;border-top:1px solid {HAIRLINE};padding-top:8px;">
+             style="margin:0 0 8px;border-top:1px solid {HAIRLINE};padding-top:8px;table-layout:fixed;">
         {rows}
       </table>
     """
@@ -346,7 +346,8 @@ def to_html(
     <td align="center" style="padding:28px 12px;">
       <table role="presentation" class="st-shell" width="600" cellpadding="0"
              cellspacing="0" border="0"
-             style="width:600px;max-width:600px;border-collapse:separate;">
+             style="width:100%;max-width:600px;border-collapse:separate;table-layout:fixed;
+                    overflow-wrap:anywhere;word-wrap:break-word;">
 
         <!-- Masthead: a wordmark set in type, plus the airmail rule. No image,
              because a blocked image is the normal case. -->
