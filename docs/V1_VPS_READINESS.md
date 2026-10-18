@@ -13,11 +13,14 @@ No real email or money movement was performed.
   `07c2a11111b26357da5ddedc2fa428854c4ee3ee`.
 * Starting working tree and stash list: empty. Stayed on `work`; main was neither
   checked out nor changed. No owner files/stashes were deleted or overwritten.
-* **Checkout discrepancy:** this cloud checkout contains the K-Series release
-  history and ShipTrip branding, not the owner's described completed Waçla rename.
-  No rename was undone and no broad rename was invented. New infrastructure uses
-  Waçla. Reconcile this commit with the owner's intended renamed development
-  branch before V2/V3; do not assume it was already present in the supplied tree.
+* **Resolved checkout discrepancy:** the starting cloud checkout did not yet
+  contain the owner's rename. Inspected and fetched the original immutable
+  `codex/rebrand-waçla` commit,
+  `26ab73aca27ceb50b9396d9d63e5dc419e60af3e`, and based only the new, unpublished
+  V1 commits on it while staying on `work`. That original owner commit and all
+  101 changed files are retained, rather than recreating the rename. Main and
+  remote branches were not modified. Final verification exercises the combined
+  renamed application and V1 infrastructure.
 * Implementation commit: record final Git HEAD from the completion report;
   this document deliberately avoids a self-referential commit hash.
 
@@ -177,9 +180,10 @@ Redis fork copy-on-write can still approach its ceiling under sustained writes;
 calibrate rewrite/memory policy on V3 load rather than increasing maxmemory blindly.
 The 40-second application/60-second stateful stop windows exceed existing child
 drain bounds. Database connection model: Python 8 HTTP + 4 gRPC + 2 loops = 14;
-Go 8 + 6 + 2 = 16; steady peak 30, conservative overlap model 60, below 85 usable
-connections with 15 reserved. Operations add only a few connections; no replicas
-are enabled. Recalculate before scaling, not merely per replica.
+Go 8 + 6 + 2 = 16; steady peak 30, conservative overlap model 60, below the
+85-connection application budget that leaves 15 for headroom. This is a launcher
+budget, not a separate PostgreSQL reserved-role setting. Operations add only a few
+connections; no replicas are enabled. Recalculate before scaling, not merely per replica.
 
 Reuse K6's 4×2 latency evidence, not its one-GiB memory defaults or extrapolated
 user-capacity claims. This cloud runner is only three visible CPUs with a two-CPU
@@ -191,8 +195,10 @@ Docker/volume prune or schema/data cleanup is a default operation.
 
 ## File inventory
 
-38 created files and 6 modified existing files (44 total). No application schema,
-mobile runtime source, provider adapter or production data was changed.
+V1 adds 38 files and modifies 6 existing files (44 total), relative to the owner's
+original rename commit. Its separate 101-file branding change is inherited, not
+part of this infrastructure inventory. V1 changes no application schema, mobile
+runtime source, provider adapter or production data.
 
 ### Created
 
@@ -259,13 +265,27 @@ Redis 7. Flutter 3.47.1 was installed from the exact official source tag
 its engine/Dart artifacts loaded successfully (Dart 3.13.1). Analytics were disabled.
 No release APK was built.
 
+Verification first ran on the supplied base, then the complete application and
+infrastructure were checked again with the owner's original rename present.
+The real `vps build` command built both images from a clean Git archive at
+`d6502afe01441124fe8a653c556d33aec9f0d2d2`. The application image is
+`sha256:684afc64cde6c79ce4eebc958bfbe6dafa96067bc8afeb683efad307fae9058b`;
+the backup image is
+`sha256:c2dea34b3f2da92102f59623e17dfeeccc114fb64a9a3ae14cae245967ef48c6`.
+Subsequent host-CLI, test and documentation fixes change none of their build inputs.
+The final fresh infrastructure run checked actual Waçla page content and all 14
+public/legal/static/Admin-static/health routes. Go sources, schema/model/migration
+files and gRPC contracts are unchanged by the rename and later infrastructure
+fixes; their earlier complete checks remain applicable.
+
 | Executed gate / command | Result |
 | --- | --- |
+| `WACLA_CONFIG=<private-fixture> WACLA_STATE=<private-state> infra/vps/vps validate` and `... build` | PASS; actual CLI validation and both reviewed-source archive builds, preserving managed-cloud proxy/CA settings. No backup repository or payment provider contacted. |
 | `docker build --secret id=system_ca,src=/etc/ssl/certs/ca-certificates.crt -f infra/vps/Dockerfile -t wacla-v1-test:$SHA .` | PASS; complete Go/Python/Caddy application image. |
 | `docker build -f infra/vps/backup/Dockerfile -t wacla-backup-test:$SHA infra/vps` | PASS; standalone PostgreSQL/restic image. |
-| `python -m unittest discover -s infra/vps/tests -p 'test_*.py'` | PASS; 21 safety/monitor/operator tests. |
-| `python infra/vps/tests/integration.py` | PASS; fresh eight-group end-to-end run plus 14 explicit website/Admin-static/health route checks, including nonempty assets and security headers. |
-| `python /workspace/.shiptrip-cloud/test-django.py -q --disable-warnings -n 4 --reuse-db` | PASS; 2,369 passed, 34 retired-legacy skips, 30 warnings; 3,943.20 seconds. Isolated PostgreSQL/Redis DB 15. |
+| `python -m unittest discover -s infra/vps/tests -p 'test_*.py'` | PASS; 23 safety/monitor/operator tests. |
+| `python infra/vps/tests/integration.py` | PASS on the combined renamed source; fresh eight-group end-to-end run, 14 website/Admin-static/health route checks, security headers and an explicit Waçla branding assertion. An earlier separate asset drill also checked nonempty responses. |
+| `python /workspace/.shiptrip-cloud/test-django.py -q --disable-warnings -n 2 --reuse-db --durations=15` | PASS on the combined renamed source; 2,369 passed, 34 retired-legacy skips, 24 warnings; 2,597.54 seconds. Isolated PostgreSQL/Redis DB 15. The initial base also passed in a separate full run (2,369 passed / 34 skipped). |
 | `EMAIL_ENABLED=false python -m pytest -q apps/finance/tests/test_deployment_safety.py --ds=config.settings.test_local` | PASS; 58 existing deployment security tests. |
 | `go test -p 4 -race -count=1 ./...` | PASS; full Go tests with race detector. |
 | `go test -p 4 -tags integration -race -count=1 ./...` | PASS; full Go tests including real isolated Redis DB 14 integrations. |
@@ -273,7 +293,7 @@ No release APK was built.
 | `flutter pub get --enforce-lockfile`; `flutter gen-l10n` | PASS; committed dependency lock respected, generated localization unchanged. |
 | `dart format --output=none --set-exit-if-changed lib test` | PASS; no formatting changes. |
 | `flutter analyze --fatal-infos` | PASS; no issues. |
-| `flutter test --no-pub --concurrency=1 --reporter=expanded` | PASS; 1,074 passed in the complete serial run. Three targeted live-refresh repetitions also passed; format/analyzer remained clean. |
+| `flutter test --no-pub --concurrency=1 --reporter=expanded` | PASS on the combined renamed source; 1,077 passed, 360.33 seconds including tool startup. The initial base also passed 1,074 tests serially. Three targeted live-refresh repetitions passed; format/analyzer remained clean. |
 | EN/FR/AR ARB message-key comparison | PASS; 1,466 matching message keys. |
 | `ruff check backend/monolith backend/railway/start.py infra/vps` | PASS. |
 | `python manage.py makemigrations --check --dry-run` | PASS; no schema/model drift or new migrations. |
@@ -292,9 +312,17 @@ selects the installed backend/Go toolchain. The full Django helper applies the
 existing CI throttle ceilings; its `POSTGRES_*` and `REDIS_URL` point only at the
 random integration fixture's loopback ports with generated test credentials.
 Use `DJANGO_SETTINGS_MODULE=config.settings.dev`, `DJANGO_DEBUG=true`,
-`PAYMENTS_ALLOW_MOCK_PROVIDER=true`, `EMAIL_ENABLED=false` **for that regression
-process only**. The infrastructure suite creates its own strict production-profile
+`DJANGO_ALLOWED_HOSTS=*`, `SHIPTRIP_ENVIRONMENT=development`,
+`PAYMENTS_ENVIRONMENT=test`, `PAYMENTS_ALLOW_MOCK_PROVIDER=true`,
+`PAYMENTS_MOCK_WEBHOOK_ENABLED=true`, `PAYMENTS_LEGACY_MUTATIONS_ENABLED=false`,
+`EMAIL_ENABLED=false` and `FCM_ENABLED=false` **for that regression process only**.
+The infrastructure suite creates its own strict production-profile
 configuration. See its source for reproducible fixtures; never point it at Railway.
+Schema/protoc commands and version/nonce normalization follow the existing
+[CI contract gate](../.github/workflows/ci.yml); Python generation follows
+`backend/Taskfile.yml` with the existing relative-import patch. Generated outputs
+were directed outside the working tree for comparison rather than overwriting
+owner files. SQLC generation was not claimed: its query inventory is empty.
 
 ### Fixes found by implementation and verification
 
@@ -309,6 +337,11 @@ configuration. See its source for reproducible fixtures; never point it at Railw
 * A copied Caddy binary retained a file capability incompatible with the non-root,
   all-capabilities-dropped app. The build removes only that capability. Explicit
   directory/file modes also avoid restrictive cloud build umask failures.
+* A Git checkout under umask 077 left public bind-mounted configuration at 0600,
+  making PostgreSQL fail before accepting connections. `vps prepare-config`
+  explicitly sets only four tracked non-secret configuration files to 0644;
+  bootstrap invokes it and validation requires readable configuration. Its
+  regression test proves secret permissions are unchanged. Rerun after checkouts.
 * Inherited managed-cloud HTTP proxy settings sent the edge's private upstream
   request outside its bridge. Explicit internal `NO_PROXY` plus a proxy-free
   local health probe restore correct routing without changing external egress.
@@ -324,7 +357,9 @@ configuration. See its source for reproducible fixtures; never point it at Railw
 * Final review found that root-run systemd commands could create state files
   unusable by the deployment user. Bootstrap now installs explicit deployment-user
   identity drop-ins for all four CLI-based units, and the CLI refuses mixed-owner
-  state before creating locks/markers. A regression test covers that refusal.
+  state and shared directories before creating locks/markers. Regression tests
+  cover both refusals; a real configuration validation also passed with private
+  deployment-user state.
 * Operator tests cover preserving source/target recovery state after an interrupted
   deploy, refusing a new build over an existing tag, excluding ignored/uncommitted
   owner bytes with Git archives, emergency stop despite broken config, and preventing
@@ -346,9 +381,13 @@ configuration. See its source for reproducible fixtures; never point it at Railw
 
 A concurrent Flutter rerun hit its wall-clock JSON budget while sharing the
 two-CPU runner with backend/container work. It was stopped and is not a pass.
-The isolated serial full run passed the unchanged limit: the 100-Deal conversion
-measured 2,991 µs against the existing 8,000 µs ceiling (17,950 µs under load).
+The isolated serial runs passed the unchanged limit: the 100-Deal conversion
+measured 3,467 µs on the renamed source (2,991 µs on the initial base), against
+the existing 8,000 µs ceiling (17,950 µs under concurrent load).
 No assertion or production rule was relaxed.
+Flutter's default widget-test HTTP environment rejects live map-tile requests;
+those diagnostic messages did not fail the suite and are not evidence of live
+provider reachability.
 
 Early test attempts exposed inherited local test email/payment switches; corrected
 only the isolated regression process environment. Production email/mock guards and
@@ -381,7 +420,7 @@ and `vps restore FULL_SNAPSHOT_ID`, then record actual RPO/RTO before launch.
 
 ## Remaining V2 / V3 prerequisites
 
-V2: resolve the renamed-branch discrepancy, prepare Sender.net SMTP configuration
+V2: prepare Sender.net SMTP configuration
 using the existing interface, review provider intent/domain verification, secrets,
 trusted-code delivery and EN/FR/AR templates, and deliberately update the V1
 email-off boundary without activation or sending. No new API adapter is needed.
@@ -402,3 +441,14 @@ rules that account for new destination writes/external side effects. If embedded
 Railway Redis cannot be exported or proven drained, migration is NO-GO; email
 outbox durability is not permission to discard pending push work. Railway stays
 unchanged during V1.
+
+## V1 decision
+
+PASS for the requested infrastructure preparation: all required V1 code is
+implemented and all applicable cloud verification gates completed. The original
+Waçla rename is retained, the full combined-source Django and Flutter suites pass,
+and disposable infrastructure/backup/restore resources have been removed without
+touching the owner's development data. The implementation is ready for V2 email
+preparation and eventual V3 provisioning/deployment, subject to the prerequisites
+above. This is not a claim of tested Hetzner capacity, public DNS/TLS, real offsite
+backup connectivity or production-provider activation.

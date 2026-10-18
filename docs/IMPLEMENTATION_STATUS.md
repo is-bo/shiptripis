@@ -52,21 +52,28 @@ Sender.net integration, real email, financial transaction, DNS/storage migration
 mobile API-origin change, release APK, push, merge or Railway operation occurred.
 Existing financial, authorization, outbox and storage behavior is reused.
 
-Verification on the supplied base checkout: Django PostgreSQL **2,369 passed,
-34 retired-legacy skips**; Flutter **1,074 passed** serially, analyzer/format/localization
-clean; full Go/race/real-Redis integrations and vet passed; **21** VPS safety tests,
+Final verification on the combined Waçla rename and V1 source: Django PostgreSQL
+**2,369 passed, 34 retired-legacy skips** (43m17s); Flutter **1,077 passed** serially,
+analyzer/format/localization clean; full Go/race/real-Redis integrations and vet
+passed; **23** VPS safety tests,
 fresh container durability/TLS/WebSocket/worker/backup/isolated-restore/corruption
 drill and 14 website/static/health routes passed. Full commands and conditions are
 in [the V1 readiness report](V1_VPS_READINESS.md). The source-level deployment
 safety test accepts the launcher's optional initialization arguments. One Flutter
 regression test now waits for sign-in before counting live-event reads; its exact
 one-read and unchanged-badge assertions remain intact, with no mobile runtime change.
+Restrictive-checkout configuration permissions, non-root backup secret access,
+streamed backup verification and deployment-user/private-state guards were fixed
+and retested. V1 code and applicable cloud verification are complete; V2 preparation
+can proceed. No actual Hetzner production capacity or external-provider readiness
+is claimed.
 
-**Supplied-checkout discrepancy:** starting branch `work`, SHA
+**Resolved supplied-checkout discrepancy:** starting branch `work`, SHA
 `07c2a11111b26357da5ddedc2fa428854c4ee3ee`, had a clean tree/no stashes but did not
-contain the described completed Waçla rename. Stayed on that supplied branch,
-preserved all existing branding/history and used Waçla for new infrastructure.
-Reconcile with the owner's renamed development branch before V2/V3. Actual Ubuntu
+contain the described completed Waçla rename. Inspected the original owner commit
+`26ab73aca27ceb50b9396d9d63e5dc419e60af3e` and based only the new unpublished V1
+commits on it, retaining all 101 owner-changed files and the original rename SHA.
+Stayed on `work`; main and remote branches were unchanged. Actual Ubuntu
 boot/firewall/Docker restart, domain/TLS, offsite/provider connectivity and target
 capacity remain V3 gates. See [operator instructions](../infra/vps/README.md),
 [secret reference](../infra/vps/ENVIRONMENT.md) and
