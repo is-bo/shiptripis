@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 HERE = Path(__file__).resolve().parent
 CONFIG = Path(os.environ.get("WACLA_CONFIG", "/etc/wacla/stack.env"))
 STATE = Path(os.environ.get("WACLA_STATE", "/var/lib/wacla"))
+PUBLIC_RUNTIME_FILES = ("Caddyfile", "postgresql.conf", "redis.conf", "redis-start.sh")
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -51,6 +52,9 @@ def immutable(image: str) -> bool:
 
 
 def validate(config: dict[str, str]) -> None:
+    for name in PUBLIC_RUNTIME_FILES:
+        if not (HERE / name).stat().st_mode & 0o004:
+            raise ValueError("public runtime files need 0644; run vps prepare-config after checkout")
     private_file(CONFIG)
     if any("REPLACE_" in value for value in config.values()):
         raise ValueError("replace all configuration placeholders")
@@ -178,8 +182,16 @@ def diagnostics(command: str, resources: ExitStack) -> None:
 def operate(resources: ExitStack) -> None:
     args = sys.argv[1:]
     if not args:
-        raise ValueError("commands: validate build start stop health logs migrate catalogue backup-init backup snapshots verify restore deploy rollback monitor scheduled")
+        raise ValueError("commands: prepare-config validate build start stop health logs migrate catalogue backup-init backup snapshots verify restore deploy rollback monitor scheduled")
     command, *rest = args
+    if command == "prepare-config":
+        # These four tracked files contain no secrets. File bind mounts retain
+        # host permissions, including a restrictive checkout umask; PG/Caddy
+        # cannot read owner-only files under their container identities.
+        for name in PUBLIC_RUNTIME_FILES:
+            (HERE / name).chmod(0o644)
+        print("Prepared non-secret runtime config permissions; secret files were not changed")
+        return
     if command in {"stop", "health", "logs"}:
         diagnostics(command, resources)
         return

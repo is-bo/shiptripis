@@ -70,6 +70,7 @@ chmod 0600 "$deploy_home/.ssh/authorized_keys"
 install -d -o "$deploy_user" -g "$runtime_group" -m 0750 /etc/wacla /etc/wacla/secrets
 install -d -o "$deploy_user" -g "$deploy_user" -m 0700 /var/lib/wacla
 install -d -o "$deploy_user" -g "$deploy_user" -m 0750 /opt/wacla
+python3 "$(dirname "$0")/vps" prepare-config
 # Host CLI, timers and boot recovery share one state-file owner. Docker/runtime
 # supplementary groups are loaded by systemd for this deployment identity.
 for unit in stack backup scheduled monitor; do

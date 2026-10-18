@@ -49,8 +49,12 @@ Named volumes preserve PostgreSQL, Redis and Caddy certificate state.
 
 1. Have the owner approve server, operator identity/SSH source addresses, domain,
    storage buckets, backup repository, recovery objectives and retention choices.
-   Copy the reviewed repository to `/opt/wacla`; never copy a working tree holding
-   real credentials. The branch/rename discrepancy in the audit must be resolved.
+   Copy the reviewed repository to `/opt/wacla`, then run
+   `python3 /opt/wacla/infra/vps/vps prepare-config`. It sets only the four tracked,
+   non-secret bind-mounted configs to 0644 even with a restrictive Git umask;
+   rerun it after future checkouts. Never copy a working tree holding
+   real credentials. The original Waçla rename is already retained in this
+   branch's history; see the audit for the starting-checkout reconciliation.
 2. Review `bootstrap.sh --help`. During V3 only, run `bootstrap.sh setup USER
    PUBLIC_KEY_FILE SSH_SOURCE_CIDR PUBLIC_INTERFACE` as root. It installs Docker,
    Compose, security updates, fail2ban, host firewall and a Docker forwarded-port
@@ -128,6 +132,7 @@ The following are **future V3 commands**, not actions authorized in V1:
 export WACLA_CONFIG=/etc/wacla/stack.env
 export WACLA_STATE=/var/lib/wacla
 VPS=/opt/wacla/infra/vps/vps
+$VPS prepare-config          # only tracked non-secret config files; secrets untouched
 $VPS validate
 $VPS build
 # First server only: start the two dependencies explicitly before migrations.
@@ -161,7 +166,8 @@ manifest with `--skip-if-current`, without `--deactivate-missing`.
 To update, first rehearse the migration plan, backup restore and **old image
 against the new schema** on disposable data. Review expand/contract compatibility;
 no script can infer semantic migration reversibility. Build the new image on a
-clean reviewed checkout, update `/opt/wacla` and invoke:
+clean reviewed checkout, update `/opt/wacla`, rerun `$VPS prepare-config`
+and invoke:
 
 ```sh
 $VPS deploy wacla-app:FULL_NEW_GIT_SHA FULL_NEW_GIT_SHA

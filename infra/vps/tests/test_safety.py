@@ -170,6 +170,24 @@ class ReleaseRecoveryTests(unittest.TestCase):
             cli.main()
 
 
+class CheckoutPermissionTests(unittest.TestCase):
+    def test_restrictive_checkout_is_prepared_without_relaxing_secrets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in cli.PUBLIC_RUNTIME_FILES:
+                path = root / name
+                path.write_text("non-secret runtime fixture")
+                path.chmod(0o600)
+            secret = root / "app.json"
+            secret.write_text("private fixture")
+            secret.chmod(0o600)
+            with patch.object(cli, "HERE", root), patch.object(sys, "argv", ["vps", "prepare-config"]):
+                cli.main()
+            for name in cli.PUBLIC_RUNTIME_FILES:
+                self.assertEqual((root / name).stat().st_mode & 0o777, 0o644)
+            self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+
+
 class ArtifactBoundaryTests(unittest.TestCase):
     def test_reviewed_archive_excludes_ignored_secrets_and_uncommitted_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:

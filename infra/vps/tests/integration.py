@@ -29,6 +29,7 @@ REPO = HERE.parents[1]
 
 
 def main():
+    subprocess.run([os.sys.executable, str(HERE / "vps"), "prepare-config"], check=True)
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     root = Path(tempfile.mkdtemp(prefix="wacla-vps-integration-"))
     project = f"wacla-v1-test-{uuid.uuid4().hex[:8]}"
@@ -184,6 +185,7 @@ volumes:
             response = request(path)
             assert response.status == 200, (path, response.status)
             assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert "Waçla" in request("/").read().decode("utf-8"), "owner rename must survive the VPS build"
         assert json.load(request("/readyz"))["checks"] == {"database": "ok", "migrations": "ok", "rate_limit_cache": "ok"}
         assert request("/readyz", **{"X-Forwarded-Proto": "http"}).status == 200
         redirect = http.client.HTTPConnection("127.0.0.1", 18080, timeout=10)
