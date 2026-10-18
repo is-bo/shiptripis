@@ -549,3 +549,33 @@ msgstr "Utilisez ce code avant son expiration. Waçla ne vous demandera jamais d
 
 msgid "Use this code before it expires. If you did not request this, ignore this email and keep your code private."
 msgstr "Utilisez ce code avant son expiration. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail et gardez votre code privé."
+
+msgid "Password"
+msgstr "Mot de passe"
+
+msgid "Name (optional)"
+msgstr "Nom (facultatif)"
+
+msgid "The invitation could not be accepted. Check the link and password, or contact your administrator."
+msgstr "L’invitation n’a pas pu être acceptée. Vérifiez le lien et le mot de passe, ou contactez votre administrateur."
+
+msgid "Please try again later."
+msgstr "Veuillez réessayer plus tard."
+
+msgid "Language"
+msgstr "Langue"
+
+msgid "Your invitation has been accepted."
+msgstr "Votre invitation a été acceptée."
+
+msgid "Open Waçla Operations"
+msgstr "Ouvrir les opérations Waçla"
+
+msgid "For an existing account, enter your current password. For a new account, choose a strong password."
+msgstr "Pour un compte existant, saisissez votre mot de passe actuel. Pour un nouveau compte, choisissez un mot de passe fort."
+
+msgid "If a different account is signed in, sign out before accepting."
+msgstr "Si un autre compte est connecté, déconnectez-vous avant d’accepter."
+
+msgid "Enable JavaScript to load your private invitation link."
+msgstr "Activez JavaScript pour ouvrir votre lien d’invitation privé."

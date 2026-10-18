@@ -449,7 +449,8 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                 or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
             raise SecretUnavailable("Invitation requires a trusted HTTPS public origin.")
         token = resolve_secret(message)
-        invite_url = f"{base}/admin/invitations/accept?token={quote(token, safe='')}"
+        locale = normalize_communication_language(message.language)
+        invite_url = f"{base}/admin/invitations/accept?language={locale}#token={quote(token, safe='')}"
         roles = {
             "ops": _("Operations"), "support": _("Support"), "finance": _("Finance"),
             "trust_verification": _("Trust / Verification"), "super_admin": _("Super Admin"),
@@ -1103,9 +1104,14 @@ def _consume_secret_ref(message: OutboundMessage) -> None:
 
 
 def dispatch_message(*, message_id: int) -> str:
-    """Hold the PostgreSQL send lock through SMTP/publication and state commit."""
+    """Serialize each obligation; hold the shared send lock only for final SMTP."""
     from .delivery_policy import acquire_send_lock
 
+    kind = OutboundMessage.objects.only("kind").get(pk=message_id).kind
+    if kind not in _SECRET_PROVIDER_KINDS:
+        # The claim and event handle must commit before Redis publication so
+        # a fast Go consumer can find its authoritative obligation/receipt.
+        return _dispatch_message_locked(message_id=message_id)
     error = None
     with transaction.atomic():
         if not acquire_send_lock():
@@ -1166,7 +1172,13 @@ def _dispatch_message_locked(*, message_id: int) -> str:
             )
             return "receipt_unconfirmed"
         message.attempts = int(message.attempts) + 1
-        message.save(update_fields=["attempts", "updated_at"])
+        fields = ["attempts", "updated_at"]
+        if message.kind not in _SECRET_PROVIDER_KINDS:
+            message.transport_event_id = message.transport_event_id or uuid.uuid4().hex
+            message.next_attempt_at = now + _DELIVERY_RECEIPT_TIMEOUT
+            message.last_error = ""
+            fields += ["transport_event_id", "next_attempt_at", "last_error"]
+        message.save(update_fields=fields)
         attempts = int(message.attempts)
         max_attempts = int(message.max_attempts)
 
@@ -1181,7 +1193,7 @@ def _dispatch_message_locked(*, message_id: int) -> str:
     except (SecretUnavailable, TypeError, ValueError, KeyError):
         # The message can never become valid again, so stop retrying it and
         # leave the reason on the row for an operator.
-        OutboundMessage.objects.filter(pk=message_id).update(
+        OutboundMessage.objects.filter(pk=message_id, status=OutboundMessage.Status.PENDING).update(
             status=OutboundMessage.Status.FAILED,
             last_error="email_context_or_capability_unavailable",
             dispatched_at=None,
@@ -1254,7 +1266,9 @@ def _dispatch_message_locked(*, message_id: int) -> str:
         )
     except (redis.RedisError, OSError):
         failed_permanently = attempts >= max_attempts
-        OutboundMessage.objects.filter(pk=message_id).update(
+        OutboundMessage.objects.filter(
+            pk=message_id, status=OutboundMessage.Status.PENDING, last_error=""
+        ).update(
             status=(
                 OutboundMessage.Status.FAILED
                 if failed_permanently
@@ -1273,19 +1287,9 @@ def _dispatch_message_locked(*, message_id: int) -> str:
         )
         raise EmailDeliveryError("email_transport_unavailable") from None
 
-    # XADD is transport, not delivery. Keep the PostgreSQL obligation pending
-    # until the Go worker records SMTP success on core_published_event. If the
-    # receipt never arrives, the table sweep re-enqueues this same event id and
-    # byte-identical body after the confirmation timeout.
-    now = timezone.now()
-    OutboundMessage.objects.filter(pk=message_id).update(
-        status=OutboundMessage.Status.PENDING,
-        transport_event_id=event_id,
-        dispatched_at=None,
-        last_error="",
-        next_attempt_at=now + _DELIVERY_RECEIPT_TIMEOUT,
-        updated_at=now,
-    )
+    # The committed claim already records the handle and confirmation timeout.
+    # Never overwrite a fast consumer's accepted/failure outcome after XADD.
+    # If no receipt arrives, the sweep republishes the same stable event id.
     return "transported"
 
 

@@ -549,3 +549,33 @@ msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. لن 
 
 msgid "Use this code before it expires. If you did not request this, ignore this email and keep your code private."
 msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. إذا لم تطلب ذلك، فتجاهل هذا البريد وحافظ على سرية الرمز."
+
+msgid "Password"
+msgstr "كلمة المرور"
+
+msgid "Name (optional)"
+msgstr "الاسم (اختياري)"
+
+msgid "The invitation could not be accepted. Check the link and password, or contact your administrator."
+msgstr "تعذر قبول الدعوة. تحقق من الرابط وكلمة المرور، أو تواصل مع المسؤول."
+
+msgid "Please try again later."
+msgstr "يرجى المحاولة مرة أخرى لاحقاً."
+
+msgid "Language"
+msgstr "اللغة"
+
+msgid "Your invitation has been accepted."
+msgstr "تم قبول دعوتك."
+
+msgid "Open Waçla Operations"
+msgstr "فتح عمليات Waçla"
+
+msgid "For an existing account, enter your current password. For a new account, choose a strong password."
+msgstr "لحساب موجود، أدخل كلمة مرورك الحالية. لحساب جديد، اختر كلمة مرور قوية."
+
+msgid "If a different account is signed in, sign out before accepting."
+msgstr "إذا كان هناك حساب آخر مسجل الدخول، فسجّل الخروج قبل القبول."
+
+msgid "Enable JavaScript to load your private invitation link."
+msgstr "فعّل JavaScript لفتح رابط دعوتك الخاص."

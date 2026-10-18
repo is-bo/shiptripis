@@ -414,9 +414,13 @@ def committed_mail(db):
 
     def cleanup():
         from apps.finance.models import ScheduledJob
+        from apps.core.models import PublishedEvent
 
         rows = OutboundMessage.objects.filter(key__startswith="v2:concurrent")
         identities = list(rows.values_list("pk", flat=True))
+        PublishedEvent.objects.filter(
+            event_id__in=list(rows.values_list("transport_event_id", flat=True))
+        ).delete()
         ScheduledJob.objects.filter(
             key__in=[f"outbound_message:{pk}" for pk in identities]
         ).delete()
@@ -425,6 +429,63 @@ def committed_mail(db):
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         pool.submit(independent_call, cleanup).result(timeout=10)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("outcome", ["dispatched", "smtp_transient"])
+@pytest.mark.parametrize("redis_reply_lost", [False, True])
+def test_redis_publication_observes_committed_claim_and_preserves_fast_outcome(
+    committed_mail, outcome, redis_reply_lost
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from apps.core.models import PublishedEvent
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        row = pool.submit(
+            independent_call,
+            lambda: outbox.enqueue_message(
+                kind="kyc_status", key="v2:concurrent-handoff",
+                to_email="only@example.invalid", context={"status": "approved"},
+            ),
+        ).result(timeout=10)
+
+        def fast_consumer(*args, **kwargs):
+            def consume():
+                current = OutboundMessage.objects.get(pk=row.pk)
+                assert current.transport_event_id == args[1]["event_id"]
+                assert current.attempts == 1 and current.next_attempt_at
+                assert PublishedEvent.objects.filter(event_id=current.transport_event_id).exists()
+                # Another publisher cannot steal the claim before receipt expiry.
+                assert outbox.dispatch_message(message_id=row.pk) == "awaiting_receipt"
+                OutboundMessage.objects.filter(pk=row.pk).update(
+                    status="dispatched" if outcome == "dispatched" else "pending",
+                    dispatched_at=timezone.now() if outcome == "dispatched" else None,
+                    last_error="" if outcome == "dispatched" else outcome,
+                    next_attempt_at=None if outcome == "dispatched" else timezone.now() + timedelta(minutes=1),
+                )
+            pool.submit(independent_call, consume).result(timeout=10)
+            if redis_reply_lost:
+                raise outbox.redis.RedisError("untrusted transport exception")
+
+        with (
+            override_settings(TRANSACTIONAL_EMAIL_ENABLED=True),
+            patch.object(outbox.redis_bus, "get_client") as redis_client,
+        ):
+            redis_client.return_value.xadd.side_effect = fast_consumer
+            result = pool.submit(
+                independent_call, lambda: outbox.dispatch_message(message_id=row.pk)
+            )
+            if redis_reply_lost:
+                with pytest.raises(outbox.EmailDeliveryError, match="email_transport_unavailable"):
+                    result.result(timeout=10)
+            else:
+                assert result.result(timeout=10) == "transported"
+            redis_client.return_value.xadd.assert_called_once()
+        final = pool.submit(
+            independent_call, lambda: OutboundMessage.objects.get(pk=row.pk)
+        ).result(timeout=10)
+        assert final.status == ("dispatched" if outcome == "dispatched" else "pending")
+        assert final.last_error == ("" if outcome == "dispatched" else outcome)
 
 
 @pytest.mark.django_db
@@ -463,6 +524,12 @@ def test_concurrent_django_workers_cannot_send_the_same_capability(committed_mai
         try:
             assert entered.wait(timeout=10)
             assert outbox.dispatch_message(message_id=row.pk) == "busy"
+            ordinary = obligation()
+            with patch.object(
+                outbox, "_xadd_email", return_value="ordinary-event"
+            ) as publish:
+                assert outbox.dispatch_message(message_id=ordinary.pk) == "transported"
+                publish.assert_called_once()
         finally:
             release.set()
         assert future.result(timeout=10) == "dispatched"

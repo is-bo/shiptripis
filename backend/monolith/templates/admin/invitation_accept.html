@@ -1,0 +1,42 @@
+{% extends "payments/_shell.html" %}
+{% load i18n %}
+{% block head_extra %}
+<style>
+  #invitation-form input:not([type="hidden"]) { display: block; width: 100%; min-height: 48px; padding: 10px 12px; margin-block: 6px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: var(--surface-raised); color: var(--ink); font: inherit; }
+  #invitation-form input[type="password"] { direction: ltr; }
+  #invitation-form button:disabled { opacity: .6; cursor: default; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="card" aria-labelledby="invitation-heading">
+  {% if accepted %}
+  <h1 id="invitation-heading">{% translate "Your invitation has been accepted." %}</h1>
+  <p><a class="secondary" href="/admin/">{% translate "Open Waçla Operations" %}</a></p>
+  {% else %}
+  <h1 id="invitation-heading">{% translate "Accept your invitation" %}</h1>
+  <p>{% translate "For an existing account, enter your current password. For a new account, choose a strong password." %}</p>
+  <p>{% translate "If a different account is signed in, sign out before accepting." %}</p>
+  <form method="post" action="?language={{ lang }}" id="invitation-form">
+    {% csrf_token %}
+    {{ form.token }}
+    {{ form.non_field_errors }}
+    <p>{{ form.full_name.label_tag }} {{ form.full_name }} {{ form.full_name.errors }}</p>
+    <p>{{ form.password.label_tag }} {{ form.password }} {{ form.password.errors }}</p>
+    <button class="pay" type="submit" id="invitation-submit" disabled>{% translate "Accept your invitation" %}</button>
+  </form>
+  <noscript><p>{% translate "Enable JavaScript to load your private invitation link." %}</p></noscript>
+  <script nonce="{{ nonce }}">
+  (() => {
+    const field = document.getElementById('id_token');
+    const address = new URL(window.location.href);
+    const capability = new URLSearchParams(address.hash.slice(1)).get('token') || address.searchParams.get('token');
+    if (capability) field.value = capability;
+    address.hash = '';
+    address.searchParams.delete('token');
+    window.history.replaceState(null, '', address.pathname + address.search);
+    document.getElementById('invitation-submit').disabled = !/^[A-Za-z0-9_-]{20,256}$/.test(field.value);
+  })();
+  </script>
+  {% endif %}
+</main>
+{% endblock %}

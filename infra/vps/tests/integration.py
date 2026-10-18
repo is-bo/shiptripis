@@ -196,6 +196,7 @@ volumes:
         assert request("/kyc/submit").status in (401, 405)
         assert request("/api/kyc/submit").status in (401, 405)
         assert request("/admin/").status == 403
+        assert request("/admin/invitations/accept?language=ar").status == 403
         assert request("/api/admin/health/deep").status == 403
         assert request("/debug/vars").status == 404
         assert request("/ws/chat", Origin="https://attacker.invalid").status == 403
@@ -264,6 +265,21 @@ else: raise RuntimeError('email worker not found')
         else:
             raise AssertionError("worker crash did not recover to full application health")
         passed.append("Worker crash propagates to the supervisor and bounded restart restores every process")
+        # Only the disposable loopback stack: permit its Docker bridge client
+        # to exercise the invitation page through both production proxies.
+        # The deployed CIDR policy and the denied-path checks above stay intact.
+        env["ADMIN_CIDRS"] = "0.0.0.0/0"
+        dc("up", "-d", "--force-recreate", "--wait", "caddy")
+        response = request("/admin/invitations/accept?language=ar")
+        assert response.status == 200
+        assert response.headers["Referrer-Policy"] == "no-referrer"
+        assert "no-store" in response.headers["Cache-Control"]
+        assert "script-src 'nonce-" in response.headers["Content-Security-Policy"]
+        assert 'lang="ar" dir="rtl"' in response.read().decode()
+        env["ADMIN_CIDRS"] = config["ADMIN_CIDRS"]
+        dc("up", "-d", "--force-recreate", "--wait", "caddy")
+        assert request("/admin/invitations/accept").status == 403
+        passed.append("Localized invitation landing, capability headers and unchanged admin CIDR enforcement through both proxies")
         dc("run", "--rm", "--no-deps", "backup", "init")
         dc("run", "--rm", "--no-deps", "backup", "backup")
         # Failed pg_dump must fail the backup and never become a good snapshot.

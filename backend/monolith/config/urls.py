@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 from apps.core.health import healthz, readyz
+from apps.admin_panel.invitation_web import invitation_accept_page
 from apps.finance.guest_web import guest_payment_page
 from apps.finance.payment_return_web import payment_return_page
 from apps.finance.payout_account_api import (
@@ -22,6 +23,7 @@ handler403 = "apps.admin_panel.console_views.permission_denied"
 
 
 urlpatterns = [
+    path("admin/invitations/accept", invitation_accept_page, name="admin-invitation-accept-page"),
     # Human-facing operations routes intentionally precede Django's technical
     # model routes. The latter remain available under /admin/ for the explicit
     # owner-only Technical records area.
