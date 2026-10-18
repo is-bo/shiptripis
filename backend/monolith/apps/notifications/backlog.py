@@ -13,9 +13,22 @@ from django.utils.dateparse import parse_datetime
 from .models import OutboundMessage, OutboundSecret
 
 
+def valid_row_id(value):
+    """Reject malformed/overflowing bigint references before querying PostgreSQL."""
+    return bool(
+        value and value.isascii() and value.isdigit() and len(value) <= 19
+        and 0 < int(value) <= 9223372036854775807
+    )
+
+
 def secret_problem(message):
     """Inspect owning state without decrypting, rendering, or auditing a code read."""
     now = timezone.now()
+    if message.kind in {
+        "email_verification", "password_reset", "admin_invitation",
+        "recipient_delivery_code",
+    } and not message.secret_ref:
+        return "invalid_reference"
     if message.secret_ref.startswith("outbound_secret:"):
         try:
             vault = OutboundSecret.objects.filter(
@@ -38,7 +51,7 @@ def secret_problem(message):
                 if prefix == "email_verification"
                 else PasswordResetCode
             )
-            if not identity.isdigit():
+            if not valid_row_id(identity):
                 return "invalid_reference"
             row = model.objects.select_related("user").filter(pk=identity).first()
             if (
@@ -76,7 +89,7 @@ def secret_problem(message):
         from apps.handover.models import DealHandoverCode
 
         identity = message.secret_ref.split(":", 1)[1]
-        if not identity.isdigit():
+        if not valid_row_id(identity):
             return "invalid_reference"
         row = DealHandoverCode.objects.filter(
             pk=identity, deal_id=message.deal_id

@@ -606,6 +606,7 @@ def test_missing_security_reference_never_reaches_smtp():
     row = OutboundMessage.objects.create(
         kind="password_reset", key="v2:missing-secret", to_email="only@example.invalid"
     )
+    assert classify(row)["category"] == "obsolete"
     with (
         override_settings(TRANSACTIONAL_EMAIL_ENABLED=True),
         patch.object(outbox, "_send_email_via_provider") as send,
@@ -613,6 +614,18 @@ def test_missing_security_reference_never_reaches_smtp():
         assert outbox.dispatch_message(message_id=row.pk) == "unrenderable"
         send.assert_not_called()
     assert OutboundMessage.objects.get(pk=row.pk).status == "failed"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("identity", ["9" * 50, "١٢٣", "9223372036854775808"])
+def test_malformed_handover_identity_fails_safely_in_audit_and_rendering(identity):
+    row = OutboundMessage.objects.create(
+        kind="recipient_delivery_code", key="v2:invalid-reference",
+        to_email="only@example.invalid", secret_ref=f"handover_code:{identity}",
+    )
+    assert classify(row)["category"] == "obsolete"
+    with pytest.raises(outbox.SecretUnavailable):
+        outbox.render_parts(row)
 
 
 @pytest.mark.django_db

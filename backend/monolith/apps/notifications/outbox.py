@@ -295,7 +295,8 @@ def resolve_secret(message: OutboundMessage) -> str:
                 "The outbound email secret could not be opened."
             ) from exc
 
-    if resolver != "handover_code" or not raw_id.isdigit():
+    from .backlog import valid_row_id
+    if resolver != "handover_code" or not valid_row_id(raw_id):
         raise SecretUnavailable(f"Unsupported secret reference {resolver!r}.")
 
     from apps.handover.models import DealHandoverCode, HandoverCodeAccess
