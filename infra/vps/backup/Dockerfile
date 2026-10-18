@@ -5,7 +5,7 @@ RUN addgroup -g 10001 wacla-backup && adduser -D -H -u 10001 -G wacla-backup wac
     && mkdir -p /status /work /repository \
     && chown 10001:10001 /status /work /repository
 COPY --from=restic /usr/bin/restic /usr/local/bin/restic
-COPY backup/backup.sh /usr/local/bin/wacla-backup
+COPY --chmod=0644 backup/backup.sh /usr/local/bin/wacla-backup
 ENV HOME=/tmp RESTIC_CACHE_DIR=/tmp/restic-cache
 USER 10001:10001
 ENTRYPOINT ["/bin/sh", "/usr/local/bin/wacla-backup"]

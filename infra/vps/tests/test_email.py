@@ -16,6 +16,11 @@ gateway = importlib.machinery.SourceFileLoader(
 
 
 class EmailBoundaryTests(unittest.TestCase):
+    def test_non_root_backup_can_read_its_script_regardless_of_build_context_umask(self):
+        dockerfile = (HERE / "backup/Dockerfile").read_text()
+        self.assertIn("COPY --chmod=0644 backup/backup.sh", dockerfile)
+        self.assertIn('ENTRYPOINT ["/bin/sh", "/usr/local/bin/wacla-backup"]', dockerfile)
+
     def test_both_vps_proxy_layers_preserve_application_referrer_policy(self):
         shared = (HERE.parents[1] / "backend/railway/Caddyfile").read_text()
         rendered = gateway.render(shared)
