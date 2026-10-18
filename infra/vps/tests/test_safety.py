@@ -164,6 +164,13 @@ class ReleaseRecoveryTests(unittest.TestCase):
                 cli.prepare_state()
         self.assertFalse((self.state / "operator.lock").exists())
 
+    def test_shared_state_is_refused_before_release_markers_are_used(self):
+        self.state.chmod(0o777)
+        with patch.object(cli, "STATE", self.state):
+            with self.assertRaisesRegex(ValueError, "private mode 0700"):
+                cli.prepare_state()
+        self.assertFalse((self.state / "operator.lock").exists())
+
     def test_stop_works_with_missing_configuration(self):
         with patch.object(cli, "STATE", self.state), patch.object(cli, "read_env", side_effect=FileNotFoundError), \
              patch.object(cli.subprocess, "check_output", return_value=""), patch.object(sys, "argv", ["vps", "stop"]):

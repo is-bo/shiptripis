@@ -62,7 +62,11 @@ Named volumes preserve PostgreSQL, Redis and Caddy certificate state.
    systemd units, so timers and interactive commands own the same state files.
    The dedicated user has root-equivalent Docker access and passwordless
    sudo. Keep this group limited to trusted operators. Package updates can restart
-   services: run setup in a reviewed maintenance window.
+   services: run setup in a reviewed maintenance window. After setup, ensure the
+   reviewed `/opt/wacla` checkout belongs to this deployment user; copy/check out
+   its files using that account. Bootstrap changes the top directory's ownership,
+   not an existing tree's files. A root-owned checkout made with umask 077 would
+   otherwise prevent the deployment user and systemd units from reading it.
 3. Keep the original SSH session open. In a **second** session prove the user's
    SSH key and sudo work. Only then run `bootstrap.sh harden-ssh
    --key-access-confirmed`. That explicit assertion is the operator's confirmation;

@@ -152,6 +152,8 @@ def prepare_state() -> None:
     STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
     if STATE.stat().st_uid != os.geteuid():
         raise ValueError("run VPS CLI as the deployment user owning WACLA_STATE; do not mix root and deploy-user state")
+    if STATE.stat().st_mode & 0o077:
+        raise ValueError("WACLA_STATE must be private mode 0700 before release/recovery state is used")
 
 
 def diagnostics(command: str, resources: ExitStack) -> None:
