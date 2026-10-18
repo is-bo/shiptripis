@@ -34,6 +34,44 @@ isolated local PostgreSQL cluster, covering the 39 cases SQLite skips. Ruff,
 all 8 globe tests, modified XML/JSON parsing and `git diff --check` passed.
 No APK was built and nothing was deployed or pushed to a remote.
 
+## Waçla V1 — VPS foundation prepared (managed cloud verification, 2026-10-18)
+
+Implemented `infra/vps/` for the planned Ubuntu 24.04 / x86-64 / 8-vCPU / 16-GB
+single Hetzner server, without provisioning or deploying anything externally.
+The six-service Compose package retains the existing combined application
+supervisor and exactly one finance/lifecycle owner, isolates durable PostgreSQL 16
+and authenticated Redis 7, and adds a configurable TLS edge, explicit locked
+maintenance, encrypted offsite backup tooling and isolated restore verification.
+It includes a non-root/read-only application and backup image, reviewed-SHA build/
+deploy/rollback CLI, safe bootstrap/SSH/firewall scripts, host monitoring/timers,
+secret contracts, a single-writer Railway migration runbook and test-only CI.
+
+All providers remain TEST/inactive, mock payments are forbidden in production,
+DZD/automatic Connect payout execution is off and `EMAIL_ENABLED=false`. No
+Sender.net integration, real email, financial transaction, DNS/storage migration,
+mobile API-origin change, release APK, push, merge or Railway operation occurred.
+Existing financial, authorization, outbox and storage behavior is reused.
+
+Verification on the supplied base checkout: Django PostgreSQL **2,369 passed,
+34 retired-legacy skips**; Flutter **1,074 passed** serially, analyzer/format/localization
+clean; full Go/race/real-Redis integrations and vet passed; **21** VPS safety tests,
+fresh container durability/TLS/WebSocket/worker/backup/isolated-restore/corruption
+drill and 14 website/static/health routes passed. Full commands and conditions are
+in [the V1 readiness report](V1_VPS_READINESS.md). The source-level deployment
+safety test accepts the launcher's optional initialization arguments. One Flutter
+regression test now waits for sign-in before counting live-event reads; its exact
+one-read and unchanged-badge assertions remain intact, with no mobile runtime change.
+
+**Supplied-checkout discrepancy:** starting branch `work`, SHA
+`07c2a11111b26357da5ddedc2fa428854c4ee3ee`, had a clean tree/no stashes but did not
+contain the described completed Waçla rename. Stayed on that supplied branch,
+preserved all existing branding/history and used Waçla for new infrastructure.
+Reconcile with the owner's renamed development branch before V2/V3. Actual Ubuntu
+boot/firewall/Docker restart, domain/TLS, offsite/provider connectivity and target
+capacity remain V3 gates. See [operator instructions](../infra/vps/README.md),
+[secret reference](../infra/vps/ENVIRONMENT.md) and
+[migration procedure](../infra/vps/MIGRATION.md). Historical records below are intact.
+
 ## K7 — Realtime, High-Scale Tuning & Final Certification (merged and released, 2026-09-23)
 
 Merged with K5 and K6 in is-bo/shiptripis#20 as `a08a87a`; released to TEST as
