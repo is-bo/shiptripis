@@ -75,7 +75,7 @@ class AppearanceScreen extends ConsumerWidget {
                           ),
                         ),
                         if (option.mode == mode)
-                          Icon(Icons.check_rounded, size: 20, color: c.brand)
+                          Icon(Icons.check_rounded, size: 20, color: c.brandInk)
                         else
                           const SizedBox(width: 20),
                       ],

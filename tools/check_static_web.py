@@ -117,7 +117,7 @@ def check_edge_routing() -> list[str]:
         errors.append("web/terms.html does not exist")
     else:
         terms_text = terms_file.read_text(encoding="utf-8")
-        if "<title>Terms of Service — ShipTrip</title>" not in terms_text:
+        if "<title>Terms of Service — Wassla</title>" not in terms_text:
             errors.append("web/terms.html missing expected title")
         if "<h1>Terms of Service</h1>" not in terms_text:
             errors.append("web/terms.html missing Terms of Service header")
@@ -127,7 +127,7 @@ def check_edge_routing() -> list[str]:
         errors.append("web/privacy.html does not exist")
     else:
         privacy_text = privacy_file.read_text(encoding="utf-8")
-        if "<title>Privacy Policy — ShipTrip</title>" not in privacy_text:
+        if "<title>Privacy Policy — Wassla</title>" not in privacy_text:
             errors.append("web/privacy.html missing expected title")
         if "<h1>Privacy Policy</h1>" not in privacy_text:
             errors.append("web/privacy.html missing Privacy Policy header")

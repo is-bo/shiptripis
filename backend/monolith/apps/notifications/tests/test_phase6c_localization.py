@@ -211,7 +211,7 @@ class RecipientLanguageContractTests(TestCase):
         )
         subject, _ = render(message)
         self.assertEqual(message.language, "en")
-        self.assertEqual(subject, "Your ShipTrip delivery code")
+        self.assertEqual(subject, "Your Wassla delivery code")
 
 
 class ProtectionEndingReminderTests(TestCase):
@@ -293,7 +293,7 @@ class ArabicMixedDirectionTests(TestCase):
             heading="اختبار",
             eyebrow="الأمان",
             highlight=("الرمز", "AB12CD"),
-            action=("افتح ShipTrip", "https://example.test/path?q=123"),
+            action=("افتح Wassla", "https://example.test/path?q=123"),
             facts=(("المرجع", "ST-1234"),),
         )
 

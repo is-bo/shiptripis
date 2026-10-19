@@ -12,7 +12,7 @@ revoked, paid or closed -- plus whether someone is paying with it right now, in
 which case it cannot be replaced *or* revoked.
 
 **The payer's email is asked for only when it is used.** It exists for
-ShipTrip's own receipt, failure and refund messages. With transactional email
+Wassla's own receipt, failure and refund messages. With transactional email
 off, none is ever sent, so the page does not ask.
 
 **The public page is the app, in the payer's language, and says nothing else.**
@@ -409,7 +409,7 @@ class PublicPageTests(_BalanceCase):
         assert "Pay €25.00" in text
         assert "You don't need an account" in text.replace("&#x27;", "'")
         assert "3 more days" in text
-        assert "ShipTrip never sees your card details" in text
+        assert "Wassla never sees your card details" in text
         # The enum never reaches a person.
         assert "deal_balance" not in text
 

@@ -3881,3 +3881,6 @@ a.st-person-fact-label:hover { color: var(--st-accent); }
   .st-person-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .st-plist-row { padding: var(--st-3); }
 }
+
+/* The admin header stays dark in both themes. */
+.st-brand-logo { width: 112px; height: auto; object-fit: contain; flex: none; }

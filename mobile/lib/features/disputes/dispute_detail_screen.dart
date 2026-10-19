@@ -597,7 +597,7 @@ class _EvidenceRow extends StatelessWidget {
               l.disputeEvidenceView,
               style: Theme.of(
                 context,
-              ).textTheme.labelMedium?.copyWith(color: c.brand),
+              ).textTheme.labelMedium?.copyWith(color: c.brandInk),
             ),
         ],
       ),

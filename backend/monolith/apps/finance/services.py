@@ -3216,7 +3216,7 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         "amount_eur_cents": order.outstanding_eur_cents,
         "currency": "EUR",
         "purpose": order.purpose,
-        "description": _checkout_description(order),
+        "description": _checkout_description(order).replace("ShipTrip", "Wassla"),
         "expires_at": link.expires_at.isoformat(),
         # Whether the payer is asked for an email. It exists for one reason:
         # ShipTrip's own receipt, failure and refund messages to someone with no

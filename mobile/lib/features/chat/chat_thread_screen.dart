@@ -345,7 +345,7 @@ class _Composer extends StatelessWidget {
         AppIconButton(
           icon: Icons.send_rounded,
           label: l.chatSend,
-          tone: c.brand,
+          tone: c.brandInk,
           onPressed: sending ? null : onSend,
         ),
       ],

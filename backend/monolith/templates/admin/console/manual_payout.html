@@ -11,7 +11,7 @@ An operator arrives asking four questions and leaves when all four are answered:
 *what has already happened to this payout*. Everything on the page belongs to one
 of those, and anything that belongs to none of them is not on the page.
 
-Two things it must never say. It must never suggest ShipTrip performs the bank
+Two things it must never say. It must never suggest Wassla performs the bank
 transfer — a person does, in a banking application, outside this system. And it
 must never offer a way to declare a payout paid: the only route to `paid` is the
 backend state machine, through a claim, a committed instruction, a receipt and an
@@ -121,7 +121,7 @@ skips any of them.
         </div>
       </dl>
     </div>
-    <p class="st-muted">Copying the amount gives you <code>{{ manual.amounts.dzd_minor }}</code> &mdash; the same figure without the thousands separator, so it pastes into a bank field unchanged. The euro amount is what ShipTrip owes and what the ledger settles. The dinar amount is the exact figure to transfer, fixed by the rate captured when this Deal was funded. Neither can be edited, here or anywhere else in the console.</p>
+    <p class="st-muted">Copying the amount gives you <code>{{ manual.amounts.dzd_minor }}</code> &mdash; the same figure without the thousands separator, so it pastes into a bank field unchanged. The euro amount is what Wassla owes and what the ledger settles. The dinar amount is the exact figure to transfer, fixed by the rate captured when this Deal was funded. Neither can be edited, here or anywhere else in the console.</p>
   </section>
 
   {% comment %}=====================================================================
@@ -294,7 +294,7 @@ skips any of them.
       {% endfor %}
     </ol>
 
-    <p class="st-muted"><strong>ShipTrip does not perform this transfer.</strong> A Finance operator sends the dinars from a bank, outside this system, and records here what they did.</p>
+    <p class="st-muted"><strong>Wassla does not perform this transfer.</strong> A Finance operator sends the dinars from a bank, outside this system, and records here what they did.</p>
 
     {% if manual.claim.claimed and not manual.claim.mine %}
     <div class="st-readonly-note"><span><strong>{{ manual.claim.operator }} claimed instruction&nbsp;#{{ manual.claim.instruction }}{% if manual.claim.committed_at %} and has already committed to sending it{% endif %}.</strong> Only that operator can act on it. Do not send a second transfer.</span></div>

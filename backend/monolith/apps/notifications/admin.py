@@ -106,6 +106,13 @@ class NotificationPreferenceAdmin(admin.ModelAdmin):
 
 @admin.register(OutboundMessage)
 class OutboundMessageAdmin(admin.ModelAdmin):
+    def get_form(self, request, obj=None, **kwargs):
+        kwargs["help_texts"] = {
+            **kwargs.get("help_texts", {}),
+            "recipient_user": "Null for a parcel recipient, who needs no Wassla account.",
+        }
+        return super().get_form(request, obj, **kwargs)
+
     # A failing send is read as: what was it, who to, how many tries are left,
     # and what did the transport say. The two timestamps that used to sit here
     # pushed that last column off the table; they are on the detail page.

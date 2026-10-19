@@ -70,7 +70,7 @@ class BannedAdminAccessTests(TestCase):
                 for url in ("/admin/", console_url):
                     response = browser.get(url)
                     self.assertIn(response.status_code, (302, 403))
-                    self.assertNotIn(b"ShipTrip Operations dashboard", response.content)
+                    self.assertNotIn(b"Wassla Operations dashboard", response.content)
 
                 if role == AdminRole.FINANCE:
                     # This route uses the staff-only decorator rather than

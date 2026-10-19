@@ -8,9 +8,9 @@
 /// The vocabulary is travel paperwork: parchment with a paper grain, passport
 /// stamps, boarding passes with a perforated stub, postage marks, wax seals,
 /// a dashed flight path with something moving along it. It was drawn entirely
-/// with [CustomPainter] in the original build and stays that way here — there
-/// is not a single raster asset in the app, so every mark is crisp at any
-/// density, tintable per theme, and free.
+/// with [CustomPainter] in the original build; the travel illustrations
+/// remain vector-painted. The brand mark uses
+/// proportional exports of the supplied Wassla artwork in both themes.
 ///
 /// Three rules every widget below obeys:
 ///
@@ -454,7 +454,7 @@ class PostageStamp extends StatelessWidget {
             painter: _PerforationPainter(color: c.surface),
             child: Container(
               decoration: BoxDecoration(
-                color: c.brandStrong,
+                color: c.brand,
                 border: Border.all(color: c.seal, width: 1.4),
               ),
               child: Column(
@@ -773,8 +773,8 @@ class CountryPill extends StatelessWidget {
   }
 }
 
-/// The wordmark: a tilted plane in an ink tile, then "ShipTrip" in the
-/// display serif.
+/// The supplied Wassla mark. Keep the class name for existing call sites.
+/// Raster exports come directly from the supplied SVG paths at 4x density.
 class ShipTripMark extends StatelessWidget {
   const ShipTripMark({this.size = 30, this.showWordmark = true, super.key});
 
@@ -783,42 +783,19 @@ class ShipTripMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final variant = context.colors.brightness == Brightness.dark
+        ? 'ivory'
+        : 'navy';
+    final kind = showWordmark ? 'primary' : 'symbol';
     return Semantics(
-      label: 'ShipTrip',
+      label: 'Wassla',
       excludeSemantics: true,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: c.surfaceInverse,
-              borderRadius: BorderRadius.circular(size * 0.27),
-            ),
-            child: Center(
-              child: Transform.rotate(
-                angle: -0.78,
-                child: Icon(
-                  Icons.airplanemode_active,
-                  size: size * 0.53,
-                  color: c.textOnInverse,
-                ),
-              ),
-            ),
-          ),
-          if (showWordmark) ...[
-            SizedBox(width: size * 0.33),
-            Text(
-              'ShipTrip',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontSize: size * 0.67,
-                color: c.textPrimary,
-              ),
-            ),
-          ],
-        ],
+      child: Image.asset(
+        'assets/branding/wassla-$kind-$variant.png',
+        width: showWordmark ? size * 4 : size,
+        height: showWordmark ? size * 4 * 346 / 1360 : size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
       ),
     );
   }
@@ -976,7 +953,7 @@ class _RouteTraceState extends State<RouteTrace>
                 child: CustomPaint(
                   painter: _RouteBackdropPainter(
                     ink: c.textPrimary,
-                    accent: c.brand,
+                    accent: c.brandInk,
                     mirrored: Directionality.of(context) == TextDirection.rtl,
                   ),
                 ),

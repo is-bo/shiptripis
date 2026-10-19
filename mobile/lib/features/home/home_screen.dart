@@ -177,7 +177,7 @@ class _RoleSwitcher extends ConsumerWidget {
                                     : Icons.luggage_rounded,
                                 size: 17,
                                 color: option == role
-                                    ? c.brand
+                                    ? c.brandInk
                                     : c.textTertiary,
                               ),
                               const SizedBox(width: AppSpace.sm),

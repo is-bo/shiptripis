@@ -1,7 +1,7 @@
 """The page behind a shared guest payment link.
 
 `GuestPaymentView` is the JSON surface the app uses. This is the surface a
-*person* uses: someone who was sent a link, has no ShipTrip account, and opened
+*person* uses: someone who was sent a link, has no Wassla account, and opened
 it in a browser. Without it the link the owner shares is a URL that returns raw
 JSON, which is not a payment experience and not something anyone should be asked
 to forward to a relative.
@@ -19,7 +19,7 @@ same page in the same words. Distinguishing them would let someone holding a
 guessed token learn which obligations exist. A real link whose payment is
 complete says so instead (J7D; see `_completed_link`).
 
-**Language.** A guest has no ShipTrip locale, so the page speaks the reader's
+**Language.** A guest has no Wassla locale, so the page speaks the reader's
 browser language when it is one of ours, falls back to the language the owner's
 link was issued in, and always offers a one-tap switch. The switch is a query
 parameter on the same path; the token never moves into a query string.
@@ -60,11 +60,11 @@ LANGUAGES = ("en", "fr", "ar")
 #: public reads, and the three languages have to be reviewed side by side.
 COPY: dict[str, dict[str, str]] = {
     "en": {
-        "title": "ShipTrip — payment request",
+        "title": "Wassla — payment request",
         "eyebrow": "Payment request",
         "lead": (
             "The person who sent you this link is asking you to pay this for "
-            "their ShipTrip delivery. You don't need an account."
+            "their Wassla delivery. You don't need an account."
         ),
         "pay_with": "Pay with",
         "email_label": "Email for your receipt",
@@ -76,7 +76,7 @@ COPY: dict[str, dict[str, str]] = {
         "pay": "Pay {amount}",
         "pay_generic": "Continue to payment",
         "handoff": (
-            "You'll finish on our payment partner's secure page. ShipTrip "
+            "You'll finish on our payment partner's secure page. Wassla "
             "never sees your card details."
         ),
         "scope": (
@@ -101,7 +101,7 @@ COPY: dict[str, dict[str, str]] = {
         "purpose_posting_deposit": "Deposit for a delivery request",
         "purpose_deal_balance": "Payment for a delivery",
         "purpose_boost": "Extra reward for a delivery",
-        "purpose_other": "ShipTrip payment",
+        "purpose_other": "Wassla payment",
         "rail_stripe": "Card",
         "rail_stripe_note": "Visa, Mastercard and more",
         "rail_chargily": "Chargily (Algeria)",
@@ -110,11 +110,11 @@ COPY: dict[str, dict[str, str]] = {
         "rail_mock_note": "Development only",
     },
     "fr": {
-        "title": "ShipTrip — demande de paiement",
+        "title": "Wassla — demande de paiement",
         "eyebrow": "Demande de paiement",
         "lead": (
             "La personne qui vous a envoyé ce lien vous demande de régler ce "
-            "montant pour sa livraison ShipTrip. Aucun compte n’est nécessaire."
+            "montant pour sa livraison Wassla. Aucun compte n’est nécessaire."
         ),
         "pay_with": "Payer par",
         "email_label": "E-mail pour votre reçu",
@@ -127,7 +127,7 @@ COPY: dict[str, dict[str, str]] = {
         "pay_generic": "Continuer vers le paiement",
         "handoff": (
             "Vous finaliserez sur la page sécurisée de notre partenaire de "
-            "paiement. ShipTrip ne voit jamais vos données de carte."
+            "paiement. Wassla ne voit jamais vos données de carte."
         ),
         "scope": (
             "Ce lien permet uniquement de régler ce montant. Il ne donne accès "
@@ -153,7 +153,7 @@ COPY: dict[str, dict[str, str]] = {
         "purpose_posting_deposit": "Acompte pour une demande de livraison",
         "purpose_deal_balance": "Paiement d’une livraison",
         "purpose_boost": "Bonus pour une livraison",
-        "purpose_other": "Paiement ShipTrip",
+        "purpose_other": "Paiement Wassla",
         "rail_stripe": "Carte bancaire",
         "rail_stripe_note": "Visa, Mastercard et autres",
         "rail_chargily": "Chargily (Algérie)",
@@ -162,11 +162,11 @@ COPY: dict[str, dict[str, str]] = {
         "rail_mock_note": "Développement uniquement",
     },
     "ar": {
-        "title": "ShipTrip — طلب دفع",
+        "title": "Wassla — طلب دفع",
         "eyebrow": "طلب دفع",
         "lead": (
             "الشخص الذي أرسل إليك هذا الرابط يطلب منك دفع هذا المبلغ مقابل "
-            "توصيله عبر ShipTrip. لا حاجة إلى حساب."
+            "توصيله عبر Wassla. لا حاجة إلى حساب."
         ),
         "pay_with": "الدفع عبر",
         "email_label": "بريدك الإلكتروني لاستلام الإيصال",
@@ -179,7 +179,7 @@ COPY: dict[str, dict[str, str]] = {
         "pay_generic": "المتابعة إلى الدفع",
         "handoff": (
             "ستُكمل الدفع على الصفحة الآمنة لشريك الدفع لدينا. لا تطّلع "
-            "ShipTrip على بيانات بطاقتك أبدًا."
+            "Wassla على بيانات بطاقتك أبدًا."
         ),
         "scope": (
             "يتيح لك هذا الرابط دفع هذا المبلغ فقط، ولا يمنح أي اطلاع على "
@@ -203,7 +203,7 @@ COPY: dict[str, dict[str, str]] = {
         "purpose_posting_deposit": "عربون لطلب توصيل",
         "purpose_deal_balance": "دفع مقابل توصيل",
         "purpose_boost": "مكافأة إضافية لتوصيل",
-        "purpose_other": "دفعة عبر ShipTrip",
+        "purpose_other": "دفعة عبر Wassla",
         "rail_stripe": "بطاقة بنكية",
         "rail_stripe_note": "فيزا وماستركارد وغيرها",
         "rail_chargily": "شارجيلي (الجزائر)",

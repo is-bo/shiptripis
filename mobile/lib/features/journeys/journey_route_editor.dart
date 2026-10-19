@@ -224,7 +224,7 @@ class _StopBlock extends StatelessWidget {
       isFirst: _isFirst,
       isLast: _isLast && draft.segments.length == index,
       node: _StopNode(
-        colour: _isFirst || _isLast ? c.brand : c.textTertiary,
+        colour: _isFirst || _isLast ? c.brandInk : c.textTertiary,
         isEndpoint: _isFirst || _isLast,
       ),
       child: Padding(

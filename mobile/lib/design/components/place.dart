@@ -415,7 +415,7 @@ class PlaceResultRow extends StatelessWidget {
                     ? Icons.check_circle_rounded
                     : Icons.chevron_right_rounded,
                 size: 20,
-                color: selected ? c.brand : c.textTertiary,
+                color: selected ? c.brandInk : c.textTertiary,
               ),
             ],
           ),

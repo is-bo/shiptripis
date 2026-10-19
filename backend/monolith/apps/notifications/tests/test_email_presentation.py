@@ -1,8 +1,8 @@
 """The HTML alternative of a transactional message.
 
-A ShipTrip email arrives from an unfamiliar address and asks its reader to hand
+A Wassla email arrives from an unfamiliar address and asks its reader to hand
 a parcel to a stranger, or types a six-character code into their phone. Whether
-it *looks* like ShipTrip is therefore not a cosmetic question — it is the only
+it *looks* like Wassla is therefore not a cosmetic question — it is the only
 signal a recipient has that the message is real, and the recipient of a delivery
 code has no account, no session and nothing else to check it against.
 
@@ -75,6 +75,22 @@ def _message(kind: str, **context) -> OutboundMessage:
 
 
 class EveryMessageHasAReadableHtmlPartTests(TestCase):
+    def test_supplied_logo_uses_only_the_configured_origin(self):
+        html = to_html(
+            EmailDocument(subject="Wassla", heading="Welcome"),
+            site_url="https://wassla.example/app?ignored=1",
+        )
+        assert 'src="https://wassla.example/assets/branding/wassla-email.png"' in html
+        assert 'alt="Wassla"' in html
+        assert 'width="180"' in html
+        assert "ignored=1/assets" not in html
+
+    def test_unconfigured_or_non_web_origin_keeps_readable_branding(self):
+        for origin in ("", "/relative", "javascript:alert(1)"):
+            html = to_html(EmailDocument(subject="s", heading="h"), site_url=origin)
+            assert "<img" not in html
+            assert '<span dir="ltr">Wassla</span>' in html
+
     def test_every_non_secret_kind_renders_all_three_parts(self):
         for kind in NON_SECRET_KINDS:
             with self.subTest(kind=kind):
@@ -88,7 +104,7 @@ class EveryMessageHasAReadableHtmlPartTests(TestCase):
         _, _, html = outbox.render_parts(
             _message(OutboundMessage.Kind.PAYMENT_SUCCEEDED)
         )
-        assert "ShipTrip" in html
+        assert "Wassla" in html
         # The masthead is set in type rather than fetched, because a blocked
         # remote image is the normal case in an email client.
         assert "<img" not in html

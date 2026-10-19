@@ -2486,7 +2486,7 @@ class _OfferBandCell extends StatelessWidget {
               Text(
                 label,
                 style: text.bodySmall?.copyWith(
-                  color: emphasised ? c.brand : c.textSecondary,
+                  color: emphasised ? c.brandInk : c.textSecondary,
                   fontWeight: emphasised ? FontWeight.w600 : null,
                 ),
               ),
@@ -2495,7 +2495,7 @@ class _OfferBandCell extends StatelessWidget {
                 value,
                 style: text.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: emphasised ? c.brand : c.textPrimary,
+                  color: emphasised ? c.brandInk : c.textPrimary,
                 ),
               ),
             ],

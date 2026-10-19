@@ -48,7 +48,7 @@ class Command(BaseCommand):
         )
         full_name = options.get("full_name") or _first_env(
             "SHIPTRIP_SUPER_ADMIN_NAME", "ADMIN_BOOTSTRAP_NAME"
-        ) or "ShipTrip Super Admin"
+        ) or "Wassla Super Admin"
 
         if not email or not password:
             raise CommandError(

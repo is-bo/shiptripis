@@ -332,7 +332,7 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: context.colors.brand,
+                                  color: context.colors.brandInk,
                                 ),
                           ),
                         ),

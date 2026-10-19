@@ -1,5 +1,5 @@
 name: shiptrip
-description: "ShipTrip — peer-to-peer parcel delivery between the EU and Algeria."
+description: "Wassla — peer-to-peer parcel delivery between the EU and Algeria."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -72,6 +72,7 @@ flutter:
 
   assets:
     - assets/fonts/
+    - assets/branding/
 
   # Bundled, not fetched. A runtime font download means a font swap on a slow
   # connection and no type at all offline — unacceptable on the corridor this

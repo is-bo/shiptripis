@@ -1,8 +1,8 @@
 /// Phase J6.2: one name for the Boost fee, and an open offer that keeps up.
 ///
-/// **Terminology.** Under J2 the Traveler receives the whole Boost and ShipTrip
-/// charges the sender a separate fee on it. "ShipTrip boost share" described the
-/// retired split model, where ShipTrip kept part of the Boost. Every screen that
+/// **Terminology.** Under J2 the Traveler receives the whole Boost and Wassla
+/// charges the sender a separate fee on it. "Wassla boost share" described the
+/// retired split model, where Wassla kept part of the Boost. Every screen that
 /// names that fee now calls it the Boost fee, in all three languages.
 ///
 /// **Live refresh.** The sender can change their Boost while an offer is
@@ -261,7 +261,7 @@ void main() {
       // Nothing the app can render still says "share" about Boost money —
       // not in a translation, and not as a literal in a screen.
       final retired = RegExp(
-        r'boost share|Part de ShipTrip sur la mise en avant|حصة ShipTrip من التعزيز',
+        r'boost share|Part de Wassla sur la mise en avant|حصة Wassla من التعزيز',
         caseSensitive: false,
       );
       final offenders = <String>[
@@ -278,9 +278,9 @@ void main() {
       final screen = await _open(tester, _Negotiation(viewerIsSender: true));
       final l = screen.l;
 
-      expect(find.text('ShipTrip boost share'), findsNothing);
+      expect(find.text('Wassla boost share'), findsNothing);
       expect(find.text('Boost fee'), findsOneWidget);
-      // Base reward, Boost, Traveler receives, ShipTrip fee, Boost fee, total.
+      // Base reward, Boost, Traveler receives, Wassla fee, Boost fee, total.
       final labels = tester
           .widget<MoneyBreakdown>(find.byType(MoneyBreakdown))
           .lines
@@ -309,7 +309,7 @@ void main() {
       await tester.pumpAndSettle();
       final l = L.of(tester.element(find.byType(DealScreen)));
 
-      expect(find.text('ShipTrip boost share'), findsNothing);
+      expect(find.text('Wassla boost share'), findsNothing);
       expect(find.text(l.moneyBoostFee), findsOneWidget);
       expect(find.textContaining(_eur(200)), findsWidgets);
       expect(find.textContaining(_eur(4750)), findsWidgets);
@@ -365,7 +365,7 @@ void main() {
       await tester.pumpAndSettle();
       final l = L.of(tester.element(find.byType(DealPaymentScreen)));
 
-      expect(find.text('ShipTrip boost share'), findsNothing);
+      expect(find.text('Wassla boost share'), findsNothing);
       expect(find.text(l.moneyBoostFee), findsOneWidget);
       expect(find.text(l.moneyBoostBonus), findsOneWidget);
     });
@@ -379,7 +379,7 @@ void main() {
       await tester.pumpAndSettle();
       final l = L.of(tester.element(find.byType(BoostScreen)));
 
-      // A card titled "What the Boost costs" used to list "ShipTrip fee", the
+      // A card titled "What the Boost costs" used to list "Wassla fee", the
       // same words the delivery's own commission goes by everywhere else.
       expect(find.text(l.moneyBoostFee), findsOneWidget);
       expect(find.text(l.pricingPlatformFee), findsNothing);

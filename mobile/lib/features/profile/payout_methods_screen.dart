@@ -282,7 +282,7 @@ class _PreferenceCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.tune_rounded, size: 20, color: c.brand),
+              Icon(Icons.tune_rounded, size: 20, color: c.brandInk),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(
@@ -364,7 +364,7 @@ class _PreferenceRadioOption extends StatelessWidget {
                   ? Icons.radio_button_checked_rounded
                   : Icons.radio_button_unchecked_rounded,
               size: 20,
-              color: isSelected ? c.brand : c.textTertiary,
+              color: isSelected ? c.brandInk : c.textTertiary,
             ),
             const SizedBox(width: AppSpace.sm),
             Expanded(
@@ -433,7 +433,7 @@ class _EurCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.euro_rounded, size: 22, color: c.brand),
+              Icon(Icons.euro_rounded, size: 22, color: c.brandInk),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(
@@ -560,7 +560,7 @@ class _DzdCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.account_balance_rounded, size: 22, color: c.brand),
+              Icon(Icons.account_balance_rounded, size: 22, color: c.brandInk),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(

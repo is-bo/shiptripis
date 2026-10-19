@@ -1,6 +1,6 @@
 /// Guest checkout contract and receipt-email coverage.
 ///
-/// The anonymous payer owns no ShipTrip identity. The only new input on this
+/// The anonymous payer owns no Wassla identity. The only new input on this
 /// surface is the mailbox used for the provider-independent receipt/failure/
 /// refund messages; the server still owns every amount and the hosted provider
 /// still owns card details.
@@ -32,7 +32,7 @@ FakeBackend _guestBackend({FakeHandler? checkout}) => FakeBackend()
     FakeResponse(200, {
       'amount_eur_cents': 4200,
       'currency': 'EUR',
-      'description': 'Payment for a ShipTrip delivery',
+      'description': 'Payment for a Wassla delivery',
       'expires_at': '2026-09-01T00:00:00Z',
       'providers': [
         {

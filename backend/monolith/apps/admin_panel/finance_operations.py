@@ -135,9 +135,9 @@ def _scope_only(params, **overrides):
 #: The three amounts the Overview leads with. H5's own definition sentence
 #: stays available on the reconciliation surface, not on the card face.
 HEADLINE = (
-    ("gross_funded", "Money processed", "Funded through ShipTrip in this period"),
-    ("recognized_revenue", "ShipTrip earned", "Platform revenue earned in this period"),
-    ("traveler_outstanding", "Owed to Travelers", "Outstanding now. Never ShipTrip's"),
+    ("gross_funded", "Money processed", "Funded through Wassla in this period"),
+    ("recognized_revenue", "Wassla earned", "Platform revenue earned in this period"),
+    ("traveler_outstanding", "Owed to Travelers", "Outstanding now. Never Wassla's"),
 )
 
 #: Rail stages as an operator reads them. `words.STAGE_LABELS` remains the
@@ -327,7 +327,7 @@ ATTENTION = (
     {
         "key": "disputes",
         "metric": "user_disputed_payouts",
-        "label": "Payouts frozen by a ShipTrip dispute",
+        "label": "Payouts frozen by a Wassla dispute",
         "says": "The payout stays frozen until the dispute is resolved.",
         "owner": "Support / Ops",
         "tone": "attn",
@@ -697,7 +697,7 @@ def _queue_rows(
         if raw.get("has_hold"):
             markers.append(("Hold", "attn"))
         if raw.get("has_user_dispute"):
-            markers.append(("ShipTrip dispute", "bad"))
+            markers.append(("Wassla dispute", "bad"))
         if raw.get("has_provider_dispute"):
             markers.append(("Provider dispute", "bad"))
         rows.append(
@@ -1088,8 +1088,8 @@ def build_exceptions(snapshot, params, scope, *, user):
             ),
             (
                 "user_disputed_payouts",
-                "ShipTrip dispute",
-                "A dispute inside ShipTrip freezes the payout. Support or Ops owns the outcome.",
+                "Wassla dispute",
+                "A dispute inside Wassla freezes the payout. Support or Ops owns the outcome.",
                 "Support / Ops",
                 "attn",
                 reverse("admin_console:disputes"),

@@ -7,8 +7,9 @@
 /// a light-mode colour into a dark-mode build.
 ///
 /// The palette keeps the Mediterranean/heritage character the product started
-/// with — warm neutral ground, Algerian emerald, Saharan terracotta — but
-/// re-tuned for a money-and-trust product: the ground is lifted so text
+/// with — warm neutral ground and Saharan terracotta — with Wassla navy
+/// replacing the former emerald brand. Functional green is preserved. The palette is
+/// tuned for a money-and-trust product: the ground is lifted so text
 /// contrast clears WCAG AA, and terracotta/amber are reserved for states that
 /// genuinely need attention rather than used as decoration.
 library;
@@ -51,7 +52,13 @@ class _Ramp {
   static const ink4 = Color(0xFF6B7785);
   static const ink5 = Color(0xFFA9B3BD);
 
-  // Emerald — brand + primary action + "confirmed".
+  // Wassla identity; emerald below remains reserved for functional states.
+  static const navy = Color(0xFF042D49);
+  static const midnight = Color(0xFF021E33);
+  static const navySoft = Color(0xFFE6EDF2);
+  static const ivory = Color(0xFFF8F6F1);
+
+  // Emerald — success and transport states, independent of the brand.
   static const emerald0 = Color(0xFF042F28);
   static const emerald1 = Color(0xFF0A4A40);
   static const emerald2 = Color(0xFF0E5A4F);
@@ -214,6 +221,10 @@ class AppColorScheme {
   final Color brandSoft;
   final Color onBrand;
 
+  /// Brand ink on neutral surfaces. Ivory keeps dark-theme text and thin
+  /// indicators legible; filled brand surfaces remain the supplied navy.
+  Color get brandInk => brightness == Brightness.dark ? _Ramp.ivory : brand;
+
   /// Terminal-good states: delivered, paid, approved, completed.
   final Color success;
   final Color successSoft;
@@ -293,9 +304,9 @@ class AppColorScheme {
     // colour here deliberately not identical to the original.
     textTertiary: _Ramp.ink3,
     textOnInverse: _Ramp.parchmentSoft,
-    brand: _Ramp.emerald2,
-    brandStrong: _Ramp.emerald1,
-    brandSoft: _Ramp.emerald6,
+    brand: _Ramp.navy,
+    brandStrong: _Ramp.midnight,
+    brandSoft: _Ramp.navySoft,
     onBrand: _Ramp.white,
     success: _Ramp.emerald2,
     successSoft: _Ramp.emerald6,
@@ -345,10 +356,10 @@ class AppColorScheme {
     // light ground, and its mute step is far too dark to read on this one.
     textTertiary: Color(0xFF93A0AB),
     textOnInverse: _Ramp.ink0,
-    brand: _Ramp.emerald4,
-    brandStrong: Color(0xFF6FBFB1),
-    brandSoft: Color(0xFF0E332C),
-    onBrand: Color(0xFF032420),
+    brand: _Ramp.navy,
+    brandStrong: _Ramp.ivory,
+    brandSoft: _Ramp.midnight,
+    onBrand: _Ramp.white,
     success: _Ramp.emerald4,
     successSoft: Color(0xFF0E332C),
     onSuccessSoft: Color(0xFFA9DACF),

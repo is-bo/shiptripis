@@ -188,7 +188,7 @@ def test_every_headline_figure_is_the_snapshot_value(world):
     for key in ("gross_funded", "recognized_revenue", "traveler_outstanding"):
         assert format_eur(snapshot["metrics"][key]["amount_eur_cents"]) in page, key
     assert format_eur(capture.amount_eur_cents) in page
-    assert "Money processed" in page and "ShipTrip earned" in page
+    assert "Money processed" in page and "Wassla earned" in page
     assert "Owed to Travelers" in page
     # The accounting decomposition is not gone; it is on the audit surface.
     for key in ("liability_eligible", "pending_earnings", "net_funded"):
@@ -335,11 +335,11 @@ def test_holds_and_disputes_are_counted_separately(world):
         overview = body(client.get(DASHBOARD, {"mode": "test"}))
     # Three different events with three different owners. A hold and a
     # provider dispute are open, so both are named with their own owner;
-    # no ShipTrip dispute is open, so none is invented. That is the
+    # no Wassla dispute is open, so none is invented. That is the
     # separation, asserted in the only way that can actually fail.
     assert "Finance hold" in page and "Finance acts next" in page
     assert "Provider dispute" in page and "Finance / Risk acts next" in page
-    assert "ShipTrip dispute" not in page
+    assert "Wassla dispute" not in page
     assert format_eur(snapshot["metrics"]["held_payouts"]["amount_eur_cents"]) in page
     # The shared blocker precedence selects the dispute ahead of the hold.
     # Its owner is intentionally unknown; Overview must not invent Finance.

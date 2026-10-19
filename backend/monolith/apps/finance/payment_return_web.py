@@ -30,7 +30,7 @@ throttled like the guest page and asks search engines and referrers to keep
 away.
 
 **Who is reading.** The newest attempt says whether the payer came from a
-guest link. A guest has no ShipTrip app and is never told to open one; the
+guest link. A guest has no Wassla app and is never told to open one; the
 Sender, who left the app for the provider, is told the app updates by itself.
 """
 
@@ -53,7 +53,7 @@ RECHECK_DELAYS = (3, 3, 5, 5, 10, 20)
 
 RETURN_COPY: dict[str, dict[str, str]] = {
     "en": {
-        "title": "ShipTrip — payment",
+        "title": "Wassla — payment",
         "languages": "Language",
         "amount_paid": "Amount paid",
         "amount_pending": "Amount being confirmed",
@@ -61,7 +61,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "success_title": "Payment complete",
         "close_guest": "You can close this page.",
         "close_app": (
-            "You can close this page and go back to the ShipTrip app. It "
+            "You can close this page and go back to the Wassla app. It "
             "updates by itself."
         ),
         "receipt_sent": "A receipt has been sent to your email.",
@@ -70,7 +70,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "paid_title": "This payment has already been completed",
         "paid_body_guest": "Nothing more is needed. You can close this page.",
         "paid_body_app": (
-            "Nothing more is needed. Go back to the ShipTrip app to continue."
+            "Nothing more is needed. Go back to the Wassla app to continue."
         ),
         "unapplied_refund": (
             "Your payment wasn't needed, so it is being refunded to you in full."
@@ -91,7 +91,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "cancelled_title": "Payment cancelled",
         "cancelled_body": "No completed payment was recorded.",
         "retry_guest": "To try again, open the payment link you were sent.",
-        "retry_app": "To try again, go back to the ShipTrip app.",
+        "retry_app": "To try again, go back to the Wassla app.",
         "inactive_title": "This link is no longer active",
         "inactive_body": (
             "No payment can be made from this page. If a payment is still "
@@ -99,7 +99,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         ),
     },
     "fr": {
-        "title": "ShipTrip — paiement",
+        "title": "Wassla — paiement",
         "languages": "Langue",
         "amount_paid": "Montant payé",
         "amount_pending": "Montant en cours de vérification",
@@ -108,7 +108,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "close_guest": "Vous pouvez fermer cette page.",
         "close_app": (
             "Vous pouvez fermer cette page et revenir dans l’application "
-            "ShipTrip : elle se met à jour toute seule."
+            "Wassla : elle se met à jour toute seule."
         ),
         "receipt_sent": "Un reçu vous a été envoyé par e-mail.",
         "receipt_queued": "Votre reçu va vous être envoyé par e-mail.",
@@ -119,7 +119,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         ),
         "paid_body_app": (
             "Vous n’avez plus rien à faire. Revenez dans l’application "
-            "ShipTrip pour continuer."
+            "Wassla pour continuer."
         ),
         "unapplied_refund": (
             "Votre paiement n’était plus nécessaire : il vous est remboursé "
@@ -144,7 +144,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "retry_guest": (
             "Pour réessayer, ouvrez le lien de paiement qui vous a été envoyé."
         ),
-        "retry_app": "Pour réessayer, revenez dans l’application ShipTrip.",
+        "retry_app": "Pour réessayer, revenez dans l’application Wassla.",
         "inactive_title": "Ce lien n’est plus actif",
         "inactive_body": (
             "Aucun paiement ne peut être effectué depuis cette page. Si un "
@@ -153,7 +153,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         ),
     },
     "ar": {
-        "title": "ShipTrip — الدفع",
+        "title": "Wassla — الدفع",
         "languages": "اللغة",
         "amount_paid": "المبلغ المدفوع",
         "amount_pending": "المبلغ قيد التأكيد",
@@ -161,7 +161,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "success_title": "تمّ الدفع",
         "close_guest": "يمكنك إغلاق هذه الصفحة.",
         "close_app": (
-            "يمكنك إغلاق هذه الصفحة والعودة إلى تطبيق ShipTrip، فهو يتحدّث "
+            "يمكنك إغلاق هذه الصفحة والعودة إلى تطبيق Wassla، فهو يتحدّث "
             "تلقائيًا."
         ),
         "receipt_sent": "أُرسل إيصال الدفع إلى بريدك الإلكتروني.",
@@ -170,7 +170,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "paid_title": "تمّ هذا الدفع من قبل",
         "paid_body_guest": "لا حاجة إلى أي إجراء آخر. يمكنك إغلاق هذه الصفحة.",
         "paid_body_app": (
-            "لا حاجة إلى أي إجراء آخر. عُد إلى تطبيق ShipTrip للمتابعة."
+            "لا حاجة إلى أي إجراء آخر. عُد إلى تطبيق Wassla للمتابعة."
         ),
         "unapplied_refund": (
             "لم يعد دفعك ضروريًا، لذلك سيُعاد إليك المبلغ كاملًا."
@@ -189,7 +189,7 @@ RETURN_COPY: dict[str, dict[str, str]] = {
         "cancelled_title": "أُلغي الدفع",
         "cancelled_body": "لم يُسجَّل أي دفع مكتمل.",
         "retry_guest": "لإعادة المحاولة، افتح رابط الدفع الذي أُرسل إليك.",
-        "retry_app": "لإعادة المحاولة، عُد إلى تطبيق ShipTrip.",
+        "retry_app": "لإعادة المحاولة، عُد إلى تطبيق Wassla.",
         "inactive_title": "لم يعد هذا الرابط صالحًا",
         "inactive_body": (
             "لا يمكن الدفع من هذه الصفحة. إن كان الدفع لا يزال مطلوبًا، "
@@ -221,7 +221,7 @@ def _dinars(amount_minor: int, exponent: int, lang: str) -> str:
 
 
 def _receipt_line(attempt: PaymentAttempt, t: dict) -> str:
-    """Only when ShipTrip really is sending this payer a receipt.
+    """Only when Wassla really is sending this payer a receipt.
 
     Email must be switched on, the payer must have given an address, and the
     outbox must hold a live (pending or dispatched) receipt for this very

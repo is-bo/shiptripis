@@ -1101,7 +1101,7 @@ class _SealHeroState extends State<_SealHero>
               painter: _FlourishPainter(
                 t: _controller.value,
                 ring: c.seal,
-                tick: c.brand,
+                tick: c.brandInk,
               ),
             ),
           ),
@@ -1135,7 +1135,7 @@ class _SealHeroState extends State<_SealHero>
         PositionedDirectional(
           bottom: 8,
           end: 12,
-          child: WaxSeal(glyph: '✓', diameter: 48, color: c.brand),
+          child: WaxSeal(glyph: '✓', diameter: 48, color: c.success),
         ),
         PositionedDirectional(
           top: 8,

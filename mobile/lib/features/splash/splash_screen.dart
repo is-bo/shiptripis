@@ -123,7 +123,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.2,
-                      color: c.brand,
+                      color: c.brandInk,
                     ),
                   ),
                 ),

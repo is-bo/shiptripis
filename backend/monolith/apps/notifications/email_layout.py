@@ -18,9 +18,8 @@ Constraints this file works inside:
 
 * **Email HTML, not web HTML.** Tables for layout, attributes for structure,
   inline styles for everything that matters. No flexbox, no grid, no external
-  stylesheet, no web font, no image — including no logo image, because a
-  blocked remote image is the normal case and a wordmark that disappears is
-  worse than one set in type.
+  stylesheet or web font. The supplied logo uses a first-party PNG with alt
+  text; a text masthead remains available without a configured public origin.
 * **Narrow clients first.** One 600px column that collapses to full width, a
   16px floor on body text, and generous tap targets; the progressive-enhancement
   `<style>` block is allowed to be ignored entirely.
@@ -33,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from html import escape
+from urllib.parse import urlsplit
 
 from django.utils.translation import gettext as _
 
@@ -97,12 +97,12 @@ def _footer_lines(support_email: str = "") -> tuple[str, ...]:
             else _("Questions? Reply to this email.")
         ),
         _(
-            "ShipTrip will never ask you for a pickup or delivery code, and will "
+            "Wassla will never ask you for a pickup or delivery code, and will "
             "never ask you to share one before the parcel is in your hands."
         ),
         _(
             "You are receiving this because of a delivery or account action on "
-            "ShipTrip. This is a transactional message, not marketing."
+            "Wassla. This is a transactional message, not marketing."
         ),
     )
 
@@ -303,9 +303,9 @@ def to_html(
     )
     home_link = (
         f'<a href="{escape(site_url, quote=True)}" dir="ltr" style="color:{INK_MUTE};'
-        f'text-decoration:underline;direction:ltr;unicode-bidi:embed;">ShipTrip</a>'
+        f'text-decoration:underline;direction:ltr;unicode-bidi:embed;">Wassla</a>'
         if site_url
-        else "ShipTrip"
+        else "Wassla"
     )
 
     transactional_line = _(
@@ -313,9 +313,22 @@ def to_html(
         "%(shiptrip)s. This is a transactional message, not marketing."
     ) % {"shiptrip": home_link}
     safety_line = _(
-        "ShipTrip will never ask you for a pickup or delivery code, and will "
+        "Wassla will never ask you for a pickup or delivery code, and will "
         "never ask you to share one before the parcel is in your hands."
     )
+
+    # Keep the existing configured origin and email delivery contract. The
+    # supplied opaque banner stays legible if the client inverts the paper.
+    origin = urlsplit(site_url)
+    masthead = '<span dir="ltr">Wassla</span>'
+    if origin.scheme in {"http", "https"} and origin.netloc:
+        logo_url = f"{origin.scheme}://{origin.netloc}/assets/branding/wassla-email.png"
+        masthead = (
+            f'<img src="{escape(logo_url, quote=True)}" alt="Wassla" '
+            'width="180" height="61" border="0" '
+            'style="display:inline-block;width:180px;max-width:100%;height:auto;'
+            'vertical-align:middle;background-color:#F8F6F1;color:#042D49;">'
+        )
 
     return f"""<!doctype html>
 <html lang="{escape(language, quote=True)}" dir="{direction}">
@@ -348,13 +361,12 @@ def to_html(
              cellspacing="0" border="0"
              style="width:600px;max-width:600px;border-collapse:separate;">
 
-        <!-- Masthead: a wordmark set in type, plus the airmail rule. No image,
-             because a blocked image is the normal case. -->
+        <!-- Supplied artwork with readable fallback, plus the airmail rule. -->
         <tr>
           <td class="st-pad" align="{alignment}" style="padding:0 32px 14px;text-align:{alignment};">
             <span style="color:{INK};font-size:20px;font-weight:700;
                          letter-spacing:-0.3px;
-                         font-family:Georgia,'Times New Roman',Times,serif;">ShipTrip</span>
+                         font-family:Georgia,'Times New Roman',Times,serif;">{masthead}</span>
             <span dir="auto" style="color:{INK_MUTE};font-size:12px;{label_style}">
               &nbsp;&nbsp;{escape(_("EU ↔ Algeria"))}</span>
           </td>

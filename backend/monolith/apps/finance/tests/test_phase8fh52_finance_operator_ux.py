@@ -253,12 +253,12 @@ def test_overview_is_five_calm_zones_in_operator_words(world):
     # The three amounts that are routinely confused, named as different things.
     for key, label in (
         ("gross_funded", "Money processed"),
-        ("recognized_revenue", "ShipTrip earned"),
+        ("recognized_revenue", "Wassla earned"),
         ("traveler_outstanding", "Owed to Travelers"),
     ):
         assert label in markup
         assert format_eur(snapshot["metrics"][key]["amount_eur_cents"]) in markup
-    for jargon in ("Gross funded volume", "Recognised ShipTrip revenue", "Rail"):
+    for jargon in ("Gross funded volume", "Recognised Wassla revenue", "Rail"):
         assert jargon not in markup, jargon
 
     # K3 does not claim a reconciliation verdict it did not compute. The

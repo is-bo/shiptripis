@@ -1,4 +1,4 @@
-"""ShipTrip V1 offer APIs.
+"""Wassla V1 offer APIs.
 
 These endpoints deliberately do not reuse the legacy airport/DZD write paths.
 All money is calculated by the server in EUR cents from one versioned business
@@ -66,7 +66,7 @@ def _product_retired_response() -> Response:
     return Response(
         {
             "code": "product_request_retired",
-            "detail": "ProductRequest/Kaba offer mutations are retired in ShipTrip V1.",
+            "detail": "ProductRequest/Kaba offer mutations are retired in Wassla V1.",
         },
         status=status.HTTP_410_GONE,
     )
@@ -148,7 +148,7 @@ class RetiredLegacyMatchingWriteView(APIView):
                 "code": "legacy_matching_flow_retired",
                 "detail": (
                     "Legacy traveler-first and DZD matching writes are retired. "
-                    "Use the ShipTrip V1 sender proposal endpoint."
+                    "Use the Wassla V1 sender proposal endpoint."
                 ),
             },
             status=status.HTTP_410_GONE,

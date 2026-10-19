@@ -14,14 +14,15 @@ invalid or expired state renders the same neutral page as a valid one, so a
 forwarded or guessed link discloses nothing.
 
 Trilingual on one page because a system browser opened it outside the app and
-carries no ShipTrip locale.
+carries no Wassla locale.
 {% endcomment %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>ShipTrip — payout setup</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <title>Wassla — payout setup</title>
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -50,6 +51,7 @@ carries no ShipTrip locale.
       background: #1b1a18; color: #faf7f2;
       font-weight: 700; letter-spacing: .02em;
     }
+    .brand-logo { display: block; width: 144px; height: auto; object-fit: contain; }
     h1 { font-size: 1.25rem; margin: 18px 0 6px; }
     p { margin: 0 0 14px; }
     .lead { color: #46423c; }
@@ -71,27 +73,27 @@ carries no ShipTrip locale.
 </head>
 <body>
   <main>
-    <span class="mark" aria-hidden="true">ST</span>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="/assets/branding/wassla-primary-ivory.svg"><img class="brand-logo" src="/assets/branding/wassla-primary-navy.svg" width="1360" height="346" alt="Wassla"></picture>
     {% if not valid %}
       <h1>This setup link has expired</h1>
       <p class="lead">
-        Stripe&rsquo;s setup links are short-lived on purpose. Open ShipTrip and
+        Stripe&rsquo;s setup links are short-lived on purpose. Open Wassla and
         tap <strong>Resume setup</strong> on your payout method to get a fresh
         one. Nothing you already entered has been lost.
       </p>
     {% elif outcome == "refresh" %}
       <h1>Let&rsquo;s get you a fresh link</h1>
       <p class="lead">
-        This setup link is no longer usable. Open ShipTrip and tap
+        This setup link is no longer usable. Open Wassla and tap
         <strong>Resume setup</strong> on your payout method; Stripe will pick up
         where you left off.
       </p>
     {% else %}
       <h1>Thanks — we&rsquo;re checking with Stripe</h1>
       <p class="lead">
-        ShipTrip asks Stripe directly whether your payout account is ready, so
+        Wassla asks Stripe directly whether your payout account is ready, so
         this page cannot confirm it from the fact that you got here. You can
-        close this tab; open ShipTrip and your payout method will show its
+        close this tab; open Wassla and your payout method will show its
         current state.
       </p>
     {% endif %}
@@ -102,11 +104,11 @@ carries no ShipTrip locale.
       <h2>Français</h2>
       <p>
         {% if valid and outcome == "return" %}
-          Merci. ShipTrip vérifie directement auprès de Stripe si votre compte
+          Merci. Wassla vérifie directement auprès de Stripe si votre compte
           de paiement est prêt&nbsp;; cette page ne peut donc pas vous le
-          confirmer. Vous pouvez fermer cet onglet et rouvrir ShipTrip.
+          confirmer. Vous pouvez fermer cet onglet et rouvrir Wassla.
         {% else %}
-          Ce lien de configuration a expiré. Ouvrez ShipTrip et touchez
+          Ce lien de configuration a expiré. Ouvrez Wassla et touchez
           «&nbsp;Reprendre la configuration&nbsp;» sur votre moyen de paiement
           pour en obtenir un nouveau. Rien de ce que vous avez saisi n&rsquo;est
           perdu.
@@ -118,11 +120,11 @@ carries no ShipTrip locale.
       <h2>العربية</h2>
       <p>
         {% if valid and outcome == "return" %}
-          شكرًا لك. تتحقّق ShipTrip مباشرةً من Stripe ممّا إذا كان حساب الدفع
+          شكرًا لك. تتحقّق Wassla مباشرةً من Stripe ممّا إذا كان حساب الدفع
           جاهزًا، لذلك لا يمكن لهذه الصفحة تأكيد ذلك. يمكنك إغلاق هذه النافذة
-          وفتح تطبيق ShipTrip.
+          وفتح تطبيق Wassla.
         {% else %}
-          انتهت صلاحية رابط الإعداد هذا. افتح تطبيق ShipTrip واضغط على
+          انتهت صلاحية رابط الإعداد هذا. افتح تطبيق Wassla واضغط على
           «متابعة الإعداد» في وسيلة الدفع للحصول على رابط جديد. لم يُفقد أي
           شيء ممّا أدخلته.
         {% endif %}

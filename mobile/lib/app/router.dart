@@ -714,7 +714,7 @@ class RouteNotFoundScreen extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () => context.goHome(),
-              child: const Text('ShipTrip'),
+              child: const Text('Wassla'),
             ),
           ],
         ),

@@ -533,7 +533,10 @@ class _ArrivalSectionState extends ConsumerState<_ArrivalSection> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.flight_land_rounded, color: context.colors.brand),
+                  Icon(
+                    Icons.flight_land_rounded,
+                    color: context.colors.brandInk,
+                  ),
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: Text(
@@ -1186,7 +1189,7 @@ class _RevealedRating extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.star_rounded, size: 20, color: c.brand),
+              Icon(Icons.star_rounded, size: 20, color: c.brandInk),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(

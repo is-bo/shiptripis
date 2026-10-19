@@ -256,7 +256,7 @@ class _Row extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 18,
-                    color: notification.isUnread ? c.brand : c.textTertiary,
+                    color: notification.isUnread ? c.brandInk : c.textTertiary,
                   ),
                 ),
                 const SizedBox(width: AppSpace.md),

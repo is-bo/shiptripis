@@ -282,7 +282,7 @@ EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 # invitation and delivery-code messages use Django's trusted final SMTP adapter
 # so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
 DEFAULT_FROM_EMAIL = env.str(
-    "DEFAULT_FROM_EMAIL", default="ShipTrip <noreply@shiptrip.dz>"
+    "DEFAULT_FROM_EMAIL", default="Wassla <noreply@shiptrip.dz>"
 )
 # Public links and support identity used by transactional templates. These are
 # intentionally non-secret; SMTP/API credentials remain in the email worker's

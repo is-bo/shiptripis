@@ -89,7 +89,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               stamp: l.authVerifyStamp,
               headline: l.authVerifyEmailTitle,
               subhead: l.authVerifySubhead,
-              stampColor: context.colors.brand,
+              stampColor: context.colors.brandInk,
             ),
             InfoNotice(
               message: l.authVerifyEmailBody(widget.email),

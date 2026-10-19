@@ -318,7 +318,7 @@ class _WhyDisclosureState extends State<_WhyDisclosure> {
                   Flexible(
                     child: Text(
                       widget.title,
-                      style: text.labelLarge?.copyWith(color: c.brand),
+                      style: text.labelLarge?.copyWith(color: c.brandInk),
                     ),
                   ),
                   Icon(
@@ -326,7 +326,7 @@ class _WhyDisclosureState extends State<_WhyDisclosure> {
                         ? Icons.expand_less_rounded
                         : Icons.expand_more_rounded,
                     size: 18,
-                    color: c.brand,
+                    color: c.brandInk,
                   ),
                 ],
               ),

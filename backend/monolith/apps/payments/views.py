@@ -81,7 +81,7 @@ def _v1_payment_unavailable() -> Response:
 def _product_payment_unavailable() -> Response:
     return Response(
         {
-            "detail": "ProductRequest/Kaba payments are retired in ShipTrip V1.",
+            "detail": "ProductRequest/Kaba payments are retired in Wassla V1.",
             "code": "product_request_retired",
         },
         status=http.HTTP_410_GONE,

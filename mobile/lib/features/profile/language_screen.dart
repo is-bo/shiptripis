@@ -263,11 +263,11 @@ class _Option extends StatelessWidget {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: c.brand,
+                      color: c.brandInk,
                     ),
                   )
                 else if (selected)
-                  Icon(Icons.check_rounded, size: 20, color: c.brand)
+                  Icon(Icons.check_rounded, size: 20, color: c.brandInk)
                 else
                   const SizedBox(width: 20),
               ],

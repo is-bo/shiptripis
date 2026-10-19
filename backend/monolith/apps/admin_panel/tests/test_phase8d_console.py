@@ -493,7 +493,7 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         response = self.dispatch("/admin/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        self.assertIn("ShipTrip commission", body)
+        self.assertIn("Wassla commission", body)
         self.assertIn("DZD for €1", body)
         self.assertIn("Payout protection window", body)
         self.assertIn("Traveler receives", body)
@@ -501,7 +501,7 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
         # not a package with a minimum sender purchase.
         self.assertIn("Boost commission", body)
         self.assertIn("Smallest boost", body)
-        self.assertIn("ShipTrip commission on boosts", body)
+        self.assertIn("Wassla commission on boosts", body)
         for secret_name in ("STRIPE_SECRET_KEY", "CHARGILY_API_KEY", "SMTP_PASSWORD"):
             self.assertNotIn(secret_name, body)
 
@@ -738,7 +738,7 @@ class ConsoleDisputeFinanceTests(ConsoleHttpMixin, TestCase):
         for label in (
             "Sender total",
             "Traveler reward",
-            "ShipTrip fee",
+            "Wassla fee",
             "Pickup confirmed",
             "Delivery confirmed",
             "Preview consequence",

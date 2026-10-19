@@ -303,7 +303,7 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
                         Icon(
                           Icons.document_scanner_outlined,
                           size: 20,
-                          color: c.brand,
+                          color: c.brandInk,
                         ),
                         const SizedBox(width: AppSpace.sm),
                         Expanded(

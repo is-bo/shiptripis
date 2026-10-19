@@ -1,4 +1,4 @@
-/// Phase 6D: the language ShipTrip writes to somebody in.
+/// Phase 6D: the language Wassla writes to somebody in.
 ///
 /// Two things are being defended here, and they are different things.
 ///

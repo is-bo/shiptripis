@@ -86,7 +86,7 @@ DEFINITIONS = {
         "net_funded = gross_funded - refunds_applied",
     ),
     "recognized_revenue": Definition(
-        "Recognized ShipTrip revenue",
+        "Recognized Wassla revenue",
         "Net platform-share credits with final earning evidence.",
         "PLATFORM_COMMISSION entries + Deal.completed_at or final settlement evidence",
         "Clean completion or final settlement; later correction at its own posting time.",
@@ -212,7 +212,7 @@ for key, purpose in (
 
 DEFINITIONS["boost_commission"] = Definition(
     "Boost Commission",
-    "ShipTrip commission on the Boost portion of funded deliveries.",
+    "Wassla commission on the Boost portion of funded deliveries.",
     "platform_commission ledger entries keyed deal_boost_allocation:",
     "additive_commission_v2 boosts only",
     "Retired paid visibility packages, whose platform share is inside "
@@ -241,7 +241,7 @@ for key, basis, description in (
     (
         "user_disputed_payouts",
         "Current snapshot",
-        "Distinct outstanding payouts with an active ShipTrip user dispute.",
+        "Distinct outstanding payouts with an active Wassla user dispute.",
     ),
     (
         "provider_disputed_payouts",
