@@ -6,13 +6,13 @@
 	     crashes on first camera/library access without these strings, and they
 	     are what the permission sheet shows, so they name the actual purpose. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Waçla uses your camera to photograph your ID document and your face so we can verify your identity.</string>
+	<string>Wassla uses your camera to photograph your ID document and your face so we can verify your identity.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Waçla lets you pick an existing photo of your ID document instead of taking a new one.</string>
+	<string>Wassla lets you pick an existing photo of your ID document instead of taking a new one.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Waçla</string>
+	<string>Wassla</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -20,7 +20,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Waçla</string>
+	<string>Wassla</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

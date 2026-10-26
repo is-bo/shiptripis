@@ -225,7 +225,7 @@ class AppChoiceSheet<T> extends StatelessWidget {
                     ? null
                     : Icon(
                         option.icon,
-                        color: isSelected ? c.brand : c.textTertiary,
+                        color: isSelected ? c.brandInk : c.textTertiary,
                       ),
                 title: Text(option.label, style: text.bodyLarge),
                 subtitle: option.detail == null
@@ -235,7 +235,7 @@ class AppChoiceSheet<T> extends StatelessWidget {
                         style: text.bodySmall?.copyWith(color: c.textSecondary),
                       ),
                 trailing: isSelected
-                    ? Icon(Icons.check_rounded, color: c.brand)
+                    ? Icon(Icons.check_rounded, color: c.brandInk)
                     : null,
                 enabled: option.enabled,
                 onTap: option.enabled

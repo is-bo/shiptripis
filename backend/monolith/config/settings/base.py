@@ -282,7 +282,7 @@ EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 # invitation and delivery-code messages use Django's trusted final SMTP adapter
 # so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
 DEFAULT_FROM_EMAIL = env.str(
-    "DEFAULT_FROM_EMAIL", default="Waçla <noreply@example.invalid>"
+    "DEFAULT_FROM_EMAIL", default="Wassla <noreply@example.invalid>"
 )
 # Public links and support identity used by transactional templates. These are
 # intentionally non-secret; SMTP/API credentials remain in the email worker's
@@ -290,7 +290,7 @@ DEFAULT_FROM_EMAIL = env.str(
 FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="")
 EMAIL_SUPPORT_ADDR = env.str("EMAIL_SUPPORT_ADDR", default="")
 EMAIL_REPLY_TO = env.str("EMAIL_REPLY_TO", default="").strip() or EMAIL_SUPPORT_ADDR
-EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Waçla").strip() or "Waçla"
+EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Wassla").strip() or "Wassla"
 EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="")
 if EMAIL_FROM_ADDR:
     from email.utils import formataddr

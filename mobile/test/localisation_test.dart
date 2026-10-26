@@ -37,7 +37,7 @@ Future<L> _catalogue(WidgetTester tester, Locale locale) async {
 
 void main() {
   for (final locale in [Locale('en'), Locale('fr'), Locale('ar')]) {
-    testWidgets('Waçla wordmark and accessibility name in $locale', (
+    testWidgets('Wassla wordmark and accessibility name in $locale', (
       tester,
     ) async {
       final semantics = tester.ensureSemantics();
@@ -48,11 +48,11 @@ void main() {
           locale: locale,
         );
 
-        expect(find.text('Waçla'), findsOneWidget);
-        expect(find.bySemanticsLabel('Waçla'), findsOneWidget);
+        expect(find.byType(Image), findsOneWidget);
+        expect(find.bySemanticsLabel('Wassla'), findsOneWidget);
         final l = L.of(tester.element(find.byType(ShipTripMark)));
-        expect(l.appName, 'Waçla');
-        expect(l.profilePassportStamp, contains('WAÇLA'));
+        expect(l.appName, 'Wassla');
+        expect(l.profilePassportStamp.toUpperCase(), contains('WASSLA'));
       } finally {
         semantics.dispose();
       }

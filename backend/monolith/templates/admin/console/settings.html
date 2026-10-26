@@ -25,14 +25,14 @@
   <section class="st-card">
     <p class="st-eyebrow">Pricing</p>
     <div class="st-card-head">
-      <div><h2>Waçla commission</h2></div>
+      <div><h2>Wassla commission</h2></div>
       <span class="st-chip st-info">Currently {{ commission.percent }}</span>
     </div>
     <p>The commission is added on top of whatever the Traveler is paid. It is not taken out of their reward.</p>
     <div class="st-worked">
       <div><span>Traveler earns</span><strong>{{ commission.example.traveler_reward }}</strong></div>
       <div class="st-worked-op" aria-hidden="true">+</div>
-      <div><span>Waçla earns</span><strong>{{ commission.example.platform_fee }}</strong></div>
+      <div><span>Wassla earns</span><strong>{{ commission.example.platform_fee }}</strong></div>
       <div class="st-worked-op" aria-hidden="true">=</div>
       <div class="is-result"><span>Sender pays</span><strong>{{ commission.example.sender_total }}</strong></div>
     </div>
@@ -83,7 +83,7 @@
     <section class="st-card" id="st-settings-providers">
       <p class="st-eyebrow">Payments and communication</p>
       <h2>Provider availability</h2>
-      <p>These switches say whether Waçla <em>offers</em> a rail. Credentials and webhook secrets live in deployment configuration and are never editable or visible here.</p>
+      <p>These switches say whether Wassla <em>offers</em> a rail. Credentials and webhook secrets live in deployment configuration and are never editable or visible here.</p>
       <ul class="st-reading-list">
         {% for provider in providers %}
         <li>
@@ -114,11 +114,11 @@
     <section class="st-card">
       <p class="st-eyebrow">Boosts</p>
       <h2>Boost commission</h2>
-      <p class="st-keyvalues-note">A boost is extra reward the Sender adds to their own request. The Traveler receives all of it; Waçla&rsquo;s commission is charged on top, at the rate below, which is set independently of the delivery commission.</p>
+      <p class="st-keyvalues-note">A boost is extra reward the Sender adds to their own request. The Traveler receives all of it; Wassla&rsquo;s commission is charged on top, at the rate below, which is set independently of the delivery commission.</p>
       <div class="st-band">
         <div><span>Smallest boost</span><strong>{{ boost_economics.minimum }}</strong></div>
         <div><span>Largest boost</span><strong>{{ boost_economics.maximum }}</strong></div>
-        <div class="is-lead"><span>Waçla commission</span><strong>{{ boost_economics.commission }}</strong></div>
+        <div class="is-lead"><span>Wassla commission</span><strong>{{ boost_economics.commission }}</strong></div>
         <div><span>Traveler receives</span><strong>{{ boost_economics.traveler_share }}</strong></div>
       </div>
       <form method="post" action="#st-settings-boost" class="st-form">{% csrf_token %}

@@ -614,7 +614,7 @@ class _SortPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             borderRadius: AppRadius.rPill,
-            border: Border.all(color: isSelected ? c.brand : c.hairline),
+            border: Border.all(color: isSelected ? c.brandInk : c.hairline),
           ),
           child: Text(
             label,
@@ -887,12 +887,16 @@ class _TravelerCard extends StatelessWidget {
                     Text(
                       l.findTravelersViewTrip,
                       style: text.labelMedium?.copyWith(
-                        color: c.brand,
+                        color: c.brandInk,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(width: 2),
-                    Icon(Icons.chevron_right_rounded, size: 16, color: c.brand),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: c.brandInk,
+                    ),
                   ],
                 )
               else
@@ -1210,7 +1214,7 @@ class _DetailedRouteStops extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: i == 0 || i == stops.length - 1
-                            ? c.brand
+                            ? c.brandInk
                             : c.textTertiary,
                       ),
                     ),
@@ -1465,7 +1469,7 @@ class _TripChecks extends StatelessWidget {
                     child: Icon(
                       Icons.verified_user_outlined,
                       size: 16,
-                      color: c.brand,
+                      color: c.success,
                     ),
                   ),
                   const SizedBox(width: AppSpace.sm),

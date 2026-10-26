@@ -1,4 +1,4 @@
-# Waçla — Claude Handoff
+# Wassla — Claude Handoff
 
 This repo is being co-built with Claude Code. If you're a contributor's Claude
 instance picking up the work, **read this file first**, then ingest the session

@@ -365,7 +365,7 @@ class _PlaceRow extends StatelessWidget {
           Icon(
             place.isExact ? Icons.home_outlined : Icons.flight_takeoff_rounded,
             size: 20,
-            color: c.brand,
+            color: c.brandInk,
           ),
           const SizedBox(width: AppSpace.md),
           Expanded(
@@ -486,7 +486,7 @@ class _Crosshair extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: c.brand, width: 2),
+              border: Border.all(color: c.brandInk, width: 2),
               color: c.surface.withValues(alpha: 0.35),
             ),
           ),

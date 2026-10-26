@@ -149,7 +149,7 @@ class _StopRow extends StatelessWidget {
 
     final nodeColour = stop.isCurrent
         ? c.attention
-        : (stop.isReached ? c.brand : c.textTertiary);
+        : (stop.isReached ? c.success : c.textTertiary);
 
     return IntrinsicHeight(
       child: Row(

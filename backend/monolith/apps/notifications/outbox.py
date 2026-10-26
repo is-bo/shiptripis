@@ -371,14 +371,14 @@ def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
         else _("Hello,")
     )
     return EmailDocument(
-        subject=_("Your Waçla delivery code"),
+        subject=_("Your Wassla delivery code"),
         preheader=_("Keep this code private until the parcel is in your hands."),
         eyebrow=_("Delivery"),
         heading=_("Your parcel is on its way"),
         paragraphs=(
             greeting,
             _(
-                "%(sender_name)s has sent you a parcel through Waçla and it is "
+                "%(sender_name)s has sent you a parcel through Wassla and it is "
                 "on its way."
             )
             % {"sender_name": sender_name},
@@ -392,7 +392,7 @@ def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
         callout=(
             _(
                 "Never share this code by phone, message or email with anyone "
-                "before you have the parcel. Waçla will never ask you for it."
+                "before you have the parcel. Wassla will never ask you for it."
             )
         ),
         facts=_facts({"deal_reference": reference}),
@@ -410,10 +410,10 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
 
     if kind == OutboundMessage.Kind.EMAIL_VERIFICATION:
         return EmailDocument(
-            subject=_("Confirm your Waçla email"),
+            subject=_("Confirm your Wassla email"),
             preheader=_("Use this code to confirm your email address."),
             eyebrow=_("Account"),
-            heading=_("Welcome to Waçla"),
+            heading=_("Welcome to Wassla"),
             paragraphs=(
                 _(
                     "Enter this code on the verification screen to confirm your "
@@ -423,14 +423,14 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             highlight=(_("Your verification code"), resolve_secret(message)),
             callout=(
                 _(
-                    "Use this code before it expires. Waçla will never ask you to share "
+                    "Use this code before it expires. Wassla will never ask you to share "
                     "this code outside the verification screen."
                 )
             ),
         )
     if kind == OutboundMessage.Kind.PASSWORD_RESET:
         return EmailDocument(
-            subject=_("Reset your Waçla password"),
+            subject=_("Reset your Wassla password"),
             preheader=_("Use this private code to reset your password."),
             eyebrow=_("Account security"),
             heading=_("Reset your password"),
@@ -457,15 +457,15 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             "trust_verification": _("Trust / Verification"), "super_admin": _("Super Admin"),
         }
         return EmailDocument(
-            subject=_("You have been invited to Waçla Operations"),
+            subject=_("You have been invited to Wassla Operations"),
             preheader=_("Use your private link to accept this invitation."),
             eyebrow=_("Operations"),
-            heading=_("You have been invited to Waçla Operations"),
+            heading=_("You have been invited to Wassla Operations"),
             paragraphs=(
-                _("A Waçla administrator invited you to join the operations team."),
+                _("A Wassla administrator invited you to join the operations team."),
             ),
             action=(_("Accept your invitation"), invite_url),
-            callout=_("This private link can be used once. If you were not expecting this, contact Waçla support."),
+            callout=_("This private link can be used once. If you were not expecting this, contact Wassla support."),
             facts=((_("Role"), roles.get(context.get("role"), _("Operations"))),),
         )
     if kind == OutboundMessage.Kind.RECIPIENT_DELIVERY_CODE:
@@ -475,7 +475,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
     if kind == OutboundMessage.Kind.KYC_STATUS:
         approved = context.get("status") == "approved"
         return EmailDocument(
-            subject=_("Waçla identity verification update"),
+            subject=_("Wassla identity verification update"),
             preheader=(
                 _("Your identity verification is approved.")
                 if approved
@@ -498,13 +498,13 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                     if context.get("reason")
                     else ""
                 ),
-                _("Open the Waçla app to see the next step."),
+                _("Open the Wassla app to see the next step."),
             ),
         )
     if kind == OutboundMessage.Kind.FLIGHT_PROOF_STATUS:
         approved = context.get("status") == "approved"
         return EmailDocument(
-            subject=_("Waçla flight proof update"),
+            subject=_("Wassla flight proof update"),
             preheader=(
                 _("Your flight proof is approved.")
                 if approved
@@ -527,7 +527,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                     if context.get("reason")
                     else ""
                 ),
-                _("Open the Waçla app to see the next step."),
+                _("Open the Wassla app to see the next step."),
             ),
             facts=(
                 (_("Journey reference"), str(context.get("journey_reference", ""))),
@@ -535,13 +535,13 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
     if kind == OutboundMessage.Kind.PAYMENT_REQUIRED:
         return EmailDocument(
-            subject=_("Payment needed for your Waçla delivery"),
-            preheader=_("Open Waçla to review the payment needed."),
+            subject=_("Payment needed for your Wassla delivery"),
+            preheader=_("Open Wassla to review the payment needed."),
             eyebrow=_("Payment"),
             heading=_("A payment is needed to continue"),
             paragraphs=(
                 _("A payment is required before this delivery can continue."),
-                _("Open Waçla to review the amount and available provider."),
+                _("Open Wassla to review the amount and available provider."),
             ),
             facts=_facts(
                 context,
@@ -551,7 +551,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
     if kind == OutboundMessage.Kind.PAYMENT_PROCESSING:
         return EmailDocument(
-            subject=_("Your Waçla payment is processing"),
+            subject=_("Your Wassla payment is processing"),
             preheader=_("The provider is still confirming your payment."),
             eyebrow=_("Payment"),
             heading=_("Your payment is being confirmed"),
@@ -568,13 +568,13 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
     if kind == OutboundMessage.Kind.PAYMENT_FAILED:
         return EmailDocument(
-            subject=_("Your Waçla payment needs attention"),
-            preheader=_("The payment failed; open Waçla to try again."),
+            subject=_("Your Wassla payment needs attention"),
+            preheader=_("The payment failed; open Wassla to try again."),
             eyebrow=_("Payment"),
             heading=_("That payment did not go through"),
             paragraphs=(
                 _("The payment provider could not complete this attempt."),
-                _("Open Waçla to retry or choose another available provider."),
+                _("Open Wassla to retry or choose another available provider."),
             ),
             facts=_facts(
                 context,
@@ -584,7 +584,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
     if kind == OutboundMessage.Kind.PAYMENT_SUCCEEDED:
         return EmailDocument(
-            subject=_("Waçla payment confirmed"),
+            subject=_("Wassla payment confirmed"),
             preheader=_("Your payment is confirmed."),
             eyebrow=_("Payment"),
             heading=_("Your payment is confirmed"),
@@ -600,11 +600,11 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         failed = context.get("status") == "failed"
         return EmailDocument(
             subject=(
-                _("Your Waçla payment receipt")
+                _("Your Wassla payment receipt")
                 if succeeded
-                else _("Your Waçla guest payment needs attention")
+                else _("Your Wassla guest payment needs attention")
                 if failed
-                else _("Your Waçla guest payment")
+                else _("Your Wassla guest payment")
             ),
             preheader=(
                 _("Your guest payment was confirmed.")
@@ -623,7 +623,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             paragraphs=(
                 (
-                    _("Waçla received this payment for the reference below.")
+                    _("Wassla received this payment for the reference below.")
                     if succeeded
                     else _("The provider could not complete this guest payment.")
                     if failed
@@ -632,9 +632,9 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             callout=(
                 _(
-                    "This payment does not create a Waçla account or give access "
+                    "This payment does not create a Wassla account or give access "
                     "to the delivery. Keep the reference private and contact "
-                    "Waçla support if you need help."
+                    "Wassla support if you need help."
                 )
             ),
             facts=_facts(
@@ -646,7 +646,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
     if kind == OutboundMessage.Kind.REFUND_STATUS:
         succeeded = context.get("status") == "succeeded"
         return EmailDocument(
-            subject=_("Waçla refund update"),
+            subject=_("Wassla refund update"),
             preheader=(
                 _("Your refund is complete.")
                 if succeeded
@@ -660,9 +660,9 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             paragraphs=(
                 (
-                    _("Waçla has completed the refund shown below.")
+                    _("Wassla has completed the refund shown below.")
                     if succeeded
-                    else _("Waçla has started the refund shown below.")
+                    else _("Wassla has started the refund shown below.")
                 ),
                 _("The time it takes to appear depends on the payment provider."),
             ),
@@ -674,11 +674,11 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
     if kind == OutboundMessage.Kind.EVIDENCE_REQUEST:
         return EmailDocument(
-            subject=_("More information is needed for your Waçla case"),
-            preheader=_("Open Waçla to review the evidence request."),
+            subject=_("More information is needed for your Wassla case"),
+            preheader=_("Open Wassla to review the evidence request."),
             eyebrow=_("Dispute"),
             heading=_("We need a little more information"),
-            paragraphs=(_("The Waçla trust team requested additional evidence."),),
+            paragraphs=(_("The Wassla trust team requested additional evidence."),),
             callout=_(
                 "Open the app to upload evidence. Never include a handover code."
             ),
@@ -690,9 +690,9 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
     if kind == OutboundMessage.Kind.SECURITY_EVENT:
         password_reset = context.get("event") == "password_reset_completed"
         return EmailDocument(
-            subject=_("Waçla security notice"),
+            subject=_("Wassla security notice"),
             preheader=(
-                _("Your Waçla password was changed.")
+                _("Your Wassla password was changed.")
                 if password_reset
                 else _("A security or account change was made")
             ),
@@ -703,7 +703,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                 else _("A security or account change was made")
             ),
             paragraphs=(
-                _("The password for your Waçla account was changed.")
+                _("The password for your Wassla account was changed.")
                 if password_reset
                 else str(
                     context.get(
@@ -715,7 +715,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             callout=(
                 _(
                     "If you did not make this change, reset your password "
-                    "immediately and contact Waçla support."
+                    "immediately and contact Wassla support."
                 )
             ),
         )
@@ -739,13 +739,13 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
     if kind == OutboundMessage.Kind.DELIVERY_CODE_RELEASED:
         return EmailDocument(
             subject=_("Your delivery code is now available"),
-            preheader=_("Open Waçla to view the delivery code."),
+            preheader=_("Open Wassla to view the delivery code."),
             eyebrow=_("Delivery"),
             heading=_("Your delivery code is now available"),
             paragraphs=(
                 _(
                     "The safety window has passed. You can now view the delivery "
-                    "code in the Waçla app, and the recipient has been emailed "
+                    "code in the Wassla app, and the recipient has been emailed "
                     "their copy."
                 ),
             ),
@@ -834,7 +834,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
         return EmailDocument(
             subject=_("Your dispute has been resolved"),
-            preheader=_("Open Waçla to review the dispute outcome."),
+            preheader=_("Open Wassla to review the dispute outcome."),
             eyebrow=_("Dispute"),
             heading=_("Your dispute has been resolved"),
             # The outbox is durable, so a row queued before a deploy is
@@ -844,14 +844,14 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             paragraphs=(
                 (
                     _(
-                        "A Waçla administrator has resolved this dispute as: "
+                        "A Wassla administrator has resolved this dispute as: "
                         "%(resolution)s."
                     )
                     % {"resolution": resolution_label}
                     if resolution_label
                     else _(
-                        "A Waçla administrator has resolved this dispute. Open "
-                        "Waçla to see the outcome."
+                        "A Wassla administrator has resolved this dispute. Open "
+                        "Wassla to see the outcome."
                     )
                 ),
             ),
@@ -873,16 +873,16 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
         return EmailDocument(
             subject=_("Payout update"),
-            preheader=_("Your Waçla payout status was updated."),
+            preheader=_("Your Wassla payout status was updated."),
             eyebrow=_("Payout"),
             heading=_("Your payout was updated"),
             paragraphs=(
                 (
-                    _("Your Waçla payout status is now %(status)s.")
+                    _("Your Wassla payout status is now %(status)s.")
                     % {"status": payout_status}
                     if context.get("payout_status")
                     else _(
-                        "Your Waçla payout was updated. Open Waçla to see "
+                        "Your Wassla payout was updated. Open Wassla to see "
                         "its current status."
                     )
                 ),
@@ -901,7 +901,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         )
         return EmailDocument(
             subject=_("Delivery cancelled"),
-            preheader=_("This Waçla delivery has been cancelled."),
+            preheader=_("This Wassla delivery has been cancelled."),
             eyebrow=_("Delivery"),
             heading=_("This delivery has been cancelled"),
             paragraphs=(

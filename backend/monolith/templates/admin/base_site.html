@@ -1,9 +1,10 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Waçla Admin') }}{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Wassla Admin') }}{% endblock %}
 
 {% block extrastyle %}{{ block.super }}
+  <link rel="icon" href="{% static 'shiptrip/branding/favicon.svg' %}" type="image/svg+xml">
   {% comment %}The two faces the console sets are the ones it always sets, on
   every screen, above the fold. Preloading them removes the flash of Georgia
   that `font-display: swap` otherwise buys.{% endcomment %}
@@ -18,8 +19,8 @@
 {% block branding %}
 <div id="site-name">
   <a href="{% url 'admin_console:overview' %}">
-    <span class="st-brand-seal" aria-hidden="true">W</span>
-    <span class="st-brand-name">{{ site_header|default:_('Waçla Operations') }}</span>
+    <img class="st-brand-logo" src="{% static 'shiptrip/branding/wassla-primary-ivory.svg' %}" width="1360" height="346" alt="Wassla">
+    <span class="st-brand-name">{{ site_header|default:_('Wassla Operations') }}</span>
   </a>
 </div>
 {% if user.is_anonymous %}

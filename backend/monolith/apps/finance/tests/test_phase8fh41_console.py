@@ -71,9 +71,9 @@ def test_detail_reads_as_an_instruction_and_never_offers_mark_paid(configured_h4
     assert "1 EUR = 260 DZD" in body
     assert 'data-copy-exact="15600"' in body
 
-    # The instruction reads as something a person does, not something Waçla
+    # The instruction reads as something a person does, not something Wassla
     # does, and there is no one-click settlement anywhere on the page.
-    assert "Waçla does not perform this transfer." in body
+    assert "Wassla does not perform this transfer." in body
     assert "Mark paid" not in body and "Mark payout paid" not in body
     for offered in re.findall(r'name="action" value="([a-z_]+)"', body):
         assert offered in {"reveal", "prepare", "review", "hold", "clear_hold"}
@@ -244,7 +244,7 @@ def test_sent_and_paid_are_never_the_same_state(configured_h4):  # noqa: F811
     )
     sent = client.get(detail_url(payout)).content.decode()
     assert "Transfer sent" in sent
-    assert "Waçla has not recorded settlement yet." in sent
+    assert "Wassla has not recorded settlement yet." in sent
     # The state chip is the one place the two must not be interchangeable.
     assert 'class="st-chip st-info">Transfer sent</span>' in sent
     assert 'class="st-chip st-ok">Paid</span>' not in sent

@@ -350,7 +350,7 @@ def _marker_cell(row):
     if row.get("has_hold"):
         marks.append("Hold")
     if row.get("has_user_dispute"):
-        marks.append("Waçla dispute")
+        marks.append("Wassla dispute")
     if row.get("has_provider_dispute"):
         marks.append("Provider dispute")
     return marks

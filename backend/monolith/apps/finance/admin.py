@@ -157,6 +157,14 @@ class PaymentOrderAdmin(_ReadOnlyAdmin):
 
 @admin.register(PaymentAttempt)
 class PaymentAttemptAdmin(_ReadOnlyAdmin):
+    def get_form(self, request, obj=None, **kwargs):
+        # Presentation metadata only: historical model migrations stay intact.
+        kwargs["help_texts"] = {
+            **kwargs.get("help_texts", {}),
+            "guest_email": "Provider-reported guest payer email. Never a Wassla identity.",
+        }
+        return super().get_form(request, obj, **kwargs)
+
     list_display = (
         "id",
         "order",

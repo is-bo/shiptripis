@@ -1,4 +1,4 @@
-"""J7D: what a payer is told after a payment, on every surface Waçla owns.
+"""J7D: what a payer is told after a payment, on every surface Wassla owns.
 
 **The provider return page reads the order, never the query string.** A
 `result=success` on an unpaid order renders "We're confirming your payment",
@@ -10,7 +10,7 @@ still confirming, not completed, cancelled, no longer active -- each in EN, FR
 and AR, on the same shell as the guest page.
 
 **The guest is never sent to an app they do not have**, and is told about a
-receipt only when Waçla really is sending one.
+receipt only when Wassla really is sending one.
 
 **The settlement block names the payment that just happened**, so the app can
 say "you paid €X" -- or "someone else paid €X" -- without doing arithmetic.
@@ -225,7 +225,7 @@ class ReturnPageOutcomesTests(_BalanceCase):
         assert "Payment complete" in text
         assert "€25.00" in text
         assert "Payment for a delivery" in text
-        assert "go back to the Waçla app" in text
+        assert "go back to the Wassla app" in text
         # One heading, no stacked synonyms.
         for duplicate in ("Payment successful", "Payment succeeded", "Success"):
             assert duplicate not in text
@@ -239,7 +239,7 @@ class ReturnPageOutcomesTests(_BalanceCase):
         _, text = self.page(result="success")
         assert "Payment complete" in text
         assert "You can close this page." in text
-        assert "Waçla app" not in text
+        assert "Wassla app" not in text
         # Receipts are off in TEST: no promise of one.
         assert "receipt" not in text
 
@@ -288,7 +288,7 @@ class ReturnPageOutcomesTests(_BalanceCase):
         assert "nothing was charged" in text
         assert "card_declined" not in text
         assert "€25.00" in text  # still due
-        assert "To try again, go back to the Waçla app." in text
+        assert "To try again, go back to the Wassla app." in text
 
     def test_a_cancelled_checkout_is_cancelled_not_failed(self):
         attempt = open_mock_checkout(self.order)
@@ -324,7 +324,7 @@ class ReturnPageOutcomesTests(_BalanceCase):
         )
         _, text = self.page(result="failure")
         assert "open the payment link you were sent" in text
-        assert "Waçla app" not in text
+        assert "Wassla app" not in text
 
     def test_a_closed_order_and_an_unknown_reference_are_no_longer_active(self):
         cancel_order(order_id=self.order.pk, reason="j7d")

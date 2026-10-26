@@ -1,4 +1,4 @@
-# Waçla — Architecture (MVP v1)
+# Wassla — Architecture (MVP v1)
 
 Peer-to-peer delivery + product-purchase platform for Algeria. Pricing in DZD.
 

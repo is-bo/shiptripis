@@ -78,7 +78,7 @@ def main():
                             facts = page.evaluate("""() => ({
                                 content: document.documentElement.scrollWidth,
                                 rtl: getComputedStyle(document.body).direction === 'rtl',
-                                brand: document.body.textContent.includes('Waçla')
+                                brand: document.body.textContent.includes('Wassla')
                             })""")
                             results.append(
                                 {

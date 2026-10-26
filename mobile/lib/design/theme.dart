@@ -32,10 +32,10 @@ ThemeData buildAppTheme({
 
   final scheme = ColorScheme(
     brightness: brightness,
-    primary: c.brand,
-    onPrimary: c.onBrand,
+    primary: c.brandInk,
+    onPrimary: isDark ? c.brand : c.onBrand,
     primaryContainer: c.brandSoft,
-    onPrimaryContainer: c.onSuccessSoft,
+    onPrimaryContainer: c.brandStrong,
     secondary: c.attention,
     onSecondary: isDark ? const Color(0xFF2A1206) : Colors.white,
     secondaryContainer: c.attentionSoft,
@@ -165,7 +165,7 @@ ThemeData buildAppTheme({
       fillColor: c.surfaceRaised,
       hintStyle: text.bodyMedium?.copyWith(color: c.textTertiary),
       labelStyle: text.bodyMedium?.copyWith(color: c.textSecondary),
-      floatingLabelStyle: text.labelMedium?.copyWith(color: c.brand),
+      floatingLabelStyle: text.labelMedium?.copyWith(color: c.brandInk),
       errorStyle: text.bodySmall?.copyWith(color: c.danger),
       helperStyle: text.bodySmall?.copyWith(color: c.textTertiary),
       contentPadding: const EdgeInsets.symmetric(
@@ -285,12 +285,12 @@ ThemeData buildAppTheme({
         (s) => s.contains(WidgetState.selected) ? c.brand : c.neutralSoft,
       ),
       trackOutlineColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? c.brand : c.hairlineStrong,
+        (s) => s.contains(WidgetState.selected) ? c.brandInk : c.hairlineStrong,
       ),
     ),
 
     progressIndicatorTheme: ProgressIndicatorThemeData(
-      color: c.brand,
+      color: c.brandInk,
       linearTrackColor: c.neutralSoft,
       circularTrackColor: c.neutralSoft,
       linearMinHeight: 4,
@@ -301,7 +301,7 @@ ThemeData buildAppTheme({
       unselectedLabelColor: c.textTertiary,
       labelStyle: text.labelLarge,
       unselectedLabelStyle: text.labelLarge,
-      indicatorColor: c.brand,
+      indicatorColor: c.brandInk,
       indicatorSize: TabBarIndicatorSize.label,
       dividerColor: c.hairline,
       overlayColor: WidgetStatePropertyAll(c.brandSoft.withValues(alpha: 0.5)),

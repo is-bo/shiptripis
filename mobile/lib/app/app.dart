@@ -28,7 +28,7 @@ class ShipTripApp extends ConsumerWidget {
     final Locale resolved = locale ?? ref.watch(effectiveLocaleProvider);
 
     return MaterialApp.router(
-      title: 'Waçla',
+      title: 'Wassla',
       debugShowCheckedModeBanner: false,
       routerConfig: router,
 

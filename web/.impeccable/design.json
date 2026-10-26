@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-20T14:35:00Z",
-  "title": "Design System: Waçla public web",
+  "title": "Design System: Wassla public web",
   "extensions": {
     "typographyMeta": {
       "display": { "displayName": "Editorial display", "purpose": "Headlines and featured journey names." },
@@ -34,7 +34,7 @@
     {
       "name": "Brand", "kind": "nav",
       "description": "The existing serif wordmark and terracotta identity seal.",
-      "html": "<a class=\"ds-brand\" href=\"/en/\"><span class=\"ds-seal\" aria-hidden=\"true\">W</span>Waçla</a>",
+      "html": "<a class=\"ds-brand\" href=\"/en/\"><span class=\"ds-seal\" aria-hidden=\"true\">W</span>Wassla</a>",
       "css": ".ds-brand{display:inline-flex;align-items:center;gap:.6rem;font:700 1.22rem var(--font-display);color:var(--text-primary);text-decoration:none}.ds-seal{display:grid;place-items:center;width:2.1rem;height:2.1rem;border-radius:50%;background:var(--attention-vivid);font-size:.95rem}.ds-brand:hover{color:var(--brand)}.ds-brand:focus-visible{outline:3px solid var(--focus);outline-offset:4px}"
     },
     {

@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Waçla Phase 6C\n"
+"Project-Id-Version: Wassla Phase 6C\n"
 "Language: fr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -19,8 +19,8 @@ msgstr "Bonjour,"
 msgid "Hello %(recipient_name)s,"
 msgstr "Bonjour %(recipient_name)s,"
 
-msgid "Your Waçla delivery code"
-msgstr "Votre code de livraison Waçla"
+msgid "Your Wassla delivery code"
+msgstr "Votre code de livraison Wassla"
 
 msgid "Keep this code private until the parcel is in your hands."
 msgstr "Gardez ce code privé jusqu'à ce que le colis soit entre vos mains."
@@ -31,8 +31,8 @@ msgstr "Livraison"
 msgid "Your parcel is on its way"
 msgstr "Votre colis est en route"
 
-msgid "Never share this code by phone, message or email with anyone before you have the parcel. Waçla will never ask you for it."
-msgstr "Ne communiquez jamais ce code par téléphone, message ou e-mail avant d'avoir le colis. Waçla ne vous le demandera jamais."
+msgid "Never share this code by phone, message or email with anyone before you have the parcel. Wassla will never ask you for it."
+msgstr "Ne communiquez jamais ce code par téléphone, message ou e-mail avant d'avoir le colis. Wassla ne vous le demandera jamais."
 
 msgid "eligible"
 msgstr "éligible"
@@ -61,8 +61,8 @@ msgstr "Donnez ce code au voyageur uniquement lorsque le colis est physiquement 
 msgid "Your delivery code"
 msgstr "Votre code de livraison"
 
-msgid "Confirm your Waçla email"
-msgstr "Confirmez votre adresse e-mail Waçla"
+msgid "Confirm your Wassla email"
+msgstr "Confirmez votre adresse e-mail Wassla"
 
 msgid "Use this code to confirm your email address."
 msgstr "Utilisez ce code pour confirmer votre adresse e-mail."
@@ -70,14 +70,14 @@ msgstr "Utilisez ce code pour confirmer votre adresse e-mail."
 msgid "Account"
 msgstr "Compte"
 
-msgid "Welcome to Waçla"
-msgstr "Bienvenue sur Waçla"
+msgid "Welcome to Wassla"
+msgstr "Bienvenue sur Wassla"
 
-msgid "It expires in 15 minutes. Waçla will never ask you to share this code outside the verification screen."
-msgstr "Il expire dans 15 minutes. Waçla ne vous demandera jamais de communiquer ce code en dehors de l'écran de vérification."
+msgid "It expires in 15 minutes. Wassla will never ask you to share this code outside the verification screen."
+msgstr "Il expire dans 15 minutes. Wassla ne vous demandera jamais de communiquer ce code en dehors de l'écran de vérification."
 
-msgid "Reset your Waçla password"
-msgstr "Réinitialisez votre mot de passe Waçla"
+msgid "Reset your Wassla password"
+msgstr "Réinitialisez votre mot de passe Wassla"
 
 msgid "Use this private code to reset your password."
 msgstr "Utilisez ce code privé pour réinitialiser votre mot de passe."
@@ -91,20 +91,20 @@ msgstr "Réinitialisez votre mot de passe"
 msgid "It expires in 15 minutes. If you did not request this, ignore this email and keep your code private."
 msgstr "Il expire dans 15 minutes. Si vous n'avez pas fait cette demande, ignorez cet e-mail et gardez ce code privé."
 
-msgid "Waçla identity verification update"
-msgstr "Mise à jour de votre vérification d'identité Waçla"
+msgid "Wassla identity verification update"
+msgstr "Mise à jour de votre vérification d'identité Wassla"
 
 msgid "Verification"
 msgstr "Vérification"
 
-msgid "Waçla flight proof update"
-msgstr "Mise à jour de votre justificatif de vol Waçla"
+msgid "Wassla flight proof update"
+msgstr "Mise à jour de votre justificatif de vol Wassla"
 
-msgid "Payment needed for your Waçla delivery"
-msgstr "Un paiement est requis pour votre livraison Waçla"
+msgid "Payment needed for your Wassla delivery"
+msgstr "Un paiement est requis pour votre livraison Wassla"
 
-msgid "Open Waçla to review the payment needed."
-msgstr "Ouvrez Waçla pour consulter le paiement requis."
+msgid "Open Wassla to review the payment needed."
+msgstr "Ouvrez Wassla pour consulter le paiement requis."
 
 msgid "Payment"
 msgstr "Paiement"
@@ -112,8 +112,8 @@ msgstr "Paiement"
 msgid "A payment is needed to continue"
 msgstr "Un paiement est nécessaire pour continuer"
 
-msgid "Your Waçla payment is processing"
-msgstr "Votre paiement Waçla est en cours"
+msgid "Your Wassla payment is processing"
+msgstr "Votre paiement Wassla est en cours"
 
 msgid "The provider is still confirming your payment."
 msgstr "Le prestataire confirme encore votre paiement."
@@ -121,17 +121,17 @@ msgstr "Le prestataire confirme encore votre paiement."
 msgid "Your payment is being confirmed"
 msgstr "Votre paiement est en cours de confirmation"
 
-msgid "Your Waçla payment needs attention"
-msgstr "Votre paiement Waçla nécessite votre attention"
+msgid "Your Wassla payment needs attention"
+msgstr "Votre paiement Wassla nécessite votre attention"
 
-msgid "The payment failed; open Waçla to try again."
-msgstr "Le paiement a échoué ; ouvrez Waçla pour réessayer."
+msgid "The payment failed; open Wassla to try again."
+msgstr "Le paiement a échoué ; ouvrez Wassla pour réessayer."
 
 msgid "That payment did not go through"
 msgstr "Ce paiement n'a pas abouti"
 
-msgid "Waçla payment confirmed"
-msgstr "Paiement Waçla confirmé"
+msgid "Wassla payment confirmed"
+msgstr "Paiement Wassla confirmé"
 
 msgid "Your payment is confirmed."
 msgstr "Votre paiement est confirmé."
@@ -139,17 +139,17 @@ msgstr "Votre paiement est confirmé."
 msgid "Your payment is confirmed"
 msgstr "Votre paiement est confirmé"
 
-msgid "This payment does not create a Waçla account or give access to the delivery. Keep the reference private and contact Waçla support if you need help."
-msgstr "Ce paiement ne crée pas de compte Waçla et ne donne pas accès à la livraison. Gardez la référence privée et contactez l'assistance Waçla si nécessaire."
+msgid "This payment does not create a Wassla account or give access to the delivery. Keep the reference private and contact Wassla support if you need help."
+msgstr "Ce paiement ne crée pas de compte Wassla et ne donne pas accès à la livraison. Gardez la référence privée et contactez l'assistance Wassla si nécessaire."
 
-msgid "Waçla refund update"
-msgstr "Mise à jour de votre remboursement Waçla"
+msgid "Wassla refund update"
+msgstr "Mise à jour de votre remboursement Wassla"
 
-msgid "More information is needed for your Waçla case"
-msgstr "Des informations supplémentaires sont requises pour votre dossier Waçla"
+msgid "More information is needed for your Wassla case"
+msgstr "Des informations supplémentaires sont requises pour votre dossier Wassla"
 
-msgid "Open Waçla to review the evidence request."
-msgstr "Ouvrez Waçla pour consulter la demande de justificatifs."
+msgid "Open Wassla to review the evidence request."
+msgstr "Ouvrez Wassla pour consulter la demande de justificatifs."
 
 msgid "Dispute"
 msgstr "Litige"
@@ -160,17 +160,17 @@ msgstr "Nous avons besoin de quelques informations supplémentaires"
 msgid "Open the app to upload evidence. Never include a handover code."
 msgstr "Ouvrez l'application pour ajouter des justificatifs. N'incluez jamais de code de remise."
 
-msgid "Waçla security notice"
-msgstr "Alerte de sécurité Waçla"
+msgid "Wassla security notice"
+msgstr "Alerte de sécurité Wassla"
 
-msgid "Your Waçla password was changed."
-msgstr "Votre mot de passe Waçla a été modifié."
+msgid "Your Wassla password was changed."
+msgstr "Votre mot de passe Wassla a été modifié."
 
 msgid "Your password was changed"
 msgstr "Votre mot de passe a été modifié"
 
-msgid "If you did not make this change, reset your password immediately and contact Waçla support."
-msgstr "Si vous n'avez pas effectué cette modification, réinitialisez immédiatement votre mot de passe et contactez l'assistance Waçla."
+msgid "If you did not make this change, reset your password immediately and contact Wassla support."
+msgstr "Si vous n'avez pas effectué cette modification, réinitialisez immédiatement votre mot de passe et contactez l'assistance Wassla."
 
 msgid "Pickup confirmed"
 msgstr "Collecte confirmée"
@@ -184,8 +184,8 @@ msgstr "Le voyageur a récupéré votre colis"
 msgid "Your delivery code is now available"
 msgstr "Votre code de livraison est maintenant disponible"
 
-msgid "Open Waçla to view the delivery code."
-msgstr "Ouvrez Waçla pour afficher le code de livraison."
+msgid "Open Wassla to view the delivery code."
+msgstr "Ouvrez Wassla pour afficher le code de livraison."
 
 msgid "The code is not in this email. Open the app to see it."
 msgstr "Le code ne figure pas dans cet e-mail. Ouvrez l'application pour le consulter."
@@ -223,14 +223,14 @@ msgstr "Le versement au voyageur est suspendu pendant l'examen du litige."
 msgid "Your dispute has been resolved"
 msgstr "Votre litige a été résolu"
 
-msgid "Open Waçla to review the dispute outcome."
-msgstr "Ouvrez Waçla pour consulter l'issue du litige."
+msgid "Open Wassla to review the dispute outcome."
+msgstr "Ouvrez Wassla pour consulter l'issue du litige."
 
 msgid "Payout update"
 msgstr "Mise à jour du versement"
 
-msgid "Your Waçla payout status was updated."
-msgstr "Le statut de votre versement Waçla a été mis à jour."
+msgid "Your Wassla payout status was updated."
+msgstr "Le statut de votre versement Wassla a été mis à jour."
 
 msgid "Payout"
 msgstr "Versement"
@@ -241,8 +241,8 @@ msgstr "Votre versement a été mis à jour"
 msgid "Delivery cancelled"
 msgstr "Livraison annulée"
 
-msgid "This Waçla delivery has been cancelled."
-msgstr "Cette livraison Waçla a été annulée."
+msgid "This Wassla delivery has been cancelled."
+msgstr "Cette livraison Wassla a été annulée."
 
 msgid "This delivery has been cancelled"
 msgstr "Cette livraison a été annulée"
@@ -259,8 +259,8 @@ msgstr "Après la livraison"
 msgid "You can now leave a review"
 msgstr "Vous pouvez maintenant laisser un avis"
 
-msgid "%(sender_name)s has sent you a parcel through Waçla and it is on its way."
-msgstr "%(sender_name)s vous a envoyé un colis via Waçla et celui-ci est en route."
+msgid "%(sender_name)s has sent you a parcel through Wassla and it is on its way."
+msgstr "%(sender_name)s vous a envoyé un colis via Wassla et celui-ci est en route."
 
 msgid "Enter this code on the verification screen to confirm your email address."
 msgstr "Saisissez ce code sur l'écran de vérification pour confirmer votre adresse e-mail."
@@ -286,8 +286,8 @@ msgstr "Votre vérification d'identité est approuvée"
 msgid "Your identity verification needs attention"
 msgstr "Votre vérification d'identité nécessite votre attention"
 
-msgid "Open the Waçla app to see the next step."
-msgstr "Ouvrez l'application Waçla pour voir l'étape suivante."
+msgid "Open the Wassla app to see the next step."
+msgstr "Ouvrez l'application Wassla pour voir l'étape suivante."
 
 msgid "Your flight proof is approved."
 msgstr "Votre justificatif de vol est approuvé."
@@ -304,8 +304,8 @@ msgstr "Votre justificatif de vol nécessite votre attention"
 msgid "A payment is required before this delivery can continue."
 msgstr "Un paiement est requis avant que cette livraison puisse continuer."
 
-msgid "Open Waçla to review the amount and available provider."
-msgstr "Ouvrez Waçla pour consulter le montant et les prestataires disponibles."
+msgid "Open Wassla to review the amount and available provider."
+msgstr "Ouvrez Wassla pour consulter le montant et les prestataires disponibles."
 
 msgid "Your payment has been received by the provider and is being confirmed."
 msgstr "Votre paiement a été reçu par le prestataire et est en cours de confirmation."
@@ -313,14 +313,14 @@ msgstr "Votre paiement a été reçu par le prestataire et est en cours de confi
 msgid "The payment provider could not complete this attempt."
 msgstr "Le prestataire de paiement n'a pas pu finaliser cette tentative."
 
-msgid "Open Waçla to retry or choose another available provider."
-msgstr "Ouvrez Waçla pour réessayer ou choisir un autre prestataire disponible."
+msgid "Open Wassla to retry or choose another available provider."
+msgstr "Ouvrez Wassla pour réessayer ou choisir un autre prestataire disponible."
 
 msgid "Your payment is confirmed and the delivery can continue."
 msgstr "Votre paiement est confirmé et la livraison peut continuer."
 
-msgid "Your Waçla payment receipt"
-msgstr "Votre reçu de paiement Waçla"
+msgid "Your Wassla payment receipt"
+msgstr "Votre reçu de paiement Wassla"
 
 msgid "Your guest payment was confirmed."
 msgstr "Votre paiement invité a été confirmé."
@@ -343,17 +343,17 @@ msgstr "Votre remboursement est en cours de traitement"
 msgid "The time it takes to appear depends on the payment provider."
 msgstr "Le délai d'affichage dépend du prestataire de paiement."
 
-msgid "The Waçla trust team requested additional evidence."
-msgstr "L'équipe de confiance Waçla a demandé des justificatifs supplémentaires."
+msgid "The Wassla trust team requested additional evidence."
+msgstr "L'équipe de confiance Wassla a demandé des justificatifs supplémentaires."
 
-msgid "The password for your Waçla account was changed."
-msgstr "Le mot de passe de votre compte Waçla a été modifié."
+msgid "The password for your Wassla account was changed."
+msgstr "Le mot de passe de votre compte Wassla a été modifié."
 
 msgid "The traveler has confirmed pickup of your parcel."
 msgstr "Le voyageur a confirmé la collecte de votre colis."
 
-msgid "The safety window has passed. You can now view the delivery code in the Waçla app, and the recipient has been emailed their copy."
-msgstr "La période de sécurité est terminée. Vous pouvez maintenant afficher le code de livraison dans l'application Waçla, et une copie a été envoyée au destinataire par e-mail."
+msgid "The safety window has passed. You can now view the delivery code in the Wassla app, and the recipient has been emailed their copy."
+msgstr "La période de sécurité est terminée. Vous pouvez maintenant afficher le code de livraison dans l'application Wassla, et une copie a été envoyée au destinataire par e-mail."
 
 msgid "The delivery code was entered successfully and the delivery is confirmed."
 msgstr "Le code de livraison a été saisi correctement et la livraison est confirmée."
@@ -397,11 +397,11 @@ msgstr "Référence du trajet"
 msgid "Payment reference"
 msgstr "Référence du paiement"
 
-msgid "Your Waçla guest payment needs attention"
-msgstr "Votre paiement invité Waçla nécessite votre attention"
+msgid "Your Wassla guest payment needs attention"
+msgstr "Votre paiement invité Wassla nécessite votre attention"
 
-msgid "Your Waçla guest payment"
-msgstr "Votre paiement invité Waçla"
+msgid "Your Wassla guest payment"
+msgstr "Votre paiement invité Wassla"
 
 msgid "Your guest payment did not complete."
 msgstr "Votre paiement invité n'a pas abouti."
@@ -415,14 +415,14 @@ msgstr "Votre paiement invité n'a pas abouti"
 msgid "Your guest payment"
 msgstr "Votre paiement invité"
 
-msgid "Waçla received this payment for the reference below."
-msgstr "Waçla a reçu ce paiement pour la référence ci-dessous."
+msgid "Wassla received this payment for the reference below."
+msgstr "Wassla a reçu ce paiement pour la référence ci-dessous."
 
-msgid "Waçla has completed the refund shown below."
-msgstr "Waçla a effectué le remboursement indiqué ci-dessous."
+msgid "Wassla has completed the refund shown below."
+msgstr "Wassla a effectué le remboursement indiqué ci-dessous."
 
-msgid "Waçla has started the refund shown below."
-msgstr "Waçla a lancé le remboursement indiqué ci-dessous."
+msgid "Wassla has started the refund shown below."
+msgstr "Wassla a lancé le remboursement indiqué ci-dessous."
 
 msgid "Dispute reference"
 msgstr "Référence du litige"
@@ -436,11 +436,11 @@ msgstr "La protection du paiement est active jusqu'au"
 msgid "Protection ends at"
 msgstr "Fin de la protection"
 
-msgid "A Waçla administrator has resolved this dispute. Open Waçla to see the outcome."
-msgstr "Un administrateur Waçla a résolu ce litige. Ouvrez Waçla pour consulter l'issue."
+msgid "A Wassla administrator has resolved this dispute. Open Wassla to see the outcome."
+msgstr "Un administrateur Wassla a résolu ce litige. Ouvrez Wassla pour consulter l'issue."
 
-msgid "Your Waçla payout was updated. Open Waçla to see its current status."
-msgstr "Votre versement Waçla a été mis à jour. Ouvrez Waçla pour consulter son statut actuel."
+msgid "Your Wassla payout was updated. Open Wassla to see its current status."
+msgstr "Votre versement Wassla a été mis à jour. Ouvrez Wassla pour consulter son statut actuel."
 
 msgid "Reason"
 msgstr "Motif"
@@ -454,8 +454,8 @@ msgstr "Le prestataire n'a pas pu finaliser ce paiement invité."
 msgid "the end of the window"
 msgstr "la fin de la période"
 
-msgid "A Waçla administrator has resolved this dispute as: %(resolution)s."
-msgstr "Un administrateur Waçla a résolu ce litige comme suit : %(resolution)s."
+msgid "A Wassla administrator has resolved this dispute as: %(resolution)s."
+msgstr "Un administrateur Wassla a résolu ce litige comme suit : %(resolution)s."
 
 msgid "A security or account change was made"
 msgstr "Une modification de sécurité ou de compte a été effectuée"
@@ -463,17 +463,17 @@ msgstr "Une modification de sécurité ou de compte a été effectuée"
 msgid "There was a security or account change."
 msgstr "Une modification de sécurité ou de compte a été effectuée."
 
-msgid "Your Waçla payout status is now %(status)s."
-msgstr "Le statut de votre versement Waçla est maintenant : %(status)s."
+msgid "Your Wassla payout status is now %(status)s."
+msgstr "Le statut de votre versement Wassla est maintenant : %(status)s."
 
 msgid "cancelled"
 msgstr "annulée"
 
-msgid "Waçla will never ask you for a pickup or delivery code, and will never ask you to share one before the parcel is in your hands."
-msgstr "Waçla ne vous demandera jamais un code de collecte ou de livraison, ni de le communiquer avant que le colis soit entre vos mains."
+msgid "Wassla will never ask you for a pickup or delivery code, and will never ask you to share one before the parcel is in your hands."
+msgstr "Wassla ne vous demandera jamais un code de collecte ou de livraison, ni de le communiquer avant que le colis soit entre vos mains."
 
-msgid "You are receiving this because of a delivery or account action on Waçla. This is a transactional message, not marketing."
-msgstr "Vous recevez ce message à la suite d'une action liée à une livraison ou à votre compte Waçla. Il s'agit d'un message transactionnel, pas d'une communication marketing."
+msgid "You are receiving this because of a delivery or account action on Wassla. This is a transactional message, not marketing."
+msgstr "Vous recevez ce message à la suite d'une action liée à une livraison ou à votre compte Wassla. Il s'agit d'un message transactionnel, pas d'une communication marketing."
 
 msgid "Questions? Reply to this email."
 msgstr "Une question ? Répondez à cet e-mail."
@@ -508,8 +508,8 @@ msgstr "annulée par le voyageur"
 msgid "cancelled by an administrator"
 msgstr "annulée par un administrateur"
 
-msgid "You have been invited to Waçla Operations"
-msgstr "Vous avez été invité à rejoindre les opérations Waçla"
+msgid "You have been invited to Wassla Operations"
+msgstr "Vous avez été invité à rejoindre les opérations Wassla"
 
 msgid "Use your private link to accept this invitation."
 msgstr "Utilisez votre lien privé pour accepter cette invitation."
@@ -529,14 +529,14 @@ msgstr "Confiance / Vérification"
 msgid "Super Admin"
 msgstr "Administrateur principal"
 
-msgid "A Waçla administrator invited you to join the operations team."
-msgstr "Un administrateur Waçla vous a invité à rejoindre l’équipe des opérations."
+msgid "A Wassla administrator invited you to join the operations team."
+msgstr "Un administrateur Wassla vous a invité à rejoindre l’équipe des opérations."
 
 msgid "Accept your invitation"
 msgstr "Accepter votre invitation"
 
-msgid "This private link can be used once. If you were not expecting this, contact Waçla support."
-msgstr "Ce lien privé ne peut être utilisé qu’une seule fois. Si vous n’attendiez pas cette invitation, contactez l’assistance Waçla."
+msgid "This private link can be used once. If you were not expecting this, contact Wassla support."
+msgstr "Ce lien privé ne peut être utilisé qu’une seule fois. Si vous n’attendiez pas cette invitation, contactez l’assistance Wassla."
 
 msgid "Role"
 msgstr "Rôle"
@@ -544,8 +544,8 @@ msgstr "Rôle"
 msgid "Expires at (UTC)"
 msgstr "Expire le (UTC)"
 
-msgid "Use this code before it expires. Waçla will never ask you to share this code outside the verification screen."
-msgstr "Utilisez ce code avant son expiration. Waçla ne vous demandera jamais de partager ce code en dehors de l’écran de vérification."
+msgid "Use this code before it expires. Wassla will never ask you to share this code outside the verification screen."
+msgstr "Utilisez ce code avant son expiration. Wassla ne vous demandera jamais de partager ce code en dehors de l’écran de vérification."
 
 msgid "Use this code before it expires. If you did not request this, ignore this email and keep your code private."
 msgstr "Utilisez ce code avant son expiration. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail et gardez votre code privé."
@@ -568,8 +568,8 @@ msgstr "Langue"
 msgid "Your invitation has been accepted."
 msgstr "Votre invitation a été acceptée."
 
-msgid "Open Waçla Operations"
-msgstr "Ouvrir les opérations Waçla"
+msgid "Open Wassla Operations"
+msgstr "Ouvrir les opérations Wassla"
 
 msgid "For an existing account, enter your current password. For a new account, choose a strong password."
 msgstr "Pour un compte existant, saisissez votre mot de passe actuel. Pour un nouveau compte, choisissez un mot de passe fort."

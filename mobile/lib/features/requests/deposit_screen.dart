@@ -348,7 +348,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   Money.eurCents(effectiveDeposit).format(locale),
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: context.colors.brand,
+                    color: context.colors.brandInk,
                   ),
                 ),
               ),

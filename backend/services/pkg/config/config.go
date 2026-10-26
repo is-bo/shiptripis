@@ -455,7 +455,7 @@ func LoadEmail() (Email, error) {
 	user := optString("EMAIL_SMTP_USERNAME", "")
 	pass := optString("EMAIL_SMTP_PASSWORD", "")
 	from := optString("EMAIL_FROM_ADDR", "")
-	fromName := optString("EMAIL_FROM_NAME", "Waçla")
+	fromName := optString("EMAIL_FROM_NAME", "Wassla")
 	useTLS := optBool(&b, "EMAIL_USE_TLS", true)
 	replyTo := optString("EMAIL_REPLY_TO", optString("EMAIL_SUPPORT_ADDR", ""))
 	timeout := optInt(&b, "EMAIL_SMTP_TIMEOUT_SECONDS", 10)

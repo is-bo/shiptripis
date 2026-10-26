@@ -22,7 +22,7 @@ func TestEmailProductionRequiresCutoffVerifiedIdentityAndMonitoredReply(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.FromName != "Waçla" || got.ReplyTo != "support@example.invalid" || got.SMTPTimeout.Seconds() != 10 {
+	if got.FromName != "Wassla" || got.ReplyTo != "support@example.invalid" || got.SMTPTimeout.Seconds() != 10 {
 		t.Fatal("sender contract mismatch")
 	}
 	for _, key := range []string{"EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT", "EMAIL_ACTIVATION_NOT_BEFORE", "EMAIL_USE_TLS", "EMAIL_REPLY_TO", "EMAIL_SMTP_TIMEOUT_SECONDS", "EMAIL_RATE_LIMIT_PER_MINUTE"} {

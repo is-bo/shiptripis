@@ -39,9 +39,9 @@
   --text-tertiary: #616c79;
   --text-on-inverse: #faf6ee;
 
-  --brand: #0e5a4f;
-  --brand-strong: #0a4a40;
-  --brand-soft: #e6f2ef;
+  --brand: #042d49;
+  --brand-strong: #021e33;
+  --brand-soft: #e6edf2;
   --on-brand: #ffffff;
 
   /* Terracotta is split the way the app splits it: `attention-vivid` fills
@@ -83,6 +83,8 @@
 
   --mode-flight: #2a62a6;
   --mode-drive: #1c7a6b;
+  --mode-drive-soft: #e6f2ef;
+  --on-mode-drive-soft: #0a4a40;
 
   /* Structure */
   --radius-sm: 8px;
@@ -458,7 +460,7 @@ details:focus-visible {
   flex: none;
 }
 .chip-flight { background: var(--info-soft); color: var(--on-info-soft); }
-.chip-drive { background: var(--brand-soft); color: var(--brand-strong); }
+.chip-drive { background: var(--mode-drive-soft); color: var(--on-mode-drive-soft); }
 .chip-wait { background: var(--waiting-soft); color: var(--on-waiting-soft); }
 .chip-attention { background: var(--attention-soft); color: var(--on-attention-soft); }
 
@@ -1255,3 +1257,7 @@ details:focus-visible {
   body { background: #fff; }
   body::before { display: none; }
 }
+
+/* Supplied bilingual artwork: intrinsic ratio, no stretching or recoloring. */
+.brand-logo { display: block; inline-size: 8rem; block-size: auto; object-fit: contain; }
+@media (max-width: 359px) { .brand-logo { inline-size: 6.5rem; } }

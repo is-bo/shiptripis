@@ -1,4 +1,4 @@
-# Waçla — product truth
+# Wassla — product truth
 
 Durable product context. `docs/SHIPTRIP_V1_SPEC.md` remains the authoritative
 specification; this file is the condensed product reading that design work
@@ -64,7 +64,7 @@ pickup code → deliver against the recipient's code → wait for payout → rat
    freezes it.
 8. **Boost improves visibility and funds delivery economics.** Most of the
    sender-chosen amount becomes a snapshotted Traveler bonus; the configured
-   remainder is Waçla revenue. It can never create compatibility.
+   remainder is Wassla revenue. It can never create compatibility.
 9. **Kaba / ProductRequest is not part of V1.**
 10. **The backend is authoritative for every amount, deadline, permission and
     state transition.** The client renders; it does not decide.

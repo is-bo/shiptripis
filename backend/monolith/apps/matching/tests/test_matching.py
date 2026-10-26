@@ -84,7 +84,7 @@ def _make_trip(traveler: User, *, origin="ALG", destination="CDG", **kw) -> Trip
     )
 
 
-@skip("Legacy traveler-first/DZD matching writes are retired in ShipTrip V1.")
+@skip("Legacy traveler-first/DZD matching writes are retired in Wassla V1.")
 class TravelerApplyTests(APITestCase):
     def setUp(self):
         self.sender = _user("sender@example.com", "1")
@@ -203,7 +203,7 @@ class TravelerApplyTests(APITestCase):
         assert r2.status_code == 409
 
 
-@skip("Legacy Trip/DZD sender matching writes are retired in ShipTrip V1.")
+@skip("Legacy Trip/DZD sender matching writes are retired in Wassla V1.")
 class SenderApplyTests(APITestCase):
     """Sender applies an existing parcel to a suggested trip (no form re-fill)."""
 

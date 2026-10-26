@@ -1,5 +1,31 @@
 # Waçla V1 Implementation Status
 
+## Wassla V3 integration baseline (2026-10-26)
+
+Created `feature/wassla-v3-baseline` from V2 `bdec34f3236eb4ddc2c102a80b9a5627808ac634`,
+which contains V1 `b215c5936146e2f0045d74c801e70b1b34e7f36b`, and merged
+the original V3 `77245abfbe04de4ce3891a6edf68e1e4bcdd7c8d`. The original
+V3 was a sibling of V1/V2; this integration supplies the complete lineage.
+
+Conflicts retain V2 delivery gates, backlog review, SMTP handling, invitation
+security/localization, migrations and fluid email layout. Supplied Wassla
+artwork and V3 mobile runtime are retained. Django/Go default sender display
+names use Wassla; configured addresses and overrides remain intact. Provider
+request descriptions retain V2 Waçla text for replay/fingerprint compatibility;
+guest-payment presentation converts historical names to Wassla. VPS runtime,
+contracts and Railway launcher match V2; only the VPS example display name
+and branding assertion change. External sending remains disabled.
+
+Integration verification: Django PostgreSQL **2,529 passed / 34 skipped**,
+Flutter **1,083 passed** across the full run and isolated unchanged benchmark
+rerun, Go build/vet and all **14** unit/race and integration packages passed
+(**353** integration test/subtest passes, no skips), VPS **29** unit tests and
+all **nine** container integration groups passed, **432** email layout checks
+and **eight** globe tests passed. Analysis, formatting, Ruff, static routing,
+migration and schema checks are clean. Details and the CPU-contention rerun
+are recorded in `docs/WASSLA_V3_INTEGRATION.md`.
+Main is untouched; no deployment or external activation is part of this work.
+
 ## Waçla V2 — transactional email readiness (2026-10-18)
 
 Status: **PASS — local/code preparation; external sending disabled.**
@@ -118,6 +144,50 @@ boot/firewall/Docker restart, domain/TLS, offsite/provider connectivity and targ
 capacity remain V3 gates. See [operator instructions](../infra/vps/README.md),
 [secret reference](../infra/vps/ENVIRONMENT.md) and
 [migration procedure](../infra/vps/MIGRATION.md). Historical records below are intact.
+
+## Wassla rebrand (2026-10-18)
+
+Implemented on the existing `work` branch, preserving the completed V1/V2
+behavior and layout. Supplied bilingual logos and icons now cover Flutter,
+Android/iOS launcher and native launch assets, landing/legal pages, Django
+operations, public payment pages and transactional email. English, French and
+Arabic catalogs, notification copy, document titles, accessibility labels and
+native display names use Wassla. The original package is retained byte-for-byte
+under `branding/wassla/`, with deterministic asset generation documented in
+`branding/README.md`.
+
+Brand emerald is replaced by `#042D49` / `#021E33`. Dark foreground ink uses the
+supplied ivory for contrast. Success/verification green, transport colors,
+orange, yellow and existing neutral surfaces remain. Dark-mode badges, stamp
+fills and thin indicators were reviewed separately to avoid losing contrast.
+
+Compatibility boundaries: package IDs, routes, imports, storage/channel keys,
+sender addresses, provider settings and migrations are unchanged. Historical
+provider request descriptions remain unchanged because they participate in
+Stripe idempotency and account-creation fingerprints; the local guest-payment
+presentation says Wassla. Email changes affect content and the default display
+name only. No new diagnostic logging was needed. No deployment, push, merge,
+external activation or APK build was performed.
+
+Validation: static site/edge checks and eight globe tests pass; Flutter analysis
+passes. The 162-test backend notification/admin/payment-presentation suite,
+104 compatibility/admin/payment tests and 24 email presentation tests pass.
+A full PostgreSQL run exercised 2,405 tests (34 skipped): its initial failures
+were traced to the workspace's enabled-email setting plus rebrand assertions;
+the failed cases were rerun successfully with CI's `EMAIL_ENABLED=false`
+default after fixing the assertions and admin title override. No migrations
+are generated and Ruff is clean. The final serial Flutter suite passes all
+**1,080 tests**. The 124 screenshots and detailed local verification are
+recorded in `build/rebrand/verification.md`.
+
+Visual verification uses real Flutter widgets with synthetic account data and
+Chromium-rendered pages, covering EN/FR/AR, phone/desktop and light/dark modes.
+The public landing site and email retain their existing light presentation
+under dark system preferences. Native image dimensions, opacity, proportional
+scaling and resource XML were checked; native OS rendering requires a device
+or simulator, which was not available. Screenshots and the local gallery are
+in `build/rebrand/`; they are review artifacts, not release assets.
+
 
 ## K7 — Realtime, High-Scale Tuning & Final Certification (merged and released, 2026-09-23)
 

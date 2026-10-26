@@ -626,7 +626,7 @@ class AppSegmentedChoice<T> extends StatelessWidget {
                                     color: !enabled
                                         ? c.textTertiary
                                         : option.value == selected
-                                        ? c.brand
+                                        ? c.brandInk
                                         : c.textTertiary,
                                   ),
                                   const SizedBox(width: AppSpace.sm),
@@ -764,9 +764,9 @@ class AppCheckTile extends StatelessWidget {
                             child: Text(
                               linkLabel!,
                               style: text.labelMedium?.copyWith(
-                                color: c.brand,
+                                color: c.brandInk,
                                 decoration: TextDecoration.underline,
-                                decorationColor: c.brand,
+                                decorationColor: c.brandInk,
                               ),
                             ),
                           ),
@@ -1245,7 +1245,7 @@ class AppStepIndicator extends StatelessWidget {
                                 height: 3,
                                 decoration: BoxDecoration(
                                   color: i <= currentIndex
-                                      ? c.brand
+                                      ? c.brandInk
                                       : c.hairlineStrong,
                                   borderRadius: AppRadius.rPill,
                                 ),

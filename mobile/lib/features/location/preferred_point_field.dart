@@ -104,7 +104,7 @@ class PreferredPointField extends StatelessWidget {
               Icon(
                 chosen == null ? Icons.explore_outlined : Icons.place_outlined,
                 size: 19,
-                color: chosen == null ? c.textTertiary : c.brand,
+                color: chosen == null ? c.textTertiary : c.brandInk,
               ),
               const SizedBox(width: AppSpace.md),
               Expanded(

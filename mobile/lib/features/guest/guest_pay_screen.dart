@@ -432,7 +432,7 @@ class _ProviderTile extends StatelessWidget {
                     ? Icons.radio_button_checked_rounded
                     : Icons.radio_button_unchecked_rounded,
                 size: 20,
-                color: selected ? c.brand : c.hairlineStrong,
+                color: selected ? c.brandInk : c.hairlineStrong,
               ),
             ],
           ),

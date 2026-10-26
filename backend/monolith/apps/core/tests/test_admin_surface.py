@@ -153,7 +153,7 @@ class AdminShellTests(TestCase):
         response = self.client.get("/admin/")
         assert response.status_code == 200
         body = response.content.decode()
-        assert "Waçla Operations" in body
+        assert "Wassla Operations" in body
         assert "shiptrip/admin.css" in body
 
     def test_a_money_column_renders_a_chip_free_aligned_amount(self):

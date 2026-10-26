@@ -120,7 +120,7 @@ abstract class L {
   /// No description provided for @appName.
   ///
   /// In en, this message translates to:
-  /// **'Waçla'**
+  /// **'Wassla'**
   String get appName;
 
   /// No description provided for @actionContinue.
@@ -438,7 +438,7 @@ abstract class L {
   /// No description provided for @authNoAccount.
   ///
   /// In en, this message translates to:
-  /// **'New to Waçla?'**
+  /// **'New to Wassla?'**
   String get authNoAccount;
 
   /// No description provided for @authHaveAccount.
@@ -666,7 +666,7 @@ abstract class L {
   /// No description provided for @stateAppOutdatedBody.
   ///
   /// In en, this message translates to:
-  /// **'Update Waçla to continue. This part of the app no longer works on this version.'**
+  /// **'Update Wassla to continue. This part of the app no longer works on this version.'**
   String get stateAppOutdatedBody;
 
   /// No description provided for @staleTitle.
@@ -840,7 +840,7 @@ abstract class L {
   /// No description provided for @moneyPlatformFee.
   ///
   /// In en, this message translates to:
-  /// **'Waçla fee'**
+  /// **'Wassla fee'**
   String get moneyPlatformFee;
 
   /// No description provided for @moneyMinimumReward.
@@ -852,7 +852,7 @@ abstract class L {
   /// No description provided for @moneyRecommendedReward.
   ///
   /// In en, this message translates to:
-  /// **'Waçla suggests'**
+  /// **'Wassla suggests'**
   String get moneyRecommendedReward;
 
   /// No description provided for @moneyYourReward.
@@ -906,7 +906,7 @@ abstract class L {
   /// No description provided for @moneyRewardNotReduced.
   ///
   /// In en, this message translates to:
-  /// **'The traveler receives this full amount. The Waçla fee is added on top, not taken out of it.'**
+  /// **'The traveler receives this full amount. The Wassla fee is added on top, not taken out of it.'**
   String get moneyRewardNotReduced;
 
   /// No description provided for @moneyDepositNotExtra.
@@ -1530,7 +1530,7 @@ abstract class L {
   /// No description provided for @depositSuggestedTotal.
   ///
   /// In en, this message translates to:
-  /// **'Waçla suggested total'**
+  /// **'Wassla suggested total'**
   String get depositSuggestedTotal;
 
   /// No description provided for @depositWholeAmount.
@@ -1560,7 +1560,7 @@ abstract class L {
   /// No description provided for @depositGuidanceNote.
   ///
   /// In en, this message translates to:
-  /// **'Waçla calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.'**
+  /// **'Wassla calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.'**
   String get depositGuidanceNote;
 
   /// No description provided for @depositPayAction.
@@ -3252,7 +3252,7 @@ abstract class L {
   /// No description provided for @guestPayExplainer.
   ///
   /// In en, this message translates to:
-  /// **'The person who sent you this link is asking you to pay this for their Waçla delivery. You don’t need an account.'**
+  /// **'The person who sent you this link is asking you to pay this for their Wassla delivery. You don’t need an account.'**
   String get guestPayExplainer;
 
   /// No description provided for @guestPayExpiresAt.
@@ -3660,7 +3660,7 @@ abstract class L {
   /// No description provided for @protectionExplainerBody.
   ///
   /// In en, this message translates to:
-  /// **'Funds are held pending delivery confirmation and the 48-hour protection period. Waçla releases them only after that period ends and no dispute is open.'**
+  /// **'Funds are held pending delivery confirmation and the 48-hour protection period. Wassla releases them only after that period ends and no dispute is open.'**
   String get protectionExplainerBody;
 
   /// No description provided for @payoutTitle.
@@ -4116,7 +4116,7 @@ abstract class L {
   /// No description provided for @boostPlatformKeeps.
   ///
   /// In en, this message translates to:
-  /// **'Waçla keeps'**
+  /// **'Wassla keeps'**
   String get boostPlatformKeeps;
 
   /// No description provided for @boostEarningsCondition.
@@ -4332,7 +4332,7 @@ abstract class L {
   /// No description provided for @profilePassportStamp.
   ///
   /// In en, this message translates to:
-  /// **'WAÇLA · MEMBER'**
+  /// **'Wassla · MEMBER'**
   String get profilePassportStamp;
 
   /// No description provided for @profileCompletedDeliveries.
@@ -4398,7 +4398,7 @@ abstract class L {
   /// No description provided for @profileAppLanguageHelp.
   ///
   /// In en, this message translates to:
-  /// **'What you read inside Waçla. Stored on this phone.'**
+  /// **'What you read inside Wassla. Stored on this phone.'**
   String get profileAppLanguageHelp;
 
   /// No description provided for @profileEmailLanguage.
@@ -4482,7 +4482,7 @@ abstract class L {
   /// No description provided for @profileMemberSince.
   ///
   /// In en, this message translates to:
-  /// **'With Waçla since {date}'**
+  /// **'With Wassla since {date}'**
   String profileMemberSince(String date);
 
   /// No description provided for @profileVersion.
@@ -6240,13 +6240,13 @@ abstract class L {
   /// No description provided for @deliverySafetyWaitingSenderBody.
   ///
   /// In en, this message translates to:
-  /// **'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then Waçla emails the delivery code to your recipient.'**
+  /// **'Pickup is confirmed. Delivery confirmation becomes available after the safety period; then Wassla emails the delivery code to your recipient.'**
   String get deliverySafetyWaitingSenderBody;
 
   /// No description provided for @deliverySafetyWaitingTravelerBody.
   ///
   /// In en, this message translates to:
-  /// **'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — Waçla never shows it to you.'**
+  /// **'Pickup is confirmed. Continue to the recipient. After the safety period, ask them for the delivery code — Wassla never shows it to you.'**
   String get deliverySafetyWaitingTravelerBody;
 
   /// Action that moves from the pickup screen to the delivery screen.
@@ -6504,7 +6504,7 @@ abstract class L {
   /// Explainer under the settlement breakdown.
   ///
   /// In en, this message translates to:
-  /// **'These amounts are Waçla\'s decision. Nothing here is worked out on your phone.'**
+  /// **'These amounts are Wassla\'s decision. Nothing here is worked out on your phone.'**
   String get disputeAmountsExplainer;
 
   /// Breakdown line for the total the sender originally paid.
@@ -6516,7 +6516,7 @@ abstract class L {
   /// Row label for the resolution note.
   ///
   /// In en, this message translates to:
-  /// **'Note from Waçla'**
+  /// **'Note from Wassla'**
   String get disputeResolutionNoteLabel;
 
   /// Section header for the dispute event log.
@@ -7074,7 +7074,7 @@ abstract class L {
   /// No description provided for @pushPermissionBody.
   ///
   /// In en, this message translates to:
-  /// **'Get timely updates about offers, payments, delivery, messages and verification. Waçla asks only when you choose Enable.'**
+  /// **'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.'**
   String get pushPermissionBody;
 
   /// No description provided for @pushPermissionEnabled.
@@ -7104,7 +7104,7 @@ abstract class L {
   /// No description provided for @pushPermissionInitializationFailed.
   ///
   /// In en, this message translates to:
-  /// **'Push could not start on this phone. Your in-app notifications still work; reopen Waçla to try again.'**
+  /// **'Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.'**
   String get pushPermissionInitializationFailed;
 
   /// No description provided for @pushEnableAction.
@@ -7122,13 +7122,13 @@ abstract class L {
   /// No description provided for @pushRegistrationPending.
   ///
   /// In en, this message translates to:
-  /// **'System notification permission is on. Waçla is finishing notification setup for this phone.'**
+  /// **'System notification permission is on. Wassla is finishing notification setup for this phone.'**
   String get pushRegistrationPending;
 
   /// No description provided for @pushRegistrationFailed.
   ///
   /// In en, this message translates to:
-  /// **'System notification permission is on, but Waçla could not finish registering this phone. Check your connection and try again.'**
+  /// **'System notification permission is on, but Wassla could not finish registering this phone. Check your connection and try again.'**
   String get pushRegistrationFailed;
 
   /// No description provided for @pushRetryRegistrationAction.
@@ -7806,7 +7806,7 @@ abstract class L {
   /// No description provided for @earlyArrivalConfirmSheetBody.
   ///
   /// In en, this message translates to:
-  /// **'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows Waçla protection rules.'**
+  /// **'This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows Wassla protection rules.'**
   String get earlyArrivalConfirmSheetBody;
 
   /// No description provided for @earlyArrivalWaitingSenderTitle.
@@ -7956,7 +7956,7 @@ abstract class L {
   /// No description provided for @notificationArrivalReportedBody.
   ///
   /// In en, this message translates to:
-  /// **'Open Waçla to confirm the early arrival.'**
+  /// **'Open Wassla to confirm the early arrival.'**
   String get notificationArrivalReportedBody;
 
   /// No description provided for @notificationArrivalConfirmed.
@@ -7980,7 +7980,7 @@ abstract class L {
   /// No description provided for @notificationArrivalDeclinedBody.
   ///
   /// In en, this message translates to:
-  /// **'Open Waçla to review the delivery.'**
+  /// **'Open Wassla to review the delivery.'**
   String get notificationArrivalDeclinedBody;
 
   /// No description provided for @routeBasisSnapshot.
@@ -8040,7 +8040,7 @@ abstract class L {
   /// No description provided for @pricingPlatformFee.
   ///
   /// In en, this message translates to:
-  /// **'Waçla fee'**
+  /// **'Wassla fee'**
   String get pricingPlatformFee;
 
   /// No description provided for @pricingTotalSenderCost.
@@ -8208,7 +8208,7 @@ abstract class L {
   /// No description provided for @guestShareLead.
   ///
   /// In en, this message translates to:
-  /// **'Share this secure payment link with someone you trust. They can pay without a Waçla account.'**
+  /// **'Share this secure payment link with someone you trust. They can pay without a Wassla account.'**
   String get guestShareLead;
 
   /// No description provided for @guestShareAction.
@@ -8238,13 +8238,13 @@ abstract class L {
   /// No description provided for @guestShareSubject.
   ///
   /// In en, this message translates to:
-  /// **'Waçla payment request'**
+  /// **'Wassla payment request'**
   String get guestShareSubject;
 
   /// No description provided for @guestShareMessage.
   ///
   /// In en, this message translates to:
-  /// **'Could you pay {amount} for my Waçla delivery? Here is the secure link: {link}'**
+  /// **'Could you pay {amount} for my Wassla delivery? Here is the secure link: {link}'**
   String guestShareMessage(String amount, String link);
 
   /// No description provided for @guestLinkLabel.
@@ -8430,7 +8430,7 @@ abstract class L {
   /// No description provided for @guestPurposeOther.
   ///
   /// In en, this message translates to:
-  /// **'Waçla payment'**
+  /// **'Wassla payment'**
   String get guestPurposeOther;
 
   /// No description provided for @guestPayingNowTitle.
@@ -8466,7 +8466,7 @@ abstract class L {
   /// No description provided for @guestPayHandoff.
   ///
   /// In en, this message translates to:
-  /// **'You’ll finish on our payment partner’s secure page. Waçla never sees your card details.'**
+  /// **'You’ll finish on our payment partner’s secure page. Wassla never sees your card details.'**
   String get guestPayHandoff;
 
   /// No description provided for @paymentSuccessAmountPaid.
@@ -8562,7 +8562,7 @@ abstract class L {
   /// boostEstimateNotice
   ///
   /// In en, this message translates to:
-  /// **'An estimate until you save. Waçla confirms the final amounts.'**
+  /// **'An estimate until you save. Wassla confirms the final amounts.'**
   String get boostEstimateNotice;
 
   /// boostAmountAboveMaximum
@@ -8664,7 +8664,7 @@ abstract class L {
   /// findTravelersTrustTitle
   ///
   /// In en, this message translates to:
-  /// **'Checks Waçla has done'**
+  /// **'Checks Wassla has done'**
   String get findTravelersTrustTitle;
 
   /// offerBaseRewardLabel
@@ -8886,7 +8886,7 @@ abstract class L {
   /// No description provided for @guestPayHandoffBody.
   ///
   /// In en, this message translates to:
-  /// **'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in Waçla.'**
+  /// **'Complete the payment on our payment partner\'s secure page. That page will show you the result, and the person who asked you will see it in Wassla.'**
   String get guestPayHandoffBody;
 
   /// No description provided for @payResultDepositCredited.

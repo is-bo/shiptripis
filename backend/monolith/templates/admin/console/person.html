@@ -86,7 +86,7 @@
         <dl class="st-facts">
           <div><dt>Status</dt><dd><span class="st-chip st-{{ header.account.tone }}">{{ header.account.label }}</span></dd></div>
           <div><dt>Marketplace role</dt><dd>{{ header.role }}</dd></div>
-          <div><dt>Uses Waçla as</dt><dd>{% if body.uses %}{{ body.uses|join:" and " }}{% else %}No marketplace activity yet{% endif %}</dd></div>
+          <div><dt>Uses Wassla as</dt><dd>{% if body.uses %}{{ body.uses|join:" and " }}{% else %}No marketplace activity yet{% endif %}</dd></div>
           <div><dt>Joined</dt><dd>{{ header.joined|date:"d M Y, H:i" }}</dd></div>
           {% if body.deals %}<div><dt>Deliveries</dt><dd>{{ body.deals.sender }} as Sender &middot; {{ body.deals.traveler }} as Traveler</dd></div>{% endif %}
           {% if header.staff_roles %}<div><dt>Staff access</dt><dd>{{ header.staff_roles|join:", " }}</dd></div>{% endif %}

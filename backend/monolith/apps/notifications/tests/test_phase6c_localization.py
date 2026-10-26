@@ -133,7 +133,7 @@ class LanguageSnapshotTests(TestCase):
                     )
                     self.assertNotEqual(subject, english_subject)
                     for rendered in (text, html):
-                        self.assertIn("Waçla", rendered)
+                        self.assertIn("Wassla", rendered)
                         self.assertNotIn("ShipTrip", rendered)
                     self.assertIn(footer_markers[language], text)
                     self.assertIn(footer_markers[language], html)
@@ -214,7 +214,7 @@ class RecipientLanguageContractTests(TestCase):
         )
         subject, _ = render(message)
         self.assertEqual(message.language, "en")
-        self.assertEqual(subject, "Your Waçla delivery code")
+        self.assertEqual(subject, "Your Wassla delivery code")
 
 
 class ProtectionEndingReminderTests(TestCase):
@@ -296,7 +296,7 @@ class ArabicMixedDirectionTests(TestCase):
             heading="اختبار",
             eyebrow="الأمان",
             highlight=("الرمز", "AB12CD"),
-            action=("افتح Waçla", "https://example.test/path?q=123"),
+            action=("افتح Wassla", "https://example.test/path?q=123"),
             facts=(("المرجع", "ST-1234"),),
         )
 

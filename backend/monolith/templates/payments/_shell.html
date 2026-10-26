@@ -123,6 +123,7 @@ and `content`, which is the one card.
       font-weight: 700;
       flex: none;
     }
+    .brand img { display: block; width: 128px; height: auto; object-fit: contain; }
     .langs { display: flex; gap: 2px; flex-wrap: wrap; }
     .langs a {
       display: inline-flex;
@@ -426,7 +427,7 @@ and `content`, which is the one card.
 <body>
 <div class="shell">
   <header class="bar">
-    <span class="brand"><span class="seal" aria-hidden="true">W</span><span lang="en" dir="ltr">Waçla</span></span>
+    <picture class="brand"><source media="(prefers-color-scheme: dark)" srcset="/assets/branding/wassla-primary-ivory.svg"><img src="/assets/branding/wassla-primary-navy.svg" width="1360" height="346" alt="Wassla"></picture>
     <nav class="langs" aria-label="{{ t.languages }}">
       {% for option in languages %}<a href="{{ option.href }}" lang="{{ option.code }}" hreflang="{{ option.code }}"{% if option.current %} aria-current="true"{% endif %}>{{ option.name }}</a>{% endfor %}
     </nav>

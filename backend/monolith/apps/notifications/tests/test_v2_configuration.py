@@ -13,7 +13,7 @@ SMTP = {
     "EMAIL_SMTP_USERNAME": "test-only-placeholder",
     "EMAIL_SMTP_PASSWORD": "test-only-placeholder",
     "EMAIL_FROM_ADDR": "notifications@example.invalid",
-    "EMAIL_FROM_NAME": "Waçla",
+    "EMAIL_FROM_NAME": "Wassla",
     "EMAIL_SUPPORT_ADDR": "support@example.invalid",
     "EMAIL_REPLY_TO": "support@example.invalid",
     "EMAIL_SENDING_DOMAIN_VERIFIED": "true",
@@ -26,7 +26,7 @@ def test_production_sender_settings_are_shared_and_require_no_live_credentials()
 from email.header import decode_header,make_header
 from email.utils import parseaddr
 name,address=parseaddr(s.DEFAULT_FROM_EMAIL)
-assert str(make_header(decode_header(name)))=='Waçla'
+assert str(make_header(decode_header(name)))=='Wassla'
 assert address=='notifications@example.invalid'
 assert s.EMAIL_REPLY_TO=='support@example.invalid'
 assert s.EMAIL_TIMEOUT==10

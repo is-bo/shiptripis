@@ -44,9 +44,9 @@ def test_entire_inventory_has_branded_localized_alternatives(kind, locale):
         f'<html lang="{resolved}" dir="{"rtl" if resolved == "ar" else "ltr"}">' in html
     )
     for value in (subject, text, html):
-        assert value and "ShipTrip" not in value
+        assert value and "ShipTrip" not in value and "Waçla" not in value
     for value in (text, html):
-        assert "Waçla" in value
+        assert "Wassla" in value
     assert "<script>" not in html and "<img" not in html
     assert "http://" not in html
     if kind in {"email_verification", "password_reset", "recipient_delivery_code"}:
@@ -357,12 +357,12 @@ def test_real_django_smtp_is_multipart_local_and_has_monitored_reply_to(locale):
                 EMAIL_HOST_PASSWORD="",
                 EMAIL_USE_TLS=False,
                 EMAIL_REPLY_TO="support@example.invalid",
-                DEFAULT_FROM_EMAIL="Waçla <notifications@example.invalid>",
+                DEFAULT_FROM_EMAIL="Wassla <notifications@example.invalid>",
             ):
                 assert outbox.dispatch_message(message_id=row.pk) == "dispatched"
             mail = BytesParser(policy=policy.default).parsebytes(server.messages[0])
             assert str(mail["Reply-To"]) == "support@example.invalid"
-            assert "Waçla" in str(mail["From"])
+            assert "Wassla" in str(mail["From"])
             assert mail.get_body(preferencelist=("plain",)) and mail.get_body(
                 preferencelist=("html",)
             )

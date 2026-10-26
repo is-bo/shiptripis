@@ -42,11 +42,11 @@ RAILS = {
 
 RAIL_HELP = {
     "stripe_eur": (
-        "Waçla moves euros to the Traveler's connected account, and then the "
+        "Wassla moves euros to the Traveler's connected account, and then the "
         "bank pays them out. Those are two different steps."
     ),
     "manual_dzd": (
-        "A person at Waçla sends Algerian dinars by hand, against a "
+        "A person at Wassla sends Algerian dinars by hand, against a "
         "settlement amount frozen when the instruction was created."
     ),
     "legacy_unclassified": (
@@ -110,12 +110,12 @@ LIABILITY_HELP = {
     "scheduled": "Released and queued for execution.",
     "eligible": "Released, nothing blocking it, waiting for the rail to take it.",
     "processing": (
-        "An instruction is out, or Waçla money is already sitting at the "
+        "An instruction is out, or Wassla money is already sitting at the "
         "provider."
     ),
     "sent": "Recorded as sent on its rail.",
     "held": "An active Finance hold stops this award.",
-    "disputed": "A Waçla or provider dispute freezes this award.",
+    "disputed": "A Wassla or provider dispute freezes this award.",
     "blocked": "Blocked or failed for a substantive reason.",
     "inconsistent": (
         "The payable and the payout state disagree. This is a reconciliation "
@@ -204,7 +204,7 @@ STAGE_HELP = {
         "pay out."
     ),
     "connected_funds": (
-        "Waçla's euros are at the Traveler's connected account. The Traveler "
+        "Wassla's euros are at the Traveler's connected account. The Traveler "
         "has not been paid."
     ),
     "transfer_committed_or_unknown": (
@@ -368,7 +368,7 @@ FIELD_LABELS = {
     "effective_at": "Recognised",
     "attempt_succeeded_at": "Captured",
     "has_hold": "On hold",
-    "has_user_dispute": "Waçla dispute",
+    "has_user_dispute": "Wassla dispute",
     "has_provider_dispute": "Provider dispute",
     "connected": "At connected account",
     "transit": "In bank transit",

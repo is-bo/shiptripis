@@ -1,4 +1,4 @@
-"""Human-scale forms for the Waçla operations console.
+"""Human-scale forms for the Wassla operations console.
 
 The domain stores basis points, integer euro cents and FX micros. Operators do
 not: forms accept percentages, euro amounts and a readable DZD-per-EUR rate,
@@ -23,7 +23,7 @@ def decimal_to_scaled_integer(value: Decimal, scale: int, *, label: str) -> int:
     scaled = value * scale
     if scaled != scaled.to_integral_value():
         raise forms.ValidationError(
-            f"{label} has more precision than Waçla can store safely."
+            f"{label} has more precision than Wassla can store safely."
         )
     return int(scaled)
 
@@ -171,7 +171,7 @@ class InvitationForm(ConsoleForm):
 class RoleChangeForm(ConsoleForm):
     role = forms.ChoiceField(choices=ROLE_CHOICES, label="Role")
     confirm = forms.BooleanField(
-        label="I understand this replaces the staff member's current Waçla role."
+        label="I understand this replaces the staff member's current Wassla role."
     )
 
 
@@ -187,7 +187,7 @@ class StaffAccessForm(ConsoleForm):
 
 
 class BoostEconomicsSettingsForm(ConsoleForm):
-    """Waçla's commission on the Boost portion of a delivery.
+    """Wassla's commission on the Boost portion of a delivery.
 
     Separate from the ordinary delivery commission on purpose: a Boost is the
     sender's own extra reward, and the platform may price its cut of that
@@ -204,7 +204,7 @@ class BoostEconomicsSettingsForm(ConsoleForm):
         max_value=Decimal("100"),
         max_digits=5,
         decimal_places=2,
-        label="Waçla commission on boosts (%)",
+        label="Wassla commission on boosts (%)",
         help_text=(
             "Charged on top of the boost, exactly as the delivery commission is "
             "charged on top of the reward. The Traveler receives the whole "
@@ -234,7 +234,7 @@ class PricingSettingsForm(ConsoleForm):
         max_value=Decimal("100"),
         max_digits=5,
         decimal_places=2,
-        label="Waçla commission (%)",
+        label="Wassla commission (%)",
         help_text="Added on top of the Traveler reward for future offers.",
     )
     deposit_percent = forms.DecimalField(
@@ -467,7 +467,7 @@ class ManualRefundForm(ConsoleForm):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
     confirm = forms.BooleanField(
-        label="I confirm the refund was sent outside Waçla and the reference is correct."
+        label="I confirm the refund was sent outside Wassla and the reference is correct."
     )
 
 

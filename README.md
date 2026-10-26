@@ -1,4 +1,4 @@
-# Waçla
+# Wassla
 
 Experimental internal application code.
 

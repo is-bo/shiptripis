@@ -89,14 +89,14 @@ void main() {
     await pumpApp(tester, const ProfileScreen(), container: container);
     await tester.pumpAndSettle();
 
-    expect(find.text('WAÇLA · MEMBER'), findsOneWidget);
+    expect(find.text('WASSLA · MEMBER'), findsOneWidget);
     expect(find.text('Amina Bouzid'), findsOneWidget);
     expect(find.text('amina@example.com'), findsOneWidget);
     expect(find.text('Sending · Traveling'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('4.5 ★'), findsOneWidget);
     expect(find.textContaining('Français'), findsOneWidget);
-    expect(find.textContaining('With Waçla since'), findsOneWidget);
+    expect(find.textContaining('With Wassla since'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -124,7 +124,7 @@ void main() {
     expect(find.text('amina@example.com'), findsWidgets);
     expect(find.text('Not started'), findsWidgets);
     expect(find.text('No ratings yet'), findsOneWidget);
-    expect(find.textContaining('With Waçla since'), findsNothing);
+    expect(find.textContaining('With Wassla since'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

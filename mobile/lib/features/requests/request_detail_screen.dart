@@ -408,7 +408,7 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
                                 ),
                                 style: text.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: c.brand,
+                                  color: c.brandInk,
                                 ),
                               ),
                             ),

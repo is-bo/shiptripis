@@ -161,11 +161,11 @@
         <dl>
           {% for row in provider.metrics %}<dt>{{ row.label }}</dt><dd class="{% if not row.value.available %}st-unknown{% endif %}">{{ row.value.text }}</dd>{% endfor %}
         </dl>
-        <p class="st-provider-balance">{% if provider.balance_available %}Provider-reported balance: {{ provider.balance_text }}{% else %}<strong>{{ provider.balance_text }}.</strong> Waçla makes no balance request to this provider, so nothing here is a claim about what the provider is holding.{% endif %}</p>
+        <p class="st-provider-balance">{% if provider.balance_available %}Provider-reported balance: {{ provider.balance_text }}{% else %}<strong>{{ provider.balance_text }}.</strong> Wassla makes no balance request to this provider, so nothing here is a claim about what the provider is holding.{% endif %}</p>
       </section>
       {% endfor %}
     </div>
-    <p class="st-fin-note">Provider costs and fees: <strong>{{ provider_costs_text }}</strong>. Waçla stores no authoritative fee data for either provider, and this page will not estimate one from an assumed percentage.
+    <p class="st-fin-note">Provider costs and fees: <strong>{{ provider_costs_text }}</strong>. Wassla stores no authoritative fee data for either provider, and this page will not estimate one from an assumed percentage.
       Per-category earned figures (delivery versus Boost) are {% if revenue_categories_available %}available{% else %}<strong>not available</strong>{% endif %}. {{ revenue_categories_reason }}</p>
   </section>
   {% endif %}
