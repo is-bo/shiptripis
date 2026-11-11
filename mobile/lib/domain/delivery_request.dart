@@ -25,9 +25,6 @@ enum RequestStatus {
   expired,
   unknown;
 
-  /// Visible to travellers and open to proposals.
-  bool get isDiscoverable => this == open;
-
   bool get isFinished =>
       this == completed || this == cancelled || this == expired;
 

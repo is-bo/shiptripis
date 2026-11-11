@@ -3,7 +3,7 @@
 Package L1A, 2026-11-11. Baseline: `feature/discovery-professional-delivery` at `d8869ad`.
 Rules: `docs/WASSLA_DISCOVERY_PRO_PLAN.md` section L1A. A removal needs evidence: no route, no
 importer, no caller in the mobile app, no admin console screen, no job handler. No table, column or
-migration was removed. L1B adds the mobile section to this file.
+migration was removed. Section 4 is the mobile section added by L1B.
 
 How the evidence was gathered:
 
@@ -11,8 +11,8 @@ How the evidence was gathered:
   walk, 620 rows before and 597 after). The diff is exactly the rows listed below.
 - **Importers.** `git grep -w <symbol>` across the repository for every removed class, function and
   module. After L1A the only hits for removed names are dated historical reports under `docs/`.
-- **Mobile.** `grep` of `mobile/lib` for every removed path. Two unused repository methods still name
-  removed paths; neither has a caller (see "Left for L1B").
+- **Mobile.** `grep` of `mobile/lib` for every removed path. Two unused repository methods still named
+  removed paths; neither had a caller. L1B removed them (section 4).
 - **Admin console.** `grep` of `apps/admin_panel` for every removed module and model surface.
 - **Jobs.** `grep` of `infra/vps/runtime.py`, `run_finance_jobs` and every management command.
 
@@ -179,3 +179,39 @@ withdraw writes in `apps/matching/views.py` now lock `Match` and `Offer` with
 `select_for_update(no_key=True)`, the canonical mode, and the module joined the lock-order gate. The
 exclusion's stated reason was the unrouted legacy classes, which are gone. Results are unchanged; only
 the lock strength is.
+
+## 4. Mobile (L1B)
+
+Package L1B, 2026-11-11. No behaviour or visual change. Evidence: an identifier-count sweep of
+`mobile/lib` and `mobile/test` (a public member whose name occurs once in `lib` and nowhere in `test`
+is dead), a key-by-key search of every ARB key in `lib` and `test`, and `flutter analyze --fatal-infos`
+after each step. Framework overrides were excluded by hand.
+
+### 4.1 Removed
+
+- **Repository methods:** `LocationRepository.airports`, `MatchingRepository.compatibleJourneys`,
+  `RequestRepository.uploadPhoto`, `MatchingRepository.cancelMatch`, `NotificationRepository.unreadActiveCount`,
+  `BoostRepository.retiredHistory`, and the `Airport` model (the routes behind the first two answer 404
+  since L1A). Kept on purpose until L2B: `JourneyRepository.searchPage` and `openFeedPage`.
+- **Client handling of removed Redis channels:** `trip.created`, `trip.updated`, `trip.cancelled`,
+  `match.created`, `handover.confirmed`, `handover.code_issued` in the live-event allow-list and (all but
+  `handover.code_issued`) in `NotificationChannel`, its destination map and the inbox icon map.
+  The `trip.` branch of the live-event resource map is gone with them.
+- **Retired refusal codes:** `legacy_matching_flow_retired`, `legacy_delivery_flow_retired`,
+  `legacy_dzd_quote_retired`, `legacy_trip_flow_retired`, `legacy_trip_search_retired`,
+  `legacy_payment_retired`. Kept: `product_request_retired`, `legacy_contract_not_supported`,
+  `airport_filter_retired`.
+- **Unused navigation and model members:** `goChat`, `goProfile`, `openNotifications`,
+  `openDzdProfileSetup`; getters on the `Journey`, `Deal`, `Payment`, `Handover`, boost, `Dispute`,
+  `Account`, `Rating`, `CanonicalPlace`, `DeliveryRequest` and discovery models that nothing read;
+  `Money.formatExact`, `ApiClient.deleteVoid`, `positiveNumber`, `bottomBelowFooter`, and the chat
+  controller's write-only `_backgroundError`.
+- **Files:** `lib/features/auth/wilayas.dart` (imported nowhere).
+- **ARB keys:** 202 keys that no Dart file references, from `app_en.arb`, `app_ar.arb` and
+  `app_fr.arb` (the three stay in step), and the generated localisations were regenerated.
+
+### 4.2 Kept
+
+- `PushRepository.unregisterDevice` has no caller, but sign-out should unregister the push
+  installation; reported to the orchestrator as a gap, not deleted.
+- Assets: every file under `assets/branding` and `assets/fonts` is referenced, so none was removed.

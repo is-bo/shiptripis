@@ -186,10 +186,6 @@ class RatingState {
   bool get awaitingCounterparty =>
       submitted && !counterpartySubmitted && theirs == null;
 
-  /// They rated first. Prompting is now worth doing — it unlocks both.
-  bool get counterpartyIsWaiting =>
-      !submitted && counterpartySubmitted && canRate;
-
   /// The viewer still owes a rating and may leave one.
   bool get isActionable => switch (state) {
     RatingLifecycleState.available => true,

@@ -1,4 +1,4 @@
-# Waçla Claude Code Instructions
+# Wassla Claude Code Instructions
 
 Before substantial work, read:
 

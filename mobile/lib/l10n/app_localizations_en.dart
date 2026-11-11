@@ -34,9 +34,6 @@ class LEn extends L {
   String get actionRetry => 'Try again';
 
   @override
-  String get actionClose => 'Close';
-
-  @override
   String get actionDone => 'Done';
 
   @override
@@ -52,12 +49,6 @@ class LEn extends L {
   String get actionEdit => 'Edit';
 
   @override
-  String get actionRemove => 'Remove';
-
-  @override
-  String get actionShare => 'Share';
-
-  @override
   String get actionCopy => 'Copy';
 
   @override
@@ -70,16 +61,10 @@ class LEn extends L {
   String get actionSeeAll => 'See all';
 
   @override
-  String get actionLearnMore => 'Learn more';
-
-  @override
   String get actionGoBack => 'Go back';
 
   @override
   String get actionNotNow => 'Not now';
-
-  @override
-  String get actionUnderstood => 'Got it';
 
   @override
   String get actionOpen => 'Open';
@@ -88,22 +73,10 @@ class LEn extends L {
   String get actionAdd => 'Add';
 
   @override
-  String get actionChange => 'Change';
-
-  @override
   String get actionSelect => 'Select';
 
   @override
-  String get actionSearch => 'Search';
-
-  @override
   String get actionClear => 'Clear';
-
-  @override
-  String get actionApply => 'Apply';
-
-  @override
-  String get actionReport => 'Report a problem';
 
   @override
   String get actionContactSupport => 'Contact support';
@@ -138,22 +111,6 @@ class LEn extends L {
   String get roleSwitchLabel => 'Switch role';
 
   @override
-  String get roleSwitchTitle => 'What are you doing today?';
-
-  @override
-  String get roleSenderDescription => 'Send a parcel with a traveler';
-
-  @override
-  String get roleTravelerDescription =>
-      'Carry parcels on a trip you\'re taking';
-
-  @override
-  String get roleSwitchedToSender => 'Switched to sending';
-
-  @override
-  String get roleSwitchedToTraveler => 'Switched to traveling';
-
-  @override
   String get authSignIn => 'Sign in';
 
   @override
@@ -173,13 +130,6 @@ class LEn extends L {
 
   @override
   String get authForgotPassword => 'Forgot your password?';
-
-  @override
-  String get authResetPassword => 'Reset password';
-
-  @override
-  String get authResetSent =>
-      'If that email has an account, we\'ve sent a reset code.';
 
   @override
   String get authNoAccount => 'New to Wassla?';
@@ -247,9 +197,6 @@ class LEn extends L {
   @override
   String get validationDeadlineBeforeReady =>
       'The deadline has to be after the parcel is ready';
-
-  @override
-  String get stateLoading => 'Loading…';
 
   @override
   String get stateOfflineTitle => 'You\'re offline';
@@ -340,16 +287,7 @@ class LEn extends L {
       'There isn\'t enough space left on this journey.';
 
   @override
-  String get staleCapacityExceededDetail =>
-      'Someone else booked space while you were deciding.';
-
-  @override
   String get staleRewardBelowMinimum => 'The minimum reward has changed.';
-
-  @override
-  String staleRewardBelowMinimumDetail(String amount) {
-    return 'The minimum is now $amount.';
-  }
 
   @override
   String get staleRouteChanged =>
@@ -418,15 +356,6 @@ class LEn extends L {
   String get moneyMinimumReward => 'Minimum reward';
 
   @override
-  String get moneyRecommendedReward => 'Wassla suggests';
-
-  @override
-  String get moneyYourReward => 'Your reward';
-
-  @override
-  String get moneyYourOffer => 'Your offer';
-
-  @override
   String get moneyTotal => 'Total';
 
   @override
@@ -465,9 +394,6 @@ class LEn extends L {
       'Chargily charges in Algerian dinars. The delivery price stays in euros.';
 
   @override
-  String get moneyFree => 'Free';
-
-  @override
   String get homeSenderGreeting => 'Send something home';
 
   @override
@@ -484,9 +410,6 @@ class LEn extends L {
 
   @override
   String get homeInProgress => 'In progress';
-
-  @override
-  String get homeRecentActivity => 'Recent activity';
 
   @override
   String get homeNothingNeedsYou => 'Nothing needs you right now';
@@ -526,9 +449,6 @@ class LEn extends L {
 
   @override
   String get deliveriesSenderSection => 'Sending';
-
-  @override
-  String get deliveriesTravelerSection => 'Carrying';
 
   @override
   String get deliveriesJourneysSection => 'My journeys';
@@ -582,9 +502,6 @@ class LEn extends L {
 
   @override
   String get dealStatusPaymentRequired => 'Payment needed';
-
-  @override
-  String get dealStatusPaymentProcessing => 'Confirming payment';
 
   @override
   String get dealStatusFunded => 'Paid and protected';
@@ -710,13 +627,6 @@ class LEn extends L {
   String get requestPhotos => 'Photos';
 
   @override
-  String get requestPhotosHelp =>
-      'Photos protect both of you if there\'s a dispute later.';
-
-  @override
-  String get requestAddPhoto => 'Add photo';
-
-  @override
   String get requestHandlingNotes => 'Handling notes';
 
   @override
@@ -799,20 +709,10 @@ class LEn extends L {
   String get depositPayAction => 'Pay deposit and publish';
 
   @override
-  String get depositPending => 'Confirming your deposit…';
-
-  @override
-  String get depositPendingBody =>
-      'We\'re waiting for your payment provider to confirm. This usually takes a few seconds.';
-
-  @override
   String get journeyTitle => 'Journey';
 
   @override
   String get journeyCreateTitle => 'Add a journey';
-
-  @override
-  String get journeyOverallRoute => 'Where are you going?';
 
   @override
   String get journeyFrom => 'From';
@@ -822,14 +722,6 @@ class LEn extends L {
 
   @override
   String get journeyLegs => 'Legs';
-
-  @override
-  String get journeyAddLeg => 'Add a leg';
-
-  @override
-  String journeyLegPosition(int position) {
-    return 'Leg $position';
-  }
 
   @override
   String get journeyModeFlight => 'Flight';
@@ -847,38 +739,16 @@ class LEn extends L {
   String get journeyCapacity => 'Space you can carry';
 
   @override
-  String get journeyCapacityHelp =>
-      'Set this per leg. You can carry different amounts on different parts of the trip.';
-
-  @override
   String get journeyFlightNumber => 'Flight number';
 
   @override
   String get journeyFlightNumberHint => 'e.g. AH1006';
 
   @override
-  String get journeyFlightAirportsRequired =>
-      'Flight legs must start and end at airports.';
-
-  @override
   String get journeyPublish => 'Publish journey';
 
   @override
   String get journeyCancel => 'Cancel journey';
-
-  @override
-  String get journeySuggestLegTitle => 'Add the road leg?';
-
-  @override
-  String journeySuggestLegBody(String arrival, String destination) {
-    return 'Your flight lands in $arrival, but you\'re going to $destination. Add the drive so parcels can be matched all the way.';
-  }
-
-  @override
-  String get journeySuggestLegAccept => 'Add drive leg';
-
-  @override
-  String get journeySuggestLegDecline => 'No, I stop there';
 
   @override
   String get journeyStatusDraft => 'Draft';
@@ -915,26 +785,11 @@ class LEn extends L {
   String get journeyModeLabel => 'How you\'re traveling';
 
   @override
-  String get journeyLegStartsAt => 'Starts at';
-
-  @override
-  String get journeyLegEndsAt => 'Ends at';
-
-  @override
-  String get journeyLegEndPlaceholder => 'Choose where this leg ends';
-
-  @override
   String get journeyChooseDateTime => 'Choose date and time';
 
   @override
   String get journeyArriveHelp =>
       'Needed to match you with senders: their deadline is checked against this time.';
-
-  @override
-  String get journeyRemoveLeg => 'Remove this leg';
-
-  @override
-  String get journeyAddLegDestinationTitle => 'Where does this leg end?';
 
   @override
   String get journeyMaxLegsReached => 'A journey can hold at most 20 legs.';
@@ -1028,10 +883,6 @@ class LEn extends L {
   String get journeyErrorNotOwned => 'This journey belongs to someone else.';
 
   @override
-  String get journeyRebuildHint =>
-      'Cancel this journey and create it again with the corrected details.';
-
-  @override
   String get journeyCancelConfirmTitle => 'Cancel this journey?';
 
   @override
@@ -1067,10 +918,6 @@ class LEn extends L {
   @override
   String get journeyMatchesInfoBody =>
       'You can\'t offer on these. If one of these senders picks you, their offer arrives in Deliveries.';
-
-  @override
-  String get journeyMatchesLoadFailed =>
-      'We couldn\'t load parcels for this journey.';
 
   @override
   String get routeStopsTitle => 'Your stops';
@@ -1239,9 +1086,6 @@ class LEn extends L {
   }
 
   @override
-  String get proofReplace => 'Upload a new one';
-
-  @override
   String get proofKindLabel => 'What are you uploading?';
 
   @override
@@ -1306,9 +1150,6 @@ class LEn extends L {
   String get kycStatusNotStarted => 'Not started';
 
   @override
-  String get kycStatusInProgress => 'In progress';
-
-  @override
   String get kycStatusPending => 'Being reviewed';
 
   @override
@@ -1318,13 +1159,7 @@ class LEn extends L {
   String get kycStatusRejected => 'Not approved';
 
   @override
-  String get kycStatusActionRequired => 'Needs your attention';
-
-  @override
   String get kycStartAction => 'Start identity check';
-
-  @override
-  String get kycResumeAction => 'Finish identity check';
 
   @override
   String get kycRetryAction => 'Try again';
@@ -1362,9 +1197,6 @@ class LEn extends L {
 
   @override
   String get discoveryRequestsTitle => 'Parcels along your route';
-
-  @override
-  String get discoveryEmptyTravelersTitle => 'No travelers yet';
 
   @override
   String get discoveryEmptyTravelersBody =>
@@ -1422,9 +1254,6 @@ class LEn extends L {
   @override
   String get findTravelersIneligibleInProgress =>
       'This parcel is already on its way.';
-
-  @override
-  String get findTravelersTripContinues => 'Trip continues';
 
   @override
   String get findTravelersDirectLeg => 'Carried in one leg';
@@ -1496,17 +1325,6 @@ class LEn extends L {
   }
 
   @override
-  String discoveryCoveredLegs(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count legs',
-      one: '1 leg',
-    );
-    return 'Covers $_temp0';
-  }
-
-  @override
   String get discoveryDetourSmall => 'Barely a detour';
 
   @override
@@ -1514,16 +1332,6 @@ class LEn extends L {
 
   @override
   String get discoveryDetourLarge => 'Noticeable detour';
-
-  @override
-  String get discoveryVerifiedTraveler => 'Verified traveler';
-
-  @override
-  String get discoveryBoosted => 'Boosted';
-
-  @override
-  String get discoveryBoostedExplainer =>
-      'The sender paid to be seen by more travelers. It doesn\'t change whether you\'re a match.';
 
   @override
   String discoveryRatingCount(String rating, int count) {
@@ -1579,11 +1387,6 @@ class LEn extends L {
   }
 
   @override
-  String offerTheyProposed(String amount) {
-    return 'They offered $amount';
-  }
-
-  @override
   String get offerHistoryTitle => 'Offer history';
 
   @override
@@ -1607,11 +1410,6 @@ class LEn extends L {
   @override
   String get offerDeclineConfirmBody =>
       'The other side will be told. You can still negotiate afterwards.';
-
-  @override
-  String offerAcceptConfirmTitle(String amount) {
-    return 'Accept $amount?';
-  }
 
   @override
   String get offerAcceptTravelerBody =>
@@ -1767,26 +1565,10 @@ class LEn extends L {
       'Nothing was charged. You can try again or use a different method.';
 
   @override
-  String get paymentExpiredTitle => 'Checkout expired';
-
-  @override
-  String get paymentExpiredBody =>
-      'That checkout link timed out. Start again when you\'re ready.';
-
-  @override
   String get paymentStatusRequired => 'Payment needed';
 
   @override
-  String get paymentStatusStarted => 'Checkout open';
-
-  @override
-  String get paymentStatusProcessing => 'Processing';
-
-  @override
   String get paymentStatusPaid => 'Paid';
-
-  @override
-  String get paymentStatusFailed => 'Failed';
 
   @override
   String get paymentStatusRefundPending => 'Refund on the way';
@@ -1796,9 +1578,6 @@ class LEn extends L {
 
   @override
   String get paymentStatusRefunded => 'Refunded';
-
-  @override
-  String get paymentReturnedTitle => 'Welcome back';
 
   @override
   String get paymentRedirectNotProof =>
@@ -1826,9 +1605,6 @@ class LEn extends L {
   @override
   String get guestPayPayerEmailHelp =>
       'We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.';
-
-  @override
-  String get guestPayAmountDue => 'Amount due';
 
   @override
   String get guestPayInvalidTitle => 'This link isn\'t valid';
@@ -1872,9 +1648,6 @@ class LEn extends L {
 
   @override
   String get recipientSaved => 'Recipient saved';
-
-  @override
-  String get recipientRequiredTitle => 'Recipient needed';
 
   @override
   String get recipientRequiredBody =>
@@ -2046,11 +1819,6 @@ class LEn extends L {
   }
 
   @override
-  String protectionEndsIn(String countdown) {
-    return 'Ends in $countdown';
-  }
-
-  @override
   String get protectionEnded => 'Protection window closed';
 
   @override
@@ -2090,9 +1858,6 @@ class LEn extends L {
   @override
   String get payoutFrozenBody =>
       'A dispute is open on this delivery, so the payout is on hold until it\'s resolved.';
-
-  @override
-  String get payoutPendingTitle => 'Payout pending';
 
   @override
   String get payoutEmptyTitle => 'No payouts yet';
@@ -2158,12 +1923,6 @@ class LEn extends L {
   }
 
   @override
-  String get disputeUploadFailed => 'Upload failed';
-
-  @override
-  String get disputeUploadRetry => 'Retry upload';
-
-  @override
   String disputeFileTooLarge(String limit) {
     return 'That file is too large. The limit is $limit.';
   }
@@ -2194,12 +1953,6 @@ class LEn extends L {
   @override
   String get disputeWindowClosedBody =>
       'Disputes can be opened for 48 hours after delivery. Contact support if you still need help.';
-
-  @override
-  String get disputeEmptyTitle => 'No disputes';
-
-  @override
-  String get disputeEmptyBody => 'Nothing is under dispute.';
 
   @override
   String get cancelTitle => 'Cancel this delivery';
@@ -2283,62 +2036,6 @@ class LEn extends L {
       'Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.';
 
   @override
-  String get boostDoesNotGuarantee =>
-      'It doesn\'t change who you match with, and it doesn\'t guarantee a delivery.';
-
-  @override
-  String get boostChoosePackage => 'Choose a boost';
-
-  @override
-  String get boostAmountLabel => 'Boost amount';
-
-  @override
-  String boostAmountHelper(String amount) {
-    return 'Minimum $amount. You can choose any higher amount.';
-  }
-
-  @override
-  String get boostPreviewTitle => 'Review before paying';
-
-  @override
-  String get boostSenderPays => 'You pay';
-
-  @override
-  String get boostTravelerGets => 'Traveler gets if delivered';
-
-  @override
-  String get boostPlatformKeeps => 'Wassla keeps';
-
-  @override
-  String get boostEarningsCondition =>
-      'The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.';
-
-  @override
-  String get boostReviewAction => 'Review boost';
-
-  @override
-  String get boostConfirmAction => 'Continue to payment';
-
-  @override
-  String get boostAmountBelowMinimum =>
-      'Enter at least the minimum boost amount.';
-
-  @override
-  String get boostPreviewStale =>
-      'The boost split changed. Review the updated amounts before continuing.';
-
-  @override
-  String boostDuration(int hours) {
-    String _temp0 = intl.Intl.pluralLogic(
-      hours,
-      locale: localeName,
-      other: '$hours hours',
-      one: '1 hour',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String boostDurationDays(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
@@ -2348,28 +2045,6 @@ class LEn extends L {
     );
     return '$_temp0';
   }
-
-  @override
-  String get boostActive => 'Boost active';
-
-  @override
-  String boostActiveUntil(String when) {
-    return 'Active until $when';
-  }
-
-  @override
-  String get boostPendingPayment => 'Waiting for payment';
-
-  @override
-  String get boostExpired => 'Boost ended';
-
-  @override
-  String boostPurchase(String amount) {
-    return 'Boost for $amount';
-  }
-
-  @override
-  String get boostNotEligible => 'This request can\'t be boosted right now.';
 
   @override
   String get chatTitle => 'Chat';
@@ -2391,9 +2066,6 @@ class LEn extends L {
 
   @override
   String get chatSend => 'Send';
-
-  @override
-  String get chatSendFailed => 'Not sent';
 
   @override
   String get chatRetrySend => 'Tap to retry';
@@ -2431,18 +2103,6 @@ class LEn extends L {
   @override
   String get notificationsEmptyBody =>
       'Offers, payments and delivery updates show up here.';
-
-  @override
-  String notificationsUnreadCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count unread',
-      one: '1 unread',
-      zero: 'No unread',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get profileTitle => 'Profile';
@@ -2545,9 +2205,6 @@ class LEn extends L {
   String get locationSearchHint => 'Search localities and airports';
 
   @override
-  String get locationSelectCountry => 'Choose a country first';
-
-  @override
   String get locationSearchStart =>
       'Type a locality, municipality, commune, or airport';
 
@@ -2605,9 +2262,6 @@ class LEn extends L {
   }
 
   @override
-  String get locationTypeLocality => 'Locality';
-
-  @override
   String get locationUseMap => 'Choose on map';
 
   @override
@@ -2621,19 +2275,11 @@ class LEn extends L {
       'Only the city is shared until the delivery is paid for.';
 
   @override
-  String get locationPrivacyAfterFunding =>
-      'Full address shared with the traveler.';
-
-  @override
   String get locationHiddenUntilFunded =>
       'Exact address available after payment';
 
   @override
   String get locationSearchEmptyTitle => 'No results';
-
-  @override
-  String get locationSearchEmptyBody =>
-      'Try a different spelling, or pick the point on the map.';
 
   @override
   String get countryNameAlgeria => 'Algeria';
@@ -2652,9 +2298,6 @@ class LEn extends L {
 
   @override
   String get locationChangeCountry => 'Change';
-
-  @override
-  String get locationCountryStep => 'Country';
 
   @override
   String get locationCountriesUnavailable =>
@@ -2747,10 +2390,6 @@ class LEn extends L {
       'Drop a pin on the map to save your first address.';
 
   @override
-  String get locationDropPinHelp =>
-      'Move the map until the crosshair sits where you mean, then confirm.';
-
-  @override
   String get locationNamePlaceTitle => 'Name this place';
 
   @override
@@ -2776,9 +2415,6 @@ class LEn extends L {
   String get locationPreferredOptional => 'Optional';
 
   @override
-  String get locationChoosePreferredPoint => 'Choose on map';
-
-  @override
   String locationFlexibleWithin(String place) {
     return 'Flexible within $place';
   }
@@ -2798,16 +2434,7 @@ class LEn extends L {
   String get timelineTitle => 'Progress';
 
   @override
-  String get timelineWaitingOnYou => 'Waiting on you';
-
-  @override
-  String get timelineWaitingOnThem => 'Waiting on them';
-
-  @override
   String get timelineDone => 'Done';
-
-  @override
-  String get timelineUpcoming => 'Next';
 
   @override
   String get a11yStatusPrefix => 'Status';
@@ -2822,13 +2449,7 @@ class LEn extends L {
   String get a11yCloseSheet => 'Close';
 
   @override
-  String get a11yBack => 'Go back';
-
-  @override
   String get a11yLoadingContent => 'Loading content';
-
-  @override
-  String get a11yImageOfParcel => 'Photo of the parcel';
 
   @override
   String get a11ySelected => 'Selected';
@@ -2904,17 +2525,6 @@ class LEn extends L {
   }
 
   @override
-  String unitDistanceKm(String value) {
-    return '$value km';
-  }
-
-  @override
-  String get weightChargeableVolumetric => 'Priced on size, not weight';
-
-  @override
-  String get weightChargeableActual => 'Priced on weight';
-
-  @override
   String get homeVerifyIdentityTitle => 'Verify your identity';
 
   @override
@@ -2946,12 +2556,6 @@ class LEn extends L {
 
   @override
   String get homeAttentionRating => 'Rate this delivery';
-
-  @override
-  String get homeOpenAction => 'Open';
-
-  @override
-  String get deliveriesTabAll => 'All';
 
   @override
   String get deliveryCardSending => 'Sending';
@@ -2987,43 +2591,7 @@ class LEn extends L {
   }
 
   @override
-  String requestOffersCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count offers',
-      one: '1 offer',
-      zero: 'No offers yet',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get onboardingSendTitle => 'Send something home';
-
-  @override
-  String get onboardingSendBody =>
-      'Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.';
-
-  @override
-  String get onboardingCarryTitle => 'Earn on a trip you\'re already taking';
-
-  @override
-  String get onboardingCarryBody =>
-      'Add your journey, and we\'ll show you parcels that fit your route and your spare kilos.';
-
-  @override
-  String get onboardingSafeTitle => 'The money waits until it arrives';
-
-  @override
-  String get onboardingSafeBody =>
-      'We hold the payment from the moment you book until 48 hours after delivery is confirmed.';
-
-  @override
   String get onboardingGetStarted => 'Create an account';
-
-  @override
-  String get onboardingHaveAccount => 'I already have an account';
 
   @override
   String onboardingPageOf(int current, int total) {
@@ -3041,16 +2609,6 @@ class LEn extends L {
 
   @override
   String get authPhone => 'Phone number';
-
-  @override
-  String get authWilaya => 'Wilaya';
-
-  @override
-  String get authWilayaHelp =>
-      'Your home wilaya in Algeria. Choose the one you\'re connected to if you live in Europe.';
-
-  @override
-  String get authWilayaSheetTitle => 'Choose a wilaya';
 
   @override
   String get authResetCodeSent =>
@@ -3125,13 +2683,7 @@ class LEn extends L {
       'Verification is temporarily unavailable. Please try again shortly.';
 
   @override
-  String get payoutEligibleIn => 'Released in';
-
-  @override
   String get notificationOffer => 'Offer update';
-
-  @override
-  String get notificationMatch => 'New match';
 
   @override
   String get notificationPayment => 'Payment update';
@@ -3150,15 +2702,6 @@ class LEn extends L {
 
   @override
   String get chatBlockedPayAction => 'Go to payment';
-
-  @override
-  String get chatLoadEarlier => 'Load earlier messages';
-
-  @override
-  String get chatToday => 'Today';
-
-  @override
-  String get chatYesterday => 'Yesterday';
 
   @override
   String get paymentProviderNewCheckoutsDisabled =>
@@ -3213,14 +2756,6 @@ class LEn extends L {
 
   @override
   String get requestWeightHelp => 'Between 0.01 and 100 kg.';
-
-  @override
-  String get requestDimensionsHelp =>
-      'Optional. Enter all three, or leave all three empty.';
-
-  @override
-  String get requestDimensionsPartial =>
-      'Enter all three measurements, or clear them all.';
 
   @override
   String get requestCategoryDocuments => 'Documents';
@@ -3346,21 +2881,8 @@ class LEn extends L {
       'This is the largest deposit we take, whatever the parcel is worth.';
 
   @override
-  String get discoveryMatchedDistance => 'Distance carried';
-
-  @override
-  String get discoveryDetourLabel => 'Detour for the traveler';
-
-  @override
-  String get discoveryFirstDeparture => 'Leaves';
-
-  @override
   String get discoveryProposeBlocked =>
       'We can\'t work out which part of this journey fits your parcel. Refresh and try again.';
-
-  @override
-  String get discoveryVolumetricExplainer =>
-      'This parcel is bulkier than it is heavy, so its size sets the price.';
 
   @override
   String get discoveryBreakdownNote =>
@@ -3385,85 +2907,8 @@ class LEn extends L {
   }
 
   @override
-  String get boostRankingLabel => 'Visibility';
-
-  @override
-  String get boostRankingModest => 'Higher in the list';
-
-  @override
-  String get boostRankingStrong => 'Much higher in the list';
-
-  @override
-  String get boostRankingTop => 'Top of the list';
-
-  @override
-  String get boostDurationLabel => 'Runs for';
-
-  @override
-  String get boostPriceLabel => 'Price';
-
-  @override
   String get boostCompatibilityNote =>
       'Only travelers who already match your parcel ever see it. A boost doesn\'t change who those travelers are.';
-
-  @override
-  String get boostActivatesOnPayment =>
-      'The boost starts once your payment is confirmed, not when you leave the checkout page.';
-
-  @override
-  String get boostBuyAction => 'Buy this boost';
-
-  @override
-  String get boostPayAction => 'Pay for this boost';
-
-  @override
-  String get boostPurchasesSection => 'Your boosts';
-
-  @override
-  String get boostNoPackagesTitle => 'No boosts available';
-
-  @override
-  String get boostNoPackagesBody =>
-      'There are no boost packages on offer at the moment.';
-
-  @override
-  String get boostDisabledTitle => 'Boosts are switched off';
-
-  @override
-  String get boostDisabledBody =>
-      'Nobody can buy a boost right now. Your request is unaffected.';
-
-  @override
-  String get boostLimitReachedTitle => 'Boost limit reached';
-
-  @override
-  String boostLimitReachedBody(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'You can have $count boosts running on a request at a time.',
-      one: 'You can have 1 boost running on a request at a time.',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get boostRequestExpiredBody =>
-      'This request has expired, so it can no longer be boosted.';
-
-  @override
-  String get boostPackageUnknownBody =>
-      'That boost is no longer offered. Choose another one.';
-
-  @override
-  String get boostStatusCancelled => 'Cancelled';
-
-  @override
-  String get boostStatusUnusable =>
-      'Refunded — the request stopped being boostable';
-
-  @override
-  String get boostStatusRefunded => 'Refunded';
 
   @override
   String get moneyBaseReward => 'Base delivery reward';
@@ -3508,9 +2953,6 @@ class LEn extends L {
   String get dealOpenChat => 'Message';
 
   @override
-  String get dealParcelSection => 'The parcel';
-
-  @override
   String get dealMoneySection => 'The money';
 
   @override
@@ -3538,10 +2980,6 @@ class LEn extends L {
   String dealFundingDeadline(String time) {
     return 'Pay before $time or the space is released';
   }
-
-  @override
-  String get dealLocationsHiddenUntilFunded =>
-      'Exact addresses appear once the delivery is paid for.';
 
   @override
   String get dealTravelerAwaitingPayment => 'Waiting for the sender to pay.';
@@ -3672,9 +3110,6 @@ class LEn extends L {
   String get disputeViewAction => 'View the dispute';
 
   @override
-  String get disputeOpenAction => 'Open a dispute';
-
-  @override
   String get disputeOpened => 'Dispute opened';
 
   @override
@@ -3696,20 +3131,11 @@ class LEn extends L {
       'A dispute can be opened once the parcel has been picked up. Before that, cancel the delivery instead.';
 
   @override
-  String get disputeAlreadyResolvedTitle => 'This has already been decided';
-
-  @override
   String get disputeAlreadyResolvedBody =>
       'There\'s already a resolved dispute on this delivery.';
 
   @override
   String get disputeDetailTitle => 'Dispute';
-
-  @override
-  String get disputeReferenceLabel => 'Reference';
-
-  @override
-  String get disputeCategoryTitle => 'Category';
 
   @override
   String get disputeReasonLabel => 'What was reported';
@@ -3725,9 +3151,6 @@ class LEn extends L {
 
   @override
   String get disputeOpenedAtLabel => 'Opened';
-
-  @override
-  String get disputeResolvedAtLabel => 'Decided';
 
   @override
   String get disputeProtectionEndsLabel => 'Protection window ends';
@@ -3832,18 +3255,6 @@ class LEn extends L {
 
   @override
   String get disputeEvidenceFileRequiredBody => 'Choose a file first.';
-
-  @override
-  String unitFileSizeMb(String value) {
-    return '$value MB';
-  }
-
-  @override
-  String get paymentPollingHint =>
-      'This can take a moment. You can leave this screen — we\'ll keep checking.';
-
-  @override
-  String get paymentOpenProvider => 'Continue payment';
 
   @override
   String get onboardingEyebrow => 'Welcome';
@@ -4029,10 +3440,6 @@ class LEn extends L {
       'Photo storage is unavailable right now. Try again in a moment.';
 
   @override
-  String get requestItemPhotoExpired =>
-      'That photo is no longer available. Add it again.';
-
-  @override
   String get requestItemPhotoPrivacy =>
       'Only travelers who can see this request can see the photo.';
 
@@ -4065,9 +3472,6 @@ class LEn extends L {
   @override
   String get formServerRefusedOnStep =>
       'The server refused this request. The problem is on this step, marked below.';
-
-  @override
-  String get formStepLockedUntilValid => 'Finish this step first.';
 
   @override
   String get pushPermissionHeading => 'On this phone';
@@ -4139,9 +3543,6 @@ class LEn extends L {
   String get pushMarketplaceBody => 'Offers, matches, journeys and requests.';
 
   @override
-  String get notificationJourney => 'Journey update';
-
-  @override
   String get notificationAccount => 'Verification update';
 
   @override
@@ -4155,9 +3556,6 @@ class LEn extends L {
 
   @override
   String get profilePayoutMethods => 'Payout methods';
-
-  @override
-  String get profilePayoutHistory => 'Payout history';
 
   @override
   String get payoutPreferenceTitle => 'Payout preference';
@@ -4178,10 +3576,6 @@ class LEn extends L {
   @override
   String get payoutPreferenceScopeNote =>
       'Preferences apply to future payouts only.';
-
-  @override
-  String get payoutPreferenceRequired =>
-      'Please select your payout preference.';
 
   @override
   String get payoutEurTitle => 'EUR payouts (Stripe)';
@@ -4266,19 +3660,7 @@ class LEn extends L {
   String get payoutDzdRipLabel => 'RIP';
 
   @override
-  String payoutDzdSubmittedAt(String date) {
-    return 'Submitted on $date';
-  }
-
-  @override
-  String get payoutDzdFutureScopeNote =>
-      'The new method applies to future eligible payouts. Already-funded payouts keep their historical payout destination.';
-
-  @override
   String get dzdFormTitle => 'Set up DZD payouts';
-
-  @override
-  String get dzdFormUpdateTitle => 'Update payout information';
 
   @override
   String get dzdFormScopeExplainer =>
@@ -4322,13 +3704,7 @@ class LEn extends L {
   String get dzdChequeReplacePhoto => 'Replace photo';
 
   @override
-  String get dzdChequeRemovePhoto => 'Remove photo';
-
-  @override
   String get dzdSubmitAction => 'Submit payout information';
-
-  @override
-  String get dzdUpdateAction => 'Update payout information';
 
   @override
   String get dzdSubmitSuccess => 'Payout information submitted successfully.';
@@ -4357,37 +3733,6 @@ class LEn extends L {
   @override
   String get payoutReasonCountryUnsupported =>
       'Country not supported for Stripe EUR payouts';
-
-  @override
-  String get deliveryPayoutSectionTitle => 'Payout status';
-
-  @override
-  String get deliveryPayoutProtectionExplainer =>
-      '48-hour protection period is active. Funds are held until the period ends.';
-
-  @override
-  String get deliveryPayoutReadyExplainer =>
-      'Delivery is complete and payout is now eligible.';
-
-  @override
-  String get deliveryPayoutProcessingExplainer =>
-      'Payout processing has started.';
-
-  @override
-  String get deliveryPayoutSentExplainer =>
-      'Payout has been sent and is in transit.';
-
-  @override
-  String get deliveryPayoutPaidExplainer =>
-      'Payout has been settled to your account.';
-
-  @override
-  String get deliveryPayoutReturnedExplainer =>
-      'The bank returned this payout. Please check your payout method.';
-
-  @override
-  String get deliveryPayoutNeedsAttentionExplainer =>
-      'This payout requires attention before it can be settled.';
 
   @override
   String payoutRateLabel(String rate) {
@@ -4456,9 +3801,6 @@ class LEn extends L {
   String get payoutStatusSent => 'Payout sent';
 
   @override
-  String get payoutStatusReturned => 'Payout returned';
-
-  @override
   String get payoutStatusNeedsAttention => 'Needs attention';
 
   @override
@@ -4466,13 +3808,6 @@ class LEn extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'Method needs attention';
-
-  @override
-  String get payoutReasonScheduledArrivalPending => 'Scheduled arrival pending';
-
-  @override
-  String get deliveryPayoutScheduledArrivalPendingExplainer =>
-      'The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.';
 
   @override
   String get earlyArrivalAction => 'I arrived early';
@@ -4525,12 +3860,6 @@ class LEn extends L {
       'Scheduled arrival for this delivery';
 
   @override
-  String get earlyArrivalReportedTimeLabel => 'Reported arrival';
-
-  @override
-  String get earlyArrivalEarlyByLabel => 'Early by';
-
-  @override
   String get earlyArrivalPayoutFloorExplanation =>
       'Arriving early does not make the payout available earlier than the protected payout date for this delivery.';
 
@@ -4555,34 +3884,13 @@ class LEn extends L {
   String get routeDriveMode => 'Drive';
 
   @override
-  String get routeDepartureLabel => 'Departure';
-
-  @override
-  String get routeArrivalLabel => 'Arrival';
-
-  @override
-  String get routeCarryingLegsOnly => 'Carrying route for this delivery';
-
-  @override
   String get notificationArrivalReported => 'Traveler arrived early';
-
-  @override
-  String get notificationArrivalReportedBody =>
-      'Open Wassla to confirm the early arrival.';
 
   @override
   String get notificationArrivalConfirmed => 'Early arrival confirmed';
 
   @override
-  String get notificationArrivalConfirmedBody =>
-      'The sender confirmed your arrival. Delivery is still to come.';
-
-  @override
   String get notificationArrivalDeclined => 'Early arrival not confirmed';
-
-  @override
-  String get notificationArrivalDeclinedBody =>
-      'Open Wassla to review the delivery.';
 
   @override
   String get routeBasisSnapshot => 'Frozen at booking';
@@ -4696,11 +4004,6 @@ class LEn extends L {
 
   @override
   String get boostHistoryTitle => 'Boost history';
-
-  @override
-  String boostHistoryChanged(String from, String to) {
-    return 'Changed from $from to $to';
-  }
 
   @override
   String get boostNotEditable =>
@@ -4869,34 +4172,6 @@ class LEn extends L {
 
   @override
   String get paymentSuccessViewDeliveryAction => 'View delivery';
-
-  @override
-  String get notificationDepositPaidTitle => 'Deposit confirmed';
-
-  @override
-  String get notificationDepositPaidBody =>
-      'Your delivery request is now active and visible to travelers.';
-
-  @override
-  String get notificationDealFundedTitle => 'Delivery funded';
-
-  @override
-  String get notificationDealFundedBody =>
-      'Payment secured. Meet your traveler at the agreed pickup point.';
-
-  @override
-  String get notificationPayoutReadyTitle => 'Payout ready';
-
-  @override
-  String get notificationPayoutReadyBody =>
-      'Your delivery payout is ready for transfer.';
-
-  @override
-  String get notificationPayoutSentTitle => 'Payout sent';
-
-  @override
-  String get notificationPayoutSentBody =>
-      'Your payout has been transferred successfully.';
 
   @override
   String get boostBreakdownTitle => 'What the Boost costs';

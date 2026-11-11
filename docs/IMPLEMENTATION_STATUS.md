@@ -1,5 +1,15 @@
 # Waçla V1 Implementation Status
 
+## Wassla L1B — mobile and docs cleanup (2026-11-11)
+
+Dead code removed from `mobile/lib` with no behaviour or visual change: unused repository methods
+(`compatibleJourneys`, `airports`, `uploadPhoto`, `cancelMatch`, `unreadActiveCount`, `retiredHistory`),
+the `Airport` model, the six removed channel names and six retired refusal codes, `wilayas.dart`, about
+45 unused getters and helpers, and 202 unused ARB keys in EN, AR and FR. `legacy_removal_test.dart`
+gained four checks so these stay removed. `CLAUDE.md` and `AGENTS.md` titles say Wassla. Detail:
+`docs/WASSLA_L1_CLEANUP_INVENTORY.md` section 4. `flutter analyze --fatal-infos` clean; Flutter 1,083
+passed (1,079 before).
+
 ## Wassla L1A — backend cleanup and Railway removal (2026-11-11)
 
 Status: **in review** on `claude/project-thread-po89ml`, pull request into

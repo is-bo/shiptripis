@@ -319,10 +319,6 @@ class _Row extends StatelessWidget {
         l.notificationOffer,
         Icons.swap_horiz_rounded,
       ),
-      NotificationChannel.matchCreated => (
-        l.notificationMatch,
-        Icons.handshake_rounded,
-      ),
       NotificationChannel.paymentCaptured ||
       NotificationChannel.paymentRefunded ||
       NotificationChannel.paymentFailed => (
@@ -347,7 +343,6 @@ class _Row extends StatelessWidget {
         l.notificationDelivery,
         Icons.local_shipping_rounded,
       ),
-      NotificationChannel.handoverConfirmed ||
       NotificationChannel.deliveryCodeAvailable ||
       NotificationChannel.deliveryConfirmed ||
       NotificationChannel.dealUpdated ||
@@ -366,12 +361,6 @@ class _Row extends StatelessWidget {
       NotificationChannel.dealArrivalDeclined => (
         l.notificationArrivalDeclined,
         Icons.info_outline_rounded,
-      ),
-      NotificationChannel.tripCreated ||
-      NotificationChannel.tripUpdated ||
-      NotificationChannel.tripCancelled => (
-        l.notificationJourney,
-        Icons.flight_takeoff_rounded,
       ),
       NotificationChannel.kycStatusChanged ||
       NotificationChannel.flightProofStatusChanged => (

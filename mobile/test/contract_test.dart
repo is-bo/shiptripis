@@ -546,8 +546,8 @@ void main() {
     test('retired surfaces are recognised as such', () {
       final error = _failure(
         statusCode: 410,
-        data: const {'code': 'legacy_matching_flow_retired', 'detail': 'x'},
-        path: '/api/matches/apply',
+        data: const {'code': 'product_request_retired', 'detail': 'x'},
+        path: '/api/matches/1/offers',
       );
       expect(error.code.isRetiredSurface, isTrue);
     });

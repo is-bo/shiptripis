@@ -17,7 +17,6 @@ import 'json.dart';
 enum NotificationChannel {
   parcelCreated,
   parcelCancelled,
-  matchCreated,
   offerCreated,
   offerUpdated,
   offerEconomicsChanged,
@@ -28,10 +27,6 @@ enum NotificationChannel {
   paymentRefunded,
   paymentFailed,
   chatMessage,
-  tripCreated,
-  tripUpdated,
-  tripCancelled,
-  handoverConfirmed,
   deliveryCodeAvailable,
   deliveryConfirmed,
   kycStatusChanged,
@@ -49,7 +44,6 @@ enum NotificationChannel {
   static NotificationChannel parse(String raw) => switch (raw) {
     'parcel.created' => parcelCreated,
     'parcel.cancelled' => parcelCancelled,
-    'match.created' => matchCreated,
     'offer.created' => offerCreated,
     'offer.updated' => offerUpdated,
     'offer.economics_changed' => offerEconomicsChanged,
@@ -60,10 +54,6 @@ enum NotificationChannel {
     'payment.refunded' => paymentRefunded,
     'payment.failed' => paymentFailed,
     'chat.message.new' => chatMessage,
-    'trip.created' => tripCreated,
-    'trip.updated' => tripUpdated,
-    'trip.cancelled' => tripCancelled,
-    'handover.confirmed' => handoverConfirmed,
     'handover.delivery_code_available' => deliveryCodeAvailable,
     'handover.delivery_confirmed' => deliveryConfirmed,
     'kyc.status_changed' => kycStatusChanged,
@@ -195,7 +185,6 @@ class AppNotification {
       final int id => OpenChat(id),
       _ => null,
     },
-    NotificationChannel.matchCreated ||
     NotificationChannel.offerCreated ||
     NotificationChannel.offerUpdated ||
     NotificationChannel.offerEconomicsChanged => switch (matchId) {
@@ -231,14 +220,10 @@ class AppNotification {
       final int id => OpenRequest(id),
       _ => null,
     },
-    NotificationChannel.tripCreated ||
-    NotificationChannel.tripUpdated ||
-    NotificationChannel.tripCancelled ||
     NotificationChannel.flightProofStatusChanged => switch (journeyId) {
       final int id => OpenJourney(id),
       _ => null,
     },
-    NotificationChannel.handoverConfirmed ||
     NotificationChannel.deliveryCodeAvailable ||
     NotificationChannel.deliveryConfirmed ||
     NotificationChannel.dealUpdated ||

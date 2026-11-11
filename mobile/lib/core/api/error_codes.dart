@@ -36,18 +36,6 @@ class ApiErrorCode {
   // Retired V1 surfaces. Reaching one of these means the client called
   // something that no longer exists — a bug in the app, not a user problem.
   // ---------------------------------------------------------------------------
-  static const legacyDeliveryFlowRetired = ApiErrorCode(
-    'legacy_delivery_flow_retired',
-  );
-  static const legacyDzdQuoteRetired = ApiErrorCode('legacy_dzd_quote_retired');
-  static const legacyMatchingFlowRetired = ApiErrorCode(
-    'legacy_matching_flow_retired',
-  );
-  static const legacyPaymentRetired = ApiErrorCode('legacy_payment_retired');
-  static const legacyTripFlowRetired = ApiErrorCode('legacy_trip_flow_retired');
-  static const legacyTripSearchRetired = ApiErrorCode(
-    'legacy_trip_search_retired',
-  );
   static const legacyContractNotSupported = ApiErrorCode(
     'legacy_contract_not_supported',
   );
@@ -371,12 +359,6 @@ class ApiErrorCode {
   /// These are never the user's fault and must never be shown as though they
   /// were; they are a release bug and should be reported, not retried.
   static const _retiredCodes = <String>{
-    'legacy_delivery_flow_retired',
-    'legacy_dzd_quote_retired',
-    'legacy_matching_flow_retired',
-    'legacy_payment_retired',
-    'legacy_trip_flow_retired',
-    'legacy_trip_search_retired',
     'legacy_contract_not_supported',
     'product_request_retired',
     'airport_filter_retired',

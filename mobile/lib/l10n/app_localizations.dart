@@ -147,12 +147,6 @@ abstract class L {
   /// **'Try again'**
   String get actionRetry;
 
-  /// No description provided for @actionClose.
-  ///
-  /// In en, this message translates to:
-  /// **'Close'**
-  String get actionClose;
-
   /// No description provided for @actionDone.
   ///
   /// In en, this message translates to:
@@ -183,18 +177,6 @@ abstract class L {
   /// **'Edit'**
   String get actionEdit;
 
-  /// No description provided for @actionRemove.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove'**
-  String get actionRemove;
-
-  /// No description provided for @actionShare.
-  ///
-  /// In en, this message translates to:
-  /// **'Share'**
-  String get actionShare;
-
   /// No description provided for @actionCopy.
   ///
   /// In en, this message translates to:
@@ -219,12 +201,6 @@ abstract class L {
   /// **'See all'**
   String get actionSeeAll;
 
-  /// No description provided for @actionLearnMore.
-  ///
-  /// In en, this message translates to:
-  /// **'Learn more'**
-  String get actionLearnMore;
-
   /// No description provided for @actionGoBack.
   ///
   /// In en, this message translates to:
@@ -236,12 +212,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Not now'**
   String get actionNotNow;
-
-  /// No description provided for @actionUnderstood.
-  ///
-  /// In en, this message translates to:
-  /// **'Got it'**
-  String get actionUnderstood;
 
   /// No description provided for @actionOpen.
   ///
@@ -255,41 +225,17 @@ abstract class L {
   /// **'Add'**
   String get actionAdd;
 
-  /// No description provided for @actionChange.
-  ///
-  /// In en, this message translates to:
-  /// **'Change'**
-  String get actionChange;
-
   /// No description provided for @actionSelect.
   ///
   /// In en, this message translates to:
   /// **'Select'**
   String get actionSelect;
 
-  /// No description provided for @actionSearch.
-  ///
-  /// In en, this message translates to:
-  /// **'Search'**
-  String get actionSearch;
-
   /// No description provided for @actionClear.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
   String get actionClear;
-
-  /// No description provided for @actionApply.
-  ///
-  /// In en, this message translates to:
-  /// **'Apply'**
-  String get actionApply;
-
-  /// No description provided for @actionReport.
-  ///
-  /// In en, this message translates to:
-  /// **'Report a problem'**
-  String get actionReport;
 
   /// No description provided for @actionContactSupport.
   ///
@@ -351,36 +297,6 @@ abstract class L {
   /// **'Switch role'**
   String get roleSwitchLabel;
 
-  /// No description provided for @roleSwitchTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'What are you doing today?'**
-  String get roleSwitchTitle;
-
-  /// No description provided for @roleSenderDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Send a parcel with a traveler'**
-  String get roleSenderDescription;
-
-  /// No description provided for @roleTravelerDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Carry parcels on a trip you\'re taking'**
-  String get roleTravelerDescription;
-
-  /// No description provided for @roleSwitchedToSender.
-  ///
-  /// In en, this message translates to:
-  /// **'Switched to sending'**
-  String get roleSwitchedToSender;
-
-  /// No description provided for @roleSwitchedToTraveler.
-  ///
-  /// In en, this message translates to:
-  /// **'Switched to traveling'**
-  String get roleSwitchedToTraveler;
-
   /// No description provided for @authSignIn.
   ///
   /// In en, this message translates to:
@@ -422,18 +338,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Forgot your password?'**
   String get authForgotPassword;
-
-  /// No description provided for @authResetPassword.
-  ///
-  /// In en, this message translates to:
-  /// **'Reset password'**
-  String get authResetPassword;
-
-  /// No description provided for @authResetSent.
-  ///
-  /// In en, this message translates to:
-  /// **'If that email has an account, we\'ve sent a reset code.'**
-  String get authResetSent;
 
   /// No description provided for @authNoAccount.
   ///
@@ -554,12 +458,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'The deadline has to be after the parcel is ready'**
   String get validationDeadlineBeforeReady;
-
-  /// No description provided for @stateLoading.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading…'**
-  String get stateLoading;
 
   /// No description provided for @stateOfflineTitle.
   ///
@@ -717,23 +615,11 @@ abstract class L {
   /// **'There isn\'t enough space left on this journey.'**
   String get staleCapacityExceeded;
 
-  /// No description provided for @staleCapacityExceededDetail.
-  ///
-  /// In en, this message translates to:
-  /// **'Someone else booked space while you were deciding.'**
-  String get staleCapacityExceededDetail;
-
   /// No description provided for @staleRewardBelowMinimum.
   ///
   /// In en, this message translates to:
   /// **'The minimum reward has changed.'**
   String get staleRewardBelowMinimum;
-
-  /// No description provided for @staleRewardBelowMinimumDetail.
-  ///
-  /// In en, this message translates to:
-  /// **'The minimum is now {amount}.'**
-  String staleRewardBelowMinimumDetail(String amount);
 
   /// No description provided for @staleRouteChanged.
   ///
@@ -849,24 +735,6 @@ abstract class L {
   /// **'Minimum reward'**
   String get moneyMinimumReward;
 
-  /// No description provided for @moneyRecommendedReward.
-  ///
-  /// In en, this message translates to:
-  /// **'Wassla suggests'**
-  String get moneyRecommendedReward;
-
-  /// No description provided for @moneyYourReward.
-  ///
-  /// In en, this message translates to:
-  /// **'Your reward'**
-  String get moneyYourReward;
-
-  /// No description provided for @moneyYourOffer.
-  ///
-  /// In en, this message translates to:
-  /// **'Your offer'**
-  String get moneyYourOffer;
-
   /// No description provided for @moneyTotal.
   ///
   /// In en, this message translates to:
@@ -933,12 +801,6 @@ abstract class L {
   /// **'Chargily charges in Algerian dinars. The delivery price stays in euros.'**
   String get moneyChargedInDinars;
 
-  /// No description provided for @moneyFree.
-  ///
-  /// In en, this message translates to:
-  /// **'Free'**
-  String get moneyFree;
-
   /// No description provided for @homeSenderGreeting.
   ///
   /// In en, this message translates to:
@@ -974,12 +836,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'In progress'**
   String get homeInProgress;
-
-  /// No description provided for @homeRecentActivity.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent activity'**
-  String get homeRecentActivity;
 
   /// No description provided for @homeNothingNeedsYou.
   ///
@@ -1052,12 +908,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Sending'**
   String get deliveriesSenderSection;
-
-  /// No description provided for @deliveriesTravelerSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Carrying'**
-  String get deliveriesTravelerSection;
 
   /// No description provided for @deliveriesJourneysSection.
   ///
@@ -1160,12 +1010,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Payment needed'**
   String get dealStatusPaymentRequired;
-
-  /// No description provided for @dealStatusPaymentProcessing.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirming payment'**
-  String get dealStatusPaymentProcessing;
 
   /// No description provided for @dealStatusFunded.
   ///
@@ -1407,18 +1251,6 @@ abstract class L {
   /// **'Photos'**
   String get requestPhotos;
 
-  /// No description provided for @requestPhotosHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Photos protect both of you if there\'s a dispute later.'**
-  String get requestPhotosHelp;
-
-  /// No description provided for @requestAddPhoto.
-  ///
-  /// In en, this message translates to:
-  /// **'Add photo'**
-  String get requestAddPhoto;
-
   /// No description provided for @requestHandlingNotes.
   ///
   /// In en, this message translates to:
@@ -1569,18 +1401,6 @@ abstract class L {
   /// **'Pay deposit and publish'**
   String get depositPayAction;
 
-  /// No description provided for @depositPending.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirming your deposit…'**
-  String get depositPending;
-
-  /// No description provided for @depositPendingBody.
-  ///
-  /// In en, this message translates to:
-  /// **'We\'re waiting for your payment provider to confirm. This usually takes a few seconds.'**
-  String get depositPendingBody;
-
   /// No description provided for @journeyTitle.
   ///
   /// In en, this message translates to:
@@ -1592,12 +1412,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Add a journey'**
   String get journeyCreateTitle;
-
-  /// No description provided for @journeyOverallRoute.
-  ///
-  /// In en, this message translates to:
-  /// **'Where are you going?'**
-  String get journeyOverallRoute;
 
   /// No description provided for @journeyFrom.
   ///
@@ -1616,18 +1430,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Legs'**
   String get journeyLegs;
-
-  /// No description provided for @journeyAddLeg.
-  ///
-  /// In en, this message translates to:
-  /// **'Add a leg'**
-  String get journeyAddLeg;
-
-  /// No description provided for @journeyLegPosition.
-  ///
-  /// In en, this message translates to:
-  /// **'Leg {position}'**
-  String journeyLegPosition(int position);
 
   /// No description provided for @journeyModeFlight.
   ///
@@ -1659,12 +1461,6 @@ abstract class L {
   /// **'Space you can carry'**
   String get journeyCapacity;
 
-  /// No description provided for @journeyCapacityHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Set this per leg. You can carry different amounts on different parts of the trip.'**
-  String get journeyCapacityHelp;
-
   /// No description provided for @journeyFlightNumber.
   ///
   /// In en, this message translates to:
@@ -1677,12 +1473,6 @@ abstract class L {
   /// **'e.g. AH1006'**
   String get journeyFlightNumberHint;
 
-  /// No description provided for @journeyFlightAirportsRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Flight legs must start and end at airports.'**
-  String get journeyFlightAirportsRequired;
-
   /// No description provided for @journeyPublish.
   ///
   /// In en, this message translates to:
@@ -1694,30 +1484,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Cancel journey'**
   String get journeyCancel;
-
-  /// No description provided for @journeySuggestLegTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Add the road leg?'**
-  String get journeySuggestLegTitle;
-
-  /// No description provided for @journeySuggestLegBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your flight lands in {arrival}, but you\'re going to {destination}. Add the drive so parcels can be matched all the way.'**
-  String journeySuggestLegBody(String arrival, String destination);
-
-  /// No description provided for @journeySuggestLegAccept.
-  ///
-  /// In en, this message translates to:
-  /// **'Add drive leg'**
-  String get journeySuggestLegAccept;
-
-  /// No description provided for @journeySuggestLegDecline.
-  ///
-  /// In en, this message translates to:
-  /// **'No, I stop there'**
-  String get journeySuggestLegDecline;
 
   /// No description provided for @journeyStatusDraft.
   ///
@@ -1785,24 +1551,6 @@ abstract class L {
   /// **'How you\'re traveling'**
   String get journeyModeLabel;
 
-  /// No description provided for @journeyLegStartsAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Starts at'**
-  String get journeyLegStartsAt;
-
-  /// No description provided for @journeyLegEndsAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Ends at'**
-  String get journeyLegEndsAt;
-
-  /// No description provided for @journeyLegEndPlaceholder.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose where this leg ends'**
-  String get journeyLegEndPlaceholder;
-
   /// No description provided for @journeyChooseDateTime.
   ///
   /// In en, this message translates to:
@@ -1814,18 +1562,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Needed to match you with senders: their deadline is checked against this time.'**
   String get journeyArriveHelp;
-
-  /// No description provided for @journeyRemoveLeg.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove this leg'**
-  String get journeyRemoveLeg;
-
-  /// No description provided for @journeyAddLegDestinationTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Where does this leg end?'**
-  String get journeyAddLegDestinationTitle;
 
   /// No description provided for @journeyMaxLegsReached.
   ///
@@ -1977,12 +1713,6 @@ abstract class L {
   /// **'This journey belongs to someone else.'**
   String get journeyErrorNotOwned;
 
-  /// No description provided for @journeyRebuildHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Cancel this journey and create it again with the corrected details.'**
-  String get journeyRebuildHint;
-
   /// No description provided for @journeyCancelConfirmTitle.
   ///
   /// In en, this message translates to:
@@ -2030,12 +1760,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'You can\'t offer on these. If one of these senders picks you, their offer arrives in Deliveries.'**
   String get journeyMatchesInfoBody;
-
-  /// No description provided for @journeyMatchesLoadFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'We couldn\'t load parcels for this journey.'**
-  String get journeyMatchesLoadFailed;
 
   /// No description provided for @routeStopsTitle.
   ///
@@ -2307,12 +2031,6 @@ abstract class L {
   /// **'Reason: {reason}'**
   String proofRejectedReason(String reason);
 
-  /// No description provided for @proofReplace.
-  ///
-  /// In en, this message translates to:
-  /// **'Upload a new one'**
-  String get proofReplace;
-
   /// No description provided for @proofKindLabel.
   ///
   /// In en, this message translates to:
@@ -2427,12 +2145,6 @@ abstract class L {
   /// **'Not started'**
   String get kycStatusNotStarted;
 
-  /// No description provided for @kycStatusInProgress.
-  ///
-  /// In en, this message translates to:
-  /// **'In progress'**
-  String get kycStatusInProgress;
-
   /// No description provided for @kycStatusPending.
   ///
   /// In en, this message translates to:
@@ -2451,23 +2163,11 @@ abstract class L {
   /// **'Not approved'**
   String get kycStatusRejected;
 
-  /// No description provided for @kycStatusActionRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Needs your attention'**
-  String get kycStatusActionRequired;
-
   /// No description provided for @kycStartAction.
   ///
   /// In en, this message translates to:
   /// **'Start identity check'**
   String get kycStartAction;
-
-  /// No description provided for @kycResumeAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Finish identity check'**
-  String get kycResumeAction;
 
   /// No description provided for @kycRetryAction.
   ///
@@ -2534,12 +2234,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Parcels along your route'**
   String get discoveryRequestsTitle;
-
-  /// No description provided for @discoveryEmptyTravelersTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'No travelers yet'**
-  String get discoveryEmptyTravelersTitle;
 
   /// No description provided for @discoveryEmptyTravelersBody.
   ///
@@ -2643,12 +2337,6 @@ abstract class L {
   /// **'This parcel is already on its way.'**
   String get findTravelersIneligibleInProgress;
 
-  /// No description provided for @findTravelersTripContinues.
-  ///
-  /// In en, this message translates to:
-  /// **'Trip continues'**
-  String get findTravelersTripContinues;
-
   /// No description provided for @findTravelersDirectLeg.
   ///
   /// In en, this message translates to:
@@ -2733,12 +2421,6 @@ abstract class L {
   /// **'{count, plural, =0{No deliveries yet} =1{1 delivery} other{{count} deliveries}}'**
   String findTravelersDeliveries(int count);
 
-  /// No description provided for @discoveryCoveredLegs.
-  ///
-  /// In en, this message translates to:
-  /// **'Covers {count, plural, =1{1 leg} other{{count} legs}}'**
-  String discoveryCoveredLegs(int count);
-
   /// No description provided for @discoveryDetourSmall.
   ///
   /// In en, this message translates to:
@@ -2756,24 +2438,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Noticeable detour'**
   String get discoveryDetourLarge;
-
-  /// No description provided for @discoveryVerifiedTraveler.
-  ///
-  /// In en, this message translates to:
-  /// **'Verified traveler'**
-  String get discoveryVerifiedTraveler;
-
-  /// No description provided for @discoveryBoosted.
-  ///
-  /// In en, this message translates to:
-  /// **'Boosted'**
-  String get discoveryBoosted;
-
-  /// No description provided for @discoveryBoostedExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'The sender paid to be seen by more travelers. It doesn\'t change whether you\'re a match.'**
-  String get discoveryBoostedExplainer;
 
   /// No description provided for @discoveryRatingCount.
   ///
@@ -2871,12 +2535,6 @@ abstract class L {
   /// **'You offered {amount}'**
   String offerYouProposed(String amount);
 
-  /// No description provided for @offerTheyProposed.
-  ///
-  /// In en, this message translates to:
-  /// **'They offered {amount}'**
-  String offerTheyProposed(String amount);
-
   /// No description provided for @offerHistoryTitle.
   ///
   /// In en, this message translates to:
@@ -2924,12 +2582,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'The other side will be told. You can still negotiate afterwards.'**
   String get offerDeclineConfirmBody;
-
-  /// No description provided for @offerAcceptConfirmTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Accept {amount}?'**
-  String offerAcceptConfirmTitle(String amount);
 
   /// No description provided for @offerAcceptTravelerBody.
   ///
@@ -3171,47 +2823,17 @@ abstract class L {
   /// **'Nothing was charged. You can try again or use a different method.'**
   String get paymentFailedBody;
 
-  /// No description provided for @paymentExpiredTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Checkout expired'**
-  String get paymentExpiredTitle;
-
-  /// No description provided for @paymentExpiredBody.
-  ///
-  /// In en, this message translates to:
-  /// **'That checkout link timed out. Start again when you\'re ready.'**
-  String get paymentExpiredBody;
-
   /// No description provided for @paymentStatusRequired.
   ///
   /// In en, this message translates to:
   /// **'Payment needed'**
   String get paymentStatusRequired;
 
-  /// No description provided for @paymentStatusStarted.
-  ///
-  /// In en, this message translates to:
-  /// **'Checkout open'**
-  String get paymentStatusStarted;
-
-  /// No description provided for @paymentStatusProcessing.
-  ///
-  /// In en, this message translates to:
-  /// **'Processing'**
-  String get paymentStatusProcessing;
-
   /// No description provided for @paymentStatusPaid.
   ///
   /// In en, this message translates to:
   /// **'Paid'**
   String get paymentStatusPaid;
-
-  /// No description provided for @paymentStatusFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed'**
-  String get paymentStatusFailed;
 
   /// No description provided for @paymentStatusRefundPending.
   ///
@@ -3230,12 +2852,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Refunded'**
   String get paymentStatusRefunded;
-
-  /// No description provided for @paymentReturnedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Welcome back'**
-  String get paymentReturnedTitle;
 
   /// No description provided for @paymentRedirectNotProof.
   ///
@@ -3278,12 +2894,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.'**
   String get guestPayPayerEmailHelp;
-
-  /// No description provided for @guestPayAmountDue.
-  ///
-  /// In en, this message translates to:
-  /// **'Amount due'**
-  String get guestPayAmountDue;
 
   /// No description provided for @guestPayInvalidTitle.
   ///
@@ -3362,12 +2972,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Recipient saved'**
   String get recipientSaved;
-
-  /// No description provided for @recipientRequiredTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Recipient needed'**
-  String get recipientRequiredTitle;
 
   /// No description provided for @recipientRequiredBody.
   ///
@@ -3639,12 +3243,6 @@ abstract class L {
   /// **'Delivered. Your payout is released after {when}, once the protection window closes.'**
   String protectionTravelerBody(String when);
 
-  /// No description provided for @protectionEndsIn.
-  ///
-  /// In en, this message translates to:
-  /// **'Ends in {countdown}'**
-  String protectionEndsIn(String countdown);
-
   /// No description provided for @protectionEnded.
   ///
   /// In en, this message translates to:
@@ -3722,12 +3320,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'A dispute is open on this delivery, so the payout is on hold until it\'s resolved.'**
   String get payoutFrozenBody;
-
-  /// No description provided for @payoutPendingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout pending'**
-  String get payoutPendingTitle;
 
   /// No description provided for @payoutEmptyTitle.
   ///
@@ -3843,18 +3435,6 @@ abstract class L {
   /// **'Uploading… {percent}%'**
   String disputeUploading(int percent);
 
-  /// No description provided for @disputeUploadFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Upload failed'**
-  String get disputeUploadFailed;
-
-  /// No description provided for @disputeUploadRetry.
-  ///
-  /// In en, this message translates to:
-  /// **'Retry upload'**
-  String get disputeUploadRetry;
-
   /// No description provided for @disputeFileTooLarge.
   ///
   /// In en, this message translates to:
@@ -3908,18 +3488,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Disputes can be opened for 48 hours after delivery. Contact support if you still need help.'**
   String get disputeWindowClosedBody;
-
-  /// No description provided for @disputeEmptyTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'No disputes'**
-  String get disputeEmptyTitle;
-
-  /// No description provided for @disputeEmptyBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing is under dispute.'**
-  String get disputeEmptyBody;
 
   /// No description provided for @cancelTitle.
   ///
@@ -4071,131 +3639,11 @@ abstract class L {
   /// **'Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.'**
   String get boostExplainer;
 
-  /// No description provided for @boostDoesNotGuarantee.
-  ///
-  /// In en, this message translates to:
-  /// **'It doesn\'t change who you match with, and it doesn\'t guarantee a delivery.'**
-  String get boostDoesNotGuarantee;
-
-  /// No description provided for @boostChoosePackage.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose a boost'**
-  String get boostChoosePackage;
-
-  /// No description provided for @boostAmountLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Boost amount'**
-  String get boostAmountLabel;
-
-  /// No description provided for @boostAmountHelper.
-  ///
-  /// In en, this message translates to:
-  /// **'Minimum {amount}. You can choose any higher amount.'**
-  String boostAmountHelper(String amount);
-
-  /// No description provided for @boostPreviewTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Review before paying'**
-  String get boostPreviewTitle;
-
-  /// No description provided for @boostSenderPays.
-  ///
-  /// In en, this message translates to:
-  /// **'You pay'**
-  String get boostSenderPays;
-
-  /// No description provided for @boostTravelerGets.
-  ///
-  /// In en, this message translates to:
-  /// **'Traveler gets if delivered'**
-  String get boostTravelerGets;
-
-  /// No description provided for @boostPlatformKeeps.
-  ///
-  /// In en, this message translates to:
-  /// **'Wassla keeps'**
-  String get boostPlatformKeeps;
-
-  /// No description provided for @boostEarningsCondition.
-  ///
-  /// In en, this message translates to:
-  /// **'The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.'**
-  String get boostEarningsCondition;
-
-  /// No description provided for @boostReviewAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Review boost'**
-  String get boostReviewAction;
-
-  /// No description provided for @boostConfirmAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Continue to payment'**
-  String get boostConfirmAction;
-
-  /// No description provided for @boostAmountBelowMinimum.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter at least the minimum boost amount.'**
-  String get boostAmountBelowMinimum;
-
-  /// No description provided for @boostPreviewStale.
-  ///
-  /// In en, this message translates to:
-  /// **'The boost split changed. Review the updated amounts before continuing.'**
-  String get boostPreviewStale;
-
-  /// No description provided for @boostDuration.
-  ///
-  /// In en, this message translates to:
-  /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
-  String boostDuration(int hours);
-
   /// No description provided for @boostDurationDays.
   ///
   /// In en, this message translates to:
   /// **'{days, plural, =1{1 day} other{{days} days}}'**
   String boostDurationDays(int days);
-
-  /// No description provided for @boostActive.
-  ///
-  /// In en, this message translates to:
-  /// **'Boost active'**
-  String get boostActive;
-
-  /// No description provided for @boostActiveUntil.
-  ///
-  /// In en, this message translates to:
-  /// **'Active until {when}'**
-  String boostActiveUntil(String when);
-
-  /// No description provided for @boostPendingPayment.
-  ///
-  /// In en, this message translates to:
-  /// **'Waiting for payment'**
-  String get boostPendingPayment;
-
-  /// No description provided for @boostExpired.
-  ///
-  /// In en, this message translates to:
-  /// **'Boost ended'**
-  String get boostExpired;
-
-  /// No description provided for @boostPurchase.
-  ///
-  /// In en, this message translates to:
-  /// **'Boost for {amount}'**
-  String boostPurchase(String amount);
-
-  /// No description provided for @boostNotEligible.
-  ///
-  /// In en, this message translates to:
-  /// **'This request can\'t be boosted right now.'**
-  String get boostNotEligible;
 
   /// No description provided for @chatTitle.
   ///
@@ -4238,12 +3686,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Send'**
   String get chatSend;
-
-  /// No description provided for @chatSendFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Not sent'**
-  String get chatSendFailed;
 
   /// No description provided for @chatRetrySend.
   ///
@@ -4310,12 +3752,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Offers, payments and delivery updates show up here.'**
   String get notificationsEmptyBody;
-
-  /// No description provided for @notificationsUnreadCount.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{No unread} =1{1 unread} other{{count} unread}}'**
-  String notificationsUnreadCount(int count);
 
   /// No description provided for @profileTitle.
   ///
@@ -4503,12 +3939,6 @@ abstract class L {
   /// **'Search localities and airports'**
   String get locationSearchHint;
 
-  /// No description provided for @locationSelectCountry.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose a country first'**
-  String get locationSelectCountry;
-
   /// No description provided for @locationSearchStart.
   ///
   /// In en, this message translates to:
@@ -4581,12 +4011,6 @@ abstract class L {
   /// **'Nearby airport · {distance} km'**
   String locationAirportNearbyDistance(String distance);
 
-  /// No description provided for @locationTypeLocality.
-  ///
-  /// In en, this message translates to:
-  /// **'Locality'**
-  String get locationTypeLocality;
-
   /// No description provided for @locationUseMap.
   ///
   /// In en, this message translates to:
@@ -4611,12 +4035,6 @@ abstract class L {
   /// **'Only the city is shared until the delivery is paid for.'**
   String get locationPrivacyBeforeFunding;
 
-  /// No description provided for @locationPrivacyAfterFunding.
-  ///
-  /// In en, this message translates to:
-  /// **'Full address shared with the traveler.'**
-  String get locationPrivacyAfterFunding;
-
   /// No description provided for @locationHiddenUntilFunded.
   ///
   /// In en, this message translates to:
@@ -4628,12 +4046,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'No results'**
   String get locationSearchEmptyTitle;
-
-  /// No description provided for @locationSearchEmptyBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Try a different spelling, or pick the point on the map.'**
-  String get locationSearchEmptyBody;
 
   /// No description provided for @countryNameAlgeria.
   ///
@@ -4670,12 +4082,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Change'**
   String get locationChangeCountry;
-
-  /// No description provided for @locationCountryStep.
-  ///
-  /// In en, this message translates to:
-  /// **'Country'**
-  String get locationCountryStep;
 
   /// No description provided for @locationCountriesUnavailable.
   ///
@@ -4821,12 +4227,6 @@ abstract class L {
   /// **'Drop a pin on the map to save your first address.'**
   String get locationEmptyBody;
 
-  /// No description provided for @locationDropPinHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Move the map until the crosshair sits where you mean, then confirm.'**
-  String get locationDropPinHelp;
-
   /// No description provided for @locationNamePlaceTitle.
   ///
   /// In en, this message translates to:
@@ -4875,12 +4275,6 @@ abstract class L {
   /// **'Optional'**
   String get locationPreferredOptional;
 
-  /// No description provided for @locationChoosePreferredPoint.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose on map'**
-  String get locationChoosePreferredPoint;
-
   /// No description provided for @locationFlexibleWithin.
   ///
   /// In en, this message translates to:
@@ -4911,29 +4305,11 @@ abstract class L {
   /// **'Progress'**
   String get timelineTitle;
 
-  /// No description provided for @timelineWaitingOnYou.
-  ///
-  /// In en, this message translates to:
-  /// **'Waiting on you'**
-  String get timelineWaitingOnYou;
-
-  /// No description provided for @timelineWaitingOnThem.
-  ///
-  /// In en, this message translates to:
-  /// **'Waiting on them'**
-  String get timelineWaitingOnThem;
-
   /// No description provided for @timelineDone.
   ///
   /// In en, this message translates to:
   /// **'Done'**
   String get timelineDone;
-
-  /// No description provided for @timelineUpcoming.
-  ///
-  /// In en, this message translates to:
-  /// **'Next'**
-  String get timelineUpcoming;
 
   /// No description provided for @a11yStatusPrefix.
   ///
@@ -4959,23 +4335,11 @@ abstract class L {
   /// **'Close'**
   String get a11yCloseSheet;
 
-  /// No description provided for @a11yBack.
-  ///
-  /// In en, this message translates to:
-  /// **'Go back'**
-  String get a11yBack;
-
   /// No description provided for @a11yLoadingContent.
   ///
   /// In en, this message translates to:
   /// **'Loading content'**
   String get a11yLoadingContent;
-
-  /// No description provided for @a11yImageOfParcel.
-  ///
-  /// In en, this message translates to:
-  /// **'Photo of the parcel'**
-  String get a11yImageOfParcel;
 
   /// No description provided for @a11ySelected.
   ///
@@ -5091,24 +4455,6 @@ abstract class L {
   /// **'Over {min} km'**
   String distanceOver(String min);
 
-  /// An exact distance, which the server only releases to the owner of a journey.
-  ///
-  /// In en, this message translates to:
-  /// **'{value} km'**
-  String unitDistanceKm(String value);
-
-  /// No description provided for @weightChargeableVolumetric.
-  ///
-  /// In en, this message translates to:
-  /// **'Priced on size, not weight'**
-  String get weightChargeableVolumetric;
-
-  /// No description provided for @weightChargeableActual.
-  ///
-  /// In en, this message translates to:
-  /// **'Priced on weight'**
-  String get weightChargeableActual;
-
   /// No description provided for @homeVerifyIdentityTitle.
   ///
   /// In en, this message translates to:
@@ -5169,18 +4515,6 @@ abstract class L {
   /// **'Rate this delivery'**
   String get homeAttentionRating;
 
-  /// No description provided for @homeOpenAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Open'**
-  String get homeOpenAction;
-
-  /// No description provided for @deliveriesTabAll.
-  ///
-  /// In en, this message translates to:
-  /// **'All'**
-  String get deliveriesTabAll;
-
   /// No description provided for @deliveryCardSending.
   ///
   /// In en, this message translates to:
@@ -5211,59 +4545,11 @@ abstract class L {
   /// **'{count, plural, =1{1 flight needs proof} other{{count} flights need proof}}'**
   String journeyProofNeeded(int count);
 
-  /// No description provided for @requestOffersCount.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{No offers yet} =1{1 offer} other{{count} offers}}'**
-  String requestOffersCount(int count);
-
-  /// No description provided for @onboardingSendTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Send something home'**
-  String get onboardingSendTitle;
-
-  /// No description provided for @onboardingSendBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.'**
-  String get onboardingSendBody;
-
-  /// No description provided for @onboardingCarryTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Earn on a trip you\'re already taking'**
-  String get onboardingCarryTitle;
-
-  /// No description provided for @onboardingCarryBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Add your journey, and we\'ll show you parcels that fit your route and your spare kilos.'**
-  String get onboardingCarryBody;
-
-  /// No description provided for @onboardingSafeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'The money waits until it arrives'**
-  String get onboardingSafeTitle;
-
-  /// No description provided for @onboardingSafeBody.
-  ///
-  /// In en, this message translates to:
-  /// **'We hold the payment from the moment you book until 48 hours after delivery is confirmed.'**
-  String get onboardingSafeBody;
-
   /// No description provided for @onboardingGetStarted.
   ///
   /// In en, this message translates to:
   /// **'Create an account'**
   String get onboardingGetStarted;
-
-  /// No description provided for @onboardingHaveAccount.
-  ///
-  /// In en, this message translates to:
-  /// **'I already have an account'**
-  String get onboardingHaveAccount;
 
   /// Screen-reader position in the onboarding carousel.
   ///
@@ -5294,24 +4580,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Phone number'**
   String get authPhone;
-
-  /// No description provided for @authWilaya.
-  ///
-  /// In en, this message translates to:
-  /// **'Wilaya'**
-  String get authWilaya;
-
-  /// No description provided for @authWilayaHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Your home wilaya in Algeria. Choose the one you\'re connected to if you live in Europe.'**
-  String get authWilayaHelp;
-
-  /// No description provided for @authWilayaSheetTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose a wilaya'**
-  String get authWilayaSheetTitle;
 
   /// No description provided for @authResetCodeSent.
   ///
@@ -5445,23 +4713,11 @@ abstract class L {
   /// **'Verification is temporarily unavailable. Please try again shortly.'**
   String get kycUnavailable;
 
-  /// No description provided for @payoutEligibleIn.
-  ///
-  /// In en, this message translates to:
-  /// **'Released in'**
-  String get payoutEligibleIn;
-
   /// No description provided for @notificationOffer.
   ///
   /// In en, this message translates to:
   /// **'Offer update'**
   String get notificationOffer;
-
-  /// No description provided for @notificationMatch.
-  ///
-  /// In en, this message translates to:
-  /// **'New match'**
-  String get notificationMatch;
 
   /// No description provided for @notificationPayment.
   ///
@@ -5498,24 +4754,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Go to payment'**
   String get chatBlockedPayAction;
-
-  /// No description provided for @chatLoadEarlier.
-  ///
-  /// In en, this message translates to:
-  /// **'Load earlier messages'**
-  String get chatLoadEarlier;
-
-  /// No description provided for @chatToday.
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatToday;
-
-  /// No description provided for @chatYesterday.
-  ///
-  /// In en, this message translates to:
-  /// **'Yesterday'**
-  String get chatYesterday;
 
   /// No description provided for @paymentProviderNewCheckoutsDisabled.
   ///
@@ -5612,18 +4850,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Between 0.01 and 100 kg.'**
   String get requestWeightHelp;
-
-  /// No description provided for @requestDimensionsHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Optional. Enter all three, or leave all three empty.'**
-  String get requestDimensionsHelp;
-
-  /// No description provided for @requestDimensionsPartial.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter all three measurements, or clear them all.'**
-  String get requestDimensionsPartial;
 
   /// No description provided for @requestCategoryDocuments.
   ///
@@ -5835,35 +5061,11 @@ abstract class L {
   /// **'This is the largest deposit we take, whatever the parcel is worth.'**
   String get depositClampedMax;
 
-  /// No description provided for @discoveryMatchedDistance.
-  ///
-  /// In en, this message translates to:
-  /// **'Distance carried'**
-  String get discoveryMatchedDistance;
-
-  /// No description provided for @discoveryDetourLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Detour for the traveler'**
-  String get discoveryDetourLabel;
-
-  /// No description provided for @discoveryFirstDeparture.
-  ///
-  /// In en, this message translates to:
-  /// **'Leaves'**
-  String get discoveryFirstDeparture;
-
   /// No description provided for @discoveryProposeBlocked.
   ///
   /// In en, this message translates to:
   /// **'We can\'t work out which part of this journey fits your parcel. Refresh and try again.'**
   String get discoveryProposeBlocked;
-
-  /// No description provided for @discoveryVolumetricExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'This parcel is bulkier than it is heavy, so its size sets the price.'**
-  String get discoveryVolumetricExplainer;
 
   /// No description provided for @discoveryBreakdownNote.
   ///
@@ -5889,137 +5091,11 @@ abstract class L {
   /// **'{count, plural, =1{This traveler no longer fits your parcel, for 1 reason.} other{This traveler no longer fits your parcel, for {count} reasons.}}'**
   String discoveryIncompatibleCount(int count);
 
-  /// No description provided for @boostRankingLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Visibility'**
-  String get boostRankingLabel;
-
-  /// No description provided for @boostRankingModest.
-  ///
-  /// In en, this message translates to:
-  /// **'Higher in the list'**
-  String get boostRankingModest;
-
-  /// No description provided for @boostRankingStrong.
-  ///
-  /// In en, this message translates to:
-  /// **'Much higher in the list'**
-  String get boostRankingStrong;
-
-  /// No description provided for @boostRankingTop.
-  ///
-  /// In en, this message translates to:
-  /// **'Top of the list'**
-  String get boostRankingTop;
-
-  /// No description provided for @boostDurationLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Runs for'**
-  String get boostDurationLabel;
-
-  /// No description provided for @boostPriceLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Price'**
-  String get boostPriceLabel;
-
   /// No description provided for @boostCompatibilityNote.
   ///
   /// In en, this message translates to:
   /// **'Only travelers who already match your parcel ever see it. A boost doesn\'t change who those travelers are.'**
   String get boostCompatibilityNote;
-
-  /// No description provided for @boostActivatesOnPayment.
-  ///
-  /// In en, this message translates to:
-  /// **'The boost starts once your payment is confirmed, not when you leave the checkout page.'**
-  String get boostActivatesOnPayment;
-
-  /// No description provided for @boostBuyAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Buy this boost'**
-  String get boostBuyAction;
-
-  /// No description provided for @boostPayAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Pay for this boost'**
-  String get boostPayAction;
-
-  /// No description provided for @boostPurchasesSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Your boosts'**
-  String get boostPurchasesSection;
-
-  /// No description provided for @boostNoPackagesTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'No boosts available'**
-  String get boostNoPackagesTitle;
-
-  /// No description provided for @boostNoPackagesBody.
-  ///
-  /// In en, this message translates to:
-  /// **'There are no boost packages on offer at the moment.'**
-  String get boostNoPackagesBody;
-
-  /// No description provided for @boostDisabledTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Boosts are switched off'**
-  String get boostDisabledTitle;
-
-  /// No description provided for @boostDisabledBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Nobody can buy a boost right now. Your request is unaffected.'**
-  String get boostDisabledBody;
-
-  /// No description provided for @boostLimitReachedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Boost limit reached'**
-  String get boostLimitReachedTitle;
-
-  /// No description provided for @boostLimitReachedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{You can have 1 boost running on a request at a time.} other{You can have {count} boosts running on a request at a time.}}'**
-  String boostLimitReachedBody(int count);
-
-  /// No description provided for @boostRequestExpiredBody.
-  ///
-  /// In en, this message translates to:
-  /// **'This request has expired, so it can no longer be boosted.'**
-  String get boostRequestExpiredBody;
-
-  /// No description provided for @boostPackageUnknownBody.
-  ///
-  /// In en, this message translates to:
-  /// **'That boost is no longer offered. Choose another one.'**
-  String get boostPackageUnknownBody;
-
-  /// No description provided for @boostStatusCancelled.
-  ///
-  /// In en, this message translates to:
-  /// **'Cancelled'**
-  String get boostStatusCancelled;
-
-  /// No description provided for @boostStatusUnusable.
-  ///
-  /// In en, this message translates to:
-  /// **'Refunded — the request stopped being boostable'**
-  String get boostStatusUnusable;
-
-  /// No description provided for @boostStatusRefunded.
-  ///
-  /// In en, this message translates to:
-  /// **'Refunded'**
-  String get boostStatusRefunded;
 
   /// No description provided for @moneyBaseReward.
   ///
@@ -6099,12 +5175,6 @@ abstract class L {
   /// **'Message'**
   String get dealOpenChat;
 
-  /// No description provided for @dealParcelSection.
-  ///
-  /// In en, this message translates to:
-  /// **'The parcel'**
-  String get dealParcelSection;
-
   /// No description provided for @dealMoneySection.
   ///
   /// In en, this message translates to:
@@ -6158,12 +5228,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Pay before {time} or the space is released'**
   String dealFundingDeadline(String time);
-
-  /// No description provided for @dealLocationsHiddenUntilFunded.
-  ///
-  /// In en, this message translates to:
-  /// **'Exact addresses appear once the delivery is paid for.'**
-  String get dealLocationsHiddenUntilFunded;
 
   /// No description provided for @dealTravelerAwaitingPayment.
   ///
@@ -6369,12 +5433,6 @@ abstract class L {
   /// **'View the dispute'**
   String get disputeViewAction;
 
-  /// Action that starts the dispute form.
-  ///
-  /// In en, this message translates to:
-  /// **'Open a dispute'**
-  String get disputeOpenAction;
-
   /// Confirmation after a dispute is created.
   ///
   /// In en, this message translates to:
@@ -6411,12 +5469,6 @@ abstract class L {
   /// **'A dispute can be opened once the parcel has been picked up. Before that, cancel the delivery instead.'**
   String get disputeNotAvailableBody;
 
-  /// Shown when the server refuses with dispute_already_resolved.
-  ///
-  /// In en, this message translates to:
-  /// **'This has already been decided'**
-  String get disputeAlreadyResolvedTitle;
-
   /// Body for dispute_already_resolved.
   ///
   /// In en, this message translates to:
@@ -6428,18 +5480,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Dispute'**
   String get disputeDetailTitle;
-
-  /// Label for the dispute's public reference.
-  ///
-  /// In en, this message translates to:
-  /// **'Reference'**
-  String get disputeReferenceLabel;
-
-  /// Row label for the reported category on the dispute detail screen.
-  ///
-  /// In en, this message translates to:
-  /// **'Category'**
-  String get disputeCategoryTitle;
 
   /// Row label for the free-text reason on the dispute detail screen.
   ///
@@ -6470,12 +5510,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Opened'**
   String get disputeOpenedAtLabel;
-
-  /// Row label for when the dispute was resolved.
-  ///
-  /// In en, this message translates to:
-  /// **'Decided'**
-  String get disputeResolvedAtLabel;
 
   /// Row label for the dispute's protection deadline.
   ///
@@ -6662,24 +5696,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Choose a file first.'**
   String get disputeEvidenceFileRequiredBody;
-
-  /// A file size in megabytes.
-  ///
-  /// In en, this message translates to:
-  /// **'{value} MB'**
-  String unitFileSizeMb(String value);
-
-  /// No description provided for @paymentPollingHint.
-  ///
-  /// In en, this message translates to:
-  /// **'This can take a moment. You can leave this screen — we\'ll keep checking.'**
-  String get paymentPollingHint;
-
-  /// No description provided for @paymentOpenProvider.
-  ///
-  /// In en, this message translates to:
-  /// **'Continue payment'**
-  String get paymentOpenProvider;
 
   /// No description provided for @onboardingEyebrow.
   ///
@@ -7011,12 +6027,6 @@ abstract class L {
   /// **'Photo storage is unavailable right now. Try again in a moment.'**
   String get requestItemPhotoStorageUnavailable;
 
-  /// No description provided for @requestItemPhotoExpired.
-  ///
-  /// In en, this message translates to:
-  /// **'That photo is no longer available. Add it again.'**
-  String get requestItemPhotoExpired;
-
   /// No description provided for @requestItemPhotoPrivacy.
   ///
   /// In en, this message translates to:
@@ -7058,12 +6068,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'The server refused this request. The problem is on this step, marked below.'**
   String get formServerRefusedOnStep;
-
-  /// No description provided for @formStepLockedUntilValid.
-  ///
-  /// In en, this message translates to:
-  /// **'Finish this step first.'**
-  String get formStepLockedUntilValid;
 
   /// No description provided for @pushPermissionHeading.
   ///
@@ -7185,12 +6189,6 @@ abstract class L {
   /// **'Offers, matches, journeys and requests.'**
   String get pushMarketplaceBody;
 
-  /// No description provided for @notificationJourney.
-  ///
-  /// In en, this message translates to:
-  /// **'Journey update'**
-  String get notificationJourney;
-
   /// No description provided for @notificationAccount.
   ///
   /// In en, this message translates to:
@@ -7220,12 +6218,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Payout methods'**
   String get profilePayoutMethods;
-
-  /// No description provided for @profilePayoutHistory.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout history'**
-  String get profilePayoutHistory;
 
   /// No description provided for @payoutPreferenceTitle.
   ///
@@ -7262,12 +6254,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Preferences apply to future payouts only.'**
   String get payoutPreferenceScopeNote;
-
-  /// No description provided for @payoutPreferenceRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Please select your payout preference.'**
-  String get payoutPreferenceRequired;
 
   /// No description provided for @payoutEurTitle.
   ///
@@ -7407,29 +6393,11 @@ abstract class L {
   /// **'RIP'**
   String get payoutDzdRipLabel;
 
-  /// No description provided for @payoutDzdSubmittedAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Submitted on {date}'**
-  String payoutDzdSubmittedAt(String date);
-
-  /// No description provided for @payoutDzdFutureScopeNote.
-  ///
-  /// In en, this message translates to:
-  /// **'The new method applies to future eligible payouts. Already-funded payouts keep their historical payout destination.'**
-  String get payoutDzdFutureScopeNote;
-
   /// No description provided for @dzdFormTitle.
   ///
   /// In en, this message translates to:
   /// **'Set up DZD payouts'**
   String get dzdFormTitle;
-
-  /// No description provided for @dzdFormUpdateTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Update payout information'**
-  String get dzdFormUpdateTitle;
 
   /// No description provided for @dzdFormScopeExplainer.
   ///
@@ -7509,23 +6477,11 @@ abstract class L {
   /// **'Replace photo'**
   String get dzdChequeReplacePhoto;
 
-  /// No description provided for @dzdChequeRemovePhoto.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove photo'**
-  String get dzdChequeRemovePhoto;
-
   /// No description provided for @dzdSubmitAction.
   ///
   /// In en, this message translates to:
   /// **'Submit payout information'**
   String get dzdSubmitAction;
-
-  /// No description provided for @dzdUpdateAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Update payout information'**
-  String get dzdUpdateAction;
 
   /// No description provided for @dzdSubmitSuccess.
   ///
@@ -7580,54 +6536,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Country not supported for Stripe EUR payouts'**
   String get payoutReasonCountryUnsupported;
-
-  /// No description provided for @deliveryPayoutSectionTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout status'**
-  String get deliveryPayoutSectionTitle;
-
-  /// No description provided for @deliveryPayoutProtectionExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'48-hour protection period is active. Funds are held until the period ends.'**
-  String get deliveryPayoutProtectionExplainer;
-
-  /// No description provided for @deliveryPayoutReadyExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'Delivery is complete and payout is now eligible.'**
-  String get deliveryPayoutReadyExplainer;
-
-  /// No description provided for @deliveryPayoutProcessingExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout processing has started.'**
-  String get deliveryPayoutProcessingExplainer;
-
-  /// No description provided for @deliveryPayoutSentExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout has been sent and is in transit.'**
-  String get deliveryPayoutSentExplainer;
-
-  /// No description provided for @deliveryPayoutPaidExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout has been settled to your account.'**
-  String get deliveryPayoutPaidExplainer;
-
-  /// No description provided for @deliveryPayoutReturnedExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'The bank returned this payout. Please check your payout method.'**
-  String get deliveryPayoutReturnedExplainer;
-
-  /// No description provided for @deliveryPayoutNeedsAttentionExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'This payout requires attention before it can be settled.'**
-  String get deliveryPayoutNeedsAttentionExplainer;
 
   /// No description provided for @payoutRateLabel.
   ///
@@ -7755,12 +6663,6 @@ abstract class L {
   /// **'Payout sent'**
   String get payoutStatusSent;
 
-  /// No description provided for @payoutStatusReturned.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout returned'**
-  String get payoutStatusReturned;
-
   /// No description provided for @payoutStatusNeedsAttention.
   ///
   /// In en, this message translates to:
@@ -7778,18 +6680,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Method needs attention'**
   String get payoutProfileNeedsAttention;
-
-  /// No description provided for @payoutReasonScheduledArrivalPending.
-  ///
-  /// In en, this message translates to:
-  /// **'Scheduled arrival pending'**
-  String get payoutReasonScheduledArrivalPending;
-
-  /// No description provided for @deliveryPayoutScheduledArrivalPendingExplainer.
-  ///
-  /// In en, this message translates to:
-  /// **'The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.'**
-  String get deliveryPayoutScheduledArrivalPendingExplainer;
 
   /// No description provided for @earlyArrivalAction.
   ///
@@ -7875,18 +6765,6 @@ abstract class L {
   /// **'Scheduled arrival for this delivery'**
   String get earlyArrivalScheduledArrivalLabel;
 
-  /// No description provided for @earlyArrivalReportedTimeLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Reported arrival'**
-  String get earlyArrivalReportedTimeLabel;
-
-  /// No description provided for @earlyArrivalEarlyByLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Early by'**
-  String get earlyArrivalEarlyByLabel;
-
   /// No description provided for @earlyArrivalPayoutFloorExplanation.
   ///
   /// In en, this message translates to:
@@ -7929,35 +6807,11 @@ abstract class L {
   /// **'Drive'**
   String get routeDriveMode;
 
-  /// No description provided for @routeDepartureLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Departure'**
-  String get routeDepartureLabel;
-
-  /// No description provided for @routeArrivalLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Arrival'**
-  String get routeArrivalLabel;
-
-  /// No description provided for @routeCarryingLegsOnly.
-  ///
-  /// In en, this message translates to:
-  /// **'Carrying route for this delivery'**
-  String get routeCarryingLegsOnly;
-
   /// No description provided for @notificationArrivalReported.
   ///
   /// In en, this message translates to:
   /// **'Traveler arrived early'**
   String get notificationArrivalReported;
-
-  /// No description provided for @notificationArrivalReportedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Wassla to confirm the early arrival.'**
-  String get notificationArrivalReportedBody;
 
   /// No description provided for @notificationArrivalConfirmed.
   ///
@@ -7965,23 +6819,11 @@ abstract class L {
   /// **'Early arrival confirmed'**
   String get notificationArrivalConfirmed;
 
-  /// No description provided for @notificationArrivalConfirmedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'The sender confirmed your arrival. Delivery is still to come.'**
-  String get notificationArrivalConfirmedBody;
-
   /// No description provided for @notificationArrivalDeclined.
   ///
   /// In en, this message translates to:
   /// **'Early arrival not confirmed'**
   String get notificationArrivalDeclined;
-
-  /// No description provided for @notificationArrivalDeclinedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Wassla to review the delivery.'**
-  String get notificationArrivalDeclinedBody;
 
   /// No description provided for @routeBasisSnapshot.
   ///
@@ -8180,12 +7022,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Boost history'**
   String get boostHistoryTitle;
-
-  /// No description provided for @boostHistoryChanged.
-  ///
-  /// In en, this message translates to:
-  /// **'Changed from {from} to {to}'**
-  String boostHistoryChanged(String from, String to);
 
   /// No description provided for @boostNotEditable.
   ///
@@ -8486,54 +7322,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'View delivery'**
   String get paymentSuccessViewDeliveryAction;
-
-  /// No description provided for @notificationDepositPaidTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Deposit confirmed'**
-  String get notificationDepositPaidTitle;
-
-  /// No description provided for @notificationDepositPaidBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your delivery request is now active and visible to travelers.'**
-  String get notificationDepositPaidBody;
-
-  /// No description provided for @notificationDealFundedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Delivery funded'**
-  String get notificationDealFundedTitle;
-
-  /// No description provided for @notificationDealFundedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment secured. Meet your traveler at the agreed pickup point.'**
-  String get notificationDealFundedBody;
-
-  /// No description provided for @notificationPayoutReadyTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout ready'**
-  String get notificationPayoutReadyTitle;
-
-  /// No description provided for @notificationPayoutReadyBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your delivery payout is ready for transfer.'**
-  String get notificationPayoutReadyBody;
-
-  /// No description provided for @notificationPayoutSentTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Payout sent'**
-  String get notificationPayoutSentTitle;
-
-  /// No description provided for @notificationPayoutSentBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Your payout has been transferred successfully.'**
-  String get notificationPayoutSentBody;
 
   /// boostBreakdownTitle
   ///

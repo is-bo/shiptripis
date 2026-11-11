@@ -47,18 +47,6 @@ enum DealStatus {
   bool get needsFunding =>
       this == paymentRequired || this == paymentFailed || this == offerAccepted;
 
-  /// Funded and before the parcel changed hands.
-  bool get isBeforePickup => this == funded || this == pickupReady;
-
-  bool get isCarrying =>
-      this == pickedUp || this == inTransit || this == deliveryReady;
-
-  bool get isAfterDelivery =>
-      this == deliveryConfirmed ||
-      this == protectionWindow ||
-      this == completed ||
-      this == disputed;
-
   bool get isFinished =>
       this == completed ||
       this == cancelled ||
@@ -223,10 +211,6 @@ class DealArrivalInfo {
 
   bool get canReportEarlyArrival =>
       availableActions.contains('report_early_arrival');
-  bool get canConfirmEarlyArrival =>
-      availableActions.contains('confirm_early_arrival');
-  bool get canDeclineEarlyArrival =>
-      availableActions.contains('decline_early_arrival');
 
   bool get isPendingConfirmation =>
       state == DealArrivalState.pendingConfirmation;
@@ -421,9 +405,6 @@ class DealPayoutFloor {
   final String? basis;
   final bool gateOpen;
   final DateTime? serverTime;
-
-  bool get isScheduleFloorBinding => basis == 'schedule_floor';
-  bool get isDeliveryProtectionBinding => basis == 'delivery_protection';
 }
 
 /// The protection window and the payout it gates.
@@ -573,8 +554,6 @@ class DealRoute {
   final DealRouteBasis basis;
   final int? journeyId;
   final List<DealRouteLeg> legs;
-
-  bool get isFundedSnapshot => basis == DealRouteBasis.fundedSnapshot;
 }
 
 /// The payout block nested on a Deal. Thinner than the standalone [Payout].
@@ -900,17 +879,6 @@ class Deal {
 
   bool get isFunded => fundedAt != null;
 
-  /// Whether this Deal is an active shipment according to the server.
-  bool get isActiveShipment => activityState != ActivityState.unknown
-      ? activityState == ActivityState.active
-      : !status.isFinished;
-
-  /// Whether this Deal is completed/finished according to the server.
-  bool get isCompletedShipment => activityState != ActivityState.unknown
-      ? (activityState == ActivityState.completed ||
-            activityState == ActivityState.cancelled)
-      : (status.isFinished || status.isAfterDelivery);
-
   bool isSender(int viewerId) => viewerId == senderId;
 
   MoneyPerspective? moneyPerspectiveFor(int viewerId) =>
@@ -937,13 +905,5 @@ class Deal {
         .toList(growable: false);
     if (deadlines.isEmpty) return null;
     return deadlines.reduce((a, b) => a.isBefore(b) ? a : b);
-  }
-
-  /// Whether the traveller is still waiting on money that a protection window
-  /// or a dispute is holding.
-  bool get payoutIsHeld {
-    final payout = protection?.payout;
-    if (payout == null) return false;
-    return payout.status.isPending || payout.status == PayoutStatus.frozen;
   }
 }

@@ -111,21 +111,6 @@ class LocationRepository {
     ),
   );
 
-  Future<List<Airport>> airports({
-    String? country,
-    CancelToken? cancelToken,
-  }) async {
-    final rows = await _api.getList(
-      '/api/airports',
-      query: {if (country != null) 'country': country.toUpperCase()},
-      cancelToken: cancelToken,
-    );
-    return rows
-        .whereType<Map>()
-        .map((r) => Airport.fromJson(Map<String, dynamic>.from(r)))
-        .toList(growable: false);
-  }
-
   static String _kindWire(LocationKind kind) => switch (kind) {
     LocationKind.city => 'city',
     LocationKind.exactAddress => 'exact_address',
@@ -691,25 +676,6 @@ class RequestRepository {
     ),
   );
 
-  /// Attaches a further photo to a request that already exists. The required
-  /// item photo does not come through here — see [stageItemPhoto].
-  Future<ParcelMedia> uploadPhoto({
-    required int requestId,
-    required String filePath,
-    required String fileName,
-    void Function(int sent, int total)? onProgress,
-    CancelToken? cancelToken,
-  }) async => ParcelMedia.fromJson(
-    await _api.upload(
-      '/api/parcels/$requestId/media',
-      form: FormData.fromMap({
-        'photo': await MultipartFile.fromFile(filePath, filename: fileName),
-      }),
-      onProgress: onProgress,
-      cancelToken: cancelToken,
-    ),
-  );
-
   /// A short-lived signed URL for one parcel photo.
   ///
   /// The bucket is private and its object keys never leave the server, so
@@ -779,23 +745,9 @@ class MatchingRepository {
 
   final ApiClient _api;
 
-  /// Travellers compatible with one of my requests. Sender-only, and the only
-  /// discovery call that carries a recommended reward.
-  Future<DiscoveryResults> compatibleJourneys({
-    required int parcelId,
-    CancelToken? cancelToken,
-  }) async => DiscoveryResults.fromJson(
-    await _api.getObject(
-      '/api/matches/compatible-journeys',
-      query: {'parcel_id': parcelId},
-      cancelToken: cancelToken,
-    ),
-  );
-
   /// One page of Find Travelers — the frozen J4 contract.
   ///
-  /// Supersedes [compatibleJourneys] for the Sender's discovery screen. Every
-  /// row already carries the Traveler's name, rating and delivery history, so
+  /// Every row already carries the Traveler's name, rating and delivery history, so
   /// rendering a list costs exactly one request no matter how many candidates
   /// come back.
   ///
@@ -953,9 +905,6 @@ class MatchingRepository {
         .map((r) => Offer.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
   }
-
-  Future<Match> cancelMatch(int matchId) async =>
-      Match.fromJson(await _api.postObject('/api/matches/$matchId/cancel'));
 
   static String _matchStatusWire(MatchStatus status) => switch (status) {
     MatchStatus.inTransit => 'in_transit',
@@ -1781,15 +1730,11 @@ class NotificationRepository {
   Future<int> activeCount({CancelToken? cancelToken}) async =>
       (await badgeCounts(cancelToken: cancelToken)).active;
 
-  /// Active notifications the user has not opened yet.
-  ///
-  /// Only this number justifies offering "Mark all read"; the badge total does
-  /// not, because a fully-read inbox can still be full of live actions.
-  Future<int> unreadActiveCount({CancelToken? cancelToken}) async =>
-      (await badgeCounts(cancelToken: cancelToken)).unreadActive;
-
-  /// Both numbers above, from the one response that carries them — so the
-  /// bell and the inbox never read it twice (K5).
+  /// The bell's active count and the inbox's unread-active count, from the one
+  /// response that carries them — so the bell and the inbox never read it
+  /// twice (K5). "Mark all read" is offered only when `unreadActive` is above
+  /// zero: the badge total alone does not justify it, because a fully-read
+  /// inbox can still be full of live actions.
   Future<BadgeCounts> badgeCounts({CancelToken? cancelToken}) async {
     final body = await _badgeCounts(cancelToken: cancelToken);
     return (
@@ -1972,17 +1917,6 @@ class BoostRepository {
     await _api.putObject(
       '/api/parcels/$requestId/boost',
       body: {'boost_eur_cents': amountEurCents},
-      cancelToken: cancelToken,
-    ),
-  );
-
-  /// Historical retired package audit trail.
-  Future<BoostState> retiredHistory(
-    int requestId, {
-    CancelToken? cancelToken,
-  }) async => BoostState.fromJson(
-    await _api.getObject(
-      '/api/parcels/$requestId/boosts',
       cancelToken: cancelToken,
     ),
   );

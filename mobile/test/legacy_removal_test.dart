@@ -56,6 +56,56 @@ void main() {
     });
   });
 
+  group('surfaces removed by L1A and L1B', () {
+    test('no client calls an endpoint the server now answers 404', () {
+      // L1A deleted these routes; L1B deleted their client methods.
+      for (final path in [
+        '/api/airports',
+        '/api/matches/compatible-journeys',
+        '/api/wallets',
+        '/api/withdrawals',
+        '/api/payments/webhook/mock',
+      ]) {
+        _expectAbsent(source, RegExp(RegExp.escape(path)));
+      }
+    });
+
+    test('the six removed Redis channel names are not mapped', () {
+      // Nothing publishes them; mapping them would be a branch no event reaches.
+      for (final channel in [
+        'trip.created',
+        'trip.updated',
+        'trip.cancelled',
+        'match.created',
+        'handover.confirmed',
+        'handover.code_issued',
+      ]) {
+        _expectAbsent(source, RegExp("'${RegExp.escape(channel)}'"));
+      }
+    });
+
+    test('the six retired refusal codes are not recognised', () {
+      // No server code sends them. The three still sent are kept in
+      // error_codes.dart: product_request_retired, legacy_contract_not_supported
+      // and airport_filter_retired.
+      for (final code in [
+        'legacy_matching_flow_retired',
+        'legacy_delivery_flow_retired',
+        'legacy_dzd_quote_retired',
+        'legacy_trip_flow_retired',
+        'legacy_trip_search_retired',
+        'legacy_payment_retired',
+      ]) {
+        _expectAbsent(source, RegExp(code));
+      }
+    });
+
+    test('the Airport model and the unused wilaya list stay deleted', () {
+      _expectAbsent(source, RegExp(r'class Airport\b'));
+      expect(File('lib/features/auth/wilayas.dart').existsSync(), isFalse);
+    });
+  });
+
   group('V1 economics', () {
     test('no DZD marketplace fields are read', () {
       // These are legacy Offer columns the server strips from a V1 offer. A

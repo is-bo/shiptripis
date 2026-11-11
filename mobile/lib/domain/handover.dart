@@ -75,11 +75,6 @@ class HandoverCodeSlot {
   final DateTime? lockedUntil;
 
   final int? rotation;
-
-  bool get isLockedNow {
-    final until = lockedUntil;
-    return until != null && until.isAfter(DateTime.now());
-  }
 }
 
 /// `GET /api/deals/<id>/handover`.
@@ -153,7 +148,6 @@ class HandoverState {
 
   bool get isPickupConfirmed => pickupConfirmedAt != null;
   bool get isDeliveryConfirmed => deliveryConfirmedAt != null;
-  bool get isDeliveryCodeReleased => deliveryCodeReleasedAt != null;
 }
 
 /// Plaintext. Sender-only, transient, never stored.

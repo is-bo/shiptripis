@@ -196,11 +196,6 @@ class Money implements Comparable<Money> {
     return showCurrency ? '\u2066$cleaned\u2069' : cleaned;
   }
 
-  /// Same as [format] but never abbreviates and never drops the minor units,
-  /// for the places a user is checking an exact figure against a bank
-  /// statement.
-  String formatExact(Locale locale) => format(locale);
-
   static String symbolFor(String currency) => switch (currency.toUpperCase()) {
     'EUR' => '€',
     'DZD' => 'DA',

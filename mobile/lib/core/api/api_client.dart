@@ -284,16 +284,6 @@ class ApiClient {
     path,
   );
 
-  Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
-    await _write(
-      (identity) => _dio.delete<dynamic>(
-        path,
-        cancelToken: cancelToken,
-        options: _requestOptions(identity),
-      ),
-    );
-  }
-
   /// Multipart upload — parcel photos, dispute evidence, flight proof.
   ///
   /// [onProgress] drives a real progress bar. A 25 MiB video on a mobile

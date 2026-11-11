@@ -267,10 +267,6 @@ abstract final class AppScrollPadding {
     return AppSpace.x3l + mq.padding.bottom + NavigationInsetScope.of(context);
   }
 
-  /// Bottom padding for a scroll view whose screen **has** a footer. The
-  /// footer already occupies that space, so only the gutter is added.
-  static double bottomBelowFooter(BuildContext context) => AppSpace.xxl;
-
   /// Standard page insets for a scrolling screen with no footer.
   static EdgeInsets page(BuildContext context, {double top = AppSpace.lg}) =>
       EdgeInsets.fromLTRB(

@@ -8,30 +8,21 @@
   "actionCancel": "Cancel",
   "actionSave": "Save",
   "actionRetry": "Try again",
-  "actionClose": "Close",
   "actionDone": "Done",
   "actionBack": "Back",
   "actionNext": "Next",
   "actionConfirm": "Confirm",
   "actionEdit": "Edit",
-  "actionRemove": "Remove",
-  "actionShare": "Share",
   "actionCopy": "Copy",
   "actionCopied": "Copied",
   "actionRefresh": "Refresh",
   "actionSeeAll": "See all",
-  "actionLearnMore": "Learn more",
   "actionGoBack": "Go back",
   "actionNotNow": "Not now",
-  "actionUnderstood": "Got it",
   "actionOpen": "Open",
   "actionAdd": "Add",
-  "actionChange": "Change",
   "actionSelect": "Select",
-  "actionSearch": "Search",
   "actionClear": "Clear",
-  "actionApply": "Apply",
-  "actionReport": "Report a problem",
   "actionContactSupport": "Contact support",
   "navHome": "Home",
   "navDeliveries": "Deliveries",
@@ -50,11 +41,6 @@
   "roleSender": "Sending",
   "roleTraveler": "Traveling",
   "roleSwitchLabel": "Switch role",
-  "roleSwitchTitle": "What are you doing today?",
-  "roleSenderDescription": "Send a parcel with a traveler",
-  "roleTravelerDescription": "Carry parcels on a trip you're taking",
-  "roleSwitchedToSender": "Switched to sending",
-  "roleSwitchedToTraveler": "Switched to traveling",
   "authSignIn": "Sign in",
   "authSignUp": "Create account",
   "authSignOut": "Sign out",
@@ -62,8 +48,6 @@
   "authPassword": "Password",
   "authFullName": "Full name",
   "authForgotPassword": "Forgot your password?",
-  "authResetPassword": "Reset password",
-  "authResetSent": "If that email has an account, we've sent a reset code.",
   "authNoAccount": "New to Wassla?",
   "authHaveAccount": "Already have an account?",
   "authVerifyEmailTitle": "Confirm your email",
@@ -98,7 +82,6 @@
   "validationSelectOne": "Choose one",
   "validationDateInPast": "Choose a date in the future",
   "validationDeadlineBeforeReady": "The deadline has to be after the parcel is ready",
-  "stateLoading": "Loading…",
   "stateOfflineTitle": "You're offline",
   "stateOfflineBody": "Check your connection. We'll load this as soon as you're back.",
   "stateTimeoutTitle": "That took too long",
@@ -125,16 +108,7 @@
   "staleOfferNotPending": "This offer has already been answered.",
   "staleMatchNotPending": "This match isn't waiting on anyone any more.",
   "staleCapacityExceeded": "There isn't enough space left on this journey.",
-  "staleCapacityExceededDetail": "Someone else booked space while you were deciding.",
   "staleRewardBelowMinimum": "The minimum reward has changed.",
-  "staleRewardBelowMinimumDetail": "The minimum is now {amount}.",
-  "@staleRewardBelowMinimumDetail": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "staleRouteChanged": "The route details changed. We've refreshed the price.",
   "staleKycInvalid": "Your identity check needs attention before you can do this.",
   "staleFlightProofInvalid": "Your flight proof needs attention before this journey can match.",
@@ -154,9 +128,6 @@
   "moneyTravelerReceives": "Traveler receives",
   "moneyPlatformFee": "Wassla fee",
   "moneyMinimumReward": "Minimum reward",
-  "moneyRecommendedReward": "Wassla suggests",
-  "moneyYourReward": "Your reward",
-  "moneyYourOffer": "Your offer",
   "moneyTotal": "Total",
   "moneyDepositPaid": "Deposit already paid",
   "moneyRemainingToPay": "Remaining to pay",
@@ -175,14 +146,12 @@
     }
   },
   "moneyChargedInDinars": "Chargily charges in Algerian dinars. The delivery price stays in euros.",
-  "moneyFree": "Free",
   "homeSenderGreeting": "Send something home",
   "homeTravelerGreeting": "Earn on a trip you're already taking",
   "homeCreateRequest": "Send a parcel",
   "homeCreateJourney": "Add a journey",
   "homeNeedsYourAction": "Needs you",
   "homeInProgress": "In progress",
-  "homeRecentActivity": "Recent activity",
   "homeNothingNeedsYou": "Nothing needs you right now",
   "homeEmptySenderTitle": "Nothing on the way yet",
   "homeEmptySenderBody": "Post what you want to send and travelers heading that way will see it.",
@@ -195,7 +164,6 @@
   "deliveriesFilterAwaitingYou": "Needs you",
   "deliveriesFilterHistory": "History",
   "deliveriesSenderSection": "Sending",
-  "deliveriesTravelerSection": "Carrying",
   "deliveriesJourneysSection": "My journeys",
   "deliveriesEmptyActiveTitle": "Nothing active",
   "deliveriesEmptyActiveBody": "Deliveries you're sending or carrying will appear here.",
@@ -213,7 +181,6 @@
   "requestStatusExpired": "Expired",
   "dealStatusOfferAccepted": "Offer accepted",
   "dealStatusPaymentRequired": "Payment needed",
-  "dealStatusPaymentProcessing": "Confirming payment",
   "dealStatusFunded": "Paid and protected",
   "dealStatusPickupReady": "Ready for pickup",
   "dealStatusPickedUp": "Picked up",
@@ -254,8 +221,6 @@
   "requestDeclaredValue": "Declared value",
   "requestDeclaredValueHelp": "What it would cost to replace. Used if something goes wrong.",
   "requestPhotos": "Photos",
-  "requestPhotosHelp": "Photos protect both of you if there's a dispute later.",
-  "requestAddPhoto": "Add photo",
   "requestHandlingNotes": "Handling notes",
   "requestHandlingNotesHint": "Anything the traveler should know",
   "requestFragile": "Fragile",
@@ -281,48 +246,20 @@
   "depositMinimumAllowed": "Minimum deposit",
   "depositGuidanceNote": "Wassla calculates the deposit from the suggested total and applies the current minimum and maximum. This is credit toward the final payment, not an extra fee.",
   "depositPayAction": "Pay deposit and publish",
-  "depositPending": "Confirming your deposit…",
-  "depositPendingBody": "We're waiting for your payment provider to confirm. This usually takes a few seconds.",
   "journeyTitle": "Journey",
   "journeyCreateTitle": "Add a journey",
-  "journeyOverallRoute": "Where are you going?",
   "journeyFrom": "From",
   "journeyTo": "To",
   "journeyLegs": "Legs",
-  "journeyAddLeg": "Add a leg",
-  "journeyLegPosition": "Leg {position}",
-  "@journeyLegPosition": {
-    "placeholders": {
-      "position": {
-        "type": "int"
-      }
-    }
-  },
   "journeyModeFlight": "Flight",
   "journeyModeDrive": "Drive",
   "journeyDeparts": "Departs",
   "journeyArrives": "Arrives",
   "journeyCapacity": "Space you can carry",
-  "journeyCapacityHelp": "Set this per leg. You can carry different amounts on different parts of the trip.",
   "journeyFlightNumber": "Flight number",
   "journeyFlightNumberHint": "e.g. AH1006",
-  "journeyFlightAirportsRequired": "Flight legs must start and end at airports.",
   "journeyPublish": "Publish journey",
   "journeyCancel": "Cancel journey",
-  "journeySuggestLegTitle": "Add the road leg?",
-  "journeySuggestLegBody": "Your flight lands in {arrival}, but you're going to {destination}. Add the drive so parcels can be matched all the way.",
-  "@journeySuggestLegBody": {
-    "placeholders": {
-      "arrival": {
-        "type": "String"
-      },
-      "destination": {
-        "type": "String"
-      }
-    }
-  },
-  "journeySuggestLegAccept": "Add drive leg",
-  "journeySuggestLegDecline": "No, I stop there",
   "journeyStatusDraft": "Draft",
   "journeyStatusPendingVerification": "Being checked",
   "journeyStatusActive": "Live",
@@ -334,13 +271,8 @@
   "journeyEmptyLegsBody": "A journey is made of legs. Paris to Algiers by plane, then Algiers to Jijel by road.",
   "journeyRouteShape": "Your route",
   "journeyModeLabel": "How you're traveling",
-  "journeyLegStartsAt": "Starts at",
-  "journeyLegEndsAt": "Ends at",
-  "journeyLegEndPlaceholder": "Choose where this leg ends",
   "journeyChooseDateTime": "Choose date and time",
   "journeyArriveHelp": "Needed to match you with senders: their deadline is checked against this time.",
-  "journeyRemoveLeg": "Remove this leg",
-  "journeyAddLegDestinationTitle": "Where does this leg end?",
   "journeyMaxLegsReached": "A journey can hold at most 20 legs.",
   "journeyCapacityInvalid": "Enter between 0.01 and 200 kg, to two decimal places.",
   "journeyLegDepartRequired": "Say when this leg departs.",
@@ -366,7 +298,6 @@
   "journeyErrorLegsDisconnected": "The legs don't join up into one route.",
   "journeyErrorLegTimeOrder": "The legs aren't in time order.",
   "journeyErrorNotOwned": "This journey belongs to someone else.",
-  "journeyRebuildHint": "Cancel this journey and create it again with the corrected details.",
   "journeyCancelConfirmTitle": "Cancel this journey?",
   "journeyCancelConfirmBody": "Senders stop seeing it and any space they were holding is released. This can't be undone.",
   "journeyCancelled": "Journey cancelled.",
@@ -383,7 +314,6 @@
   "journeyErrorHasFundedDeal": "A paid delivery is riding on this journey. Sort that delivery out first.",
   "journeyMatchesInfoTitle": "Senders make the first move",
   "journeyMatchesInfoBody": "You can't offer on these. If one of these senders picks you, their offer arrives in Deliveries.",
-  "journeyMatchesLoadFailed": "We couldn't load parcels for this journey.",
   "routeStopsTitle": "Your stops",
   "routeStopsHelp": "Add where you start, where you end, and anywhere you stop on the way. We work out the legs between them.",
   "routeStopLabel": "Stop",
@@ -471,7 +401,6 @@
       }
     }
   },
-  "proofReplace": "Upload a new one",
   "proofKindLabel": "What are you uploading?",
   "proofKindTicket": "Ticket",
   "proofKindBoardingPass": "Boarding pass",
@@ -505,13 +434,10 @@
   "kycWhyTitle": "Why we ask",
   "kycWhyBody": "Senders are handing a stranger something that matters to them. Verifying travelers is what makes that reasonable.",
   "kycStatusNotStarted": "Not started",
-  "kycStatusInProgress": "In progress",
   "kycStatusPending": "Being reviewed",
   "kycStatusApproved": "Verified",
   "kycStatusRejected": "Not approved",
-  "kycStatusActionRequired": "Needs your attention",
   "kycStartAction": "Start identity check",
-  "kycResumeAction": "Finish identity check",
   "kycRetryAction": "Try again",
   "kycPendingBody": "We're reviewing your documents. This usually takes less than a day.",
   "kycApprovedBody": "You're verified. You can publish journeys and carry parcels.",
@@ -523,7 +449,6 @@
   "kycSelfie": "Selfie",
   "discoveryTravelersTitle": "Travelers for this parcel",
   "discoveryRequestsTitle": "Parcels along your route",
-  "discoveryEmptyTravelersTitle": "No travelers yet",
   "discoveryEmptyTravelersBody": "Nobody is going your way right now. We'll notify you when someone is.",
   "discoveryEmptyRequestsTitle": "No parcels yet",
   "discoveryEmptyRequestsBody": "Nothing matches your journey right now. We'll notify you when something does.",
@@ -541,7 +466,6 @@
   "findTravelersIneligibleAlreadyMatched": "This parcel already has a traveler.",
   "findTravelersIneligibleClosed": "This request is closed.",
   "findTravelersIneligibleInProgress": "This parcel is already on its way.",
-  "findTravelersTripContinues": "Trip continues",
   "findTravelersDirectLeg": "Carried in one leg",
   "findTravelersWholeTripMatches": "This whole trip is your route",
   "findTravelersIdentityVerified": "Identity verified",
@@ -613,20 +537,9 @@
       }
     }
   },
-  "discoveryCoveredLegs": "Covers {count, plural, =1{1 leg} other{{count} legs}}",
-  "@discoveryCoveredLegs": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "discoveryDetourSmall": "Barely a detour",
   "discoveryDetourModerate": "Small detour",
   "discoveryDetourLarge": "Noticeable detour",
-  "discoveryVerifiedTraveler": "Verified traveler",
-  "discoveryBoosted": "Boosted",
-  "discoveryBoostedExplainer": "The sender paid to be seen by more travelers. It doesn't change whether you're a match.",
   "discoveryRatingCount": "{rating} ({count})",
   "@discoveryRatingCount": {
     "placeholders": {
@@ -660,14 +573,6 @@
       }
     }
   },
-  "offerTheyProposed": "They offered {amount}",
-  "@offerTheyProposed": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "offerHistoryTitle": "Offer history",
   "offerStatusPending": "Waiting",
   "offerStatusAccepted": "Accepted",
@@ -676,14 +581,6 @@
   "offerStatusExpired": "Expired",
   "offerDeclineConfirmTitle": "Decline this offer?",
   "offerDeclineConfirmBody": "The other side will be told. You can still negotiate afterwards.",
-  "offerAcceptConfirmTitle": "Accept {amount}?",
-  "@offerAcceptConfirmTitle": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "offerAcceptTravelerBody": "Space on your journey is reserved as soon as you accept. The sender then has to pay.",
   "offerAcceptSenderBody": "Once you accept, you'll be asked to pay so the delivery can start.",
   "offerAcceptSenderConfirmTitle": "Pay {amount} for this delivery?",
@@ -814,17 +711,11 @@
   "paymentOpeningProvider": "Opening secure checkout…",
   "paymentFailedTitle": "Payment didn't go through",
   "paymentFailedBody": "Nothing was charged. You can try again or use a different method.",
-  "paymentExpiredTitle": "Checkout expired",
-  "paymentExpiredBody": "That checkout link timed out. Start again when you're ready.",
   "paymentStatusRequired": "Payment needed",
-  "paymentStatusStarted": "Checkout open",
-  "paymentStatusProcessing": "Processing",
   "paymentStatusPaid": "Paid",
-  "paymentStatusFailed": "Failed",
   "paymentStatusRefundPending": "Refund on the way",
   "paymentStatusPartiallyRefunded": "Partly refunded",
   "paymentStatusRefunded": "Refunded",
-  "paymentReturnedTitle": "Welcome back",
   "paymentRedirectNotProof": "We confirm every payment with the provider before marking it paid.",
   "guestPayTitle": "Payment request",
   "guestPayExplainer": "The person who sent you this link is asking you to pay this for their Wassla delivery. You don’t need an account.",
@@ -839,7 +730,6 @@
   "guestPayWarning": "This link only lets you pay this amount. It gives no access to the delivery or to anyone’s details.",
   "guestPayPayerEmail": "Email for your receipt",
   "guestPayPayerEmailHelp": "We’ll send your receipt here, and tell you if a refund is ever due. It doesn’t create an account.",
-  "guestPayAmountDue": "Amount due",
   "guestPayInvalidTitle": "This link isn't valid",
   "guestPayInvalidBody": "It may have expired, been cancelled, or already been paid.",
   "recipientTitle": "Who's receiving this?",
@@ -853,7 +743,6 @@
   "recipientNote": "Note for the recipient (optional)",
   "recipientSave": "Save recipient",
   "recipientSaved": "Recipient saved",
-  "recipientRequiredTitle": "Recipient needed",
   "recipientRequiredBody": "Add the recipient before pickup so we can send them the delivery code.",
   "recipientRecordedForTraveler": "The sender has provided the recipient's details.",
   "pickupSenderTitle": "Pickup code",
@@ -941,14 +830,6 @@
       }
     }
   },
-  "protectionEndsIn": "Ends in {countdown}",
-  "@protectionEndsIn": {
-    "placeholders": {
-      "countdown": {
-        "type": "String"
-      }
-    }
-  },
   "protectionEnded": "Protection window closed",
   "protectionExplainerTitle": "What this means",
   "protectionExplainerBody": "Funds are held pending delivery confirmation and the 48-hour protection period. Wassla releases them only after that period ends and no dispute is open.",
@@ -962,7 +843,6 @@
   "payoutStatusCancelled": "Cancelled",
   "payoutStatusFrozen": "On hold",
   "payoutFrozenBody": "A dispute is open on this delivery, so the payout is on hold until it's resolved.",
-  "payoutPendingTitle": "Payout pending",
   "payoutEmptyTitle": "No payouts yet",
   "payoutEmptyBody": "Complete a delivery and your earnings appear here.",
   "disputeOpenTitle": "Open a dispute",
@@ -989,8 +869,6 @@
       }
     }
   },
-  "disputeUploadFailed": "Upload failed",
-  "disputeUploadRetry": "Retry upload",
   "disputeFileTooLarge": "That file is too large. The limit is {limit}.",
   "@disputeFileTooLarge": {
     "placeholders": {
@@ -1007,8 +885,6 @@
   "disputeResolutionPartial": "Split between both sides",
   "disputeWindowClosedTitle": "The dispute window has closed",
   "disputeWindowClosedBody": "Disputes can be opened for 48 hours after delivery. Contact support if you still need help.",
-  "disputeEmptyTitle": "No disputes",
-  "disputeEmptyBody": "Nothing is under dispute.",
   "cancelTitle": "Cancel this delivery",
   "cancelConfirmAction": "Cancel delivery",
   "cancelKeepAction": "Keep it",
@@ -1041,34 +917,6 @@
   "ratingEmptyBody": "Ratings appear after a delivery is completed.",
   "boostTitle": "Boost this request",
   "boostExplainer": "Travelers receive 100% of the Boost bonus. Boosted requests appear higher in traveler search.",
-  "boostDoesNotGuarantee": "It doesn't change who you match with, and it doesn't guarantee a delivery.",
-  "boostChoosePackage": "Choose a boost",
-  "boostAmountLabel": "Boost amount",
-  "boostAmountHelper": "Minimum {amount}. You can choose any higher amount.",
-  "@boostAmountHelper": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
-  "boostPreviewTitle": "Review before paying",
-  "boostSenderPays": "You pay",
-  "boostTravelerGets": "Traveler gets if delivered",
-  "boostPlatformKeeps": "Wassla keeps",
-  "boostEarningsCondition": "The Traveler bonus becomes part of protected deal earnings. If no delivery reaches an earning outcome, the boost payment is refunded.",
-  "boostReviewAction": "Review boost",
-  "boostConfirmAction": "Continue to payment",
-  "boostAmountBelowMinimum": "Enter at least the minimum boost amount.",
-  "boostPreviewStale": "The boost split changed. Review the updated amounts before continuing.",
-  "boostDuration": "{hours, plural, =1{1 hour} other{{hours} hours}}",
-  "@boostDuration": {
-    "placeholders": {
-      "hours": {
-        "type": "int"
-      }
-    }
-  },
   "boostDurationDays": "{days, plural, =1{1 day} other{{days} days}}",
   "@boostDurationDays": {
     "placeholders": {
@@ -1077,26 +925,6 @@
       }
     }
   },
-  "boostActive": "Boost active",
-  "boostActiveUntil": "Active until {when}",
-  "@boostActiveUntil": {
-    "placeholders": {
-      "when": {
-        "type": "String"
-      }
-    }
-  },
-  "boostPendingPayment": "Waiting for payment",
-  "boostExpired": "Boost ended",
-  "boostPurchase": "Boost for {amount}",
-  "@boostPurchase": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
-  "boostNotEligible": "This request can't be boosted right now.",
   "chatTitle": "Chat",
   "chatEmptyTitle": "No conversations",
   "chatEmptyBody": "Chat opens once a delivery is paid for.",
@@ -1104,7 +932,6 @@
   "chatThreadEmptyBody": "Arrange where and when to meet.",
   "chatComposerHint": "Write a message",
   "chatSend": "Send",
-  "chatSendFailed": "Not sent",
   "chatRetrySend": "Tap to retry",
   "chatSending": "Sending…",
   "chatClosedTitle": "This conversation is closed",
@@ -1116,14 +943,6 @@
   "notificationsMarkAllRead": "Mark all as read",
   "notificationsEmptyTitle": "Nothing new",
   "notificationsEmptyBody": "Offers, payments and delivery updates show up here.",
-  "notificationsUnreadCount": "{count, plural, =0{No unread} =1{1 unread} other{{count} unread}}",
-  "@notificationsUnreadCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "profileTitle": "Profile",
   "profileAccount": "Account",
   "profilePassportStamp": "Wassla · MEMBER",
@@ -1172,7 +991,6 @@
   },
   "locationSearchTitle": "Choose a place",
   "locationSearchHint": "Search localities and airports",
-  "locationSelectCountry": "Choose a country first",
   "locationSearchStart": "Type a locality, municipality, commune, or airport",
   "placeTierWilaya": "{name} Wilaya",
   "@placeTierWilaya": {
@@ -1256,22 +1074,18 @@
       }
     }
   },
-  "locationTypeLocality": "Locality",
   "locationUseMap": "Choose on map",
   "locationConfirmPoint": "Use this point",
   "locationSaved": "Saved places",
   "locationPrivacyBeforeFunding": "Only the city is shared until the delivery is paid for.",
-  "locationPrivacyAfterFunding": "Full address shared with the traveler.",
   "locationHiddenUntilFunded": "Exact address available after payment",
   "locationSearchEmptyTitle": "No results",
-  "locationSearchEmptyBody": "Try a different spelling, or pick the point on the map.",
   "countryNameAlgeria": "Algeria",
   "countryNameFrance": "France",
   "countryNameSpain": "Spain",
   "countryNameGermany": "Germany",
   "locationCountryQuestion": "Which country?",
   "locationChangeCountry": "Change",
-  "locationCountryStep": "Country",
   "locationCountriesUnavailable": "No countries are available right now.",
   "locationSelectCountryBody": "Pick a country above, then search for the town, commune or airport.",
   "locationSearchReadyTitle": "Ready when you are",
@@ -1338,7 +1152,6 @@
   "locationYourPlaces": "Your places",
   "locationEmptyTitle": "No saved places yet",
   "locationEmptyBody": "Drop a pin on the map to save your first address.",
-  "locationDropPinHelp": "Move the map until the crosshair sits where you mean, then confirm.",
   "locationNamePlaceTitle": "Name this place",
   "locationNamePlaceBody": "Only you see the label. Other people see the city until a delivery is paid for.",
   "locationLabelField": "Label",
@@ -1347,7 +1160,6 @@
   "locationPlaceSaved": "Place saved.",
   "locationPreferredMeetingPoint": "Preferred meeting point",
   "locationPreferredOptional": "Optional",
-  "locationChoosePreferredPoint": "Choose on map",
   "locationFlexibleWithin": "Flexible within {place}",
   "@locationFlexibleWithin": {
     "placeholders": {
@@ -1367,17 +1179,12 @@
   "mapZoomIn": "Zoom in",
   "mapZoomOut": "Zoom out",
   "timelineTitle": "Progress",
-  "timelineWaitingOnYou": "Waiting on you",
-  "timelineWaitingOnThem": "Waiting on them",
   "timelineDone": "Done",
-  "timelineUpcoming": "Next",
   "a11yStatusPrefix": "Status",
   "a11yMoneyAmount": "Amount",
   "a11yRequiredField": "Required",
   "a11yCloseSheet": "Close",
-  "a11yBack": "Go back",
   "a11yLoadingContent": "Loading content",
-  "a11yImageOfParcel": "Photo of the parcel",
   "a11ySelected": "Selected",
   "a11yNotSelected": "Not selected",
   "a11yExpandSection": "Expand",
@@ -1473,17 +1280,6 @@
       }
     }
   },
-  "unitDistanceKm": "{value} km",
-  "@unitDistanceKm": {
-    "description": "An exact distance, which the server only releases to the owner of a journey.",
-    "placeholders": {
-      "value": {
-        "type": "String"
-      }
-    }
-  },
-  "weightChargeableVolumetric": "Priced on size, not weight",
-  "weightChargeableActual": "Priced on weight",
   "homeVerifyIdentityTitle": "Verify your identity",
   "homeVerifyIdentityBody": "Travelers must be verified before a journey can go live.",
   "homeAttentionOfferAwaiting": "An offer is waiting for your answer",
@@ -1494,8 +1290,6 @@
   "homeAttentionRevealDelivery": "The delivery code is ready",
   "homeAttentionSubmitDelivery": "Enter the delivery code",
   "homeAttentionRating": "Rate this delivery",
-  "homeOpenAction": "Open",
-  "deliveriesTabAll": "All",
   "deliveryCardSending": "Sending",
   "deliveryCardCarrying": "Carrying",
   "deliveryCardWith": "with {name}",
@@ -1523,22 +1317,7 @@
       }
     }
   },
-  "requestOffersCount": "{count, plural, =0{No offers yet} =1{1 offer} other{{count} offers}}",
-  "@requestOffersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "onboardingSendTitle": "Send something home",
-  "onboardingSendBody": "Post what you want delivered. Travelers already heading that way can carry it, and you agree the price between you.",
-  "onboardingCarryTitle": "Earn on a trip you're already taking",
-  "onboardingCarryBody": "Add your journey, and we'll show you parcels that fit your route and your spare kilos.",
-  "onboardingSafeTitle": "The money waits until it arrives",
-  "onboardingSafeBody": "We hold the payment from the moment you book until 48 hours after delivery is confirmed.",
   "onboardingGetStarted": "Create an account",
-  "onboardingHaveAccount": "I already have an account",
   "onboardingPageOf": "Page {current} of {total}",
   "@onboardingPageOf": {
     "description": "Screen-reader position in the onboarding carousel.",
@@ -1555,9 +1334,6 @@
   "authShowPassword": "Show password",
   "authHidePassword": "Hide password",
   "authPhone": "Phone number",
-  "authWilaya": "Wilaya",
-  "authWilayaHelp": "Your home wilaya in Algeria. Choose the one you're connected to if you live in Europe.",
-  "authWilayaSheetTitle": "Choose a wilaya",
   "authResetCodeSent": "If that address has an account, we've sent it a six-digit code.",
   "authResetCodeLabel": "Six-digit code",
   "authNewPassword": "New password",
@@ -1580,18 +1356,13 @@
   "kycBackNotNeeded": "A passport only needs its photo page.",
   "kycSelfieHelp": "A clear photo of your face, taken now — it's checked against your document.",
   "kycUnavailable": "Verification is temporarily unavailable. Please try again shortly.",
-  "payoutEligibleIn": "Released in",
   "notificationOffer": "Offer update",
-  "notificationMatch": "New match",
   "notificationPayment": "Payment update",
   "notificationChat": "New message",
   "notificationRequest": "Request update",
   "notificationDelivery": "Delivery update",
   "notificationOther": "Update",
   "chatBlockedPayAction": "Go to payment",
-  "chatLoadEarlier": "Load earlier messages",
-  "chatToday": "Today",
-  "chatYesterday": "Yesterday",
   "paymentProviderNewCheckoutsDisabled": "Not taking new payments right now",
   "paymentProviderPickAnother": "Try a different payment method.",
   "paymentContinueTitle": "A checkout is already open",
@@ -1608,8 +1379,6 @@
   "requestReadyWindowHelp": "The stretch of time a traveler could collect it. Give a window, not a minute.",
   "requestDeadlineHelp": "The latest it can arrive. This has to be after your ready window closes.",
   "requestWeightHelp": "Between 0.01 and 100 kg.",
-  "requestDimensionsHelp": "Optional. Enter all three, or leave all three empty.",
-  "requestDimensionsPartial": "Enter all three measurements, or clear them all.",
   "requestCategoryDocuments": "Documents",
   "requestCategorySmallBox": "Small box",
   "requestCategoryElectronics": "Electronics",
@@ -1652,11 +1421,7 @@
   "depositNotRequiredBody": "This request publishes without one. There is nothing to pay here.",
   "depositClampedMin": "This is the smallest deposit we take.",
   "depositClampedMax": "This is the largest deposit we take, whatever the parcel is worth.",
-  "discoveryMatchedDistance": "Distance carried",
-  "discoveryDetourLabel": "Detour for the traveler",
-  "discoveryFirstDeparture": "Leaves",
   "discoveryProposeBlocked": "We can't work out which part of this journey fits your parcel. Refresh and try again.",
-  "discoveryVolumetricExplainer": "This parcel is bulkier than it is heavy, so its size sets the price.",
   "discoveryBreakdownNote": "This is how the suggested amount adds up. Offer something different and the total moves with it.",
   "discoveryProposalSent": "Offer sent",
   "discoveryLegRangeMoved": "This traveler's route changed while you were looking. We've refreshed it.",
@@ -1668,35 +1433,7 @@
       }
     }
   },
-  "boostRankingLabel": "Visibility",
-  "boostRankingModest": "Higher in the list",
-  "boostRankingStrong": "Much higher in the list",
-  "boostRankingTop": "Top of the list",
-  "boostDurationLabel": "Runs for",
-  "boostPriceLabel": "Price",
   "boostCompatibilityNote": "Only travelers who already match your parcel ever see it. A boost doesn't change who those travelers are.",
-  "boostActivatesOnPayment": "The boost starts once your payment is confirmed, not when you leave the checkout page.",
-  "boostBuyAction": "Buy this boost",
-  "boostPayAction": "Pay for this boost",
-  "boostPurchasesSection": "Your boosts",
-  "boostNoPackagesTitle": "No boosts available",
-  "boostNoPackagesBody": "There are no boost packages on offer at the moment.",
-  "boostDisabledTitle": "Boosts are switched off",
-  "boostDisabledBody": "Nobody can buy a boost right now. Your request is unaffected.",
-  "boostLimitReachedTitle": "Boost limit reached",
-  "boostLimitReachedBody": "{count, plural, =1{You can have 1 boost running on a request at a time.} other{You can have {count} boosts running on a request at a time.}}",
-  "@boostLimitReachedBody": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "boostRequestExpiredBody": "This request has expired, so it can no longer be boosted.",
-  "boostPackageUnknownBody": "That boost is no longer offered. Choose another one.",
-  "boostStatusCancelled": "Cancelled",
-  "boostStatusUnusable": "Refunded — the request stopped being boostable",
-  "boostStatusRefunded": "Refunded",
   "moneyBaseReward": "Base delivery reward",
   "moneyBoostBonus": "Boost bonus",
   "moneyBoostFee": "Boost fee",
@@ -1720,7 +1457,6 @@
   "dealStepProtection": "Protected payment",
   "dealStepCompleted": "Completed",
   "dealOpenChat": "Message",
-  "dealParcelSection": "The parcel",
   "dealMoneySection": "The money",
   "dealActionPay": "Pay now",
   "dealActionRecipient": "Add recipient",
@@ -1737,7 +1473,6 @@
       }
     }
   },
-  "dealLocationsHiddenUntilFunded": "Exact addresses appear once the delivery is paid for.",
   "dealTravelerAwaitingPayment": "Waiting for the sender to pay.",
   "dealTravelerPaymentFunded": "The sender's payment is confirmed and protected.",
   "ratingBlindNote": "Neither of you sees the other's rating until you've both left one, or the window closes.",
@@ -1849,10 +1584,6 @@
   "@disputeViewAction": {
     "description": "Action that opens the dispute attached to this delivery."
   },
-  "disputeOpenAction": "Open a dispute",
-  "@disputeOpenAction": {
-    "description": "Action that starts the dispute form."
-  },
   "disputeOpened": "Dispute opened",
   "@disputeOpened": {
     "description": "Confirmation after a dispute is created."
@@ -1877,10 +1608,6 @@
   "@disputeNotAvailableBody": {
     "description": "Body for dispute_not_available."
   },
-  "disputeAlreadyResolvedTitle": "This has already been decided",
-  "@disputeAlreadyResolvedTitle": {
-    "description": "Shown when the server refuses with dispute_already_resolved."
-  },
   "disputeAlreadyResolvedBody": "There's already a resolved dispute on this delivery.",
   "@disputeAlreadyResolvedBody": {
     "description": "Body for dispute_already_resolved."
@@ -1888,14 +1615,6 @@
   "disputeDetailTitle": "Dispute",
   "@disputeDetailTitle": {
     "description": "Top bar of the dispute detail screen."
-  },
-  "disputeReferenceLabel": "Reference",
-  "@disputeReferenceLabel": {
-    "description": "Label for the dispute's public reference."
-  },
-  "disputeCategoryTitle": "Category",
-  "@disputeCategoryTitle": {
-    "description": "Row label for the reported category on the dispute detail screen."
   },
   "disputeReasonLabel": "What was reported",
   "@disputeReasonLabel": {
@@ -1916,10 +1635,6 @@
   "disputeOpenedAtLabel": "Opened",
   "@disputeOpenedAtLabel": {
     "description": "Row label for when the dispute was opened."
-  },
-  "disputeResolvedAtLabel": "Decided",
-  "@disputeResolvedAtLabel": {
-    "description": "Row label for when the dispute was resolved."
   },
   "disputeProtectionEndsLabel": "Protection window ends",
   "@disputeProtectionEndsLabel": {
@@ -2058,17 +1773,6 @@
   "@disputeEvidenceFileRequiredBody": {
     "description": "Shown for dispute_evidence_file_required."
   },
-  "unitFileSizeMb": "{value} MB",
-  "@unitFileSizeMb": {
-    "description": "A file size in megabytes.",
-    "placeholders": {
-      "value": {
-        "type": "String"
-      }
-    }
-  },
-  "paymentPollingHint": "This can take a moment. You can leave this screen — we'll keep checking.",
-  "paymentOpenProvider": "Continue payment",
   "onboardingEyebrow": "Welcome",
   "onboardingHeadline": "Send anything,\nthe travelers\ndo the rest.",
   "onboardingBody": "A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.",
@@ -2143,7 +1847,6 @@
   "requestItemPhotoTypeNotAllowed": "That file type isn't accepted. Use a JPEG, PNG or WebP image.",
   "requestItemPhotoUploadFailed": "The photo didn't upload. It's still selected — try again.",
   "requestItemPhotoStorageUnavailable": "Photo storage is unavailable right now. Try again in a moment.",
-  "requestItemPhotoExpired": "That photo is no longer available. Add it again.",
   "requestItemPhotoPrivacy": "Only travelers who can see this request can see the photo.",
   "fieldOptional": "Optional",
   "requestDimensionsOptionalHelp": "Optional. Leave empty if you haven't measured it — or enter all three.",
@@ -2159,7 +1862,6 @@
     }
   },
   "formServerRefusedOnStep": "The server refused this request. The problem is on this step, marked below.",
-  "formStepLockedUntilValid": "Finish this step first.",
   "pushPermissionHeading": "On this phone",
   "pushPermissionBody": "Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.",
   "pushPermissionEnabled": "Notifications are enabled.",
@@ -2180,20 +1882,17 @@
   "pushMessagesBody": "New chat activity.",
   "pushMarketplaceTitle": "Marketplace activity",
   "pushMarketplaceBody": "Offers, matches, journeys and requests.",
-  "notificationJourney": "Journey update",
   "notificationAccount": "Verification update",
   "notificationDispute": "Dispute update",
   "notificationPayout": "Payout update",
   "payoutMethodsTitle": "Payout methods",
   "profilePayoutMethods": "Payout methods",
-  "profilePayoutHistory": "Payout history",
   "payoutPreferenceTitle": "Payout preference",
   "payoutPreferenceEurOnly": "EUR only",
   "payoutPreferenceDzdOnly": "DZD only",
   "payoutPreferenceBoth": "Both",
   "payoutPreferenceBothExplainer": "Stripe-funded deliveries are paid in EUR; Chargily-funded deliveries are paid in DZD.",
   "payoutPreferenceScopeNote": "Preferences apply to future payouts only.",
-  "payoutPreferenceRequired": "Please select your payout preference.",
   "payoutEurTitle": "EUR payouts (Stripe)",
   "payoutEurNotConfiguredBody": "Connect your European bank account to receive payouts in EUR.",
   "payoutEurSetupRequiredBody": "Complete your account setup with Stripe to enable EUR payouts.",
@@ -2217,17 +1916,7 @@
   "payoutActionReplaceDzd": "Update payout information",
   "payoutDzdCcpLabel": "CCP account",
   "payoutDzdRipLabel": "RIP",
-  "payoutDzdSubmittedAt": "Submitted on {date}",
-  "@payoutDzdSubmittedAt": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
-  "payoutDzdFutureScopeNote": "The new method applies to future eligible payouts. Already-funded payouts keep their historical payout destination.",
   "dzdFormTitle": "Set up DZD payouts",
-  "dzdFormUpdateTitle": "Update payout information",
   "dzdFormScopeExplainer": "This information applies to future eligible payouts. Already-funded payouts keep their historical payout destination.",
   "dzdFirstNameLabel": "First name",
   "dzdLastNameLabel": "Last name",
@@ -2241,9 +1930,7 @@
   "dzdChequeProofHelper": "Upload a clear photo of the full crossed cheque.",
   "dzdChequeAddPhoto": "Upload photo",
   "dzdChequeReplacePhoto": "Replace photo",
-  "dzdChequeRemovePhoto": "Remove photo",
   "dzdSubmitAction": "Submit payout information",
-  "dzdUpdateAction": "Update payout information",
   "dzdSubmitSuccess": "Payout information submitted successfully.",
   "payoutReasonSetupRequired": "Payout setup required",
   "payoutReasonUnderReview": "Profile under review",
@@ -2253,14 +1940,6 @@
   "payoutReasonFailed": "Payout attempt failed",
   "payoutReasonReturned": "Bank payout was returned",
   "payoutReasonCountryUnsupported": "Country not supported for Stripe EUR payouts",
-  "deliveryPayoutSectionTitle": "Payout status",
-  "deliveryPayoutProtectionExplainer": "48-hour protection period is active. Funds are held until the period ends.",
-  "deliveryPayoutReadyExplainer": "Delivery is complete and payout is now eligible.",
-  "deliveryPayoutProcessingExplainer": "Payout processing has started.",
-  "deliveryPayoutSentExplainer": "Payout has been sent and is in transit.",
-  "deliveryPayoutPaidExplainer": "Payout has been settled to your account.",
-  "deliveryPayoutReturnedExplainer": "The bank returned this payout. Please check your payout method.",
-  "deliveryPayoutNeedsAttentionExplainer": "This payout requires attention before it can be settled.",
   "payoutRateLabel": "Frozen rate: 1 EUR = {rate} DZD",
   "@payoutRateLabel": {
     "placeholders": {
@@ -2289,12 +1968,9 @@
   "payoutStatusReleasePending": "Awaiting release",
   "payoutStatusReady": "Payout ready",
   "payoutStatusSent": "Payout sent",
-  "payoutStatusReturned": "Payout returned",
   "payoutStatusNeedsAttention": "Needs attention",
   "payoutProfileReady": "Payout method ready",
   "payoutProfileNeedsAttention": "Method needs attention",
-  "payoutReasonScheduledArrivalPending": "Scheduled arrival pending",
-  "deliveryPayoutScheduledArrivalPendingExplainer": "The 48-hour delivery protection has ended, but payout remains held until the scheduled arrival date agreed when funded.",
   "earlyArrivalAction": "I arrived early",
   "earlyArrivalConfirmSheetTitle": "Report early arrival",
   "earlyArrivalConfirmSheetBody": "This notifies the sender that you arrived before the scheduled arrival. It does not confirm delivery of the parcel. The sender must confirm your arrival, and payout timing still follows Wassla protection rules.",
@@ -2309,8 +1985,6 @@
   "earlyArrivalDeclinedTitle": "Early arrival not confirmed",
   "earlyArrivalDeclinedBody": "The early arrival report was not confirmed. Delivery will proceed according to the scheduled route.",
   "earlyArrivalScheduledArrivalLabel": "Scheduled arrival for this delivery",
-  "earlyArrivalReportedTimeLabel": "Reported arrival",
-  "earlyArrivalEarlyByLabel": "Early by",
   "earlyArrivalPayoutFloorExplanation": "Arriving early does not make the payout available earlier than the protected payout date for this delivery.",
   "earlyArrivalPayoutProtectedGateLabel": "Payout eligible from",
   "routeTitle": "Route",
@@ -2318,15 +1992,9 @@
   "routeUnavailableBeforeFunding": "The travel route appears here once the delivery is funded.",
   "routeFlightMode": "Flight",
   "routeDriveMode": "Drive",
-  "routeDepartureLabel": "Departure",
-  "routeArrivalLabel": "Arrival",
-  "routeCarryingLegsOnly": "Carrying route for this delivery",
   "notificationArrivalReported": "Traveler arrived early",
-  "notificationArrivalReportedBody": "Open Wassla to confirm the early arrival.",
   "notificationArrivalConfirmed": "Early arrival confirmed",
-  "notificationArrivalConfirmedBody": "The sender confirmed your arrival. Delivery is still to come.",
   "notificationArrivalDeclined": "Early arrival not confirmed",
-  "notificationArrivalDeclinedBody": "Open Wassla to review the delivery.",
   "routeBasisSnapshot": "Frozen at booking",
   "routeBasisLive": "Live journey",
   "pricingMinimumLabel": "Minimum price",
@@ -2395,17 +2063,6 @@
   "boostPostPublicationOnly": "You can add a Boost now that this request is live. Travelers receive all of it.",
   "boostRemoveAction": "Remove Boost",
   "boostHistoryTitle": "Boost history",
-  "boostHistoryChanged": "Changed from {from} to {to}",
-  "@boostHistoryChanged": {
-    "placeholders": {
-      "from": {
-        "type": "String"
-      },
-      "to": {
-        "type": "String"
-      }
-    }
-  },
   "boostNotEditable": "Boost cannot be edited once an offer has been accepted or the request has expired.",
   "guestPaymentTitle": "Someone else can pay",
   "guestCreateAction": "Create payment link",
@@ -2480,14 +2137,6 @@
   "paymentSuccessAmountPaid": "Amount paid",
   "paymentSuccessViewRequestAction": "View request",
   "paymentSuccessViewDeliveryAction": "View delivery",
-  "notificationDepositPaidTitle": "Deposit confirmed",
-  "notificationDepositPaidBody": "Your delivery request is now active and visible to travelers.",
-  "notificationDealFundedTitle": "Delivery funded",
-  "notificationDealFundedBody": "Payment secured. Meet your traveler at the agreed pickup point.",
-  "notificationPayoutReadyTitle": "Payout ready",
-  "notificationPayoutReadyBody": "Your delivery payout is ready for transfer.",
-  "notificationPayoutSentTitle": "Payout sent",
-  "notificationPayoutSentBody": "Your payout has been transferred successfully.",
   "boostBreakdownTitle": "What the Boost costs",
   "@boostBreakdownTitle": {
     "description": "boostBreakdownTitle"
