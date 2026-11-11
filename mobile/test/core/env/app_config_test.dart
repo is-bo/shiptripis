@@ -16,7 +16,7 @@ void main() {
     }
     expect(
       () => AppConfig.validateReleaseOrigin(
-        'https://shiptrip-production-f7f7.up.railway.app',
+        'https://api.wassla.example',
       ),
       returnsNormally,
     );

@@ -30,6 +30,9 @@ from apps.payments.providers import (
 MONOLITH = Path(__file__).resolve().parents[3]
 BACKEND = MONOLITH.parent
 REPO = BACKEND.parent
+VPS = REPO / "infra" / "vps"
+#: The process launcher the VPS application image runs (`runtime.py serve`).
+LAUNCHER = VPS / "launcher.py"
 
 #: Everything `config.settings.prod` needs to boot, with every payment escape
 #: hatch closed. Individual tests open one at a time and assert the refusal.
@@ -90,7 +93,7 @@ def boot_production(snippet: str, **overrides: str) -> subprocess.CompletedProce
 
 
 def load_combined_launcher():
-    """Load `backend/railway/start.py`'s definitions without running it.
+    """Load `infra/vps/launcher.py`'s definitions without running it.
 
     The launcher is a script, not an importable package module, and everything
     below the definitions is guarded by `__main__`. Executing it by path keeps
@@ -98,9 +101,7 @@ def load_combined_launcher():
     """
 
     name = "shiptrip_combined_launcher"
-    spec = importlib.util.spec_from_file_location(
-        name, BACKEND / "railway" / "start.py"
-    )
+    spec = importlib.util.spec_from_file_location(name, LAUNCHER)
     module = importlib.util.module_from_spec(spec)
     # `@dataclass` resolves string annotations through `sys.modules`, so the
     # module has to be registered before it executes.
@@ -122,7 +123,7 @@ SERVICE_ACCOUNT_FIXTURE = {
 
 
 class FirebaseAdminCredentialInstallTests(SimpleTestCase):
-    """The Railway secret store holds a string; the worker wants a file.
+    """The mounted secret document holds a string; the worker wants a file.
 
     These cover the seam that turns one into the other, because a mistake here
     either leaks a private key into a child process's environment or silently
@@ -216,37 +217,20 @@ class ProductionEntrypointTests(SimpleTestCase):
             assert '"config.settings.prod"' in source, relative
             assert '"config.settings.dev"' not in source, relative
 
-    def test_every_railway_command_selects_production_settings_explicitly(self):
-        for relative in ("railway.web.json", "railway.grpc.json"):
-            document = json.loads((MONOLITH / relative).read_text(encoding="utf-8"))
-            commands = " ".join(
-                str(value)
-                for key, value in document["deploy"].items()
-                if key.endswith("Command")
-            )
-            assert "DJANGO_SETTINGS_MODULE=config.settings.prod" in commands
-        combined = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+    def test_the_launcher_selects_production_settings_explicitly(self):
+        combined = LAUNCHER.read_text(encoding="utf-8")
         assert 'DJANGO_SETTINGS_MODULE="config.settings.prod"' in combined
 
-    def test_public_railway_entrypoints_gate_traffic_on_readiness(self):
-        for path in (
-            REPO / "railway.json",
-            BACKEND / "gateway" / "railway.json",
-            MONOLITH / "railway.web.json",
-        ):
-            document = json.loads(path.read_text(encoding="utf-8"))
-            assert document["deploy"]["healthcheckPath"] == "/readyz", path
+    def test_the_vps_container_lets_the_launcher_drain_before_sigkill(self):
+        """Docker SIGKILLs a container `stop_grace_period` after SIGTERM, so
+        that window must outlast the launcher's own child drain."""
 
-    def test_railway_lets_the_combined_launcher_drain_before_sigkill(self):
-        """Railway's default gap between SIGTERM and SIGKILL is zero seconds,
-        which would make every in-process drain unreachable."""
-
-        document = json.loads((REPO / "railway.json").read_text(encoding="utf-8"))
+        compose = (VPS / "compose.yml").read_text(encoding="utf-8")
+        anchor = compose[: compose.index("\nservices:")]
+        grace = re.search(r"^  stop_grace_period: (\d+)s$", anchor, re.MULTILINE)
+        assert grace is not None, "the application anchor sets no stop_grace_period"
         launcher = load_combined_launcher()
-        assert (
-            document["deploy"]["drainingSeconds"]
-            > launcher.CHILD_STOP_TIMEOUT_SECONDS
-        )
+        assert int(grace.group(1)) > launcher.CHILD_STOP_TIMEOUT_SECONDS
 
     def test_email_send_budget_fits_inside_the_child_stop_window(self):
         """The email worker detaches each SMTP send from shutdown so it is not
@@ -282,16 +266,14 @@ class ProductionEntrypointTests(SimpleTestCase):
         """Gunicorn's request line carries guest payment capabilities; the
         middleware's route-template `http_request` line is the access log."""
 
-        launcher = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
-        web = (MONOLITH / "railway.web.json").read_text(encoding="utf-8")
-        for source in (launcher, web):
-            assert "--access-logfile" not in source
-            assert "--access-logformat" not in source
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        assert "--access-logfile" not in launcher
+        assert "--access-logformat" not in launcher
 
     def test_container_images_pin_production_settings(self):
         """The image itself carries the module, not just the start command."""
 
-        for relative in ("backend/monolith/Dockerfile", "backend/railway/Dockerfile"):
+        for relative in ("backend/monolith/Dockerfile", "infra/vps/Dockerfile"):
             source = (REPO / relative).read_text(encoding="utf-8")
             assert "DJANGO_SETTINGS_MODULE=config.settings.prod" in source, relative
             assert "config.settings.dev" not in source, relative
@@ -475,36 +457,15 @@ class ProductionEntrypointTests(SimpleTestCase):
             assert variable in result.stderr
 
 
-class CombinedLauncherGeographyTests(SimpleTestCase):
-    """The catalogue import in the boot sequence, and where it must sit.
+class GeographyCatalogueShippingTests(SimpleTestCase):
+    """The reviewed catalogue ships inside the application image.
 
     The active V1 write contract refuses a request or a journey without a
-    canonical Place, so the release ships the reviewed catalogue and applies it
-    on first boot. Two properties keep that from being a liability, and both are
-    positional rather than behavioural — which is exactly the kind of thing a
-    later edit moves without noticing.
+    canonical Place, and the VPS applies the bundled catalogue as an explicit
+    maintenance operation (`runtime.py maintenance import_geography`). A
+    `.dockerignore` pattern that excluded the artefact would fail only in
+    production, as an empty catalogue.
     """
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.launcher = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
-
-    def test_the_import_is_guarded_so_a_restart_is_not_a_reimport(self):
-        assert '"import_geography"' in self.launcher
-        assert '"--skip-if-current"' in self.launcher
-        # No `--deactivate-missing` on the boot path: a boot must never be able
-        # to retire catalogue rows that a running deployment is matching on.
-        assert "--deactivate-missing" not in self.launcher
-
-    def test_the_import_runs_after_readiness_not_before_it(self):
-        ready = self.launcher.index('print("ShipTrip is ready"')
-        applied = self.launcher.index("apply_geography_catalogue(base_env)")
-        gateway = self.launcher.index('wait_for_port(gateway')
-
-        # A first import takes minutes. Ahead of the gateway it would fail the
-        # platform health check and roll the deployment back.
-        assert gateway < ready < applied
 
     def test_the_catalogue_actually_reaches_the_image(self):
         from apps.locations.management.commands.import_geography import (
@@ -512,9 +473,6 @@ class CombinedLauncherGeographyTests(SimpleTestCase):
         )
 
         assert BUNDLED_MANIFEST.exists()
-        # A `.dockerignore` pattern that excluded the artefact would fail only
-        # in production, as an empty catalogue — the one failure mode the local
-        # suite cannot otherwise see.
         relative = BUNDLED_MANIFEST.relative_to(REPO).as_posix()
         for ignore in (REPO / ".dockerignore", MONOLITH / ".dockerignore"):
             for line in ignore.read_text(encoding="utf-8").splitlines():
@@ -528,25 +486,21 @@ class CombinedLauncherGeographyTests(SimpleTestCase):
                     BUNDLED_MANIFEST.name, pattern
                 ), f"{ignore.name} pattern {pattern!r} would drop the catalogue"
 
-    def test_a_failed_import_does_not_take_the_service_down(self):
-        body = self.launcher[
-            self.launcher.index("def apply_geography_catalogue") : self.launcher.index(
-                "def run("
-            )
-        ]
-        # Serving without a catalogue is degraded; refusing to serve is worse.
-        assert "check=True" not in body
-        assert "FAILED" in body
-        assert "raise" not in body
+    def test_starting_the_container_never_migrates_or_imports(self):
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        assert '"migrate"' not in launcher
+        assert "import_geography" not in launcher
+        runtime = (VPS / "runtime.py").read_text(encoding="utf-8")
+        assert '"import_geography"' in runtime  # the explicit maintenance path
 
 
 class CombinedLauncherReliabilityTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.launcher = runpy.run_path(str(BACKEND / "railway" / "start.py"))
+        cls.launcher = runpy.run_path(str(LAUNCHER))
 
-    def test_railway_requires_external_shared_redis(self):
+    def test_the_launcher_requires_the_shared_redis(self):
         for value in (
             "",
             "not-a-url",
@@ -562,7 +516,7 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
                 os.environ, {"REDIS_URL": value}, clear=True
             ):
                 with self.assertRaisesRegex(RuntimeError, "REDIS_URL"):
-                    self.launcher["redis_topology"]()
+                    self.launcher["shared_redis_url"]()
 
     def test_every_child_receives_the_same_external_redis(self):
         shared_url = "rediss://user:secret@shared-cache.invalid:6380/4"
@@ -571,33 +525,18 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
             {"REDIS_URL": shared_url, "KYC_S3_ACCESS_KEY": "kyc-only-access-key"},
             clear=True,
         ):
-            redis_url, embedded = self.launcher["redis_topology"]()
+            redis_url = self.launcher["shared_redis_url"]()
             env = self.launcher["kyc_env"](redis_url)
 
-        assert embedded is False
+        assert redis_url == shared_url
         assert env["REDIS_URL"] == shared_url
         assert env["S3_ACCESS_KEY"] == "kyc-only-access-key"
         assert env["KYC_HTTP_ADDR"] == "127.0.0.1:8083"
 
-    def test_embedded_redis_is_explicit_local_compatibility_only(self):
-        with mock.patch.dict(
-            os.environ, {"SHIPTRIP_EMBEDDED_REDIS": "true"}, clear=True
-        ):
-            redis_url, embedded = self.launcher["redis_topology"]()
-
-        assert embedded is True
-        assert redis_url == "redis://127.0.0.1:6379/0"
-
-        with mock.patch.dict(
-            os.environ,
-            {
-                "SHIPTRIP_EMBEDDED_REDIS": "true",
-                "REDIS_URL": "redis://shared-cache.invalid:6379/0",
-            },
-            clear=True,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "SHIPTRIP_EMBEDDED_REDIS"):
-                self.launcher["redis_topology"]()
+    def test_no_redis_daemon_is_started_inside_the_container(self):
+        source = LAUNCHER.read_text(encoding="utf-8")
+        assert "redis-server" not in source
+        assert "SHIPTRIP_EMBEDDED_REDIS" not in source
 
     def shared_redis(self, *, policy="noeviction", appendonly="yes", save="60 1"):
         import redis
@@ -637,11 +576,10 @@ class CombinedLauncherReliabilityTests(SimpleTestCase):
         return printed
 
     def test_shared_redis_is_proven_before_anything_depends_on_it(self):
-        source = (BACKEND / "railway" / "start.py").read_text(encoding="utf-8")
+        source = LAUNCHER.read_text(encoding="utf-8")
         probe = source.index("probe_shared_redis(redis_url)")
-        assert probe < source.index('print("applying database migrations"')
-        # The probe belongs to the shared branch; embedded mode never dials out.
-        assert source.index("if embedded_redis:") < probe
+        assert source.index("redis_url = shared_redis_url()") < probe
+        assert probe < source.index('print("collecting static files"')
 
     def test_unreachable_shared_redis_fails_startup_without_leaking_the_url(self):
         import redis
@@ -782,7 +720,7 @@ class KycEdgeLimitTests(SimpleTestCase):
         authoritative_bytes = int(match.group(1)) << int(match.group(2))
 
         for path in (
-            BACKEND / "railway" / "Caddyfile",
+            VPS / "gateway.Caddyfile",
             BACKEND / "gateway" / "Caddyfile",
         ):
             text = path.read_text(encoding="utf-8")
@@ -878,7 +816,7 @@ class PublicEdgeRoutingTests(SimpleTestCase):
 
     def test_caddyfiles_define_clean_legal_rewrites(self):
         caddyfiles = [
-            REPO / "backend" / "railway" / "Caddyfile",
+            VPS / "gateway.Caddyfile",
             REPO / "backend" / "gateway" / "Caddyfile",
         ]
         for caddyfile in caddyfiles:
@@ -899,7 +837,7 @@ class PublicEdgeRoutingTests(SimpleTestCase):
 
     def test_public_matcher_does_not_shadow_protected_routes(self):
         import re
-        caddyfile = REPO / "backend" / "railway" / "Caddyfile"
+        caddyfile = VPS / "gateway.Caddyfile"
         text = caddyfile.read_text(encoding="utf-8")
         match = re.search(r"@public\s+path\s+([^\n]+)", text)
         assert match is not None

@@ -10,27 +10,21 @@ HERE = Path(__file__).resolve().parents[1]
 runtime = importlib.machinery.SourceFileLoader(
     "email_runtime", str(HERE / "runtime.py")
 ).load_module()
-gateway = importlib.machinery.SourceFileLoader(
-    "email_gateway", str(HERE / "render_internal_caddy.py")
-).load_module()
 
 
 class EmailBoundaryTests(unittest.TestCase):
     def test_both_vps_proxy_layers_preserve_application_referrer_policy(self):
-        shared = (HERE.parents[1] / "backend/railway/Caddyfile").read_text()
-        rendered = gateway.render(shared)
-        self.assertIn('?Referrer-Policy "strict-origin-when-cross-origin"', rendered)
-        self.assertIn("trusted_proxies static private_ranges", rendered)
+        gateway = (HERE / "gateway.Caddyfile").read_text()
+        self.assertEqual(gateway.count("Referrer-Policy"), 1)
+        self.assertIn('?Referrer-Policy "strict-origin-when-cross-origin"', gateway)
+        self.assertIn("trusted_proxies static private_ranges", gateway)
+        self.assertIn("auto_https off", gateway)
         self.assertIn("?Referrer-Policy strict-origin-when-cross-origin", (HERE / "Caddyfile").read_text())
-        for changed in (shared.replace("auto_https off", "auto_https on"), shared.replace("Referrer-Policy", "Changed-Policy")):
-            with self.assertRaises(RuntimeError):
-                gateway.render(changed)
 
     def environment(self):
         return {
             "SHIPTRIP_ENVIRONMENT": "production",
             "DJANGO_DEBUG": "false",
-            "SHIPTRIP_EMBEDDED_REDIS": "false",
             "PAYMENTS_ENVIRONMENT": "test",
             "PAYMENTS_ALLOW_MOCK_PROVIDER": "false",
             "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false",

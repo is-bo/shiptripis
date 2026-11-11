@@ -555,17 +555,12 @@ func LoadLogger(service string) Logger {
 
 // ── HTTP listen address ──────────────────────────────────────────────────────
 
-// HTTPAddr reads a service-specific address, then Railway's injected PORT,
-// then the local fallback. Compose sets the service-specific values so the
-// binaries can run side-by-side on a developer machine.
+// HTTPAddr reads a service-specific address, then the local fallback. Compose
+// and the VPS launcher set the service-specific values so the binaries can run
+// side by side. A generic PORT is never consulted: in the combined container it
+// belongs to the gateway, so honouring it would collide with Caddy.
 func HTTPAddr(envKey, fallback string) string {
-	if addr := optString(envKey, ""); addr != "" {
-		return addr
-	}
-	if port := optString("PORT", ""); port != "" {
-		return ":" + port
-	}
-	return fallback
+	return optString(envKey, fallback)
 }
 
 // String reads an arbitrary string env var with a fallback. Use for

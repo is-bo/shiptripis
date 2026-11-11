@@ -157,8 +157,8 @@ for _origin_name, _origins in (
         if not _is_https_origin(_origin):
             raise RuntimeError(f"{_origin_name} entries must be https origins.")
 
-# DRF throttles must share counters across Gunicorn workers and Railway
-# instances. Development/test keep the dependency-free locmem backend; the
+# DRF throttles must share counters across Gunicorn workers and application
+# containers. Development/test keep the dependency-free locmem backend; the
 # production profile always uses the required Redis deployment.
 CACHES["default"] = {  # noqa: F405
     "BACKEND": "django.core.cache.backends.redis.RedisCache",
@@ -188,9 +188,9 @@ if dsn := env.str("SENTRY_DSN", default=""):
         release=None if RELEASE_ID == "unknown" else RELEASE_ID,  # noqa: F405
     )
 
-# mTLS is the normal production transport. Railway can explicitly opt into a
-# strong bearer token because the service is reachable only over its private
-# project network; this exception fails closed unless both safeguards are set.
+# mTLS is the normal production transport. A deployment can explicitly opt into
+# a strong bearer token when gRPC is reachable only privately (the VPS container
+# binds it to loopback); this exception fails closed unless both safeguards are set.
 if GRPC_AUTH_MODE == "bearer":  # noqa: F405
     if not env.bool("GRPC_ALLOW_PRIVATE_BEARER", default=False):  # noqa: F405
         raise RuntimeError(

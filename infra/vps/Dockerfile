@@ -25,11 +25,10 @@ COPY --chown=10001:10001 web/ /web/
 COPY --from=go-build /out/ /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 RUN python -c "import os; p='/usr/local/bin/caddy'; [os.removexattr(p, n) for n in os.listxattr(p) if n == 'security.capability']"
-COPY --chmod=0644 backend/railway/Caddyfile /etc/caddy/Caddyfile
-COPY --chmod=0644 backend/railway/start.py /opt/vps/launcher.py
+COPY --chmod=0644 infra/vps/gateway.Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=0644 infra/vps/launcher.py /opt/vps/launcher.py
 COPY --chmod=0644 infra/vps/runtime.py /opt/vps/runtime.py
-COPY --chmod=0644 infra/vps/render_internal_caddy.py /opt/vps/render_internal_caddy.py
-RUN chmod 0755 /opt/vps /etc/caddy && python /opt/vps/render_internal_caddy.py
+RUN chmod 0755 /opt/vps /etc/caddy
 RUN mkdir -p /app/staticfiles && chown 10001:10001 /app/staticfiles
 USER 10001:10001
 EXPOSE 8080

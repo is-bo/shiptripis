@@ -40,7 +40,7 @@ def load_secrets(directory: Path = Path("/run/secrets")) -> None:
 def v1_guards() -> None:
     for key, value in {
         "SHIPTRIP_ENVIRONMENT": "production", "DJANGO_DEBUG": "false",
-        "SHIPTRIP_EMBEDDED_REDIS": "false", "PAYMENTS_ENVIRONMENT": "test",
+        "PAYMENTS_ENVIRONMENT": "test",
         "PAYMENTS_ALLOW_MOCK_PROVIDER": "false",
         "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false", "PAYMENTS_LEGACY_MUTATIONS_ENABLED": "false",
         "PAYOUT_DZD_EXECUTION_ENABLED": "false", "STRIPE_CONNECT_PAYOUTS_ENABLED": "false",
@@ -119,7 +119,7 @@ def main() -> int:
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, launcher.request_stop)
     try:
-        return launcher.run(migrate_database=False, import_catalogue=False)
+        return launcher.run()
     finally:
         launcher.terminate_children()
 

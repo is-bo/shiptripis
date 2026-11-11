@@ -1,6 +1,6 @@
 """One-shot sweep of due financial jobs.
 
-Safe to run from cron, a Railway one-off, or by hand. Everything it executes is
+Safe to run from cron, a one-off container, or by hand. Everything it executes is
 idempotent, so an overlapping run is a no-op rather than a double refund.
 """
 

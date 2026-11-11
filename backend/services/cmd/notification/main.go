@@ -172,7 +172,7 @@ func run() error {
 		dispatcherErr <- dispatcher.Run(rootCtx)
 	}()
 
-	// /debug/vars is loopback-only and unscraped on Railway, so the socket
+	// /debug/vars is loopback-only and unscraped, so the socket
 	// count and the drop/delivery counters also go to the log stream.
 	go metrics.Every(rootCtx, statsInterval, func() {
 		sockets, users, connects := hub.Stats()

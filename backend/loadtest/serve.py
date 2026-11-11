@@ -1,7 +1,7 @@
-"""Serve the monolith like the Railway container does, on a Windows box.
+"""Serve the monolith like the production container does, on a Windows box.
 
 Production runs ``gunicorn --worker-class gthread --workers W --threads T``
-behind Caddy (``backend/railway/start.py``). Gunicorn does not run on Windows,
+behind Caddy (``infra/vps/launcher.py``). Gunicorn does not run on Windows,
 so this supervisor starts W independent Waitress processes with T threads each
 -- the same process x thread shape, one Python interpreter and one GIL per
 worker -- and, with ``--caddy``, a real Caddy in front using ``least_conn`` so

@@ -37,8 +37,8 @@ def config(**changes):
             "TRANSACTIONAL_EMAIL_ENABLED": False,
             "PAYOUT_DZD_EXECUTION_ENABLED": False,
             "PAYOUT_PROFILES_ENABLED": True,
-            "PAYMENTS_PUBLIC_BASE_URL": "https://shiptrip-production-f7f7.up.railway.app",
-            "FRONTEND_BASE_URL": "https://shiptrip-production-f7f7.up.railway.app",
+            "PAYMENTS_PUBLIC_BASE_URL": "https://api.wassla.example",
+            "FRONTEND_BASE_URL": "https://api.wassla.example",
             **changes,
         }
     )

@@ -1,5 +1,5 @@
-# ShipTrip API gateway. Upstreams default to docker-compose service names and
-# are overridden with Railway private-network addresses when hosted.
+# ShipTrip API gateway for the local docker-compose stack. Upstreams default to
+# the compose service names. The VPS image uses infra/vps/gateway.Caddyfile.
 # Per ARCHITECTURE.md §3: Caddy does NOT validate JWTs — services do their own.
 # Production sets shutdown_timeout 30s for graceful WS drain on rolling deploys.
 
@@ -69,8 +69,8 @@
 
 	# Django REST + admin + static (catch-all).
 	reverse_proxy {$DJANGO_UPSTREAM:django:8000} {
-		# Railway terminates TLS before this container. Preserve the edge
-		# scheme so Django's production HTTPS redirect does not loop.
+		# TLS is terminated before this proxy. Preserve the edge scheme so
+		# Django's production HTTPS redirect does not loop.
 		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
 	}
 }

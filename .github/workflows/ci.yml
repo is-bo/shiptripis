@@ -329,7 +329,7 @@ jobs:
       - name: Validate Caddy configurations
         run: |
           docker run --rm \
-            -v "$PWD/backend/railway/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/infra/vps/gateway.Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           docker run --rm \
             -v "$PWD/backend/gateway/Caddyfile:/etc/caddy/Caddyfile:ro" \

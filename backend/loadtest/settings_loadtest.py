@@ -1,4 +1,4 @@
-"""Django settings for the LOCAL load harness. Never used by CI or Railway.
+"""Django settings for the LOCAL load harness. Never used by CI or production.
 
 Production-shaped where it changes request cost, local where it cannot be
 production:

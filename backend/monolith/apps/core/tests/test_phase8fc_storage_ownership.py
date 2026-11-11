@@ -1,8 +1,8 @@
 """Phase 8F-C: which credential owns which bucket, and why that is not cosmetic.
 
 The deployed failure this file locks down: the Go KYC service holds a key
-scoped to the private KYC bucket, and on Railway that key is the *only* one
-granted there. Django's generic `S3_*` key gets `AccessDenied`. Django was
+scoped to the private KYC bucket, and on the deployed environment that key is
+the *only* one granted there. Django's generic `S3_*` key gets `AccessDenied`. Django was
 nonetheless presigning KYC objects with it — and presigning never fails, because
 it is a local HMAC. The reviewer therefore received a perfectly well-formed URL
 and a broken image, with no error anywhere in the stack.

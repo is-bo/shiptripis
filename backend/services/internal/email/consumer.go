@@ -103,7 +103,7 @@ const (
 	// Detached from the parent ctx so a graceful shutdown mid-send completes
 	// rather than leaving the entry half-sent and unacked. sendTimeout plus
 	// ackTimeout must fit cmd/email's 15s shutdownTimeout, which in turn sits
-	// inside the combined launcher's 20s SIGKILL window (start.py
+	// inside the combined launcher's 20s SIGKILL window (infra/vps/launcher.py
 	// CHILD_STOP_TIMEOUT_SECONDS); test_deployment_safety pins both.
 	sendTimeout = 12 * time.Second
 	// ackTimeout caps the detached XAck after a send.

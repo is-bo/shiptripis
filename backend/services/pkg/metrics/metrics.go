@@ -86,7 +86,7 @@ func (g *Group) GaugeAdd(name string, delta float64) {
 
 // Snapshot returns every metric this Group has written, keyed by its
 // unprefixed sanitized name. /debug/vars is served only on each service's
-// loopback admin port, which nothing on Railway scrapes, so services also
+// loopback admin port, which nothing scrapes, so services also
 // log this map periodically (see Every) — the log stream is the one sink
 // that is always collected.
 func (g *Group) Snapshot() map[string]any {

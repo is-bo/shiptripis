@@ -1,6 +1,6 @@
 # ShipTrip Deployment Runbook
 
-This is an operator-controlled procedure. It does not authorize a production deployment. The root `railway.json` currently selects the combined `backend/railway/Dockerfile` topology: one application service (Django, gRPC, Go services, durable workers, and Caddy/static web) plus managed PostgreSQL and one shared persistent Redis. The per-service Railway files are a future split topology and must not be mixed into the same release accidentally.
+This is an operator-controlled procedure. It does not authorize a production deployment. Hosting is the single VPS described in `infra/vps/README.md`: one application container built from `infra/vps/Dockerfile` (Django, gRPC, Go services, durable workers, and Caddy/static web, supervised by `infra/vps/launcher.py`) beside PostgreSQL and one persistent Redis, behind the TLS edge. The exact commands (configuration, release, migration, catalogue, backup, rollback) live in that README; this runbook keeps the host-independent gates around them.
 
 ## 1. Release record and freeze
 
@@ -25,21 +25,20 @@ python manage.py check --deploy --settings=config.settings.prod
 
 Compare the plan to a restored production snapshot. Measure every data migration/index/constraint and rehearse lock/statement timeouts. A plan mismatch or unexplained lock is a stop condition.
 
-## 3. Railway/environment preflight
+## 3. Environment preflight
 
-- [ ] Verify the Railway CLI/account/project/environment/service target manually. A linked CLI context is not proof that the correct production environment is selected.
-- [ ] Verify root `railway.json` and Dockerfile path in the release artifact.
-- [ ] Reconcile Railway variables against `backend/.env.example`; check presence and safe shape, never print values.
+- [ ] Verify the target server and deployment user manually. A shell on a host is not proof that it is the production host.
+- [ ] Verify the release image was built from the reviewed commit with `infra/vps/Dockerfile`.
+- [ ] Reconcile the server's `stack.env` and secret files against `infra/vps/ENVIRONMENT.md` with `vps validate`; check presence and safe shape, never print values.
 - [ ] `SHIPTRIP_ENVIRONMENT=production`, `DJANGO_DEBUG=false`, explicit hosts/origins, immutable `RELEASE_ID`.
-- [ ] Database, HTTPS S3, Redis/topology, JWT, handover, transactional-email, and gRPC secrets are distinct and stored only in the platform secret store. `REDIS_URL` must point at the shared persistent non-loopback service used by Django and all Go children.
-- [ ] `SHIPTRIP_EMBEDDED_REDIS` is unset/false. It is an explicit local-development compatibility path, not a Railway exception; the launcher refuses production-style startup without shared Redis.
+- [ ] Database, HTTPS S3, Redis, JWT, handover, transactional-email, and gRPC secrets are distinct and stored only in the mounted secret files. `runtime.py` derives `REDIS_URL` for the stack's persistent Redis service; the launcher refuses a loopback Redis.
 - [ ] Mock/legacy payment switches are false. Stripe/Chargily/Sender.net remain disabled unless this release explicitly includes their separately approved activation.
-- [ ] Confirm public domain/TLS, bucket privacy/CORS/encryption, database connection ceiling, disk/memory/CPU, restart policy, health timeout, and alert destinations in the Railway dashboard.
-- [ ] Confirm the current plan’s backup feature, retention, point-in-time recovery, and restore mechanism. Do not infer these from repository configuration.
+- [ ] Confirm public domain/TLS, bucket privacy/CORS/encryption, database connection ceiling, disk/memory/CPU, restart policy, health timeout, and alert destinations on the server and its monitoring.
+- [ ] Confirm the offsite backup repository, retention and restore mechanism (`infra/vps/README.md`, Backup and recovery). Do not infer these from repository configuration.
 
 ## 4. Backup and restore readiness
 
-Create a platform snapshot if the Railway plan supports it and record its identifier/time. Also create a logical pre-release backup from a trusted operator host using a secret-injected connection URL (never place the URL on a shared command line or in logs):
+Take the encrypted VPS backup (`vps backup`, then `vps snapshots`) and record its snapshot identifier and time. Also create a logical pre-release backup from a trusted operator host using a secret-injected connection URL (never place the URL on a shared command line or in logs):
 
 ```powershell
 $env:PGDATABASE = 'shiptrip'
@@ -68,43 +67,41 @@ Run Django checks, migration plan (expected empty), row-count/invariant queries,
 ## 4b. Geography catalogue (from Phase 8E)
 
 The release ships the reviewed catalogue as
-`backend/monolith/apps/locations/data/geography_manifest_2026.json.gz`, and the
-combined launcher applies it with `manage.py import_geography --skip-if-current`
-**after** the gateway is listening. Read the sequence rather than repeating it:
+`backend/monolith/apps/locations/data/geography_manifest_2026.json.gz`. On the VPS
+it is applied by the explicit, locked maintenance step `vps catalogue` (part of
+`vps deploy`), which runs `manage.py import_geography --skip-if-current`. Starting
+the container never imports it. Read the sequence rather than repeating it:
 
 - [ ] Confirm the release-data test passes, so the artefact is the reviewed
       manifest (uncompressed SHA-256
       `b4aad209f4ae7ecb264fc9ae4b5d9b4b61b7ff9d918ca470729db93d1abb7692`,
       56,134 places / 3,833 alternate names / 165 mappings / 161 airports).
-- [ ] Expect the first boot after this release to log
-      `applying bundled geography catalogue (skip-if-current)` and then the
+- [ ] Expect the first catalogue step after this release to print the
       import counts. Rehearsed at 145.7 s and a 280 MB peak against
-      PostgreSQL 16; every boot after it is a ~1 s indexed no-op.
-- [ ] The service is **ready before the catalogue lands**. During that window
-      canonical place search returns nothing and request/journey creation is
-      refused. This is expected on a first deployment and is not a rollback
-      trigger; the import is one transaction, so a partial catalogue is never
-      visible.
+      PostgreSQL 16; every run after it is a ~1 s indexed no-op.
+- [ ] The import is one transaction, so a partial catalogue is never visible.
+      Until it commits, canonical place search returns nothing and
+      request/journey creation is refused.
 - [ ] Verify afterwards on **Operations → Geography catalogue**: the applied
       manifest digest, the per-country counts, and 161 airport-to-locality
       links. `No catalogue import is recorded` means the import failed — check
-      the deployment log for `geography catalogue import FAILED`. Re-running is
-      safe: the command is transactional and rerunnable.
-- [ ] Do not add `--deactivate-missing` to the boot path. Retiring catalogue
+      the maintenance step's output. Re-running is safe: the command is
+      transactional and rerunnable.
+- [ ] Do not add `--deactivate-missing` to the release path. Retiring catalogue
       rows a live deployment is matching on is an operator decision, not a
       restart side effect.
 
 ## 5. Deploy sequence
 
-The combined launcher currently runs migrations and `collectstatic` before starting the web process, then starts Django web, Django gRPC, reservation releaser, durable finance worker, Go services, and Caddy, and finally applies the bundled geography catalogue (§4b). Because application and migration are one rollout unit, migrations must be backward-compatible with the previous release.
+`vps deploy` quiesces the edge and application, takes an encrypted backup, runs production checks, serial migrations and the catalogue import (§4b), then starts the application. The container refuses to start with unapplied migrations; on start the launcher runs `collectstatic`, then Django web, Django gRPC, reservation releaser, durable finance worker, Go services, and Caddy. This is a short maintenance window, not zero downtime. Image rollback does not reverse migrations, so migrations must stay compatible with the previous release.
 
 1. Announce the release window and confirm the backup/restore evidence.
 2. Ensure the new image is built from the reviewed commit and tagged with the release identifier.
 3. Keep all external providers in their existing state. Do not combine first production deploy and provider activation.
-4. Trigger one application deployment through the approved Railway UI/CLI workflow. Do not create an automatic GitHub Actions production deployment.
+4. Run one `vps deploy` with the reviewed image and SHA, as `infra/vps/README.md` describes. Do not create an automatic GitHub Actions production deployment.
 5. Watch migration output. Abort on an unexpected plan, precondition failure, lock timeout, or table rewrite beyond rehearsal.
 6. Watch child startup. All required processes must listen; any child exit makes the combined launcher fail.
-7. Require `/healthz` 200 with the expected release, then `/readyz` 200 with database, migrations, and `rate_limit_cache` all `ok`. Railway entrypoint health checks target `/readyz`; do not route new traffic on liveness alone.
+7. Require `/healthz` 200 with the expected release, then `/readyz` 200 with database, migrations, and `rate_limit_cache` all `ok`. The container health check (`runtime.py health`) targets `/readyz`; do not route new traffic on liveness alone.
 8. Authenticate as a least-privilege Ops user and inspect `/api/admin/health/deep`, provider health, scheduled jobs, provider events, email backlog, and audit log. From Phase 8E the provider block also reports `stripe_mode` / `chargily_mode` — `test`, `live`, `unknown` or `not_configured` — derived from each credential's documented shape. It is the supported way to confirm which rail a deployment is armed against; reading a key to find out is not. `unknown` on a configured rail means the credential and the API base disagree, or the key is not a shape this code recognises: treat it as a stop condition, not as `test`.
 9. Verify public EN/FR/AR routes, assets, security headers, legal/support placeholders, 404 behavior, API/admin framing refusal, and TLS/HSTS.
 10. Run the production smoke checklist below with controlled test accounts and no live provider calls unless activation is separately authorized.

@@ -404,7 +404,7 @@ S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
 # does not raise: it returns a URL the browser is then denied, which is exactly
 # how the admin console came to render a broken KYC image.
 #
-# These variables already exist in the deployment contract — `railway/start.py`
+# These variables already exist in the deployment contract — `infra/vps/launcher.py`
 # maps `KYC_S3_*` onto the KYC child process's own `S3_*` — so Django reads the
 # same pair rather than a new secret being minted. They fall back to the generic
 # credential, which is the correct behaviour for local/compose environments

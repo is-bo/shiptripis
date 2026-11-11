@@ -375,7 +375,7 @@ void main() {
         communicationLanguage: CommunicationLanguage.english,
         state: GuestLinkState.active,
         paymentLink:
-            'https://shiptrip-production-f7f7.up.railway.app/pay/guest/seed-token',
+            'https://api.wassla.example/pay/guest/seed-token',
         canRevoke: true,
         checkoutInProgress: false,
       );
@@ -390,7 +390,7 @@ void main() {
         communicationLanguage: CommunicationLanguage.english,
         state: GuestLinkState.active,
         paymentLink:
-            'https://shiptrip-production-f7f7.up.railway.app/pay/guest/seed-token',
+            'https://api.wassla.example/pay/guest/seed-token',
         canRevoke: false,
         checkoutInProgress: true,
       );

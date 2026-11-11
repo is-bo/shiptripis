@@ -33,7 +33,6 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | --- | --- |
 | `SHIPTRIP_ENVIRONMENT` | Must remain `production` for this Django profile; historical config name is intentionally preserved. |
 | `DJANGO_DEBUG` | Must be `false`. |
-| `SHIPTRIP_EMBEDDED_REDIS` | Must be `false`; no production ephemeral fallback. |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated actual hostname plus `localhost` for internal health probes; never wildcard. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated HTTPS browser origins; empty valid for native-only API. |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated HTTPS origins used by Admin/browser POSTs. Must match actual deployment. |

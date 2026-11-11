@@ -181,7 +181,7 @@ func run() error {
 		log.Info("email consumer disabled (EMAIL_ENABLED=false)")
 	}
 
-	// /debug/vars is loopback-only and unscraped on Railway, so the counters
+	// /debug/vars is loopback-only and unscraped, so the counters
 	// (stale drops, Redis health) also go to the log stream for alerting.
 	go metrics.Every(rootCtx, statsInterval, func() {
 		log.Info("email stats", "event", "email_stats", "metrics", m.Snapshot())

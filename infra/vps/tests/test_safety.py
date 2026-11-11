@@ -18,7 +18,7 @@ class V1BoundaryTests(unittest.TestCase):
     def setUp(self):
         self.environment = {
             "SHIPTRIP_ENVIRONMENT": "production", "DJANGO_DEBUG": "false",
-            "SHIPTRIP_EMBEDDED_REDIS": "false", "PAYMENTS_ENVIRONMENT": "test",
+            "PAYMENTS_ENVIRONMENT": "test",
             "PAYMENTS_ALLOW_MOCK_PROVIDER": "false", "EMAIL_ENABLED": "false",
             "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false", "PAYMENTS_LEGACY_MUTATIONS_ENABLED": "false",
             "PAYOUT_DZD_EXECUTION_ENABLED": "false", "STRIPE_CONNECT_PAYOUTS_ENABLED": "false",
