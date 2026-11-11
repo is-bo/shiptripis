@@ -368,36 +368,37 @@ void main() {
   // ---------------------------------------------------------------------------
 
   group('J7C — Guest payer sheet state model', () {
-    test('state transitions: link reuse, checkout in progress, revoke lockout', () {
-      const activeLink = GuestPaymentLink(
-        token: 'seed-token',
-        currency: 'EUR',
-        communicationLanguage: CommunicationLanguage.english,
-        state: GuestLinkState.active,
-        paymentLink:
-            'https://api.wassla.example/pay/guest/seed-token',
-        canRevoke: true,
-        checkoutInProgress: false,
-      );
+    test(
+      'state transitions: link reuse, checkout in progress, revoke lockout',
+      () {
+        const activeLink = GuestPaymentLink(
+          token: 'seed-token',
+          currency: 'EUR',
+          communicationLanguage: CommunicationLanguage.english,
+          state: GuestLinkState.active,
+          paymentLink: 'https://api.wassla.example/pay/guest/seed-token',
+          canRevoke: true,
+          checkoutInProgress: false,
+        );
 
-      expect(activeLink.state, equals(GuestLinkState.active));
-      expect(activeLink.canRevoke, isTrue);
-      expect(activeLink.checkoutInProgress, isFalse);
+        expect(activeLink.state, equals(GuestLinkState.active));
+        expect(activeLink.canRevoke, isTrue);
+        expect(activeLink.checkoutInProgress, isFalse);
 
-      const midCheckoutLink = GuestPaymentLink(
-        token: 'seed-token',
-        currency: 'EUR',
-        communicationLanguage: CommunicationLanguage.english,
-        state: GuestLinkState.active,
-        paymentLink:
-            'https://api.wassla.example/pay/guest/seed-token',
-        canRevoke: false,
-        checkoutInProgress: true,
-      );
+        const midCheckoutLink = GuestPaymentLink(
+          token: 'seed-token',
+          currency: 'EUR',
+          communicationLanguage: CommunicationLanguage.english,
+          state: GuestLinkState.active,
+          paymentLink: 'https://api.wassla.example/pay/guest/seed-token',
+          canRevoke: false,
+          checkoutInProgress: true,
+        );
 
-      expect(midCheckoutLink.canRevoke, isFalse);
-      expect(midCheckoutLink.checkoutInProgress, isTrue);
-    });
+        expect(midCheckoutLink.canRevoke, isFalse);
+        expect(midCheckoutLink.checkoutInProgress, isTrue);
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------

@@ -15,9 +15,7 @@ void main() {
       expect(() => AppConfig.validateReleaseOrigin(value), throwsStateError);
     }
     expect(
-      () => AppConfig.validateReleaseOrigin(
-        'https://api.wassla.example',
-      ),
+      () => AppConfig.validateReleaseOrigin('https://api.wassla.example'),
       returnsNormally,
     );
   });
