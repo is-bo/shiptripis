@@ -1,6 +1,6 @@
 # Wassla Discovery and Professional Delivery Specification
 
-Status: **locked by Ismail on 2026-11-10.** Baseline: `feature/wassla-v3-baseline` at `dd7f820`.
+Status: **locked by Ismail on 2026-11-10; four follow-up answers added on 2026-11-11.** Baseline: `feature/wassla-v3-baseline` at `dd7f820`.
 Working branch: `feature/discovery-professional-delivery`.
 Build order and work packages: `docs/WASSLA_DISCOVERY_PRO_PLAN.md`.
 
@@ -39,6 +39,7 @@ not pick a different rule.
 | §10: per-leg capacity is weight only, with a 200 kg ceiling per leg | Section 5.5: weight stays the main capacity; volume and parcel count are optional; the ceiling becomes a typo guard, not a policy cap |
 | §17: only the traveler confirms delivery, by entering the recipient's code | Section 10: unchanged for personal delivery; after a courier handoff the recipient, the sender or staff confirm |
 | Home shows only the user's own activity | Section 4: Home also shows discovery |
+| Brand note: Railway resources remain in place for compatibility | Hosting is the VPS. Railway deployment files and Railway-only code are removed on this branch (plan package L1A) |
 
 Nothing else is overridden. In particular these stay untouched and every phase must prove it:
 
@@ -111,7 +112,7 @@ needed to open the card.
   the route. The app then opens Find Travelers for that request with this journey in focus. If the
   server says the pair is incompatible, the screen states the server's reason. The sender still
   proposes first.
-- From a request card, a traveler may tap **"I can carry this"** when they have a journey the server
+- From a request card, a traveler may tap **"I can carry this"** (kept by Ismail on 2026-11-11) when they have a journey the server
   confirms is compatible. This sends the sender one notification that opens Find Travelers with that
   traveler in focus. It is not an offer, carries no price and reserves nothing. Limits: one per journey
   and request pair, and a daily cap per traveler set in policy.
@@ -155,15 +156,46 @@ needed to open the card.
   direction is its own row.
 - Port cities are ordinary catalogue localities. There is no new place type, so city-identity matching
   is unchanged.
-- The initial list is seeded from a reviewed data file. Candidate port cities, **to be confirmed
-  against real ferry schedules by Ismail before the switch is turned on**: Marseille, Sète (France);
-  Alicante, Almería, Barcelona, Valencia (Spain); Algiers, Oran, Béjaïa, Skikda, Annaba, Mostaganem,
-  Ghazaouet (Algeria). No crossing may be seeded as active without that confirmation.
+- The initial list is seeded from the table in 5.3.1, which Ismail asked to be researched on
+  2026-11-11. Each crossing is seeded in both directions.
 - Staff can add, activate and deactivate crossings in the admin Geography area, with a reason, audited.
 - Deactivating a crossing, or turning the switch off, blocks new journeys and new offers on journeys
   that use it. It never changes a funded deal.
-- The "Sea legs" switch ships **off**. Turning it on is Ismail's decision. The legal, ferry and customs
+- The "Sea legs" switch ships **off**. Turning it on is Ismail's decision. The legal and customs
   position for carrying parcels by sea has not been researched by this project.
+
+#### 5.3.1 Initial crossings
+
+Researched on 2026-11-11 from travel news and ferry booking listings for the 2026 summer and the
+2026 to 2027 autumn and winter seasons. **The operators' own timetable pages were not opened**, so
+this is a list of lines that are reported to run, not a schedule. A crossing only says "a ferry line
+joins these two cities". The traveler's ticket, checked for each sea leg, is what proves a sailing.
+
+Seeded **active**, most popular first:
+
+| # | Crossing | Reported operators | Reported service |
+| --- | --- | --- | --- |
+| 1 | Marseille and Algiers | Algérie Ferries, Corsica Linea, Nouris Elbahr | Year-round; the most frequent line |
+| 2 | Marseille and Béjaïa | Algérie Ferries, Corsica Linea | Mainly summer |
+| 3 | Marseille and Skikda | Algérie Ferries, Corsica Linea | Summer, some autumn and winter |
+| 4 | Marseille and Oran | Algérie Ferries, Nouris Elbahr | Summer, some autumn and winter |
+| 5 | Marseille and Annaba | Algérie Ferries | Summer |
+| 6 | Valencia and Mostaganem | Baleària | Year-round, up to 4 a week |
+| 7 | Almería and Oran | Naviera Armas, Baleària | Year-round, up to 2 a week |
+| 8 | Almería and Ghazaouet | Naviera Armas, Baleària | Year-round, up to 2 a week |
+| 9 | Alicante and Algiers | Algérie Ferries, Nouris Elbahr | About 2 a month, more in summer |
+| 10 | Valencia and Algiers | Baleària | Weekly |
+| 11 | Valencia and Oran | Baleària | Weekly |
+| 12 | Barcelona and Algiers | Baleària | Weekly |
+
+Seeded **inactive**, because the evidence was a single source or the line is short-season. Staff can
+activate one once it is confirmed: Sète and Algiers; Sète and Béjaïa; Sète and Oran; Sète and Skikda;
+Sète and Annaba; Alicante and Oran; Barcelona and Oran.
+
+Sources: ulysse.com (ferries Algeria summer 2026), observalgerie.com (Algérie Ferries autumn and
+winter 2026 to 2027 bookings, and the Marseille summer line), algerie360.com (September 2026 sailing
+changes), ferryhopper.com (Spain to Algeria routes). Lines and seasons change; the admin list is the
+place to keep them current.
 
 ### 5.4 Distance and pricing for a sea leg
 
@@ -349,7 +381,8 @@ It never changes the deal's status. It is recorded beside the deal's state machi
 - **Route changes.** A traveler may change the times of an active journey. Wassla lists the affected
   parcels, notifies their senders and keeps the original schedule on record. A change that would miss a
   parcel's deadline, or move its arrival by more than the policy threshold, needs the sender's
-  agreement; a sender who does not agree may cancel under the existing cancellation rules. Adding or
+  agreement; a sender who does not agree may cancel, and that cancellation is treated as caused by the
+  traveler under the existing cancellation rules (confirmed by Ismail on 2026-11-11). Adding or
   removing stops on an active journey is not part of this build.
 
 ## 13. Admin

@@ -13,6 +13,10 @@ transporters, manifest, custody and courier handoff, problems and route changes,
 `SHIPTRIP_V1_SPEC.md`, `CLAUDE.md` and `AGENTS.md` now point at both. Nothing is implemented yet; the
 V1 rules remain what the code enforces. Main is untouched; no deployment.
 
+Updated 2026-11-11 with the owner's follow-up answers: effort level per package, the "start" runbook
+and the agent brief, the shared progress file `docs/WASSLA_L_SERIES_PROGRESS.md`, the researched sea
+crossings (spec 5.3.1), and Railway removal moved into package L1A. Still documentation only.
+
 ## Wassla V3 integration baseline (2026-10-26)
 
 Created `feature/wassla-v3-baseline` from V2 `bdec34f3236eb4ddc2c102a80b9a5627808ac634`,

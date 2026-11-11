@@ -39,7 +39,8 @@ Before any work on Home discovery, sea legs, traveler pricing, professional tran
 courier handoff or progress reminders, also read:
 
 - `docs/WASSLA_DISCOVERY_PRO_SPEC.md` (owner-approved addendum; overrides the V1 specification for the topics it covers)
-- `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model per package, and the checks that close each one)
+- `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model and effort per package, and the checks that close each one)
+- `docs/WASSLA_L_SERIES_PROGRESS.md` (the live board and each finished package's handoff notes; read it first, and fill in only your own package's block)
 
 Work happens on `feature/discovery-professional-delivery`, one package per pull request into that
 branch. Never merge into `main` or deploy without the owner's explicit approval. For this series the

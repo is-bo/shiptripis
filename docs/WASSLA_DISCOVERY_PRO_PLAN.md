@@ -1,6 +1,8 @@
 # Wassla Discovery and Professional Delivery Implementation Plan
 
-Written 2026-11-10 for the orchestrator. Product rules: `docs/WASSLA_DISCOVERY_PRO_SPEC.md` ("the spec").
+Written 2026-11-10, updated 2026-11-11, for the orchestrator (the project coordinator). Product rules:
+`docs/WASSLA_DISCOVERY_PRO_SPEC.md` ("the spec"). Live status: `docs/WASSLA_L_SERIES_PROGRESS.md`
+("the progress file").
 Baseline: `feature/wassla-v3-baseline` at `dd7f820`. Integration branch:
 `feature/discovery-professional-delivery`.
 
@@ -11,21 +13,55 @@ If the plan and the spec disagree, the spec wins and the disagreement is a plan 
 
 ## 1. How to run this plan
 
+### 1.0 When Ismail says "start"
+
+The coordinator does exactly this, with no further questions:
+
+1. Read `CLAUDE.md`, the spec, sections 1 to 3 of this plan, and the progress file.
+2. In the progress file, find the package to work on:
+   - a package that is `in_progress`, `in_review` or `changes_requested` is resumed first;
+   - otherwise take the first `not_started` package in the order of section 3 whose "Depends on"
+     packages are all `merged`.
+   A `blocked` package is not skipped silently: report what it is waiting on.
+3. Mark it `in_progress` in the progress file on the integration branch (1.8).
+4. Start **one thread** for that package, with the **model and effort from section 3**, and give it the
+   brief in 1.9 unchanged except for the package id.
+5. When the agent opens its pull request, mark the package `in_review` and run the gate review (1.6).
+6. If the gate fails, mark it `changes_requested` and send the findings back to the same thread.
+7. If the gate passes and CI is green, merge the pull request into
+   `feature/discovery-professional-delivery`, mark the package `merged` with the merge commit, and
+   tell Ismail in one line what was merged.
+8. Repeat from step 2 until L10 is `merged`, then stop and hand Ismail the release report.
+
+One package at a time. Stop and ask Ismail only for the cases in 1.7. **Never merge into `main` and
+never deploy**; both need his explicit approval, given after L10.
+
 ### 1.1 Roles
 
-- **Orchestrator:** hands one work package at a time to an agent, reviews the result against the
+- **Orchestrator:** the project coordinator. Hands one work package at a time to an agent, reviews the result against the
   package's "Done when" list, and merges it into the integration branch. Never merges into `main`.
   Never deploys. Both need Ismail's explicit approval.
-- **Agent:** implements exactly one work package. Reads, in this order: `CLAUDE.md`, the spec, section
-  1 and 2 of this plan, its own package, and the code the package names. Nothing else is in scope.
+- **Agent:** implements exactly one work package. Reads, in this order: `CLAUDE.md`, the progress file
+  (the board and every earlier package's handoff notes), the spec, sections 1 and 2 of this plan, its
+  own package, and the code the package names. Nothing else is in scope.
 - **Ownership note.** `CLAUDE.md` and `AGENTS.md` name Codex as the backend owner. For this L-series
   Ismail assigned the work to Claude agents through the orchestrator, backend included. That
   instruction is the owner override both files allow.
 
-### 1.2 Models
+### 1.2 Models and effort
 
 Ismail's rule: quality first, save usage where possible. **Opus** for any package that touches
-matching, money or codes. **Sonnet** for the rest. Each package states its model. If a Sonnet package
+matching, money or codes. **Sonnet** for the rest. Every package also has a reasoning **effort**:
+
+- **xhigh:** the two packages where a mistake corrupts matching or delivery confirmation (L3A, L8A).
+- **high:** every other Opus package, and the Sonnet packages that carry the most user-facing design
+  (L2B, L3B, L7B, L8B).
+- **medium:** the remaining Sonnet packages, which follow an existing pattern closely.
+
+Nothing in this series runs at low effort, and nothing needs max. The gate review (1.6) runs on Opus
+at high effort for every package; the second review pass on Opus packages also runs at high.
+Section 3 lists the model and effort for each package, and each package heading repeats them. They
+are not to be lowered to save usage. If a Sonnet package
 turns out to need a change in `apps/matching`, `apps/finance`, `apps/handover`, `apps/deals/lifecycle.py`
 or `apps/deals/cancellation.py`, the agent stops and the orchestrator re-issues that part to Opus.
 Two things are not such a change and are allowed in a Sonnet package where the package says so:
@@ -98,8 +134,9 @@ is rewritten to the new rule, and the pull request says which and why.
    (web pages and email). `l10n_untranslated.json` stays empty.
 10. **No dead code.** A package removes what it replaces in the same pull request. No commented-out
     code, no unused parameter "for later", no second implementation of an existing rule.
-11. **Status file.** Each package adds a short dated entry at the top of `docs/IMPLEMENTATION_STATUS.md`
-    and writes `docs/PHASE_<id>_<NAME>.md` with what was built, the contract, and the test counts.
+11. **Status files.** Each package adds a short dated entry at the top of `docs/IMPLEMENTATION_STATUS.md`,
+    writes `docs/PHASE_<id>_<NAME>.md` with what was built, the contract, and the test counts, and
+    fills in its own handoff block in the progress file (1.8).
 
 ### 1.6 Gate review
 
@@ -117,6 +154,48 @@ Before merging a package the orchestrator checks, and records in the pull reques
 Stop and report, without guessing, when: a spec rule cannot be implemented as written; a change would
 alter a money, code or matching result for an existing deal; a migration would need to drop or rewrite
 data; an existing test encodes behaviour the spec does not mention.
+
+### 1.8 The progress file: how agents coordinate
+
+`docs/WASSLA_L_SERIES_PROGRESS.md` on the integration branch is the single shared record. Every agent
+reads it before anything else, so no agent depends on another agent's conversation.
+
+- **The board** (one row per package: status, model, effort, branch, pull request, merge commit, phase
+  doc) is edited **only by the orchestrator**, directly on the integration branch, in small docs-only
+  commits. Statuses: `not_started`, `in_progress`, `in_review`, `changes_requested`, `merged`,
+  `blocked`.
+- **Handoff notes** (one block per package) are written **by that package's agent, inside its own pull
+  request**, and merge with it. They hold what the next agent cannot learn from the plan: the final
+  names of endpoints, fields, error codes and channels where they differ from this plan; anything
+  deliberately left for a later package; new switches and their defaults; test counts before and
+  after; known limits.
+- An agent edits only its own handoff block. It never edits the board or another package's block, so
+  two pull requests never conflict in this file.
+- **Deviations.** If an agent had to deviate from this plan, the handoff notes say what, why, and who
+  approved it. A deviation from the **spec** is never made by an agent; it is a stop-and-ask (1.7).
+- **Questions for Ismail** are listed at the bottom of the file by the orchestrator, with the date
+  asked and, later, the answer.
+- The plan and the spec are not rewritten as work proceeds. If a later package's instructions are
+  made wrong by an earlier package's outcome, the orchestrator corrects the plan in a docs-only
+  commit and records it in the file's change log.
+
+### 1.9 The brief the orchestrator gives each agent
+
+```
+You are implementing package <ID> of the Wassla L-series in the repository is-bo/shiptripis.
+
+1. Check out feature/discovery-professional-delivery and create the branch l/<id>-<short-name> from it.
+2. Read, in this order: CLAUDE.md; docs/WASSLA_L_SERIES_PROGRESS.md (the board and all earlier
+   handoff notes); docs/WASSLA_DISCOVERY_PRO_SPEC.md; sections 1 and 2 of
+   docs/WASSLA_DISCOVERY_PRO_PLAN.md; then the section for package <ID>.
+3. Implement package <ID> and nothing else. The spec is authoritative. Follow every rule in plan
+   section 1.5. Stop and report instead of guessing in the cases of plan section 1.7.
+4. Run every check in plan section 1.4 that applies. The whole suites must pass.
+5. Write docs/PHASE_<ID>_<NAME>.md, add the entry to docs/IMPLEMENTATION_STATUS.md, and fill in your
+   own handoff block in docs/WASSLA_L_SERIES_PROGRESS.md. Do not edit the board.
+6. Open one pull request into feature/discovery-professional-delivery. In its description list each
+   line of the package's "Done when" with the evidence. Never push to main. Never deploy.
+```
 
 ---
 
@@ -216,28 +295,28 @@ language from the browser with a one-tap switch, no private data.
 
 ## 3. Work packages
 
-| # | Package | Model | Depends on |
-| --- | --- | --- | --- |
-| L0 | Spec and plan (this commit) | done | |
-| L1A | Backend cleanup | Opus | L0 |
-| L1B | Mobile and docs cleanup | Sonnet | L1A |
-| L2A | Discovery backend and marketplace policy | Opus | L1A |
-| L2B | Discovery on Home (mobile) | Sonnet | L2A, L1B |
-| L3A | Routes for everyone, backend: sea, ticket proof, stops, capacity, pause | Opus | L2A |
-| L3B | Routes for everyone, mobile and admin screens | Sonnet | L3A |
-| L4A | Traveler pricing, backend | Opus | L3A |
-| L4B | Traveler pricing, mobile | Sonnet | L4A, L3B |
-| L5A | Progress updates and reminders, backend | Sonnet | L3A |
-| L5B | Progress updates and reminders, mobile | Sonnet | L5A, L3B |
-| L6A | Professional profile, verification, admin inbox, proof skip | Opus | L3A |
-| L6B | Professional Mode, mobile | Sonnet | L6A |
-| L7A | Manifest, backend projections | Sonnet | L6A |
-| L7B | Manifest dashboard, mobile | Sonnet | L7A, L6B |
-| L8A | Custody, courier handoff, recipient confirmation, backend and web pages | Opus | L5A |
-| L8B | Custody and handoff, mobile | Sonnet | L8A, L7B |
-| L9A | Problems and route changes, backend | Opus | L8A |
-| L9B | Problems and route changes, mobile | Sonnet | L9A, L8B |
-| L10 | Final acceptance | Opus | all |
+| # | Package | Model | Effort | Depends on |
+| --- | --- | --- | --- | --- |
+| L0 | Spec and plan (this commit) | done |  |  |
+| L1A | Backend cleanup | Opus | high | L0 |
+| L1B | Mobile and docs cleanup | Sonnet | medium | L1A |
+| L2A | Discovery backend and marketplace policy | Opus | high | L1A |
+| L2B | Discovery on Home (mobile) | Sonnet | high | L2A, L1B |
+| L3A | Routes for everyone, backend: sea, ticket proof, stops, capacity, pause | Opus | xhigh | L2A |
+| L3B | Routes for everyone, mobile and admin screens | Sonnet | high | L3A |
+| L4A | Traveler pricing, backend | Opus | high | L3A |
+| L4B | Traveler pricing, mobile | Sonnet | medium | L4A, L3B |
+| L5A | Progress updates and reminders, backend | Sonnet | medium | L3A |
+| L5B | Progress updates and reminders, mobile | Sonnet | medium | L5A, L3B |
+| L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | L3A |
+| L6B | Professional Mode, mobile | Sonnet | medium | L6A |
+| L7A | Manifest, backend projections | Sonnet | medium | L6A |
+| L7B | Manifest dashboard, mobile | Sonnet | high | L7A, L6B |
+| L8A | Custody, courier handoff, recipient confirmation, backend and web pages | Opus | xhigh | L5A |
+| L8B | Custody and handoff, mobile | Sonnet | high | L8A, L7B |
+| L9A | Problems and route changes, backend | Opus | high | L8A |
+| L9B | Problems and route changes, mobile | Sonnet | medium | L9A, L8B |
+| L10 | Final acceptance | Opus | high | all |
 
 This follows Ismail's order: cleanup, then discovery, then sea legs for everyone, then professional
 features.
@@ -246,7 +325,7 @@ features.
 
 ## 4. Packages in detail
 
-### L1A. Backend cleanup (Opus)
+### L1A. Backend cleanup (Opus, high effort)
 
 **Goal.** Remove dead and retired backend code without changing any behaviour a current client uses,
 and without touching data.
@@ -275,7 +354,18 @@ and without touching data.
 | `GET /api/matches/compatible-journeys` | `apps/matching/v1_views.py` | Superseded by `find-travelers`; the app has an unused repository method for it |
 | Redis channels nobody publishes (`trip.*`, `match.created`, `handover.code_issued` and others) | `apps/core/channels.py`, Go dispatcher list | Remove a channel only when nothing publishes it and no stored inbox row needs it rendered |
 | `schema_version` 1 and 2 branches | `apps/matching`, `apps/trips`, `apps/parcels` (about 48 references) | Remove a branch only when it is provably unreachable for live rows; otherwise keep and record |
-| Railway launch files | `backend/services/railway*.json`, entrypoint | Needs Ismail's decision: is Railway retired now that hosting is the VPS? Do not remove without it |
+| Railway deployment | root `railway.json`, `backend/railway/`, `backend/gateway/railway.json`, `backend/monolith/railway.web.json`, `backend/monolith/railway.grpc.json`, `backend/services/railway.json`, `backend/services/railway-entrypoint.sh`, and Railway-only branches in settings, config, Dockerfiles, CI and tests | **Ismail decided on 2026-11-11: Railway does not stay on this branch.** See "Railway removal" below |
+
+**Railway removal.** Hosting is the VPS (`infra/vps/`). Remove the Railway deployment files listed
+above and every code path that exists only for Railway: settings and config branches keyed on Railway
+environment variables, Railway-only Docker stages and entrypoints, Railway references in CI, and tests
+that assert Railway behaviour. Rules: the VPS path must be the one that remains and must keep working,
+proven by the VPS unit tests, the `vps-readiness` workflow and the production-safety CI job; an
+environment variable the VPS also uses keeps its name even if it was introduced for Railway; a setting
+whose only reader was Railway is deleted, not left unused; `docs/` runbooks that describe Railway as
+the current host are corrected, while dated historical phase reports are left as written. Anything
+where it is unclear whether the VPS still depends on it goes to "kept, needs decision" with the
+evidence. This overrides the V1 specification's note that Railway resources remain.
 
 **Also in scope.** Django admin registrations, tests, fixtures and settings that exist only for removed
 surfaces. `ARCHITECTURE.md`: correct what is false at the baseline.
@@ -287,8 +377,11 @@ surfaces. `ARCHITECTURE.md`: correct what is false at the baseline.
 - The whole Django, Go and Flutter suites pass. Test counts before and after are in the phase doc, and
   every removed test is listed with the surface it covered.
 - A request to each removed route returns 404, or 410 for the tombstones.
+- No Railway file or Railway-only code path remains (`git grep -i railway` shows only dated historical
+  reports and the cleanup inventory), and the VPS unit tests, `vps-readiness` and the
+  production-safety job pass.
 
-### L1B. Mobile and docs cleanup (Sonnet)
+### L1B. Mobile and docs cleanup (Sonnet, medium effort)
 
 **Goal.** The app and the docs contain nothing unused or misleading before new screens are added.
 
@@ -305,7 +398,7 @@ surfaces. `ARCHITECTURE.md`: correct what is false at the baseline.
 **Done when.** `flutter analyze --fatal-infos` is clean, the whole Flutter suite passes, the inventory
 file gains a mobile section, and golden or screenshot tests are unchanged.
 
-### L2A. Discovery backend and marketplace policy (Opus)
+### L2A. Discovery backend and marketplace policy (Opus, high effort)
 
 **Goal.** The marketplace policy exists, and the server can answer the three discovery tiers with
 strictly public data.
@@ -367,7 +460,7 @@ count tests pass; an opted-out, hidden or banned user appears in no tier; the tw
 the code only they used are gone; switching `listings_enabled` or `profiles_enabled` off makes the
 tier answer `state: "disabled"`.
 
-### L2B. Discovery on Home (Sonnet)
+### L2B. Discovery on Home (Sonnet, high effort)
 
 **Goal.** Home shows, in order: what needs me, what is in progress, matches for me, listings, people,
 my own items. It stays fast and calm.
@@ -408,7 +501,7 @@ bounded number of calls on open; localisation test passes with zero untranslated
 **Done when.** The gate screenshots exist (1.6) and Home's time to first content is not worse than the
 baseline in the existing cold-start test.
 
-### L3A. Routes for everyone, backend (Opus)
+### L3A. Routes for everyone, backend (Opus, xhigh effort)
 
 **Goal.** Sea legs on admin-managed crossings, ticket proof for flight and sea through one function,
 stop options, optional volume and parcel-count capacity, what the traveler accepts, and pause. All
@@ -430,10 +523,11 @@ enforced by the server. All existing flight and road behaviour unchanged.
   `maxJourneyLegCapacityKg` follows in L3B.
 
 **Sea crossings.**
-- `python manage.py seed_sea_crossings --file tools/geography/sea_crossings.json`. Idempotent. Creates
-  each pair **inactive**. A pair is created only when both names resolve to exactly one catalogue
-  locality; anything else is reported and skipped. The file holds the candidate port cities from spec
-  5.3, both directions.
+- `python manage.py seed_sea_crossings --file tools/geography/sea_crossings.json`. Idempotent. The
+  file holds exactly the crossings of spec 5.3.1, both directions, each with its `active` flag: the
+  twelve listed crossings active, the seven others inactive. A pair is created only when both names
+  resolve to exactly one catalogue locality; anything else is reported and skipped, never guessed.
+  Re-running the command never re-activates a crossing staff deactivated.
 - Service functions `activate_crossing`, `deactivate_crossing`, `create_crossing`, each requiring a
   reason and writing the audit log. (The console screen is L3B.)
 - `GET /api/geography/sea-crossings` returns `{"enabled": bool, "crossings": [{origin, destination}]}`
@@ -499,7 +593,7 @@ on and a crossing active, the Lille, Paris, Lyon, Marseille, Algiers, Sétif, Co
 Ismail's brief can be created, published with an approved sea ticket, and matched leg by leg, with a
 Lille to Paris parcel using no capacity on the sea leg, proven by test.
 
-### L3B. Routes for everyone, mobile and admin screens (Sonnet)
+### L3B. Routes for everyone, mobile and admin screens (Sonnet, high effort)
 
 **Mobile.**
 - `TransportMode` and `LegMode` gain sea, with icon and colour in `design/components/status.dart`.
@@ -532,7 +626,7 @@ screen states; RTL and bottom-overlap; admin view tests for permissions and audi
 **Done when.** A traveler can build the Lille to Constantine route on a 360 px phone in Arabic without
 horizontal scrolling or overlap, and the gate screenshots show it.
 
-### L4A. Traveler pricing, backend (Opus)
+### L4A. Traveler pricing, backend (Opus, high effort)
 
 **Schema.** `Journey.price_per_kg_eur_cents` and `Journey.min_price_eur_cents`, both null or both set,
 each within the bounds in the marketplace policy.
@@ -562,7 +656,7 @@ finance suite passes with no edits.
 **Done when.** A diff of every amount on an end-to-end deal created at the listed price equals the
 same deal created today by typing that amount by hand.
 
-### L4B. Traveler pricing, mobile (Sonnet)
+### L4B. Traveler pricing, mobile (Sonnet, medium effort)
 
 - Route editor and journey detail: "Your price" with "Price per kg" and "Minimum per parcel", optional,
   with the line "Senders see your price plus Wassla's fee. Wassla's minimum for each parcel still
@@ -577,7 +671,7 @@ same deal created today by typing that amount by hand.
 **Done when.** Money tests (`money_test`, the perspective tests) pass unchanged, and a sender can go
 from a trip card to a sent offer at the listed price in three taps.
 
-### L5A. Progress updates and reminders, backend (Sonnet)
+### L5A. Progress updates and reminders, backend (Sonnet, medium effort)
 
 **Schema.** `trips.JourneyLegProgress(leg, kind: at_port|departed|arrived, source: traveler|staff,
 reported_by, reported_at, retracted_at)`, one live row per leg and kind.
@@ -610,7 +704,7 @@ fact), or to any payout gate. If one seems needed, stop (1.2).
 before and after a report. The reminder handler in each no-op case and the notify case, including
 running twice. The Go channel list test.
 
-### L5B. Progress updates and reminders, mobile (Sonnet)
+### L5B. Progress updates and reminders, mobile (Sonnet, medium effort)
 
 - Journey detail: a "Trip progress" stepper, one step per leg, with one large button for the next
   action and an undo for 10 minutes.
@@ -619,7 +713,7 @@ running twice. The Go channel list test.
 - Sender's deal screen: progress lines in the timeline, each marked "reported by the traveler".
 - States, RTL, and an offline rule: a report needs the network; the button says so instead of queuing.
 
-### L6A. Professional profile, verification, admin inbox, proof skip (Opus)
+### L6A. Professional profile, verification, admin inbox, proof skip (Opus, high effort)
 
 **Schema.** New app `apps.professionals`.
 - `ProfessionalProfile(user one to one, business_name, registration_number, registration_country,
@@ -668,7 +762,7 @@ with no proof; the same journey is refused the moment they are suspended; funded
 Acceptance racing a suspension resolves to one consistent outcome. Privacy: registration number and
 document never appear in any non-staff payload. Permissions and audit for every staff action.
 
-### L6B. Professional Mode, mobile (Sonnet)
+### L6B. Professional Mode, mobile (Sonnet, medium effort)
 
 - Profile gains "Professional Mode". Screens: what it is and what it needs; the form (business name,
   registration number, country, city with the place picker, document type, photo); pending;
@@ -680,7 +774,7 @@ document never appear in any non-staff payload. Permissions and audit for every 
 - For a verified professional the ticket step is absent from publishing, with one line explaining why.
 - States, RTL, upload progress and failure, photo retake.
 
-### L7A. Manifest, backend projections (Sonnet)
+### L7A. Manifest, backend projections (Sonnet, medium effort)
 
 Read-only. Verified professionals only (`professional_required`), except the deal filters.
 
@@ -695,7 +789,7 @@ Read-only. Verified professionals only (`professional_required`), except the dea
   grouped by payout state. Sums only. No new fee, FX or refund arithmetic.
 - Fixed query counts, asserted.
 
-### L7B. Manifest dashboard, mobile (Sonnet)
+### L7B. Manifest dashboard, mobile (Sonnet, high effort)
 
 - Home: a "Today" section for verified professionals, above discovery, listing actions in the order a
   working day needs them.
@@ -706,7 +800,7 @@ Read-only. Verified professionals only (`professional_required`), except the dea
 - At widths of 840 dp and more, the manifest uses two panes. The last opened manifest is readable
   offline and marked as such; code entry needs the network and says so.
 
-### L8A. Custody, courier handoff, recipient confirmation (Opus)
+### L8A. Custody, courier handoff, recipient confirmation (Opus, xhigh effort)
 
 **Schema.** App `apps.custody` (2.6).
 - `CustodyEvent(deal, kind, source, actor, occurred_at, data)`, append-only. Kinds: `collected`,
@@ -772,7 +866,7 @@ review" queue.
 
 **Done when.** The grep in L10 for writes to `Deal.status` finds none in `apps/custody`.
 
-### L8B. Custody and handoff, mobile (Sonnet)
+### L8B. Custody and handoff, mobile (Sonnet, high effort)
 
 - Deal screen: a custody timeline where every line carries its source label.
 - After pickup: an optional "Record condition" sheet with photos; skipping is one tap.
@@ -784,7 +878,7 @@ review" queue.
 - Manifest: handoffs awaiting courier confirmation appear in Today.
 - States including "courier handoff is not available" when the switch is off.
 
-### L9A. Problems and route changes, backend (Opus)
+### L9A. Problems and route changes, backend (Opus, high effort)
 
 **Problems.** `custody.ShipmentProblem(deal, reported_by, kind, note, status: open|acknowledged|
 escalated|closed, closed_by, closed_reason)`. `POST` and `GET /api/deals/<id>/problems`. Kinds as spec
@@ -806,7 +900,7 @@ build.
   accepted or no longer active. The traveler may withdraw it.
 - A sender who declines may cancel through the existing cancellation flow. **The cancellation is
   recorded as caused by the traveler and uses the existing traveler-cancellation outcome; no new
-  refund rule is written.** This line needs Ismail's confirmation before the package starts (5.3).
+  refund rule is written.** Ismail confirmed this on 2026-11-11.
 - `Deal.arrival_snapshot` and `funded_scheduled_arrival_floor_at` are never rewritten. The payout
   floor stays the one agreed at funding.
 - Applying a change reschedules leg reminders and is recorded with the original schedule.
@@ -816,7 +910,7 @@ snapshot is untouched. Cancellation after a decline produces exactly the amounts
 traveler-cancellation path produces. Pending offers are re-validated at acceptance against the new
 times.
 
-### L9B. Problems and route changes, mobile (Sonnet)
+### L9B. Problems and route changes, mobile (Sonnet, medium effort)
 
 - "Report a problem" from the deal screen and from a manifest row; the problem list on the deal.
 - Traveler: "Change times" on an active journey, a review step listing the affected parcels and which
@@ -824,7 +918,7 @@ times.
 - Sender: a screen comparing the old and new times with "Accept" and "Decline", and, on decline, the
   cancellation consequence text from the existing cancellation quote endpoint.
 
-### L10. Final acceptance (Opus)
+### L10. Final acceptance (Opus, high effort)
 
 1. Whole suites on PostgreSQL, Go with race detection, and Flutter. Counts recorded against the
    baseline (Django 2,529 passed, Flutter 1,083 passed at `dd7f820`).
@@ -847,20 +941,25 @@ times.
 
 ---
 
-## 5. Decisions still open with Ismail
+## 5. Decisions
 
-None of these blocks L1 or L2.
+### 5.1 Answered by Ismail on 2026-11-11
 
-1. **Sea crossings.** The candidate port list must be checked against real ferry schedules, and the
-   legal position for carrying parcels by sea confirmed, before the "Sea legs" switch is turned on.
-   The code ships with it off.
-2. **Railway files.** Remove them in L1A, or keep them? (Hosting is moving to the VPS.)
-3. **Declined schedule change.** L9A treats the resulting cancellation as caused by the traveler. Confirm
-   before L9A starts.
-4. **"I can carry this".** A small addition in L2A so a traveler looking at an open request is not at a
-   dead end. It is not an offer. It can be dropped from L2A and L2B without affecting anything else.
-5. **Later, not in this build:** business logos and photos, courier API integrations, recurring
-   routes, fleet management, analytics.
+1. **Sea crossings.** Researched and added: spec 5.3.1. Twelve crossings are seeded active and seven
+   inactive. The "Sea legs" switch itself still ships off.
+2. **Railway.** It does not stay on this branch. L1A removes it.
+3. **Declined schedule change.** The cancellation that follows is treated as caused by the traveler.
+4. **"I can carry this".** Kept.
+
+### 5.2 Still open
+
+1. **Turning sea legs on.** The legal and customs position for carrying parcels by sea was not
+   researched, and the crossings were not checked on the operators' own sites. This is Ismail's call
+   when he turns the switch on. It blocks nothing in the build.
+
+### 5.3 Later, not in this build
+
+Business logos and photos, courier API integrations, recurring routes, fleet management, analytics.
 
 ---
 
