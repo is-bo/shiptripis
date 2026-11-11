@@ -53,9 +53,6 @@ enum KycStatus {
     'unverified' => KycStatus.unverified,
     _ => KycStatus.unknown,
   };
-
-  /// True when the user has something to do about it.
-  bool get needsAction => this == rejected || this == unverified;
 }
 
 class Account {

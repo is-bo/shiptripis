@@ -275,27 +275,3 @@ enum DetourBand {
 /// How the matched distance was arrived at. Shown to nobody directly; used to
 /// decide whether a distance is worth stating at all.
 enum DistancePrecision { unavailable, mixed, estimated, routed, unknown }
-
-/// An airport, from `GET /api/airports`.
-class Airport {
-  const Airport({
-    required this.iata,
-    required this.city,
-    required this.name,
-    required this.country,
-  });
-
-  factory Airport.fromJson(Map<String, dynamic> json) => Airport(
-    iata: readText(json['iata']),
-    city: readText(json['city']),
-    name: readText(json['name']),
-    country: readText(json['country']),
-  );
-
-  final String iata;
-  final String city;
-  final String name;
-  final String country;
-
-  String get label => '$city ($iata)';
-}

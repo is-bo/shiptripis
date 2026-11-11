@@ -156,16 +156,6 @@ class Validators {
       (value != null && value.characters.length > max)
       ? _l.validationTooLong(max)
       : null;
-
-  /// A positive decimal. Accepts both `.` and `,` because a French or Arabic
-  /// keyboard offers the comma and typing it should not be an error.
-  String? positiveNumber(String? value, {bool allowEmpty = false}) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return allowEmpty ? null : _l.validationRequired;
-    final parsed = double.tryParse(v.replaceAll(',', '.'));
-    if (parsed == null) return _l.validationNumberInvalid;
-    return parsed > 0 ? null : _l.validationMustBePositive;
-  }
 }
 
 /// Parses a user-entered decimal, accepting a comma as the separator.

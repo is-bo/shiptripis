@@ -1,4 +1,4 @@
-# Waçla Codex Instructions
+# Wassla Codex Instructions
 
 Codex is the primary engineering owner. Before substantial work, read:
 

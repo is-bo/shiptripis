@@ -161,8 +161,6 @@ class JourneyLeg {
   /// publishing. Drive legs never need one.
   bool get needsProof => mode.requiresProof && !hasApprovedProof;
 
-  JourneyLegProof? get latestProof => proofs.isEmpty ? null : proofs.first;
-
   ProofStatus get proofStatus {
     if (!mode.requiresProof) return ProofStatus.approved;
     if (hasApprovedProof) return ProofStatus.approved;
@@ -249,11 +247,6 @@ class Journey {
   bool get canEdit => editable == true;
 
   DateTime? get firstDeparture => legs.isEmpty ? null : legs.first.departAt;
-  DateTime? get lastArrival => legs.isEmpty ? null : legs.last.arriveAt;
-
-  bool get isMultiLeg => legs.length > 1;
-
-  bool get isMixedMode => legs.map((l) => l.mode).toSet().length > 1;
 
   /// Legs that still block publication. Empty means proof is not the reason
   /// the journey cannot go live.
@@ -309,8 +302,6 @@ class JourneyRouteChange {
 
   /// Proof that went with a leg the edit removed entirely.
   final int proofsDiscarded;
-
-  bool get touchedProof => proofsResetForReview > 0 || proofsDiscarded > 0;
 }
 
 CanonicalPlace? _place(Object? raw) {

@@ -189,8 +189,6 @@ class Compatibility {
   final DetourBand totalAddedDistance;
   final bool capacityAvailableOnEveryCoveredLeg;
   final List<String> limitations;
-
-  bool get spansMultipleLegs => coveredLegIds.length > 1;
 }
 
 /// The server's price for one candidate.

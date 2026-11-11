@@ -25,14 +25,17 @@ void main() {
     test('covers every server event family with its typed resources', () {
       final cases = <(String, Map<String, dynamic>, LiveResource)>[
         ('parcel.created', {'parcel_id': 1}, const LiveResource.request(1)),
-        ('match.created', {'match_id': 2}, const LiveResource.match(2)),
+        ('match.in_transit', {'match_id': 2}, const LiveResource.match(2)),
         ('offer.updated', {'match_id': 2}, const LiveResource.offers(2)),
         ('deal.updated', {'deal_id': 3}, const LiveResource.deal(3)),
         ('payment.captured', {'deal_id': 3}, const LiveResource.payment(3)),
-        ('handover.confirmed', {'deal_id': 3}, const LiveResource.deal(3)),
+        (
+          'handover.delivery_confirmed',
+          {'deal_id': 3},
+          const LiveResource.deal(3),
+        ),
         ('dispute.opened', {'dispute_id': 4}, const LiveResource.dispute(4)),
         ('payout.status_changed', {'deal_id': 3}, const LiveResource.payouts()),
-        ('trip.updated', {'journey_id': 5}, const LiveResource.journey(5)),
         (
           'flight_proof.status_changed',
           {'trip_id': 5},

@@ -90,13 +90,11 @@ class ChatThreadController extends ChangeNotifier {
   int _unresolvedSends = 0;
   int _reconcileCursor = 0;
   Object? _initialError;
-  Object? _backgroundError;
   ChatEligibility? _eligibility;
   ChatBlockReason _sendBlock = ChatBlockReason.ok;
 
   ChatEligibility? get eligibility => _eligibility;
   Object? get initialError => _initialError;
-  Object? get backgroundError => _backgroundError;
   bool get isInitialLoading => _initialLoading;
   bool get isLoadingOlder => _loadingOlder;
   bool get hasMoreOlder => _hasMoreOlder;
@@ -165,7 +163,6 @@ class ChatThreadController extends ChangeNotifier {
       _merge(page.messages);
       _reconcileCursor = page.latestId ?? _highestId;
       _hasMoreOlder = page.hasMore;
-      _backgroundError = null;
       _invalidateThreads();
     } on Object catch (error) {
       if (!_accepts(token)) return;
@@ -225,7 +222,6 @@ class ChatThreadController extends ChangeNotifier {
         _reconcileCursor = 0;
         _hasMoreOlder = false;
         _initialError = null;
-        _backgroundError = null;
         notifyListeners();
         return;
       }
@@ -246,7 +242,6 @@ class ChatThreadController extends ChangeNotifier {
         currentToken = null;
         _invalidateThreads();
         _initialError = null;
-        _backgroundError = null;
 
         if (_unresolvedSends > 0) {
           _deferredPages.add(page);
@@ -273,11 +268,9 @@ class ChatThreadController extends ChangeNotifier {
         await Future<void>.delayed(Duration.zero);
       }
       _initialError = null;
-      _backgroundError = null;
-    } on Object catch (error) {
-      if (_active && (currentToken == null || _accepts(currentToken))) {
-        _backgroundError = error;
-      }
+    } on Object {
+      // A failed background read keeps what is already on screen; the next
+      // read or live event reconciles it.
     } finally {
       if (currentToken != null) _readTokens.remove(currentToken);
       if (_active) {
@@ -313,10 +306,9 @@ class ChatThreadController extends ChangeNotifier {
       if (!_accepts(token)) return;
       _merge(page.messages);
       _hasMoreOlder = page.hasMore;
-      _backgroundError = null;
       _invalidateThreads();
-    } on Object catch (error) {
-      if (_accepts(token)) _backgroundError = error;
+    } on Object {
+      // Older pages are optional; the thread stays as it is.
     } finally {
       if (_accepts(token)) {
         _readTokens.remove(token);
@@ -394,7 +386,6 @@ class ChatThreadController extends ChangeNotifier {
       _merge(<ChatMessage>[acknowledged]);
       _flushDeferredPages();
       _sendBlock = ChatBlockReason.ok;
-      _backgroundError = null;
       // The ACK may have a higher id than an inbound message that this
       // controller has not fetched yet. Reconcile from the independent HTTP
       // cursor after every successful write; the ACK itself never advances it.

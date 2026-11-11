@@ -565,10 +565,6 @@ int _id(GoRouterState state, String key) =>
 extension AppNavigation on BuildContext {
   void goHome() => goNamed(Routes.home);
   void goDeliveries() => goNamed(Routes.deliveries);
-  void goChat() => goNamed(Routes.chat);
-  void goProfile() => goNamed(Routes.profile);
-
-  void openNotifications() => pushNamed(Routes.notifications);
 
   Future<void> openRequestCreate() => pushNamed(Routes.requestCreate);
 
@@ -669,7 +665,6 @@ extension AppNavigation on BuildContext {
   void openKyc() => pushNamed(Routes.kyc);
 
   void openPayoutMethods() => pushNamed(Routes.profilePayoutMethods);
-  void openDzdProfileSetup() => pushNamed(Routes.dzdProfileSetup);
   void openPayoutDetail(String reference) =>
       pushNamed(Routes.payoutDetail, pathParameters: {'reference': reference});
 

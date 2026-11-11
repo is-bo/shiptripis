@@ -84,12 +84,27 @@ factual. Use exactly these headings.
 
 ### L1B. Mobile and docs cleanup
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): no contract change. Removed from the client:
+  `compatibleJourneys()`, `airports()`, `Airport`, `uploadPhoto`, `cancelMatch`, `unreadActiveCount`,
+  `retiredHistory`, the six removed channel names (including the `NotificationChannel` values
+  `matchCreated`, `tripCreated`, `tripUpdated`, `tripCancelled`, `handoverConfirmed`), the six retired
+  refusal codes, `wilayas.dart`, ~45 unused getters/helpers and 202 unused ARB keys (EN, AR, FR).
+  The full list is `docs/WASSLA_L1_CLEANUP_INVENTORY.md` section 4.
+- Left for a later package: `JourneyRepository.searchPage` and `RequestRepository`/`MatchingRepository`
+  `openFeedPage` stay until L2B replaces them (plan). `PushRepository.unregisterDevice` has no caller;
+  sign-out ought to unregister the push installation, so whichever package touches sign-out/push
+  should wire it (not deleted on purpose). Later packages re-add ARB keys they need.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): branch is the harness name
+  `claude/project-thread-y61pdg`; PR targets `feature/discovery-professional-delivery`. Four test
+  fixtures moved off removed channel/code names. Chat controller's write-only `_backgroundError` field
+  was removed with its unused getter (the failure path still swallows the error, as before).
+- Tests (before and after counts): Flutter 1,079 passed before, 1,083 after (4 added in
+  `legacy_removal_test.dart`). `flutter analyze --fatal-infos` clean before and after. No golden
+  file changed.
+- Known limits: no screenshots taken (no visual change, and no widget touched). The unused-member
+  sweep is name-based, so a member used only through dynamic access would be missed; analyze and the
+  suite found none.
 
 ### L2A. Discovery backend and marketplace policy
 

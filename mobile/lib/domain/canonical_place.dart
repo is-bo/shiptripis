@@ -87,16 +87,6 @@ class CanonicalPlace {
   final double? searchDistanceKm;
 
   bool get isAirport => type == CanonicalPlaceType.airport;
-
-  String get typeLabel => isAirport ? 'Airport' : 'Locality';
-
-  String get contextualLabel {
-    final airport = isAirport && iataCode != null ? ' (${iataCode!})' : '';
-    final context = parentName.isNotEmpty
-        ? '\n$typeLabel · $parentName'
-        : '\n$typeLabel';
-    return '$name$airport$context';
-  }
 }
 
 class GeographyCountry {

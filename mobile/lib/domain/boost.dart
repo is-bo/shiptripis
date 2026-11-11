@@ -26,9 +26,7 @@ enum BoostStatus {
   unusable,
 
   refunded,
-  unknown;
-
-  bool get occupiesSlot => this == pendingPayment || this == active;
+  unknown,
 }
 
 class BoostPackage {
@@ -101,8 +99,6 @@ class BoostCatalogue {
   final Money minimumAmount;
   final int travelerShareBps;
   final List<BoostPackage> packages;
-
-  bool get isAvailable => enabled && packages.isNotEmpty;
 }
 
 class BoostPreview {
@@ -219,10 +215,6 @@ class BoostPurchase {
   final Money? paymentOutstanding;
 
   bool get isActive => status == BoostStatus.active;
-
-  bool get awaitsPayment =>
-      status == BoostStatus.pendingPayment &&
-      (paymentOutstanding?.isPositive ?? true);
 }
 
 /// The bounds and the rate a client may show before the sender chooses a Boost.
@@ -401,11 +393,4 @@ class BoostState {
   final List<BoostIntentHistoryEvent> history;
 
   bool get isBoosted => boostEur.isPositive;
-
-  BoostPurchase? get pendingPurchase {
-    for (final purchase in purchases) {
-      if (purchase.awaitsPayment) return purchase;
-    }
-    return null;
-  }
 }

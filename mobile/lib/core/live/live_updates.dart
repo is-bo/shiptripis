@@ -271,12 +271,8 @@ Set<LiveResource> resourcesForLiveEvent(
   // Ignore protocol frames and unknown names. A socket acknowledgement or
   // heartbeat is not a notification and must not cause an HTTP read.
   const knownEvents = {
-    'trip.created',
-    'trip.updated',
-    'trip.cancelled',
     'parcel.created',
     'parcel.cancelled',
-    'match.created',
     'match.in_transit',
     'match.completed',
     'offer.created',
@@ -286,8 +282,6 @@ Set<LiveResource> resourcesForLiveEvent(
     'payment.captured',
     'payment.failed',
     'payment.refunded',
-    'handover.confirmed',
-    'handover.code_issued',
     'handover.delivery_code_available',
     'handover.delivery_confirmed',
     'kyc.status_changed',
@@ -375,7 +369,7 @@ Set<LiveResource> resourcesForLiveEvent(
 
   if (type.startsWith('parcel.')) {
     addRequest(deposit: true);
-  } else if (type.startsWith('trip.') || type.startsWith('flight_proof.')) {
+  } else if (type.startsWith('flight_proof.')) {
     addJourney();
     resources.add(const LiveResource.matches());
   } else if (type.startsWith('offer.')) {

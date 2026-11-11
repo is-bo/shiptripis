@@ -34,9 +34,6 @@ class LAr extends L {
   String get actionRetry => 'إعادة المحاولة';
 
   @override
-  String get actionClose => 'إغلاق';
-
-  @override
   String get actionDone => 'تم';
 
   @override
@@ -52,12 +49,6 @@ class LAr extends L {
   String get actionEdit => 'تعديل';
 
   @override
-  String get actionRemove => 'إزالة';
-
-  @override
-  String get actionShare => 'مشاركة';
-
-  @override
   String get actionCopy => 'نسخ';
 
   @override
@@ -70,16 +61,10 @@ class LAr extends L {
   String get actionSeeAll => 'عرض الكل';
 
   @override
-  String get actionLearnMore => 'معرفة المزيد';
-
-  @override
   String get actionGoBack => 'العودة';
 
   @override
   String get actionNotNow => 'ليس الآن';
-
-  @override
-  String get actionUnderstood => 'فهمت';
 
   @override
   String get actionOpen => 'فتح';
@@ -88,22 +73,10 @@ class LAr extends L {
   String get actionAdd => 'إضافة';
 
   @override
-  String get actionChange => 'تغيير';
-
-  @override
   String get actionSelect => 'اختيار';
 
   @override
-  String get actionSearch => 'بحث';
-
-  @override
   String get actionClear => 'مسح';
-
-  @override
-  String get actionApply => 'تطبيق';
-
-  @override
-  String get actionReport => 'الإبلاغ عن مشكلة';
 
   @override
   String get actionContactSupport => 'التواصل مع الدعم';
@@ -138,21 +111,6 @@ class LAr extends L {
   String get roleSwitchLabel => 'تبديل الدور';
 
   @override
-  String get roleSwitchTitle => 'ماذا تفعل اليوم؟';
-
-  @override
-  String get roleSenderDescription => 'أرسل طردًا مع مسافر';
-
-  @override
-  String get roleTravelerDescription => 'احمل طرودًا في رحلة تقوم بها';
-
-  @override
-  String get roleSwitchedToSender => 'تم التبديل إلى الإرسال';
-
-  @override
-  String get roleSwitchedToTraveler => 'تم التبديل إلى السفر';
-
-  @override
   String get authSignIn => 'تسجيل الدخول';
 
   @override
@@ -172,13 +130,6 @@ class LAr extends L {
 
   @override
   String get authForgotPassword => 'نسيت كلمة المرور؟';
-
-  @override
-  String get authResetPassword => 'إعادة تعيين كلمة المرور';
-
-  @override
-  String get authResetSent =>
-      'إذا كان هذا البريد الإلكتروني مرتبطًا بحساب، فقد أرسلنا إليه رمز إعادة التعيين.';
 
   @override
   String get authNoAccount => 'جديد على Wassla؟';
@@ -246,9 +197,6 @@ class LAr extends L {
   @override
   String get validationDeadlineBeforeReady =>
       'يجب أن يكون الموعد النهائي بعد جاهزية الطرد';
-
-  @override
-  String get stateLoading => 'جارٍ التحميل…';
 
   @override
   String get stateOfflineTitle => 'أنت غير متصل بالإنترنت';
@@ -335,16 +283,7 @@ class LAr extends L {
   String get staleCapacityExceeded => 'لم تعد هناك مساحة كافية في هذه الرحلة.';
 
   @override
-  String get staleCapacityExceededDetail =>
-      'قام شخص آخر بحجز المساحة أثناء اتخاذك القرار.';
-
-  @override
   String get staleRewardBelowMinimum => 'تغيّر الحد الأدنى للمكافأة.';
-
-  @override
-  String staleRewardBelowMinimumDetail(String amount) {
-    return 'الحد الأدنى الآن هو $amount.';
-  }
 
   @override
   String get staleRouteChanged => 'تغيّرت تفاصيل المسار. لقد حدّثنا السعر.';
@@ -412,15 +351,6 @@ class LAr extends L {
   String get moneyMinimumReward => 'الحد الأدنى للمكافأة';
 
   @override
-  String get moneyRecommendedReward => 'يقترح Wassla';
-
-  @override
-  String get moneyYourReward => 'مكافأتك';
-
-  @override
-  String get moneyYourOffer => 'عرضك';
-
-  @override
   String get moneyTotal => 'الإجمالي';
 
   @override
@@ -459,9 +389,6 @@ class LAr extends L {
       'تفرض Chargily الرسوم بالدينار الجزائري. يبقى سعر التوصيل باليورو.';
 
   @override
-  String get moneyFree => 'مجاني';
-
-  @override
   String get homeSenderGreeting => 'أرسل شيئًا إلى الوطن';
 
   @override
@@ -478,9 +405,6 @@ class LAr extends L {
 
   @override
   String get homeInProgress => 'قيد التنفيذ';
-
-  @override
-  String get homeRecentActivity => 'النشاط الأخير';
 
   @override
   String get homeNothingNeedsYou => 'لا شيء يحتاج انتباهك الآن';
@@ -520,9 +444,6 @@ class LAr extends L {
 
   @override
   String get deliveriesSenderSection => 'الإرسال';
-
-  @override
-  String get deliveriesTravelerSection => 'الحمل';
 
   @override
   String get deliveriesJourneysSection => 'رحلاتي';
@@ -576,9 +497,6 @@ class LAr extends L {
 
   @override
   String get dealStatusPaymentRequired => 'الدفع مطلوب';
-
-  @override
-  String get dealStatusPaymentProcessing => 'جارٍ تأكيد الدفع';
 
   @override
   String get dealStatusFunded => 'مدفوع ومحمي';
@@ -704,13 +622,6 @@ class LAr extends L {
   String get requestPhotos => 'الصور';
 
   @override
-  String get requestPhotosHelp =>
-      'تحمي الصور كلا الطرفين في حال حدوث نزاع لاحقًا.';
-
-  @override
-  String get requestAddPhoto => 'إضافة صورة';
-
-  @override
   String get requestHandlingNotes => 'ملاحظات التعامل';
 
   @override
@@ -792,20 +703,10 @@ class LAr extends L {
   String get depositPayAction => 'ادفع العربون وانشر';
 
   @override
-  String get depositPending => 'جارٍ تأكيد عربونك…';
-
-  @override
-  String get depositPendingBody =>
-      'ننتظر تأكيد مزود الدفع الخاص بك. عادةً ما يستغرق هذا بضع ثوانٍ.';
-
-  @override
   String get journeyTitle => 'الرحلة';
 
   @override
   String get journeyCreateTitle => 'أضف رحلة';
-
-  @override
-  String get journeyOverallRoute => 'إلى أين أنت ذاهب؟';
 
   @override
   String get journeyFrom => 'من';
@@ -815,14 +716,6 @@ class LAr extends L {
 
   @override
   String get journeyLegs => 'المراحل';
-
-  @override
-  String get journeyAddLeg => 'أضف مرحلة';
-
-  @override
-  String journeyLegPosition(int position) {
-    return 'المرحلة $position';
-  }
 
   @override
   String get journeyModeFlight => 'طيران';
@@ -840,38 +733,16 @@ class LAr extends L {
   String get journeyCapacity => 'المساحة التي يمكنك حملها';
 
   @override
-  String get journeyCapacityHelp =>
-      'حدد هذا لكل مرحلة على حدة. يمكنك حمل كميات مختلفة في أجزاء مختلفة من الرحلة.';
-
-  @override
   String get journeyFlightNumber => 'رقم الرحلة الجوية';
 
   @override
   String get journeyFlightNumberHint => 'مثال: AH1006';
 
   @override
-  String get journeyFlightAirportsRequired =>
-      'يجب أن تبدأ مراحل الطيران وتنتهي في مطارات.';
-
-  @override
   String get journeyPublish => 'نشر الرحلة';
 
   @override
   String get journeyCancel => 'إلغاء الرحلة';
-
-  @override
-  String get journeySuggestLegTitle => 'أضف مرحلة الطريق البري؟';
-
-  @override
-  String journeySuggestLegBody(String arrival, String destination) {
-    return 'تهبط رحلتك الجوية في $arrival، لكنك متجه إلى $destination. أضف مرحلة القيادة حتى يمكن مطابقة الطرود طوال الطريق.';
-  }
-
-  @override
-  String get journeySuggestLegAccept => 'أضف مرحلة القيادة';
-
-  @override
-  String get journeySuggestLegDecline => 'لا، سأتوقف هناك';
 
   @override
   String get journeyStatusDraft => 'مسودة';
@@ -908,26 +779,11 @@ class LAr extends L {
   String get journeyModeLabel => 'طريقة سفرك';
 
   @override
-  String get journeyLegStartsAt => 'تبدأ في';
-
-  @override
-  String get journeyLegEndsAt => 'تنتهي في';
-
-  @override
-  String get journeyLegEndPlaceholder => 'اختر أين تنتهي هذه المرحلة';
-
-  @override
   String get journeyChooseDateTime => 'اختر التاريخ والوقت';
 
   @override
   String get journeyArriveHelp =>
       'مطلوب لمطابقتك مع المرسلين، إذ يُقارَن موعدهم النهائي بهذا الوقت.';
-
-  @override
-  String get journeyRemoveLeg => 'إزالة هذه المرحلة';
-
-  @override
-  String get journeyAddLegDestinationTitle => 'أين تنتهي هذه المرحلة؟';
 
   @override
   String get journeyMaxLegsReached =>
@@ -1020,10 +876,6 @@ class LAr extends L {
   String get journeyErrorNotOwned => 'هذه الرحلة تخص شخصًا آخر.';
 
   @override
-  String get journeyRebuildHint =>
-      'ألغِ هذه الرحلة وأنشئها من جديد بالتفاصيل الصحيحة.';
-
-  @override
   String get journeyCancelConfirmTitle => 'إلغاء هذه الرحلة؟';
 
   @override
@@ -1062,10 +914,6 @@ class LAr extends L {
   @override
   String get journeyMatchesInfoBody =>
       'لا يمكنك تقديم عرض على هؤلاء. إذا اختارك أحد هؤلاء المُرسِلين، سيصلك عرضه في التوصيلات.';
-
-  @override
-  String get journeyMatchesLoadFailed =>
-      'تعذّر علينا تحميل الطرود الخاصة بهذه الرحلة.';
 
   @override
   String get routeStopsTitle => 'محطاتك';
@@ -1236,9 +1084,6 @@ class LAr extends L {
   }
 
   @override
-  String get proofReplace => 'ارفع واحدًا جديدًا';
-
-  @override
   String get proofKindLabel => 'ماذا ترفع؟';
 
   @override
@@ -1302,9 +1147,6 @@ class LAr extends L {
   String get kycStatusNotStarted => 'لم يبدأ';
 
   @override
-  String get kycStatusInProgress => 'قيد التنفيذ';
-
-  @override
   String get kycStatusPending => 'قيد المراجعة';
 
   @override
@@ -1314,13 +1156,7 @@ class LAr extends L {
   String get kycStatusRejected => 'غير معتمد';
 
   @override
-  String get kycStatusActionRequired => 'يحتاج انتباهك';
-
-  @override
   String get kycStartAction => 'ابدأ التحقق من الهوية';
-
-  @override
-  String get kycResumeAction => 'أكمل التحقق من الهوية';
 
   @override
   String get kycRetryAction => 'إعادة المحاولة';
@@ -1357,9 +1193,6 @@ class LAr extends L {
 
   @override
   String get discoveryRequestsTitle => 'الطرود على مسارك';
-
-  @override
-  String get discoveryEmptyTravelersTitle => 'لا يوجد مسافرون بعد';
 
   @override
   String get discoveryEmptyTravelersBody =>
@@ -1416,9 +1249,6 @@ class LAr extends L {
 
   @override
   String get findTravelersIneligibleInProgress => 'هذا الطرد في الطريق بالفعل.';
-
-  @override
-  String get findTravelersTripContinues => 'الرحلة تستمر';
 
   @override
   String get findTravelersDirectLeg => 'يُنقل في مرحلة واحدة';
@@ -1492,21 +1322,6 @@ class LAr extends L {
   }
 
   @override
-  String discoveryCoveredLegs(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مرحلة',
-      many: '$count مرحلة',
-      few: '$count مراحل',
-      two: 'مرحلتين',
-      one: 'مرحلة واحدة',
-      zero: 'لا مراحل',
-    );
-    return 'يغطي $_temp0';
-  }
-
-  @override
   String get discoveryDetourSmall => 'انحراف طفيف جدًا عن المسار';
 
   @override
@@ -1514,16 +1329,6 @@ class LAr extends L {
 
   @override
   String get discoveryDetourLarge => 'انحراف ملحوظ عن المسار';
-
-  @override
-  String get discoveryVerifiedTraveler => 'مسافر موثّق';
-
-  @override
-  String get discoveryBoosted => 'مُعزَّز';
-
-  @override
-  String get discoveryBoostedExplainer =>
-      'دفع المُرسِل ليظهر لعدد أكبر من المسافرين. هذا لا يغيّر ما إذا كنت مطابقًا له أم لا.';
 
   @override
   String discoveryRatingCount(String rating, int count) {
@@ -1579,11 +1384,6 @@ class LAr extends L {
   }
 
   @override
-  String offerTheyProposed(String amount) {
-    return 'عرضوا $amount';
-  }
-
-  @override
   String get offerHistoryTitle => 'سجل العروض';
 
   @override
@@ -1607,11 +1407,6 @@ class LAr extends L {
   @override
   String get offerDeclineConfirmBody =>
       'سيتم إعلام الطرف الآخر. لا يزال بإمكانكما التفاوض بعد ذلك.';
-
-  @override
-  String offerAcceptConfirmTitle(String amount) {
-    return 'قبول $amount؟';
-  }
 
   @override
   String get offerAcceptTravelerBody =>
@@ -1767,26 +1562,10 @@ class LAr extends L {
       'لم يُخصم أي مبلغ. يمكنك إعادة المحاولة أو استخدام وسيلة أخرى.';
 
   @override
-  String get paymentExpiredTitle => 'انتهت صلاحية صفحة الدفع';
-
-  @override
-  String get paymentExpiredBody =>
-      'انتهت صلاحية رابط الدفع هذا. ابدأ من جديد عندما تكون جاهزًا.';
-
-  @override
   String get paymentStatusRequired => 'الدفع مطلوب';
 
   @override
-  String get paymentStatusStarted => 'صفحة الدفع مفتوحة';
-
-  @override
-  String get paymentStatusProcessing => 'قيد المعالجة';
-
-  @override
   String get paymentStatusPaid => 'مدفوع';
-
-  @override
-  String get paymentStatusFailed => 'فشل';
 
   @override
   String get paymentStatusRefundPending => 'الاسترجاع في الطريق';
@@ -1796,9 +1575,6 @@ class LAr extends L {
 
   @override
   String get paymentStatusRefunded => 'تم الاسترجاع';
-
-  @override
-  String get paymentReturnedTitle => 'مرحبًا بعودتك';
 
   @override
   String get paymentRedirectNotProof =>
@@ -1826,9 +1602,6 @@ class LAr extends L {
   @override
   String get guestPayPayerEmailHelp =>
       'سنرسل إليه إيصال الدفع، ونبلغك إن استحق لك أي استرداد. لن يُنشأ لك أي حساب.';
-
-  @override
-  String get guestPayAmountDue => 'المبلغ المستحق';
 
   @override
   String get guestPayInvalidTitle => 'هذا الرابط غير صالح';
@@ -1872,9 +1645,6 @@ class LAr extends L {
 
   @override
   String get recipientSaved => 'تم حفظ المستلِم';
-
-  @override
-  String get recipientRequiredTitle => 'المستلِم مطلوب';
 
   @override
   String get recipientRequiredBody =>
@@ -2047,11 +1817,6 @@ class LAr extends L {
   }
 
   @override
-  String protectionEndsIn(String countdown) {
-    return 'تنتهي خلال $countdown';
-  }
-
-  @override
   String get protectionEnded => 'أُغلقت فترة الحماية';
 
   @override
@@ -2091,9 +1856,6 @@ class LAr extends L {
   @override
   String get payoutFrozenBody =>
       'هناك نزاع مفتوح على هذا التوصيل، لذا الدفعة معلّقة إلى حين حل النزاع.';
-
-  @override
-  String get payoutPendingTitle => 'الدفعة قيد الانتظار';
 
   @override
   String get payoutEmptyTitle => 'لا توجد دفعات بعد';
@@ -2157,12 +1919,6 @@ class LAr extends L {
   }
 
   @override
-  String get disputeUploadFailed => 'فشل الرفع';
-
-  @override
-  String get disputeUploadRetry => 'إعادة محاولة الرفع';
-
-  @override
   String disputeFileTooLarge(String limit) {
     return 'هذا الملف كبير جدًا. الحد الأقصى هو $limit.';
   }
@@ -2192,12 +1948,6 @@ class LAr extends L {
   @override
   String get disputeWindowClosedBody =>
       'يمكن فتح النزاعات خلال 48 ساعة بعد التوصيل. تواصل مع الدعم إذا كنت لا تزال بحاجة إلى مساعدة.';
-
-  @override
-  String get disputeEmptyTitle => 'لا توجد نزاعات';
-
-  @override
-  String get disputeEmptyBody => 'لا شيء قيد النزاع.';
 
   @override
   String get cancelTitle => 'إلغاء هذا التوصيل';
@@ -2281,65 +2031,6 @@ class LAr extends L {
       'يحصل المسافر على 100% من مكافأة التعزيز. تظهر الطلبات المعززة في مقدمة نتائج البحث.';
 
   @override
-  String get boostDoesNotGuarantee =>
-      'لا يغيّر ذلك من تتطابق معه، ولا يضمن حدوث توصيل.';
-
-  @override
-  String get boostChoosePackage => 'اختر تعزيزًا';
-
-  @override
-  String get boostAmountLabel => 'مبلغ التعزيز';
-
-  @override
-  String boostAmountHelper(String amount) {
-    return 'الحد الأدنى $amount. يمكنك اختيار أي مبلغ أكبر.';
-  }
-
-  @override
-  String get boostPreviewTitle => 'راجع قبل الدفع';
-
-  @override
-  String get boostSenderPays => 'أنت تدفع';
-
-  @override
-  String get boostTravelerGets => 'يحصل المسافر عند اكتمال التوصيل';
-
-  @override
-  String get boostPlatformKeeps => 'تحتفظ Wassla';
-
-  @override
-  String get boostEarningsCondition =>
-      'تصبح مكافأة المسافر جزءاً من أرباح الصفقة المحمية. إذا لم يصل التوصيل إلى استحقاق الربح، يُرد مبلغ التعزيز.';
-
-  @override
-  String get boostReviewAction => 'مراجعة التعزيز';
-
-  @override
-  String get boostConfirmAction => 'المتابعة إلى الدفع';
-
-  @override
-  String get boostAmountBelowMinimum => 'أدخل مبلغ التعزيز الأدنى على الأقل.';
-
-  @override
-  String get boostPreviewStale =>
-      'تغيّرت قسمة مبلغ التعزيز. راجع المبالغ المحدّثة قبل المتابعة.';
-
-  @override
-  String boostDuration(int hours) {
-    String _temp0 = intl.Intl.pluralLogic(
-      hours,
-      locale: localeName,
-      other: '$hours ساعة',
-      many: '$hours ساعة',
-      few: '$hours ساعات',
-      two: 'ساعتان',
-      one: 'ساعة واحدة',
-      zero: 'لا ساعات',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String boostDurationDays(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
@@ -2353,28 +2044,6 @@ class LAr extends L {
     );
     return '$_temp0';
   }
-
-  @override
-  String get boostActive => 'التعزيز نشط';
-
-  @override
-  String boostActiveUntil(String when) {
-    return 'نشط حتى $when';
-  }
-
-  @override
-  String get boostPendingPayment => 'بانتظار الدفع';
-
-  @override
-  String get boostExpired => 'انتهى التعزيز';
-
-  @override
-  String boostPurchase(String amount) {
-    return 'عزّز مقابل $amount';
-  }
-
-  @override
-  String get boostNotEligible => 'لا يمكن تعزيز هذا الطلب الآن.';
 
   @override
   String get chatTitle => 'المحادثة';
@@ -2396,9 +2065,6 @@ class LAr extends L {
 
   @override
   String get chatSend => 'إرسال';
-
-  @override
-  String get chatSendFailed => 'لم تُرسل';
 
   @override
   String get chatRetrySend => 'اضغط لإعادة المحاولة';
@@ -2436,21 +2102,6 @@ class LAr extends L {
   @override
   String get notificationsEmptyBody =>
       'تظهر هنا العروض والمدفوعات وتحديثات التوصيل.';
-
-  @override
-  String notificationsUnreadCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count إشعار غير مقروء',
-      many: '$count إشعارًا غير مقروء',
-      few: '$count إشعارات غير مقروءة',
-      two: 'إشعاران غير مقروءين',
-      one: 'إشعار واحد غير مقروء',
-      zero: 'لا إشعارات غير مقروءة',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get profileTitle => 'الحساب';
@@ -2553,9 +2204,6 @@ class LAr extends L {
   String get locationSearchHint => 'ابحث عن بلدية أو مطار';
 
   @override
-  String get locationSelectCountry => 'اختر بلدًا أولًا';
-
-  @override
   String get locationSearchStart => 'اكتب اسم بلدية أو مدينة أو مطار';
 
   @override
@@ -2612,9 +2260,6 @@ class LAr extends L {
   }
 
   @override
-  String get locationTypeLocality => 'بلدية';
-
-  @override
   String get locationUseMap => 'اختر من الخريطة';
 
   @override
@@ -2628,18 +2273,10 @@ class LAr extends L {
       'لا تُشارَك سوى المدينة إلى أن يُدفع ثمن التوصيل.';
 
   @override
-  String get locationPrivacyAfterFunding =>
-      'يُشارَك العنوان الكامل مع المسافر.';
-
-  @override
   String get locationHiddenUntilFunded => 'العنوان الدقيق متاح بعد الدفع';
 
   @override
   String get locationSearchEmptyTitle => 'لا توجد نتائج';
-
-  @override
-  String get locationSearchEmptyBody =>
-      'جرّب إملاءً مختلفًا، أو حدد النقطة على الخريطة.';
 
   @override
   String get countryNameAlgeria => 'الجزائر';
@@ -2658,9 +2295,6 @@ class LAr extends L {
 
   @override
   String get locationChangeCountry => 'تغيير';
-
-  @override
-  String get locationCountryStep => 'البلد';
 
   @override
   String get locationCountriesUnavailable =>
@@ -2752,10 +2386,6 @@ class LAr extends L {
   String get locationEmptyBody => 'ضع دبوسًا على الخريطة لحفظ عنوانك الأول.';
 
   @override
-  String get locationDropPinHelp =>
-      'حرّك الخريطة حتى تستقر علامة التصويب في المكان المقصود، ثم أكّد.';
-
-  @override
   String get locationNamePlaceTitle => 'سمِّ هذا المكان';
 
   @override
@@ -2781,9 +2411,6 @@ class LAr extends L {
   String get locationPreferredOptional => 'اختياري';
 
   @override
-  String get locationChoosePreferredPoint => 'اختر على الخريطة';
-
-  @override
   String locationFlexibleWithin(String place) {
     return 'مرن داخل $place';
   }
@@ -2803,16 +2430,7 @@ class LAr extends L {
   String get timelineTitle => 'التقدّم';
 
   @override
-  String get timelineWaitingOnYou => 'بانتظارك';
-
-  @override
-  String get timelineWaitingOnThem => 'بانتظارهم';
-
-  @override
   String get timelineDone => 'تم';
-
-  @override
-  String get timelineUpcoming => 'التالي';
 
   @override
   String get a11yStatusPrefix => 'الحالة';
@@ -2827,13 +2445,7 @@ class LAr extends L {
   String get a11yCloseSheet => 'إغلاق';
 
   @override
-  String get a11yBack => 'العودة';
-
-  @override
   String get a11yLoadingContent => 'جارٍ تحميل المحتوى';
-
-  @override
-  String get a11yImageOfParcel => 'صورة الطرد';
 
   @override
   String get a11ySelected => 'محدد';
@@ -2909,17 +2521,6 @@ class LAr extends L {
   }
 
   @override
-  String unitDistanceKm(String value) {
-    return '$value كم';
-  }
-
-  @override
-  String get weightChargeableVolumetric => 'السعر محسوب على الحجم لا الوزن';
-
-  @override
-  String get weightChargeableActual => 'السعر محسوب على الوزن';
-
-  @override
   String get homeVerifyIdentityTitle => 'تحقق من هويتك';
 
   @override
@@ -2949,12 +2550,6 @@ class LAr extends L {
 
   @override
   String get homeAttentionRating => 'قيّم هذا التوصيل';
-
-  @override
-  String get homeOpenAction => 'فتح';
-
-  @override
-  String get deliveriesTabAll => 'الكل';
 
   @override
   String get deliveryCardSending => 'إرسال';
@@ -2998,46 +2593,7 @@ class LAr extends L {
   }
 
   @override
-  String requestOffersCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count عرض',
-      many: '$count عرضًا',
-      few: '$count عروض',
-      two: 'عرضان',
-      one: 'عرض واحد',
-      zero: 'لا عروض بعد',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get onboardingSendTitle => 'أرسل شيئًا إلى الوطن';
-
-  @override
-  String get onboardingSendBody =>
-      'انشر ما تريد توصيله. يمكن للمسافرين المتجهين إلى تلك الوجهة حمله، وتتفقان على السعر بينكما.';
-
-  @override
-  String get onboardingCarryTitle => 'اربح من رحلة تقوم بها أصلاً';
-
-  @override
-  String get onboardingCarryBody =>
-      'أضف رحلتك، وسنعرض عليك الطرود التي تناسب مسارك وكيلوغراماتك المتاحة.';
-
-  @override
-  String get onboardingSafeTitle => 'المال ينتظر حتى الوصول';
-
-  @override
-  String get onboardingSafeBody =>
-      'نحتفظ بالدفعة من لحظة الحجز إلى 48 ساعة بعد تأكيد التوصيل.';
-
-  @override
   String get onboardingGetStarted => 'إنشاء حساب';
-
-  @override
-  String get onboardingHaveAccount => 'لدي حساب بالفعل';
 
   @override
   String onboardingPageOf(int current, int total) {
@@ -3056,16 +2612,6 @@ class LAr extends L {
 
   @override
   String get authPhone => 'رقم الهاتف';
-
-  @override
-  String get authWilaya => 'الولاية';
-
-  @override
-  String get authWilayaHelp =>
-      'ولايتك في الجزائر. اختر الولاية التي ترتبط بها إذا كنت تعيش في أوروبا.';
-
-  @override
-  String get authWilayaSheetTitle => 'اختر ولاية';
 
   @override
   String get authResetCodeSent =>
@@ -3139,13 +2685,7 @@ class LAr extends L {
       'التحقق غير متاح مؤقتًا. يُرجى إعادة المحاولة قريبًا.';
 
   @override
-  String get payoutEligibleIn => 'يُطلق خلال';
-
-  @override
   String get notificationOffer => 'تحديث العرض';
-
-  @override
-  String get notificationMatch => 'مطابقة جديدة';
 
   @override
   String get notificationPayment => 'تحديث الدفع';
@@ -3164,15 +2704,6 @@ class LAr extends L {
 
   @override
   String get chatBlockedPayAction => 'الذهاب إلى الدفع';
-
-  @override
-  String get chatLoadEarlier => 'تحميل الرسائل السابقة';
-
-  @override
-  String get chatToday => 'اليوم';
-
-  @override
-  String get chatYesterday => 'أمس';
 
   @override
   String get paymentProviderNewCheckoutsDisabled =>
@@ -3227,14 +2758,6 @@ class LAr extends L {
 
   @override
   String get requestWeightHelp => 'بين 0.01 و100 كغ.';
-
-  @override
-  String get requestDimensionsHelp =>
-      'اختياري. أدخل القياسات الثلاثة كلها، أو اتركها كلها فارغة.';
-
-  @override
-  String get requestDimensionsPartial =>
-      'أدخل القياسات الثلاثة كلها، أو امسحها كلها.';
 
   @override
   String get requestCategoryDocuments => 'وثائق';
@@ -3362,21 +2885,8 @@ class LAr extends L {
   String get depositClampedMax => 'هذا أكبر عربون نقبله، مهما كانت قيمة الطرد.';
 
   @override
-  String get discoveryMatchedDistance => 'المسافة المحمولة';
-
-  @override
-  String get discoveryDetourLabel => 'انحراف المسافر عن مساره';
-
-  @override
-  String get discoveryFirstDeparture => 'المغادرة';
-
-  @override
   String get discoveryProposeBlocked =>
       'تعذّر علينا تحديد أي جزء من هذه الرحلة يناسب طردك. حدّث الصفحة وأعد المحاولة.';
-
-  @override
-  String get discoveryVolumetricExplainer =>
-      'هذا الطرد أكبر حجمًا منه وزنًا، لذا يحدد حجمه السعر.';
 
   @override
   String get discoveryBreakdownNote =>
@@ -3404,87 +2914,8 @@ class LAr extends L {
   }
 
   @override
-  String get boostRankingLabel => 'الظهور';
-
-  @override
-  String get boostRankingModest => 'أعلى في القائمة';
-
-  @override
-  String get boostRankingStrong => 'أعلى بكثير في القائمة';
-
-  @override
-  String get boostRankingTop => 'أعلى القائمة';
-
-  @override
-  String get boostDurationLabel => 'يستمر لمدة';
-
-  @override
-  String get boostPriceLabel => 'السعر';
-
-  @override
   String get boostCompatibilityNote =>
       'لا يراه إلا المسافرون المطابقون لطردك بالفعل. التعزيز لا يغيّر هوية هؤلاء المسافرين.';
-
-  @override
-  String get boostActivatesOnPayment =>
-      'يبدأ التعزيز بمجرد تأكيد دفعتك، لا عند مغادرتك صفحة الدفع.';
-
-  @override
-  String get boostBuyAction => 'اشترِ هذا التعزيز';
-
-  @override
-  String get boostPayAction => 'ادفع مقابل هذا التعزيز';
-
-  @override
-  String get boostPurchasesSection => 'تعزيزاتك';
-
-  @override
-  String get boostNoPackagesTitle => 'لا توجد تعزيزات متاحة';
-
-  @override
-  String get boostNoPackagesBody =>
-      'لا توجد باقات تعزيز متاحة في الوقت الحالي.';
-
-  @override
-  String get boostDisabledTitle => 'التعزيزات معطّلة';
-
-  @override
-  String get boostDisabledBody =>
-      'لا يمكن لأحد شراء تعزيز الآن. طلبك غير متأثر.';
-
-  @override
-  String get boostLimitReachedTitle => 'تم بلوغ الحد الأقصى للتعزيز';
-
-  @override
-  String boostLimitReachedBody(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'يمكن أن يكون لديك $count تعزيز نشط على طلب في الوقت نفسه.',
-      many: 'يمكن أن يكون لديك $count تعزيزًا نشطًا على طلب في الوقت نفسه.',
-      few: 'يمكن أن يكون لديك $count تعزيزات نشطة على طلب في الوقت نفسه.',
-      two: 'يمكن أن يكون لديك تعزيزان نشطان على طلب في الوقت نفسه.',
-      one: 'يمكن أن يكون لديك تعزيز واحد نشط على طلب في الوقت نفسه.',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get boostRequestExpiredBody =>
-      'انتهت صلاحية هذا الطلب، لذا لم يعد بالإمكان تعزيزه.';
-
-  @override
-  String get boostPackageUnknownBody => 'لم يعد هذا التعزيز متاحًا. اختر آخر.';
-
-  @override
-  String get boostStatusCancelled => 'ملغى';
-
-  @override
-  String get boostStatusUnusable =>
-      'تم الاسترجاع — لم يعد الطلب قابلاً للتعزيز';
-
-  @override
-  String get boostStatusRefunded => 'تم الاسترجاع';
 
   @override
   String get moneyBaseReward => 'مكافأة التوصيل الأساسية';
@@ -3529,9 +2960,6 @@ class LAr extends L {
   String get dealOpenChat => 'مراسلة';
 
   @override
-  String get dealParcelSection => 'الطرد';
-
-  @override
   String get dealMoneySection => 'المال';
 
   @override
@@ -3559,10 +2987,6 @@ class LAr extends L {
   String dealFundingDeadline(String time) {
     return 'ادفع قبل $time وإلا سيتم تحرير المساحة';
   }
-
-  @override
-  String get dealLocationsHiddenUntilFunded =>
-      'تظهر العناوين الدقيقة بمجرد دفع ثمن التوصيل.';
 
   @override
   String get dealTravelerAwaitingPayment => 'بانتظار دفع المُرسِل.';
@@ -3695,9 +3119,6 @@ class LAr extends L {
   String get disputeViewAction => 'عرض النزاع';
 
   @override
-  String get disputeOpenAction => 'فتح نزاع';
-
-  @override
   String get disputeOpened => 'تم فتح النزاع';
 
   @override
@@ -3719,20 +3140,11 @@ class LAr extends L {
       'يمكن فتح نزاع بمجرد استلام الطرد. قبل ذلك، ألغِ التوصيل بدلاً من ذلك.';
 
   @override
-  String get disputeAlreadyResolvedTitle => 'تم البت في هذا بالفعل';
-
-  @override
   String get disputeAlreadyResolvedBody =>
       'توجد بالفعل تسوية نزاع على هذا التوصيل.';
 
   @override
   String get disputeDetailTitle => 'النزاع';
-
-  @override
-  String get disputeReferenceLabel => 'المرجع';
-
-  @override
-  String get disputeCategoryTitle => 'الفئة';
 
   @override
   String get disputeReasonLabel => 'ما تم الإبلاغ عنه';
@@ -3748,9 +3160,6 @@ class LAr extends L {
 
   @override
   String get disputeOpenedAtLabel => 'تاريخ الفتح';
-
-  @override
-  String get disputeResolvedAtLabel => 'تاريخ البت';
 
   @override
   String get disputeProtectionEndsLabel => 'تنتهي فترة الحماية';
@@ -3854,18 +3263,6 @@ class LAr extends L {
 
   @override
   String get disputeEvidenceFileRequiredBody => 'اختر ملفًا أولاً.';
-
-  @override
-  String unitFileSizeMb(String value) {
-    return '$value ميغابايت';
-  }
-
-  @override
-  String get paymentPollingHint =>
-      'قد يستغرق هذا لحظة. يمكنك مغادرة هذه الشاشة — سنواصل التحقق.';
-
-  @override
-  String get paymentOpenProvider => 'متابعة الدفع';
 
   @override
   String get onboardingEyebrow => 'أهلاً بك';
@@ -4050,9 +3447,6 @@ class LAr extends L {
       'تخزين الصور غير متاح حالياً. أعد المحاولة بعد قليل.';
 
   @override
-  String get requestItemPhotoExpired => 'لم تعد الصورة متاحة. أضفها من جديد.';
-
-  @override
   String get requestItemPhotoPrivacy =>
       'لا يرى الصورة إلا المسافرون الذين يمكنهم رؤية هذا الطلب.';
 
@@ -4084,9 +3478,6 @@ class LAr extends L {
   @override
   String get formServerRefusedOnStep =>
       'رفض الخادم هذا الطلب. المشكلة في هذه الخطوة، وهي موضّحة أدناه.';
-
-  @override
-  String get formStepLockedUntilValid => 'أكمل هذه الخطوة أولاً.';
 
   @override
   String get pushPermissionHeading => 'على هذا الهاتف';
@@ -4158,9 +3549,6 @@ class LAr extends L {
   String get pushMarketplaceBody => 'العروض والمطابقات والرحلات والطلبات.';
 
   @override
-  String get notificationJourney => 'تحديث الرحلة';
-
-  @override
   String get notificationAccount => 'تحديث التحقق';
 
   @override
@@ -4174,9 +3562,6 @@ class LAr extends L {
 
   @override
   String get profilePayoutMethods => 'وسائل التحويل';
-
-  @override
-  String get profilePayoutHistory => 'سجل التحويلات';
 
   @override
   String get payoutPreferenceTitle => 'تفضيل التحويل';
@@ -4197,9 +3582,6 @@ class LAr extends L {
   @override
   String get payoutPreferenceScopeNote =>
       'ينطبق هذا التفضيل على التحويلات المستقبلية فقط.';
-
-  @override
-  String get payoutPreferenceRequired => 'يرجى اختيار تفضيل التحويل الخاص بك.';
 
   @override
   String get payoutEurTitle => 'التحويلات باليورو (Stripe)';
@@ -4283,19 +3665,7 @@ class LAr extends L {
   String get payoutDzdRipLabel => 'RIP';
 
   @override
-  String payoutDzdSubmittedAt(String date) {
-    return 'أُرسل بتاريخ $date';
-  }
-
-  @override
-  String get payoutDzdFutureScopeNote =>
-      'تنطبق هذه البيانات على التحويلات المؤهلة المستقبلية. التحويلات المموّلة مسبقاً تحتفظ بوجهتها الأصلية.';
-
-  @override
   String get dzdFormTitle => 'إعداد التحويلات بالدينار الجزائري';
-
-  @override
-  String get dzdFormUpdateTitle => 'تحديث بيانات التحويل';
 
   @override
   String get dzdFormScopeExplainer =>
@@ -4338,13 +3708,7 @@ class LAr extends L {
   String get dzdChequeReplacePhoto => 'تغيير الصورة';
 
   @override
-  String get dzdChequeRemovePhoto => 'حذف الصورة';
-
-  @override
   String get dzdSubmitAction => 'حفظ بيانات التحويل';
-
-  @override
-  String get dzdUpdateAction => 'تحديث بيانات التحويل';
 
   @override
   String get dzdSubmitSuccess => 'تم حفظ بيانات التحويل بنجاح.';
@@ -4373,36 +3737,6 @@ class LAr extends L {
   @override
   String get payoutReasonCountryUnsupported =>
       'البلد غير مدعوم للتحويلات باليورو عبر Stripe';
-
-  @override
-  String get deliveryPayoutSectionTitle => 'حالة التحويل';
-
-  @override
-  String get deliveryPayoutProtectionExplainer =>
-      'فترة الحماية (48 ساعة) جارية حالياً. سيصبح التحويل متاحاً فور انتهائها.';
-
-  @override
-  String get deliveryPayoutReadyExplainer =>
-      'تم تأكيد التسليم وأصبح التحويل مؤهلاً للدفع.';
-
-  @override
-  String get deliveryPayoutProcessingExplainer =>
-      'يجري حالياً تجهيز وإرسال التحويل.';
-
-  @override
-  String get deliveryPayoutSentExplainer =>
-      'تم إرسال المبلغ وهو في طريقه إلى حسابك.';
-
-  @override
-  String get deliveryPayoutPaidExplainer => 'تم تحويل المبلغ لحسابك بنجاح.';
-
-  @override
-  String get deliveryPayoutReturnedExplainer =>
-      'أعاد المصرف هذا التحويل. يرجى مراجعة وتحديث بيانات وسيلة التحويل.';
-
-  @override
-  String get deliveryPayoutNeedsAttentionExplainer =>
-      'يتطلب هذا التحويل إجراءً قبل إمكانية صرفه.';
 
   @override
   String payoutRateLabel(String rate) {
@@ -4471,9 +3805,6 @@ class LAr extends L {
   String get payoutStatusSent => 'تم إرسال التحويل';
 
   @override
-  String get payoutStatusReturned => 'أُعيد التحويل';
-
-  @override
   String get payoutStatusNeedsAttention => 'يلزم اتخاذ إجراء';
 
   @override
@@ -4481,14 +3812,6 @@ class LAr extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'يلزم التحقق من وسيلة التحويل';
-
-  @override
-  String get payoutReasonScheduledArrivalPending =>
-      'بانتظار حلول موعد الوصول المجدول';
-
-  @override
-  String get deliveryPayoutScheduledArrivalPendingExplainer =>
-      'انتهت فترة حماية التسليم (48 ساعة)، لكن التحويل يظل معلقاً حتى موعد الوصول المجدول المتفق عليه عند تمويل الطلب.';
 
   @override
   String get earlyArrivalAction => 'وصلتُ مبكراً';
@@ -4539,12 +3862,6 @@ class LAr extends L {
       'موعد الوصول المجدول لهذه الشحنة';
 
   @override
-  String get earlyArrivalReportedTimeLabel => 'وقت الإبلاغ عن الوصول';
-
-  @override
-  String get earlyArrivalEarlyByLabel => 'مبكراً بمقدار';
-
-  @override
   String get earlyArrivalPayoutFloorExplanation =>
       'الوصول المبكر لا يجعل المستحقات متاحة قبل تاريخ انتهاء فترة الحماية المحددة لهذه الشحنة.';
 
@@ -4568,33 +3885,13 @@ class LAr extends L {
   String get routeDriveMode => 'مسار بري';
 
   @override
-  String get routeDepartureLabel => 'المغادرة';
-
-  @override
-  String get routeArrivalLabel => 'الوصول';
-
-  @override
-  String get routeCarryingLegsOnly => 'مسار النقل لهذه الشحنة';
-
-  @override
   String get notificationArrivalReported => 'وصل المسافر مبكراً';
-
-  @override
-  String get notificationArrivalReportedBody =>
-      'افتح شيب تريب لتأكيد الوصول المبكر.';
 
   @override
   String get notificationArrivalConfirmed => 'تم تأكيد الوصول المبكر';
 
   @override
-  String get notificationArrivalConfirmedBody =>
-      'أكد المرسل وصولك. تسليم الطرد ما زال معلقاً.';
-
-  @override
   String get notificationArrivalDeclined => 'لم يتم تأكيد الوصول المبكر';
-
-  @override
-  String get notificationArrivalDeclinedBody => 'افتح شيب تريب لمراجعة الشحنة.';
 
   @override
   String get routeBasisSnapshot => 'المسار المحجوز';
@@ -4707,11 +4004,6 @@ class LAr extends L {
 
   @override
   String get boostHistoryTitle => 'سجل التعزيز';
-
-  @override
-  String boostHistoryChanged(String from, String to) {
-    return 'تم التغيير من $from إلى $to';
-  }
 
   @override
   String get boostNotEditable =>
@@ -4880,32 +4172,6 @@ class LAr extends L {
 
   @override
   String get paymentSuccessViewDeliveryAction => 'عرض الشحنة';
-
-  @override
-  String get notificationDepositPaidTitle => 'تم تأكيد العربون';
-
-  @override
-  String get notificationDepositPaidBody =>
-      'طلب الشحن الخاص بك نشط الآن ومرئي للمسافرين.';
-
-  @override
-  String get notificationDealFundedTitle => 'تم تمويل الشحنة';
-
-  @override
-  String get notificationDealFundedBody =>
-      'تم تأمين الدفع. التقي بالمسافر في نقطة الاستلام المحددة.';
-
-  @override
-  String get notificationPayoutReadyTitle => 'المستحقات جاهزة';
-
-  @override
-  String get notificationPayoutReadyBody => 'مستحقات الشحنة جاهزة للتحويل.';
-
-  @override
-  String get notificationPayoutSentTitle => 'تم إرسال المستحقات';
-
-  @override
-  String get notificationPayoutSentBody => 'تم تحويل مستحقاتك بنجاح.';
 
   @override
   String get boostBreakdownTitle => 'تكلفة التعزيز';

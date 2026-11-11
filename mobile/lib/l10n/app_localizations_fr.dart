@@ -34,9 +34,6 @@ class LFr extends L {
   String get actionRetry => 'Réessayer';
 
   @override
-  String get actionClose => 'Fermer';
-
-  @override
   String get actionDone => 'Terminé';
 
   @override
@@ -52,12 +49,6 @@ class LFr extends L {
   String get actionEdit => 'Modifier';
 
   @override
-  String get actionRemove => 'Retirer';
-
-  @override
-  String get actionShare => 'Partager';
-
-  @override
   String get actionCopy => 'Copier';
 
   @override
@@ -70,16 +61,10 @@ class LFr extends L {
   String get actionSeeAll => 'Tout voir';
 
   @override
-  String get actionLearnMore => 'En savoir plus';
-
-  @override
   String get actionGoBack => 'Retour';
 
   @override
   String get actionNotNow => 'Pas maintenant';
-
-  @override
-  String get actionUnderstood => 'Compris';
 
   @override
   String get actionOpen => 'Ouvrir';
@@ -88,22 +73,10 @@ class LFr extends L {
   String get actionAdd => 'Ajouter';
 
   @override
-  String get actionChange => 'Changer';
-
-  @override
   String get actionSelect => 'Sélectionner';
 
   @override
-  String get actionSearch => 'Rechercher';
-
-  @override
   String get actionClear => 'Effacer';
-
-  @override
-  String get actionApply => 'Appliquer';
-
-  @override
-  String get actionReport => 'Signaler un problème';
 
   @override
   String get actionContactSupport => 'Contacter le support';
@@ -138,22 +111,6 @@ class LFr extends L {
   String get roleSwitchLabel => 'Changer de rôle';
 
   @override
-  String get roleSwitchTitle => 'Que faites-vous aujourd’hui ?';
-
-  @override
-  String get roleSenderDescription => 'Envoyer un colis avec un voyageur';
-
-  @override
-  String get roleTravelerDescription =>
-      'Transporter des colis lors d’un trajet que vous faites';
-
-  @override
-  String get roleSwitchedToSender => 'Passé en mode envoi';
-
-  @override
-  String get roleSwitchedToTraveler => 'Passé en mode voyage';
-
-  @override
   String get authSignIn => 'Se connecter';
 
   @override
@@ -173,13 +130,6 @@ class LFr extends L {
 
   @override
   String get authForgotPassword => 'Mot de passe oublié ?';
-
-  @override
-  String get authResetPassword => 'Réinitialiser le mot de passe';
-
-  @override
-  String get authResetSent =>
-      'Si cette adresse e-mail est associée à un compte, nous avons envoyé un code de réinitialisation.';
 
   @override
   String get authNoAccount => 'Nouveau sur Wassla ?';
@@ -249,9 +199,6 @@ class LFr extends L {
   @override
   String get validationDeadlineBeforeReady =>
       'L’échéance doit être postérieure à la date de disponibilité du colis';
-
-  @override
-  String get stateLoading => 'Chargement…';
 
   @override
   String get stateOfflineTitle => 'Vous êtes hors ligne';
@@ -343,16 +290,7 @@ class LFr extends L {
       'Il ne reste plus assez de place sur ce trajet.';
 
   @override
-  String get staleCapacityExceededDetail =>
-      'Quelqu’un d’autre a réservé de la place pendant que vous décidiez.';
-
-  @override
   String get staleRewardBelowMinimum => 'La rémunération minimale a changé.';
-
-  @override
-  String staleRewardBelowMinimumDetail(String amount) {
-    return 'Le minimum est désormais de $amount.';
-  }
 
   @override
   String get staleRouteChanged =>
@@ -421,15 +359,6 @@ class LFr extends L {
   String get moneyMinimumReward => 'Rémunération minimale';
 
   @override
-  String get moneyRecommendedReward => 'Wassla suggère';
-
-  @override
-  String get moneyYourReward => 'Votre rémunération';
-
-  @override
-  String get moneyYourOffer => 'Votre offre';
-
-  @override
   String get moneyTotal => 'Total';
 
   @override
@@ -468,9 +397,6 @@ class LFr extends L {
       'Chargily facture en dinars algériens. Le prix de la livraison reste en euros.';
 
   @override
-  String get moneyFree => 'Gratuit';
-
-  @override
   String get homeSenderGreeting => 'Envoyez quelque chose au pays';
 
   @override
@@ -488,9 +414,6 @@ class LFr extends L {
 
   @override
   String get homeInProgress => 'En cours';
-
-  @override
-  String get homeRecentActivity => 'Activité récente';
 
   @override
   String get homeNothingNeedsYou =>
@@ -531,9 +454,6 @@ class LFr extends L {
 
   @override
   String get deliveriesSenderSection => 'Envois';
-
-  @override
-  String get deliveriesTravelerSection => 'Transports';
 
   @override
   String get deliveriesJourneysSection => 'Mes trajets';
@@ -587,9 +507,6 @@ class LFr extends L {
 
   @override
   String get dealStatusPaymentRequired => 'Paiement requis';
-
-  @override
-  String get dealStatusPaymentProcessing => 'Confirmation du paiement';
 
   @override
   String get dealStatusFunded => 'Payé et protégé';
@@ -714,13 +631,6 @@ class LFr extends L {
   String get requestPhotos => 'Photos';
 
   @override
-  String get requestPhotosHelp =>
-      'Les photos vous protègent tous les deux en cas de litige ultérieur.';
-
-  @override
-  String get requestAddPhoto => 'Ajouter une photo';
-
-  @override
   String get requestHandlingNotes => 'Consignes de manipulation';
 
   @override
@@ -805,20 +715,10 @@ class LFr extends L {
   String get depositPayAction => 'Payer l’acompte et publier';
 
   @override
-  String get depositPending => 'Confirmation de votre acompte…';
-
-  @override
-  String get depositPendingBody =>
-      'Nous attendons la confirmation de votre prestataire de paiement. Cela prend généralement quelques secondes.';
-
-  @override
   String get journeyTitle => 'Trajet';
 
   @override
   String get journeyCreateTitle => 'Ajouter un trajet';
-
-  @override
-  String get journeyOverallRoute => 'Où allez-vous ?';
 
   @override
   String get journeyFrom => 'De';
@@ -828,14 +728,6 @@ class LFr extends L {
 
   @override
   String get journeyLegs => 'Étapes';
-
-  @override
-  String get journeyAddLeg => 'Ajouter une étape';
-
-  @override
-  String journeyLegPosition(int position) {
-    return 'Étape $position';
-  }
 
   @override
   String get journeyModeFlight => 'Avion';
@@ -853,38 +745,16 @@ class LFr extends L {
   String get journeyCapacity => 'Espace que vous pouvez transporter';
 
   @override
-  String get journeyCapacityHelp =>
-      'Définissez ceci par étape. Vous pouvez transporter des quantités différentes selon les parties du trajet.';
-
-  @override
   String get journeyFlightNumber => 'Numéro de vol';
 
   @override
   String get journeyFlightNumberHint => 'ex. AH1006';
 
   @override
-  String get journeyFlightAirportsRequired =>
-      'Les trajets en avion doivent commencer et se terminer dans des aéroports.';
-
-  @override
   String get journeyPublish => 'Publier le trajet';
 
   @override
   String get journeyCancel => 'Annuler le trajet';
-
-  @override
-  String get journeySuggestLegTitle => 'Ajouter l’étape par la route ?';
-
-  @override
-  String journeySuggestLegBody(String arrival, String destination) {
-    return 'Votre vol atterrit à $arrival, mais vous allez à $destination. Ajoutez le trajet en voiture pour que des colis puissent être associés sur tout le parcours.';
-  }
-
-  @override
-  String get journeySuggestLegAccept => 'Ajouter l’étape en voiture';
-
-  @override
-  String get journeySuggestLegDecline => 'Non, je m’arrête là';
 
   @override
   String get journeyStatusDraft => 'Brouillon';
@@ -921,26 +791,11 @@ class LFr extends L {
   String get journeyModeLabel => 'Comment vous voyagez';
 
   @override
-  String get journeyLegStartsAt => 'Débute à';
-
-  @override
-  String get journeyLegEndsAt => 'Se termine à';
-
-  @override
-  String get journeyLegEndPlaceholder => 'Choisissez où cette étape se termine';
-
-  @override
   String get journeyChooseDateTime => 'Choisissez la date et l’heure';
 
   @override
   String get journeyArriveHelp =>
       'Nécessaire pour vous proposer des colis : l’échéance de l’expéditeur est comparée à cette heure.';
-
-  @override
-  String get journeyRemoveLeg => 'Retirer cette étape';
-
-  @override
-  String get journeyAddLegDestinationTitle => 'Où se termine cette étape ?';
 
   @override
   String get journeyMaxLegsReached =>
@@ -1038,10 +893,6 @@ class LFr extends L {
       'Ce trajet appartient à quelqu’un d’autre.';
 
   @override
-  String get journeyRebuildHint =>
-      'Annulez ce trajet et recréez-le avec les détails corrigés.';
-
-  @override
   String get journeyCancelConfirmTitle => 'Annuler ce trajet ?';
 
   @override
@@ -1077,10 +928,6 @@ class LFr extends L {
   @override
   String get journeyMatchesInfoBody =>
       'Vous ne pouvez pas faire d’offre ici. Si l’un de ces expéditeurs vous choisit, son offre arrivera dans Livraisons.';
-
-  @override
-  String get journeyMatchesLoadFailed =>
-      'Nous n’avons pas pu charger les colis pour ce trajet.';
 
   @override
   String get routeStopsTitle => 'Vos arrêts';
@@ -1250,9 +1097,6 @@ class LFr extends L {
   }
 
   @override
-  String get proofReplace => 'Téléverser un nouveau';
-
-  @override
   String get proofKindLabel => 'Que téléversez-vous ?';
 
   @override
@@ -1318,9 +1162,6 @@ class LFr extends L {
   String get kycStatusNotStarted => 'Non commencé';
 
   @override
-  String get kycStatusInProgress => 'En cours';
-
-  @override
   String get kycStatusPending => 'En cours d’examen';
 
   @override
@@ -1330,13 +1171,7 @@ class LFr extends L {
   String get kycStatusRejected => 'Non approuvé';
 
   @override
-  String get kycStatusActionRequired => 'Nécessite votre attention';
-
-  @override
   String get kycStartAction => 'Commencer la vérification';
-
-  @override
-  String get kycResumeAction => 'Terminer la vérification';
 
   @override
   String get kycRetryAction => 'Réessayer';
@@ -1374,9 +1209,6 @@ class LFr extends L {
 
   @override
   String get discoveryRequestsTitle => 'Colis sur votre trajet';
-
-  @override
-  String get discoveryEmptyTravelersTitle => 'Aucun voyageur pour le moment';
 
   @override
   String get discoveryEmptyTravelersBody =>
@@ -1434,9 +1266,6 @@ class LFr extends L {
 
   @override
   String get findTravelersIneligibleInProgress => 'Ce colis est déjà en route.';
-
-  @override
-  String get findTravelersTripContinues => 'Le trajet continue';
 
   @override
   String get findTravelersDirectLeg => 'Transporté en un seul tronçon';
@@ -1509,17 +1338,6 @@ class LFr extends L {
   }
 
   @override
-  String discoveryCoveredLegs(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count étapes',
-      one: '1 étape',
-    );
-    return 'Couvre $_temp0';
-  }
-
-  @override
   String get discoveryDetourSmall => 'Détour minime';
 
   @override
@@ -1527,16 +1345,6 @@ class LFr extends L {
 
   @override
   String get discoveryDetourLarge => 'Détour notable';
-
-  @override
-  String get discoveryVerifiedTraveler => 'Voyageur vérifié';
-
-  @override
-  String get discoveryBoosted => 'Mis en avant';
-
-  @override
-  String get discoveryBoostedExplainer =>
-      'L’expéditeur a payé pour être vu par plus de voyageurs. Cela ne change pas si vous êtes compatible.';
 
   @override
   String discoveryRatingCount(String rating, int count) {
@@ -1592,11 +1400,6 @@ class LFr extends L {
   }
 
   @override
-  String offerTheyProposed(String amount) {
-    return 'Offre reçue : $amount';
-  }
-
-  @override
   String get offerHistoryTitle => 'Historique des offres';
 
   @override
@@ -1620,11 +1423,6 @@ class LFr extends L {
   @override
   String get offerDeclineConfirmBody =>
       'L’autre partie sera informée. Vous pourrez encore négocier ensuite.';
-
-  @override
-  String offerAcceptConfirmTitle(String amount) {
-    return 'Accepter $amount ?';
-  }
 
   @override
   String get offerAcceptTravelerBody =>
@@ -1781,26 +1579,10 @@ class LFr extends L {
       'Rien n’a été débité. Vous pouvez réessayer ou utiliser un autre moyen de paiement.';
 
   @override
-  String get paymentExpiredTitle => 'La session de paiement a expiré';
-
-  @override
-  String get paymentExpiredBody =>
-      'Ce lien de paiement a expiré. Recommencez quand vous êtes prêt.';
-
-  @override
   String get paymentStatusRequired => 'Paiement requis';
 
   @override
-  String get paymentStatusStarted => 'Paiement en cours';
-
-  @override
-  String get paymentStatusProcessing => 'Traitement en cours';
-
-  @override
   String get paymentStatusPaid => 'Payé';
-
-  @override
-  String get paymentStatusFailed => 'Échoué';
 
   @override
   String get paymentStatusRefundPending => 'Remboursement en cours';
@@ -1810,9 +1592,6 @@ class LFr extends L {
 
   @override
   String get paymentStatusRefunded => 'Remboursé';
-
-  @override
-  String get paymentReturnedTitle => 'Bon retour';
 
   @override
   String get paymentRedirectNotProof =>
@@ -1840,9 +1619,6 @@ class LFr extends L {
   @override
   String get guestPayPayerEmailHelp =>
       'Nous y enverrons votre reçu et vous préviendrons si un remboursement vous est dû. Aucun compte n’est créé.';
-
-  @override
-  String get guestPayAmountDue => 'Montant dû';
 
   @override
   String get guestPayInvalidTitle => 'Ce lien n’est pas valide';
@@ -1886,9 +1662,6 @@ class LFr extends L {
 
   @override
   String get recipientSaved => 'Destinataire enregistré';
-
-  @override
-  String get recipientRequiredTitle => 'Destinataire requis';
 
   @override
   String get recipientRequiredBody =>
@@ -2060,11 +1833,6 @@ class LFr extends L {
   }
 
   @override
-  String protectionEndsIn(String countdown) {
-    return 'Se termine dans $countdown';
-  }
-
-  @override
   String get protectionEnded => 'Période de protection terminée';
 
   @override
@@ -2104,9 +1872,6 @@ class LFr extends L {
   @override
   String get payoutFrozenBody =>
       'Un litige est ouvert sur cette livraison, le versement est donc gelé jusqu’à sa résolution.';
-
-  @override
-  String get payoutPendingTitle => 'Versement en attente';
 
   @override
   String get payoutEmptyTitle => 'Aucun versement pour le moment';
@@ -2172,12 +1937,6 @@ class LFr extends L {
   }
 
   @override
-  String get disputeUploadFailed => 'Échec du téléversement';
-
-  @override
-  String get disputeUploadRetry => 'Réessayer le téléversement';
-
-  @override
   String disputeFileTooLarge(String limit) {
     return 'Ce fichier est trop volumineux. La limite est de $limit.';
   }
@@ -2208,12 +1967,6 @@ class LFr extends L {
   @override
   String get disputeWindowClosedBody =>
       'Les litiges peuvent être ouverts pendant 48 heures après la livraison. Contactez le support si vous avez encore besoin d’aide.';
-
-  @override
-  String get disputeEmptyTitle => 'Aucun litige';
-
-  @override
-  String get disputeEmptyBody => 'Rien n’est actuellement en litige.';
 
   @override
   String get cancelTitle => 'Annuler cette livraison';
@@ -2299,62 +2052,6 @@ class LFr extends L {
       'Les voyageurs reçoivent 100 % du bonus Boost. Les demandes boostées apparaissent en tête des recherches.';
 
   @override
-  String get boostDoesNotGuarantee =>
-      'Elle ne change pas vos correspondances et ne garantit aucune livraison.';
-
-  @override
-  String get boostChoosePackage => 'Choisissez une mise en avant';
-
-  @override
-  String get boostAmountLabel => 'Montant de la mise en avant';
-
-  @override
-  String boostAmountHelper(String amount) {
-    return 'Minimum $amount. Vous pouvez choisir tout montant supérieur.';
-  }
-
-  @override
-  String get boostPreviewTitle => 'Vérifiez avant de payer';
-
-  @override
-  String get boostSenderPays => 'Vous payez';
-
-  @override
-  String get boostTravelerGets => 'Le voyageur reçoit si la livraison aboutit';
-
-  @override
-  String get boostPlatformKeeps => 'Wassla conserve';
-
-  @override
-  String get boostEarningsCondition =>
-      'Le bonus du voyageur fait partie des gains protégés du Deal. Si la livraison n’aboutit pas à un gain, le paiement de la mise en avant est remboursé.';
-
-  @override
-  String get boostReviewAction => 'Vérifier la mise en avant';
-
-  @override
-  String get boostConfirmAction => 'Continuer vers le paiement';
-
-  @override
-  String get boostAmountBelowMinimum =>
-      'Saisissez au moins le montant minimum de la mise en avant.';
-
-  @override
-  String get boostPreviewStale =>
-      'La répartition a changé. Vérifiez les nouveaux montants avant de continuer.';
-
-  @override
-  String boostDuration(int hours) {
-    String _temp0 = intl.Intl.pluralLogic(
-      hours,
-      locale: localeName,
-      other: '$hours heures',
-      one: '1 heure',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String boostDurationDays(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
@@ -2364,29 +2061,6 @@ class LFr extends L {
     );
     return '$_temp0';
   }
-
-  @override
-  String get boostActive => 'Mise en avant active';
-
-  @override
-  String boostActiveUntil(String when) {
-    return 'Active jusqu’au $when';
-  }
-
-  @override
-  String get boostPendingPayment => 'En attente de paiement';
-
-  @override
-  String get boostExpired => 'Mise en avant terminée';
-
-  @override
-  String boostPurchase(String amount) {
-    return 'Mise en avant pour $amount';
-  }
-
-  @override
-  String get boostNotEligible =>
-      'Cette demande ne peut pas être mise en avant pour le moment.';
 
   @override
   String get chatTitle => 'Chat';
@@ -2409,9 +2083,6 @@ class LFr extends L {
 
   @override
   String get chatSend => 'Envoyer';
-
-  @override
-  String get chatSendFailed => 'Non envoyé';
 
   @override
   String get chatRetrySend => 'Appuyez pour réessayer';
@@ -2449,18 +2120,6 @@ class LFr extends L {
   @override
   String get notificationsEmptyBody =>
       'Les offres, paiements et mises à jour de livraison apparaissent ici.';
-
-  @override
-  String notificationsUnreadCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count non lues',
-      one: '1 non lue',
-      zero: 'Aucune non lue',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get profileTitle => 'Profil';
@@ -2563,9 +2222,6 @@ class LFr extends L {
   String get locationSearchHint => 'Rechercher une localité ou un aéroport';
 
   @override
-  String get locationSelectCountry => 'Choisissez d’abord un pays';
-
-  @override
   String get locationSearchStart =>
       'Saisissez une localité, commune ou un aéroport';
 
@@ -2623,9 +2279,6 @@ class LFr extends L {
   }
 
   @override
-  String get locationTypeLocality => 'Localité';
-
-  @override
   String get locationUseMap => 'Choisir sur la carte';
 
   @override
@@ -2639,19 +2292,11 @@ class LFr extends L {
       'Seule la ville est partagée tant que la livraison n’est pas payée.';
 
   @override
-  String get locationPrivacyAfterFunding =>
-      'Adresse complète partagée avec le voyageur.';
-
-  @override
   String get locationHiddenUntilFunded =>
       'Adresse exacte disponible après paiement';
 
   @override
   String get locationSearchEmptyTitle => 'Aucun résultat';
-
-  @override
-  String get locationSearchEmptyBody =>
-      'Essayez une autre orthographe, ou choisissez le point sur la carte.';
 
   @override
   String get countryNameAlgeria => 'Algérie';
@@ -2670,9 +2315,6 @@ class LFr extends L {
 
   @override
   String get locationChangeCountry => 'Changer';
-
-  @override
-  String get locationCountryStep => 'Pays';
 
   @override
   String get locationCountriesUnavailable =>
@@ -2765,10 +2407,6 @@ class LFr extends L {
       'Placez un repère sur la carte pour enregistrer votre première adresse.';
 
   @override
-  String get locationDropPinHelp =>
-      'Déplacez la carte jusqu’à ce que le repère central soit au bon endroit, puis confirmez.';
-
-  @override
   String get locationNamePlaceTitle => 'Nommez ce lieu';
 
   @override
@@ -2794,9 +2432,6 @@ class LFr extends L {
   String get locationPreferredOptional => 'Facultatif';
 
   @override
-  String get locationChoosePreferredPoint => 'Choisir sur la carte';
-
-  @override
   String locationFlexibleWithin(String place) {
     return 'Flexible dans $place';
   }
@@ -2816,16 +2451,7 @@ class LFr extends L {
   String get timelineTitle => 'Progression';
 
   @override
-  String get timelineWaitingOnYou => 'En attente de vous';
-
-  @override
-  String get timelineWaitingOnThem => 'En attente de l’autre partie';
-
-  @override
   String get timelineDone => 'Terminé';
-
-  @override
-  String get timelineUpcoming => 'À venir';
 
   @override
   String get a11yStatusPrefix => 'Statut';
@@ -2840,13 +2466,7 @@ class LFr extends L {
   String get a11yCloseSheet => 'Fermer';
 
   @override
-  String get a11yBack => 'Retour';
-
-  @override
   String get a11yLoadingContent => 'Chargement du contenu';
-
-  @override
-  String get a11yImageOfParcel => 'Photo du colis';
 
   @override
   String get a11ySelected => 'Sélectionné';
@@ -2922,17 +2542,6 @@ class LFr extends L {
   }
 
   @override
-  String unitDistanceKm(String value) {
-    return '$value km';
-  }
-
-  @override
-  String get weightChargeableVolumetric => 'Tarifé au volume, pas au poids';
-
-  @override
-  String get weightChargeableActual => 'Tarifé au poids';
-
-  @override
   String get homeVerifyIdentityTitle => 'Vérifiez votre identité';
 
   @override
@@ -2963,12 +2572,6 @@ class LFr extends L {
 
   @override
   String get homeAttentionRating => 'Évaluez cette livraison';
-
-  @override
-  String get homeOpenAction => 'Ouvrir';
-
-  @override
-  String get deliveriesTabAll => 'Tout';
 
   @override
   String get deliveryCardSending => 'Envoi';
@@ -3004,44 +2607,7 @@ class LFr extends L {
   }
 
   @override
-  String requestOffersCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count offres',
-      one: '1 offre',
-      zero: 'Aucune offre pour le moment',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get onboardingSendTitle => 'Envoyez quelque chose au pays';
-
-  @override
-  String get onboardingSendBody =>
-      'Publiez ce que vous voulez faire livrer. Les voyageurs déjà en route peuvent le transporter, et vous fixez le prix ensemble.';
-
-  @override
-  String get onboardingCarryTitle =>
-      'Gagnez de l’argent sur un trajet que vous faites déjà';
-
-  @override
-  String get onboardingCarryBody =>
-      'Ajoutez votre trajet, et nous vous montrerons les colis qui correspondent à votre itinéraire et à vos kilos disponibles.';
-
-  @override
-  String get onboardingSafeTitle => 'L’argent attend jusqu’à l’arrivée';
-
-  @override
-  String get onboardingSafeBody =>
-      'Nous conservons le paiement dès la réservation jusqu’à 48 heures après la confirmation de la livraison.';
-
-  @override
   String get onboardingGetStarted => 'Créer un compte';
-
-  @override
-  String get onboardingHaveAccount => 'J’ai déjà un compte';
 
   @override
   String onboardingPageOf(int current, int total) {
@@ -3059,16 +2625,6 @@ class LFr extends L {
 
   @override
   String get authPhone => 'Numéro de téléphone';
-
-  @override
-  String get authWilaya => 'Wilaya';
-
-  @override
-  String get authWilayaHelp =>
-      'Votre wilaya d’origine en Algérie. Choisissez celle à laquelle vous êtes rattaché si vous vivez en Europe.';
-
-  @override
-  String get authWilayaSheetTitle => 'Choisir une wilaya';
 
   @override
   String get authResetCodeSent =>
@@ -3146,13 +2702,7 @@ class LFr extends L {
       'La vérification est temporairement indisponible. Veuillez réessayer prochainement.';
 
   @override
-  String get payoutEligibleIn => 'Débloqué dans';
-
-  @override
   String get notificationOffer => 'Mise à jour d’offre';
-
-  @override
-  String get notificationMatch => 'Nouvelle correspondance';
 
   @override
   String get notificationPayment => 'Mise à jour de paiement';
@@ -3171,15 +2721,6 @@ class LFr extends L {
 
   @override
   String get chatBlockedPayAction => 'Aller au paiement';
-
-  @override
-  String get chatLoadEarlier => 'Charger les messages précédents';
-
-  @override
-  String get chatToday => 'Aujourd’hui';
-
-  @override
-  String get chatYesterday => 'Hier';
 
   @override
   String get paymentProviderNewCheckoutsDisabled =>
@@ -3235,14 +2776,6 @@ class LFr extends L {
 
   @override
   String get requestWeightHelp => 'Entre 0,01 et 100 kg.';
-
-  @override
-  String get requestDimensionsHelp =>
-      'Facultatif. Renseignez les trois, ou laissez les trois vides.';
-
-  @override
-  String get requestDimensionsPartial =>
-      'Renseignez les trois mesures, ou effacez-les toutes.';
 
   @override
   String get requestCategoryDocuments => 'Documents';
@@ -3371,21 +2904,8 @@ class LFr extends L {
       'C’est le plus grand acompte que nous acceptons, quelle que soit la valeur du colis.';
 
   @override
-  String get discoveryMatchedDistance => 'Distance parcourue';
-
-  @override
-  String get discoveryDetourLabel => 'Détour pour le voyageur';
-
-  @override
-  String get discoveryFirstDeparture => 'Départ';
-
-  @override
   String get discoveryProposeBlocked =>
       'Nous n’arrivons pas à déterminer quelle partie de ce trajet correspond à votre colis. Actualisez et réessayez.';
-
-  @override
-  String get discoveryVolumetricExplainer =>
-      'Ce colis est plus volumineux que lourd, c’est donc sa taille qui détermine le prix.';
 
   @override
   String get discoveryBreakdownNote =>
@@ -3411,87 +2931,8 @@ class LFr extends L {
   }
 
   @override
-  String get boostRankingLabel => 'Visibilité';
-
-  @override
-  String get boostRankingModest => 'Plus haut dans la liste';
-
-  @override
-  String get boostRankingStrong => 'Beaucoup plus haut dans la liste';
-
-  @override
-  String get boostRankingTop => 'En tête de liste';
-
-  @override
-  String get boostDurationLabel => 'Durée';
-
-  @override
-  String get boostPriceLabel => 'Prix';
-
-  @override
   String get boostCompatibilityNote =>
       'Seuls les voyageurs déjà compatibles avec votre colis le voient. Un Boost ne change pas qui sont ces voyageurs.';
-
-  @override
-  String get boostActivatesOnPayment =>
-      'La mise en avant démarre une fois votre paiement confirmé, pas lorsque vous quittez la page de paiement.';
-
-  @override
-  String get boostBuyAction => 'Acheter cette mise en avant';
-
-  @override
-  String get boostPayAction => 'Payer cette mise en avant';
-
-  @override
-  String get boostPurchasesSection => 'Vos mises en avant';
-
-  @override
-  String get boostNoPackagesTitle => 'Aucune mise en avant disponible';
-
-  @override
-  String get boostNoPackagesBody =>
-      'Aucune formule de mise en avant n’est proposée pour le moment.';
-
-  @override
-  String get boostDisabledTitle => 'Les mises en avant sont désactivées';
-
-  @override
-  String get boostDisabledBody =>
-      'Personne ne peut acheter de mise en avant pour le moment. Votre demande n’est pas affectée.';
-
-  @override
-  String get boostLimitReachedTitle => 'Limite de mise en avant atteinte';
-
-  @override
-  String boostLimitReachedBody(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other:
-          'Vous pouvez avoir $count mises en avant actives à la fois sur une demande.',
-      one:
-          'Vous pouvez avoir 1 mise en avant active à la fois sur une demande.',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get boostRequestExpiredBody =>
-      'Cette demande a expiré, elle ne peut donc plus être mise en avant.';
-
-  @override
-  String get boostPackageUnknownBody =>
-      'Cette mise en avant n’est plus proposée. Choisissez-en une autre.';
-
-  @override
-  String get boostStatusCancelled => 'Annulée';
-
-  @override
-  String get boostStatusUnusable =>
-      'Remboursée — la demande n’était plus éligible à la mise en avant';
-
-  @override
-  String get boostStatusRefunded => 'Remboursée';
 
   @override
   String get moneyBaseReward => 'Rémunération de base';
@@ -3536,9 +2977,6 @@ class LFr extends L {
   String get dealOpenChat => 'Message';
 
   @override
-  String get dealParcelSection => 'Le colis';
-
-  @override
   String get dealMoneySection => 'L’argent';
 
   @override
@@ -3566,10 +3004,6 @@ class LFr extends L {
   String dealFundingDeadline(String time) {
     return 'Payez avant $time ou l’espace sera libéré';
   }
-
-  @override
-  String get dealLocationsHiddenUntilFunded =>
-      'Les adresses exactes apparaissent une fois la livraison payée.';
 
   @override
   String get dealTravelerAwaitingPayment =>
@@ -3702,9 +3136,6 @@ class LFr extends L {
   String get disputeViewAction => 'Voir le litige';
 
   @override
-  String get disputeOpenAction => 'Ouvrir un litige';
-
-  @override
   String get disputeOpened => 'Litige ouvert';
 
   @override
@@ -3727,20 +3158,11 @@ class LFr extends L {
       'Un litige peut être ouvert une fois le colis récupéré. Avant cela, annulez plutôt la livraison.';
 
   @override
-  String get disputeAlreadyResolvedTitle => 'Une décision a déjà été prise';
-
-  @override
   String get disputeAlreadyResolvedBody =>
       'Il existe déjà un litige résolu sur cette livraison.';
 
   @override
   String get disputeDetailTitle => 'Litige';
-
-  @override
-  String get disputeReferenceLabel => 'Référence';
-
-  @override
-  String get disputeCategoryTitle => 'Catégorie';
 
   @override
   String get disputeReasonLabel => 'Ce qui a été signalé';
@@ -3756,9 +3178,6 @@ class LFr extends L {
 
   @override
   String get disputeOpenedAtLabel => 'Ouvert le';
-
-  @override
-  String get disputeResolvedAtLabel => 'Décidé le';
 
   @override
   String get disputeProtectionEndsLabel => 'Fin de la période de protection';
@@ -3865,18 +3284,6 @@ class LFr extends L {
   @override
   String get disputeEvidenceFileRequiredBody =>
       'Choisissez d’abord un fichier.';
-
-  @override
-  String unitFileSizeMb(String value) {
-    return '$value Mo';
-  }
-
-  @override
-  String get paymentPollingHint =>
-      'Cela peut prendre un instant. Vous pouvez quitter cet écran — nous continuerons à vérifier.';
-
-  @override
-  String get paymentOpenProvider => 'Continuer le paiement';
 
   @override
   String get onboardingEyebrow => 'Bienvenue';
@@ -4066,10 +3473,6 @@ class LFr extends L {
       'Le stockage des photos est indisponible. Réessayez dans un instant.';
 
   @override
-  String get requestItemPhotoExpired =>
-      'Cette photo n\'est plus disponible. Ajoutez-la de nouveau.';
-
-  @override
   String get requestItemPhotoPrivacy =>
       'Seuls les voyageurs qui voient cette demande voient la photo.';
 
@@ -4102,9 +3505,6 @@ class LFr extends L {
   @override
   String get formServerRefusedOnStep =>
       'Le serveur a refusé cette demande. Le problème est à cette étape, signalé ci-dessous.';
-
-  @override
-  String get formStepLockedUntilValid => 'Terminez d\'abord cette étape.';
 
   @override
   String get pushPermissionHeading => 'Sur ce téléphone';
@@ -4177,9 +3577,6 @@ class LFr extends L {
       'Offres, correspondances, trajets et demandes.';
 
   @override
-  String get notificationJourney => 'Mise à jour du trajet';
-
-  @override
   String get notificationAccount => 'Mise à jour de la vérification';
 
   @override
@@ -4193,9 +3590,6 @@ class LFr extends L {
 
   @override
   String get profilePayoutMethods => 'Moyens de versement';
-
-  @override
-  String get profilePayoutHistory => 'Historique des versements';
 
   @override
   String get payoutPreferenceTitle => 'Préférence de versement';
@@ -4216,10 +3610,6 @@ class LFr extends L {
   @override
   String get payoutPreferenceScopeNote =>
       'Cette préférence s\'applique uniquement aux prochains versements.';
-
-  @override
-  String get payoutPreferenceRequired =>
-      'Veuillez choisir votre préférence de versement.';
 
   @override
   String get payoutEurTitle => 'Versements en EUR (Stripe)';
@@ -4304,19 +3694,7 @@ class LFr extends L {
   String get payoutDzdRipLabel => 'RIP';
 
   @override
-  String payoutDzdSubmittedAt(String date) {
-    return 'Envoyé le $date';
-  }
-
-  @override
-  String get payoutDzdFutureScopeNote =>
-      'Ces informations s\'appliquent aux prochains versements éligibles. Les versements déjà financés conservent leur destination d\'origine.';
-
-  @override
   String get dzdFormTitle => 'Configurer les versements en DZD';
-
-  @override
-  String get dzdFormUpdateTitle => 'Mettre à jour les informations';
 
   @override
   String get dzdFormScopeExplainer =>
@@ -4360,13 +3738,7 @@ class LFr extends L {
   String get dzdChequeReplacePhoto => 'Changer la photo';
 
   @override
-  String get dzdChequeRemovePhoto => 'Supprimer la photo';
-
-  @override
   String get dzdSubmitAction => 'Enregistrer les coordonnées';
-
-  @override
-  String get dzdUpdateAction => 'Mettre à jour les coordonnées';
 
   @override
   String get dzdSubmitSuccess =>
@@ -4396,37 +3768,6 @@ class LFr extends L {
   @override
   String get payoutReasonCountryUnsupported =>
       'Pays non supporté pour les versements Stripe EUR';
-
-  @override
-  String get deliveryPayoutSectionTitle => 'Statut du versement';
-
-  @override
-  String get deliveryPayoutProtectionExplainer =>
-      'La période de protection de 48h est en cours. Les fonds sont retenus jusqu\'à son terme.';
-
-  @override
-  String get deliveryPayoutReadyExplainer =>
-      'La livraison est terminée et le versement est maintenant éligible.';
-
-  @override
-  String get deliveryPayoutProcessingExplainer =>
-      'Le traitement du versement a commencé.';
-
-  @override
-  String get deliveryPayoutSentExplainer =>
-      'Le versement a été envoyé et est en cours d\'acheminement.';
-
-  @override
-  String get deliveryPayoutPaidExplainer =>
-      'Le versement a été crédité sur votre compte.';
-
-  @override
-  String get deliveryPayoutReturnedExplainer =>
-      'Le virement a été retourné par la banque. Veuillez vérifier votre moyen de versement.';
-
-  @override
-  String get deliveryPayoutNeedsAttentionExplainer =>
-      'Ce versement nécessite une action avant de pouvoir être réglé.';
 
   @override
   String payoutRateLabel(String rate) {
@@ -4495,9 +3836,6 @@ class LFr extends L {
   String get payoutStatusSent => 'Versement envoyé';
 
   @override
-  String get payoutStatusReturned => 'Versement retourné';
-
-  @override
   String get payoutStatusNeedsAttention => 'Action requise';
 
   @override
@@ -4505,14 +3843,6 @@ class LFr extends L {
 
   @override
   String get payoutProfileNeedsAttention => 'Moyen de versement à vérifier';
-
-  @override
-  String get payoutReasonScheduledArrivalPending =>
-      'En attente de la date d\'arrivée prévue';
-
-  @override
-  String get deliveryPayoutScheduledArrivalPendingExplainer =>
-      'La protection de livraison de 48h est terminée, mais le versement reste retenu jusqu\'à la date d\'arrivée prévue convenue lors du financement.';
 
   @override
   String get earlyArrivalAction => 'Je suis arrivé en avance';
@@ -4565,12 +3895,6 @@ class LFr extends L {
       'Arrivée prévue pour cette livraison';
 
   @override
-  String get earlyArrivalReportedTimeLabel => 'Arrivée signalée';
-
-  @override
-  String get earlyArrivalEarlyByLabel => 'En avance de';
-
-  @override
   String get earlyArrivalPayoutFloorExplanation =>
       'Arriver en avance ne rend pas le versement disponible plus tôt que la date de protection prévue pour cette livraison.';
 
@@ -4596,35 +3920,13 @@ class LFr extends L {
   String get routeDriveMode => 'Trajet routier';
 
   @override
-  String get routeDepartureLabel => 'Départ';
-
-  @override
-  String get routeArrivalLabel => 'Arrivée';
-
-  @override
-  String get routeCarryingLegsOnly =>
-      'Itinéraire de transport pour cette livraison';
-
-  @override
   String get notificationArrivalReported => 'Le voyageur est arrivé en avance';
-
-  @override
-  String get notificationArrivalReportedBody =>
-      'Ouvrez Wassla pour confirmer l\'arrivée anticipée.';
 
   @override
   String get notificationArrivalConfirmed => 'Arrivée anticipée confirmée';
 
   @override
-  String get notificationArrivalConfirmedBody =>
-      'L\'expéditeur a confirmé votre arrivée. La livraison reste à venir.';
-
-  @override
   String get notificationArrivalDeclined => 'Arrivée anticipée non confirmée';
-
-  @override
-  String get notificationArrivalDeclinedBody =>
-      'Ouvrez Wassla pour consulter la livraison.';
 
   @override
   String get routeBasisSnapshot => 'Figé à la réservation';
@@ -4738,11 +4040,6 @@ class LFr extends L {
 
   @override
   String get boostHistoryTitle => 'Historique du Boost';
-
-  @override
-  String boostHistoryChanged(String from, String to) {
-    return 'Modifié de $from à $to';
-  }
 
   @override
   String get boostNotEditable =>
@@ -4912,34 +4209,6 @@ class LFr extends L {
 
   @override
   String get paymentSuccessViewDeliveryAction => 'Voir la livraison';
-
-  @override
-  String get notificationDepositPaidTitle => 'Acompte confirmé';
-
-  @override
-  String get notificationDepositPaidBody =>
-      'Votre demande de livraison est maintenant active et visible pour les voyageurs.';
-
-  @override
-  String get notificationDealFundedTitle => 'Livraison financée';
-
-  @override
-  String get notificationDealFundedBody =>
-      'Paiement sécurisé. Retrouvez votre voyageur au point de collecte convenu.';
-
-  @override
-  String get notificationPayoutReadyTitle => 'Versement prêt';
-
-  @override
-  String get notificationPayoutReadyBody =>
-      'Vos gains pour cette livraison sont prêts pour le transfert.';
-
-  @override
-  String get notificationPayoutSentTitle => 'Versement envoyé';
-
-  @override
-  String get notificationPayoutSentBody =>
-      'Votre versement a été transféré avec succès.';
 
   @override
   String get boostBreakdownTitle => 'Ce que coûte le Boost';

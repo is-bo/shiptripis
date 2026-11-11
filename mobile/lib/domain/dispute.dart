@@ -169,9 +169,6 @@ class DisputeEvidence {
   final bool hasFile;
 
   final DateTime? createdAt;
-
-  bool get isVideo => kind == EvidenceKind.video;
-  bool get isImage => kind == EvidenceKind.photo;
 }
 
 /// A short-lived signed URL for one piece of evidence.
@@ -333,8 +330,6 @@ class Dispute {
   bool get isActive => status.isActive;
   bool get canAddEvidence => status.isActive;
   bool get hasResolution => resolution != DisputeResolution.unknown;
-
-  bool openedByViewer(int viewerId) => openedById == viewerId;
 }
 
 /// The evidence limits the server currently enforces, surfaced in refusals.

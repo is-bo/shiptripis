@@ -49,8 +49,6 @@ enum PaymentOrderStatus {
 
   bool get isCollectable => this == pending || this == partiallyPaid;
   bool get isSettled => this == paid;
-  bool get isRefunding =>
-      this == refundPending || this == partiallyRefunded || this == refunded;
 }
 
 enum PaymentAttemptStatus {
@@ -239,8 +237,6 @@ class ProvidersView {
 
   List<ProviderOption> get usable =>
       providers.where((p) => p.available).toList(growable: false);
-
-  bool get hasUsableProvider => usable.isNotEmpty;
 }
 
 class PaymentAttempt {
@@ -630,10 +626,6 @@ class PostingDepositState {
 
   /// Present once an order exists.
   final PaymentOrder? order;
-
-  bool get isPaid => order?.status.isSettled ?? false;
-  bool get isAwaitingPayment =>
-      depositRequired && (order?.hasOutstanding ?? quote != null);
 }
 
 class DepositQuote {
