@@ -286,7 +286,7 @@ were never built.
 
 | App | Responsibility |
 |---|---|
-| `core` | Redis publisher (`redis_bus.publish_after_commit`) and channel names, versioned business settings, financial lock order, storage classes, retired-route tombstones |
+| `core` | Redis publisher (`redis_bus.publish_after_commit`) and channel names, versioned business settings, financial lock order, storage classes |
 | `accounts` | User, authentication, JWT issue and rotation, email verification |
 | `kyc` | KYC submission records and the gRPC server the Go KYC service calls |
 | `trips` | Journey and JourneyLeg (V1); the legacy Trip and Airport tables stay as history |

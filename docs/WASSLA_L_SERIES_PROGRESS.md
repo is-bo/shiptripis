@@ -45,19 +45,24 @@ factual. Use exactly these headings.
 
 ### L1A. Backend cleanup, including Railway removal
 
-- Contract as built (names that differ from the plan): tombstones live in
-  `apps/core/retired_routes.py` (410 with `code` and `detail`; other methods 405; anonymous 401).
-  `parcels/product` now carries the code `product_request_retired`. Every other removed route is
-  404. The Railway launcher is now `infra/vps/launcher.py` (`run()`, no `main()`), the internal
+- Contract as built (names that differ from the plan): no tombstones. Every removed route answers
+  404, including the six paths the plan listed for 410. The Railway launcher is now `infra/vps/launcher.py` (`run()`, no `main()`), the internal
   gateway config `infra/vps/gateway.Caddyfile`, the Go entrypoint `backend/services/entrypoint.sh`.
   Legacy history admins use `apps/core/historical_admin.py` (view-only). Full list:
   `docs/WASSLA_L1_CLEANUP_INVENTORY.md`.
 - Left for a later package: L1B removes the mobile `compatibleJourneys()` and `airports()`
-  repository methods (no callers, routes now 404) and must keep the app's mapping of the six removed
+  repository methods (no callers, routes now 404) and can drop the app's mapping of the six removed
   channel names (`trip.created`, `trip.updated`, `trip.cancelled`, `match.created`,
-  `handover.confirmed`, `handover.code_issued`) because stored inbox rows still carry them.
-  `journeys/search` and open-requests stay until L2B. Three questions for Ismail are in inventory
-  section 3 (MIGRATION.md, paid-undelivered legacy matches, old inbox rows).
+  `handover.confirmed`, `handover.code_issued`): Ismail confirmed there are no real users, so no
+  stored inbox row carries them. It may also delete the client's handling of the retired refusal
+  codes `legacy_matching_flow_retired`, `legacy_delivery_flow_retired`, `legacy_dzd_quote_retired`,
+  `legacy_trip_flow_retired`, `legacy_trip_search_retired` and `legacy_payment_retired`: no server
+  code sends them any more. Keep `product_request_retired`, `legacy_contract_not_supported` and
+  `airport_filter_retired`: live server code still sends them.
+  `journeys/search` and open-requests stay until L2B. Ismail answered the three open questions (no
+  real users, no legacy data): `infra/vps/MIGRATION.md` is deleted. Legacy tables and the
+  `schema_version` 1/2 branches stay because removing them needs a narrowing migration (rule 1.5.5);
+  inventory section 3 lists them as a follow-up candidate.
 - Switches added and their defaults: none. Removed: `SHIPTRIP_EMBEDDED_REDIS`,
   `PAYMENTS_MOCK_WEBHOOK_ENABLED`, `PAYMENTS_LEGACY_MUTATIONS_ENABLED` (no reader left).
 - Deviations from the plan (what, why, approved by): branch is `claude/project-thread-po89ml`, not
@@ -65,11 +70,13 @@ factual. Use exactly these headings.
   PR target is still `feature/discovery-professional-delivery`). `apps/matching/views.py` cancel,
   decline and withdraw now lock with `select_for_update(no_key=True)` and the module joined the
   lock-order gate; the gate's stated reason for leaving it out was the legacy classes L1A deleted.
-  Lock strength only, no result change; flagged for Ismail in the inventory. Legacy admins made
+  Lock strength only, no result change; accepted by the orchestrator. The plan's 410 tombstone
+  module was built and then removed: Ismail confirmed the app was never released and has no real
+  users, and the orchestrator asked for 404 on all six paths. Legacy admins made
   view-only and the withdrawal "mark sent" action removed (plan: admin registrations for removed
   surfaces are in scope; the tables stay readable).
 - Tests (before and after counts): Django 2,529 passed / 34 skipped (2,563) before;
-  2,447 passed / 0 skipped after (132 IDs removed, of which 34 were skipped and 5 are renames; 16 added).
+  2,438 passed / 0 skipped after (138 IDs removed, of which 34 were skipped and 5 are renames; 13 added).
   Go 199 top-level tests before and after. VPS unit 29 before and after. Removed tests are listed in
   inventory section 1.10.
 - Known limits: Flutter could not run in this environment (CI runs it; only two Dart test fixture

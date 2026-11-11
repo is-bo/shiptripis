@@ -11,8 +11,8 @@ Routed here (see `urls.py`):
 
 Every V1 *negotiation write* lives in `v1_views.py` and `v1_services.py`
 instead: `SenderProposeV1View`, `CounterOfferV1View` and `OfferAcceptV1View`.
-The retired traveler-first paths answer 410 from `apps.core.retired_routes`;
-L1A deleted the pre-V1 write classes that used to sit in this module.
+L1A deleted the pre-V1 traveler-first write classes that used to sit in this
+module; their paths are no longer routed.
 
 Row locks here use `select_for_update(no_key=True)`, the canonical mode
 asserted by `apps/finance/tests/test_phase8df_lock_order.py`.

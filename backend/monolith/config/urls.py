@@ -85,7 +85,4 @@ urlpatterns = [
     path("api/", include("apps.finance.urls")),
     path("api/", include("apps.notifications.urls")),
     path("api/", include("apps.chat.urls")),
-    # Retired paths answer 410 with their stable refusal code. Their literal
-    # segments never collide with a live route's converters above.
-    path("api/", include("apps.core.retired_routes")),
 ]

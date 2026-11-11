@@ -35,6 +35,7 @@ only host.
 | `SHIPTRIP_EMBEDDED_REDIS` (VPS guard, `stack.env.example`, `compose.yml`, `ENVIRONMENT.md`, `.env.example`) | Its only reader was the Railway embedded-Redis branch. |
 | Go `config.HTTPAddr` fallback to `PORT` | `PORT` was Railway's injected variable. In the combined container it belongs to the gateway, so honouring it would collide with Caddy. Every service has its own `*_HTTP_ADDR`. |
 | Admin console "Single-replica local mode" limiter label (`console_views.system_status`) | Shown only when the embedded Redis was on. |
+| `infra/vps/MIGRATION.md` (the Railway-to-VPS data migration runbook) | Ismail, 2026-11-11: the app was never in production and has no real users, so there is no data to move. |
 | Railway URLs in test fixtures (`test_h8a_guards.py`, two mobile tests) | Replaced with `https://api.wassla.example`; the tests check URL handling, not the host. |
 
 Runbooks corrected: `docs/DEPLOYMENT_RUNBOOK.md`, `docs/ROLLBACK_RUNBOOK.md`,
@@ -47,7 +48,7 @@ rewritten where it was false (see section 1.8).
 | Removed | Evidence |
 | --- | --- |
 | `TravelerApplyView`, `SenderApplyView`, `CounterOfferView`, `OfferAcceptView`, `_quote_for_parcel` (`apps/matching/views.py`) | Not routed, not imported anywhere (the module docstring said so itself). |
-| `RetiredLegacyMatchingWriteView` (`apps/matching/v1_views.py`) | Replaced by the tombstone module (section 1.7). |
+| `RetiredLegacyMatchingWriteView` (`apps/matching/v1_views.py`) | The 410 answer for the retired matching paths; see section 1.7. |
 | `TravelerApplySerializer`, `SenderApplySerializer`, `CounterOfferSerializer`, `CompatibleJourneysQuerySerializer`, `MatchEventSerializer` (`apps/matching/serializers.py`) | Used only by the removed views; `MatchEventSerializer` had no user even at the baseline. |
 | `GET /api/matches/compatible-journeys` (`CompatibleJourneysV1View`) | Superseded by `find-travelers` and `quote`. Mobile `compatibleJourneys()` has no caller. `compatible_journeys_for_request` stays because find-travelers uses it. |
 | `apps/core/pricing.py` | The pre-V1 DZD pricing engine. No importer outside its own test. |
@@ -79,33 +80,27 @@ rewritten where it was false (see section 1.8).
 | --- | --- |
 | `TripListCreateView`, `TripSearchView`, `TripDetailView`, `TripCancelView`, `TripMediaUploadView`, `AirportListView` and their serializers: `/api/trips`, `/api/trips/search`, `/api/trips/<pk>`, `.../cancel`, `.../media`, `/api/airports` | Superseded by journeys. No mobile caller of the trip routes; mobile `airports()` has no caller. `AirportSerializer` stays (parcels use it). |
 
-### 1.7 Retired routes now answer from one tombstone module
+### 1.7 The six 410 routes are gone too
 
-`apps/core/retired_routes.py`, mounted last under `api/`. Each answers its retired method with `410`
-and a stable code, requires authentication like before, and answers other methods `405`:
-
-| Path | Method | Code |
-| --- | --- | --- |
-| `matches/apply` | POST | `legacy_matching_flow_retired` |
-| `matches/apply-to-trip` | POST | `legacy_matching_flow_retired` |
-| `matches/<pk>/offers/counter` | POST | `legacy_matching_flow_retired` |
-| `parcels/delivery` | POST | `legacy_delivery_flow_retired` |
-| `parcels/quote/delivery` | GET | `legacy_dzd_quote_retired` |
-| `parcels/product` | POST | `product_request_retired` |
-
-The implementations behind them were deleted: `DeliveryCreateView`, `ProductCreateView`,
-`DeliveryQuoteView`, and the serializers only they used (`_ParcelBase`, `DeliveryCreateSerializer`,
-`ProductCreateSerializer`). Every other removed route answers `404`
-(`apps/core/tests/test_l1a_retired_surfaces.py`).
+The plan asked for one tombstone module answering `410` for `matches/apply`, `matches/apply-to-trip`,
+`matches/<pk>/offers/counter`, `parcels/delivery` (POST), `parcels/quote/delivery` (GET) and
+`parcels/product`. It was built and then removed in the same pull request: Ismail confirmed the app
+was never released, so no stale client calls these paths, and the orchestrator asked for them to
+answer `404` like every other removed route. Their implementations were deleted:
+`DeliveryCreateView`, `ProductCreateView`, `DeliveryQuoteView`, `RetiredLegacyMatchingWriteView`, and
+the serializers only they used (`_ParcelBase`, `DeliveryCreateSerializer`,
+`ProductCreateSerializer`). The ProductRequest refusal inside the live V1 offer services
+(`product_request_retired` on counter and accept, and in chat eligibility) is a data guard, not a
+route, and stays. Every removed route is asserted `404` in
+`apps/core/tests/test_l1a_retired_surfaces.py`.
 
 ### 1.8 Redis channels nobody publishes
 
 `trip.created`, `trip.updated`, `trip.cancelled`, `match.created`, `handover.confirmed`,
 `handover.code_issued`, removed from `apps/core/channels.py`, the Go notification dispatcher's
 subscribe list and the push template table. Evidence: before L1A their only publishers were the
-removed legacy views and services (`git grep` of the baseline); after L1A nothing names them. The
-server renders stored inbox rows without these names, so old rows still list. The mobile app keeps
-its mapping of these names for stored rows (L1B must keep it).
+removed legacy views and services (`git grep` of the baseline); after L1A nothing names them. There
+are no stored inbox rows to render (section 3), so L1B can drop the app's mapping of these names too.
 
 ### 1.9 Admin and documentation
 
@@ -132,6 +127,8 @@ its mapping of these names for stored rows (L1B must keep it).
 | `apps/verification/tests/test_verification.py` | 15 | Legacy match handover API and services |
 | `apps/trips/tests/test_trips.py` | 20 | Legacy trip and airport API (10 were already skipped) |
 | `apps/trips/tests/test_legacy_trip_retirement.py` | 2 | The old trip 410 answers, now 404 |
+| `apps/parcels/tests/test_parcels.py`: `DeliveryCreateTests`, `ProductCreateTests`, `DeliveryQuoteTests` | 5 | The legacy delivery create, product create and DZD quote 410 answers, now 404 |
+| `test_v1_matching.py::test_legacy_matching_write_routes_are_gone` | 1 | The `matches/apply*` 410 answers, now 404 |
 | `test_matching.py`: `TravelerApplyTests`, `SenderApplyTests`, `CounterAcceptTests` | 24 | Legacy apply and counter views (all 24 were already skipped) |
 | `test_deployment_safety.py`: `LegacyProviderFirewallTests`, `LegacyMockWebhookFirewallTests` | 3 | Legacy provider registry and mock webhook switches |
 | `test_deployment_safety.py`: `test_public_railway_entrypoints_gate_traffic_on_readiness`, `test_railway_requires_external_shared_redis`, `test_embedded_redis_is_explicit_local_compatibility_only`, and the three boot-time import tests (`..._is_guarded_...`, `..._runs_after_readiness_...`, `..._failed_import_does_not_take_the_service_down`) | 6 | Railway health checks, embedded Redis and boot-time catalogue import. The VPS equivalents are `test_the_launcher_requires_the_shared_redis`, `test_no_redis_daemon_is_started_inside_the_container`, `test_starting_the_container_never_migrates_or_imports`, the compose health check and `infra/vps/tests/integration.py` |
@@ -150,24 +147,32 @@ channel fixtures in five Go tests and `test_redis_bus.py` (moved to live channel
 | Kept | Reason |
 | --- | --- |
 | Models, migrations and history tables of `apps.payments`, `apps.wallet`, `apps.verification`, `apps.trips.Trip`, `ProductRequest` | Rule: no table, column or migration is removed. `Journey.legacy_trip` points at `Trip`. |
-| Legacy chat eligibility through `PaymentIntent` (`apps/matching/services.py::_legacy_chat_eligibility`) | Historical match threads still read it; every function in that module has a live caller. |
-| `schema_version` 1 and 2 branches (matching, trips, parcels) | Rows of those versions can exist; a branch is unreachable only if production has none, which this package cannot prove from the repository. |
+| Legacy chat eligibility through `PaymentIntent` (`apps/matching/services.py::_legacy_chat_eligibility`) | Chat eligibility for legacy match rows; every function in that module has a live caller. See section 3. |
+| `schema_version` 1 and 2 branches (matching, trips, parcels, finance) | No real rows need them (section 3), but they are tied to database check constraints and to matching, finance and pricing reads; removing them needs a narrowing migration. See section 3. |
 | `GET /api/journeys/search` and the open-requests reads | Plan: kept until L2B replaces them. |
 | `backend/monolith/Dockerfile`, `backend/gateway/Caddyfile`, `backend/docker-compose.yml` | Local development stack; no Railway dependency. |
 | Go `DATABASE_URL` loader | Generic; the VPS runtime refuses it explicitly. Not Railway-only. |
 | `docs/SHIPTRIP_V1_SPEC.md` mentions of Railway | The owner's specification; the plan states it overrides the spec's Railway note. |
 | Dated historical reports under `docs/` that mention Railway, `apps.payments` routes or the removed settings (`PHASE_*`, `V1_VPS_READINESS.md`, `V2_EMAIL_READINESS.md`, `PERFORMANCE_AUDIT.md`, `k6-notes/`, `k7-notes/`, older `IMPLEMENTATION_STATUS.md` entries) | Rule: dated historical reports are left as written. |
 
-## 3. Needs Ismail's decision
+## 3. Ismail's decisions
 
-1. **`infra/vps/MIGRATION.md`** describes moving production data from Railway to the VPS. It is the
-   last Railway runbook. Keep it until the data has moved, then delete it? Kept for now.
-2. **Paid but undelivered legacy matches.** If production has a legacy `Match` with a succeeded
-   `PaymentIntent` and no completed handover, it can no longer complete through the API (the legacy
-   handover and payment routes are gone). A one-off query decides whether any such row exists:
-   `PaymentIntent.objects.filter(status="succeeded", offer__match__status__in=["accepted", "in_transit", "delivered"])`.
-3. **Legacy stored inbox rows** with the six removed channel names still render in the app. Whether
-   to delete them or leave them is a data question, not a code one; nothing was deleted.
+Answered on 2026-11-11: the app has never been in production and has no real users, so there is no
+legacy data to protect. That settles the three questions this inventory first asked:
+
+1. **`infra/vps/MIGRATION.md`** (the Railway-to-VPS data move) is deleted: there is no production
+   data to move. Two dated reports (`V1_VPS_READINESS.md`, an older `IMPLEMENTATION_STATUS.md`
+   entry) still link to it and are left as written.
+2. **Paid but undelivered legacy matches** cannot exist, so no production check is needed.
+3. **Stored inbox rows with the six removed channel names** do not exist, so the app does not need
+   to keep rendering them (see "Left for L1B" in the handoff notes).
+
+The same answer also removes the data reason behind three "kept" rows above: the legacy tables, the
+legacy chat-eligibility branch, and the `schema_version` 1 and 2 branches. They stay in this package
+anyway. Dropping a table or narrowing the `schema_version` check constraints is a migration that
+removes or narrows something, which plan rule 1.5.5 forbids for the whole series, and the branches sit
+inside matching, finance and pricing reads that L1A must not change. They are listed for the
+orchestrator as a candidate follow-up that needs Ismail to lift rule 1.5.5.
 
 One change outside the starting list that Ismail may want to confirm: the routed cancel, decline and
 withdraw writes in `apps/matching/views.py` now lock `Match` and `Offer` with

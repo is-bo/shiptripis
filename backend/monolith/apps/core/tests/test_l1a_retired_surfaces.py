@@ -1,13 +1,11 @@
 """L1A: what a retired backend surface answers now.
 
-Two shapes, and only two. The six paths in ``apps.core.retired_routes`` keep a
-``410 Gone`` with their stable refusal code, because a stale client may still
-call them and deserves an explicit answer. Every other route L1A removed is
-simply not routed any more and answers ``404``. The inventory
+Every route L1A removed is simply not routed any more and answers ``404``,
+including the six paths that used to answer ``410``: the app was never
+released, so no stale client needs an explicit refusal. The inventory
 (``docs/WASSLA_L1_CLEANUP_INVENTORY.md``) lists the evidence for each removal.
 
-Literal paths, never ``reverse()``: the names of removed routes no longer
-exist, and a stale client calls the path, not the name.
+Literal paths, never ``reverse()``: the names of removed routes no longer exist.
 """
 
 from __future__ import annotations
@@ -45,18 +43,16 @@ def _client(user: User | None = None) -> APIClient:
     return client
 
 
-#: (method, path, refusal code) for every tombstone in apps.core.retired_routes.
-TOMBSTONES = (
-    ("post", "/api/matches/apply", "legacy_matching_flow_retired"),
-    ("post", "/api/matches/apply-to-trip", "legacy_matching_flow_retired"),
-    ("post", "/api/matches/1/offers/counter", "legacy_matching_flow_retired"),
-    ("post", "/api/parcels/delivery", "legacy_delivery_flow_retired"),
-    ("get", "/api/parcels/quote/delivery", "legacy_dzd_quote_retired"),
-    ("post", "/api/parcels/product", "product_request_retired"),
-)
-
 #: (method, path) for every route L1A removed outright.
 REMOVED = (
+    # Pre-V1 matching writes, delivery create, DZD quote and ProductRequest
+    # create (these answered 410 until L1A).
+    ("post", "/api/matches/apply"),
+    ("post", "/api/matches/apply-to-trip"),
+    ("post", "/api/matches/1/offers/counter"),
+    ("post", "/api/parcels/delivery"),
+    ("get", "/api/parcels/quote/delivery"),
+    ("post", "/api/parcels/product"),
     # Legacy DZD payment intents and the unauthenticated mock webhook.
     ("get", "/api/payments/intents"),
     ("post", "/api/payments/intents/create"),
@@ -87,35 +83,6 @@ REMOVED = (
     # Superseded by find-travelers and the quote endpoint.
     ("get", "/api/matches/compatible-journeys"),
 )
-
-
-class TombstoneTests(APITestCase):
-    def setUp(self):
-        self.user = _user("tombstone@example.com", "201")
-
-    def test_each_tombstone_answers_410_with_its_refusal_code(self):
-        client = _client(self.user)
-        for method, path, code in TOMBSTONES:
-            with self.subTest(path=path):
-                response = getattr(client, method)(path, {}, format="json")
-                assert response.status_code == 410, (path, response.status_code)
-                assert response.data["code"] == code
-                assert response.data["detail"]
-
-    def test_a_tombstone_answers_only_the_method_it_retired(self):
-        client = _client(self.user)
-        for method, path, _code in TOMBSTONES:
-            other = "get" if method == "post" else "post"
-            with self.subTest(path=path):
-                response = getattr(client, other)(path, {}, format="json")
-                assert response.status_code == 405, (path, response.status_code)
-
-    def test_a_tombstone_still_requires_authentication(self):
-        client = _client()
-        for method, path, _code in TOMBSTONES:
-            with self.subTest(path=path):
-                response = getattr(client, method)(path, {}, format="json")
-                assert response.status_code == 401, (path, response.status_code)
 
 
 class RemovedRouteTests(APITestCase):

@@ -471,16 +471,6 @@ class V1OfferDealTests(APITestCase):
             Offer.objects.get(pk=second_offer.data["id"]).status == Offer.Status.PENDING
         )
 
-    def test_legacy_matching_write_routes_are_gone(self):
-        client = _client(self.sender)
-        assert (
-            client.post(reverse("matches-apply"), {}, format="json").status_code == 410
-        )
-        assert (
-            client.post(reverse("matches-apply-to-trip"), {}, format="json").status_code
-            == 410
-        )
-
     def test_exact_locations_reveal_to_traveler_only_after_funding(self):
         proposal = self._propose()
         accepted = _client(self.traveler).post(

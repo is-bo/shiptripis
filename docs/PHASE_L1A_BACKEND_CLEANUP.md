@@ -19,8 +19,8 @@ and the test counts.
    published plaintext codes to both parties), the airport trip API, `compatible-journeys`, the
    unrouted traveler-first matching views, the DZD pricing engine, and the serializers only they used.
    Their models, admin and migrations stay.
-3. **One tombstone module.** `apps/core/retired_routes.py` answers `410` with a stable code for the
-   six paths the plan names. Every other removed route answers `404`.
+3. **Every removed route answers `404`,** including the six paths the plan wanted kept as `410`
+   tombstones: with no released client, nothing stale calls them (Ismail, via the orchestrator).
 4. **Two settings removed** whose only readers were removed code: `PAYMENTS_MOCK_WEBHOOK_ENABLED` and
    `PAYMENTS_LEGACY_MUTATIONS_ENABLED`, in Django, the VPS guard and the env examples.
 5. **Six Redis channels removed** that nothing publishes (`trip.*`, `match.created`,
@@ -36,18 +36,11 @@ and the test counts.
 
 - Removed routes return `404` to every caller: `/api/payments/intents*`, `/api/payments/webhook/mock`,
   `/api/wallets*`, `/api/withdrawals*`, `/api/matches/<id>/handover*`, `/api/trips*`,
-  `/api/airports`, `/api/matches/compatible-journeys`.
-- Tombstones (authenticated; other methods `405`; anonymous `401`):
-
-  | Path | Method | `code` |
-  | --- | --- | --- |
-  | `/api/matches/apply` | POST | `legacy_matching_flow_retired` |
-  | `/api/matches/apply-to-trip` | POST | `legacy_matching_flow_retired` |
-  | `/api/matches/<pk>/offers/counter` | POST | `legacy_matching_flow_retired` |
-  | `/api/parcels/delivery` | POST | `legacy_delivery_flow_retired` |
-  | `/api/parcels/quote/delivery` | GET | `legacy_dzd_quote_retired` |
-  | `/api/parcels/product` | POST | `product_request_retired` (new code on this path; it previously had none) |
-
+  `/api/airports`, `/api/matches/compatible-journeys`, `/api/matches/apply`,
+  `/api/matches/apply-to-trip`, `/api/matches/<pk>/offers/counter`, `POST /api/parcels/delivery`,
+  `/api/parcels/quote/delivery`, `/api/parcels/product`.
+- The V1 offer services still refuse a historical ProductRequest match with
+  `product_request_retired` (counter, accept, chat eligibility).
 - No live route, payload, price, lifecycle or payout result changed. No migration was added or
   deleted; `makemigrations --check` reports no changes.
 - The VPS launcher refuses a loopback `REDIS_URL`; Go services no longer read `PORT`.
@@ -56,7 +49,7 @@ and the test counts.
 
 | Suite | Before | After |
 | --- | --- | --- |
-| Django (PostgreSQL) | 2,529 passed, 34 skipped (2,563 collected) | 2,447 passed, 0 skipped (2,447 collected) |
+| Django (PostgreSQL) | 2,529 passed, 34 skipped (2,563 collected) | 2,438 passed, 0 skipped (2,438 collected) |
 | Go (`go test -race ./...`, top-level tests) | 199 passed | 199 passed |
 | VPS unit (`infra/vps/tests`) | 29 OK | 29 OK |
 | Static web and edge routing check | passed | passed |
@@ -64,12 +57,12 @@ and the test counts.
 | Flutter | not run here (no SDK in this environment) | CI runs it; L1A changed only two Dart test fixtures (a Railway URL string) |
 | VPS container integration (`infra/vps/tests/integration.py`) | nine groups passed (V3 baseline report) | all nine groups passed, against images built from this branch |
 
-Django: 132 test IDs removed (34 of them were already skipped, which is every skip the baseline had) and 16 added, so 2,563 − 132 + 16 =
-2,447 collected. The removed tests and the surface each covered are listed in the inventory,
+Django: 138 test IDs removed (34 of them were already skipped, which is every skip the baseline had) and 13 added, so 2,563 − 138 + 13 =
+2,438 collected. The removed tests and the surface each covered are listed in the inventory,
 section 1.10. Added:
 
-- `apps/core/tests/test_l1a_retired_surfaces.py` (8): each tombstone's 410 and code, method and
-  authentication; every removed route is 404 to signed-in and anonymous callers; a historical
+- `apps/core/tests/test_l1a_retired_surfaces.py` (5): every removed route, including the six former
+  410 paths, is 404 to signed-in and anonymous callers; a historical
   ProductRequest match cannot re-enter payment, handover, chat, counter or accept (ported); the
   legacy admins are view-only and still render.
 - `test_deployment_safety.py` (7): three new VPS checks (the launcher requires the shared Redis,
@@ -78,7 +71,7 @@ section 1.10. Added:
   drain, the catalogue reaches the image, the mock payment rail stops the boot).
 - `test_v1_matching.py` (1, renamed): a V1 deal has no legacy payment or handover route (404).
 
-The 132 removed IDs are 127 removed tests plus those 5 renames.
+The 138 removed IDs are 133 removed tests plus those 5 renames.
 
 Go: one test rewritten (`TestHTTPAddrIgnoresTheGatewayPort` replaces `TestHTTPAddrUsesRailwayPort`);
 channel fixtures in five tests moved to live channels.
@@ -87,5 +80,9 @@ channel fixtures in five tests moved to live channels.
 
 - Flutter was not run locally; CI covers it.
 - The mobile app still has two unused repository methods that name removed routes
-  (`compatibleJourneys`, `airports`) and still maps the six removed channel names for stored inbox
-  rows. Both belong to L1B.
+  (`compatibleJourneys`, `airports`) and still maps the six removed channel names. Both belong to
+  L1B; with no real users, the mapping can go too.
+- One full local run had a single failure in
+  `test_phase8fh5_control_plane.py::test_user_dispute_is_separate_and_postgres_plan_uses_existing_indexes`,
+  a PostgreSQL query-plan assertion that L1A does not touch; it passed three times alone and with its
+  file, and CI runs the full suite on the final head.
