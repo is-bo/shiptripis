@@ -1,5 +1,18 @@
 # Waçla V1 Implementation Status
 
+## Wassla L0 — discovery and professional delivery specification and plan (2026-11-10)
+
+Status: **documentation only; no application code changed.**
+
+Created `feature/discovery-professional-delivery` from `feature/wassla-v3-baseline`
+`dd7f8200615e3433bab4af5977b8c0a2c2e6114e`. Added the owner-locked addendum
+`docs/WASSLA_DISCOVERY_PRO_SPEC.md` and the implementation plan
+`docs/WASSLA_DISCOVERY_PRO_PLAN.md` (packages L1A to L10: cleanup, Home discovery, routes for
+everyone with sea legs and ticket proof, traveler pricing, progress reminders, professional
+transporters, manifest, custody and courier handoff, problems and route changes, final acceptance).
+`SHIPTRIP_V1_SPEC.md`, `CLAUDE.md` and `AGENTS.md` now point at both. Nothing is implemented yet; the
+V1 rules remain what the code enforces. Main is untouched; no deployment.
+
 ## Wassla V3 integration baseline (2026-10-26)
 
 Created `feature/wassla-v3-baseline` from V2 `bdec34f3236eb4ddc2c102a80b9a5627808ac634`,

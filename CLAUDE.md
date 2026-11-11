@@ -32,3 +32,16 @@ Codex remains the primary engineering and backend owner. Claude may make safe fr
 - Kaba/ProductRequest is not active in V1.
 
 After meaningful work, update `docs/IMPLEMENTATION_STATUS.md`; it tracks progress but never replaces the specification.
+
+## Discovery and professional delivery (L-series)
+
+Before any work on Home discovery, sea legs, traveler pricing, professional transporters, custody,
+courier handoff or progress reminders, also read:
+
+- `docs/WASSLA_DISCOVERY_PRO_SPEC.md` (owner-approved addendum; overrides the V1 specification for the topics it covers)
+- `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model per package, and the checks that close each one)
+
+Work happens on `feature/discovery-professional-delivery`, one package per pull request into that
+branch. Never merge into `main` or deploy without the owner's explicit approval. For this series the
+owner assigned backend packages to Claude agents through the orchestrator. Until package L3A is
+merged the code still enforces FLIGHT and DRIVE only, with proof on flight legs only.

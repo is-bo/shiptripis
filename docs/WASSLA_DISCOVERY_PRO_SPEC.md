@@ -1,0 +1,392 @@
+# Wassla Discovery and Professional Delivery Specification
+
+Status: **locked by Ismail on 2026-11-10.** Baseline: `feature/wassla-v3-baseline` at `dd7f820`.
+Working branch: `feature/discovery-professional-delivery`.
+Build order and work packages: `docs/WASSLA_DISCOVERY_PRO_PLAN.md`.
+
+This document is an addendum to `docs/SHIPTRIP_V1_SPEC.md`. Where the two differ, **this document wins
+for the topics it covers**, because the owner explicitly overrode the V1 specification for them. Everything
+this document does not mention stays exactly as the V1 specification says.
+
+A rule in this document is a product decision. An agent must not reinterpret, extend or relax one. If a
+rule turns out to be impossible or contradictory in the code, stop and report it to the orchestrator; do
+not pick a different rule.
+
+---
+
+## 1. What this adds
+
+1. **Home discovery.** Senders see travelers, travelers see senders. Real compatible matches come first,
+   then real published trips and open requests, then people who chose to be visible.
+2. **Routes for everyone.** Every traveler, individual or professional, can publish a multi-stop route
+   with flight, road and sea legs, choose capacity per leg, set a price, and pick up and drop off at any
+   stop.
+3. **Professional transporters.** A verified business on the same account, with a Pro badge, a business
+   profile, a manifest dashboard and no per-trip ticket proof.
+4. **Custody and courier handoff.** Every parcel keeps its own custody history. A traveler may hand a
+   parcel to a local courier for the last part. A handoff is never a delivery and never pays out.
+5. **Progress and reminders.** Travelers report "at the port", "departed", "arrived". The app asks them
+   when they forget. Senders see it in tracking.
+6. **Admin control.** One verification inbox, switches for the risky capabilities, pause, suspend and
+   hide, all audited with a reason.
+
+## 2. What this overrides in the V1 specification
+
+| V1 specification | Replaced by |
+| --- | --- |
+| §6: no ferry or sea transport; an Algeria to non-Algeria leg must be FLIGHT | Section 5 below: a `SEA` mode exists for everyone, on admin-managed crossings, behind an admin switch |
+| §6 and AGENTS.md: modes are FLIGHT and DRIVE; only flight legs need proof | Section 6: flight **and sea** legs need a ticket proof, except for a verified professional |
+| §10: per-leg capacity is weight only, with a 200 kg ceiling per leg | Section 5.5: weight stays the main capacity; volume and parcel count are optional; the ceiling becomes a typo guard, not a policy cap |
+| §17: only the traveler confirms delivery, by entering the recipient's code | Section 10: unchanged for personal delivery; after a courier handoff the recipient, the sender or staff confirm |
+| Home shows only the user's own activity | Section 4: Home also shows discovery |
+
+Nothing else is overridden. In particular these stay untouched and every phase must prove it:
+
+- EUR is canonical, in integer cents. DZD is only a Chargily or manual-settlement representation.
+- The sender proposes first. Boost never bypasses compatibility.
+- Exact locations stay hidden until the deal is funded.
+- The traveler can never read the delivery code. It stays locked for 30 minutes after pickup.
+- Delivery protection is 48 hours. A dispute freezes the payout. The funded arrival floor still gates payout.
+- The platform fee is added on top of the traveler's reward.
+- Kaba / ProductRequest stays retired.
+- Navigation is Home, Deliveries, Chat, Profile. Notifications live in the bell.
+- Backend state is authoritative. The client never fakes payment, verification, delivery or payout.
+
+## 3. Launch scope
+
+- **Countries:** Algeria, France, Spain, Germany only. The place catalogue already covers exactly these.
+  No new country is imported in this work.
+- **Languages:** English, French, Arabic with right-to-left layout, on every new screen, email and web page.
+- **Not in this build** (do not start them, do not leave hooks for them): courier company API
+  integrations, fleet or vehicle management, recurring routes, business analytics, business logos or
+  photo avatars, free-text public bios, insurance or customs document handling, new countries.
+
+## 4. Home discovery
+
+### 4.1 Three tiers, in this order
+
+1. **Matches for you.** For a sender: for each of their open requests, the travelers who are really
+   compatible, from the existing Find Travelers engine. For a traveler: for each of their active
+   journeys, the requests that are really compatible, from the existing compatible-requests engine.
+   No second matching implementation may exist. Discovery calls the same functions.
+2. **Listings.** For a sender: published journeys ("Trips"). For a traveler: open requests ("Parcels
+   looking for a traveler"). These are real, current, server-filtered rows.
+3. **People.** Users who opted in to a public profile and who match the viewer's side: a sender sees
+   travelers, a traveler sees senders.
+
+A tier with nothing to show renders its designed empty state. It is never filled with fake, sample or
+"suggested" data.
+
+### 4.2 What a public card may contain
+
+A card is built by an explicit allowlist serializer. Anything not listed is forbidden.
+
+- **Trip card:** traveler first name, or business name for a verified professional; ID-verified flag;
+  Pro badge; rating and completed-delivery count; ordered stops at **locality level** with transport
+  mode per leg; departure and arrival dates; remaining weight capacity as the existing public band;
+  listed price (per kg and minimum) when set.
+- **Request card:** locality of pickup and delivery; item title, category and fragile flag; weight;
+  ready window and deadline; offered reward; sender first name. Nothing the existing
+  compatible-requests contract does not already show a matched traveler, and never the recipient.
+- **Profile card:** first name, or business name for a verified professional; ID-verified flag; Pro
+  badge; member since (month and year); rating and completed-delivery count; up to three "usual
+  routes" the user chose, as locality pairs.
+
+Never on any public surface: last name, email, phone, exact address or coordinates, distance or detour
+figures, recipient data, document data, payout data, another user's internal ids beyond the opaque id
+needed to open the card.
+
+### 4.3 Opt-in
+
+- Public profiles are **off by default**. Home shows a one-time, dismissible card that previews exactly
+  what would be visible and offers "Show my profile" and "Not now". It never blocks the screen.
+- The choice lives in Profile, under "Public profile", and can be changed at any time. Turning it off
+  removes the profile from discovery immediately.
+- A published journey and an open request are listed because publishing them is their purpose. The
+  publish and post screens say so in one line.
+
+### 4.4 Actions from discovery
+
+- From a trip card, a sender chooses one of their open requests, or creates a new one pre-filled with
+  the route. The app then opens Find Travelers for that request with this journey in focus. If the
+  server says the pair is incompatible, the screen states the server's reason. The sender still
+  proposes first.
+- From a request card, a traveler may tap **"I can carry this"** when they have a journey the server
+  confirms is compatible. This sends the sender one notification that opens Find Travelers with that
+  traveler in focus. It is not an offer, carries no price and reserves nothing. Limits: one per journey
+  and request pair, and a daily cap per traveler set in policy.
+- From a profile card, a viewer may turn on a **route alert**: a notification when that person, or
+  anyone, publishes a trip or posts a request on a chosen route. There is no direct message from a
+  profile. Chat still begins only inside a match.
+
+### 4.5 Admin
+
+- Staff can hide a public profile with a reason. A hidden profile is invisible in discovery and the
+  owner sees a neutral "not currently visible" state.
+- Policy switches: listings on or off, profiles on or off.
+
+## 5. Routes for everyone
+
+### 5.1 Stops and legs
+
+- A route is an ordered list of stops. Legs are the segments between consecutive stops. This is the
+  existing `Journey` and `JourneyLeg` model. A professional route is the same model, not a new one.
+- A sender's parcel may be picked up at any stop that accepts pickup and dropped off at any later stop
+  that accepts drop-off. It uses capacity only on the legs it actually travels.
+- Each stop may carry, all optional:
+  - "accepts pickup" and "accepts drop-off" (both on by default; the first stop cannot be a drop-off
+    and the last stop cannot be a pickup);
+  - a handover time window, which must fit between arriving at and leaving that stop;
+  - a short handover note, shown **only** to the sender of a funded deal that uses that stop.
+- These are available to every traveler.
+
+### 5.2 Modes
+
+`FLIGHT`, `DRIVE`, `SEA`.
+
+- `DRIVE`: unchanged. Allowed inside one road network (Algeria; France, Spain and Germany together).
+- `FLIGHT`: unchanged. Needs airport endpoints and a flight number.
+- `SEA`: allowed only between two port cities joined by an **active sea crossing**, and only while the
+  admin switch "Sea legs" is on. A sea leg has no flight number.
+
+### 5.3 Sea crossings (the "ports")
+
+- A sea crossing is an admin-managed row: origin port city, destination port city, active or not. Each
+  direction is its own row.
+- Port cities are ordinary catalogue localities. There is no new place type, so city-identity matching
+  is unchanged.
+- The initial list is seeded from a reviewed data file. Candidate port cities, **to be confirmed
+  against real ferry schedules by Ismail before the switch is turned on**: Marseille, Sète (France);
+  Alicante, Almería, Barcelona, Valencia (Spain); Algiers, Oran, Béjaïa, Skikda, Annaba, Mostaganem,
+  Ghazaouet (Algeria). No crossing may be seeded as active without that confirmation.
+- Staff can add, activate and deactivate crossings in the admin Geography area, with a reason, audited.
+- Deactivating a crossing, or turning the switch off, blocks new journeys and new offers on journeys
+  that use it. It never changes a funded deal.
+- The "Sea legs" switch ships **off**. Turning it on is Ismail's decision. The legal, ferry and customs
+  position for carrying parcels by sea has not been researched by this project.
+
+### 5.4 Distance and pricing for a sea leg
+
+A sea leg's distance is the great-circle distance between the two port cities, the same method as a
+flight leg. Pricing bands apply unchanged.
+
+### 5.5 Capacity
+
+- The traveler chooses capacity per leg. There is **no admin capacity cap**, for anyone.
+- Weight in kg stays required and is the main capacity. Volume in litres and number of parcels are
+  optional per leg.
+- The 200 kg per-leg ceiling is replaced by a technical ceiling of 20,000 kg whose only job is to catch
+  typos.
+- Volume is enforced only when the leg declares a volume **and** the request has dimensions. When the
+  leg declares a volume and the request has none, the match is allowed and shows a caveat.
+- Parcel count is enforced when declared.
+- Capacity is checked before an offer exists and again, under lock, when it is accepted. Overselling
+  must stay impossible.
+
+### 5.6 What the traveler accepts
+
+A journey may refuse item categories and may refuse fragile items. The server enforces this in
+matching. The default accepts everything the V1 safety rules allow.
+
+### 5.7 Pause
+
+A traveler can pause and resume their own active journey. Staff can pause any journey with a reason.
+A paused journey is not discoverable and accepts no new offers. Funded deals continue normally.
+
+## 6. Verification and proof
+
+| | Individual traveler | Verified professional |
+| --- | --- | --- |
+| Identity | Existing ID check (KYC) | Existing ID check (KYC) |
+| Professional status | none | One business document, reviewed once |
+| Flight leg | Ticket proof for each flight leg | No ticket proof |
+| Sea leg | Ticket or booking proof for each sea leg | No ticket proof |
+| Road leg | No proof | No proof |
+
+- A verified professional skips **every** per-trip ticket proof, flight and sea. They need no extra
+  document for sea.
+- "Verified professional" is evaluated when a gate runs, not copied onto the journey. If a professional
+  is suspended, or loses verified status, their journeys with flight or sea legs that have no approved
+  ticket proof stop being discoverable and stop accepting offers until proofs are approved or the
+  status returns. Funded deals are not touched.
+- The single place that answers "is this leg's proof requirement satisfied" is one backend function.
+  No other code may decide it by comparing a mode.
+
+## 7. Professional transporters
+
+### 7.1 Professional Mode
+
+- Same account. A user can send, travel as an individual and operate professionally.
+- To apply, the user enters business name, registration number, country of registration and business
+  city, chooses the document type (auto-entrepreneur card, commercial register extract, other business
+  registration) and uploads a photo of it. The existing ID check must also be approved.
+- Statuses: not verified, verification pending, more information required, verified, suspended. A
+  rejected application returns to not verified with the reason shown, and the user may apply again.
+
+### 7.2 What only a verified professional gets
+
+- The Pro badge and business name on cards, on their public profile and in tracking.
+- The manifest dashboard (section 9).
+- No per-trip ticket proof.
+
+Everything else, including sea legs, multi-stop routes, pricing, courier handoff and progress updates,
+is for every traveler.
+
+### 7.3 Public professional profile
+
+Business name, Pro badge, ID-verified flag, cities served (derived from their published routes, at
+locality level), transport modes used, rating, completed deliveries, currently published routes. Never
+the registration number, the document, or any address.
+
+### 7.4 Routes
+
+A professional's routes go live without per-route approval. The traveler still accepts or declines
+each booking. Staff can pause any route afterwards.
+
+## 8. Pricing
+
+- Every traveler, individual or professional, **may** set a price on a journey: a price per kg and a
+  minimum per parcel, in EUR. Both or neither.
+- For a given request, the **listed price** is the largest of: price per kg times the request's
+  chargeable weight (rounded up to a cent); the traveler's minimum per parcel; Wassla's own minimum
+  for that match.
+- Find Travelers shows the listed price. The sender's offer is pre-filled with it and can be sent in
+  one tap.
+- The price stays negotiable. The sender may offer less. The traveler accepts, declines or counters.
+  The existing offer flow is unchanged.
+- **Wassla's admin-controlled minimum always applies.** An offer below it is refused exactly as today.
+- The fee is added on top exactly as today. The sender sees the full total before paying.
+- If a courier is used for the last part, **the courier's cost is included in the traveler's price**.
+  Wassla never charges a separate courier amount and never pays a courier.
+- A traveler may change the price of an active journey. It affects only offers created afterwards.
+  Existing offers and deals keep their snapshot.
+- A journey with no price behaves exactly as today.
+
+## 9. Manifest dashboard (verified professionals)
+
+Lives inside the existing navigation. Deliveries holds it; Home surfaces today's work.
+
+- **Today** (on Home): what needs doing now. Collections due, parcels to deliver, offers waiting for an
+  answer, courier handoffs awaiting confirmation, problems. Actions first, statistics never first.
+- **Route manifest** (Deliveries, per journey): stops in order; at each stop the parcels to collect and
+  to drop; per leg the occupied and free capacity; every parcel with its own status.
+- **Stop view:** the list of parcels for one stop. The traveler works through it one parcel at a time.
+  Each parcel is confirmed with its own code. There is no "confirm all".
+- **Shipments** (Deliveries): every parcel across routes, with filters for route, pickup city,
+  destination city, status, expected date and "has a problem", and a search by reference.
+- **Earnings** (Profile, existing payout screens): per route, the accepted prices, amounts paid, fees,
+  pending and completed payouts, refunds and disputed parcels. Read from the existing finance
+  projections. No new money calculation.
+
+## 10. Custody, courier handoff and final delivery
+
+### 10.1 Custody
+
+- Every parcel has its own append-only custody history: who holds it, since when, and how we know.
+- Collection is recorded when the pickup code is confirmed, as today. Right after it the traveler may
+  record the parcel's condition and photos. This is optional and never blocks the pickup.
+- Each event states its source, and the source is shown to the sender: **confirmed by Wassla**,
+  **reported by the traveler**, **reported by the courier**, **confirmed by the recipient**,
+  **recorded by Wassla staff**.
+
+### 10.2 Courier handoff
+
+- Available to every traveler, behind the admin switch "Courier handoff", which ships **off**.
+- Allowed only for a parcel the traveler has collected, with no open dispute.
+- The traveler records: courier company, branch or location, tracking reference if any, the courier's
+  representative if any, the time, and an optional receipt photo.
+- Wassla creates a **one-time handoff link**, shown as a QR code. It is separate from the pickup code
+  and the delivery code and is never reused as either.
+- The courier opens the link with no account and confirms they received the parcel. The page shows the
+  shipment reference and a short parcel description, and nothing private.
+- Evidence grades, lowest to highest: reported by the traveler; receipt attached; confirmed by the
+  courier on the link; reviewed by staff.
+- With the same link the courier may later report "out for delivery", "delivered" or "delivery failed".
+  These are courier reports. They are shown as such and decide nothing.
+- The traveler may cancel a handoff the courier has not confirmed ("I took it back").
+- The sender sees: **"Handed to a local courier, awaiting final delivery."**
+
+### 10.3 What a handoff never does
+
+It never marks the deal delivered. It never starts the protection window. It never releases a payout.
+It never changes the deal's status. It is recorded beside the deal's state machine.
+
+### 10.4 Final delivery
+
+- **Personal delivery:** unchanged. The traveler enters the recipient's delivery code.
+- **After a courier handoff**, delivery is confirmed by one of:
+  1. the **recipient**, on their own web page, by entering the delivery code they received by email;
+  2. the **sender**, in the app, stating the recipient has the parcel;
+  3. **Wassla staff**, after review, with a reason and evidence.
+- Each of these runs the same delivery-confirmation transition as today, so the 48-hour protection
+  window, the arrival floor, disputes and payout behave identically.
+- When a handoff is recorded, the recipient gets an email with a link to a tracking page. The page
+  shows progress with no private data and offers "I received my parcel" and "I have a problem".
+- **If nobody confirms within 5 days of the handoff**, the parcel goes to a staff review queue. Staff
+  contact the recipient and the sender, then either confirm delivery with evidence or leave it for a
+  dispute. The 5 days is an admin setting.
+
+## 11. Progress updates and reminders
+
+- For every traveler. Per leg: "departed" and "arrived"; for a sea leg also "at the port".
+- A report is a traveler's statement. It appears in the sender's tracking for every funded parcel on
+  that leg, labelled "reported by the traveler". It changes no deal status and moves no money.
+- **Reminders.** When a leg that carries at least one funded parcel passes its planned departure with
+  no "departed" report, the app asks "Did you depart from {city}?". Same for arrival. The traveler
+  answers in one tap from the notification, the bell inbox or Home. "Not yet" asks again later. The
+  number of repeats and the delays are admin settings, with a small default.
+- Reminders always appear in the bell inbox and on Home. Closed-app push uses Firebase (Android) and
+  APNs through Firebase (iOS), as today. Nothing else depends on Firebase.
+
+## 12. Problems and route changes
+
+- A traveler or sender can report a problem on a parcel: sender unavailable, recipient unavailable,
+  parcel does not match, parcel damaged, crossing cancelled, customs delay, courier refused the parcel,
+  courier lost the parcel, tracking reference invalid, other.
+- A problem is recorded, the other party is notified, and serious kinds go to staff. Reporting a
+  problem never changes a deal's status. Money consequences come only through the existing dispute and
+  cancellation rules.
+- **Route changes.** A traveler may change the times of an active journey. Wassla lists the affected
+  parcels, notifies their senders and keeps the original schedule on record. A change that would miss a
+  parcel's deadline, or move its arrival by more than the policy threshold, needs the sender's
+  agreement; a sender who does not agree may cancel under the existing cancellation rules. Adding or
+  removing stops on an active journey is not part of this build.
+
+## 13. Admin
+
+- **One verification inbox** with three tabs and counters: ID, Professional, Tickets (flight and sea).
+  One review screen for all three: approve, ask for more, reject with a reason.
+- **No per-corridor or per-capability approval.** No per-route approval.
+- **Switches** (versioned settings, changed with a reason): sea legs; courier handoff; discovery
+  listings; discovery profiles; professional applications; reminder timings; days before an
+  unconfirmed courier delivery is reviewed; the daily "I can carry this" cap; traveler price bounds.
+  Sea legs and courier handoff ship **off** and are turned on by Ismail. Everything else ships on.
+- **Controls:** pause any journey; suspend any professional; hide any public profile; activate or
+  deactivate a sea crossing; confirm a courier delivery after review.
+- **Visibility:** for any deal, the custody history, handoff record with evidence, progress reports,
+  problems and route changes.
+- Every staff action writes an audit entry with actor, target, before, after and reason. Staff cannot
+  edit a delivery or payment state except through the same guarded transitions the product uses.
+
+## 14. Experience standard
+
+Every new screen and page must have a designed state for: loading, empty, error with retry, offline,
+validation, permission denied, and "feature switched off". Every one must work in English, French and
+Arabic, right-to-left, on a small phone, with the keyboard open, and without overlapping the bottom
+navigation or the system gesture area. Actions a traveler performs standing next to a vehicle need
+large targets and as little typing as possible. Server-authored reasons are shown; the client never
+invents one.
+
+## 15. Glossary for agents
+
+| Product word | In the code |
+| --- | --- |
+| Route, trip | `trips.Journey` with ordered `trips.JourneyLeg` |
+| Stop | A leg endpoint; position 0 is the first leg's origin, position k is leg k-1's destination |
+| Parcel, shipment, booking | `deals.Deal` (after acceptance); `parcels.DeliveryRequest` (before) |
+| Ticket proof | `trips.JourneyLegProof` |
+| ID check | `kyc.KycSubmission`, owned at runtime by the Go kyc service |
+| Wassla minimum price | `PricingQuote.minimum_reward_eur_cents` from `apps/matching/pricing.py` |
+| Fee | `calculate_offer_economics` in `apps/core/business_settings.py` |
+| Switches and settings | `core.BusinessSettingsVersion.policy`, a new `marketplace` section |
+| Delivery confirmation | `deals.lifecycle.apply_delivery_confirmed` |

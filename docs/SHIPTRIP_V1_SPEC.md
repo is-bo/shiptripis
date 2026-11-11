@@ -7,6 +7,13 @@ keeps its existing filename so links and engineering workflows continue to work.
 
 SHIPTRIP_V1_SPEC.md is the authoritative Waçla V1 product and technical specification. If legacy code, README files, ARCHITECTURE.md, comments, tests, or previous product assumptions conflict with this specification, this specification wins unless the user explicitly overrides it.
 
+**Addendum (10 November 2026):** `docs/WASSLA_DISCOVERY_PRO_SPEC.md` is an owner-approved addendum.
+For the topics it covers (Home discovery, sea legs and ticket proof, per-leg capacity, traveler
+pricing, professional transporters, custody and courier handoff, progress reminders) it overrides
+this specification, including the "no ferry or sea" and "flight only between Algeria and Europe"
+rules in section 6. Everything it does not mention stays as written here. The code implements the
+addendum only as each L-series package in `docs/WASSLA_DISCOVERY_PRO_PLAN.md` is merged.
+
 **Locked:** 24 August 2026  
 **Market:** EU ↔ Algeria  
 **Platform entity:** France  
