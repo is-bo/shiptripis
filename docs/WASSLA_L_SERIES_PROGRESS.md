@@ -16,7 +16,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | Package | What | Model | Effort | Status | Branch | Pull request | Merge commit | Phase doc |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | L0 | Spec and plan | | | merged | | | see git log for `docs/WASSLA_DISCOVERY_PRO_PLAN.md` | |
-| L1A | Backend cleanup, including Railway removal | Opus | high | not_started | | | | |
+| L1A | Backend cleanup, including Railway removal | Opus | high | merged | `claude/project-thread-po89ml` | #22 | `345849b` | `docs/PHASE_L1A_BACKEND_CLEANUP.md` |
 | L1B | Mobile and docs cleanup | Sonnet | medium | not_started | | | | |
 | L2A | Discovery backend and marketplace policy | Opus | high | not_started | | | | |
 | L2B | Discovery on Home (mobile) | Sonnet | high | not_started | | | | |
@@ -36,7 +36,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance | Opus | high | not_started | | | | |
 
-**Next package:** L1A.
+**Next package:** L1B (Sonnet, medium).
 
 ## Handoff notes
 

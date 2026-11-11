@@ -71,7 +71,9 @@ package's own app), and reading existing finance or deal rows without writing th
 ### 1.3 Branches and CI
 
 - One branch per package, from the current tip of the integration branch:
-  `l/<package id>-<short name>`, for example `l/l3a-routes-backend`.
+  `l/<package id>-<short name>`, for example `l/l3a-routes-backend`. Agent sessions get a branch
+  name fixed by their harness (`claude/project-thread-...`) and cannot follow this naming; that is
+  fine, because what matters is the pull request's base branch.
 - One pull request per package **into `feature/discovery-professional-delivery`**. CI runs on every
   pull request, whatever the base branch.
 - A package merges only when CI is green and the gate review is done (1.6).
