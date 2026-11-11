@@ -1,153 +1,116 @@
-# Wassla — Architecture (MVP v1)
+# Wassla — Architecture (V1)
 
-Peer-to-peer delivery + product-purchase platform for Algeria. Pricing in DZD.
+Peer-to-peer parcel-delivery marketplace. V1 is delivery only: the
+Kaba/ProductRequest flow is retired. All marketplace money is canonical EUR,
+stored as integer cents; Chargily shows a server-calculated DZD conversion.
+`docs/SHIPTRIP_V1_SPEC.md` is authoritative where this file and the
+specification disagree. Corrected in package L1A (2026-11-11) where the
+earlier version described a topology, apps and pricing that no longer exist.
 
-**Stack:** Flutter · Caddy · Django monolith · Go services · PostgreSQL · Redis · MinIO (S3-compatible)
+**Stack:** Flutter · Caddy · Django monolith · Go services · PostgreSQL · Redis · S3-compatible object storage (MinIO in local development)
 
 ---
 
 ## 1. Repo layout
 
 ```
-shiptrip/
+shiptripis/
 ├── mobile/                       # Flutter app (iOS + Android)
-├── ship-trip-backend/
-│   ├── docker-compose.yml        # boots Postgres, Redis, MinIO, Django, Go, Caddy
-│   ├── Taskfile.yml              # master orchestrator (task <subcommand>)
-│   ├── .env.example
-│   ├── gateway/
-│   │   └── Caddyfile             # /api/v1/kyc + /ws/v1/* → Go, rest → Django
-│   ├── contracts/                # the DMZ between Django and Go
-│   │   ├── Taskfile.yml
-│   │   ├── rest/                 # OpenAPI specs (manual + Django-generated)
-│   │   ├── grpc/
-│   │   │   └── kyc.proto
-│   │   └── sql/
-│   │       ├── schema.sql        # exported from Django, single source for sqlc
-│   │       └── sqlc.yaml
-│   ├── monolith/                 # Django (Python)
-│   │   ├── Taskfile.yml
-│   │   ├── Dockerfile
-│   │   └── apps/                 # accounts, trips, parcels, matching,
-│   │                             # payments, wallet, verification,
-│   │                             # notifications (publisher only),
-│   │                             # chat (schema only), kyc (gRPC server),
-│   │                             # admin_panel, core
-│   └── services/                 # Go workspace (1.22+)
-│       ├── Taskfile.yml
-│       ├── go.mod
-│       ├── build/                # multi-stage Dockerfiles per service
-│       ├── cmd/                  # main.go per executable (chat, notif, kyc)
-│       ├── internal/             # domain code + sqlc-generated repos
-│       └── pkg/                  # shared libs
-│           ├── auth/             # JWT validation (HS256, leeway)
-│           ├── config/           # envconfig
-│           ├── db/               # pgxpool
-│           ├── health/           # /healthz
-│           ├── logger/           # slog JSON
-│           ├── ratelimit/        # token bucket + semaphore
-│           ├── redisbus/         # pub/sub + streams
-│           └── wsproto/          # WS envelope helpers
-└── ARCHITECTURE.md               # this file
+├── web/                          # static public site served by the gateway
+├── infra/vps/                    # the production host: compose stack, the
+│                                 # combined app image (Dockerfile, launcher.py,
+│                                 # runtime.py, gateway.Caddyfile), the public
+│                                 # edge Caddyfile, backups, systemd units
+├── backend/
+│   ├── docker-compose.yml        # local development stack
+│   ├── Taskfile.yml              # local orchestration (task <subcommand>)
+│   ├── gateway/Caddyfile         # local development gateway
+│   ├── contracts/
+│   │   ├── grpc/kyc.proto        # Go KYC service -> Django recorder
+│   │   └── sql/                  # schema.sql exported from Django; sqlc.yaml
+│   │                             # is a template (no queries, no generated repos)
+│   ├── loadtest/                 # Locust load test harness
+│   ├── monolith/                 # Django (Python): config/ and apps/
+│   └── services/                 # Go module
+│       ├── cmd/                  # chat, notification, email, kyc
+│       ├── internal/             # one package per binary
+│       └── pkg/                  # auth, config, db, health, logger,
+│                                 # metrics, redisbus, retry, storage, wsproto
+├── tools/                        # CI checks (static web, geography catalogue)
+└── docs/                         # specification, runbooks, phase reports
 ```
 
 ---
 
-## 2. System topology
+## 2. System topology (VPS)
 
 ```
-                    +-------------------+
-   Flutter <------> |   Caddy gateway   |  TLS · routing · CORS · WS upgrade
-   (HTTPS/WSS)      |  (auto-TLS, WS)   |  no JWT validation here — services do their own
-                    +---+-----------+---+
-   /api/v1/kyc     /ws/v1/*           /api/v1/*  (everything else)
-        v               v                  v
-   +----------+   +-----------+      +-----------------+
-   | kyc-svc  |   | chat-svc  |      | Django monolith |
-   | (Go)     |   | notif-svc |      | DRF + admin     |
-   +----+-----+   |   (Go)    |      +--------+--------+
-        | gRPC    +-----+-----+               |
-        | (mTLS)        |                     |
-        v               |                     |
-   +-----------+        |              writes |
-   | Django gRPC|       |                     v
-   | server     |       |               +----------------+
-   +-----+-----+        |               |   PostgreSQL   |
-         |              |               |   (shared)     |
-         | writes       | reads/writes  +-------+--------+
-         v              v                       ^
-   +-------------------------+   pgx pool       |
-   |        PostgreSQL       |<-----------------+
-   +-------------------------+
-                ^
-                |
-   +-------------------------+   pub/sub (WS fan-out) + streams (FCM queue)
-   |          Redis          |
-   +-------------------------+
-                ^
-                |
-   +-------------------------+   S3 API
-   |   MinIO (dev)  /  S3-   |
-   |   compatible (prod)     |
-   +-------------------------+
+   Flutter / browser
+        | HTTPS + WSS
+        v
+   +---------------------------+
+   | edge Caddy                |  infra/vps/Caddyfile: TLS, origin checks,
+   | (compose service `caddy`) |  /metrics and /debug denied publicly
+   +-------------+-------------+
+                 | http://app:8080
+                 v
+   +----------------------------------------------------------------+
+   | app container (infra/vps/Dockerfile, started by runtime.py)    |
+   |                                                                |
+   |  internal Caddy :8080 (infra/vps/gateway.Caddyfile)            |
+   |    /ws/chat*            -> chat         :8081  (Go)            |
+   |    /ws/notifications*   -> notification :8082  (Go)            |
+   |    /kyc/*, /api/kyc/*   -> kyc          :8083  (Go)            |
+   |    public site paths    -> web/ files                          |
+   |    everything else      -> Django       :8000  (gunicorn)      |
+   |                                                                |
+   |  also: Django gRPC KYC recorder, email consumer (Go),          |
+   |        Django job loops                                        |
+   +--------+-----------------------+-------------------+-----------+
+            |                       |                   |
+            v                       v                   v
+     PostgreSQL (compose)     Redis (compose)     S3-compatible storage
 ```
 
-Caddy is the only publicly exposed service. Internal traffic (Django ↔ Postgres ↔ Redis, Go ↔ Postgres ↔ Redis, Go ↔ Django gRPC, Go ↔ MinIO) stays on the private docker / K3s network.
+`infra/vps/launcher.py` supervises every process in the app container and
+drains them on SIGTERM (compose gives it `stop_grace_period: 40s`). Migrations
+and the geography catalogue import are maintenance operations run by the
+`maintenance` compose service, never by container start. PostgreSQL and Redis
+are separate compose services on the private network; only the edge Caddy is
+published.
 
 ---
 
-## 3. Caddy gateway (`gateway/Caddyfile`)
+## 3. Gateway routing
 
-- Auto-TLS via Let's Encrypt
-- HTTP/2 + WebSocket upgrade
-- CORS (allow Flutter app origin)
-- Routing:
-  - `/api/v1/kyc/*` → kyc-service (Go)
-  - `/ws/v1/chat`   → chat-service (Go)
-  - `/ws/v1/notif`  → notification-service (Go)
-  - `/api/v1/*`     → Django (default)
-- Graceful shutdown: `shutdown_timeout 30s` so K3s rolling deploys drain WS instead of dropping them
-- **No JWT validation at the gateway.** Each service validates its own tokens (gateway has no business knowing the secret).
+- The edge Caddy (`infra/vps/Caddyfile`) terminates TLS and proxies everything
+  to the app container's internal Caddy.
+- The internal Caddy (`infra/vps/gateway.Caddyfile`) routes by path as drawn
+  above, bounds request bodies (with a larger limit for KYC uploads), and
+  serves the static public site, including the clean `/terms` and `/privacy`
+  URLs. `tools/check_static_web.py` checks those routes in CI.
+- `backend/gateway/Caddyfile` is the same routing for local development.
+- **No JWT validation at the gateway.** Each service validates its own tokens.
 
 ---
 
-## 4. Database boundary (the most important rule)
+## 4. Database boundary
 
-- **Django owns 100% of migrations.** All schema changes go through `manage.py makemigrations`.
-- After every migration, the Django Taskfile target runs `task contract:sync-db` which exports the merged schema to `contracts/sql/schema.sql`.
-- Go reads `schema.sql` via **sqlc**, generates type-safe repository code into `services/internal/<domain>/repo/`.
-- Go writes raw SQL via the generated repos. Go never runs migrations.
-- Both sides connect to the shared Postgres directly:
-  - Django: standard ORM + `psycopg`
-  - Go: `pgxpool` from `pkg/db/`
+- **Django owns 100% of migrations.** All schema changes go through
+  `manage.py makemigrations`; Go never runs migrations.
+- Go talks to the shared PostgreSQL through `pkg/db` (pgxpool) with inline SQL.
+  The `sqlc.yaml` packages have no queries, so no repositories are generated.
+- CI's `check-drift` job re-exports `contracts/sql/schema.sql` from a migrated
+  database and fails on a diff.
 
-### CI gate against schema drift (master `Taskfile.yml`)
+### Connection budget (load-bearing)
 
-```yaml
-check-drift:
-  desc: "Fail CI if schema.sql or sqlc-generated code is stale"
-  cmds:
-    - task contract:sync-db        # re-export schema.sql from Django state
-    - task contract:generate       # re-run sqlc against the exported schema
-    - git diff --exit-code contracts/sql/ services/internal/*/repo/
-```
-
-Both steps must run in CI. Running only `generate` checks Go matches a stale schema file — exactly the failure mode we're trying to prevent.
-
-### Connection pool sizing (load-bearing)
-
-Default Postgres `max_connections = 100`. Plan:
-
-| Side | Pool | Workers/pods | Total |
-|---|---|---|---|
-| Django (gunicorn) | `CONN_MAX_AGE = 60` | 4 workers × 5 conn | 20 |
-| Go chat-service | `pgxpool.MaxConns = 15` | 2 pods | 30 |
-| Go notif-service | `pgxpool.MaxConns = 10` | 1 pod | 10 |
-| Go kyc-service | `pgxpool.MaxConns = 5` | 1 pod | 5 |
-| Reserved (admin, migrations) | — | — | 10 |
-| **Total** | | | **75** |
-
-Headroom for one extra Go pod: 25 conn. **Document this in the deploy runbook before scaling.**
+`infra/vps/postgresql.conf` sets `max_connections = 100`. The launcher computes
+the peak from its settings (Django web workers × threads, the gRPC executor,
+the job loops, and the chat, notification and email pools) and refuses to start
+if twice that peak, which is a rolling deploy, would exceed the limit minus a
+reserve of 10. Change the pool sizes through those environment variables, never
+by editing the services.
 
 ---
 
@@ -155,9 +118,9 @@ Headroom for one extra Go pod: 25 conn. **Document this in the deploy runbook be
 
 - Django (`accounts` app) issues JWTs. Refresh-token rotation lives in Django; Go never mints or rotates.
 - HS256 with secret in `JWT_HS256_SECRET` env var, distributed to Django and every Go service.
-- Claims (both sides agree on shape): `sub` (user_id UUID), `role`, `exp`, `iat`, `jti`.
-- Access token TTL: **5 minutes** (was 15 — tightened to bound JWT-revocation gap).
-- Refresh token TTL: 7 days, rotated on every use.
+- Go reads the integer `user_id` claim and refuses a token without one (`pkg/auth/jwt.go`).
+- Access token TTL: **5 minutes** by default (`JWT_ACCESS_TTL_SECONDS`).
+- Refresh token TTL: 30 days by default (`JWT_REFRESH_TTL_SECONDS`), rotated on every use.
 - **Clock-skew leeway: 30s on both sides.**
   - Go: `golang-jwt/jwt/v5` → `jwt.WithLeeway(30 * time.Second)`
   - Django: `SIMPLE_JWT["LEEWAY"] = timedelta(seconds=30)`
@@ -169,19 +132,20 @@ Headroom for one extra Go pod: 25 conn. **Document this in the deploy runbook be
 
 KYC submit is heavy (multipart, multi-MB images). Two-phase:
 
-1. **Flutter** → POST multipart to `/api/v1/kyc/submit` → Caddy → **kyc-service (Go)**
-2. kyc-service streams files to MinIO under `kyc-docs/<user_id>/<uuid>.<ext>`
+1. **Flutter** → POST multipart to `/kyc/submit` (or `/api/kyc/submit`) → Caddy → **kyc-service (Go)**
+2. kyc-service streams the images to the KYC bucket (`S3_BUCKET_KYC`) with its own credential
 3. kyc-service calls Django via private gRPC: `KYCSubmissionService.RecordSubmission(...)`
 4. Django runs `INSERT INTO kyc_submission ... ON CONFLICT (idempotency_key) DO NOTHING RETURNING id` — Flutter-generated UUID is the idempotency key, so retries during flaky network are no-ops
 5. gRPC response includes the row id; kyc-service returns `{ status: "under_review", submission_id }` to Flutter
 
-### gRPC channel security — **mTLS, not static bearer**
+### gRPC channel security
 
-- Self-signed CA generated once with `cert-manager` (K3s) or `mkcert` (local dev).
-- Django gRPC server presents `django.shiptrip.local` cert; each Go service has its own cert (`kyc.svc`, `chat.svc`, `notif.svc`).
-- Both sides verify peer cert against the shared CA.
-- Static bearer tokens are **not acceptable** for production. They leak, can't be revoked, and offer no replay protection. Bearer-only mode is permitted for `docker-compose` local dev, gated by `GRPC_AUTH_MODE=bearer|mtls`.
-- Cert rotation: 90-day cert lifetime, cert-manager auto-renews; deploys re-mount renewed secret without restart (gRPC handles cert reload).
+- `GRPC_AUTH_MODE=mtls` verifies both peers against a shared CA.
+- `GRPC_AUTH_MODE=bearer` is accepted in production only with
+  `GRPC_ALLOW_PRIVATE_BEARER=true` and a long `GRPC_BEARER_TOKEN`, because the
+  KYC service and the Django recorder run in the same container on the private
+  network. This is what the VPS uses; `config/settings/prod.py` refuses any
+  other combination at boot.
 
 ### gRPC payload limits
 
@@ -205,16 +169,21 @@ Two distinct primitives, two distinct purposes.
 Django publishes after the Postgres transaction commits:
 
 ```python
-def on_offer_accepted(match):
-    transaction.on_commit(lambda: redis_bus.publish(
-        f"notif.user.{match.sender_id}",
-        json.dumps({"event": "offer_accepted", "match_id": str(match.id)})
-    ))
+redis_bus.publish_after_commit(
+    channels.OFFER_ACCEPTED,
+    {"offer_id": offer.pk, "match_id": offer.match_id},
+    targets=[offer.match.sender_id],
+)
 ```
 
-`transaction.on_commit` is **mandatory**. Publishing inside the transaction risks ghost events on rollback.
+`publish_after_commit` defers to `transaction.on_commit`, so a rolled-back
+transaction publishes nothing. Channel names are `<domain>.<event>` and live in
+`apps/core/channels.py`; the notification service's subscribe list must match
+it, which `TestSubscribeChannelsMatchDjango` enforces.
 
-Every Go pod subscribes to every channel. If a pod has the user in its local WS map, it pushes to that socket and writes a **delivery receipt** to Redis: `SET delivered:<event_id> 1 EX 60`. Other pods see no local socket and do nothing.
+The notification service subscribes to every channel. If it holds a socket for
+a target user it pushes to that socket and writes a **delivery receipt** to
+Redis: `SET delivered:<event_id> 1 EX 60`.
 
 ### Streams — FCM queue (durable, single-consumer)
 
@@ -226,12 +195,12 @@ XADD notif:fcm * user_id <uuid> event_id <uuid> payload <json>
 
 Stream config:
 - `MAXLEN ~ 10000` (cap memory growth — drop oldest if backed up)
-- Single consumer group `fcm-workers`
-- Workers reside in notif-service Go pods
+- Consumer group `notif-fcm-workers`
+- Workers run in the notification service
 
 Worker loop:
-1. `XREADGROUP GROUP fcm-workers worker-<pod_id> COUNT 10 BLOCK 5000 STREAMS notif:fcm >`
-2. Wait 2 seconds (gives WS pods time to deliver and write `delivered:<event_id>`)
+1. `XREADGROUP` on `notif:fcm` for the `notif-fcm-workers` group
+2. Wait 2 seconds (gives the WebSocket hub time to deliver and write its receipt)
 3. Check `EXISTS delivered:<event_id>` — if 1, `XACK` and skip FCM
 4. Else check `EXISTS presence:<user_id>` — if 1, sleep another 2s and re-check delivery flag
 5. If still no delivery: call FCM HTTP API, then `XACK`
@@ -251,15 +220,11 @@ redis.Del(ctx, "presence:"+userID)
 
 TTL is **15s, not 30s** — must be tighter than the WS ping interval (10s) so a disconnect can't masquerade as online for the FCM consumer.
 
-### Detection-only outbox (V1 simplification)
+### Detection-only sweep for live events
 
-Full transactional outbox deferred to V2. For V1:
-
-- Every Django Redis publish writes a row to `published_event(id, channel, event_id, payload_hash, published_at, delivered_at NULL)`.
-- Daily Django cron compares `published_event` rows where `delivered_at IS NULL AND published_at < now - 5 min` against Redis `delivered:*` keys; mismatches go to Sentry.
-- We don't auto-recover lost events in V1 — but we **detect** them. Silent failure rate is bounded.
-
-V2 will swap publishing for an outbox-poller worker (or Debezium CDC).
+- Every Django Redis publish writes a `PublishedEvent` row (`channel`, `event_id`, `payload_hash`, `published_at`, `delivered_at`).
+- `manage.py sweep_published_events` (a maintenance operation in `infra/vps/runtime.py`) compares rows still undelivered after 5 minutes against the Redis `delivered:<event_id>:<user_id>` receipts and reports the misses.
+- Live events are not re-published; they are detected. Messages that must arrive, such as transactional email, are PostgreSQL outbox rows instead (`apps/notifications/outbox.py`).
 
 ---
 
@@ -275,8 +240,8 @@ Decision tree per outbound notification:
        PUBLISH notif.user.<id>           ← Pub/Sub fan-out (WS)
        XADD   notif:fcm                  ← Stream (FCM fallback)
               |
-              +---> All Go pods receive pub/sub.
-              |     Pod with WS → push + SET delivered:<event_id> EX 60
+              +---> The notification service receives pub/sub.
+              |     Socket held → push + SET delivered:<event_id>:<user_id> EX 60
               |
               +---> FCM worker picks up stream entry.
                     Wait 2s.
@@ -285,65 +250,62 @@ Decision tree per outbound notification:
                     Still no delivery → POST to FCM, XACK.
 ```
 
-Net result: every notification is delivered exactly once, via WS if connected, via FCM if not. A pod crash mid-delivery is recovered by `XAUTOCLAIM`.
+Net result: every notification is delivered exactly once, via WS if connected, via FCM if not. A crash mid-delivery is recovered by `XAUTOCLAIM`.
 
 ---
 
-## 9. Object storage — MinIO (dev) / S3-compatible (prod)
+## 9. Object storage — S3-compatible
 
-- Dev: MinIO container in `docker-compose.yml`, single node, ephemeral volume.
-- Prod: env-configured S3 endpoint (Hetzner, Scaleway, Backblaze, Wasabi). No code change.
-- All access via `pkg/storage/s3.go` using `aws-sdk-go-v2` with custom endpoint.
-- Buckets:
+- Local development: MinIO in `backend/docker-compose.yml`.
+- Production: an env-configured S3 endpoint. No code change between providers.
+- Django addresses storage by logical class through `apps.core.storage`
+  (`storage_for(<class>)`); Go uses `pkg/storage`.
+- Buckets: `S3_BUCKET_PARCEL` (parcel media), `S3_BUCKET_PROOF` (travel proof),
+  `S3_BUCKET_DISPUTE` (dispute evidence), `S3_BUCKET_KYC` (identity documents,
+  written by the KYC service with its own credential) and `S3_BUCKET_PAYOUT`
+  (payout evidence). See the credential table in section 11.
+- Uploads go through a service, never straight from the app to the bucket:
+  KYC images through the Go KYC service, everything else as multipart to
+  Django. Reads are short-lived signed URLs.
 
-| Bucket | Visibility | Max size | Owner |
-|---|---|---|---|
-| `kyc-docs` | private | 10 MB | kyc-service |
-| `parcel-photos` | private (signed URL, 5 min) | 5 MB | Django parcels app |
-| `product-photos` | private (signed URL, 5 min) | 5 MB | Django parcels app |
-| `tickets` | private | 10 MB | Django trips app |
-
-**Caveat:** MinIO and real S3 differ on multipart edge cases and presigned URL date semantics. Test against the prod provider in staging — not just MinIO.
-
-Direct uploads from Flutter:
-- `kyc-docs`: NO. Flutter sends multipart to kyc-service, which streams to MinIO with service credentials.
-- `parcel-photos` / `product-photos` / `tickets`: Flutter requests a presigned PUT URL from Django, uploads directly. Django records the resulting object key in `MediaObject`.
+**Caveat:** MinIO and real S3 differ on multipart edge cases and presigned URL date semantics. Test against the production provider, not just MinIO.
 
 ---
 
-## 10. Thundering-herd protection (Algerian mobile network reality)
+## 10. Rate limiting
 
-A tower hiccup reconnects thousands of devices simultaneously. Four layers:
-
-1. **Client-side jitter** — Flutter retries with exponential backoff + ±30% jitter
-2. **Go-side token bucket** (`pkg/ratelimit/tokenbucket.go`) — per-IP, ~10 req/s burst 50
-3. **Semaphore** — concurrent Postgres catch-up queries capped at 25 across the pod (`pkg/ratelimit/semaphore.go`)
-4. **Read-through cache** — missed-notifications fetch is cached 5s per user_id; 1000 simultaneous reconnects of the same user trigger one Postgres query
-
-Without all four, a small connectivity blip cascades into a DB connection exhaustion event.
+The KYC upload path has its own Redis-backed rate limiter
+(`internal/kyc/rate_limiter.go`). Django throttles its API through DRF throttle
+classes (the `DRF_*_THROTTLE_RATE` settings). The shared Go token bucket,
+semaphore and read-through cache described in earlier versions of this file
+were never built.
 
 ---
 
-## 11. Django apps (`monolith/apps/`)
+## 11. Django apps (`backend/monolith/apps/`)
 
-This Claude owns these.
+| App | Responsibility |
+|---|---|
+| `core` | Redis publisher (`redis_bus.publish_after_commit`) and channel names, versioned business settings, financial lock order, storage classes |
+| `accounts` | User, authentication, JWT issue and rotation, email verification |
+| `kyc` | KYC submission records and the gRPC server the Go KYC service calls |
+| `trips` | Journey and JourneyLeg (V1); the legacy Trip and Airport tables stay as history |
+| `locations` | Canonical Place catalogue and preferred Locations |
+| `parcels` | Delivery requests (V1) and parcel media; ProductRequest rows are history |
+| `matching` | Compatibility, find-travelers, quotes, Match and Offer negotiation (sender proposes first) |
+| `deals` | Funded delivery lifecycle, recipients, arrival, cancellation |
+| `finance` | EUR payment orders and attempts (Stripe, Chargily), settlement, payouts |
+| `handover` | Deal-scoped pickup and delivery codes |
+| `disputes` | Disputes, which freeze payout |
+| `ratings` | Post-delivery ratings |
+| `boosts` | Paid visibility boosts on requests |
+| `notifications` | In-app inbox, push device registration, FCM stream, transactional email outbox |
+| `chat` | Deal chat persistence and REST API; Go relays new messages to sockets |
+| `admin_panel` | The operations console and the admin API |
+| `payments`, `wallet`, `verification` | Pre-V1 DZD payment, wallet and match-handover tables, kept as history. No API; view-only in the Django admin |
 
-| App | Responsibility | Notes |
-|---|---|---|
-| `core` | pricing engine, commission tiers, Redis publisher (`redis_bus.publish_after_commit`), gRPC server bootstrap | single source for pricing rules |
-| `accounts` | User, OAuth, JWT mint+rotate, OTP, push tokens | AUTH_USER_MODEL must be set before any other app migrates |
-| `trips` | Trip, Airport, TripStopover, FlightTrackingSnapshot | airport seed via data migration from Flutter mock |
-| `parcels` | DeliveryRequest, ProductRequest (multi-table inheritance), ParcelMedia | |
-| `matching` | Match, Offer (counter chain), MatchEvent | offers freeze pricing at creation |
-| `payments` | PaymentIntent, PaymentEvent, Refund | webhook idempotency on `provider_event_id` |
-| `wallet` | Wallet, WalletEntry, Withdrawal | settled vs. pending balance |
-| `verification` | HandoverCode (PICKUP + DELIVERY), hashed | argon2; max 5 attempts |
-| `notifications` | Notification model + Redis publisher | actual delivery is Go's job |
-| `chat` | Conversation + ChatMessage **schema only** | tables exist for sqlc; Go owns reads/writes |
-| `kyc` | KycSubmission schema + gRPC server | gRPC handles `RecordSubmission` from Go |
-| `admin_panel` | Dispute, AdminAuditLog, Django admin views | |
-
-Django **never stores binary bytes**. All photos/docs reference `MediaObject(bucket, object_key)`.
+Django **never stores binary bytes**. All photos and documents live in object
+storage.
 
 **Buckets are not all owned by the same credential.** `apps.core.storage`
 addresses object storage by *logical class*, and each class names both its
@@ -368,49 +330,35 @@ fetched. `manage.py check_object_storage` probes each class with its own key.
 
 ---
 
-## 12. Go services (`services/`)
+---
 
-Contributor's Claude owns these.
+## 12. Go services (`backend/services/`)
 
 | Binary | Purpose |
 |---|---|
-| `cmd/chat` | WS hub, persists to `chat_message` via sqlc |
-| `cmd/notif` | WS hub for notifications + FCM consumer worker (single binary, two goroutines) |
-| `cmd/kyc` | HTTP `/api/v1/kyc/*`, streams to MinIO, calls Django gRPC |
+| `cmd/chat` | WebSocket relay for new chat messages (server to client only; Django is the write path) |
+| `cmd/notification` | WebSocket hub for notifications, presence, and the FCM stream consumer |
+| `cmd/email` | Consumer of the non-secret email stream |
+| `cmd/kyc` | HTTP KYC upload, streams to object storage, records through Django gRPC |
 
-Shared via `services/pkg/`:
-- `auth/` — JWT verify with 30s leeway
-- `config/` — envconfig
-- `db/` — pgxpool wrapper
-- `health/` — `/healthz` + `/readyz`
-- `logger/` — slog JSON, includes `request_id`, `user_id`, `service`
-- `ratelimit/` — token bucket + semaphore
-- `redisbus/` — pub/sub + stream consumer wrapper
-- `wsproto/` — JSON envelope `{ id, type, payload, ts }`
+Shared via `services/pkg/`: `auth` (JWT verify with leeway), `config`, `db`
+(pgxpool), `health`, `logger`, `metrics`, `redisbus` (pub/sub and streams),
+`retry`, `storage` (S3), `wsproto` (WebSocket envelope).
 
 ---
 
-## 13. Commission rules (load-bearing)
+## 13. Money rules (load-bearing)
 
-**Delivery payments:**
-- Platform takes 25% flat
-- Sender pays full total; traveler sees total + 25% deduction
+- EUR is canonical, stored as integer cents. DZD appears only as Chargily's
+  server-calculated conversion of an EUR amount.
+- The sender proposes first; the negotiated amount is the traveler reward.
+- Commission is a percentage of the reward (25% at launch), admin-configurable
+  through a versioned business setting and snapshotted on the offer and deal.
+  Example: reward €30, fee €7.50, sender total €37.50.
+- Payout protection is 48 hours after delivery; a dispute freezes payout.
 
-**Product-request payments:**
-- Base fee: 2,500 DZD
-- Tiered commission on item price:
-
-| Item price (DZD) | Commission |
-|---|---|
-| Under 30,000 | 0% |
-| 30,000 – 54,999 | 7% |
-| 55,000 – 99,999 | 5% |
-| 100,000+ | 3% |
-
-- Sender pays: item_price + base_fee + commission
-- Traveler receives 100% of item_price (no deduction)
-
-Pricing is **frozen on the Offer at creation time**. Rate changes never retroactively touch live offers.
+The pricing engine (chargeable weight, matched distance, minimum and
+recommended reward) is specified in `docs/SHIPTRIP_V1_SPEC.md` section 8.
 
 ---
 
@@ -418,38 +366,24 @@ Pricing is **frozen on the Offer at creation time**. Rate changes never retroact
 
 | Topic | Decision |
 |---|---|
-| Public ingress | Caddy (auto-TLS, native WS, `shutdown_timeout 30s`) |
-| Auth at edge | None. Each service validates JWT itself with shared HS256 secret + 30s leeway |
-| Access TTL | 5 min (tightened from 15) |
-| DB ownership | Django 100% migrations; Go reads `schema.sql` via sqlc and writes raw SQL through generated repos |
-| Schema-drift CI | `task check-drift` runs `sync-db` AND `generate` then `git diff --exit-code` |
-| Connection pool budget | Documented sum < `max_connections - 10` reserved |
-| Internal RPC | gRPC, **mTLS** (cert-manager / mkcert). Bearer-only for local dev |
+| Hosting | One VPS: compose stack in `infra/vps/` (edge Caddy, app container, PostgreSQL, Redis, backups) |
+| Auth at edge | None. Each service validates JWT itself with the shared HS256 secret and 30s leeway |
+| Access TTL | 5 min by default (`JWT_ACCESS_TTL_SECONDS`) |
+| DB ownership | Django owns all migrations; Go uses inline SQL through pgxpool |
+| Schema-drift CI | `check-drift` re-exports `schema.sql` and fails on a diff |
+| Internal RPC | gRPC; mTLS, or bearer only on the private network with `GRPC_ALLOW_PRIVATE_BEARER=true` |
 | gRPC msg size | 16 MB on both sides |
-| Redis WS fan-out | Pub/Sub, all pods subscribe, only WS-owning pod pushes |
+| Redis WS fan-out | Pub/Sub, best-effort; the notification service subscribes to every channel in `apps/core/channels.py` |
 | Redis FCM queue | Stream + consumer group, MAXLEN cap, XAUTOCLAIM sweeper |
 | Presence | `presence:<user_id>` 15s TTL, refreshed on pong, DEL on disconnect |
-| Delivery receipts | `delivered:<event_id>` 60s TTL, set by WS-owning pod |
-| Outbox pattern | V1: detection-only (`published_event` audit + Sentry alert). V2: full transactional outbox |
-| Object storage | MinIO dev, S3-compat prod, abstracted via `pkg/storage/s3.go` |
-| KYC upload path | Flutter → kyc-service → MinIO + Django gRPC |
-| Other media uploads | Flutter ↔ Django for presigned URL → Flutter ↔ MinIO direct |
-| Pricing freeze | On `Offer` creation, never retroactive |
-| Ratings/disputes/boost/insurance | Deferred to V2 |
-| Old Node prototype | Removed |
+| Durable messages | Transactional email is a PostgreSQL outbox row; Redis only carries it |
+| Object storage | S3-compatible, one credential per storage class |
+| KYC upload path | Flutter → kyc-service → object storage + Django gRPC |
+| Pricing freeze | Snapshotted on the Offer and Deal, never retroactive |
 
 ---
 
-## 15. V2 roadmap
+## 15. Later
 
-- Transactional outbox (Postgres `outbox_events` + Debezium or polling worker)
-- Full ratings + reviews
-- Dispute resolution UI in mobile
-- Boost / paid promotion
-- Insurance
-- Local DZ payment rails (CIB / Edahabia / Baridimob)
-- Image compression on upload
-- Pre-generated thumbnails
-- Virus scanning
-- gRPC for hot-path inter-service calls beyond KYC (only if measurements demand it)
-- Move from HS256 → RS256 for JWT (allows public-key-only distribution to Go)
+Work planned after V1 is tracked in `docs/WASSLA_DISCOVERY_PRO_PLAN.md` and
+`docs/IMPLEMENTATION_STATUS.md`, not here.

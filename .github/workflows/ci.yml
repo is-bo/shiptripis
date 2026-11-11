@@ -329,7 +329,7 @@ jobs:
       - name: Validate Caddy configurations
         run: |
           docker run --rm \
-            -v "$PWD/backend/railway/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/infra/vps/gateway.Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           docker run --rm \
             -v "$PWD/backend/gateway/Caddyfile:/etc/caddy/Caddyfile:ro" \
@@ -434,7 +434,7 @@ jobs:
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          sudo apt-get update && sudo apt-get install -y protobuf-compiler postgresql-client
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Migrate
         working-directory: backend/monolith
@@ -442,10 +442,15 @@ jobs:
 
       - name: Re-export schema.sql (contract:sync-db)
         working-directory: backend
+        # pg_dump runs inside the PostgreSQL 16 service container, so the
+        # client always matches the server. The runner's apt client follows
+        # the Ubuntu release (18 on 26.04), and pg_dump 17+ adds
+        # `SET transaction_timeout = 0;` to every dump, which reads as drift.
         run: |
           mkdir -p contracts/sql
-          pg_dump --schema-only --no-owner --no-privileges \
-            -h localhost -U shiptrip -d shiptrip \
+          docker exec "${{ job.services.postgres.id }}" \
+            pg_dump --schema-only --no-owner --no-privileges \
+            -U shiptrip -d shiptrip \
             > contracts/sql/schema.sql
 
       # sqlc.yaml declares four packages (chat/notif/kyc/media) whose query

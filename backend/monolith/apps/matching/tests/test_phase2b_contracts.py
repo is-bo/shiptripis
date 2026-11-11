@@ -115,14 +115,23 @@ class Phase2BContractTestCase(TestCase):
         client.force_authenticate(user=user)
         return client
 
-    def candidate(self) -> dict:
-        response = self.client_for(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
-            {"parcel_id": self.delivery_request.pk},
+    def candidate(self, journey_id: int | None = None) -> dict:
+        """The sender's public quote for one candidate journey.
+
+        `matches/quote` returns exactly the per-candidate payload that the
+        retired `compatible-journeys` list carried for each row.
+        """
+
+        response = self.client_for(self.sender).post(
+            reverse("matches-quote-v1"),
+            {
+                "parcel_id": self.delivery_request.pk,
+                "journey_id": journey_id or self.journey.pk,
+            },
+            format="json",
         )
         assert response.status_code == 200, response.data
-        assert response.data["count"] == 1, response.data
-        return response.data["results"][0]
+        return response.data
 
     def propose(self, reward: int | None = None):
         candidate = self.candidate()
@@ -486,13 +495,14 @@ class Phase2BOfferActionTests(Phase2BContractTestCase):
                 capacity_kg=Decimal("20.00"),
                 distance_meters=120_000,
             )
-        candidates = self.client_for(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
+        browse = self.client_for(self.sender).get(
+            reverse("matches-find-travelers-v1"),
             {"parcel_id": self.delivery_request.pk},
         )
-        assert candidates.data["count"] == 2, candidates.data
+        assert browse.data["page"]["total"] == 2, browse.data
         proposals = []
-        for candidate in candidates.data["results"]:
+        for row in browse.data["results"]:
+            candidate = self.candidate(row["journey_id"])
             response = self.client_for(self.sender).post(
                 reverse("matches-propose-v1"),
                 {
@@ -588,17 +598,17 @@ class Phase2BDiscoveryContractTests(Phase2BContractTestCase):
 
         client = self.client_for(self.sender)
         client.get(
-            reverse("matches-compatible-journeys-v1"),
+            reverse("matches-find-travelers-v1"),
             {"parcel_id": self.delivery_request.pk},
         )
         with CaptureQueriesContext(connection) as queries:
             response = client.get(
-                reverse("matches-compatible-journeys-v1"),
+                reverse("matches-find-travelers-v1"),
                 {"parcel_id": self.delivery_request.pk},
             )
 
         assert response.status_code == 200, response.data
-        assert response.data["count"] == 5
+        assert response.data["page"]["total"] == 5
         # Discovery itself stays at its Phase 2 constant-query budget; the rest
         # is request/session/settings reads shared by every authenticated call.
         assert len(queries) <= 12, len(queries)

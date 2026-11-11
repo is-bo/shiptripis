@@ -1,23 +1,23 @@
-"""Django admin for payments."""
+"""Django admin for the legacy DZD payment history (view-only)."""
 
 from __future__ import annotations
 
 from django.contrib import admin
 
+from apps.core.historical_admin import HistoricalRecordAdmin, HistoricalRecordInline
+
 from .models import PaymentEvent, PaymentIntent, Refund
 
 
-class PaymentEventInline(admin.TabularInline):
+class PaymentEventInline(HistoricalRecordInline):
     model = PaymentEvent
-    extra = 0
     fields = ("id", "provider", "provider_event_id", "kind", "payload", "created_at")
     readonly_fields = fields
     show_change_link = False
 
 
-class RefundInline(admin.TabularInline):
+class RefundInline(HistoricalRecordInline):
     model = Refund
-    extra = 0
     fields = (
         "id",
         "amount_minor",
@@ -34,7 +34,7 @@ class RefundInline(admin.TabularInline):
 
 
 @admin.register(PaymentIntent)
-class PaymentIntentAdmin(admin.ModelAdmin):
+class PaymentIntentAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "offer",
@@ -66,7 +66,7 @@ class PaymentIntentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Refund)
-class RefundAdmin(admin.ModelAdmin):
+class RefundAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "intent",
@@ -93,7 +93,7 @@ class RefundAdmin(admin.ModelAdmin):
 
 
 @admin.register(PaymentEvent)
-class PaymentEventAdmin(admin.ModelAdmin):
+class PaymentEventAdmin(HistoricalRecordAdmin):
     list_display = ("id", "intent", "provider", "kind", "created_at")
     list_filter = ("provider", "kind")
     search_fields = ("intent__id", "provider_event_id")

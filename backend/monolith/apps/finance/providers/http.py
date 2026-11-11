@@ -1,7 +1,7 @@
 """Bounded, thread-local HTTP transport for payment providers.
 
 `requests.Session` reuses TCP/TLS connections but is not documented as
-thread-safe. Gunicorn uses threads in the combined Railway service, so each
+thread-safe. Gunicorn uses threads in the combined application container, so each
 long-lived worker thread owns one session per provider. Sessions never carry
 authentication or request bodies as mutable defaults; every call supplies its
 own headers and data.

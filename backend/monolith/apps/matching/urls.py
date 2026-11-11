@@ -15,34 +15,17 @@ from .views import (
 )
 from .v1_views import (
     CandidateExplanationV1View,
-    CompatibleJourneysV1View,
     CompatibleRequestsV1View,
     CounterOfferV1View,
     FindTravelersV1View,
     OfferAcceptV1View,
-    RetiredLegacyMatchingWriteView,
     SenderProposeV1View,
     PricingQuoteV1View,
 )
 
 urlpatterns = [
     path("matches", MatchListView.as_view(), name="matches-list"),
-    path(
-        "matches/apply",
-        RetiredLegacyMatchingWriteView.as_view(),
-        name="matches-apply",
-    ),
-    path(
-        "matches/apply-to-trip",
-        RetiredLegacyMatchingWriteView.as_view(),
-        name="matches-apply-to-trip",
-    ),
     path("matches/propose", SenderProposeV1View.as_view(), name="matches-propose-v1"),
-    path(
-        "matches/compatible-journeys",
-        CompatibleJourneysV1View.as_view(),
-        name="matches-compatible-journeys-v1",
-    ),
     path(
         "matches/find-travelers",
         FindTravelersV1View.as_view(),
@@ -67,11 +50,6 @@ urlpatterns = [
         name="matches-chat-eligibility",
     ),
     path("matches/<int:pk>/offers", OfferListView.as_view(), name="matches-offers"),
-    path(
-        "matches/<int:pk>/offers/counter",
-        RetiredLegacyMatchingWriteView.as_view(),
-        name="matches-offers-counter",
-    ),
     path(
         "offers/<int:pk>/counter",
         CounterOfferV1View.as_view(),

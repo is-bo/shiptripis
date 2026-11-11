@@ -2,8 +2,8 @@
 
 Two readers share these helpers: the permissioned deep-health endpoint, and
 the finance worker, which logs one `ops_snapshot` line every few minutes. The
-log line matters because Railway collects the log stream by default and can
-search/filter structured fields, while nothing scrapes an internal endpoint.
+log line matters because the container log stream is collected and can be
+searched by structured field, while nothing scrapes an internal endpoint.
 
 Everything here is a count, an age in seconds, or a byte size. No identifiers,
 addresses, payloads or SQL leave this module.
@@ -24,8 +24,8 @@ from django.utils import timezone
 
 logger = logging.getLogger("shiptrip.ops")
 
-#: cgroup v2 files Railway containers expose; absent elsewhere (and on
-#: developer machines), in which case memory is simply omitted.
+#: cgroup v2 files a container exposes; absent elsewhere (and on developer
+#: machines), in which case memory is simply omitted.
 _CGROUP_MEMORY_CURRENT = Path("/sys/fs/cgroup/memory.current")
 _CGROUP_MEMORY_MAX = Path("/sys/fs/cgroup/memory.max")
 

@@ -176,7 +176,6 @@ class K4ReadPathBudgets(CanonicalOfferFixture, TestCase):
             "places": self._measure(
                 self.sender_client, "/api/geography/places?country=FR"
             ),
-            "airports": self._measure(self.sender_client, "/api/airports"),
         }
 
     def _measure_payout_account(self) -> dict[str, int | float]:
@@ -285,7 +284,3 @@ class K4ReadPathBudgets(CanonicalOfferFixture, TestCase):
         )
         self.assertEqual(unchanged.status_code, 304)
         self.assertEqual(unchanged.content, b"")
-
-        airports = self.sender_client.get("/api/airports")
-        self.assertEqual(airports.status_code, 200)
-        self.assertEqual(airports["Cache-Control"], "public, max-age=3600")

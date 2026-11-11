@@ -8,16 +8,11 @@ reserved for Redis key namespaces like `presence:<uid>` and
 
 from __future__ import annotations
 
-# trips/parcels
-TRIP_CREATED = "trip.created"
-TRIP_UPDATED = "trip.updated"
-TRIP_CANCELLED = "trip.cancelled"
-
+# parcels
 PARCEL_CREATED = "parcel.created"
 PARCEL_CANCELLED = "parcel.cancelled"
 
 # matching
-MATCH_CREATED = "match.created"
 MATCH_IN_TRANSIT = "match.in_transit"
 MATCH_COMPLETED = "match.completed"
 OFFER_CREATED = "offer.created"
@@ -39,8 +34,6 @@ PAYMENT_REFUNDED = "payment.refunded"
 PAYMENT_FAILED = "payment.failed"
 
 # verification (handover)
-HANDOVER_CONFIRMED = "handover.confirmed"
-HANDOVER_CODE_ISSUED = "handover.code_issued"
 HANDOVER_DELIVERY_CODE_AVAILABLE = "handover.delivery_code_available"
 HANDOVER_DELIVERY_CONFIRMED = "handover.delivery_confirmed"
 

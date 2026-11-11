@@ -38,9 +38,9 @@ from apps.matching.models import Offer
 class PaymentIntent(models.Model):
     """A sender's payment for a specific accepted Offer.
 
-    Lifecycle is driven by `apps.payments.views` + the provider webhook (or
-    in V1, the mock instant-success path). After `succeeded`, the wallet
-    app holds the funds in escrow until handover unlocks the payout.
+    Pre-V1 history only. L1A removed the API, providers and webhook that
+    moved these rows; the table and its migrations stay, and the Django admin
+    shows it view-only. V1 money lives in `apps.finance` (`PaymentOrder`).
     """
 
     class Provider(models.TextChoices):

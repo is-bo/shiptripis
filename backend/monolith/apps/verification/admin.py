@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from apps.core.historical_admin import HistoricalRecordAdmin
+
 from .models import HandoverCode
 
 
 @admin.register(HandoverCode)
-class HandoverCodeAdmin(admin.ModelAdmin):
+class HandoverCodeAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "match",

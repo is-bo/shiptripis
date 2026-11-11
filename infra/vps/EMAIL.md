@@ -2,7 +2,7 @@
 
 V2 performs no external activation. Keep `EMAIL_ENABLED=false`,
 `EMAIL_ACTIVATION_APPROVED=false` and `EMAIL_SENDING_DOMAIN_VERIFIED=false`.
-Do not create Sender credentials, change DNS/mailboxes, deploy, touch Railway or
+Do not create Sender credentials, change DNS/mailboxes, deploy, or
 run any of these commands against an existing environment during V2.
 The commands below describe later, explicitly authorized operations.
 
@@ -45,8 +45,8 @@ login or returned credentials. EN/FR/AR follows the invitation's explicit locale
 The page uses same-origin existing branding assets and no third-party scripts.
 Keep admin CIDRs enforced; provide invited staff the approved VPN/admin network
 before sharing the link. Do not expose the administration surface to bypass this
-boundary. Both VPS proxy layers preserve the page's no-referrer policy; the VPS-only
-internal renderer leaves Railway configuration untouched. Disable provider
+boundary. Both VPS proxy layers (`Caddyfile` and `gateway.Caddyfile`) preserve the
+page's no-referrer policy with `?Referrer-Policy`. Disable provider
 click/open tracking for capability mail, as described below.
 
 ## Historical backlog: required before every activation

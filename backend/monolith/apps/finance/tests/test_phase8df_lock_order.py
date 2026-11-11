@@ -60,10 +60,10 @@ POSTGRES_ONLY = unittest.skipUnless(
 )
 
 #: Every module that locks a row named in the canonical finance/deal lock order.
-#: Legacy rails that V1 refuses -- `apps.verification`, `apps.wallet`,
-#: `apps.payments` and the unrouted legacy views in `apps.matching.views` -- are
-#: deliberately absent: they cannot execute against a V1 Deal, and Phase 8D-R
-#: already recorded them as removal candidates rather than repair targets.
+#: L1A removed the legacy rails Phase 8D-R recorded as removal candidates (the
+#: `apps.verification`, `apps.wallet` and `apps.payments` services and the
+#: unrouted legacy views in `apps.matching.views`), so every module that still
+#: locks a Match or an Offer is held to the canonical mode.
 CANONICAL_LOCK_MODULES = (
     "apps/core/financial_locks.py",
     "apps/core/business_settings.py",
@@ -95,6 +95,9 @@ CANONICAL_LOCK_MODULES = (
     "apps/disputes/services.py",
     "apps/trips/services.py",
     "apps/matching/v1_services.py",
+    # The routed cancel, decline and withdraw writes. They lock the same Match
+    # and Offer rows as the V1 negotiation services, so they take the same mode.
+    "apps/matching/views.py",
 )
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]

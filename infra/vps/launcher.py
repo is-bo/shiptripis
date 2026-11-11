@@ -1,8 +1,8 @@
-"""Run ShipTrip's production processes in one Railway service.
+"""Run Wassla's application processes in the one VPS application container.
 
-Railway uses one externally managed Redis for cache, throttling, realtime and
-stream transport.  An embedded loopback Redis remains available only through
-an explicit local-development switch; it is never the production default.
+`runtime.py` injects the mounted secrets and the V1 guards, then calls `run()`.
+Every process in the container uses the one Redis service of the VPS stack for
+cache, throttling, realtime and stream transport; a loopback Redis is refused.
 """
 
 from __future__ import annotations
@@ -23,14 +23,13 @@ from urllib.parse import urlparse
 
 ROOT = "/app"
 STOP_REQUESTED = False
-LOCAL_REDIS_URL = "redis://127.0.0.1:6379/0"
-# Railway's private network can take a few seconds to route after a container
-# starts; a shared Redis that is still silent after this is a real outage.
+# The Redis service can still be starting when this container starts; a shared
+# Redis that is still silent after this is a real outage.
 REDIS_PREFLIGHT_TIMEOUT_SECONDS = 30.0
 
-# The combined 1 GiB Railway container cannot safely buy concurrency by adding
-# Python processes. Two gthread workers keep the measured worker RSS bounded
-# while allowing one slow provider call per worker without starving all HTTP.
+# Conservative defaults for one combined container. Two gthread workers keep
+# the measured worker RSS bounded while allowing one slow provider call per
+# worker without starving all HTTP. The VPS stack sets WEB_CONCURRENCY itself.
 WEB_WORKERS_DEFAULT = 2
 WEB_THREADS_DEFAULT = 2
 GRPC_WORKERS_DEFAULT = 4
@@ -48,8 +47,8 @@ POSTGRES_CONNECTION_RESERVE_DEFAULT = 10
 # How long children get between SIGTERM and SIGKILL. Go services drain within
 # their 15s shutdown budget -- the longest in-flight unit is an email send
 # (12s detached SMTP timeout plus a 3s ack) -- and Gunicorn finishes in-flight
-# requests. Railway must allow more than this (`drainingSeconds` in
-# railway.json) or it SIGKILLs first -- its default is zero seconds.
+# requests. The container's `stop_grace_period` in infra/vps/compose.yml must
+# be longer, or Docker SIGKILLs the whole container first.
 CHILD_STOP_TIMEOUT_SECONDS = 20
 
 
@@ -151,10 +150,10 @@ FCM_CREDENTIALS_DEFAULT_PATH = "/tmp/shiptrip/firebase-admin.json"
 def install_fcm_credentials() -> None:
     """Materialise the Firebase Admin service account as a private file.
 
-    Railway has no secret-file primitive: the platform secret store holds
-    strings, and the Go notification worker's `FCM_CREDENTIALS_PATH` contract
-    wants a real JSON file. So the credential travels as base64 in the secret
-    store and is written here, once, before any child process is spawned.
+    The mounted `app_secrets` document holds strings, and the Go notification
+    worker's `FCM_CREDENTIALS_PATH` contract wants a real JSON file. So the
+    credential travels as base64 in that document and is written here, once,
+    before any child process is spawned.
 
     Three properties matter:
 
@@ -223,10 +222,6 @@ def install_fcm_credentials() -> None:
     )
 
 
-def _enabled(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     raw = os.environ.get(name, str(default)).strip()
     try:
@@ -238,7 +233,7 @@ def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     return value
 
 
-def _validate_redis_url(value: str, *, allow_loopback: bool) -> str:
+def _validate_redis_url(value: str) -> str:
     try:
         parsed = urlparse(value)
         parsed.port
@@ -251,27 +246,18 @@ def _validate_redis_url(value: str, *, allow_loopback: bool) -> str:
         loopback = ipaddress.ip_address(hostname).is_loopback
     except ValueError:
         loopback = hostname in {"localhost", "localhost.localdomain"}
-    if loopback and not allow_loopback:
-        raise RuntimeError(
-            "REDIS_URL must use shared external Redis; loopback is local mode only"
-        )
+    if loopback:
+        raise RuntimeError("REDIS_URL must use the shared Redis, never loopback")
     return value
 
 
-def redis_topology() -> tuple[str, bool]:
+def shared_redis_url() -> str:
     """Resolve the one Redis URL every process in this container must use."""
 
-    embedded = _enabled("SHIPTRIP_EMBEDDED_REDIS")
     configured = os.environ.get("REDIS_URL", "").strip()
-    if embedded:
-        if configured not in {"", LOCAL_REDIS_URL, "redis://localhost:6379/0"}:
-            raise RuntimeError(
-                "SHIPTRIP_EMBEDDED_REDIS requires REDIS_URL to be empty or local"
-            )
-        return LOCAL_REDIS_URL, True
     if not configured:
-        raise RuntimeError("REDIS_URL must point at shared external Redis")
-    return _validate_redis_url(configured, allow_loopback=False), False
+        raise RuntimeError("REDIS_URL must point at the shared Redis")
+    return _validate_redis_url(configured)
 
 
 def probe_shared_redis(
@@ -284,8 +270,7 @@ def probe_shared_redis(
     plainly. Three outcomes:
 
     * **Unreachable or rejected credentials fail startup.** There is no
-      fallback to the embedded daemon: a silent fallback would split cache,
-      throttles and queues across two Redis servers.
+      fallback: a second Redis would split cache, throttles and queues.
     * **An `allkeys-*` eviction policy fails startup.** Stream keys carry no
       TTL, so only those policies can evict `notif:fcm` or `email:send`, which
       would drop queued work without an error anywhere.
@@ -380,7 +365,7 @@ def kyc_env(redis_url: str) -> dict[str, str]:
         KYC_GRPC_TARGET="127.0.0.1:50051",
         REDIS_URL=redis_url,
     )
-    # The combined container still gives KYC its own bucket credentials.
+    # The combined container gives KYC its own bucket credentials.
     # Mapping is per child, so Django continues to use the parcel-media bucket.
     for target in (
         "S3_ENDPOINT_URL",
@@ -460,59 +445,16 @@ def connection_budget() -> dict[str, int]:
     }
 
 
-def apply_geography_catalogue(base_env: dict[str, str]) -> None:
-    """Apply the reviewed catalogue that shipped with this image, once.
+def run() -> int:
+    """Start every child and supervise them until a stop is requested.
 
-    The 56k-row geography catalogue is deliberately not a migration, and the
-    active V1 write contract refuses a request or a journey that does not
-    reference a canonical Place — so a deployment without the catalogue is a
-    deployment nobody can create anything on. Shipping the manifest inside the
-    image and applying it here makes one release identifier carry both the code
-    and the exact reviewed data it needs.
-
-    Two properties matter more than speed:
-
-    * **It is not destructive on every boot.** `--skip-if-current` compares the
-      shipped manifest's content digest against what the database records and
-      returns after one indexed read when they match, which is every boot after
-      the first.
-    * **It never blocks readiness.** It runs after the gateway is listening, so
-      a slow first import cannot fail a health check and roll the deployment
-      back. The import is one transaction, so until it commits the catalogue
-      reads as its previous state rather than as a half-built one.
-
-    A failure here is loud and non-fatal: the service keeps serving, and the
-    operations console reports a catalogue that is not at the shipped digest.
+    Migrations and the geography catalogue are deliberately not applied here:
+    on the VPS they are explicit, locked maintenance operations
+    (`runtime.py maintenance ...`), so a restart never mutates the schema.
     """
 
-    print("applying bundled geography catalogue (skip-if-current)", flush=True)
-    result = subprocess.run(
-        [
-            sys.executable,
-            "manage.py",
-            "import_geography",
-            "--skip-if-current",
-        ],
-        cwd=ROOT,
-        env=base_env,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        print(f"geography catalogue: {result.stdout.strip()}", flush=True)
-        return
-    print(
-        "geography catalogue import FAILED; the service is still serving but "
-        "canonical place selection will be unavailable until this is resolved",
-        file=sys.stderr,
-        flush=True,
-    )
-    print(result.stderr.strip()[-4000:], file=sys.stderr, flush=True)
-
-
-def run(*, migrate_database: bool = True, import_catalogue: bool = True) -> int:
     install_fcm_credentials()
-    redis_url, embedded_redis = redis_topology()
+    redis_url = shared_redis_url()
     budget = connection_budget()
     kyc_process_env = kyc_env(redis_url)
     base_env = child_env(
@@ -526,36 +468,8 @@ def run(*, migrate_database: bool = True, import_catalogue: bool = True) -> int:
         flush=True,
     )
 
-    if embedded_redis:
-        redis = spawn(
-            "redis",
-            [
-                "redis-server",
-                "--bind",
-                "127.0.0.1",
-                "--protected-mode",
-                "yes",
-                "--save",
-                "",
-                "--appendonly",
-                "no",
-                "--port",
-                "6379",
-            ],
-            env=base_env,
-        )
-        wait_for_port(redis, 6379)
-    else:
-        probe_shared_redis(redis_url)
+    probe_shared_redis(redis_url)
 
-    if migrate_database:
-        print("applying database migrations", flush=True)
-        subprocess.run(
-            [sys.executable, "manage.py", "migrate", "--noinput"],
-            cwd=ROOT,
-            env=base_env,
-            check=True,
-        )
     print("collecting static files", flush=True)
     subprocess.run(
         [sys.executable, "manage.py", "collectstatic", "--noinput"],
@@ -677,29 +591,9 @@ def run(*, migrate_database: bool = True, import_catalogue: bool = True) -> int:
     wait_for_port(gateway, int(os.environ.get("PORT", "8080")))
     print("ShipTrip is ready", flush=True)
 
-    # Deliberately after readiness. See `apply_geography_catalogue`.
-    if import_catalogue:
-        apply_geography_catalogue(base_env)
-
     while not STOP_REQUESTED:
         for child in CHILDREN:
             if (code := child.process.poll()) is not None:
                 raise RuntimeError(f"{child.name} exited with code {code}")
         time.sleep(0.5)
     return 0
-
-
-def main() -> int:
-    signal.signal(signal.SIGTERM, request_stop)
-    signal.signal(signal.SIGINT, request_stop)
-    try:
-        return run()
-    except (RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"startup failed: {exc}", file=sys.stderr, flush=True)
-        return 1
-    finally:
-        terminate_children()
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

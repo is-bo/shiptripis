@@ -42,8 +42,8 @@ supervision and routing while isolating VPS-specific behavior.
 
 See [infra/vps/README.md](../infra/vps/README.md) for the diagram, operational
 sequence, command reference and troubleshooting. Supporting contracts:
-[environment/secrets](../infra/vps/ENVIRONMENT.md),
-[migration runbook](../infra/vps/MIGRATION.md).
+[environment/secrets](../infra/vps/ENVIRONMENT.md). (The Railway migration runbook
+this baseline shipped was deleted in L1A: the app has no production data to move.)
 
 | Compose service | Responsibility / ownership |
 | --- | --- |
@@ -208,7 +208,6 @@ runtime source, provider adapter or production data.
 * [infra/vps/Caddyfile](../infra/vps/Caddyfile)
 * [infra/vps/Dockerfile](../infra/vps/Dockerfile)
 * [infra/vps/ENVIRONMENT.md](../infra/vps/ENVIRONMENT.md)
-* [infra/vps/MIGRATION.md](../infra/vps/MIGRATION.md)
 * [infra/vps/README.md](../infra/vps/README.md)
 * [infra/vps/app-secrets.example.json](../infra/vps/app-secrets.example.json)
 * [infra/vps/backup.env.example](../infra/vps/backup.env.example)
@@ -414,8 +413,7 @@ independent offsite S3 credentials/connectivity/permissions, real private-media
 reachability, Firebase/OAuth/provider webhook connectivity and external alert
 receipt require owner accounts/server/domain and are outside V1 authorization.
 No such check is reported as passed. Execute the bootstrap/activation sequence in
-`infra/vps/README.md` and every migration rehearsal/cutover gate in
-`infra/vps/MIGRATION.md`; prove offsite upload plus `vps verify FULL_SNAPSHOT_ID`
+`infra/vps/README.md`; prove offsite upload plus `vps verify FULL_SNAPSHOT_ID`
 and `vps restore FULL_SNAPSHOT_ID`, then record actual RPO/RTO before launch.
 
 ## Remaining V2 / V3 prerequisites
@@ -434,13 +432,8 @@ delivery. Review PostgreSQL runtime-role privileges against the current app befo
 launch; the baseline uses the existing single owner/initialization role on a
 private-only server. Resolve mobile-origin compatibility without changing it in V1.
 
-The [migration runbook](../infra/vps/MIGRATION.md) requires a proven consistent
-Redis checkpoint while still reachable, write quiescence, final DB transfer,
-financial/auth/storage/queue verification, exactly one active writer, and rollback
-rules that account for new destination writes/external side effects. If embedded
-Railway Redis cannot be exported or proven drained, migration is NO-GO; email
-outbox durability is not permission to discard pending push work. Railway stays
-unchanged during V1.
+L1A removed Railway and the Railway-to-VPS migration runbook: the app was never in
+production, so there is no data or Redis state to carry over.
 
 ## V1 decision
 

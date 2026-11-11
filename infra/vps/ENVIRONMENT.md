@@ -33,7 +33,6 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | --- | --- |
 | `SHIPTRIP_ENVIRONMENT` | Must remain `production` for this Django profile; historical config name is intentionally preserved. |
 | `DJANGO_DEBUG` | Must be `false`. |
-| `SHIPTRIP_EMBEDDED_REDIS` | Must be `false`; no production ephemeral fallback. |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated actual hostname plus `localhost` for internal health probes; never wildcard. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated HTTPS browser origins; empty valid for native-only API. |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated HTTPS origins used by Admin/browser POSTs. Must match actual deployment. |
@@ -84,7 +83,6 @@ reachability and provider lifecycle policy are V3 verification items.
 | --- | --- |
 | `PAYMENTS_ENVIRONMENT` | `test` only. |
 | `PAYMENTS_ALLOW_MOCK_PROVIDER` | `false`; production mock remains forbidden. |
-| `PAYMENTS_MOCK_WEBHOOK_ENABLED`, `PAYMENTS_LEGACY_MUTATIONS_ENABLED` | Both `false`; no legacy bypass. |
 | `PAYMENTS_PUBLIC_BASE_URL` | HTTPS origin of future API domain, matching owner’s actual gateway. |
 | `STRIPE_API_BASE` | Official `https://api.stripe.com`; credential must be TEST if supplied. |
 | `CHARGILY_API_BASE` | Official `https://pay.chargily.net/test/api/v2`. |

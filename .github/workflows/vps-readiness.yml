@@ -1,7 +1,7 @@
 name: VPS readiness
 on:
   pull_request:
-    paths: ['infra/vps/**', 'backend/railway/**', 'backend/services/**', 'backend/monolith/**', 'web/**', '.dockerignore', '.github/workflows/vps-readiness.yml']
+    paths: ['infra/vps/**', 'backend/services/**', 'backend/monolith/**', 'web/**', '.dockerignore', '.github/workflows/vps-readiness.yml']
   workflow_dispatch:
 permissions:
   contents: read

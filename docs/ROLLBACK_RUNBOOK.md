@@ -23,7 +23,7 @@ An application rollback is allowed only when the previous image is compatible wi
 - Require `/healthz` and `/readyz`, deep health, auth/read-only smoke, worker progress, and finance reconciliation after rollback.
 - Static web/gateway can roll back independently only if routes/security headers/API expectations remain compatible. A future mobile artifact is never remotely rolled back; preserve backward API compatibility and use the release manifest to identify affected builds.
 
-For the combined Railway topology, rolling back the application image also rolls back Django, all Go services/workers, Caddy, and static web. Verify every child, not just gateway liveness.
+On the VPS (`vps rollback --schema-compatibility-reviewed`, see `infra/vps/README.md`), rolling back the application image also rolls back Django, all Go services/workers, Caddy, and static web. Verify every child, not just gateway liveness.
 
 ## Migration decision rules
 
@@ -60,7 +60,7 @@ Stopping a worker does not cancel an obligation. After the safe application is r
 
 ## Database restore/cutover
 
-Restore only from a verified encrypted backup into a **new** Railway/PostgreSQL database. Validate PostgreSQL version compatibility, migration state, row counts, foreign keys, unique provider-event IDs, balanced ledger transactions, payment order invariants, open disputes/payout freezes, scheduled jobs, and application smoke tests.
+Restore only from a verified encrypted backup into a **new** PostgreSQL database (`vps restore` targets a disposable isolated database, never production). Validate PostgreSQL version compatibility, migration state, row counts, foreign keys, unique provider-event IDs, balanced ledger transactions, payment order invariants, open disputes/payout freezes, scheduled jobs, and application smoke tests.
 
 Calculate the recovery-point gap. Reconcile every provider payment/refund/payout and any handover/dispute event created after the backup. A restored database that omits a provider success can double-charge or strand money if exposed without reconciliation.
 

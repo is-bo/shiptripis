@@ -63,35 +63,6 @@ class ProductAdminRetirementTests(SimpleTestCase):
         ) == {field.name for field in ParcelMedia._meta.fields}
 
 
-def _delivery_payload(**overrides) -> dict:
-    base = {
-        "origin": "ALG",
-        "destination": "CDG",
-        "weight_kg": 3,
-        "item_type": "documents",
-        "description": "Birth certificate",
-        "base_amount_dzd": 3000,
-        "pickup_city": "Algiers",
-        "delivery_city": "Paris",
-    }
-    base.update(overrides)
-    return base
-
-
-def _product_payload(**overrides) -> dict:
-    base = {
-        "origin": "CDG",
-        "destination": "ALG",
-        "weight_kg": 2,
-        "item_type": "electronics",
-        "store_name": "Fnac",
-        "product_url": "https://fnac.fr/x",
-        "product_price_dzd": 45000,
-    }
-    base.update(overrides)
-    return base
-
-
 def _make_location(
     owner: User,
     *,
@@ -199,44 +170,6 @@ def _create_v1_delivery(
     }
     values.update(overrides)
     return DeliveryRequest.objects.create(**values)
-
-
-class DeliveryCreateTests(APITestCase):
-    def setUp(self):
-        self.user = _make_user()
-        self.client = _auth_client(self.user)
-
-    def test_unauth_rejected(self):
-        c = APIClient()
-        r = c.post(
-            reverse("parcels-delivery-create"), _delivery_payload(), format="json"
-        )
-        assert r.status_code == 401
-
-    @patch("apps.parcels.views.redis_bus.publish_after_commit")
-    def test_legacy_delivery_creation_is_gone(self, pub):
-        r = self.client.post(
-            reverse("parcels-delivery-create"), _delivery_payload(), format="json"
-        )
-        assert r.status_code == 410, r.data
-        assert r.data["code"] == "legacy_delivery_flow_retired"
-        assert DeliveryRequest.objects.count() == 0
-        pub.assert_not_called()
-
-
-class ProductCreateTests(APITestCase):
-    def setUp(self):
-        self.user = _make_user()
-        self.client = _auth_client(self.user)
-
-    @patch("apps.parcels.views.redis_bus.publish_after_commit")
-    def test_product_creation_is_gone_and_does_not_publish(self, pub):
-        r = self.client.post(
-            reverse("parcels-product-create"), _product_payload(), format="json"
-        )
-        assert r.status_code == 410, r.data
-        assert ProductRequest.objects.count() == 0
-        pub.assert_not_called()
 
 
 class DeliveryV1CreateTests(APITestCase):
@@ -648,28 +581,6 @@ class ParcelDetailTests(APITestCase):
     def test_404_for_unknown(self):
         r = self.client.get(reverse("parcels-detail", args=[9999]))
         assert r.status_code == 404
-
-
-class DeliveryQuoteTests(APITestCase):
-    """The legacy DZD quote cannot participate in the V1 EUR flow."""
-
-    def setUp(self):
-        self.user = _make_user("quote@example.com")
-        self.client = _auth_client(self.user)
-
-    def test_unauth_rejected(self):
-        c = APIClient()
-        r = c.get(reverse("parcels-quote-delivery"), {"weight_kg": 2})
-        assert r.status_code == 401
-
-    def test_legacy_dzd_quote_is_gone(self):
-        r = self.client.get(
-            reverse("parcels-quote-delivery"),
-            {"weight_kg": 3, "origin": "ALG", "destination": "CDG"},
-        )
-        assert r.status_code == 410
-        assert r.data["code"] == "legacy_dzd_quote_retired"
-        assert "suggested_base_dzd" not in r.data
 
 
 class ParcelMediaPrivacyTests(APITestCase):

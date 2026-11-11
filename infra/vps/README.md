@@ -278,7 +278,7 @@ none is enabled by this repository or bootstrap. Daily backup/maintenance times 
 UTC in the unit files, independent of the owner's display timezone. Choose a backup
 cadence/RPO in V3; the provided daily schedule is not a PITR promise. RPO for an
 every-second Redis AOF after a hard host crash is approximately one second;
-host/volume loss needs a separate Redis transport recovery plan in the migration runbook.
+host/volume loss needs a separate Redis transport recovery plan (restore from backup).
 
 `monitor` is host-only. It checks container health, memory, disk, Redis AOF/RDB status,
 HTTP error ratio, financial/email/stream backlogs, connection pressure, missing

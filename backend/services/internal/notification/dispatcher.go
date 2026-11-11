@@ -64,15 +64,10 @@ const setEXRetryDelay = 100 * time.Millisecond
 // to each target's local WS sockets — payload semantics (match_id,
 // offer_id, code, etc.) are mobile's concern, not Go's.
 var subscribeChannels = []string{
-	// trips
-	"trip.created",
-	"trip.updated",
-	"trip.cancelled",
 	// parcels
 	"parcel.created",
 	"parcel.cancelled",
 	// matching
-	"match.created",
 	"match.in_transit",
 	"match.completed",
 	"offer.created",
@@ -85,8 +80,6 @@ var subscribeChannels = []string{
 	"payment.refunded",
 	"payment.failed",
 	// verification
-	"handover.confirmed",
-	"handover.code_issued",
 	"handover.delivery_code_available",
 	"handover.delivery_confirmed",
 	// kyc

@@ -9,7 +9,6 @@ capability as its API counterpart and delegates to the same domain service.
 from __future__ import annotations
 
 import logging
-import os
 from copy import deepcopy
 from datetime import timedelta
 from functools import wraps
@@ -3508,22 +3507,10 @@ def system_status(request):
     jobs = ScheduledJob.objects.all()
     pending = jobs.filter(status=ScheduledJob.Status.PENDING)
     oldest = pending.order_by("run_at").values_list("run_at", flat=True).first()
-    kyc_local = os.environ.get("SHIPTRIP_EMBEDDED_REDIS", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    # K1 gives KYC the same REDIS_URL as every other combined-container child.
-    # Production-style startup rejects loopback unless embedded mode is
-    # explicit, so a configured non-embedded runtime is the shared topology.
-    kyc_shared = bool(settings.REDIS_URL) and not kyc_local
-    if kyc_shared:
-        limiter = "Shared Redis"
-    elif kyc_local:
-        limiter = "Single-replica local mode"
-    else:
-        limiter = "Not configured"
+    # K1 gives KYC the same REDIS_URL as every other combined-container child,
+    # and the launcher refuses a loopback Redis, so a configured URL is the
+    # shared topology.
+    limiter = "Shared Redis" if settings.REDIS_URL else "Not configured"
     try:
         routing = route_provider_status()
     except Exception:
@@ -3548,12 +3535,6 @@ def system_status(request):
             "label": "Healthy",
             "tone": "ok",
             "detail": "The shared limiter is active, which is safe on any number of replicas.",
-        }
-    elif limiter == "Single-replica local mode":
-        limiter_signal = {
-            "label": "Warning",
-            "tone": "wait",
-            "detail": "Local mode is only safe while exactly one application replica runs.",
         }
     else:
         limiter_signal = {

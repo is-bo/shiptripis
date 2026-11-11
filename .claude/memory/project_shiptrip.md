@@ -36,7 +36,7 @@ V1 architecture is **locked** (commit 058f25d). Source of truth: `ARCHITECTURE.m
 **Commission rules (load-bearing, frozen on Offer at creation):**
 - Delivery: 25% flat platform commission, sender pays total.
 - Product: 2,500 DZD base fee + tiered commission on item price (0% <30k, 7% 30–55k, 5% 55–100k, 3% 100k+). Traveler always receives 100% of item price.
-- Single source: `monolith/apps/core/pricing.py`. Integer DZD, no floats.
+- Superseded: V1 money is EUR integer cents (`docs/SHIPTRIP_V1_SPEC.md` §4 and §8); the DZD engine was deleted in L1A.
 
 **Verification flow (load-bearing):** 2-step argon2-hashed handover code (PICKUP → "In Transit", DELIVERY → confirm). Trips require admin approval (ticket upload mandatory).
 

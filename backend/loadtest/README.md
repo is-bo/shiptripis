@@ -1,7 +1,7 @@
 # ShipTrip local load harness
 
 A reproducible way to put production-shaped traffic on the Django API and the
-Go realtime relays **on a workstation**. It never targets Railway: every
+Go realtime relays **on a workstation**. It never targets a hosted environment: every
 component binds to `127.0.0.1`, and the seeded world uses
 `@loadtest.shiptrip.invalid` accounts in a dedicated database.
 
@@ -21,7 +21,7 @@ venv, and the Go tools are a separate module (`tools/`) that
 | `manage_loadtest.py` | `manage.py` under those settings (migrate, import_geography, run the job loops). |
 | `seed.py` | Builds the world through the real V1 offer/accept services and writes `.data/world.json` (JWTs, ids, admin sessions). |
 | `serve.py` | Gunicorn-shaped server for Windows: W Waitress processes x T threads, optionally a real Caddy in front with `least_conn`. |
-| `Caddyfile` | The harness edge; mirrors `backend/railway/Caddyfile` routing (`/ws/chat`, `/ws/notifications`, Django catch-all). |
+| `Caddyfile` | The harness edge; mirrors `infra/vps/gateway.Caddyfile` routing (`/ws/chat`, `/ws/notifications`, Django catch-all). |
 | `locustfile.py` | Traffic mix built from the Flutter screens (one task = one screen's requests): senders 60 %, travelers 38 %, Admin console operators 2 %, 2-8 s think time. |
 | `monitor.py` | Samples per-process RSS/CPU, machine CPU, `pg_stat_activity` and Postgres memory to CSV. |
 | `ws_memory.py` + `tools/cmd/wsprobe` | Memory per idle WebSocket for a Go relay or Caddy. |
@@ -37,7 +37,7 @@ backend/loadtest/.venv/Scripts/python -m pip install locust
 # Waitress into the monolith *dev* venv (never requirements.txt)
 backend/monolith/.venv/Scripts/python -m pip install waitress
 
-# Go tools (and optionally Caddy, same version as the Railway image)
+# Go tools (and optionally Caddy, same version as the VPS image)
 cd backend/loadtest/tools && go build -o ../.data/bin/ ./cmd/...
 GOBIN=$PWD/../.data/bin go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.10.0
 ```
@@ -117,6 +117,6 @@ $PY backend/loadtest/ws_memory.py --service-pid <chat pid> --wsprobe .data/bin/w
   per backend and overstates.
 * miniredis answers the protocol in-process; Redis latency and throughput must
   be taken from real Redis.
-* Loopback has no network latency. Railway's private network adds roughly a
-  millisecond per Postgres/Redis round trip, which matters for query-heavy
+* Loopback has no network latency. A real network adds latency to every
+  Postgres/Redis round trip, which matters for query-heavy
   endpoints.

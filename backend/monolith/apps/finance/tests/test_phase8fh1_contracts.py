@@ -291,7 +291,7 @@ def test_ban_revokes_cached_sensitive_and_owner_access(eur_snapshot):
 
 
 def test_launcher_does_not_forward_financial_keys_to_go(monkeypatch):
-    path = Path(__file__).resolve().parents[4] / "railway" / "start.py"
+    path = Path(__file__).resolve().parents[5] / "infra" / "vps" / "launcher.py"
     spec = importlib.util.spec_from_file_location("h1_launcher_fixture", path)
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, module)

@@ -1,5 +1,24 @@
 # Waçla V1 Implementation Status
 
+## Wassla L1A — backend cleanup and Railway removal (2026-11-11)
+
+Status: **in review** on `claude/project-thread-po89ml`, pull request into
+`feature/discovery-professional-delivery`. No deployment; `main` untouched.
+
+Railway is removed and the VPS (`infra/vps/`) is the only host: the launcher and internal gateway
+config moved into `infra/vps/`, the embedded Redis, boot-time migrate and import, and Go's `PORT`
+fallback are gone. The legacy DZD payments, wallet, match-handover, airport-trip and
+`compatible-journeys` APIs, the unrouted traveler-first matching views and the DZD pricing engine
+were deleted; their tables, models and migrations stay, and their Django admin pages are now
+view-only. Every removed route answers `404`, including the six paths the plan had kept as `410`
+tombstones (no released client exists). Two settings and six Redis channels that only removed code used were deleted.
+Matching cancel, decline and withdraw now take the canonical no-key row lock. `ARCHITECTURE.md` was
+corrected. No migration, price, lifecycle or payout result changed.
+
+Ismail confirmed the app has no real users, so the Railway data-migration runbook
+(`infra/vps/MIGRATION.md`) is deleted too. Evidence and decisions: `docs/WASSLA_L1_CLEANUP_INVENTORY.md`. Details and test counts:
+`docs/PHASE_L1A_BACKEND_CLEANUP.md` (Django 2,438 passed, 0 skipped; Go 199; VPS unit 29).
+
 ## Wassla L0 — discovery and professional delivery specification and plan (2026-11-10)
 
 Status: **documentation only; no application code changed.**
@@ -159,8 +178,8 @@ commits on it, retaining all 101 owner-changed files and the original rename SHA
 Stayed on `work`; main and remote branches were unchanged. Actual Ubuntu
 boot/firewall/Docker restart, domain/TLS, offsite/provider connectivity and target
 capacity remain V3 gates. See [operator instructions](../infra/vps/README.md),
-[secret reference](../infra/vps/ENVIRONMENT.md) and
-[migration procedure](../infra/vps/MIGRATION.md). Historical records below are intact.
+[secret reference](../infra/vps/ENVIRONMENT.md) (the migration procedure,
+`infra/vps/MIGRATION.md`, was deleted in L1A). Historical records below are intact.
 
 ## Wassla rebrand (2026-10-18)
 

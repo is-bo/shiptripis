@@ -404,7 +404,7 @@ S3_BUCKET_KYC = env.str("S3_BUCKET_KYC", default="shiptrip-kyc")
 # does not raise: it returns a URL the browser is then denied, which is exactly
 # how the admin console came to render a broken KYC image.
 #
-# These variables already exist in the deployment contract — `railway/start.py`
+# These variables already exist in the deployment contract — `infra/vps/launcher.py`
 # maps `KYC_S3_*` onto the KYC child process's own `S3_*` — so Django reads the
 # same pair rather than a new secret being minted. They fall back to the generic
 # credential, which is the correct behaviour for local/compose environments
@@ -439,16 +439,6 @@ GRPC_DJANGO_BIND = env.str("GRPC_DJANGO_BIND", default="0.0.0.0:50051")
 GRPC_TLS_CA_CERT = env.str("GRPC_TLS_CA_CERT", default="")
 GRPC_TLS_SERVER_CERT = env.str("GRPC_TLS_SERVER_CERT", default="")
 GRPC_TLS_SERVER_KEY = env.str("GRPC_TLS_SERVER_KEY", default="")
-
-# Development/QA only. Hosted environments leave this disabled so an
-# unauthenticated caller cannot synthesize payment state transitions.
-PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool("PAYMENTS_MOCK_WEBHOOK_ENABLED", default=False)
-# Historical DZD PaymentIntent rows remain readable, but their old instant-mock
-# mutation surface is retired by default. Tests that exercise archival behavior
-# must opt in explicitly.
-PAYMENTS_LEGACY_MUTATIONS_ENABLED = env.bool(
-    "PAYMENTS_LEGACY_MUTATIONS_ENABLED", default=False
-)
 
 # --- V1 payments -------------------------------------------------------------
 # Credentials only. Everything commercial (which providers are on, the deposit

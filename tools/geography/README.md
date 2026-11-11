@@ -119,9 +119,9 @@ With no `--manifest`, the command reads the bundled artefact. `--skip-if-current
 compares the manifest's uncompressed-content SHA-256 against
 `locations_geography_catalogue_import` and returns after one indexed read when
 they match — which is every boot after the first, so the import is never
-destructive or expensive on a restart. `backend/railway/start.py` runs exactly
-that, after the gateway is listening, so a slow first import cannot fail a
-health check. The import is one transaction: until it commits, the catalogue
+destructive or expensive on a repeat. On the VPS it is an explicit, locked
+maintenance operation (`infra/vps/vps` runs `runtime.py maintenance
+import_geography`), never part of container start. The import is one transaction: until it commits, the catalogue
 reads as its previous state, never as a half-built one. Rehearsed on
 PostgreSQL 16 at 145.7 s and a 280 MB peak for the first import, 2.9 s for the
 skip.

@@ -258,7 +258,7 @@ func TestDispatch_UnknownChannel(t *testing.T) {
 	// The Run loop should never deliver this — we control the subscribe
 	// list — but the default arm of dispatch() exists as defense-in-depth
 	// and must not panic or fan out.
-	d.dispatch(redisbus.Message{Channel: "trip.created", Payload: []byte(`{}`)})
+	d.dispatch(redisbus.Message{Channel: "no.such.channel", Payload: []byte(`{}`)})
 
 	if calls := hub.callsCopy(); len(calls) != 0 {
 		t.Errorf("hub.Send called %d times for unknown channel, want 0", len(calls))

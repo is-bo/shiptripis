@@ -344,8 +344,6 @@ class MockProviderProductionSafetyTests(TestCase):
 
         assert "PAYMENTS_ALLOW_MOCK_PROVIDER" in source
         assert "raise RuntimeError" in source
-        assert "PAYMENTS_MOCK_WEBHOOK_ENABLED" in source
-        assert "PAYMENTS_LEGACY_MUTATIONS_ENABLED" in source
 
     def test_a_signed_mock_webhook_is_still_rejected_without_the_flag(self):
         """Even a correctly signed event cannot move money when mock is off."""

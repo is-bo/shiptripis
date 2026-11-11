@@ -11,7 +11,6 @@ from apps.locations.serializers import (
     PrivateLocationSerializer,
     PublicLocationSerializer,
 )
-from apps.trips.models import Airport
 from apps.trips.serializers import AirportSerializer
 
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
@@ -31,58 +30,6 @@ class ParcelMediaSerializer(serializers.ModelSerializer):
         model = ParcelMedia
         fields = ("id", "purpose", "content_type", "bytes", "created_at")
         read_only_fields = fields
-
-
-class _ParcelBase(serializers.Serializer):
-    origin = serializers.CharField(min_length=3, max_length=3)
-    destination = serializers.CharField(min_length=3, max_length=3)
-    pickup_city = serializers.CharField(
-        required=False, allow_blank=True, max_length=80, default=""
-    )
-    delivery_city = serializers.CharField(
-        required=False, allow_blank=True, max_length=80, default=""
-    )
-    weight_kg = serializers.IntegerField(min_value=1, max_value=100)
-    item_type = serializers.ChoiceField(
-        choices=ParcelRequest.ItemType.choices,
-        default=ParcelRequest.ItemType.OTHER,
-    )
-    description = serializers.CharField(
-        required=False, allow_blank=True, max_length=2000, default=""
-    )
-    deadline_at = serializers.DateTimeField(required=False, allow_null=True)
-    # Optional: when present, this request is aimed at one specific traveler
-    # (e.g. sender hit "Request this trip" on a trip tile). The traveler can
-    # then counter-offer; on broadcast requests the price is sender-set and
-    # the traveler only accepts/declines. See CounterOfferView.
-    target_traveler_id = serializers.IntegerField(required=False, allow_null=True)
-
-    def validate(self, attrs: dict) -> dict:
-        if attrs["origin"].upper() == attrs["destination"].upper():
-            raise serializers.ValidationError(
-                {"destination": "Origin and destination must differ."}
-            )
-        deadline = attrs.get("deadline_at")
-        if deadline is not None and deadline <= timezone.now():
-            raise serializers.ValidationError(
-                {"deadline_at": "Deadline must be in the future."}
-            )
-        codes = {attrs["origin"].upper(), attrs["destination"].upper()}
-        known = set(
-            Airport.objects.filter(iata__in=codes).values_list("iata", flat=True)
-        )
-        missing = codes - known
-        if missing:
-            raise serializers.ValidationError(
-                {"airports": f"Unknown IATA code(s): {', '.join(sorted(missing))}"}
-            )
-        attrs["origin"] = attrs["origin"].upper()
-        attrs["destination"] = attrs["destination"].upper()
-        return attrs
-
-
-class DeliveryCreateSerializer(_ParcelBase):
-    base_amount_dzd = serializers.IntegerField(min_value=100, max_value=10_000_000)
 
 
 class DeliveryV1CreateSerializer(serializers.Serializer):
@@ -361,16 +308,6 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
                 {"target_traveler_id": "A sender cannot target their own account."}
             )
         return attrs
-
-
-class ProductCreateSerializer(_ParcelBase):
-    product_url = serializers.URLField(
-        required=False, allow_blank=True, max_length=500, default=""
-    )
-    store_name = serializers.CharField(
-        required=False, allow_blank=True, max_length=120, default=""
-    )
-    product_price_dzd = serializers.IntegerField(min_value=100, max_value=10_000_000)
 
 
 class ParcelRequestSerializer(serializers.ModelSerializer):

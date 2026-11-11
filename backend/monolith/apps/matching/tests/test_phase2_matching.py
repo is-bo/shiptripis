@@ -421,7 +421,7 @@ class Phase2MatchingApiTests(TestCase):
         assert "3.041970" not in payload_text
 
     def test_discovery_endpoints_require_auth_and_enforce_each_owner(self):
-        journeys_url = reverse("matches-compatible-journeys-v1")
+        journeys_url = reverse("matches-find-travelers-v1")
         requests_url = reverse("matches-compatible-requests-v1")
         quote_url = reverse("matches-quote-v1")
         anonymous = self._client()
@@ -466,25 +466,32 @@ class Phase2MatchingApiTests(TestCase):
         assert quote_response.data["code"] == "not_authorized"
 
     def test_both_discovery_directions_return_one_coarse_privacy_safe_candidate(self):
-        sender_response = self._client(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
+        browse_response = self._client(self.sender).get(
+            reverse("matches-find-travelers-v1"),
             {"parcel_id": self.delivery_request.pk},
+        )
+        sender_response = self._client(self.sender).post(
+            reverse("matches-quote-v1"),
+            {"parcel_id": self.delivery_request.pk, "journey_id": self.journey.pk},
+            format="json",
         )
         traveler_response = self._client(self.traveler).get(
             reverse("matches-compatible-requests-v1"),
             {"journey_id": self.journey.pk},
         )
 
+        assert browse_response.status_code == 200, browse_response.data
         assert sender_response.status_code == 200, sender_response.data
         assert traveler_response.status_code == 200, traveler_response.data
-        assert sender_response.data["count"] == 1
+        assert browse_response.data["page"]["total"] == 1
+        assert browse_response.data["results"][0]["journey_id"] == self.journey.pk
         assert traveler_response.data["count"] == 1
-        for response in (sender_response, traveler_response):
-            candidate = response.data["results"][0]
+        for candidate in (sender_response.data, traveler_response.data["results"][0]):
             assert candidate["delivery_request"]["id"] == self.delivery_request.pk
             assert candidate["journey"]["id"] == self.journey.pk
             assert candidate["compatibility"]["compatible"] is True
             assert candidate["delivery_request"]["pickup"]["coarse_latitude"]
+        for response in (browse_response, sender_response, traveler_response):
             self._assert_privacy_safe(response.data)
 
     def test_quote_returns_explainable_components_and_stable_incompatible_error(self):

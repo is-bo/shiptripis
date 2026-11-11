@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 CADDYFILES = (
-    ROOT / "backend" / "railway" / "Caddyfile",
+    ROOT / "infra" / "vps" / "gateway.Caddyfile",
     ROOT / "backend" / "gateway" / "Caddyfile",
 )
 

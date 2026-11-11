@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from apps.core.historical_admin import HistoricalRecordAdmin
+
 from .models import Hold, Wallet, WalletEntry, Withdrawal
 
 
 @admin.register(Wallet)
-class WalletAdmin(admin.ModelAdmin):
+class WalletAdmin(HistoricalRecordAdmin):
     list_display = ("id", "user", "currency", "created_at")
     list_filter = ("currency",)
     search_fields = ("user__email",)
@@ -14,7 +16,7 @@ class WalletAdmin(admin.ModelAdmin):
 
 
 @admin.register(WalletEntry)
-class WalletEntryAdmin(admin.ModelAdmin):
+class WalletEntryAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "wallet",
@@ -41,7 +43,7 @@ class WalletEntryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Hold)
-class HoldAdmin(admin.ModelAdmin):
+class HoldAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "wallet",
@@ -68,7 +70,7 @@ class HoldAdmin(admin.ModelAdmin):
 
 
 @admin.register(Withdrawal)
-class WithdrawalAdmin(admin.ModelAdmin):
+class WithdrawalAdmin(HistoricalRecordAdmin):
     list_display = (
         "id",
         "user",
@@ -92,12 +94,3 @@ class WithdrawalAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    actions = ("mark_sent",)
-
-    @admin.action(description="Mark selected withdrawals as sent")
-    def mark_sent(self, request, queryset):
-        from django.utils import timezone
-
-        queryset.filter(status=Withdrawal.Status.REQUESTED).update(
-            status=Withdrawal.Status.SENT, sent_at=timezone.now()
-        )

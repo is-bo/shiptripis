@@ -508,11 +508,11 @@ func TestHTTPAddrAndString(t *testing.T) {
 	}
 }
 
-func TestHTTPAddrUsesRailwayPort(t *testing.T) {
+func TestHTTPAddrIgnoresTheGatewayPort(t *testing.T) {
 	clearConfigEnv(t)
-	t.Setenv("PORT", "4321")
-	if got := HTTPAddr("CHAT_HTTP_ADDR", ":8081"); got != ":4321" {
-		t.Errorf("HTTPAddr Railway PORT = %q, want :4321", got)
+	t.Setenv("PORT", "8080")
+	if got := HTTPAddr("CHAT_HTTP_ADDR", ":8081"); got != ":8081" {
+		t.Errorf("HTTPAddr with only PORT set = %q, want the :8081 fallback", got)
 	}
 }
 

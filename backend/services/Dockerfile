@@ -1,6 +1,7 @@
-# Multi-stage build for all ShipTrip Go services. Building every small static
-# binary makes one immutable image usable by Railway's chat, notification,
-# KYC, and email services without relying on provider-specific build args.
+# Multi-stage build for all ShipTrip Go services, used by the local
+# docker-compose stack. Building every small static binary makes one image
+# serve the chat, notification, KYC and email services; SHIPTRIP_SERVICE picks
+# which one runs. The VPS image builds the same binaries in infra/vps/Dockerfile.
 
 # ---- build ----------------------------------------------------------------
 FROM golang:1.26-alpine AS build
@@ -35,6 +36,6 @@ RUN adduser -D -u 10001 app
 USER app
 
 COPY --from=build /out/ /usr/local/bin/
-COPY railway-entrypoint.sh /usr/local/bin/railway-entrypoint
+COPY entrypoint.sh /usr/local/bin/shiptrip-service
 
-ENTRYPOINT ["/bin/sh", "/usr/local/bin/railway-entrypoint"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/shiptrip-service"]
