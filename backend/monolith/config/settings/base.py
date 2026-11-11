@@ -440,16 +440,6 @@ GRPC_TLS_CA_CERT = env.str("GRPC_TLS_CA_CERT", default="")
 GRPC_TLS_SERVER_CERT = env.str("GRPC_TLS_SERVER_CERT", default="")
 GRPC_TLS_SERVER_KEY = env.str("GRPC_TLS_SERVER_KEY", default="")
 
-# Development/QA only. Hosted environments leave this disabled so an
-# unauthenticated caller cannot synthesize payment state transitions.
-PAYMENTS_MOCK_WEBHOOK_ENABLED = env.bool("PAYMENTS_MOCK_WEBHOOK_ENABLED", default=False)
-# Historical DZD PaymentIntent rows remain readable, but their old instant-mock
-# mutation surface is retired by default. Tests that exercise archival behavior
-# must opt in explicitly.
-PAYMENTS_LEGACY_MUTATIONS_ENABLED = env.bool(
-    "PAYMENTS_LEGACY_MUTATIONS_ENABLED", default=False
-)
-
 # --- V1 payments -------------------------------------------------------------
 # Credentials only. Everything commercial (which providers are on, the deposit
 # formula, the EUR->DZD rate) lives in the versioned BusinessSettingsVersion

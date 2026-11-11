@@ -1,12 +1,13 @@
 """Phase J4 — the frozen Find Travelers contract.
 
-`compatible-journeys` answers "which journeys pass hard compatibility, and what
-would each cost". It is a correct diagnostic payload and a poor browse payload:
-it repeats the sender's own request on every row, carries pricing vocabulary the
-sender did not ask about, names no Traveler at all, and publishes detour and
-carried-distance *bands* that are a straight zero on every canonical V1
-candidate. A sender scanning that list is reading five facts about geometry and
-none about the person who would carry their parcel.
+The retired J3 `compatible-journeys` endpoint (removed in L1A) answered "which
+journeys pass hard compatibility, and what would each cost". It was a correct
+diagnostic payload and a poor browse payload: it repeated the sender's own
+request on every row, carried pricing vocabulary the sender did not ask about,
+named no Traveler at all, and published detour and carried-distance *bands*
+that are a straight zero on every canonical V1 candidate. A sender scanning that
+list read five facts about geometry and none about the person who would carry
+their parcel.
 
 This module is the browse answer. It is a **projection**, not a second matching
 engine:
@@ -677,8 +678,9 @@ def candidate_payload(
 def request_block(delivery_request: DeliveryRequest, *, pricing: dict | None) -> dict:
     """The Sender's own request, sent once per page instead of once per row.
 
-    `compatible-journeys` repeats this block on every candidate, which on a
-    fifty-row answer is fifty copies of facts the Sender typed themselves.
+    The retired `compatible-journeys` endpoint repeated this block on every
+    candidate, which on a fifty-row answer was fifty copies of facts the Sender
+    typed themselves.
     """
 
     quote = pricing or {}
@@ -767,8 +769,7 @@ def find_travelers(
         pricing = public_pricing_payload(
             evaluation.pricing.as_dict() if evaluation.pricing else None,
             # The caller owns the request, so the detour-bearing recommendation
-            # is about their own parcel and may be returned — the same rule
-            # `compatible-journeys` applies.
+            # is about their own parcel and may be returned.
             include_recommendation=True,
         )
         projections.append((evaluation, compatibility, pricing))

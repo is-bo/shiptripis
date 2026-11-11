@@ -12,7 +12,7 @@ from rest_framework import serializers
 from apps.parcels.models import ParcelRequest
 
 from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
-from .models import Match, MatchEvent, Offer
+from .models import Match, Offer
 from .offer_economics import OfferEconomicsReader
 from .public_contract import public_compatibility_payload, public_terms_snapshot
 
@@ -172,15 +172,6 @@ class OfferListSerializer(OfferSerializer):
         fields = tuple(
             field for field in OfferSerializer.Meta.fields if field != "terms_snapshot"
         )
-        read_only_fields = fields
-
-
-class MatchEventSerializer(serializers.ModelSerializer):
-    actor_id = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = MatchEvent
-        fields = ("id", "kind", "actor_id", "offer", "payload", "created_at")
         read_only_fields = fields
 
 
@@ -370,43 +361,6 @@ class MatchListSerializer(MatchSerializer):
         read_only_fields = fields
 
 
-class TravelerApplySerializer(serializers.Serializer):
-    """Traveler applies to carry a sender's parcel.
-
-    Creates Match + first Offer in one POST. The offer's pricing is computed
-    server-side from `apps.core.pricing` based on the parcel kind. The
-    traveler may override `base_amount_dzd` (their asking price for delivery,
-    or the price they'll pay at the store for product) within validation
-    bounds — defaults to the sender's posted intent.
-    """
-
-    parcel_id = serializers.IntegerField()
-    trip_id = serializers.IntegerField()
-    base_amount_dzd = serializers.IntegerField(required=False, min_value=100)
-    note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
-
-
-class SenderApplySerializer(serializers.Serializer):
-    """Sender applies an existing parcel to one specific traveler's trip.
-
-    Mirrors `TravelerApplySerializer`; the difference is who proposes. The
-    parcel already exists, so the sender re-enters nothing — they only
-    optionally restate their price for this particular trip.
-    """
-
-    parcel_id = serializers.IntegerField()
-    trip_id = serializers.IntegerField()
-    base_amount_dzd = serializers.IntegerField(required=False, min_value=100)
-    note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
-
-
-class CounterOfferSerializer(serializers.Serializer):
-    """Counter the current pending offer with a new amount."""
-
-    base_amount_dzd = serializers.IntegerField(min_value=100)
-    note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
-
-
 class SenderProposeV1Serializer(serializers.Serializer):
     parcel_id = serializers.IntegerField()
     journey_id = serializers.IntegerField()
@@ -439,10 +393,6 @@ class OfferAcceptV1Serializer(serializers.Serializer):
 class PricingQuoteV1Serializer(serializers.Serializer):
     parcel_id = serializers.IntegerField(min_value=1)
     journey_id = serializers.IntegerField(min_value=1)
-
-
-class CompatibleJourneysQuerySerializer(serializers.Serializer):
-    parcel_id = serializers.IntegerField(min_value=1)
 
 
 class FindTravelersQuerySerializer(serializers.Serializer):

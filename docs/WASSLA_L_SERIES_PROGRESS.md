@@ -45,12 +45,35 @@ factual. Use exactly these headings.
 
 ### L1A. Backend cleanup, including Railway removal
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): tombstones live in
+  `apps/core/retired_routes.py` (410 with `code` and `detail`; other methods 405; anonymous 401).
+  `parcels/product` now carries the code `product_request_retired`. Every other removed route is
+  404. The Railway launcher is now `infra/vps/launcher.py` (`run()`, no `main()`), the internal
+  gateway config `infra/vps/gateway.Caddyfile`, the Go entrypoint `backend/services/entrypoint.sh`.
+  Legacy history admins use `apps/core/historical_admin.py` (view-only). Full list:
+  `docs/WASSLA_L1_CLEANUP_INVENTORY.md`.
+- Left for a later package: L1B removes the mobile `compatibleJourneys()` and `airports()`
+  repository methods (no callers, routes now 404) and must keep the app's mapping of the six removed
+  channel names (`trip.created`, `trip.updated`, `trip.cancelled`, `match.created`,
+  `handover.confirmed`, `handover.code_issued`) because stored inbox rows still carry them.
+  `journeys/search` and open-requests stay until L2B. Three questions for Ismail are in inventory
+  section 3 (MIGRATION.md, paid-undelivered legacy matches, old inbox rows).
+- Switches added and their defaults: none. Removed: `SHIPTRIP_EMBEDDED_REDIS`,
+  `PAYMENTS_MOCK_WEBHOOK_ENABLED`, `PAYMENTS_LEGACY_MUTATIONS_ENABLED` (no reader left).
+- Deviations from the plan (what, why, approved by): branch is `claude/project-thread-po89ml`, not
+  an `l/l1a-...` name, because the session's harness fixes the branch (not approved by Ismail; the
+  PR target is still `feature/discovery-professional-delivery`). `apps/matching/views.py` cancel,
+  decline and withdraw now lock with `select_for_update(no_key=True)` and the module joined the
+  lock-order gate; the gate's stated reason for leaving it out was the legacy classes L1A deleted.
+  Lock strength only, no result change; flagged for Ismail in the inventory. Legacy admins made
+  view-only and the withdrawal "mark sent" action removed (plan: admin registrations for removed
+  surfaces are in scope; the tables stay readable).
+- Tests (before and after counts): Django 2,529 passed / 34 skipped (2,563) before;
+  2,447 passed / 0 skipped after (132 IDs removed, of which 34 were skipped and 5 are renames; 16 added).
+  Go 199 top-level tests before and after. VPS unit 29 before and after. Removed tests are listed in
+  inventory section 1.10.
+- Known limits: Flutter could not run in this environment (CI runs it; only two Dart test fixture
+  strings changed). The VPS image build and all nine container integration groups passed locally.
 
 ### L1B. Mobile and docs cleanup
 

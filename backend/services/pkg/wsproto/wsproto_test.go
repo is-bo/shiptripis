@@ -216,12 +216,12 @@ func TestClose_IsIdempotent(t *testing.T) {
 func TestEnvelope_JSONRoundTrip(t *testing.T) {
 	// Server→client envelopes carry event_id + ts; omitempty keeps inbound
 	// (client→server) frames minimal. Confirm the tags behave.
-	out := Envelope{Type: "match.created"} // no event_id/ts/payload
+	out := Envelope{Type: "offer.created"} // no event_id/ts/payload
 	b, err := json.Marshal(out)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if got := string(b); got != `{"type":"match.created"}` {
+	if got := string(b); got != `{"type":"offer.created"}` {
 		t.Errorf("marshalled = %s, want omitempty to drop event_id/ts/payload", got)
 	}
 

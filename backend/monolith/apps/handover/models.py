@@ -1,12 +1,12 @@
 """Deal-scoped handover codes.
 
 This is a new domain, not a migration of `apps.verification`. The legacy
-`HandoverCode` hangs off a `Match`, is auto-issued to the sender the instant a
-pickup is verified, and publishes its plaintext over the Redis bus to *both*
-parties -- which for a delivery code means straight to the traveler. It also
-locks itself before `Match`, inverting the global financial lock order. None of
-that is reusable, so the legacy model keeps serving legacy rows and V1 Deals get
-this instead. See `docs/PHASE4_HANDOVER_DISPUTES.md` for the full audit.
+`HandoverCode` hung off a `Match`, was auto-issued to the sender the instant a
+pickup was verified, and published its plaintext over the Redis bus to *both*
+parties -- which for a delivery code meant straight to the traveler. It also
+locked itself before `Match`, inverting the global financial lock order. L1A
+removed that service and its routes; the legacy table stays as history only.
+See `docs/PHASE4_HANDOVER_DISPUTES.md` for the full audit.
 
 Two invariants shape everything below:
 

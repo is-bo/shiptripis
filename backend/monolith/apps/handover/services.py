@@ -18,8 +18,8 @@ window -- and because the recipient's email is armed *by* that same transition,
 impossible event rather than two separate risks.
 
 Everything enters through `lock_deal_lifecycle`, so handover rows are always
-taken after the Deal, never before it. That is the specific defect in the legacy
-`apps.verification` path, which locks `HandoverCode` and then `Match`.
+taken after the Deal, never before it. The legacy `apps.verification` path got
+that order backwards (`HandoverCode`, then `Match`); L1A removed it.
 """
 
 from __future__ import annotations

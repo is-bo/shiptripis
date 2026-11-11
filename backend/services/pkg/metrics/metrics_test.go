@@ -95,7 +95,7 @@ func TestSanitize(t *testing.T) {
 		"pubsub_drops_offer.accepted": "pubsub_drops_offer_accepted",
 		"UPPER_Case":                  "upper_case",
 		"with spaces":                 "with_spaces",
-		"trip.created":                "trip_created",
+		"deal.updated":                "deal_updated",
 		"already_ok_123":              "already_ok_123",
 		"weird/chars:here":            "weird_chars_here",
 		"":                            "",

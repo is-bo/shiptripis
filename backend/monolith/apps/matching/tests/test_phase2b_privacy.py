@@ -311,8 +311,8 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
         sender = self._client(self.sender)
         traveler = self._client(self.traveler)
 
-        journeys = sender.get(
-            reverse("matches-compatible-journeys-v1"),
+        travelers = sender.get(
+            reverse("matches-find-travelers-v1"),
             {"parcel_id": self.delivery_request.pk},
         )
         requests = traveler.get(
@@ -327,14 +327,14 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
             },
             format="json",
         )
-        assert journeys.status_code == 200, journeys.data
+        assert travelers.status_code == 200, travelers.data
         assert requests.status_code == 200, requests.data
         assert quote.status_code == 200, quote.data
-        self._assert_no_forbidden_keys(journeys.data, "compatible-journeys")
+        self._assert_no_forbidden_keys(travelers.data, "find-travelers")
         self._assert_no_forbidden_keys(requests.data, "compatible-requests")
         self._assert_no_forbidden_keys(quote.data, "quote")
 
-        candidate = journeys.data["results"][0]
+        candidate = quote.data
         proposal = sender.post(
             reverse("matches-propose-v1"),
             {
@@ -379,10 +379,11 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
     def test_persisted_snapshots_keep_the_internal_form_for_audit(self):
         """Storage is unchanged; only serialization is narrowed."""
 
-        candidate = self._client(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
-            {"parcel_id": self.delivery_request.pk},
-        ).data["results"][0]
+        candidate = self._client(self.sender).post(
+            reverse("matches-quote-v1"),
+            {"parcel_id": self.delivery_request.pk, "journey_id": self.journey.pk},
+            format="json",
+        ).data
         proposal = self._client(self.sender).post(
             reverse("matches-propose-v1"),
             {
@@ -455,11 +456,12 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
             assert row["pricing"]["minimum_reward_eur_cents"] > 0
 
     def test_capacity_details_are_never_published(self):
-        response = self._client(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
-            {"parcel_id": self.delivery_request.pk},
+        response = self._client(self.sender).post(
+            reverse("matches-quote-v1"),
+            {"parcel_id": self.delivery_request.pk, "journey_id": self.journey.pk},
+            format="json",
         )
-        compatibility = response.data["results"][0]["compatibility"]
+        compatibility = response.data["compatibility"]
 
         assert compatibility["capacity_available_on_every_covered_leg"] is True
         text = json.dumps(response.data, default=str)
@@ -475,11 +477,12 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
 
         assert set(PUBLIC_LOCATION_SUMMARY_FIELDS) == serializer_fields
 
-        response = self._client(self.sender).get(
-            reverse("matches-compatible-journeys-v1"),
-            {"parcel_id": self.delivery_request.pk},
+        response = self._client(self.sender).post(
+            reverse("matches-quote-v1"),
+            {"parcel_id": self.delivery_request.pk, "journey_id": self.journey.pk},
+            format="json",
         )
-        leg = response.data["results"][0]["compatibility"]["covered_legs"][0]
+        leg = response.data["compatibility"]["covered_legs"][0]
         assert set(leg["origin"]) == set(PUBLIC_LOCATION_SUMMARY_FIELDS)
         assert set(leg["destination"]) == set(PUBLIC_LOCATION_SUMMARY_FIELDS)
 

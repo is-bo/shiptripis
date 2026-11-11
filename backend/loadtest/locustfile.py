@@ -218,11 +218,8 @@ class SenderUser(_AppUser):
 
     @task(1)
     def reference(self) -> None:
-        # Countries/airports carry strong ETags; a warm client revalidates.
-        for path, name in (
-            ("/api/geography/countries", "geography countries"),
-            ("/api/airports", "airports"),
-        ):
+        # The country catalogue carries a strong ETag; a warm client revalidates.
+        for path, name in (("/api/geography/countries", "geography countries"),):
             headers = {}
             if etag := self.catalogue_etags.get(path):
                 headers["If-None-Match"] = etag

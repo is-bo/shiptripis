@@ -65,15 +65,15 @@ func TestRecordDropSeparatesChannels(t *testing.T) {
 	m := metrics.Register("redisbus-drop-b")
 	sub := newDropTestSub(m)
 
-	sub.recordDrop("trip.created", []byte(`{"event_id":"a"}`))
+	sub.recordDrop("deal.updated", []byte(`{"event_id":"a"}`))
 	sub.recordDrop("parcel.created", []byte(`{"event_id":"b"}`))
 	sub.recordDrop("parcel.created", []byte(`{"event_id":"c"}`))
 
 	if got := readInt(t, "redisbus_drop_b_pubsub_drops_total"); got != 3 {
 		t.Errorf("total = %d, want 3", got)
 	}
-	if got := readInt(t, "redisbus_drop_b_pubsub_drops_trip_created"); got != 1 {
-		t.Errorf("trip.created drop = %d, want 1", got)
+	if got := readInt(t, "redisbus_drop_b_pubsub_drops_deal_updated"); got != 1 {
+		t.Errorf("deal.updated drop = %d, want 1", got)
 	}
 	if got := readInt(t, "redisbus_drop_b_pubsub_drops_parcel_created"); got != 2 {
 		t.Errorf("parcel.created drop = %d, want 2", got)

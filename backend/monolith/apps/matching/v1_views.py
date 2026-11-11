@@ -37,7 +37,6 @@ from .policy import InvalidPhase2Policy
 from .pricing import PricingError
 from .serializers import (
     CandidateExplanationQuerySerializer,
-    CompatibleJourneysQuerySerializer,
     CompatibleRequestsQuerySerializer,
     CounterOfferV1Serializer,
     FindTravelersQuerySerializer,
@@ -136,23 +135,6 @@ def _request_for_owner(*, pk: int, user):
             "Only the request sender may discover or quote matches."
         )
     return delivery_request
-
-
-class RetiredLegacyMatchingWriteView(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request, *args, **kwargs) -> Response:
-        del request, args, kwargs
-        return Response(
-            {
-                "code": "legacy_matching_flow_retired",
-                "detail": (
-                    "Legacy traveler-first and DZD matching writes are retired. "
-                    "Use the Wassla V1 sender proposal endpoint."
-                ),
-            },
-            status=status.HTTP_410_GONE,
-        )
 
 
 class SenderProposeV1View(APIView):
@@ -261,51 +243,14 @@ class OfferAcceptV1View(APIView):
         return Response(DealSerializer(accepted.deal).data, status=response_status)
 
 
-class CompatibleJourneysV1View(APIView):
-    permission_classes = (IsAuthenticated,)
-    throttle_classes = (UserRateThrottle, ScopedRateThrottle)
-    throttle_scope = "matching_discovery"
-
-    def get(self, request: Request) -> Response:
-        serializer = CompatibleJourneysQuerySerializer(data=request.query_params)
-        serializer.is_valid(raise_exception=True)
-        try:
-            delivery_request = _request_for_owner(
-                pk=serializer.validated_data["parcel_id"],
-                user=request.user,
-            )
-            candidates = compatible_journeys_for_request(
-                delivery_request=delivery_request,
-                policy=phase2_policy(),
-            )
-        except (
-            OfferAuthorizationError,
-            NoActiveBusinessSettings,
-            InvalidPhase2Policy,
-            PricingError,
-        ) as exc:
-            return _domain_error_response(exc)
-        # The caller owns the request, so the detour-bearing recommendation is
-        # about their own parcel and may be returned.
-        return Response(
-            {
-                "count": len(candidates),
-                "results": [
-                    row.as_public_dict(include_recommendation=True)
-                    for row in candidates
-                ],
-            }
-        )
-
-
 class FindTravelersV1View(APIView):
     """`GET /api/matches/find-travelers` — the frozen J4 browse contract.
 
-    Supersedes `compatible-journeys` for the Sender's Find Travelers screen.
-    The older endpoint keeps answering the shipped J3 app unchanged; this one is
-    what Gemini J5 renders.
+    The Sender's Find Travelers screen. It replaced the J3
+    `compatible-journeys` endpoint, which L1A removed; both read the same
+    hard-compatibility set from `compatible_journeys_for_request`.
 
-    Three things it does that the older endpoint cannot.
+    Three things it adds over that set.
 
     It **names the Traveler**, with a first name, a rating state and a completed
     delivery count, so a browse row answers "would I trust this person" without

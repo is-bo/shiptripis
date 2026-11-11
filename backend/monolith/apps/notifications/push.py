@@ -172,22 +172,6 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("تم تأكيد التسليم", "بدأت فترة الحماية لمدة 48 ساعة."),
         },
     ),
-    "handover.confirmed": (
-        "essential",
-        "deliveries",
-        "",
-        {
-            "en": (
-                "Handover confirmed",
-                "Open Wassla to review the delivery status.",
-            ),
-            "fr": (
-                "Remise confirmée",
-                "Ouvrez Wassla pour consulter l'état de la livraison.",
-            ),
-            "ar": ("تم تأكيد التسليم", "افتح Wassla لمراجعة حالة التوصيل."),
-        },
-    ),
     "handover.delivery_code_available": (
         "essential",
         "deliveries",

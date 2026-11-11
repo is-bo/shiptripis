@@ -1,4 +1,4 @@
-"""Matching API — the routed V1 reads plus a retained legacy write block.
+"""Matching API — the routed V1 reads and the party-side closing writes.
 
 Routed here (see `urls.py`):
   GET  /api/matches                          — list (mine, ?role=sender|traveler, ?status=)
@@ -11,19 +11,11 @@ Routed here (see `urls.py`):
 
 Every V1 *negotiation write* lives in `v1_views.py` and `v1_services.py`
 instead: `SenderProposeV1View`, `CounterOfferV1View` and `OfferAcceptV1View`.
-`urls.py` points the retired traveler-first paths at
-`RetiredLegacyMatchingWriteView`.
+The retired traveler-first paths answer 410 from `apps.core.retired_routes`;
+L1A deleted the pre-V1 write classes that used to sit in this module.
 
-**Unrouted legacy classes.** `TravelerApplyView`, `SenderApplyView`,
-`CounterOfferView` and `OfferAcceptView` below are the pre-V1 traveler-first,
-DZD-priced write path. Nothing in the repository routes, imports or calls them;
-they are reachable only by reading this file. They are kept rather than deleted
-because they still document the retired behaviour that several comments in
-`apps.parcels` point at, and because they are the reason
-`apps/finance/tests/test_phase8df_lock_order.py` excludes this module from the
-canonical finance lock graph — they cannot execute against a V1 Deal. Removing
-them is a separate legacy-retirement change, not a release-candidate cleanup.
-Do not add a route to them.
+Row locks here use `select_for_update(no_key=True)`, the canonical mode
+asserted by `apps/finance/tests/test_phase8df_lock_order.py`.
 
 State machine details in `models.py`.
 
@@ -45,71 +37,19 @@ from rest_framework.views import APIView
 from apps.core import channels, redis_bus
 from apps.core.event_resources import match_resources
 from apps.core.pagination import paginated_array_response
-from apps.core.pricing import quote_delivery, quote_product
 from apps.parcels.models import ParcelRequest
-from apps.trips.models import Trip
 
 from .models import Match, MatchEvent, Offer
 from .offer_economics import OfferEconomicsReader
 from .serializers import (
-    CounterOfferSerializer,
     MatchListSerializer,
     MatchSerializer,
     OfferSerializer,
-    SenderApplySerializer,
-    TravelerApplySerializer,
 )
 from .services import chat_eligibility
 
 
 # ---------- helpers ----------
-
-
-def _quote_for_parcel(parcel: ParcelRequest, base_amount_dzd: int | None) -> dict:
-    """Run the pricing engine for the parcel kind, return frozen-fields dict.
-
-    `base_amount_dzd` semantics differ by kind:
-      delivery: traveler's asking payout. Defaults to the sender's posted base.
-      product:  product price the traveler will pay at the store.
-                Defaults to the sender's posted product price.
-
-    Returns dict suitable for `Offer.objects.create(**fields)`:
-      base_amount_dzd, base_fee_dzd, commission_dzd, total_dzd
-    """
-    if parcel.kind == ParcelRequest.Kind.DELIVERY:
-        # Lazy import to avoid circular issues at startup.
-        from apps.parcels.models import DeliveryRequest
-
-        delivery = DeliveryRequest.objects.get(pk=parcel.pk)
-        amount = (
-            base_amount_dzd if base_amount_dzd is not None else delivery.base_amount_dzd
-        )
-        q = quote_delivery(amount)
-        return {
-            "base_amount_dzd": q.base_amount_dzd,
-            "base_fee_dzd": 0,
-            "commission_dzd": q.commission_dzd,
-            "total_dzd": q.total_dzd,
-            "economics_version": Offer.EconomicsVersion.LEGACY_DZD,
-            "currency": Offer.Currency.DZD,
-        }
-
-    # product
-    from apps.parcels.models import ProductRequest
-
-    product = ProductRequest.objects.get(pk=parcel.pk)
-    amount = (
-        base_amount_dzd if base_amount_dzd is not None else product.product_price_dzd
-    )
-    q = quote_product(amount)
-    return {
-        "base_amount_dzd": q.product_price_dzd,
-        "base_fee_dzd": q.base_fee_dzd,
-        "commission_dzd": q.commission_dzd,
-        "total_dzd": q.total_dzd,
-        "economics_version": Offer.EconomicsVersion.LEGACY_DZD,
-        "currency": Offer.Currency.DZD,
-    }
 
 
 def _is_party(match: Match, user_id: int) -> bool:
@@ -235,263 +175,6 @@ class MatchDetailView(APIView):
         return Response(MatchSerializer(match, context={"request": request}).data)
 
 
-class TravelerApplyView(APIView):
-    """Traveler applies to carry a parcel.
-
-    Creates Match + first Offer in one transaction. The traveler is the
-    proposer; the sender is the one who must accept/decline/counter.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request) -> Response:
-        s = TravelerApplySerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = s.validated_data
-
-        parcel = get_object_or_404(ParcelRequest, pk=d["parcel_id"])
-        trip = get_object_or_404(Trip, pk=d["trip_id"])
-
-        if trip.traveler_id != request.user.id:
-            return Response(
-                {"detail": "Only the trip's traveler can apply with it."},
-                status=http.HTTP_403_FORBIDDEN,
-            )
-        if parcel.sender_id == request.user.id:
-            return Response(
-                {"detail": "Cannot apply to your own parcel."},
-                status=http.HTTP_400_BAD_REQUEST,
-            )
-        if parcel.status != ParcelRequest.Status.OPEN:
-            return Response(
-                {"detail": f"Parcel is not open (status={parcel.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-        if trip.status not in {Trip.Status.DRAFT, Trip.Status.ACTIVE}:
-            return Response(
-                {"detail": f"Trip is not bookable (status={trip.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-        if (parcel.origin_id, parcel.destination_id) != (
-            trip.origin_id,
-            trip.destination_id,
-        ):
-            return Response(
-                {"detail": "Parcel and trip must share origin and destination."},
-                status=http.HTTP_400_BAD_REQUEST,
-            )
-
-        pricing = _quote_for_parcel(parcel, d.get("base_amount_dzd"))
-
-        with transaction.atomic():
-            # Re-check uniqueness inside the txn — partial unique index will
-            # also catch races. Friendly 409 first.
-            existing = Match.objects.filter(
-                parcel=parcel, trip=trip, status=Match.Status.PENDING
-            ).first()
-            if existing is not None:
-                return Response(
-                    {
-                        "detail": "A pending match already exists.",
-                        "match_id": existing.id,
-                    },
-                    status=http.HTTP_409_CONFLICT,
-                )
-
-            match = Match.objects.create(
-                parcel=parcel,
-                trip=trip,
-                sender_id=parcel.sender_id,
-                traveler_id=trip.traveler_id,
-                status=Match.Status.PENDING,
-            )
-            offer = Offer.objects.create(
-                match=match,
-                proposed_by=Offer.ProposedBy.TRAVELER,
-                proposer=request.user,
-                note=d.get("note", ""),
-                **pricing,
-            )
-            MatchEvent.objects.create(
-                match=match,
-                offer=offer,
-                actor=request.user,
-                kind=MatchEvent.Kind.MATCH_CREATED,
-                payload={"trip_id": trip.id, "parcel_id": parcel.id},
-            )
-            MatchEvent.objects.create(
-                match=match,
-                offer=offer,
-                actor=request.user,
-                kind=MatchEvent.Kind.OFFER_CREATED,
-                payload={"by": "traveler", "total_dzd": offer.total_dzd},
-            )
-
-            redis_bus.publish_after_commit(
-                channels.MATCH_CREATED,
-                {
-                    "match_id": match.id,
-                    "parcel_id": parcel.id,
-                    "trip_id": trip.id,
-                    "sender_id": match.sender_id,
-                    "traveler_id": match.traveler_id,
-                },
-                targets=[match.sender_id, match.traveler_id],
-            )
-            redis_bus.publish_after_commit(
-                channels.OFFER_CREATED,
-                {
-                    "match_id": match.id,
-                    "offer_id": offer.id,
-                    "proposed_by": offer.proposed_by,
-                    "total_dzd": offer.total_dzd,
-                    "recipient_id": match.sender_id,
-                },
-                targets=[match.sender_id],
-            )
-
-        return Response(
-            MatchSerializer(
-                _refetch_match(match.pk), context={"request": request}
-            ).data,
-            status=http.HTTP_201_CREATED,
-        )
-
-
-class SenderApplyView(APIView):
-    """Sender applies an existing parcel to one specific traveler's trip.
-
-    The mirror image of `TravelerApplyView`: the sender is the proposer and
-    the traveler must accept/decline/counter. This is what makes a suggested
-    trip actionable — the parcel is already posted, so the sender picks a
-    trip instead of filling the request form again.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request) -> Response:
-        s = SenderApplySerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = s.validated_data
-
-        parcel = get_object_or_404(ParcelRequest, pk=d["parcel_id"])
-        trip = get_object_or_404(Trip, pk=d["trip_id"])
-
-        if parcel.sender_id != request.user.id:
-            return Response(
-                {"detail": "Only the parcel's sender can apply with it."},
-                status=http.HTTP_403_FORBIDDEN,
-            )
-        if trip.traveler_id == request.user.id:
-            return Response(
-                {"detail": "Cannot apply to your own trip."},
-                status=http.HTTP_400_BAD_REQUEST,
-            )
-        if parcel.status != ParcelRequest.Status.OPEN:
-            return Response(
-                {"detail": f"Parcel is not open (status={parcel.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-        if trip.status not in {Trip.Status.DRAFT, Trip.Status.ACTIVE}:
-            return Response(
-                {"detail": f"Trip is not bookable (status={trip.status})."},
-                status=http.HTTP_409_CONFLICT,
-            )
-        if (parcel.origin_id, parcel.destination_id) != (
-            trip.origin_id,
-            trip.destination_id,
-        ):
-            return Response(
-                {"detail": "Parcel and trip must share origin and destination."},
-                status=http.HTTP_400_BAD_REQUEST,
-            )
-
-        pricing = _quote_for_parcel(parcel, d.get("base_amount_dzd"))
-
-        with transaction.atomic():
-            existing = Match.objects.filter(
-                parcel=parcel, trip=trip, status=Match.Status.PENDING
-            ).first()
-            if existing is not None:
-                return Response(
-                    {
-                        "detail": "A pending match already exists.",
-                        "match_id": existing.id,
-                    },
-                    status=http.HTTP_409_CONFLICT,
-                )
-
-            # Reaching out to one named traveler makes this a direct request,
-            # not a broadcast — and CounterOfferView only permits countering on
-            # direct requests. Without this the traveler could accept or decline
-            # but never negotiate, which is precisely the flow the sender is
-            # opening here. Only set it when the parcel is still un-targeted so
-            # we never retarget a parcel the sender aimed elsewhere.
-            if parcel.target_traveler_id is None:
-                parcel.target_traveler_id = trip.traveler_id
-                parcel.save(update_fields=["target_traveler", "updated_at"])
-
-            match = Match.objects.create(
-                parcel=parcel,
-                trip=trip,
-                sender_id=parcel.sender_id,
-                traveler_id=trip.traveler_id,
-                status=Match.Status.PENDING,
-            )
-            offer = Offer.objects.create(
-                match=match,
-                proposed_by=Offer.ProposedBy.SENDER,
-                proposer=request.user,
-                note=d.get("note", ""),
-                **pricing,
-            )
-            MatchEvent.objects.create(
-                match=match,
-                offer=offer,
-                actor=request.user,
-                kind=MatchEvent.Kind.MATCH_CREATED,
-                payload={"trip_id": trip.id, "parcel_id": parcel.id, "directed": True},
-            )
-            MatchEvent.objects.create(
-                match=match,
-                offer=offer,
-                actor=request.user,
-                kind=MatchEvent.Kind.OFFER_CREATED,
-                payload={"by": "sender", "total_dzd": offer.total_dzd},
-            )
-
-            redis_bus.publish_after_commit(
-                channels.MATCH_CREATED,
-                {
-                    "match_id": match.id,
-                    "parcel_id": parcel.id,
-                    "trip_id": trip.id,
-                    "sender_id": match.sender_id,
-                    "traveler_id": match.traveler_id,
-                },
-                targets=[match.sender_id, match.traveler_id],
-            )
-            # The traveler is the one who must respond, so they get the ping.
-            redis_bus.publish_after_commit(
-                channels.OFFER_CREATED,
-                {
-                    "match_id": match.id,
-                    "offer_id": offer.id,
-                    "proposed_by": offer.proposed_by,
-                    "total_dzd": offer.total_dzd,
-                    "recipient_id": match.traveler_id,
-                },
-                targets=[match.traveler_id],
-            )
-
-        return Response(
-            MatchSerializer(
-                _refetch_match(match.pk), context={"request": request}
-            ).data,
-            status=http.HTTP_201_CREATED,
-        )
-
-
 class MatchCancelView(APIView):
     """Either party cancels a Match while it's still pending."""
 
@@ -500,7 +183,7 @@ class MatchCancelView(APIView):
     def post(self, request: Request, pk: int) -> Response:
         with transaction.atomic():
             match = get_object_or_404(
-                Match.objects.select_for_update().select_related("parcel"), pk=pk
+                Match.objects.select_for_update(no_key=True).select_related("parcel"), pk=pk
             )
             if not _is_party(match, request.user.id):
                 return Response(
@@ -566,208 +249,6 @@ class OfferListView(APIView):
         )
 
 
-class CounterOfferView(APIView):
-    """Counter the current pending offer.
-
-    Only the side that did NOT propose the current pending offer can counter.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request, pk: int) -> Response:
-        s = CounterOfferSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = s.validated_data
-
-        with transaction.atomic():
-            # Lock the match and its current pending offer before validating
-            # the state machine. This prevents two counters from both
-            # replacing the same parent offer.
-            match = get_object_or_404(
-                Match.objects.select_for_update().select_related("parcel"), pk=pk
-            )
-            if not _is_party(match, request.user.id):
-                return Response(
-                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
-                )
-            if match.status != Match.Status.PENDING:
-                return Response(
-                    {"detail": f"Match not pending (status={match.status})."},
-                    status=http.HTTP_409_CONFLICT,
-                )
-
-            pending = (
-                Offer.objects.select_for_update()
-                .filter(match=match, status=Offer.Status.PENDING)
-                .first()
-            )
-            if pending is None:
-                return Response(
-                    {"detail": "No pending offer to counter."},
-                    status=http.HTTP_409_CONFLICT,
-                )
-            if pending.proposer_id == request.user.id:
-                return Response(
-                    {"detail": "Cannot counter your own offer; withdraw it instead."},
-                    status=http.HTTP_403_FORBIDDEN,
-                )
-            if match.parcel.target_traveler_id is None:
-                return Response(
-                    {
-                        "detail": "Counter not allowed on broadcast requests; "
-                        "accept or decline."
-                    },
-                    status=http.HTTP_409_CONFLICT,
-                )
-
-            my_side = (
-                Offer.ProposedBy.SENDER
-                if request.user.id == match.sender_id
-                else Offer.ProposedBy.TRAVELER
-            )
-            pricing = _quote_for_parcel(match.parcel, d["base_amount_dzd"])
-            now = timezone.now()
-            pending.status = Offer.Status.COUNTERED
-            pending.responded_at = now
-            pending.save(update_fields=["status", "responded_at", "updated_at"])
-
-            child = Offer.objects.create(
-                match=match,
-                parent_offer=pending,
-                proposed_by=my_side,
-                proposer=request.user,
-                note=d.get("note", ""),
-                **pricing,
-            )
-            MatchEvent.objects.create(
-                match=match,
-                offer=child,
-                actor=request.user,
-                kind=MatchEvent.Kind.OFFER_COUNTERED,
-                payload={"parent_offer_id": pending.id, "total_dzd": child.total_dzd},
-            )
-            recipient = (
-                match.traveler_id
-                if my_side == Offer.ProposedBy.SENDER
-                else match.sender_id
-            )
-            redis_bus.publish_after_commit(
-                channels.OFFER_CREATED,
-                {
-                    "match_id": match.id,
-                    "offer_id": child.id,
-                    "proposed_by": child.proposed_by,
-                    "total_dzd": child.total_dzd,
-                    "recipient_id": recipient,
-                },
-                targets=[recipient],
-            )
-
-        return Response(
-            OfferSerializer(child, context={"request": request, "match": match}).data,
-            status=http.HTTP_201_CREATED,
-        )
-
-
-class OfferAcceptView(APIView):
-    """Counterparty accepts a pending offer.
-
-    Side effects:
-      - Offer.status = accepted, Match.status = accepted
-      - Parcel.status = matched, Trip.status unchanged (capacity logic later)
-      - Publishes `offer.accepted` (and reuses `offer.updated`).
-
-    Payment is handled by `apps/payments` against the now-frozen Offer total.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request, pk: int) -> Response:
-        with transaction.atomic():
-            # The parcel row is the cross-match serialization point. The
-            # schema can enforce one accepted offer per Match, but only this
-            # lock can ensure that two different Matches for the same parcel
-            # are not accepted concurrently.
-            initial_offer = get_object_or_404(
-                Offer.objects.select_related("match"), pk=pk
-            )
-            parcel = get_object_or_404(
-                ParcelRequest.objects.select_for_update(),
-                pk=initial_offer.match.parcel_id,
-            )
-            match = get_object_or_404(
-                # `trip` is nullable, so this select_related outer-joins and a
-                # bare FOR UPDATE would be rejected by PostgreSQL. Name the row
-                # actually being locked.
-                Match.objects.select_for_update(of=("self",)).select_related("trip"),
-                pk=initial_offer.match_id,
-            )
-            offer = get_object_or_404(
-                Offer.objects.select_for_update(), pk=initial_offer.pk
-            )
-
-            if not _is_party(match, request.user.id):
-                return Response(
-                    {"detail": "Not a party."}, status=http.HTTP_403_FORBIDDEN
-                )
-            if offer.proposer_id == request.user.id:
-                return Response(
-                    {"detail": "Cannot accept your own offer."},
-                    status=http.HTTP_403_FORBIDDEN,
-                )
-            if offer.status != Offer.Status.PENDING:
-                return Response(
-                    {"detail": f"Offer not pending (status={offer.status})."},
-                    status=http.HTTP_409_CONFLICT,
-                )
-            if match.status != Match.Status.PENDING:
-                return Response(
-                    {"detail": f"Match not pending (status={match.status})."},
-                    status=http.HTTP_409_CONFLICT,
-                )
-            if parcel.status != ParcelRequest.Status.OPEN:
-                return Response(
-                    {"detail": "Parcel request is already matched or closed."},
-                    status=http.HTTP_409_CONFLICT,
-                )
-
-            now = timezone.now()
-            offer.status = Offer.Status.ACCEPTED
-            offer.responded_at = now
-            offer.save(update_fields=["status", "responded_at", "updated_at"])
-
-            match.status = Match.Status.ACCEPTED
-            match.save(update_fields=["status", "updated_at"])
-
-            parcel.status = ParcelRequest.Status.MATCHED
-            parcel.save(update_fields=["status", "updated_at"])
-
-            MatchEvent.objects.create(
-                match=match,
-                offer=offer,
-                actor=request.user,
-                kind=MatchEvent.Kind.OFFER_ACCEPTED,
-                payload={"total_dzd": offer.total_dzd},
-            )
-            redis_bus.publish_after_commit(
-                channels.OFFER_ACCEPTED,
-                {
-                    "match_id": match.id,
-                    "offer_id": offer.id,
-                    "parcel_id": match.parcel_id,
-                    "trip_id": match.trip_id,
-                    "sender_id": match.sender_id,
-                    "traveler_id": match.traveler_id,
-                    "total_dzd": offer.total_dzd,
-                },
-                targets=[match.sender_id, match.traveler_id],
-            )
-
-        return Response(
-            OfferSerializer(offer, context={"request": request, "match": match}).data
-        )
-
-
 class OfferDeclineView(APIView):
     """Counterparty declines a pending offer (Match stays open for new offers)."""
 
@@ -779,10 +260,10 @@ class OfferDeclineView(APIView):
                 Offer.objects.select_related("match__parcel"), pk=pk
             )
             match = get_object_or_404(
-                Match.objects.select_for_update(), pk=initial_offer.match_id
+                Match.objects.select_for_update(no_key=True), pk=initial_offer.match_id
             )
             offer = get_object_or_404(
-                Offer.objects.select_for_update(), pk=initial_offer.pk
+                Offer.objects.select_for_update(no_key=True), pk=initial_offer.pk
             )
             if not _is_party(match, request.user.id):
                 return _domain_error(
@@ -893,10 +374,10 @@ class OfferWithdrawView(APIView):
                 Offer.objects.select_related("match__parcel"), pk=pk
             )
             match = get_object_or_404(
-                Match.objects.select_for_update(), pk=initial_offer.match_id
+                Match.objects.select_for_update(no_key=True), pk=initial_offer.match_id
             )
             offer = get_object_or_404(
-                Offer.objects.select_for_update().select_related("match"),
+                Offer.objects.select_for_update(no_key=True).select_related("match"),
                 pk=initial_offer.pk,
             )
             if offer.proposer_id != request.user.id:

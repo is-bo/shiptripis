@@ -2,8 +2,8 @@
 
 The legacy `apps.payments` schema binds one `PaymentIntent` to one accepted
 `Offer` and carries DZD as if it were marketplace truth. It stays in the
-database as history and keeps serving legacy rows; nothing here reinterprets
-it and nothing here writes to it.
+database as history only (L1A removed its API); nothing here reinterprets it
+and nothing here writes to it.
 
 The V1 model separates two things the legacy schema conflated:
 

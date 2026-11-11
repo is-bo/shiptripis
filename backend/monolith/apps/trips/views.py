@@ -1,15 +1,18 @@
-"""Trip API.
+"""Journey API.
 
 Endpoints:
-  GET  /api/airports                 — list (filter by ?country=DZ)
-  GET  /api/trips                    — list (mine, with ?status=active)
-  GET  /api/trips/search             — public search (active trips, not mine)
-  POST /api/trips                    — create
-  GET  /api/trips/<id>               — retrieve (any auth user)
-  POST /api/trips/<id>/cancel        — cancel (owner only, while active)
+  GET   /api/journeys                                   — list mine
+  POST  /api/journeys                                   — create a draft
+  GET   /api/journeys/search                            — public search
+  GET   /api/journeys/<id>                              — retrieve
+  PATCH /api/journeys/<id>                              — edit while editable
+  POST  /api/journeys/<id>/publish                      — publish
+  POST  /api/journeys/<id>/cancel                       — cancel
+  POST  /api/journeys/<journey_id>/legs/<leg_id>/proof  — upload a flight proof
 
-Per CLAUDE.md G6, every Trip lifecycle change publishes via
-`redis_bus.publish_after_commit` so the Go services can fan out.
+The pre-V1 `/api/trips*` and `/api/airports` endpoints were removed in L1A;
+the `Trip` model stays because `Journey.legacy_trip` and historical matches
+reference it.
 """
 
 from __future__ import annotations
@@ -35,13 +38,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.core.http_cache import public_catalog_response
 from apps.core.pagination import paginated_array_response
 from apps.core.storage import (
     ext_for_content_type,
@@ -55,21 +57,17 @@ from apps.kyc.models import KycSubmission
 from apps.locations.models import AirportLocalityMapping
 
 from .models import (
-    Airport,
     Journey,
     JourneyLeg,
     JourneyLegProof,
-    Trip,
 )
 from .serializers import (
-    AirportSerializer,
     JourneyCreateSerializer,
     JourneyListSerializer,
     JourneyLegProofSerializer,
     JourneySearchFilterSerializer,
     JourneySerializer,
     JourneyUpdateSerializer,
-    TripSerializer,
 )
 from .services import (
     JourneyDomainError,
@@ -82,114 +80,6 @@ from .services import (
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 logger = logging.getLogger("apps.trips")
-
-
-class AirportListView(APIView):
-    permission_classes = (AllowAny,)
-
-    def get(self, request: Request) -> Response:
-        qs = Airport.objects.all()
-        country = request.query_params.get("country")
-        if country:
-            qs = qs.filter(country=country.upper())
-        return public_catalog_response(
-            request, AirportSerializer(qs, many=True).data
-        )
-
-
-class TripListCreateView(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        qs = (
-            Trip.objects.filter(traveler=request.user)
-            .select_related("origin", "destination", "traveler")
-            .prefetch_related("stopovers__airport")
-        )
-        status_filter = request.query_params.get("status")
-        if status_filter:
-            qs = qs.filter(status=status_filter)
-        return Response(TripSerializer(qs[:100], many=True).data)
-
-    def post(self, request: Request) -> Response:
-        del request
-        return Response(
-            {
-                "code": "legacy_trip_flow_retired",
-                "detail": "Use POST /api/journeys with ordered FLIGHT/DRIVE legs.",
-            },
-            status=status.HTTP_410_GONE,
-        )
-
-
-class TripSearchView(APIView):
-    """Public trip search for senders looking for travelers.
-
-    Only returns trips in ACTIVE status that are NOT the caller's own. Filters:
-      ?origin=ALG&destination=CDG     IATA codes (uppercased)
-      ?departure_after=2026-05-20T00:00:00Z   ISO 8601, accepts naive
-      ?min_capacity_kg=2              integer
-    Results are ordered by earliest departure first; capped at 100 rows.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        del request
-        return Response(
-            {
-                "code": "legacy_trip_search_retired",
-                "detail": "Search active V1 Journeys instead.",
-            },
-            status=status.HTTP_410_GONE,
-        )
-
-
-class TripDetailView(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request, pk: int) -> Response:
-        trip = get_object_or_404(
-            Trip.objects.select_related(
-                "origin", "destination", "traveler"
-            ).prefetch_related("stopovers__airport"),
-            pk=pk,
-        )
-        if trip.traveler_id != request.user.id and not request.user.is_staff:
-            return Response(
-                {"detail": "Legacy Trip history is owner-only."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        return Response(TripSerializer(trip).data)
-
-
-class TripCancelView(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request, pk: int) -> Response:
-        del request, pk
-        return Response(
-            {
-                "code": "legacy_trip_flow_retired",
-                "detail": "Legacy Trip mutations are retired; use Journey APIs.",
-            },
-            status=status.HTTP_410_GONE,
-        )
-
-
-class TripMediaUploadView(APIView):
-    permission_classes = (IsAuthenticated,)
-    parser_classes = (MultiPartParser,)
-
-    def post(self, request: Request, pk: int) -> Response:
-        del request, pk
-        return Response(
-            {
-                "code": "legacy_trip_flow_retired",
-                "detail": "Legacy Trip media writes are retired; use Journey proof APIs.",
-            },
-            status=status.HTTP_410_GONE,
-        )
 
 
 def _journey_queryset(*, include_proofs: bool = True):

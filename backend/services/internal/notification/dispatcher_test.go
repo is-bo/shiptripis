@@ -220,7 +220,7 @@ func TestDispatch_FansToEveryTargetSkippingZero(t *testing.T) {
 
 	// targets=[1,2,0] — uid 0 is a defensive guard and must be skipped.
 	raw := envelope(t, "evt-multi", []int64{1, 2, 0}, nil)
-	d.dispatch(redisbus.Message{Channel: "match.created", Payload: raw})
+	d.dispatch(redisbus.Message{Channel: "offer.created", Payload: raw})
 
 	calls := hub.callsCopy()
 	if len(calls) != 2 {
@@ -244,7 +244,7 @@ func TestDispatch_NoLocalSocketsSkipsReceipt(t *testing.T) {
 	d := newTestDispatcher(hub, receipts)
 
 	raw := envelope(t, "evt-remote", []int64{42}, nil)
-	d.dispatch(redisbus.Message{Channel: "trip.updated", Payload: raw})
+	d.dispatch(redisbus.Message{Channel: "deal.updated", Payload: raw})
 
 	if calls := hub.callsCopy(); len(calls) != 1 {
 		t.Fatalf("Send should probe once, got %d", len(calls))

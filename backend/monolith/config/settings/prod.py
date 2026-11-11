@@ -220,14 +220,6 @@ if PAYMENTS_ALLOW_MOCK_PROVIDER:  # noqa: F405
         "PAYMENTS_ALLOW_MOCK_PROVIDER must be false in production; the mock "
         "payment provider is for tests and local development only."
     )
-if PAYMENTS_MOCK_WEBHOOK_ENABLED:  # noqa: F405
-    raise RuntimeError(
-        "PAYMENTS_MOCK_WEBHOOK_ENABLED must be false in production."
-    )
-if PAYMENTS_LEGACY_MUTATIONS_ENABLED:  # noqa: F405
-    raise RuntimeError(
-        "PAYMENTS_LEGACY_MUTATIONS_ENABLED must be false in production."
-    )
 # A checkout cannot be created without a public base URL for the provider's
 # success/failure redirects and its webhook endpoint. Fail at boot rather than
 # at the first payment.

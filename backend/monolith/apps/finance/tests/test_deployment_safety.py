@@ -17,14 +17,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase, override_settings
-from django.urls import reverse
-
-from apps.payments.providers import (
-    LegacyPaymentDisabled,
-    choose_provider,
-    get_provider,
-)
+from django.test import SimpleTestCase
 
 
 MONOLITH = Path(__file__).resolve().parents[3]
@@ -55,8 +48,6 @@ PROD_BOOT_ENV = {
     "GRPC_BEARER_TOKEN": "g" * 48,
     "PAYMENTS_PUBLIC_BASE_URL": "https://api.shiptrip.invalid",
     "PAYMENTS_ALLOW_MOCK_PROVIDER": "false",
-    "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false",
-    "PAYMENTS_LEGACY_MUTATIONS_ENABLED": "false",
     # Phase 4: handover code secrecy has its own key, and production refuses to
     # boot without one that is long enough and distinct from SECRET_KEY.
     "HANDOVER_CODE_SECRET": "h" * 48,
@@ -283,25 +274,23 @@ class ProductionEntrypointTests(SimpleTestCase):
             "from config.wsgi import application; "
             "from django.conf import settings; "
             "assert settings.SETTINGS_MODULE == 'config.settings.prod'; "
-            "assert not settings.PAYMENTS_ALLOW_MOCK_PROVIDER; "
-            "assert not settings.PAYMENTS_LEGACY_MUTATIONS_ENABLED"
+            "assert not settings.PAYMENTS_ALLOW_MOCK_PROVIDER"
         )
         assert result.returncode == 0, result.stderr
 
-    def test_production_refuses_to_boot_with_any_payment_escape_hatch_open(self):
-        """Each switch is a boot-time refusal, so a misconfigured deploy never
-        serves a single request rather than serving one with a fake rail."""
+    def test_production_refuses_to_boot_with_the_mock_payment_rail_open(self):
+        """A boot-time refusal, so a misconfigured deploy never serves a single
+        request rather than serving one with a fake rail.
 
-        for variable in (
-            "PAYMENTS_ALLOW_MOCK_PROVIDER",
-            "PAYMENTS_MOCK_WEBHOOK_ENABLED",
-            "PAYMENTS_LEGACY_MUTATIONS_ENABLED",
-        ):
-            result = boot_production(
-                PROD_ENTRYPOINT_BOOT, **{variable: "true"}
-            )
-            assert result.returncode != 0, f"{variable} did not stop the boot"
-            assert variable in result.stderr, result.stderr
+        L1A removed the legacy DZD webhook and mutation switches together with
+        the only code that read them; the mock rail is the one hatch left.
+        """
+
+        result = boot_production(
+            PROD_ENTRYPOINT_BOOT, PAYMENTS_ALLOW_MOCK_PROVIDER="true"
+        )
+        assert result.returncode != 0, "the mock rail did not stop the boot"
+        assert "PAYMENTS_ALLOW_MOCK_PROVIDER" in result.stderr, result.stderr
 
     def test_production_refuses_a_nonproduction_environment_label(self):
         result = boot_production(
@@ -737,45 +726,6 @@ class KycEdgeLimitTests(SimpleTestCase):
             assert re.search(
                 r"@bounded_body\s*\{\s*not path /kyc/\* /api/kyc/\*\s*\}", text
             )
-
-
-class LegacyProviderFirewallTests(SimpleTestCase):
-    @override_settings(PAYMENTS_LEGACY_MUTATIONS_ENABLED=False)
-    def test_legacy_provider_registry_cannot_return_the_mock(self):
-        with self.assertRaises(LegacyPaymentDisabled):
-            choose_provider("DZD")
-        with self.assertRaises(LegacyPaymentDisabled):
-            get_provider("mock")
-
-
-class LegacyMockWebhookFirewallTests(TestCase):
-    """The unauthenticated legacy mock webhook must not exist off dev."""
-
-    @override_settings(
-        PAYMENTS_MOCK_WEBHOOK_ENABLED=True, PAYMENTS_LEGACY_MUTATIONS_ENABLED=False
-    )
-    def test_the_legacy_mock_webhook_is_absent_without_the_legacy_switch(self):
-        response = self.client.post(
-            reverse("payments-webhook-mock"),
-            {"provider_intent_id": "anything", "event": "succeeded"},
-            content_type="application/json",
-        )
-
-        # 404, not 403: an anonymous caller learns nothing about a
-        # development-only mutation endpoint that does not serve them.
-        assert response.status_code == 404
-
-    @override_settings(
-        PAYMENTS_MOCK_WEBHOOK_ENABLED=False, PAYMENTS_LEGACY_MUTATIONS_ENABLED=True
-    )
-    def test_either_switch_alone_is_enough_to_hide_it(self):
-        response = self.client.post(
-            reverse("payments-webhook-mock"),
-            {"provider_intent_id": "anything", "event": "succeeded"},
-            content_type="application/json",
-        )
-
-        assert response.status_code == 404
 
 
 class HandoverSecretBootTests(SimpleTestCase):

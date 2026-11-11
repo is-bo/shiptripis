@@ -301,24 +301,6 @@ class OpenParcelSearchView(APIView):
         )
 
 
-class DeliveryCreateView(APIView):
-    """Retired legacy airport/DZD write endpoint."""
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request) -> Response:
-        return Response(
-            {
-                "code": "legacy_delivery_flow_retired",
-                "detail": (
-                    "Use POST /api/parcels/delivery/v1 with canonical Place IDs "
-                    "and EUR cents. Preferred Location IDs are optional."
-                ),
-            },
-            status=status.HTTP_410_GONE,
-        )
-
-
 class _DepositRefused(Exception):
     """Carries a finance refusal out of the create transaction, rolling it back.
 
@@ -619,16 +601,6 @@ class DeliveryV1CreateView(APIView):
         return Response(payload, status=status.HTTP_201_CREATED)
 
 
-class ProductCreateView(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request: Request) -> Response:
-        return Response(
-            {"detail": "ProductRequest creation is retired in Wassla V1."},
-            status=status.HTTP_410_GONE,
-        )
-
-
 class ParcelDetailView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -684,29 +656,6 @@ class ParcelCancelView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         return Response(_serialize(_refetch(result.parcel_id), request).data)
-
-
-class DeliveryQuoteView(APIView):
-    """Non-binding weight + route price suggestion for a delivery.
-
-    GET /api/parcels/quote/delivery?weight_kg=3&origin=ALG&destination=CDG
-
-    Returns the suggested traveler payout + sender total, plus a soft
-    floor/ceiling band the UI uses to warn on outlier offers. Authenticated
-    so we keep our pricing curve out of the public domain; rate-limited
-    naturally by DRF defaults.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        return Response(
-            {
-                "code": "legacy_dzd_quote_retired",
-                "detail": "DZD pricing is not a Wassla V1 marketplace contract.",
-            },
-            status=status.HTTP_410_GONE,
-        )
 
 
 class ParcelItemPhotoStageView(APIView):

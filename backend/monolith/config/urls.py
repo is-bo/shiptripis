@@ -78,19 +78,14 @@ urlpatterns = [
     path("api/", include("apps.parcels.urls")),
     path("api/", include("apps.matching.urls")),
     path("api/", include("apps.deals.urls")),
-    # Phase 4 Deal-scoped domains. They are mounted before the legacy
-    # `apps.verification` handover routes so a V1 Deal path can never be
-    # shadowed by the retired Match-scoped one.
     path("api/", include("apps.handover.urls")),
     path("api/", include("apps.disputes.urls")),
     path("api/", include("apps.ratings.urls")),
     path("api/", include("apps.boosts.urls")),
-    # V1 finance routes are mounted before the legacy payments app so a V1
-    # path can never be shadowed by a legacy pattern.
     path("api/", include("apps.finance.urls")),
-    path("api/", include("apps.payments.urls")),
-    path("api/", include("apps.wallet.urls")),
-    path("api/", include("apps.verification.urls")),
     path("api/", include("apps.notifications.urls")),
     path("api/", include("apps.chat.urls")),
+    # Retired paths answer 410 with their stable refusal code. Their literal
+    # segments never collide with a live route's converters above.
+    path("api/", include("apps.core.retired_routes")),
 ]

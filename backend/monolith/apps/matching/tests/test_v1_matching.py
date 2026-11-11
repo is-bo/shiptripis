@@ -346,7 +346,7 @@ class V1OfferDealTests(APITestCase):
         assert outsider.status_code == 403
         assert "id" not in outsider.data
 
-    def test_v1_deal_requires_funding_before_chat_and_cannot_enter_legacy_payment_or_handover(self):
+    def test_v1_deal_requires_funding_before_chat_and_has_no_legacy_payment_or_handover_route(self):
         proposal = self._propose()
         accepted = _client(self.traveler).post(
             reverse("offers-accept", args=[proposal.data["id"]]), format="json"
@@ -354,13 +354,15 @@ class V1OfferDealTests(APITestCase):
         assert accepted.status_code == 201
         offer = Offer.objects.select_related("match").get(pk=proposal.data["id"])
 
+        # The retired DZD payment and Match-scoped handover APIs were removed in
+        # L1A; their paths no longer resolve.
         payment = _client(self.sender).post(
-            reverse("payments-create"),
+            "/api/payments/intents/create",
             {"offer_id": offer.pk, "currency": "EUR"},
             format="json",
         )
         handover = _client(self.sender).post(
-            reverse("handover-issue", args=[offer.match_id]),
+            f"/api/matches/{offer.match_id}/handover/issue",
             {"kind": HandoverCode.Kind.PICKUP},
             format="json",
         )
@@ -370,9 +372,8 @@ class V1OfferDealTests(APITestCase):
             format="json",
         )
 
-        assert payment.status_code == 409
-        assert payment.data["code"] == "v1_deal_payment_not_available"
-        assert handover.status_code == 409
+        assert payment.status_code == 404
+        assert handover.status_code == 404
         assert chat.status_code == 402
         assert chat.data == {
             "reason": "payment_pending",

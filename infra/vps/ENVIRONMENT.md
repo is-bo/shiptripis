@@ -83,7 +83,6 @@ reachability and provider lifecycle policy are V3 verification items.
 | --- | --- |
 | `PAYMENTS_ENVIRONMENT` | `test` only. |
 | `PAYMENTS_ALLOW_MOCK_PROVIDER` | `false`; production mock remains forbidden. |
-| `PAYMENTS_MOCK_WEBHOOK_ENABLED`, `PAYMENTS_LEGACY_MUTATIONS_ENABLED` | Both `false`; no legacy bypass. |
 | `PAYMENTS_PUBLIC_BASE_URL` | HTTPS origin of future API domain, matching owner’s actual gateway. |
 | `STRIPE_API_BASE` | Official `https://api.stripe.com`; credential must be TEST if supplied. |
 | `CHARGILY_API_BASE` | Official `https://pay.chargily.net/test/api/v2`. |

@@ -81,8 +81,8 @@ single decision is what keeps
 the new edges acyclic:
 
 * Handover confirmation locks Deal then codes, never codes then Deal. The
-  legacy `apps.verification` path does the opposite (`HandoverCode` before
-  `Match`); it is not reused, not extended, and stays refused for V1 Deals.
+  legacy `apps.verification` path, which did the opposite (`HandoverCode`
+  before `Match`), was removed in L1A; only its history table remains.
 * Dispute opening and protection expiry are the two writers that race for the
   same money. Both enter through `lock_deal_aggregate` and then take `Dispute`
   and `Payout` in this order, so one of them always blocks on the Deal row and

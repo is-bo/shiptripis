@@ -12,14 +12,10 @@ Per CLAUDE.md §6 + ARCHITECTURE.md §11:
 - A Wallet is scoped to (user, currency). Same user with DZD + EUR wallets
   is two separate rows.
 
-Escrow shape (driven by `apps.payments` events):
-  payment.captured  → deposit + hold on sender wallet
-  handover.confirmed → release on sender hold + payout to traveler
-  payment.refunded  → refund on sender wallet (and reverse-hold if held)
-
-Withdrawal is a separate path; sender/traveler can request a payout to
-their bank/card. V1 only models the request schema; the actual disbursement
-is a manual ops action.
+Pre-V1 history only. The signal handlers that wrote these rows from legacy
+`PaymentIntent` events, the wallet and withdrawal API and the admin "mark sent"
+action were removed in L1A. The tables and their migrations stay as history and
+the Django admin shows them view-only. V1 settlement lives in `apps.finance`.
 """
 
 from __future__ import annotations

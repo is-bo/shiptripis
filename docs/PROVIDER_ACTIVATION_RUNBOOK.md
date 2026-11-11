@@ -19,7 +19,7 @@ The endpoints are unauthenticated only at the HTTP layer. They verify the raw re
 ## Shared preconditions
 
 - [ ] Deployment and restore rehearsal are green; `/healthz`, `/readyz`, and deep health are green.
-- [ ] `PAYMENTS_ALLOW_MOCK_PROVIDER=false`, `PAYMENTS_MOCK_WEBHOOK_ENABLED=false`, and `PAYMENTS_LEGACY_MUTATIONS_ENABLED=false`.
+- [ ] `PAYMENTS_ALLOW_MOCK_PROVIDER=false`.
 - [ ] Public API origin, TLS, allowed hosts, and callback URLs are final.
 - [ ] A Finance Admin and Super Admin are available; all changes go through an audited `BusinessSettingsVersion`.
 - [ ] Reconciliation worker and alerting for retryable/failed provider events are running.

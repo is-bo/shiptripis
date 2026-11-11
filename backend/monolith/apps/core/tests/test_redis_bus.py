@@ -28,7 +28,7 @@ class PublishAfterCommitTests(TransactionTestCase):
         with patch.object(redis_bus, "get_client") as gc:
             gc.return_value.publish.return_value = 1
             with transaction.atomic():
-                eid = redis_bus.publish_after_commit("trip.created", {"id": 1})
+                eid = redis_bus.publish_after_commit("parcel.created", {"id": 1})
         assert isinstance(eid, str)
         assert len(eid) == 32  # uuid4 hex
 
@@ -36,7 +36,7 @@ class PublishAfterCommitTests(TransactionTestCase):
         with patch.object(redis_bus, "get_client") as gc:
             gc.return_value.publish.return_value = 1
             with transaction.atomic():
-                eid = redis_bus.publish_after_commit("trip.created", {"id": 7})
+                eid = redis_bus.publish_after_commit("parcel.created", {"id": 7})
                 # Inside the block: not yet published, no audit row.
                 assert PublishedEvent.objects.count() == 0
                 gc.return_value.publish.assert_not_called()
@@ -44,7 +44,7 @@ class PublishAfterCommitTests(TransactionTestCase):
             assert PublishedEvent.objects.filter(event_id=eid).exists()
             gc.return_value.publish.assert_called_once()
             args, _ = gc.return_value.publish.call_args
-            assert args[0] == "trip.created"
+            assert args[0] == "parcel.created"
             # payload includes event_id + ts + caller fields
             assert f'"event_id":"{eid}"' in args[1]
             assert '"id":7' in args[1]
@@ -56,7 +56,7 @@ class PublishAfterCommitTests(TransactionTestCase):
         with patch.object(redis_bus, "get_client") as gc:
             try:
                 with transaction.atomic():
-                    redis_bus.publish_after_commit("trip.created", {"id": 1})
+                    redis_bus.publish_after_commit("parcel.created", {"id": 1})
                     raise _Boom()
             except _Boom:
                 pass
@@ -69,7 +69,7 @@ class PublishAfterCommitTests(TransactionTestCase):
         with patch.object(redis_bus, "get_client") as gc:
             gc.return_value.publish.side_effect = redis_pkg.RedisError("nope")
             with transaction.atomic():
-                eid = redis_bus.publish_after_commit("trip.created", {"id": 1})
+                eid = redis_bus.publish_after_commit("parcel.created", {"id": 1})
         # Audit row stays (so the daily sweep can flag it as undelivered).
         assert PublishedEvent.objects.filter(event_id=eid).exists()
 
@@ -183,7 +183,7 @@ class EnqueueEmailAfterCommitTests(TransactionTestCase):
 class MarkDeliveredTests(TestCase):
     def test_marks_delivered_once(self):
         ev = PublishedEvent.objects.create(
-            channel="trip.created",
+            channel="parcel.created",
             event_id="abc123",
             payload_hash="x" * 64,
         )
@@ -194,7 +194,7 @@ class MarkDeliveredTests(TestCase):
 
     def test_idempotent(self):
         PublishedEvent.objects.create(
-            channel="trip.created",
+            channel="parcel.created",
             event_id="abc123",
             payload_hash="x" * 64,
         )

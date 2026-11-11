@@ -5,12 +5,12 @@ Per ARCHITECTURE.md §11 + CLAUDE.md §6:
 - A Match links one ParcelRequest to one Trip. Multiple Matches per parcel
   are fine (the sender shops around) until one Match's Offer is accepted.
 - An Offer is a price proposal on a Match. Offers form a counter chain via
-  `parent_offer` (each side counters the previous one). The first Offer
-  is created by the **traveler** when they apply to carry the parcel.
-- Pricing is FROZEN on the Offer row at creation. `commission_dzd`,
-  `base_fee_dzd`, `total_dzd` come from `apps.core.pricing` and are never
-  recomputed. If platform rates change, in-flight offers settle at their
-  frozen rates.
+  `parent_offer` (each side counters the previous one). In V1 the first Offer
+  is the **sender's** proposal (`v1_services.create_sender_offer`).
+- Pricing is FROZEN on the Offer row at creation and never recomputed. V1
+  offers carry EUR economics (`economics_version="v1_eur"`) and zero in the
+  DZD columns (`commission_dzd`, `base_fee_dzd`, `total_dzd`), which hold
+  history from the retired pre-V1 flow.
 
 Status machines:
 

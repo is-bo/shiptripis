@@ -42,7 +42,6 @@ def v1_guards() -> None:
         "SHIPTRIP_ENVIRONMENT": "production", "DJANGO_DEBUG": "false",
         "PAYMENTS_ENVIRONMENT": "test",
         "PAYMENTS_ALLOW_MOCK_PROVIDER": "false",
-        "PAYMENTS_MOCK_WEBHOOK_ENABLED": "false", "PAYMENTS_LEGACY_MUTATIONS_ENABLED": "false",
         "PAYOUT_DZD_EXECUTION_ENABLED": "false", "STRIPE_CONNECT_PAYOUTS_ENABLED": "false",
         "STRIPE_CONNECT_NON_STRIPE_FUNDING_ENABLED": "false",
         "STRIPE_CONNECT_EXPECTED_MODE": "test",
