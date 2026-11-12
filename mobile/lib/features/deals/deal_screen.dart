@@ -42,6 +42,7 @@ import '../../design/components/route.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/components/timeline.dart';
+import '../../domain/progress.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
@@ -250,6 +251,21 @@ class DealScreen extends ConsumerWidget {
             ? () => context.openPickup(deal.id)
             : null,
       ),
+
+      // What the traveler reported about the trip. The sender's view only, and
+      // always labelled as the traveler's word.
+      if (isSender)
+        for (final update in deal.progressUpdates)
+          LifecycleStep(
+            label: switch (update.kind) {
+              ProgressKind.atPort => l.dealProgressAtPort,
+              ProgressKind.departed => l.dealProgressDeparted,
+              ProgressKind.arrived => l.dealProgressArrived,
+            },
+            state: LifecycleState.done,
+            timeLabel: at(update.reportedAt),
+            detail: l.dealProgressReportedBy,
+          ),
 
       LifecycleStep(
         label: l.dealStepDelivered,

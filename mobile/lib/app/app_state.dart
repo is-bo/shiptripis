@@ -32,6 +32,7 @@ import '../domain/journey.dart';
 import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
+import '../domain/progress.dart';
 import '../domain/rating.dart';
 import '../domain/sea_crossings.dart';
 
@@ -234,6 +235,73 @@ final journeyDetailProvider = Provider.autoDispose
         _journeyDetailQuery((accountId: _watchAccountId(ref), argument: id)),
       );
     });
+
+/// Each leg's progress reports and the buttons the server offers.
+///
+/// Refreshed with the journey itself: a reminder, a report from another
+/// device or a journey the server moved all reconcile through
+/// `LiveResource.journey`.
+final _journeyProgressQuery = FutureProvider.autoDispose
+    .family<JourneyProgress, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(journeyRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.journey(key.argument),
+        (cancel) => repo.progress(key.argument, cancelToken: cancel),
+      );
+    });
+final journeyProgressProvider = Provider.autoDispose
+    .family<AsyncValue<JourneyProgress>, int>((ref, id) {
+      return _projectLiveQuery(
+        ref,
+        _journeyProgressQuery((accountId: _watchAccountId(ref), argument: id)),
+      );
+    });
+
+final _pendingProgressQuery = FutureProvider.autoDispose
+    .family<List<PendingProgressQuestion>, int?>((ref, accountId) async {
+      final repo = ref.watch(journeyRepositoryProvider);
+      return _liveRead(
+        ref,
+        accountId,
+        const LiveResource.progress(),
+        (cancel) => repo.pendingProgress(cancelToken: cancel),
+      );
+    });
+
+/// "Did you depart from {city}?", for Home. Read only when the traveler has a
+/// live journey, so a sender's Home makes no extra request. A failure is an
+/// empty list: Home must never fail because a reminder could not load.
+final pendingProgressProvider =
+    Provider.autoDispose<List<PendingProgressQuestion>>((ref) {
+      final accountId = _watchAccountId(ref);
+      if (accountId == null || ref.watch(activeJourneysProvider).isEmpty) {
+        return const [];
+      }
+      final dismissed = ref.watch(dismissedProgressQuestionsProvider);
+      final pending = _projectLiveQuery(ref, _pendingProgressQuery(accountId));
+      return [
+        for (final question in pending.value ?? const [])
+          if (!dismissed.contains((question.legId, question.kind))) question,
+      ];
+    });
+
+/// Questions the traveler answered "Not yet" to, for this app session only.
+/// The server keeps asking on its own schedule; this just stops Home nagging
+/// with the answer already given.
+final dismissedProgressQuestionsProvider =
+    NotifierProvider<DismissedProgressQuestions, Set<(int, ProgressKind)>>(
+      DismissedProgressQuestions.new,
+    );
+
+class DismissedProgressQuestions extends Notifier<Set<(int, ProgressKind)>> {
+  @override
+  Set<(int, ProgressKind)> build() => const {};
+
+  void dismiss(int legId, ProgressKind kind) =>
+      state = {...state, (legId, kind)};
+}
 
 /// The journeys a traveller can actually receive proposals on.
 final activeJourneysProvider = Provider.autoDispose<List<Journey>>((ref) {
@@ -964,6 +1032,8 @@ void refreshVolatileState(WidgetRef ref) {
     ..invalidate(requestDetailProvider)
     ..invalidate(myJourneysProvider)
     ..invalidate(journeyDetailProvider)
+    ..invalidate(journeyProgressProvider)
+    ..invalidate(pendingProgressProvider)
     ..invalidate(chatThreadsProvider)
     ..invalidate(unreadNotificationsProvider)
     ..invalidate(postingDepositProvider)

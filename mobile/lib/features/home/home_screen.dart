@@ -40,6 +40,7 @@ import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
+import '../journeys/progress_widgets.dart';
 import '../requests/request_labels.dart';
 import '../shell/app_shell.dart';
 import 'discovery_sections.dart';
@@ -266,6 +267,7 @@ class _AttentionSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final items = ref.watch(attentionProvider);
+    final questions = ref.watch(pendingProgressProvider);
     final deals = ref.watch(currentDealsProvider);
 
     // While the first load is in flight there is no honest answer to "does
@@ -281,7 +283,7 @@ class _AttentionSection extends ConsumerWidget {
       );
     }
 
-    if (items.isEmpty) {
+    if (items.isEmpty && questions.isEmpty) {
       return AppInsetGroup(
         child: Row(
           children: [
@@ -306,6 +308,15 @@ class _AttentionSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(title: l.homeNeedsYourAction),
+        // The traveler's own question comes first: a funded parcel is waiting
+        // on the answer.
+        for (final question in questions) ...[
+          ProgressQuestionCard(
+            key: ValueKey('progress-${question.legId}-${question.kind.name}'),
+            question: question,
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         for (final item in items) ...[
           _AttentionRow(item: item),
           const SizedBox(height: AppSpace.md),

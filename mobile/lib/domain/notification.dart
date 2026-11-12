@@ -12,6 +12,7 @@
 library;
 
 import 'json.dart';
+import 'progress.dart';
 
 /// The channels that actually produce inbox rows today.
 enum NotificationChannel {
@@ -41,6 +42,8 @@ enum NotificationChannel {
   payoutStatusChanged,
   discoveryRouteAlert,
   discoveryTravelerInterested,
+  dealProgressReported,
+  journeyLegReminder,
   unknown;
 
   static NotificationChannel parse(String raw) => switch (raw) {
@@ -70,6 +73,8 @@ enum NotificationChannel {
     'payout.status_changed' => payoutStatusChanged,
     'discovery.route_alert' => discoveryRouteAlert,
     'discovery.traveler_interested' => discoveryTravelerInterested,
+    'deal.progress_reported' => dealProgressReported,
+    'journey.leg_reminder' => journeyLegReminder,
     _ => unknown,
   };
 }
@@ -115,6 +120,18 @@ class OpenPayoutMethods extends NotificationDestination {
 class OpenJourney extends NotificationDestination {
   const OpenJourney(this.journeyId);
   final int journeyId;
+}
+
+/// A reminder: opens the journey with the question for one leg as a sheet.
+class OpenProgressQuestion extends NotificationDestination {
+  const OpenProgressQuestion({
+    required this.journeyId,
+    required this.legId,
+    required this.kind,
+  });
+  final int journeyId;
+  final int legId;
+  final ProgressKind kind;
 }
 
 class OpenDispute extends NotificationDestination {
@@ -197,6 +214,9 @@ class AppNotification {
       readInt(payload['journey_id']) ?? readInt(payload['trip_id']);
   int? get disputeId => readInt(payload['dispute_id']);
   int? get alertId => readInt(payload['alert_id']);
+  int? get legId => readInt(payload['leg_id']);
+  ProgressKind? get progressKind =>
+      ProgressKind.parse(payload['progress_kind']);
 
   /// The discovery payloads name a request as `request_id`; the older parcel
   /// channels call the same thing `parcel_id`.
@@ -259,7 +279,8 @@ class AppNotification {
     NotificationChannel.dealCancelled ||
     NotificationChannel.dealArrivalReported ||
     NotificationChannel.dealArrivalConfirmed ||
-    NotificationChannel.dealArrivalDeclined => switch (dealId) {
+    NotificationChannel.dealArrivalDeclined ||
+    NotificationChannel.dealProgressReported => switch (dealId) {
       final int id => OpenDeal(id),
       _ => null,
     },
@@ -284,6 +305,16 @@ class AppNotification {
         journeyId: journey,
       ),
       (final int request, _) => OpenRequest(request),
+      _ => null,
+    },
+    NotificationChannel.journeyLegReminder => switch ((
+      journeyId,
+      legId,
+      progressKind,
+    )) {
+      (final int journey, final int leg, final ProgressKind kind) =>
+        OpenProgressQuestion(journeyId: journey, legId: leg, kind: kind),
+      (final int journey, _, _) => OpenJourney(journey),
       _ => null,
     },
     NotificationChannel.unknown => null,

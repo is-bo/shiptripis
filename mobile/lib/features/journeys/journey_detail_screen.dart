@@ -47,6 +47,8 @@ import 'journey_create_screen.dart' show journeyRouteFailure;
 import 'journey_labels.dart';
 import 'journey_price_card.dart';
 import 'journey_route_draft.dart' show carryableCategories;
+import 'progress_widgets.dart';
+import '../../domain/progress.dart';
 
 final _compatibleRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryResults, int>((ref, journeyId) async {
@@ -58,9 +60,18 @@ final _compatibleRequestsProvider = FutureProvider.autoDispose
     });
 
 class JourneyDetailScreen extends ConsumerStatefulWidget {
-  const JourneyDetailScreen({required this.journeyId, super.key});
+  const JourneyDetailScreen({
+    required this.journeyId,
+    this.askLegId,
+    this.askKind,
+    super.key,
+  });
 
   final int journeyId;
+
+  /// Set by a reminder: open the question for this leg as a sheet.
+  final int? askLegId;
+  final ProgressKind? askKind;
 
   @override
   ConsumerState<JourneyDetailScreen> createState() =>
@@ -69,6 +80,38 @@ class JourneyDetailScreen extends ConsumerStatefulWidget {
 
 class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
   bool _busy = false;
+  bool _askHandled = false;
+
+  /// A reminder opens its question as a sheet, once, and only while the server
+  /// still offers that step: an answered or out-of-date reminder lands on the
+  /// stepper and shows what is true now.
+  void _maybeAsk(JourneyProgress progress) {
+    final legId = widget.askLegId;
+    final kind = widget.askKind;
+    if (_askHandled || legId == null || kind == null) return;
+    _askHandled = true;
+    LegProgress? leg;
+    for (final candidate in progress.legs) {
+      if (candidate.legId == legId) leg = candidate;
+    }
+    final offered = leg?.nextActions.any(
+      (a) => a.kind == kind && a.canReportNow,
+    );
+    if (leg == null || offered != true) return;
+    final place = kind == ProgressKind.arrived
+        ? leg.destinationName
+        : leg.originName;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showProgressQuestionSheet(
+        context,
+        journeyId: widget.journeyId,
+        legId: legId,
+        kind: kind,
+        place: place,
+      );
+    });
+  }
 
   Future<void> _publish() async {
     setState(() => _busy = true);
@@ -226,6 +269,14 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
     final journey = ref.watch(journeyDetailProvider(widget.journeyId));
+    if (widget.askLegId != null && !_askHandled) {
+      ref.listen(journeyProgressProvider(widget.journeyId), (_, next) {
+        final value = next.value;
+        if (value != null) _maybeAsk(value);
+      });
+      final already = ref.read(journeyProgressProvider(widget.journeyId)).value;
+      if (already != null) _maybeAsk(already);
+    }
 
     return AppScaffold(
       topBar: AppTopBar(title: l.journeyTitle, showBack: true),
@@ -312,6 +363,11 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
 
                           // What only the owner set: where parcels change
                           // hands and what they will not take.
+                          // Only a traveler whose journey is live has anything
+                          // to report.
+                          if (isOwner && data.status.isLive)
+                            JourneyProgressSection(journeyId: data.id),
+
                           if (isOwner) ...[
                             _HandoverSummary(journey: data),
                             _CarrySummary(journey: data),

@@ -33,6 +33,7 @@ import 'package:go_router/go_router.dart';
 import '../core/session/session.dart';
 import '../domain/canonical_place.dart';
 import '../domain/location.dart';
+import '../domain/progress.dart';
 import '../domain/public_discovery.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
@@ -419,8 +420,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/journeys/:id',
         name: Routes.journeyDetail,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) =>
-            JourneyDetailScreen(journeyId: _id(state, 'id')),
+        builder: (context, state) => JourneyDetailScreen(
+          journeyId: _id(state, 'id'),
+          // A reminder names the step it asks about.
+          askLegId: int.tryParse(state.uri.queryParameters['leg'] ?? ''),
+          askKind: ProgressKind.parse(state.uri.queryParameters['ask']),
+        ),
         routes: [
           GoRoute(
             path: 'edit',
@@ -728,6 +733,13 @@ extension AppNavigation on BuildContext {
 
   void openJourney(int id) =>
       pushNamed(Routes.journeyDetail, pathParameters: {'id': '$id'});
+
+  /// A reminder's destination: the journey, with the question as a sheet.
+  void openJourneyQuestion(int id, int legId, ProgressKind kind) => pushNamed(
+    Routes.journeyDetail,
+    pathParameters: {'id': '$id'},
+    queryParameters: {'leg': '$legId', 'ask': kind.wire},
+  );
 
   void openLegProof(int journeyId, int legId) => pushNamed(
     Routes.legProof,

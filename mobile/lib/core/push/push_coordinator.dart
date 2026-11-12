@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/router.dart';
 import '../../data/repositories.dart';
+import '../../domain/progress.dart';
 import '../live/live_updates.dart';
 import '../session/session.dart';
 import 'notification_socket.dart';
@@ -440,6 +441,17 @@ String? pushLocation(Map<String, String> data) {
     return journeyId == null
         ? '/requests/$requestId'
         : '/requests/$requestId/discovery?journey=$journeyId';
+  }
+  if (channel == 'journey.leg_reminder') {
+    // The traveler's own journey, with the question for that leg. A payload
+    // missing the leg or the step still opens the journey.
+    final journeyId = positive('journey_id');
+    if (journeyId == null) return '/notifications';
+    final leg = positive('leg_id');
+    final ask = ProgressKind.parse(data['progress_kind']);
+    return leg == null || ask == null
+        ? '/journeys/$journeyId'
+        : '/journeys/$journeyId?leg=$leg&ask=${ask.wire}';
   }
   final disputeId = positive('dispute_id');
   if (disputeId != null) return '/disputes/$disputeId';

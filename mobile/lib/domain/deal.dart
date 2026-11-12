@@ -21,6 +21,7 @@ import 'json.dart';
 import 'money_perspective.dart';
 import 'payment.dart';
 import 'payout.dart';
+import 'progress.dart';
 import 'rating.dart';
 import 'transport_mode.dart';
 
@@ -794,6 +795,7 @@ class Deal {
     this.arrival,
     this.route,
     this.availableActions = const [],
+    this.progressUpdates = const [],
     this.serverTime,
     this.createdAt,
     this.updatedAt,
@@ -854,6 +856,7 @@ class Deal {
     availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
         .whereType<String>()
         .toList(growable: false),
+    progressUpdates: DealProgressUpdate.fromTimeline(json['timeline']),
     serverTime: readDate(json['server_time']),
     createdAt: readDate(json['created_at']),
     updatedAt: readDate(json['updated_at']),
@@ -863,6 +866,11 @@ class Deal {
   final int? acceptedOfferId;
   final int? matchId;
   final int? deliveryRequestId;
+
+  /// What the traveler said about the legs carrying this parcel, oldest
+  /// first, retractions already applied. Statements, not status: nothing in
+  /// the deal moves because of them.
+  final List<DealProgressUpdate> progressUpdates;
 
   /// The parcel's number, shown to both parties.
   final String? trackingNumber;

@@ -2840,5 +2840,74 @@
   "tripPrice": "Price",
   "trackingNumberLabel": "Tracking number",
   "trackingNumberCopy": "Copy tracking number",
-  "trackingNumberCopied": "Tracking number copied"
+  "trackingNumberCopied": "Tracking number copied",
+  "progressTitle": "Trip progress",
+  "progressIntro": "Tell senders how your trip is going. They see your update marked as reported by you. It never moves a payment.",
+  "progressActionAtPort": "I'm at the port",
+  "progressActionDeparted": "I've departed",
+  "progressActionArrived": "I've arrived",
+  "progressReportedAtPort": "At the port",
+  "progressReportedDeparted": "Departed",
+  "progressReportedArrived": "Arrived",
+  "progressAvailableFrom": "You can report this from {time}.",
+  "@progressAvailableFrom": {
+    "description": "When the report opens.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "progressNeedsNetwork": "Needs a connection. Nothing is saved for later.",
+  "progressUndo": "Undo",
+  "progressUndoHint": "You can undo an update for 10 minutes.",
+  "progressSent": "Update shared with the senders.",
+  "progressUndone": "Update removed.",
+  "progressErrorOffline": "No connection, so your update was not sent. Try again when you are back online.",
+  "progressErrorTooEarly": "It is too early to report this. Reports open 24 hours before the planned time.",
+  "progressErrorOutOfOrder": "That step does not come next. Pull down to refresh.",
+  "progressErrorNotReportable": "This journey cannot take updates right now.",
+  "progressErrorUndoClosed": "The 10 minutes to undo this update have passed.",
+  "progressErrorHasFollowup": "A later update depends on this one, so it cannot be undone.",
+  "progressQuestionDeparted": "Did you depart from {place}?",
+  "@progressQuestionDeparted": {
+    "description": "Asks if the traveler has left a place.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "progressQuestionDepartedBare": "Did you depart?",
+  "progressQuestionArrived": "Did you arrive in {place}?",
+  "@progressQuestionArrived": {
+    "description": "Asks if the traveler has reached a place.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "progressQuestionArrivedBare": "Did you arrive?",
+  "progressQuestionAtPort": "Are you at the port in {place}?",
+  "@progressQuestionAtPort": {
+    "description": "Asks if the traveler is at a port.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "progressQuestionAtPortBare": "Are you at the port?",
+  "progressYesDeparted": "Yes, departed",
+  "progressYesArrived": "Yes, arrived",
+  "progressYesAtPort": "Yes, I'm here",
+  "progressNotYet": "Not yet",
+  "progressQuestionBody": "Senders with a parcel on this leg will see your answer, marked as reported by you.",
+  "dealProgressAtPort": "Your traveler is at the port",
+  "dealProgressDeparted": "Your traveler has departed",
+  "dealProgressArrived": "Your traveler has arrived",
+  "dealProgressReportedBy": "Reported by the traveler",
+  "notificationProgressReported": "Update from your traveler",
+  "notificationLegReminder": "How is your trip going?"
 }

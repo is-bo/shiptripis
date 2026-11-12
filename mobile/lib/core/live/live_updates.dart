@@ -29,6 +29,9 @@ enum LiveResourceKind {
   deposit,
   journey,
   journeys,
+
+  /// The questions due now ("did you depart?"): Home and the sheet.
+  progress,
   dispute,
   chat,
   threads,
@@ -58,6 +61,7 @@ class LiveResource {
     : this(LiveResourceKind.deposit, requestId);
   const LiveResource.journey(int id) : this(LiveResourceKind.journey, id);
   const LiveResource.journeys() : this(LiveResourceKind.journeys);
+  const LiveResource.progress() : this(LiveResourceKind.progress);
   const LiveResource.dispute(int id) : this(LiveResourceKind.dispute, id);
   const LiveResource.chat(int matchId) : this(LiveResourceKind.chat, matchId);
   const LiveResource.threads() : this(LiveResourceKind.threads);
@@ -306,6 +310,11 @@ Set<LiveResource> resourcesForLiveEvent(
     // badge) is all they refresh.
     'discovery.route_alert',
     'discovery.traveler_interested',
+    // L5A. The sender's timeline gains a line (the `deal.` case below
+    // refreshes the deal); the traveler is asked about a leg (handled just
+    // before it, because the payload names a journey, not a deal).
+    'deal.progress_reported',
+    'journey.leg_reminder',
   };
   if (!knownEvents.contains(type)) return const {};
 
@@ -372,7 +381,12 @@ Set<LiveResource> resourcesForLiveEvent(
     if (journeyId != null) resources.add(LiveResource.journey(journeyId));
   }
 
-  if (type.startsWith('parcel.')) {
+  if (type == 'journey.leg_reminder') {
+    // Asks the traveler something: the inbox row, the open journey and the
+    // question on Home. No deal, match or request is involved.
+    addJourney();
+    resources.add(const LiveResource.progress());
+  } else if (type.startsWith('parcel.')) {
     addRequest(deposit: true);
   } else if (type.startsWith('leg_proof.')) {
     addJourney();

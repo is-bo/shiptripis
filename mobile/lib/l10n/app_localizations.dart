@@ -9188,6 +9188,228 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Tracking number copied'**
   String get trackingNumberCopied;
+
+  /// No description provided for @progressTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trip progress'**
+  String get progressTitle;
+
+  /// No description provided for @progressIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell senders how your trip is going. They see your update marked as reported by you. It never moves a payment.'**
+  String get progressIntro;
+
+  /// No description provided for @progressActionAtPort.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m at the port'**
+  String get progressActionAtPort;
+
+  /// No description provided for @progressActionDeparted.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve departed'**
+  String get progressActionDeparted;
+
+  /// No description provided for @progressActionArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve arrived'**
+  String get progressActionArrived;
+
+  /// No description provided for @progressReportedAtPort.
+  ///
+  /// In en, this message translates to:
+  /// **'At the port'**
+  String get progressReportedAtPort;
+
+  /// No description provided for @progressReportedDeparted.
+  ///
+  /// In en, this message translates to:
+  /// **'Departed'**
+  String get progressReportedDeparted;
+
+  /// No description provided for @progressReportedArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrived'**
+  String get progressReportedArrived;
+
+  /// When the report opens.
+  ///
+  /// In en, this message translates to:
+  /// **'You can report this from {time}.'**
+  String progressAvailableFrom(String time);
+
+  /// No description provided for @progressNeedsNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a connection. Nothing is saved for later.'**
+  String get progressNeedsNetwork;
+
+  /// No description provided for @progressUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get progressUndo;
+
+  /// No description provided for @progressUndoHint.
+  ///
+  /// In en, this message translates to:
+  /// **'You can undo an update for 10 minutes.'**
+  String get progressUndoHint;
+
+  /// No description provided for @progressSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Update shared with the senders.'**
+  String get progressSent;
+
+  /// No description provided for @progressUndone.
+  ///
+  /// In en, this message translates to:
+  /// **'Update removed.'**
+  String get progressUndone;
+
+  /// No description provided for @progressErrorOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection, so your update was not sent. Try again when you are back online.'**
+  String get progressErrorOffline;
+
+  /// No description provided for @progressErrorTooEarly.
+  ///
+  /// In en, this message translates to:
+  /// **'It is too early to report this. Reports open 24 hours before the planned time.'**
+  String get progressErrorTooEarly;
+
+  /// No description provided for @progressErrorOutOfOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'That step does not come next. Pull down to refresh.'**
+  String get progressErrorOutOfOrder;
+
+  /// No description provided for @progressErrorNotReportable.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey cannot take updates right now.'**
+  String get progressErrorNotReportable;
+
+  /// No description provided for @progressErrorUndoClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'The 10 minutes to undo this update have passed.'**
+  String get progressErrorUndoClosed;
+
+  /// No description provided for @progressErrorHasFollowup.
+  ///
+  /// In en, this message translates to:
+  /// **'A later update depends on this one, so it cannot be undone.'**
+  String get progressErrorHasFollowup;
+
+  /// Asks if the traveler has left a place.
+  ///
+  /// In en, this message translates to:
+  /// **'Did you depart from {place}?'**
+  String progressQuestionDeparted(String place);
+
+  /// No description provided for @progressQuestionDepartedBare.
+  ///
+  /// In en, this message translates to:
+  /// **'Did you depart?'**
+  String get progressQuestionDepartedBare;
+
+  /// Asks if the traveler has reached a place.
+  ///
+  /// In en, this message translates to:
+  /// **'Did you arrive in {place}?'**
+  String progressQuestionArrived(String place);
+
+  /// No description provided for @progressQuestionArrivedBare.
+  ///
+  /// In en, this message translates to:
+  /// **'Did you arrive?'**
+  String get progressQuestionArrivedBare;
+
+  /// Asks if the traveler is at a port.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you at the port in {place}?'**
+  String progressQuestionAtPort(String place);
+
+  /// No description provided for @progressQuestionAtPortBare.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you at the port?'**
+  String get progressQuestionAtPortBare;
+
+  /// No description provided for @progressYesDeparted.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, departed'**
+  String get progressYesDeparted;
+
+  /// No description provided for @progressYesArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, arrived'**
+  String get progressYesArrived;
+
+  /// No description provided for @progressYesAtPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, I\'m here'**
+  String get progressYesAtPort;
+
+  /// No description provided for @progressNotYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not yet'**
+  String get progressNotYet;
+
+  /// No description provided for @progressQuestionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders with a parcel on this leg will see your answer, marked as reported by you.'**
+  String get progressQuestionBody;
+
+  /// No description provided for @dealProgressAtPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Your traveler is at the port'**
+  String get dealProgressAtPort;
+
+  /// No description provided for @dealProgressDeparted.
+  ///
+  /// In en, this message translates to:
+  /// **'Your traveler has departed'**
+  String get dealProgressDeparted;
+
+  /// No description provided for @dealProgressArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'Your traveler has arrived'**
+  String get dealProgressArrived;
+
+  /// No description provided for @dealProgressReportedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported by the traveler'**
+  String get dealProgressReportedBy;
+
+  /// No description provided for @notificationProgressReported.
+  ///
+  /// In en, this message translates to:
+  /// **'Update from your traveler'**
+  String get notificationProgressReported;
+
+  /// No description provided for @notificationLegReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'How is your trip going?'**
+  String get notificationLegReminder;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

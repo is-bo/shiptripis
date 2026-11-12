@@ -41,6 +41,7 @@ import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
 import '../domain/pricing.dart';
+import '../domain/progress.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
 import '../domain/sea_crossings.dart';
@@ -441,6 +442,46 @@ class JourneyRepository {
   /// Idempotent. A staff pause cannot be lifted here (`journey_paused_by_staff`).
   Future<Journey> resume(int id) async =>
       Journey.fromJson(await _api.postObject('/api/journeys/$id/resume'));
+
+  /// Each leg's reports and the buttons the server offers for it.
+  Future<JourneyProgress> progress(int id, {CancelToken? cancelToken}) async =>
+      JourneyProgress.fromJson(
+        await _api.getObject(
+          '/api/journeys/$id/progress',
+          cancelToken: cancelToken,
+        ),
+      );
+
+  /// The questions due for this traveler now. Empty when reminders are off.
+  Future<List<PendingProgressQuestion>> pendingProgress({
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.getObject(
+      '/api/journeys/progress/pending',
+      cancelToken: cancelToken,
+    );
+    return readObjectList(
+      body['results'],
+    ).map(PendingProgressQuestion.maybe).nonNulls.toList(growable: false);
+  }
+
+  /// A statement about one leg. Repeating the same one is harmless (the
+  /// server answers 200 with the existing report). Needs the network; it is
+  /// never queued.
+  Future<void> reportProgress({
+    required int journeyId,
+    required int legId,
+    required ProgressKind kind,
+  }) => _api.postVoid(
+    '/api/journeys/$journeyId/legs/$legId/progress',
+    body: {'kind': kind.wire},
+  );
+
+  /// Takes a report back within the server's 10-minute window.
+  Future<void> retractProgress({
+    required int journeyId,
+    required int progressId,
+  }) => _api.postVoid('/api/journeys/$journeyId/progress/$progressId/retract');
 
   /// Idempotent: publishing an already-active journey returns it unchanged.
   Future<Journey> publish(int id) async =>

@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla L5B — Progress updates and reminders, mobile (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
+
+- Journey page "Trip progress" stepper with one button for the next step the server offers and a 10-minute
+  undo; Home asks "Did you depart from {place}?"; the reminder push and inbox row open the same question as
+  a sheet; the sender's deal timeline shows each live report marked "Reported by the traveler".
+- A report needs the network: no queue, and the message says so. Backend state stays authoritative; a
+  report never moves a deal, a payment or a payout.
+
+Detail: `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md`.
+
 ## Wassla L5A — Progress updates and reminders, backend (2026-11-12)
 
 Status: **merged** (PR #34, `73d5169`, into `feature/discovery-professional-delivery`). No deployment; `main` untouched.
