@@ -2,7 +2,7 @@
 
 ## Wassla L11A — Tracking number, backend (2026-11-12)
 
-Status: **in review** (pull request into `feature/discovery-professional-delivery`). No deployment;
+Status: **merged** (PR #32, `1021c89`, into `feature/discovery-professional-delivery`). No deployment;
 `main` untouched.
 
 - Every parcel request has one tracking number, `WSL-` and 8 characters without look-alikes (for
