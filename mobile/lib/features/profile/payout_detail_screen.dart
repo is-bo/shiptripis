@@ -16,6 +16,7 @@ import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
@@ -68,6 +69,11 @@ class PayoutDetailScreen extends ConsumerWidget {
             return ListView(
               padding: AppScrollPadding.page(context),
               children: [
+                if (payout.trackingNumber != null) ...[
+                  TrackingNumberView(number: payout.trackingNumber),
+                  const SizedBox(height: AppSpace.lg),
+                ],
+
                 // Top Financial Overview Card
                 AppCard(
                   child: Column(

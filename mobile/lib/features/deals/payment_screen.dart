@@ -37,6 +37,7 @@ import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/route.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
@@ -220,6 +221,11 @@ class _Summary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (state.trackingNumber != null) ...[
+          TrackingNumberView(number: state.trackingNumber),
+          const SizedBox(height: AppSpace.lg),
+        ],
+
         if (hero != null)
           AppCard(
             child: MoneyHero(amount: hero, label: heroLabel),

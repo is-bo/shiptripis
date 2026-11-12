@@ -9170,6 +9170,24 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Price'**
   String get tripPrice;
+
+  /// No description provided for @trackingNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracking number'**
+  String get trackingNumberLabel;
+
+  /// No description provided for @trackingNumberCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy tracking number'**
+  String get trackingNumberCopy;
+
+  /// No description provided for @trackingNumberCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracking number copied'**
+  String get trackingNumberCopied;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

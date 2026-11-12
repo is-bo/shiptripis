@@ -5333,4 +5333,13 @@ class LFr extends L {
 
   @override
   String get tripPrice => 'Prix';
+
+  @override
+  String get trackingNumberLabel => 'Numéro de suivi';
+
+  @override
+  String get trackingNumberCopy => 'Copier le numéro de suivi';
+
+  @override
+  String get trackingNumberCopied => 'Numéro de suivi copié';
 }

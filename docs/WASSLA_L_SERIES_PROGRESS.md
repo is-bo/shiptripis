@@ -524,12 +524,14 @@ Detail: `docs/PHASE_L11A_TRACKING_NUMBER.md`. Screenshots: `/mnt/project-files/l
 
 ### L11B. Tracking number, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`. Screenshots: `/mnt/project-files/l-series-screens/L11B/`.
+
+- Contract as built (names that differ from the plan): widget `TrackingNumberView(number, dense)` in `mobile/lib/design/components/tracking.dart`; `readTrackingNumber` in `domain/json.dart`; `trackingNumber` on `DeliveryRequest`, `Match`, `Offer`, `Deal`, `PaymentOrder`, `DealPaymentState`, `PayoutMobile`, `PayoutListItem`, `Dispute`. Strings `trackingNumberLabel`, `trackingNumberCopy`, `trackingNumberCopied`.
+- Left for a later package: later mobile packages put the widget on their own parcel screens (rule 12). The posting-deposit screen does not show it yet (`PaymentOrder.trackingNumber` is read).
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): none. No screen printed a delivery id as a reference, so there was nothing to remove.
+- Tests (before and after counts): Flutter 1,374 to 1,399.
+- Known limits: the app trusts the server's decision on who sees the number; it never validates the format.
 
 ### L12A. Proposal deadline and trip-fit alerts, backend
 

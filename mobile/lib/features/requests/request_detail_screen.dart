@@ -36,6 +36,7 @@ import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
+import '../../design/components/tracking.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/delivery_request.dart';
@@ -175,6 +176,11 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
           ],
         ),
         const SizedBox(height: AppSpace.lg),
+
+        if (request.trackingNumber != null) ...[
+          TrackingNumberView(number: request.trackingNumber),
+          const SizedBox(height: AppSpace.lg),
+        ],
 
         if (_blockedNotice != null) ...[
           InfoNotice(

@@ -49,6 +49,7 @@ import '../../design/components/forms.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/route.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
@@ -375,6 +376,10 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
+          if (match.trackingNumber != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            TrackingNumberView(number: match.trackingNumber),
+          ],
           if (parcel?.origin != null && parcel?.destination != null) ...[
             const SizedBox(height: AppSpace.lg),
             // Coarse labels only: locations stay city-level until the deal is

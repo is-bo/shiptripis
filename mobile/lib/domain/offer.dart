@@ -97,6 +97,7 @@ class Offer {
     required this.allowedActions,
     required this.awaitingParty,
     this.parentOfferId,
+    this.trackingNumber,
     this.travelerReward,
     this.commissionRateBps,
     this.platformFee,
@@ -129,6 +130,7 @@ class Offer {
       id: readInt(json['id']) ?? 0,
       matchId: readInt(json['match']) ?? 0,
       parentOfferId: readInt(json['parent_offer']),
+      trackingNumber: readTrackingNumber(json['tracking_number']),
       proposedBy: readEnum(
         json['proposed_by'],
         ProposedBy.values,
@@ -190,6 +192,9 @@ class Offer {
   final int id;
   final int matchId;
   final int? parentOfferId;
+
+  /// The parcel's number, shown to the two people of this proposal.
+  final String? trackingNumber;
   final ProposedBy proposedBy;
   final int proposerId;
   final EconomicsVersion economicsVersion;
@@ -346,6 +351,7 @@ class Match {
     this.startLegId,
     this.endLegId,
     this.dealId,
+    this.trackingNumber,
     this.matchedDistanceBand,
     this.compatibility,
     this.parcel,
@@ -365,6 +371,7 @@ class Match {
       startLegId: readInt(json['start_leg_id']),
       endLegId: readInt(json['end_leg_id']),
       dealId: readInt(json['deal_id']),
+      trackingNumber: readTrackingNumber(json['tracking_number']),
       senderId: readInt(json['sender_id']) ?? 0,
       travelerId: readInt(json['traveler_id']) ?? 0,
       senderName: readText(json['sender_name']),
@@ -395,6 +402,9 @@ class Match {
 
   /// Null until an offer is accepted.
   final int? dealId;
+
+  /// The parcel's number, shown to the two people of this proposal.
+  final String? trackingNumber;
 
   final int senderId;
   final int travelerId;

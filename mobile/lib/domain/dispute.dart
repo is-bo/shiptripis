@@ -238,6 +238,7 @@ class Dispute {
     required this.evidence,
     required this.events,
     this.publicReference,
+    this.trackingNumber,
     this.dealStatusRaw,
     this.openedById,
     this.openedByRole,
@@ -256,6 +257,7 @@ class Dispute {
   factory Dispute.fromJson(Map<String, dynamic> json) => Dispute(
     id: readInt(json['id']) ?? 0,
     publicReference: readString(json['public_reference']),
+    trackingNumber: readTrackingNumber(json['tracking_number']),
     dealId: readInt(json['deal_id']) ?? 0,
     dealStatusRaw: readString(json['deal_status']),
     status: readEnum(
@@ -298,6 +300,9 @@ class Dispute {
   final int id;
   final String? publicReference;
   final int dealId;
+
+  /// The parcel's number, shared by both parties and staff.
+  final String? trackingNumber;
   final String? dealStatusRaw;
   final DisputeStatus status;
   final DisputeCategory category;
