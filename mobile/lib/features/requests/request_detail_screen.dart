@@ -259,7 +259,7 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
               ],
               DetailRow(
                 label: l.requestCategory,
-                value: Text(_categoryLabel(l, request.category)),
+                value: Text(itemCategoryLabel(l, request.category)),
               ),
               DetailRow(
                 label: l.requestWeight,
@@ -666,14 +666,6 @@ class _MatchRow extends StatelessWidget {
     );
   }
 }
-
-String _categoryLabel(L l, ItemCategory category) => switch (category) {
-  ItemCategory.documents => l.requestCategoryDocuments,
-  ItemCategory.smallBox => l.requestCategorySmallBox,
-  ItemCategory.electronics => l.requestCategoryElectronics,
-  ItemCategory.clothing => l.requestCategoryClothing,
-  ItemCategory.other || ItemCategory.unknown => l.requestCategoryOther,
-};
 
 /// The item photograph, fetched through a signed URL that expires in minutes.
 ///

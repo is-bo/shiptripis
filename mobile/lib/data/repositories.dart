@@ -378,50 +378,6 @@ class JourneyRepository {
     ),
   );
 
-  /// One page of active journeys other than the caller's own, already
-  /// filtered server-side to those whose traveller is verified and whose
-  /// flight legs are proven, in the server's order (first departure).
-  ///
-  /// Always sends `page_size`: without it the server answers its 100-row
-  /// default, which made this one of the most expensive reads under load
-  /// (K6). Search results grow with the marketplace, so a caller reads them a
-  /// page at a time as the user scrolls, never all at once.
-  Future<JourneySearchPage> searchPage({
-    required int page,
-    int pageSize = discoveryPageSize,
-    int? startLocationId,
-    int? destinationLocationId,
-    TransportModeDraft? mode,
-    DateTime? departureAfter,
-    double? minCapacityKg,
-    int? startPlaceId,
-    int? destinationPlaceId,
-    CancelToken? cancelToken,
-  }) async {
-    final result = await _api.getListPage(
-      '/api/journeys/search',
-      query: {
-        'start_location_id': ?startLocationId,
-        'destination_location_id': ?destinationLocationId,
-        'start_place_id': ?startPlaceId,
-        'destination_place_id': ?destinationPlaceId,
-        if (mode != null) 'mode': mode.wire,
-        if (departureAfter != null)
-          'departure_after': departureAfter.toUtc().toIso8601String(),
-        if (minCapacityKg != null)
-          'min_capacity_kg': minCapacityKg.toStringAsFixed(2),
-        'page_size': pageSize,
-        if (page > 1) 'page': page,
-      },
-      cancelToken: cancelToken,
-    );
-    return JourneySearchPage(
-      journeys: _parseJourneys(result.rows),
-      hasNext: result.hasNext,
-      total: result.total,
-    );
-  }
-
   static List<Journey> _parseJourneys(List<dynamic> rows) => rows
       .whereType<Map>()
       .map((r) => Journey.fromJson(Map<String, dynamic>.from(r)))
@@ -692,36 +648,6 @@ class RequestRepository {
       cancelToken: cancelToken,
     );
     return (body['url'] as String?) ?? '';
-  }
-
-  /// One page of open requests from other senders, for a browsing
-  /// traveller, newest first as the server orders them.
-  ///
-  /// Note this is the untargeted, deadline-in-future feed. Real matching is
-  /// `compatible-requests`, which is journey-aware; this is the shallower
-  /// "what is out there" list. Like [JourneyRepository.searchPage] it always
-  /// sends `page_size` and is read a page at a time (K6).
-  Future<OpenRequestPage> openFeedPage({
-    required int page,
-    int pageSize = discoveryPageSize,
-    double? maxWeightKg,
-    CancelToken? cancelToken,
-  }) async {
-    final result = await _api.getListPage(
-      '/api/parcels/open',
-      query: {
-        if (maxWeightKg != null)
-          'max_weight_kg': maxWeightKg.toStringAsFixed(2),
-        'page_size': pageSize,
-        if (page > 1) 'page': page,
-      },
-      cancelToken: cancelToken,
-    );
-    return OpenRequestPage(
-      requests: _parse(result.rows),
-      hasNext: result.hasNext,
-      total: result.total,
-    );
   }
 
   static List<DeliveryRequest> _parse(List<dynamic> rows) => rows
@@ -1776,11 +1702,6 @@ class PushRepository {
     );
   }
 
-  Future<void> unregisterDevice(String installationId) => _api.postVoid(
-    '/api/notifications/devices/unregister',
-    body: {'installation_id': installationId},
-  );
-
   Future<PushPreferences> preferences() async => PushPreferences.fromJson(
     await _api.getObject('/api/notifications/preferences'),
   );
@@ -2044,39 +1965,4 @@ class DealPage {
 
   final List<Deal> deals;
   final bool hasNext;
-}
-
-/// Rows per page for the marketplace discovery feeds (journey search, open
-/// requests). The server's default is 100; 20-row pages cut these feeds'
-/// share of server time sharply under load (K6).
-const discoveryPageSize = 20;
-
-/// One page of journey search results, whether another follows, and the
-/// server's count of every match when it states one.
-class JourneySearchPage {
-  const JourneySearchPage({
-    required this.journeys,
-    required this.hasNext,
-    this.total,
-  });
-
-  final List<Journey> journeys;
-  final bool hasNext;
-
-  /// Every match across all pages: the number to show for "how many", so a
-  /// count never needs the rows.
-  final int? total;
-}
-
-/// One page of the open-request feed; see [JourneySearchPage].
-class OpenRequestPage {
-  const OpenRequestPage({
-    required this.requests,
-    required this.hasNext,
-    this.total,
-  });
-
-  final List<DeliveryRequest> requests;
-  final bool hasNext;
-  final int? total;
 }

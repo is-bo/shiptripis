@@ -94,6 +94,16 @@ class ProfileScreen extends ConsumerWidget {
 
             SectionHeader(title: l.profileAccount),
             _Row(
+              icon: Icons.public_rounded,
+              label: l.publicProfileTitle,
+              onTap: () => context.openPublicProfile(),
+            ),
+            _Row(
+              icon: Icons.add_alert_outlined,
+              label: l.alertsTitle,
+              onTap: () => context.openRouteAlerts(),
+            ),
+            _Row(
               icon: Icons.notifications_active_outlined,
               label: l.profileNotificationSettings,
               onTap: () => context.pushNamed(Routes.profileNotifications),
@@ -610,25 +620,36 @@ class _Row extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(minHeight: AppSpace.minTapTarget),
             padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: c.textTertiary),
-                const SizedBox(width: AppSpace.lg),
-                Expanded(child: Text(label, style: text.bodyLarge)),
-                if (value != null) ...[
+            child: LayoutBuilder(
+              builder: (context, box) => Row(
+                children: [
+                  Icon(icon, size: 20, color: c.textTertiary),
+                  const SizedBox(width: AppSpace.lg),
+                  Expanded(child: Text(label, style: text.bodyLarge)),
+                  if (value != null) ...[
+                    const SizedBox(width: AppSpace.sm),
+                    // Its own width, but never more than 40% of the row: a
+                    // long translated value or a large text size wraps here
+                    // instead of squeezing the label to nothing or overflowing.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: box.maxWidth * 0.4),
+                      child: Text(
+                        value!,
+                        textAlign: TextAlign.end,
+                        style: text.bodyMedium?.copyWith(
+                          color: c.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: AppSpace.sm),
-                  Text(
-                    value!,
-                    style: text.bodyMedium?.copyWith(color: c.textSecondary),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: enabled ? c.textTertiary : c.hairlineStrong,
                   ),
                 ],
-                const SizedBox(width: AppSpace.sm),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: enabled ? c.textTertiary : c.hairlineStrong,
-                ),
-              ],
+              ),
             ),
           ),
         ),

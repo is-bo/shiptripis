@@ -23,7 +23,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_state.dart';
+import '../../app/discovery_state.dart';
 import '../../app/router.dart';
+import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
@@ -37,10 +39,10 @@ import '../../domain/deal.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/delivery_card.dart';
-import '../../core/format/locale_formats.dart';
 import '../common/status_copy.dart';
 import '../requests/request_labels.dart';
 import '../shell/app_shell.dart';
+import 'discovery_sections.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -67,8 +69,14 @@ class HomeScreen extends ConsumerWidget {
         actions: const [NotificationBell()],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => refreshVolatileState(ref),
+        onRefresh: () async {
+          refreshVolatileState(ref);
+          refreshDiscovery(ref);
+        },
         child: ListView(
+          // Short on a quiet day, and still pull-to-refresh: the refresh also
+          // re-reads every discovery section.
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppScrollPadding.pageWithFooter(context),
           children: [
             if (canSwitch) ...[
@@ -90,6 +98,14 @@ class HomeScreen extends ConsumerWidget {
               const _MyRequestsSection()
             else
               const _MyJourneysSection(),
+
+            // Discovery sits below what is the member's own. Each section is
+            // its own list child, so one scrolled far below the fold is not
+            // read until it is near the screen.
+            MatchesSection(isSender: isSender),
+            const ProfileOptInCard(),
+            ListingsSection(isSender: isSender),
+            PeopleSection(isSender: isSender),
           ],
         ),
       ),
@@ -181,14 +197,18 @@ class _RoleSwitcher extends ConsumerWidget {
                                     : c.textTertiary,
                               ),
                               const SizedBox(width: AppSpace.sm),
-                              Text(
-                                option == RoleContext.sender
-                                    ? l.roleSender
-                                    : l.roleTraveler,
-                                style: text.labelLarge?.copyWith(
-                                  color: option == role
-                                      ? c.textPrimary
-                                      : c.textSecondary,
+                              Flexible(
+                                child: Text(
+                                  option == RoleContext.sender
+                                      ? l.roleSender
+                                      : l.roleTraveler,
+                                  style: text.labelLarge?.copyWith(
+                                    color: option == role
+                                        ? c.textPrimary
+                                        : c.textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],

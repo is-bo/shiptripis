@@ -39,6 +39,8 @@ enum NotificationChannel {
   disputeOpened,
   disputeResolved,
   payoutStatusChanged,
+  discoveryRouteAlert,
+  discoveryTravelerInterested,
   unknown;
 
   static NotificationChannel parse(String raw) => switch (raw) {
@@ -66,6 +68,8 @@ enum NotificationChannel {
     'dispute.opened' => disputeOpened,
     'dispute.resolved' => disputeResolved,
     'payout.status_changed' => payoutStatusChanged,
+    'discovery.route_alert' => discoveryRouteAlert,
+    'discovery.traveler_interested' => discoveryTravelerInterested,
     _ => unknown,
   };
 }
@@ -122,6 +126,26 @@ class OpenKyc extends NotificationDestination {
   const OpenKyc();
 }
 
+/// A route alert fired. Opens Browse on the alert's own route with the trip
+/// or request that triggered it; with neither id, the member's alert list.
+class OpenRouteAlert extends NotificationDestination {
+  const OpenRouteAlert({this.alertId, this.journeyId, this.requestId});
+  final int? alertId;
+  final int? journeyId;
+  final int? requestId;
+}
+
+/// A traveler said "I can carry this". Opens Find Travelers for that request
+/// with that traveler's trip in focus.
+class OpenTravelerInterest extends NotificationDestination {
+  const OpenTravelerInterest({
+    required this.requestId,
+    required this.journeyId,
+  });
+  final int requestId;
+  final int journeyId;
+}
+
 class AppNotification {
   const AppNotification({
     required this.id,
@@ -172,6 +196,11 @@ class AppNotification {
   int? get journeyId =>
       readInt(payload['journey_id']) ?? readInt(payload['trip_id']);
   int? get disputeId => readInt(payload['dispute_id']);
+  int? get alertId => readInt(payload['alert_id']);
+
+  /// The discovery payloads name a request as `request_id`; the older parcel
+  /// channels call the same thing `parcel_id`.
+  int? get requestId => readInt(payload['request_id']);
   String? get payoutReference => readString(payload['payout_reference']);
   String? get event => readString(payload['event']);
 
@@ -241,6 +270,22 @@ class AppNotification {
       _ => null,
     },
     NotificationChannel.kycStatusChanged => const OpenKyc(),
+    NotificationChannel.discoveryRouteAlert => OpenRouteAlert(
+      alertId: alertId,
+      journeyId: journeyId,
+      requestId: requestId,
+    ),
+    NotificationChannel.discoveryTravelerInterested => switch ((
+      requestId,
+      journeyId,
+    )) {
+      (final int request, final int journey) => OpenTravelerInterest(
+        requestId: request,
+        journeyId: journey,
+      ),
+      (final int request, _) => OpenRequest(request),
+      _ => null,
+    },
     NotificationChannel.unknown => null,
   };
 }

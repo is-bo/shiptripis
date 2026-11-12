@@ -114,6 +114,7 @@ Future<void> _pumpScreenWithRoute(
   );
 
   final backend = FakeBackend()
+    ..emptyDiscovery()
     ..on('GET', '/api/me', FakeResponse(200, meFixture()))
     ..on('GET', '/api/deals', FakeResponse(200, <Object>[]))
     ..on('GET', '/api/matches', FakeResponse(200, <Object>[]))
@@ -469,6 +470,9 @@ void main() {
 
         final termsFinder = find.text('Terms of service');
         await tester.scrollUntilVisible(termsFinder, 200);
+        // A built row can still sit past the cache edge, below the screen.
+        await tester.ensureVisible(termsFinder);
+        await tester.pumpAndSettle();
         expect(termsFinder, findsOneWidget);
 
         await tester.tap(termsFinder);
@@ -492,6 +496,9 @@ void main() {
 
         final privacyFinder = find.text('Privacy policy');
         await tester.scrollUntilVisible(privacyFinder, 200);
+        // A built row can still sit past the cache edge, below the screen.
+        await tester.ensureVisible(privacyFinder);
+        await tester.pumpAndSettle();
         expect(privacyFinder, findsOneWidget);
 
         await tester.tap(privacyFinder);
@@ -515,6 +522,9 @@ void main() {
 
         final termsFinder = find.text('Terms of service');
         await tester.scrollUntilVisible(termsFinder, 200);
+        // A built row can still sit past the cache edge, below the screen.
+        await tester.ensureVisible(termsFinder);
+        await tester.pumpAndSettle();
         await tester.tap(termsFinder);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
@@ -672,10 +682,16 @@ void main() {
 
         final termsFinder = find.text('شروط الخدمة');
         await tester.scrollUntilVisible(termsFinder, 200);
+        // A built row can still sit past the cache edge, below the screen.
+        await tester.ensureVisible(termsFinder);
+        await tester.pumpAndSettle();
         expect(termsFinder, findsOneWidget);
 
         final privacyFinder = find.text('سياسة الخصوصية');
         await tester.scrollUntilVisible(privacyFinder, 200);
+        // A built row can still sit past the cache edge, below the screen.
+        await tester.ensureVisible(privacyFinder);
+        await tester.pumpAndSettle();
         expect(privacyFinder, findsOneWidget);
         expect(tester.takeException(), isNull);
       });

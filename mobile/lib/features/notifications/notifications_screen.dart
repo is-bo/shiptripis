@@ -193,6 +193,19 @@ class NotificationsScreen extends ConsumerWidget {
         );
       case OpenKyc():
         context.pushNamed(Routes.kyc);
+      case OpenRouteAlert(:final alertId, :final journeyId, :final requestId):
+        if (journeyId != null) {
+          context.openBrowseTrips(alertId: alertId, focusJourneyId: journeyId);
+        } else if (requestId != null) {
+          context.openBrowseRequests(
+            alertId: alertId,
+            focusRequestId: requestId,
+          );
+        } else {
+          context.openRouteAlerts();
+        }
+      case OpenTravelerInterest(:final requestId, :final journeyId):
+        context.openDiscovery(requestId, focusJourneyId: journeyId);
     }
   }
 
@@ -371,6 +384,14 @@ class _Row extends StatelessWidget {
       NotificationChannel.disputeResolved => (
         l.notificationDispute,
         Icons.gavel_outlined,
+      ),
+      NotificationChannel.discoveryRouteAlert => (
+        l.notificationRouteAlert,
+        Icons.add_alert_outlined,
+      ),
+      NotificationChannel.discoveryTravelerInterested => (
+        l.notificationTravelerInterested,
+        Icons.back_hand_outlined,
       ),
       NotificationChannel.unknown => (
         l.notificationOther,

@@ -301,6 +301,11 @@ Set<LiveResource> resourcesForLiveEvent(
     'dispute.resolved',
     'payout.status_changed',
     'chat.message.new',
+    // L2A discovery. Both only add a row to the bell inbox: neither changes a
+    // deal, a match, a request or a journey, so the base set (inbox and
+    // badge) is all they refresh.
+    'discovery.route_alert',
+    'discovery.traveler_interested',
   };
   if (!knownEvents.contains(type)) return const {};
 

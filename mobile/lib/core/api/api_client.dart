@@ -252,6 +252,17 @@ class ApiClient {
     );
   }
 
+  /// For `DELETE` endpoints, whose success is a 204.
+  Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
+    await _write(
+      (identity) => _dio.delete<dynamic>(
+        path,
+        cancelToken: cancelToken,
+        options: _requestOptions(identity),
+      ),
+    );
+  }
+
   Future<Json> patchObject(
     String path, {
     Object? body,

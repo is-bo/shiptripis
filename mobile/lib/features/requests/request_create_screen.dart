@@ -103,6 +103,7 @@ import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../location/preferred_point_field.dart';
+import 'request_labels.dart';
 
 /// User-facing pricing failures are selected from structured API metadata.
 /// Server prose is intentionally excluded because it is unlocalized and may
@@ -213,8 +214,20 @@ class RequestCreatePricingSeed {
   final int? itemPhotoMediaId;
 }
 
+/// A route chosen before the form opened — a trip found in Browse. The sender
+/// still reviews and can change either end; this only saves them picking the
+/// two cities again.
+class RequestRoutePrefill {
+  const RequestRoutePrefill({this.pickup, this.delivery});
+
+  final CanonicalPlace? pickup;
+  final CanonicalPlace? delivery;
+}
+
 class RequestCreateScreen extends ConsumerStatefulWidget {
-  const RequestCreateScreen({super.key, this.debugPricingSeed});
+  const RequestCreateScreen({super.key, this.prefill, this.debugPricingSeed});
+
+  final RequestRoutePrefill? prefill;
 
   /// Test-only. See [RequestCreatePricingSeed].
   @visibleForTesting
@@ -433,6 +446,8 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         '${orphans.toList()..sort()}',
       );
     }());
+    _pickup = widget.prefill?.pickup;
+    _delivery = widget.prefill?.delivery;
     final seed = widget.debugPricingSeed;
     if (seed != null) {
       _pickup = seed.pickup;
@@ -784,7 +799,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             for (final category in _offeredCategories)
               AppSheetOption(
                 value: category,
-                label: _categoryLabel(sheetL, category),
+                label: itemCategoryLabel(sheetL, category),
               ),
           ],
         );
@@ -1588,7 +1603,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
         label: l.requestCategory,
         isRequired: true,
         placeholder: l.actionSelect,
-        value: _category == null ? null : _categoryLabel(l, _category!),
+        value: _category == null ? null : itemCategoryLabel(l, _category!),
         errorText: _errorFor(l, 'category'),
         icon: Icons.category_outlined,
         onTap: _pickCategory,
@@ -1826,7 +1841,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
             if (_category != null)
               DetailRow(
                 label: l.requestCategory,
-                value: Text(_categoryLabel(l, _category!)),
+                value: Text(itemCategoryLabel(l, _category!)),
               ),
             DetailRow(
               label: l.requestWeight,
@@ -2351,14 +2366,6 @@ const _offeredCategories = <ItemCategory>[
   ItemCategory.clothing,
   ItemCategory.other,
 ];
-
-String _categoryLabel(L l, ItemCategory category) => switch (category) {
-  ItemCategory.documents => l.requestCategoryDocuments,
-  ItemCategory.smallBox => l.requestCategorySmallBox,
-  ItemCategory.electronics => l.requestCategoryElectronics,
-  ItemCategory.clothing => l.requestCategoryClothing,
-  ItemCategory.other || ItemCategory.unknown => l.requestCategoryOther,
-};
 
 class _DimensionField extends StatelessWidget {
   const _DimensionField({

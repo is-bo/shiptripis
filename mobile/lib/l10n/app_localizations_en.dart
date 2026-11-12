@@ -4411,4 +4411,487 @@ class LEn extends L {
   @override
   String get payResultDepositCredited =>
       'This deposit counts toward your delivery total when a traveler accepts.';
+
+  @override
+  String get alertsTitle => 'Route alerts';
+
+  @override
+  String get alertsIntro =>
+      'We send at most one notification per alert every few hours.';
+
+  @override
+  String get alertsEmptyTitle => 'No route alerts yet';
+
+  @override
+  String get alertsEmptyBody =>
+      'Get a notification when a trip or a parcel appears on a route you care about.';
+
+  @override
+  String get alertAdd => 'Add alert';
+
+  @override
+  String get alertAddTitle => 'New route alert';
+
+  @override
+  String get alertAddSubtitle =>
+      'We\'ll notify you when something new appears on this route.';
+
+  @override
+  String get alertCreate => 'Create alert';
+
+  @override
+  String get alertPickCity => 'Choose a city';
+
+  @override
+  String get alertWatchLabel => 'Watch for';
+
+  @override
+  String get alertWatchesTrips => 'New trips';
+
+  @override
+  String get alertWatchesRequests => 'New parcels';
+
+  @override
+  String alertFollowing(String name) {
+    return 'Following $name';
+  }
+
+  @override
+  String alertRemoveA11y(String route) {
+    return 'Remove alert for $route';
+  }
+
+  @override
+  String get alertRemoved => 'Alert removed';
+
+  @override
+  String get alertSwitchLabel => 'Alert me about this route';
+
+  @override
+  String get alertTurnedOn => 'Alert turned on';
+
+  @override
+  String get alertTurnedOff => 'Alert turned off';
+
+  @override
+  String get alertLimitReached =>
+      'You have reached the maximum number of active alerts. Remove one to add another.';
+
+  @override
+  String get alertSameCity => 'Choose two different cities.';
+
+  @override
+  String get alertSelf => 'You can\'t follow yourself.';
+
+  @override
+  String get browseTripsTitle => 'Trips leaving soon';
+
+  @override
+  String get browseRequestsTitle => 'Parcels looking for a traveler';
+
+  @override
+  String get browseTripsEmptyTitle => 'No trips right now';
+
+  @override
+  String get browseTripsEmptyBody =>
+      'Trips appear here as soon as travelers publish them.';
+
+  @override
+  String get browseTripsEmptyAction => 'Send a parcel';
+
+  @override
+  String get browseRequestsEmptyTitle => 'No open parcels right now';
+
+  @override
+  String get browseRequestsEmptyBody =>
+      'Parcels appear here as soon as senders post them.';
+
+  @override
+  String get browseRequestsEmptyAction => 'Add a journey';
+
+  @override
+  String get browseNoMatchTitle => 'No results';
+
+  @override
+  String get browseNoMatchBody =>
+      'Nothing matches these filters. Try other cities or another date.';
+
+  @override
+  String get browseClearFilters => 'Clear filters';
+
+  @override
+  String browseClearFilter(String label) {
+    return 'Clear $label';
+  }
+
+  @override
+  String get browseFilterFrom => 'From';
+
+  @override
+  String get browseFilterTo => 'To';
+
+  @override
+  String get browseFilterDate => 'From date';
+
+  @override
+  String get countryAlgeria => 'Algeria';
+
+  @override
+  String get countryFrance => 'France';
+
+  @override
+  String get countrySpain => 'Spain';
+
+  @override
+  String get countryGermany => 'Germany';
+
+  @override
+  String get corridorAll => 'All routes';
+
+  @override
+  String corridorA11y(String from, String to) {
+    return 'From $from to $to';
+  }
+
+  @override
+  String get discoveryListingsOffTitle => 'Not available right now';
+
+  @override
+  String get discoveryListingsOff =>
+      'Browsing trips and parcels is paused for now. Please check back later.';
+
+  @override
+  String get discoveryProfilesOffTitle => 'Not available right now';
+
+  @override
+  String get discoveryProfilesOff =>
+      'Public profiles are paused for now. Please check back later.';
+
+  @override
+  String get discoveryProfileGone => 'This profile is no longer available.';
+
+  @override
+  String get discoveryShowingEarlier => 'Showing what we loaded earlier';
+
+  @override
+  String get requestCarryAction => 'I can carry this';
+
+  @override
+  String get carryExplain =>
+      'Tell the sender you could carry this. It isn\'t an offer: there is no price, nothing is reserved, and the sender decides what happens next.';
+
+  @override
+  String get carryChooseTrip => 'Which trip?';
+
+  @override
+  String get carryChooseTripHint => 'Pick the journey you would carry this on.';
+
+  @override
+  String get carryPublishTrip => 'Add a journey to carry this';
+
+  @override
+  String get carrySentTitle => 'Sender notified';
+
+  @override
+  String get carryAlreadySentTitle => 'Already sent';
+
+  @override
+  String get carrySentBody =>
+      'The sender got one notification that you can carry this. They can look at your trip and propose a delivery. Nothing is reserved.';
+
+  @override
+  String get carryIncompatible => 'This parcel doesn\'t fit that trip:';
+
+  @override
+  String get carryDailyCap =>
+      'You have reached today\'s limit for \"I can carry this\". Try again tomorrow.';
+
+  @override
+  String get carryRequestGone => 'That parcel is no longer open.';
+
+  @override
+  String get carryJourneyGone => 'That trip is no longer available.';
+
+  @override
+  String get rejectCapacity => 'There isn\'t enough space left on every leg.';
+
+  @override
+  String get rejectDeadline => 'It would arrive after the deadline.';
+
+  @override
+  String get rejectTiming => 'The dates don\'t line up.';
+
+  @override
+  String get rejectRoute => 'The detour from the route is too large.';
+
+  @override
+  String get rejectClosed => 'One of them is no longer open.';
+
+  @override
+  String get rejectVerification =>
+      'The traveler\'s verification isn\'t complete.';
+
+  @override
+  String get rejectItem => 'This item can\'t be carried on this trip.';
+
+  @override
+  String get rejectGeneric => 'The trip and the parcel don\'t match.';
+
+  @override
+  String get focusTripMissingTitle => 'That trip doesn\'t fit this parcel';
+
+  @override
+  String get focusTripMissingBody =>
+      'This trip isn\'t in your list of compatible travelers.';
+
+  @override
+  String tripLeaves(String date) {
+    return 'Leaves $date';
+  }
+
+  @override
+  String get tripArrives => 'Arrives';
+
+  @override
+  String get tripSpace => 'Space left';
+
+  @override
+  String get tripCapacityUnder5 => 'Under 5 kg left';
+
+  @override
+  String get tripCapacity5to10 => '5–10 kg left';
+
+  @override
+  String get tripCapacity10to20 => '10–20 kg left';
+
+  @override
+  String get tripCapacity20Plus => '20 kg or more left';
+
+  @override
+  String get tripPreviewSubtitle =>
+      'You propose first. Nothing is booked from here.';
+
+  @override
+  String get tripChooseParcel => 'Choose one of your parcels';
+
+  @override
+  String get tripPostForRoute => 'Post a parcel for this route';
+
+  @override
+  String requestCardDeadline(String date) {
+    return 'By $date';
+  }
+
+  @override
+  String requestCardFrom(String name) {
+    return 'From $name';
+  }
+
+  @override
+  String get requestOfferedReward => 'Offered reward';
+
+  @override
+  String publicRatingA11y(String rating) {
+    return 'Rated $rating out of 5';
+  }
+
+  @override
+  String get profileNoUsualRoutes => 'No usual routes shown';
+
+  @override
+  String get homeMatchesTitle => 'Matches for you';
+
+  @override
+  String get homeMatchesEmptyTitle => 'No matches yet';
+
+  @override
+  String get homeMatchesSenderNone =>
+      'Post a parcel and the travelers who fit it will show up here.';
+
+  @override
+  String get homeMatchesSenderWaiting =>
+      'No traveler fits your open parcels yet. We\'ll show them here as soon as one does.';
+
+  @override
+  String get homeMatchesTravelerNone =>
+      'Add a journey and the parcels that fit it will show up here.';
+
+  @override
+  String get homeMatchesTravelerWaiting =>
+      'No parcel fits your journeys yet. We\'ll show them here as soon as one does.';
+
+  @override
+  String get homeTripsTitle => 'Trips leaving soon';
+
+  @override
+  String get homeTripsEmptyBody =>
+      'Trips that are about to leave will show up here.';
+
+  @override
+  String get homeRequestsTitle => 'Parcels looking for a traveler';
+
+  @override
+  String get homeRequestsEmptyBody =>
+      'Parcels that need a traveler will show up here.';
+
+  @override
+  String get homeListingsEmptyTitle => 'Nothing listed yet';
+
+  @override
+  String get homeListingsEmptyRouteTitle => 'Nothing on this route yet';
+
+  @override
+  String get homePeopleSenderTitle => 'Travelers on Wassla';
+
+  @override
+  String get homePeopleTravelerTitle => 'Senders on Wassla';
+
+  @override
+  String get homePeopleEmptyTitle => 'No public profiles yet';
+
+  @override
+  String get homePeopleEmptyBody =>
+      'People who choose to show a public profile will appear here.';
+
+  @override
+  String get optInTitle => 'Be found on Wassla';
+
+  @override
+  String get optInBody =>
+      'Let senders and travelers find you. Only your first name, your trust badges and the routes you choose are shown.';
+
+  @override
+  String get optInPreviewLabel => 'This is what others would see';
+
+  @override
+  String get optInShow => 'Show my profile';
+
+  @override
+  String get optInNotNow => 'Not now';
+
+  @override
+  String get personTitle => 'Profile';
+
+  @override
+  String get personGoneTitle => 'Profile unavailable';
+
+  @override
+  String get personUsualRoutes => 'Usual routes';
+
+  @override
+  String personAlertHint(String name) {
+    return 'Turn on an alert to hear when $name posts on a route.';
+  }
+
+  @override
+  String personNoUsualRoutes(String name) {
+    return '$name hasn\'t added usual routes.';
+  }
+
+  @override
+  String personTrips(String name) {
+    return '$name\'s trips';
+  }
+
+  @override
+  String personRequests(String name) {
+    return '$name\'s parcels';
+  }
+
+  @override
+  String personNothingListed(String name) {
+    return '$name has no live trips or open parcels right now.';
+  }
+
+  @override
+  String get publicProfileTitle => 'Public profile';
+
+  @override
+  String get publicProfileIntro =>
+      'A public profile lets senders and travelers find you and follow your routes. It is off unless you turn it on, and you can turn it off at any time.';
+
+  @override
+  String get publicShownTitle => 'What others see';
+
+  @override
+  String get publicShownFirstName => 'Your first name';
+
+  @override
+  String get publicShownTrust =>
+      'Whether your identity is verified, your rating and your completed deliveries';
+
+  @override
+  String get publicShownMemberSince => 'The month and year you joined';
+
+  @override
+  String get publicShownRoutes => 'The usual routes you choose';
+
+  @override
+  String get publicNeverTitle => 'Never shown';
+
+  @override
+  String get publicNeverContact => 'Your last name, email or phone number';
+
+  @override
+  String get publicNeverPlaces => 'An exact address or position';
+
+  @override
+  String get publicShowSwitch => 'Show my public profile';
+
+  @override
+  String get publicSwitchOn => 'Others can find you.';
+
+  @override
+  String get publicSwitchOff => 'Others can\'t find you.';
+
+  @override
+  String get publicProfileOn => 'Your public profile is on';
+
+  @override
+  String get publicHiddenNotice =>
+      'Your profile is not currently visible to others.';
+
+  @override
+  String get publicRoutesTitle => 'Usual routes';
+
+  @override
+  String get publicRoutesHint =>
+      'Up to three routes you often travel or send on.';
+
+  @override
+  String get publicRoutesLimit => 'You\'ve added the maximum of three routes.';
+
+  @override
+  String get publicRouteAdd => 'Add a usual route';
+
+  @override
+  String get publicRouteFrom => 'Usual route: from';
+
+  @override
+  String get publicRouteTo => 'Usual route: to';
+
+  @override
+  String publicRouteRemove(String route) {
+    return 'Remove $route';
+  }
+
+  @override
+  String get publicRouteDuplicate => 'That route is already on your profile.';
+
+  @override
+  String get publicPreviewTitle => 'Your public card';
+
+  @override
+  String get publicPreviewVisible => 'This is what others see right now.';
+
+  @override
+  String get publicPreviewHidden =>
+      'This is what others would see if you turn it on.';
+
+  @override
+  String get notificationRouteAlert => 'New on a route you follow';
+
+  @override
+  String get notificationTravelerInterested =>
+      'A traveler can carry your parcel';
 }

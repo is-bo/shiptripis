@@ -431,6 +431,16 @@ String? pushLocation(Map<String, String> data) {
   if (channel == 'chat.message.new' && matchId != null) {
     return '/chat/thread/$matchId';
   }
+  if (channel == 'discovery.route_alert') return _routeAlertLocation(data);
+  if (channel == 'discovery.traveler_interested') {
+    // The sender's own request, with the traveler's trip in focus.
+    final requestId = positive('request_id');
+    final journeyId = positive('journey_id');
+    if (requestId == null) return '/notifications';
+    return journeyId == null
+        ? '/requests/$requestId'
+        : '/requests/$requestId/discovery?journey=$journeyId';
+  }
   final disputeId = positive('dispute_id');
   if (disputeId != null) return '/disputes/$disputeId';
   if (channel == 'payout.status_changed') {
@@ -467,4 +477,32 @@ String? pushLocation(Map<String, String> data) {
     return '/profile/payouts';
   }
   return channel.isEmpty ? null : '/notifications';
+}
+
+/// A route alert opens Browse on the alert's own route and focuses the trip or
+/// request that triggered it. Without either id the member's alert list opens:
+/// there is nothing to focus, and `journey_id` here is somebody else's trip,
+/// which the generic ladder would wrongly open as the member's own journey.
+String _routeAlertLocation(Map<String, String> data) {
+  int? positive(String key) {
+    final value = int.tryParse(data[key] ?? '');
+    return value != null && value > 0 ? value : null;
+  }
+
+  final alertId = positive('alert_id');
+  final journeyId = positive('journey_id');
+  final requestId = positive('request_id');
+  final (path, focus) = journeyId != null
+      ? ('/discover/trips', journeyId)
+      : requestId != null
+      ? ('/discover/requests', requestId)
+      : ('/profile/alerts', null);
+  if (focus == null) return path;
+  return Uri(
+    path: path,
+    queryParameters: {
+      if (alertId != null) 'alert': '$alertId',
+      'focus': '$focus',
+    },
+  ).toString();
 }

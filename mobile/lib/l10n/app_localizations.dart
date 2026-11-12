@@ -7682,6 +7682,858 @@ abstract class L {
   /// In en, this message translates to:
   /// **'This deposit counts toward your delivery total when a traveler accepts.'**
   String get payResultDepositCredited;
+
+  /// No description provided for @alertsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Route alerts'**
+  String get alertsTitle;
+
+  /// No description provided for @alertsIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'We send at most one notification per alert every few hours.'**
+  String get alertsIntro;
+
+  /// No description provided for @alertsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No route alerts yet'**
+  String get alertsEmptyTitle;
+
+  /// No description provided for @alertsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a notification when a trip or a parcel appears on a route you care about.'**
+  String get alertsEmptyBody;
+
+  /// No description provided for @alertAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add alert'**
+  String get alertAdd;
+
+  /// No description provided for @alertAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New route alert'**
+  String get alertAddTitle;
+
+  /// No description provided for @alertAddSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll notify you when something new appears on this route.'**
+  String get alertAddSubtitle;
+
+  /// No description provided for @alertCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create alert'**
+  String get alertCreate;
+
+  /// No description provided for @alertPickCity.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a city'**
+  String get alertPickCity;
+
+  /// No description provided for @alertWatchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch for'**
+  String get alertWatchLabel;
+
+  /// No description provided for @alertWatchesTrips.
+  ///
+  /// In en, this message translates to:
+  /// **'New trips'**
+  String get alertWatchesTrips;
+
+  /// No description provided for @alertWatchesRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'New parcels'**
+  String get alertWatchesRequests;
+
+  /// No description provided for @alertFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Following {name}'**
+  String alertFollowing(String name);
+
+  /// No description provided for @alertRemoveA11y.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove alert for {route}'**
+  String alertRemoveA11y(String route);
+
+  /// No description provided for @alertRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert removed'**
+  String get alertRemoved;
+
+  /// No description provided for @alertSwitchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert me about this route'**
+  String get alertSwitchLabel;
+
+  /// No description provided for @alertTurnedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert turned on'**
+  String get alertTurnedOn;
+
+  /// No description provided for @alertTurnedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert turned off'**
+  String get alertTurnedOff;
+
+  /// No description provided for @alertLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached the maximum number of active alerts. Remove one to add another.'**
+  String get alertLimitReached;
+
+  /// No description provided for @alertSameCity.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose two different cities.'**
+  String get alertSameCity;
+
+  /// No description provided for @alertSelf.
+  ///
+  /// In en, this message translates to:
+  /// **'You can\'t follow yourself.'**
+  String get alertSelf;
+
+  /// No description provided for @browseTripsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trips leaving soon'**
+  String get browseTripsTitle;
+
+  /// No description provided for @browseRequestsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Parcels looking for a traveler'**
+  String get browseRequestsTitle;
+
+  /// No description provided for @browseTripsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No trips right now'**
+  String get browseTripsEmptyTitle;
+
+  /// No description provided for @browseTripsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Trips appear here as soon as travelers publish them.'**
+  String get browseTripsEmptyBody;
+
+  /// No description provided for @browseTripsEmptyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a parcel'**
+  String get browseTripsEmptyAction;
+
+  /// No description provided for @browseRequestsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No open parcels right now'**
+  String get browseRequestsEmptyTitle;
+
+  /// No description provided for @browseRequestsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Parcels appear here as soon as senders post them.'**
+  String get browseRequestsEmptyBody;
+
+  /// No description provided for @browseRequestsEmptyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a journey'**
+  String get browseRequestsEmptyAction;
+
+  /// No description provided for @browseNoMatchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No results'**
+  String get browseNoMatchTitle;
+
+  /// No description provided for @browseNoMatchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches these filters. Try other cities or another date.'**
+  String get browseNoMatchBody;
+
+  /// No description provided for @browseClearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filters'**
+  String get browseClearFilters;
+
+  /// No description provided for @browseClearFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear {label}'**
+  String browseClearFilter(String label);
+
+  /// No description provided for @browseFilterFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get browseFilterFrom;
+
+  /// No description provided for @browseFilterTo.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get browseFilterTo;
+
+  /// No description provided for @browseFilterDate.
+  ///
+  /// In en, this message translates to:
+  /// **'From date'**
+  String get browseFilterDate;
+
+  /// No description provided for @countryAlgeria.
+  ///
+  /// In en, this message translates to:
+  /// **'Algeria'**
+  String get countryAlgeria;
+
+  /// No description provided for @countryFrance.
+  ///
+  /// In en, this message translates to:
+  /// **'France'**
+  String get countryFrance;
+
+  /// No description provided for @countrySpain.
+  ///
+  /// In en, this message translates to:
+  /// **'Spain'**
+  String get countrySpain;
+
+  /// No description provided for @countryGermany.
+  ///
+  /// In en, this message translates to:
+  /// **'Germany'**
+  String get countryGermany;
+
+  /// No description provided for @corridorAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All routes'**
+  String get corridorAll;
+
+  /// No description provided for @corridorA11y.
+  ///
+  /// In en, this message translates to:
+  /// **'From {from} to {to}'**
+  String corridorA11y(String from, String to);
+
+  /// No description provided for @discoveryListingsOffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available right now'**
+  String get discoveryListingsOffTitle;
+
+  /// No description provided for @discoveryListingsOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Browsing trips and parcels is paused for now. Please check back later.'**
+  String get discoveryListingsOff;
+
+  /// No description provided for @discoveryProfilesOffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available right now'**
+  String get discoveryProfilesOffTitle;
+
+  /// No description provided for @discoveryProfilesOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Public profiles are paused for now. Please check back later.'**
+  String get discoveryProfilesOff;
+
+  /// No description provided for @discoveryProfileGone.
+  ///
+  /// In en, this message translates to:
+  /// **'This profile is no longer available.'**
+  String get discoveryProfileGone;
+
+  /// No description provided for @discoveryShowingEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing what we loaded earlier'**
+  String get discoveryShowingEarlier;
+
+  /// No description provided for @requestCarryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'I can carry this'**
+  String get requestCarryAction;
+
+  /// No description provided for @carryExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell the sender you could carry this. It isn\'t an offer: there is no price, nothing is reserved, and the sender decides what happens next.'**
+  String get carryExplain;
+
+  /// No description provided for @carryChooseTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Which trip?'**
+  String get carryChooseTrip;
+
+  /// No description provided for @carryChooseTripHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick the journey you would carry this on.'**
+  String get carryChooseTripHint;
+
+  /// No description provided for @carryPublishTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a journey to carry this'**
+  String get carryPublishTrip;
+
+  /// No description provided for @carrySentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender notified'**
+  String get carrySentTitle;
+
+  /// No description provided for @carryAlreadySentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Already sent'**
+  String get carryAlreadySentTitle;
+
+  /// No description provided for @carrySentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender got one notification that you can carry this. They can look at your trip and propose a delivery. Nothing is reserved.'**
+  String get carrySentBody;
+
+  /// No description provided for @carryIncompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'This parcel doesn\'t fit that trip:'**
+  String get carryIncompatible;
+
+  /// No description provided for @carryDailyCap.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached today\'s limit for \"I can carry this\". Try again tomorrow.'**
+  String get carryDailyCap;
+
+  /// No description provided for @carryRequestGone.
+  ///
+  /// In en, this message translates to:
+  /// **'That parcel is no longer open.'**
+  String get carryRequestGone;
+
+  /// No description provided for @carryJourneyGone.
+  ///
+  /// In en, this message translates to:
+  /// **'That trip is no longer available.'**
+  String get carryJourneyGone;
+
+  /// No description provided for @rejectCapacity.
+  ///
+  /// In en, this message translates to:
+  /// **'There isn\'t enough space left on every leg.'**
+  String get rejectCapacity;
+
+  /// No description provided for @rejectDeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'It would arrive after the deadline.'**
+  String get rejectDeadline;
+
+  /// No description provided for @rejectTiming.
+  ///
+  /// In en, this message translates to:
+  /// **'The dates don\'t line up.'**
+  String get rejectTiming;
+
+  /// No description provided for @rejectRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'The detour from the route is too large.'**
+  String get rejectRoute;
+
+  /// No description provided for @rejectClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'One of them is no longer open.'**
+  String get rejectClosed;
+
+  /// No description provided for @rejectVerification.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler\'s verification isn\'t complete.'**
+  String get rejectVerification;
+
+  /// No description provided for @rejectItem.
+  ///
+  /// In en, this message translates to:
+  /// **'This item can\'t be carried on this trip.'**
+  String get rejectItem;
+
+  /// No description provided for @rejectGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'The trip and the parcel don\'t match.'**
+  String get rejectGeneric;
+
+  /// No description provided for @focusTripMissingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'That trip doesn\'t fit this parcel'**
+  String get focusTripMissingTitle;
+
+  /// No description provided for @focusTripMissingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This trip isn\'t in your list of compatible travelers.'**
+  String get focusTripMissingBody;
+
+  /// No description provided for @tripLeaves.
+  ///
+  /// In en, this message translates to:
+  /// **'Leaves {date}'**
+  String tripLeaves(String date);
+
+  /// No description provided for @tripArrives.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrives'**
+  String get tripArrives;
+
+  /// No description provided for @tripSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Space left'**
+  String get tripSpace;
+
+  /// No description provided for @tripCapacityUnder5.
+  ///
+  /// In en, this message translates to:
+  /// **'Under 5 kg left'**
+  String get tripCapacityUnder5;
+
+  /// No description provided for @tripCapacity5to10.
+  ///
+  /// In en, this message translates to:
+  /// **'5–10 kg left'**
+  String get tripCapacity5to10;
+
+  /// No description provided for @tripCapacity10to20.
+  ///
+  /// In en, this message translates to:
+  /// **'10–20 kg left'**
+  String get tripCapacity10to20;
+
+  /// No description provided for @tripCapacity20Plus.
+  ///
+  /// In en, this message translates to:
+  /// **'20 kg or more left'**
+  String get tripCapacity20Plus;
+
+  /// No description provided for @tripPreviewSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You propose first. Nothing is booked from here.'**
+  String get tripPreviewSubtitle;
+
+  /// No description provided for @tripChooseParcel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose one of your parcels'**
+  String get tripChooseParcel;
+
+  /// No description provided for @tripPostForRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Post a parcel for this route'**
+  String get tripPostForRoute;
+
+  /// No description provided for @requestCardDeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'By {date}'**
+  String requestCardDeadline(String date);
+
+  /// No description provided for @requestCardFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From {name}'**
+  String requestCardFrom(String name);
+
+  /// No description provided for @requestOfferedReward.
+  ///
+  /// In en, this message translates to:
+  /// **'Offered reward'**
+  String get requestOfferedReward;
+
+  /// No description provided for @publicRatingA11y.
+  ///
+  /// In en, this message translates to:
+  /// **'Rated {rating} out of 5'**
+  String publicRatingA11y(String rating);
+
+  /// No description provided for @profileNoUsualRoutes.
+  ///
+  /// In en, this message translates to:
+  /// **'No usual routes shown'**
+  String get profileNoUsualRoutes;
+
+  /// No description provided for @homeMatchesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches for you'**
+  String get homeMatchesTitle;
+
+  /// No description provided for @homeMatchesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches yet'**
+  String get homeMatchesEmptyTitle;
+
+  /// No description provided for @homeMatchesSenderNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Post a parcel and the travelers who fit it will show up here.'**
+  String get homeMatchesSenderNone;
+
+  /// No description provided for @homeMatchesSenderWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'No traveler fits your open parcels yet. We\'ll show them here as soon as one does.'**
+  String get homeMatchesSenderWaiting;
+
+  /// No description provided for @homeMatchesTravelerNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a journey and the parcels that fit it will show up here.'**
+  String get homeMatchesTravelerNone;
+
+  /// No description provided for @homeMatchesTravelerWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'No parcel fits your journeys yet. We\'ll show them here as soon as one does.'**
+  String get homeMatchesTravelerWaiting;
+
+  /// No description provided for @homeTripsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trips leaving soon'**
+  String get homeTripsTitle;
+
+  /// No description provided for @homeTripsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Trips that are about to leave will show up here.'**
+  String get homeTripsEmptyBody;
+
+  /// No description provided for @homeRequestsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Parcels looking for a traveler'**
+  String get homeRequestsTitle;
+
+  /// No description provided for @homeRequestsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Parcels that need a traveler will show up here.'**
+  String get homeRequestsEmptyBody;
+
+  /// No description provided for @homeListingsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing listed yet'**
+  String get homeListingsEmptyTitle;
+
+  /// No description provided for @homeListingsEmptyRouteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing on this route yet'**
+  String get homeListingsEmptyRouteTitle;
+
+  /// No description provided for @homePeopleSenderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Travelers on Wassla'**
+  String get homePeopleSenderTitle;
+
+  /// No description provided for @homePeopleTravelerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders on Wassla'**
+  String get homePeopleTravelerTitle;
+
+  /// No description provided for @homePeopleEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No public profiles yet'**
+  String get homePeopleEmptyTitle;
+
+  /// No description provided for @homePeopleEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'People who choose to show a public profile will appear here.'**
+  String get homePeopleEmptyBody;
+
+  /// No description provided for @optInTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Be found on Wassla'**
+  String get optInTitle;
+
+  /// No description provided for @optInBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Let senders and travelers find you. Only your first name, your trust badges and the routes you choose are shown.'**
+  String get optInBody;
+
+  /// No description provided for @optInPreviewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'This is what others would see'**
+  String get optInPreviewLabel;
+
+  /// No description provided for @optInShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show my profile'**
+  String get optInShow;
+
+  /// No description provided for @optInNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get optInNotNow;
+
+  /// No description provided for @personTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get personTitle;
+
+  /// No description provided for @personGoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile unavailable'**
+  String get personGoneTitle;
+
+  /// No description provided for @personUsualRoutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Usual routes'**
+  String get personUsualRoutes;
+
+  /// No description provided for @personAlertHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on an alert to hear when {name} posts on a route.'**
+  String personAlertHint(String name);
+
+  /// No description provided for @personNoUsualRoutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} hasn\'t added usual routes.'**
+  String personNoUsualRoutes(String name);
+
+  /// No description provided for @personTrips.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s trips'**
+  String personTrips(String name);
+
+  /// No description provided for @personRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s parcels'**
+  String personRequests(String name);
+
+  /// No description provided for @personNothingListed.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} has no live trips or open parcels right now.'**
+  String personNothingListed(String name);
+
+  /// No description provided for @publicProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Public profile'**
+  String get publicProfileTitle;
+
+  /// No description provided for @publicProfileIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'A public profile lets senders and travelers find you and follow your routes. It is off unless you turn it on, and you can turn it off at any time.'**
+  String get publicProfileIntro;
+
+  /// No description provided for @publicShownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What others see'**
+  String get publicShownTitle;
+
+  /// No description provided for @publicShownFirstName.
+  ///
+  /// In en, this message translates to:
+  /// **'Your first name'**
+  String get publicShownFirstName;
+
+  /// No description provided for @publicShownTrust.
+  ///
+  /// In en, this message translates to:
+  /// **'Whether your identity is verified, your rating and your completed deliveries'**
+  String get publicShownTrust;
+
+  /// No description provided for @publicShownMemberSince.
+  ///
+  /// In en, this message translates to:
+  /// **'The month and year you joined'**
+  String get publicShownMemberSince;
+
+  /// No description provided for @publicShownRoutes.
+  ///
+  /// In en, this message translates to:
+  /// **'The usual routes you choose'**
+  String get publicShownRoutes;
+
+  /// No description provided for @publicNeverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Never shown'**
+  String get publicNeverTitle;
+
+  /// No description provided for @publicNeverContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Your last name, email or phone number'**
+  String get publicNeverContact;
+
+  /// No description provided for @publicNeverPlaces.
+  ///
+  /// In en, this message translates to:
+  /// **'An exact address or position'**
+  String get publicNeverPlaces;
+
+  /// No description provided for @publicShowSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Show my public profile'**
+  String get publicShowSwitch;
+
+  /// No description provided for @publicSwitchOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Others can find you.'**
+  String get publicSwitchOn;
+
+  /// No description provided for @publicSwitchOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Others can\'t find you.'**
+  String get publicSwitchOff;
+
+  /// No description provided for @publicProfileOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Your public profile is on'**
+  String get publicProfileOn;
+
+  /// No description provided for @publicHiddenNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile is not currently visible to others.'**
+  String get publicHiddenNotice;
+
+  /// No description provided for @publicRoutesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Usual routes'**
+  String get publicRoutesTitle;
+
+  /// No description provided for @publicRoutesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to three routes you often travel or send on.'**
+  String get publicRoutesHint;
+
+  /// No description provided for @publicRoutesLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve added the maximum of three routes.'**
+  String get publicRoutesLimit;
+
+  /// No description provided for @publicRouteAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a usual route'**
+  String get publicRouteAdd;
+
+  /// No description provided for @publicRouteFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Usual route: from'**
+  String get publicRouteFrom;
+
+  /// No description provided for @publicRouteTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Usual route: to'**
+  String get publicRouteTo;
+
+  /// No description provided for @publicRouteRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {route}'**
+  String publicRouteRemove(String route);
+
+  /// No description provided for @publicRouteDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'That route is already on your profile.'**
+  String get publicRouteDuplicate;
+
+  /// No description provided for @publicPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your public card'**
+  String get publicPreviewTitle;
+
+  /// No description provided for @publicPreviewVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'This is what others see right now.'**
+  String get publicPreviewVisible;
+
+  /// No description provided for @publicPreviewHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'This is what others would see if you turn it on.'**
+  String get publicPreviewHidden;
+
+  /// No description provided for @notificationRouteAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'New on a route you follow'**
+  String get notificationRouteAlert;
+
+  /// No description provided for @notificationTravelerInterested.
+  ///
+  /// In en, this message translates to:
+  /// **'A traveler can carry your parcel'**
+  String get notificationTravelerInterested;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

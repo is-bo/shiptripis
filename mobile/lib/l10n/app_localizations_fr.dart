@@ -4448,4 +4448,499 @@ class LFr extends L {
   @override
   String get payResultDepositCredited =>
       'Cet acompte sera déduit du total de votre livraison lorsqu’un voyageur acceptera.';
+
+  @override
+  String get alertsTitle => 'Alertes d\'itinéraire';
+
+  @override
+  String get alertsIntro =>
+      'Nous envoyons au plus une notification par alerte toutes les quelques heures.';
+
+  @override
+  String get alertsEmptyTitle => 'Aucune alerte pour l\'instant';
+
+  @override
+  String get alertsEmptyBody =>
+      'Recevez une notification quand un trajet ou un colis apparaît sur un itinéraire qui vous intéresse.';
+
+  @override
+  String get alertAdd => 'Ajouter une alerte';
+
+  @override
+  String get alertAddTitle => 'Nouvelle alerte d\'itinéraire';
+
+  @override
+  String get alertAddSubtitle =>
+      'Nous vous préviendrons dès qu\'un nouvel élément apparaît sur cet itinéraire.';
+
+  @override
+  String get alertCreate => 'Créer l\'alerte';
+
+  @override
+  String get alertPickCity => 'Choisir une ville';
+
+  @override
+  String get alertWatchLabel => 'Surveiller';
+
+  @override
+  String get alertWatchesTrips => 'Nouveaux trajets';
+
+  @override
+  String get alertWatchesRequests => 'Nouveaux colis';
+
+  @override
+  String alertFollowing(String name) {
+    return 'Suit $name';
+  }
+
+  @override
+  String alertRemoveA11y(String route) {
+    return 'Supprimer l\'alerte pour $route';
+  }
+
+  @override
+  String get alertRemoved => 'Alerte supprimée';
+
+  @override
+  String get alertSwitchLabel => 'M\'alerter sur cet itinéraire';
+
+  @override
+  String get alertTurnedOn => 'Alerte activée';
+
+  @override
+  String get alertTurnedOff => 'Alerte désactivée';
+
+  @override
+  String get alertLimitReached =>
+      'Vous avez atteint le nombre maximal d\'alertes actives. Supprimez-en une pour en ajouter une autre.';
+
+  @override
+  String get alertSameCity => 'Choisissez deux villes différentes.';
+
+  @override
+  String get alertSelf => 'Vous ne pouvez pas vous suivre vous-même.';
+
+  @override
+  String get browseTripsTitle => 'Trajets au départ bientôt';
+
+  @override
+  String get browseRequestsTitle => 'Colis en quête de voyageur';
+
+  @override
+  String get browseTripsEmptyTitle => 'Aucun trajet pour le moment';
+
+  @override
+  String get browseTripsEmptyBody =>
+      'Les trajets apparaissent ici dès que les voyageurs les publient.';
+
+  @override
+  String get browseTripsEmptyAction => 'Envoyer un colis';
+
+  @override
+  String get browseRequestsEmptyTitle => 'Aucun colis ouvert pour le moment';
+
+  @override
+  String get browseRequestsEmptyBody =>
+      'Les colis apparaissent ici dès que les expéditeurs les publient.';
+
+  @override
+  String get browseRequestsEmptyAction => 'Ajouter un trajet';
+
+  @override
+  String get browseNoMatchTitle => 'Aucun résultat';
+
+  @override
+  String get browseNoMatchBody =>
+      'Rien ne correspond à ces filtres. Essayez d\'autres villes ou une autre date.';
+
+  @override
+  String get browseClearFilters => 'Effacer les filtres';
+
+  @override
+  String browseClearFilter(String label) {
+    return 'Effacer $label';
+  }
+
+  @override
+  String get browseFilterFrom => 'De';
+
+  @override
+  String get browseFilterTo => 'Vers';
+
+  @override
+  String get browseFilterDate => 'À partir du';
+
+  @override
+  String get countryAlgeria => 'Algérie';
+
+  @override
+  String get countryFrance => 'France';
+
+  @override
+  String get countrySpain => 'Espagne';
+
+  @override
+  String get countryGermany => 'Allemagne';
+
+  @override
+  String get corridorAll => 'Tous les itinéraires';
+
+  @override
+  String corridorA11y(String from, String to) {
+    return 'De $from vers $to';
+  }
+
+  @override
+  String get discoveryListingsOffTitle => 'Indisponible pour le moment';
+
+  @override
+  String get discoveryListingsOff =>
+      'La consultation des trajets et des colis est suspendue pour le moment. Revenez plus tard.';
+
+  @override
+  String get discoveryProfilesOffTitle => 'Indisponible pour le moment';
+
+  @override
+  String get discoveryProfilesOff =>
+      'Les profils publics sont suspendus pour le moment. Revenez plus tard.';
+
+  @override
+  String get discoveryProfileGone => 'Ce profil n\'est plus disponible.';
+
+  @override
+  String get discoveryShowingEarlier =>
+      'Affichage de ce qui a été chargé plus tôt';
+
+  @override
+  String get requestCarryAction => 'Je peux le transporter';
+
+  @override
+  String get carryExplain =>
+      'Dites à l\'expéditeur que vous pourriez le transporter. Ce n\'est pas une offre : pas de prix, rien n\'est réservé, et c\'est l\'expéditeur qui décide de la suite.';
+
+  @override
+  String get carryChooseTrip => 'Quel trajet ?';
+
+  @override
+  String get carryChooseTripHint =>
+      'Choisissez le trajet sur lequel vous le transporteriez.';
+
+  @override
+  String get carryPublishTrip => 'Ajouter un trajet pour le transporter';
+
+  @override
+  String get carrySentTitle => 'Expéditeur prévenu';
+
+  @override
+  String get carryAlreadySentTitle => 'Déjà envoyé';
+
+  @override
+  String get carrySentBody =>
+      'L\'expéditeur a reçu une notification indiquant que vous pouvez le transporter. Il peut consulter votre trajet et proposer une livraison. Rien n\'est réservé.';
+
+  @override
+  String get carryIncompatible => 'Ce colis ne correspond pas à ce trajet :';
+
+  @override
+  String get carryDailyCap =>
+      'Vous avez atteint la limite du jour pour « Je peux le transporter ». Réessayez demain.';
+
+  @override
+  String get carryRequestGone => 'Ce colis n\'est plus ouvert.';
+
+  @override
+  String get carryJourneyGone => 'Ce trajet n\'est plus disponible.';
+
+  @override
+  String get rejectCapacity =>
+      'Il ne reste pas assez de place sur chaque tronçon.';
+
+  @override
+  String get rejectDeadline => 'Il arriverait après la date limite.';
+
+  @override
+  String get rejectTiming => 'Les dates ne coïncident pas.';
+
+  @override
+  String get rejectRoute =>
+      'Le détour par rapport à l\'itinéraire est trop important.';
+
+  @override
+  String get rejectClosed => 'L\'un des deux n\'est plus ouvert.';
+
+  @override
+  String get rejectVerification =>
+      'La vérification du voyageur n\'est pas terminée.';
+
+  @override
+  String get rejectItem =>
+      'Cet objet ne peut pas être transporté sur ce trajet.';
+
+  @override
+  String get rejectGeneric => 'Le trajet et le colis ne correspondent pas.';
+
+  @override
+  String get focusTripMissingTitle => 'Ce trajet ne convient pas à ce colis';
+
+  @override
+  String get focusTripMissingBody =>
+      'Ce trajet ne figure pas dans votre liste de voyageurs compatibles.';
+
+  @override
+  String tripLeaves(String date) {
+    return 'Part le $date';
+  }
+
+  @override
+  String get tripArrives => 'Arrivée';
+
+  @override
+  String get tripSpace => 'Place disponible';
+
+  @override
+  String get tripCapacityUnder5 => 'Moins de 5 kg disponibles';
+
+  @override
+  String get tripCapacity5to10 => '5 à 10 kg disponibles';
+
+  @override
+  String get tripCapacity10to20 => '10 à 20 kg disponibles';
+
+  @override
+  String get tripCapacity20Plus => '20 kg ou plus disponibles';
+
+  @override
+  String get tripPreviewSubtitle =>
+      'Vous proposez en premier. Rien n\'est réservé depuis ici.';
+
+  @override
+  String get tripChooseParcel => 'Choisissez l\'un de vos colis';
+
+  @override
+  String get tripPostForRoute => 'Publier un colis pour cet itinéraire';
+
+  @override
+  String requestCardDeadline(String date) {
+    return 'Avant le $date';
+  }
+
+  @override
+  String requestCardFrom(String name) {
+    return 'De $name';
+  }
+
+  @override
+  String get requestOfferedReward => 'Rémunération proposée';
+
+  @override
+  String publicRatingA11y(String rating) {
+    return 'Noté $rating sur 5';
+  }
+
+  @override
+  String get profileNoUsualRoutes => 'Aucun itinéraire habituel affiché';
+
+  @override
+  String get homeMatchesTitle => 'Correspondances pour vous';
+
+  @override
+  String get homeMatchesEmptyTitle => 'Pas encore de correspondance';
+
+  @override
+  String get homeMatchesSenderNone =>
+      'Publiez un colis et les voyageurs compatibles apparaîtront ici.';
+
+  @override
+  String get homeMatchesSenderWaiting =>
+      'Aucun voyageur ne correspond encore à vos colis ouverts. Ils apparaîtront ici dès qu\'il y en aura un.';
+
+  @override
+  String get homeMatchesTravelerNone =>
+      'Ajoutez un trajet et les colis compatibles apparaîtront ici.';
+
+  @override
+  String get homeMatchesTravelerWaiting =>
+      'Aucun colis ne correspond encore à vos trajets. Ils apparaîtront ici dès qu\'il y en aura un.';
+
+  @override
+  String get homeTripsTitle => 'Trajets au départ bientôt';
+
+  @override
+  String get homeTripsEmptyBody =>
+      'Les trajets sur le point de partir apparaîtront ici.';
+
+  @override
+  String get homeRequestsTitle => 'Colis en quête de voyageur';
+
+  @override
+  String get homeRequestsEmptyBody =>
+      'Les colis qui cherchent un voyageur apparaîtront ici.';
+
+  @override
+  String get homeListingsEmptyTitle => 'Rien pour le moment';
+
+  @override
+  String get homeListingsEmptyRouteTitle =>
+      'Rien sur cet itinéraire pour l\'instant';
+
+  @override
+  String get homePeopleSenderTitle => 'Voyageurs sur Wassla';
+
+  @override
+  String get homePeopleTravelerTitle => 'Expéditeurs sur Wassla';
+
+  @override
+  String get homePeopleEmptyTitle => 'Aucun profil public pour l\'instant';
+
+  @override
+  String get homePeopleEmptyBody =>
+      'Les personnes qui choisissent d\'afficher un profil public apparaîtront ici.';
+
+  @override
+  String get optInTitle => 'Soyez visible sur Wassla';
+
+  @override
+  String get optInBody =>
+      'Laissez les expéditeurs et les voyageurs vous trouver. Seuls votre prénom, vos badges de confiance et les itinéraires que vous choisissez sont affichés.';
+
+  @override
+  String get optInPreviewLabel => 'Voici ce que les autres verraient';
+
+  @override
+  String get optInShow => 'Afficher mon profil';
+
+  @override
+  String get optInNotNow => 'Pas maintenant';
+
+  @override
+  String get personTitle => 'Profil';
+
+  @override
+  String get personGoneTitle => 'Profil indisponible';
+
+  @override
+  String get personUsualRoutes => 'Itinéraires habituels';
+
+  @override
+  String personAlertHint(String name) {
+    return 'Activez une alerte pour être prévenu quand $name publie sur un itinéraire.';
+  }
+
+  @override
+  String personNoUsualRoutes(String name) {
+    return '$name n\'a pas ajouté d\'itinéraires habituels.';
+  }
+
+  @override
+  String personTrips(String name) {
+    return 'Trajets de $name';
+  }
+
+  @override
+  String personRequests(String name) {
+    return 'Colis de $name';
+  }
+
+  @override
+  String personNothingListed(String name) {
+    return '$name n\'a aucun trajet en cours ni colis ouvert pour le moment.';
+  }
+
+  @override
+  String get publicProfileTitle => 'Profil public';
+
+  @override
+  String get publicProfileIntro =>
+      'Un profil public permet aux expéditeurs et aux voyageurs de vous trouver et de suivre vos itinéraires. Il est désactivé tant que vous ne l\'activez pas, et vous pouvez le désactiver à tout moment.';
+
+  @override
+  String get publicShownTitle => 'Ce que les autres voient';
+
+  @override
+  String get publicShownFirstName => 'Votre prénom';
+
+  @override
+  String get publicShownTrust =>
+      'Si votre identité est vérifiée, votre note et vos livraisons terminées';
+
+  @override
+  String get publicShownMemberSince =>
+      'Le mois et l\'année de votre inscription';
+
+  @override
+  String get publicShownRoutes =>
+      'Les itinéraires habituels que vous choisissez';
+
+  @override
+  String get publicNeverTitle => 'Jamais affiché';
+
+  @override
+  String get publicNeverContact =>
+      'Votre nom de famille, e-mail ou numéro de téléphone';
+
+  @override
+  String get publicNeverPlaces => 'Une adresse ou une position exacte';
+
+  @override
+  String get publicShowSwitch => 'Afficher mon profil public';
+
+  @override
+  String get publicSwitchOn => 'Les autres peuvent vous trouver.';
+
+  @override
+  String get publicSwitchOff => 'Les autres ne peuvent pas vous trouver.';
+
+  @override
+  String get publicProfileOn => 'Votre profil public est activé';
+
+  @override
+  String get publicHiddenNotice =>
+      'Votre profil n\'est actuellement pas visible par les autres.';
+
+  @override
+  String get publicRoutesTitle => 'Itinéraires habituels';
+
+  @override
+  String get publicRoutesHint =>
+      'Jusqu\'à trois itinéraires que vous empruntez ou utilisez souvent.';
+
+  @override
+  String get publicRoutesLimit =>
+      'Vous avez ajouté le maximum de trois itinéraires.';
+
+  @override
+  String get publicRouteAdd => 'Ajouter un itinéraire habituel';
+
+  @override
+  String get publicRouteFrom => 'Itinéraire habituel : de';
+
+  @override
+  String get publicRouteTo => 'Itinéraire habituel : vers';
+
+  @override
+  String publicRouteRemove(String route) {
+    return 'Supprimer $route';
+  }
+
+  @override
+  String get publicRouteDuplicate =>
+      'Cet itinéraire figure déjà sur votre profil.';
+
+  @override
+  String get publicPreviewTitle => 'Votre carte publique';
+
+  @override
+  String get publicPreviewVisible =>
+      'Voici ce que les autres voient actuellement.';
+
+  @override
+  String get publicPreviewHidden =>
+      'Voici ce que les autres verraient si vous l\'activiez.';
+
+  @override
+  String get notificationRouteAlert => 'Nouveau sur un itinéraire suivi';
+
+  @override
+  String get notificationTravelerInterested =>
+      'Un voyageur peut transporter votre colis';
 }

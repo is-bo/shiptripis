@@ -40,7 +40,6 @@ class ApiErrorCode {
     'legacy_contract_not_supported',
   );
   static const productRequestRetired = ApiErrorCode('product_request_retired');
-  static const airportFilterRetired = ApiErrorCode('airport_filter_retired');
 
   // ---------------------------------------------------------------------------
   // Request / journey lifecycle
@@ -123,6 +122,30 @@ class ApiErrorCode {
     'invalid_reservation_grace',
   );
   static const constraintConflict = ApiErrorCode('constraint_conflict');
+
+  // ---------------------------------------------------------------------------
+  // Public discovery (L2A contract, section 7)
+  // ---------------------------------------------------------------------------
+  static const requestNotFound = ApiErrorCode('request_not_found');
+  static const journeyNotFound = ApiErrorCode('journey_not_found');
+  static const profileNotFound = ApiErrorCode('profile_not_found');
+  static const placeNotFound = ApiErrorCode('place_not_found');
+  static const interestDailyCapReached = ApiErrorCode(
+    'interest_daily_cap_reached',
+  );
+  static const discoveryListingsDisabled = ApiErrorCode(
+    'discovery_listings_disabled',
+  );
+  static const discoveryProfilesDisabled = ApiErrorCode(
+    'discovery_profiles_disabled',
+  );
+  static const usualRouteSameCity = ApiErrorCode('usual_route_same_city');
+  static const usualRouteDuplicate = ApiErrorCode('usual_route_duplicate');
+  static const routeAlertSameCity = ApiErrorCode('route_alert_same_city');
+  static const routeAlertSelf = ApiErrorCode('route_alert_self');
+  static const routeAlertLimitReached = ApiErrorCode(
+    'route_alert_limit_reached',
+  );
 
   // ---------------------------------------------------------------------------
   // Deal lifecycle
@@ -361,7 +384,6 @@ class ApiErrorCode {
   static const _retiredCodes = <String>{
     'legacy_contract_not_supported',
     'product_request_retired',
-    'airport_filter_retired',
   };
 
   bool get isRetiredSurface => _retiredCodes.contains(raw);

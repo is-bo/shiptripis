@@ -146,12 +146,38 @@ factual. Use exactly these headings.
 
 ### L2B. Discovery on Home (mobile)
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): `docs/PHASE_L2B_DISCOVERY_HOME.md`. Routes
+  `/discover/trips`, `/discover/requests`, `/discover/people[/:id]`, `/profile/public`,
+  `/profile/alerts`; a Browse link takes `from`/`to` (a launch corridor), `alert` and `focus`. The
+  traveler-interested push and inbox row open `/requests/<id>/discovery?journey=<jid>`. Domain models
+  in `lib/domain/public_discovery.dart`, calls in `lib/data/discovery_repository.dart`, state in
+  `lib/app/discovery_state.dart`. Removed: `searchPage`, `openFeedPage`, `JourneySearchPage`,
+  `OpenRequestPage`, `discoveryPageSize`, the `airport_filter_retired` handling, and
+  `PushRepository.unregisterDevice`.
+- Left for a later package: L3B adds sea legs to the trip card (mode icons already come from the
+  card's `legs`); L4B adds the listed price to the trip card and preview; L6B the pro badge and business
+  name.
+- Switches added and their defaults: none. Tier switches are read from the server's `state`.
+- Deviations from the plan (what, why, approved by): carry-over `unregisterDevice` was removed rather
+  than wired: sign-out already unregisters server-side, so a client call would be a second, failing
+  path after the token is gone. Home pull-to-refresh now uses always-scrollable physics so it works on a
+  quiet Home. Role-switcher label ellipsises (a 5.9px overflow at 360px). Profile rows with a value
+  (language, appearance) share the row 3:2 and wrap instead of overflowing at 320dp and 1.6x text
+  (existing code, fixed at the coordinator's request). Reported to the orchestrator
+  with the PR; not reviewed by Ismail.
+- Judgment calls: corridor chips are the six launch pairs between France, Spain, Germany and Algeria;
+  the People row is unfiltered and titled by the viewer's role; previews are bottom sheets; an alert
+  deep link resolves through the alerts list plus Browse focus (there is no single-item endpoint);
+  focus on Find Travelers pages client-side and quotes for the server's reason; "I can carry this" is
+  on a matched traveler card and its preview; a per-usual-route alert switch on the person page; the
+  opt-in card hides silently if its read fails; sections follow the member's own content; "See all"
+  reused instead of a new label; dates in Arabic use the app's existing formatter (Arabic-Indic digits
+  in dates, Latin digits in counts and money), unchanged.
+- Tests (before and after counts): Flutter 1,087 passed before, 1,303 after (`k6_discovery_paging_test`
+  replaced; eight new `l2b_*` suites). Analyzer clean with `--fatal-infos`.
+- Known limits: Home reads Matches at cold start (one request, in the 8-request budget); the trips,
+  people and opt-in reads wait until scrolled near. Gate screenshots are rendered from the widget tree
+  with the real fonts (EN and AR, 360px), not a device.
 
 ### L3A. Routes for everyone, backend
 
