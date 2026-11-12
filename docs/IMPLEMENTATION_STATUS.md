@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla L4B — Traveler pricing, mobile (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`
+untouched. No backend, migration or contract change.
+
+- Travelers can set "Price per kg" and "Minimum per parcel" (optional, both or neither) when creating
+  or editing a journey and from the journey page, which changes it on its own endpoint even while the
+  route is locked. Senders see "from €X per kg, minimum €Y" on trip cards and previews, the listed price
+  for their parcel on each Find Travelers card, and a "Lowest price" sort.
+- The propose sheet opens on the traveler's listed price with the fee and total from the server;
+  "Offer €X" sends it, "Offer a different amount" opens the field with Wassla's minimum. The app does
+  no price arithmetic.
+- A route edit always resends the stored price (leaving it out clears it); with pricing switched off
+  the fields are hidden and the stored price is untouched.
+- Flutter tests 1,353 to 1,374; EN, FR and AR strings; gate screenshots in the shared project folder.
+
+Detail: `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md`.
+
 ## Wassla L4C — CI time limit and backup ferry distances (2026-11-12)
 
 Status: **in review** (PR #30 into `feature/discovery-professional-delivery`). No deployment; `main`

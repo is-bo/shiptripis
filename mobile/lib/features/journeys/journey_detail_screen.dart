@@ -45,6 +45,7 @@ import '../common/traveler_candidate_card.dart' show modeAccentColor;
 import '../requests/request_labels.dart' show itemCategoryLabel;
 import 'journey_create_screen.dart' show journeyRouteFailure;
 import 'journey_labels.dart';
+import 'journey_price_card.dart';
 import 'journey_route_draft.dart' show carryableCategories;
 
 final _compatibleRequestsProvider = FutureProvider.autoDispose
@@ -314,6 +315,7 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                           if (isOwner) ...[
                             _HandoverSummary(journey: data),
                             _CarrySummary(journey: data),
+                            JourneyPriceCard(journey: data),
                           ],
 
                           if (data.notes.isNotEmpty) ...[

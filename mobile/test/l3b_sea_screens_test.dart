@@ -192,7 +192,12 @@ Future<(FakeBackend, JourneyRouteDraft)> _pumpCreate(
   double? keyboardInset,
 }) async {
   final backend = FakeBackend()
-    ..on('GET', '/api/geography/sea-crossings', crossings);
+    ..on('GET', '/api/geography/sea-crossings', crossings)
+    ..on(
+      'GET',
+      '/api/journeys/pricing-policy',
+      FakeResponse(200, {'enabled': false}),
+    );
   final container = await _signedIn(tester, backend);
   // The screen owns the draft it is handed and disposes it with itself.
   final draft = _draft();
@@ -537,6 +542,8 @@ void main() {
         draft.refusedCategories,
         isNot(contains(carryableCategories.first)),
       );
+      // Scrolling built the price section, whose policy read has to finish.
+      await tester.pumpAndSettle();
     });
   });
 
@@ -619,6 +626,11 @@ void main() {
       final backend = FakeBackend()
         ..on(
           'GET',
+          '/api/journeys/pricing-policy',
+          FakeResponse(200, {'enabled': false}),
+        )
+        ..on(
+          'GET',
           '/api/journeys/7',
           FakeResponse(200, _journey(pause: pause)),
         )
@@ -654,6 +666,8 @@ void main() {
       expect(find.text('Café by the terminal'), findsOneWidget);
       expect(find.text(l.journeyCarryRefuses('Electronics')), findsOneWidget);
       expect(find.text(l.journeyCarryNoFragile), findsOneWidget);
+      // Scrolling built the price card, whose policy read has to finish.
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 

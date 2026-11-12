@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/discovery_state.dart' show AccountScopedValue;
 import '../../core/format/locale_formats.dart';
+import '../../core/money/money.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/primitives.dart';
@@ -189,6 +190,13 @@ class TripListingCard extends StatelessWidget {
     final when = card.nextDepartureAt ?? card.departsAt;
     final capacity = capacityBandLabel(l, card.capacityBand);
     final modes = card.modes;
+    final price = card.price;
+    final priceLine = price == null
+        ? ''
+        : l.tripPriceFrom(
+            Money.eurCents(price.perKgEurCents).format(locale),
+            Money.eurCents(price.minimumEurCents).format(locale),
+          );
 
     return AppCard(
       onTap: onTap,
@@ -198,6 +206,7 @@ class TripListingCard extends StatelessWidget {
         routeSemanticLabel(stops: stops, locale: locale),
         if (when != null) l.tripLeaves(LocaleFormats.dayMonth(locale, when)),
         capacity,
+        if (price != null) priceLine,
       ]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,6 +254,16 @@ class TripListingCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (price != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              priceLine,
+              style: text.labelLarge?.copyWith(
+                color: c.brandInk,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           if (card.traveler.completedDeliveries > 0) ...[
             const SizedBox(height: AppSpace.sm),
             Text(

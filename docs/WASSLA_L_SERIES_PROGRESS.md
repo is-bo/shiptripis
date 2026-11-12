@@ -379,12 +379,24 @@ Detail: `docs/PHASE_L4C_HOUSEKEEPING.md`.
 
 ### L4B. Traveler pricing, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md`. Screenshots: `/mnt/project-files/l-series-screens/L4B/`.
+
+- Contract as built (names that differ from the plan): none; the app reads L4A's contract as shipped
+  (`Journey.price`, `TripCard.price`, `economics.listed`, `sort=listed_price`, `GET
+  /api/journeys/pricing-policy`, `PATCH /api/journeys/<id>/pricing`). `JourneyRepository.update` always
+  sends the two price fields (null included) because a left-out price is cleared.
+- Left for a later package: nothing for L4B.
+- Switches added and their defaults: none; reads `marketplace.traveler_pricing` through the policy
+  endpoint. Off: price fields and the "Lowest price" sort are hidden, a stored price is re-sent
+  unchanged by a route edit.
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) The
+  different-amount field starts on the listed price and "Use suggested" is hidden when a listed price
+  exists. (2) The sort pill shows only while pricing is on. (3) The trip preview sheet also shows the
+  price. (4) The journey page edits the price on any journey that is not finished (server decides).
+- Tests (before and after counts): Flutter 1,353 to 1,374 (+21, `l4b_traveler_pricing_test.dart`); two
+  L3B tests answer the new policy route (no assertion changed). Django untouched.
+- Known limits: the listed price is shown on the card and the propose sheet, not on the Find Travelers
+  trip detail sheet.
 
 ### L5A. Progress updates and reminders, backend
 

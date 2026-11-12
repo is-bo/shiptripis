@@ -217,6 +217,16 @@ final seaCrossingsProvider = FutureProvider.autoDispose<SeaCrossings>(
   retry: (_, _) => null,
 );
 
+/// Whether travellers may set a price, and the ceilings. Its own provider: a
+/// failure leaves the route editable and hides only the price.
+final travelerPricingPolicyProvider =
+    FutureProvider.autoDispose<TravelerPricingPolicy>(
+      (ref) => ref
+          .watch(journeyRepositoryProvider)
+          .pricingPolicy(cancelToken: cancelOnDispose(ref)),
+      retry: (_, _) => null,
+    );
+
 final journeyDetailProvider = Provider.autoDispose
     .family<AsyncValue<Journey>, int>((ref, id) {
       return _projectLiveQuery(

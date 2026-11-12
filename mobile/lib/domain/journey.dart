@@ -37,6 +37,63 @@ enum JourneyStatus {
       this == completed || this == cancelled || this == expired;
 }
 
+/// What a traveller charges for a journey, in euro cents: a price per kg and
+/// a minimum per parcel. Both or neither, which is why this is one value.
+///
+/// The app does no arithmetic with it. What a parcel would cost on this
+/// journey is the server's `listed` block on Find Travelers.
+class JourneyPrice {
+  const JourneyPrice({
+    required this.perKgEurCents,
+    required this.minimumEurCents,
+  });
+
+  /// Null when the journey has no price, or when it carries a half-price the
+  /// contract forbids: a half-price is not shown as if it were a whole one.
+  static JourneyPrice? maybe(Object? raw) {
+    final json = readObject(raw);
+    if (json == null) return null;
+    final perKg = readInt(json['price_per_kg_eur_cents']);
+    final minimum = readInt(json['min_price_eur_cents']);
+    if (perKg == null || minimum == null) return null;
+    return JourneyPrice(perKgEurCents: perKg, minimumEurCents: minimum);
+  }
+
+  final int perKgEurCents;
+  final int minimumEurCents;
+
+  @override
+  bool operator ==(Object other) =>
+      other is JourneyPrice &&
+      other.perKgEurCents == perKgEurCents &&
+      other.minimumEurCents == minimumEurCents;
+
+  @override
+  int get hashCode => Object.hash(perKgEurCents, minimumEurCents);
+}
+
+/// `GET /api/journeys/pricing-policy`: whether travellers may set a price at
+/// all, and the largest value each part may take. The ceilings are null while
+/// the switch is off.
+class TravelerPricingPolicy {
+  const TravelerPricingPolicy({
+    required this.enabled,
+    this.maxPerKgEurCents,
+    this.maxMinimumEurCents,
+  });
+
+  factory TravelerPricingPolicy.fromJson(Map<String, dynamic> json) =>
+      TravelerPricingPolicy(
+        enabled: json['enabled'] == true,
+        maxPerKgEurCents: readInt(json['max_price_per_kg_eur_cents']),
+        maxMinimumEurCents: readInt(json['max_min_price_eur_cents']),
+      );
+
+  final bool enabled;
+  final int? maxPerKgEurCents;
+  final int? maxMinimumEurCents;
+}
+
 enum ProofStatus { pending, approved, rejected, unknown }
 
 /// What the server says a leg's ticket needs, from `proof_state`.
@@ -291,6 +348,7 @@ class Journey {
     this.refusedCategories = const [],
     this.acceptsFragile = true,
     this.pause,
+    this.price,
   });
 
   factory Journey.fromJson(Map<String, dynamic> json) => Journey(
@@ -326,6 +384,7 @@ class Journey {
     pause: readObject(json['pause']) == null
         ? null
         : JourneyPause.fromJson(readObject(json['pause'])!),
+    price: JourneyPrice.maybe(json['price']),
   );
 
   final int id;
@@ -363,6 +422,9 @@ class Journey {
 
   /// Owner only; null for anyone else, who never sees a paused journey.
   final JourneyPause? pause;
+
+  /// What the traveller charges, or null when no price is set.
+  final JourneyPrice? price;
 
   bool get isPaused => pause?.paused ?? false;
   bool get isPausedByStaff => pause?.pausedByStaff ?? false;

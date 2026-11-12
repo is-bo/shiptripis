@@ -2763,5 +2763,79 @@
   "staleJourneyPaused": "This journey is paused, so nothing on it can be accepted until it resumes.",
   "dealHandoverTitle": "Where and when to meet",
   "dealHandoverPickup": "Pickup",
-  "dealHandoverDropoff": "Drop-off"
+  "dealHandoverDropoff": "Drop-off",
+  "journeyPriceTitle": "Your price",
+  "journeyPriceOptional": "Optional",
+  "journeyPriceNote": "Senders see your price plus Wassla's fee. Wassla's minimum for each parcel still applies.",
+  "journeyPricePerKgLabel": "Price per kg",
+  "journeyPriceMinimumLabel": "Minimum per parcel",
+  "journeyPriceErrorBoth": "Fill in both amounts, or leave both empty.",
+  "journeyPriceErrorMaximum": "At most {amount}.",
+  "@journeyPriceErrorMaximum": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyPriceErrorTooHigh": "That amount is higher than Wassla allows.",
+  "journeyPriceDisabled": "Setting a price is not available right now.",
+  "journeyPriceNotEditable": "The price can no longer be changed on this journey.",
+  "journeyPriceNone": "No price set. Senders propose their own amount.",
+  "journeyPriceSet": "Set a price",
+  "journeyPriceChange": "Change",
+  "journeyPriceSave": "Save price",
+  "journeyPriceRemove": "Remove price",
+  "journeyPriceSaved": "Price saved.",
+  "journeyPriceCleared": "Price removed.",
+  "journeyPriceAppliesToNew": "A new price applies to offers made from now on. Offers and deals already made keep theirs.",
+  "journeyPricePerKgValue": "{amount} per kg",
+  "@journeyPricePerKgValue": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyPriceMinimumValue": "Minimum {amount} per parcel",
+  "@journeyPriceMinimumValue": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "tripPriceFrom": "from {perKg} per kg, minimum {minimum}",
+  "@tripPriceFrom": {
+    "placeholders": {
+      "perKg": {
+        "type": "String"
+      },
+      "minimum": {
+        "type": "String"
+      }
+    }
+  },
+  "findTravelersSortPrice": "Lowest price",
+  "findTravelersListedPrice": "{amount} for this parcel",
+  "@findTravelersListedPrice": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerListedLabel": "Their price for this parcel",
+  "offerSendListed": "Offer {amount}",
+  "@offerSendListed": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "offerDifferentAmount": "Offer a different amount",
+  "offerBelowListedNote": "That is below their price, so they may decline or counter.",
+  "offerUseListed": "Use their price",
+  "tripPrice": "Price"
 }

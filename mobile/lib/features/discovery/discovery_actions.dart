@@ -22,6 +22,7 @@ import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
 import '../../data/discovery_repository.dart';
 import '../../design/components/feedback.dart';
+import '../../core/money/money.dart';
 import '../../design/components/money.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
@@ -291,6 +292,17 @@ class _TripPreviewSheet extends ConsumerWidget {
               label: l.tripSpace,
               icon: Icons.luggage_outlined,
               value: Text(capacity),
+            ),
+          if (card.price case final price?)
+            DetailRow(
+              label: l.tripPrice,
+              icon: Icons.sell_outlined,
+              value: Text(
+                l.tripPriceFrom(
+                  Money.eurCents(price.perKgEurCents).format(locale),
+                  Money.eurCents(price.minimumEurCents).format(locale),
+                ),
+              ),
             ),
           if (canAct && open.isNotEmpty) ...[
             SectionHeader(title: l.tripChooseParcel),

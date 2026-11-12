@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/format/locale_formats.dart';
+import '../../core/money/money.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
 import '../../design/components/status.dart';
@@ -90,6 +91,10 @@ class TravelerCandidateCard extends StatelessWidget {
         if (hasName) displayName,
         if (routeLabel.isNotEmpty) routeLabel,
         travelMeta,
+        if (candidate.economics?.listed case final listed?)
+          l.findTravelersListedPrice(
+            Money.eurCents(listed.reward).format(locale),
+          ),
       ].join(' · '),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,6 +211,21 @@ class TravelerCandidateCard extends StatelessWidget {
               _RouteFitBadge(routeFit: candidate.routeFit),
             ],
           ),
+
+          // Row 3b — what this traveller would charge for this parcel, from
+          // the server. Absent when the journey has no price.
+          if (candidate.economics?.listed case final listed?) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              l.findTravelersListedPrice(
+                Money.eurCents(listed.reward).format(locale),
+              ),
+              style: text.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: c.brandInk,
+              ),
+            ),
+          ],
 
           const SizedBox(height: AppSpace.sm),
 

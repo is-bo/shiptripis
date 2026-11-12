@@ -42,6 +42,7 @@ import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import 'journey_create_screen.dart'
     show journeyRouteFailure, showRouteRefusalOnLeg;
+import 'journey_price.dart';
 import 'journey_route_draft.dart';
 import 'journey_route_editor.dart' show routeCopyOf;
 import 'journey_route_section.dart';
@@ -61,6 +62,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
   /// Built once from the loaded journey. Rebuilding it on every provider
   /// rebuild would throw away half-typed input and reset the picker.
   JourneyRouteDraft? _draft;
+  JourneyPriceDraft? _price;
   int? _seededFrom;
 
   bool _busy = false;
@@ -75,28 +77,39 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
     'refused_categories',
     'accepts_fragile',
     'notes',
+    'price_per_kg_eur_cents',
+    'min_price_eur_cents',
   };
 
   @override
   void dispose() {
     _notes.dispose();
     _draft?.dispose();
+    _price?.dispose();
     super.dispose();
   }
 
   void _seed(Journey journey) {
     if (_seededFrom == journey.id) return;
     _draft?.dispose();
+    _price?.dispose();
     _draft = JourneyRouteDraft.fromJourney(journey);
+    _price = JourneyPriceDraft(journey.price);
     _notes.text = journey.notes;
     _seededFrom = journey.id;
   }
 
   Future<void> _save(Journey journey) async {
     final draft = _draft;
+    final price = _price;
     final l = L.of(context);
-    if (draft == null) return;
-    if (!draft.isValid(routeCopyOf(context))) {
+    if (draft == null || price == null) return;
+    final policy = ref.read(travelerPricingPolicyProvider).value;
+    // The price is checked only while its fields are on screen. Off, or not
+    // yet answered, the stored price goes back exactly as it was: a route
+    // edit that left it out would clear it.
+    final priceOk = policy?.enabled != true || price.isValid(policy);
+    if (!draft.isValid(routeCopyOf(context)) || !priceOk) {
       setState(() => _showErrors = true);
       return;
     }
@@ -132,6 +145,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
             refusedCategories: draft.refusedCategoryWire,
             acceptsFragile: draft.acceptsFragile,
             notes: _notes.text.trim(),
+            price: price.price,
           );
 
       if (!mounted) return;
@@ -149,11 +163,13 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
       if (!mounted) return;
       setState(() => _fieldErrors = FieldErrorMap.from(error));
       showRouteRefusalOnLeg(draft, error);
-      AppSnack.failure(
-        context,
-        error,
-        fallback: journeyRouteFailure(context, error),
-      );
+      if (!price.showRefusal(error)) {
+        AppSnack.failure(
+          context,
+          error,
+          fallback: journeyRouteFailure(context, error),
+        );
+      }
       // The world moved under the form: the journey went live, or a sender
       // proposed. Re-reading is the only honest recovery.
       if (error.isStale) ref.invalidate(journeyDetailProvider(journey.id));
@@ -225,6 +241,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
           if (!data.canEdit) return _Blocked(journey: data);
           _seed(data);
           final draft = _draft!;
+          final price = _price!;
           final unclaimed = _fieldErrors.unclaimed(_claimedFields);
 
           return DismissKeyboardOnTap(
@@ -251,6 +268,12 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
 
                 JourneyRouteSection(
                   draft: draft,
+                  enabled: !_busy,
+                  showErrors: _showErrors,
+                ),
+
+                JourneyPriceSection(
+                  draft: price,
                   enabled: !_busy,
                   showErrors: _showErrors,
                 ),

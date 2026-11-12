@@ -5173,4 +5173,111 @@ class LEn extends L {
 
   @override
   String get dealHandoverDropoff => 'Drop-off';
+
+  @override
+  String get journeyPriceTitle => 'Your price';
+
+  @override
+  String get journeyPriceOptional => 'Optional';
+
+  @override
+  String get journeyPriceNote =>
+      'Senders see your price plus Wassla\'s fee. Wassla\'s minimum for each parcel still applies.';
+
+  @override
+  String get journeyPricePerKgLabel => 'Price per kg';
+
+  @override
+  String get journeyPriceMinimumLabel => 'Minimum per parcel';
+
+  @override
+  String get journeyPriceErrorBoth =>
+      'Fill in both amounts, or leave both empty.';
+
+  @override
+  String journeyPriceErrorMaximum(String amount) {
+    return 'At most $amount.';
+  }
+
+  @override
+  String get journeyPriceErrorTooHigh =>
+      'That amount is higher than Wassla allows.';
+
+  @override
+  String get journeyPriceDisabled =>
+      'Setting a price is not available right now.';
+
+  @override
+  String get journeyPriceNotEditable =>
+      'The price can no longer be changed on this journey.';
+
+  @override
+  String get journeyPriceNone =>
+      'No price set. Senders propose their own amount.';
+
+  @override
+  String get journeyPriceSet => 'Set a price';
+
+  @override
+  String get journeyPriceChange => 'Change';
+
+  @override
+  String get journeyPriceSave => 'Save price';
+
+  @override
+  String get journeyPriceRemove => 'Remove price';
+
+  @override
+  String get journeyPriceSaved => 'Price saved.';
+
+  @override
+  String get journeyPriceCleared => 'Price removed.';
+
+  @override
+  String get journeyPriceAppliesToNew =>
+      'A new price applies to offers made from now on. Offers and deals already made keep theirs.';
+
+  @override
+  String journeyPricePerKgValue(String amount) {
+    return '$amount per kg';
+  }
+
+  @override
+  String journeyPriceMinimumValue(String amount) {
+    return 'Minimum $amount per parcel';
+  }
+
+  @override
+  String tripPriceFrom(String perKg, String minimum) {
+    return 'from $perKg per kg, minimum $minimum';
+  }
+
+  @override
+  String get findTravelersSortPrice => 'Lowest price';
+
+  @override
+  String findTravelersListedPrice(String amount) {
+    return '$amount for this parcel';
+  }
+
+  @override
+  String get offerListedLabel => 'Their price for this parcel';
+
+  @override
+  String offerSendListed(String amount) {
+    return 'Offer $amount';
+  }
+
+  @override
+  String get offerDifferentAmount => 'Offer a different amount';
+
+  @override
+  String get offerBelowListedNote =>
+      'That is below their price, so they may decline or counter.';
+
+  @override
+  String get offerUseListed => 'Use their price';
+
+  @override
+  String get tripPrice => 'Price';
 }

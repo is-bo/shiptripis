@@ -22,6 +22,7 @@ import 'canonical_place.dart';
 import 'delivery_request.dart' show ItemCategory;
 import 'discovery.dart';
 import 'find_travelers.dart';
+import 'journey.dart' show JourneyPrice;
 import 'json.dart';
 import 'transport_mode.dart';
 
@@ -262,6 +263,7 @@ class TripCard {
     this.departsAt,
     this.nextDepartureAt,
     this.arrivesAt,
+    this.price,
   });
 
   factory TripCard.fromJson(Map<String, dynamic> json) => TripCard(
@@ -277,6 +279,7 @@ class TripCard {
     nextDepartureAt: readDate(json['next_departure_at']),
     arrivesAt: readDate(json['arrives_at']),
     capacityBand: CapacityBand.parse(json['capacity_band']),
+    price: JourneyPrice.maybe(json['price']),
   );
 
   final int journeyId;
@@ -291,6 +294,10 @@ class TripCard {
   final DateTime? nextDepartureAt;
   final DateTime? arrivesAt;
   final CapacityBand capacityBand;
+
+  /// What the traveller charges, or null. A card is about no parcel in
+  /// particular, so this is the price itself and never a total for a parcel.
+  final JourneyPrice? price;
 
   /// The distinct leg modes in travel order, unknown ones dropped.
   List<TransportMode> get modes => legs

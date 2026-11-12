@@ -392,6 +392,7 @@ Map<String, dynamic> tripCardFixture(
   String to = 'Algiers',
   String departs = '2026-12-02T10:00:00Z',
   String capacity = '5_to_10kg',
+  Map<String, dynamic>? price,
 }) => {
   'journey_id': id,
   'traveler': discoveryPersonFields(name: name, rating: 4.8, deliveries: 3),
@@ -407,6 +408,7 @@ Map<String, dynamic> tripCardFixture(
   'next_departure_at': departs,
   'arrives_at': '2026-12-02T13:00:00Z',
   'capacity_band': capacity,
+  'price': price,
 };
 
 /// A request card. [id] doubles as the request id.

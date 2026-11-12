@@ -421,6 +421,8 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
     final l = L.of(context);
     final controller = ref.watch(findTravelersControllerProvider(requestId));
     _resolveFocus(controller);
+    final showPriceSort =
+        ref.watch(travelerPricingPolicyProvider).value?.enabled == true;
 
     return AppScaffold(
       topBar: AppTopBar(title: l.discoveryTravelersTitle, showBack: true),
@@ -467,6 +469,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                     )
                   : _CandidateListView(
                       state: state,
+                      showPriceSort: showPriceSort,
                       onRefresh: () => controller.refresh(),
                       onLoadMore: () => controller.loadMore(),
                       onSortChanged: (sort) => controller.setSort(sort),
@@ -577,9 +580,14 @@ class _CandidateListView extends StatelessWidget {
     required this.onLoadMore,
     required this.onSortChanged,
     required this.onCandidateTap,
+    required this.showPriceSort,
   });
 
   final FindTravelersState state;
+
+  /// Only while travellers may set a price at all; otherwise the sort would
+  /// equal best match and be a pill that does nothing.
+  final bool showPriceSort;
   final Future<void> Function() onRefresh;
   final VoidCallback onLoadMore;
   final ValueChanged<String> onSortChanged;
@@ -606,6 +614,7 @@ class _CandidateListView extends StatelessWidget {
             if (index == 0) {
               return _SortHeader(
                 currentSort: state.sort,
+                showPriceSort: showPriceSort,
                 total: state.total,
                 onSortChanged: onSortChanged,
               );
@@ -645,8 +654,10 @@ class _SortHeader extends StatelessWidget {
     required this.currentSort,
     required this.total,
     required this.onSortChanged,
+    required this.showPriceSort,
   });
 
+  final bool showPriceSort;
   final String currentSort;
   final int total;
   final ValueChanged<String> onSortChanged;
@@ -688,6 +699,12 @@ class _SortHeader extends StatelessWidget {
                 isSelected: currentSort == 'soonest_departure',
                 onTap: () => onSortChanged('soonest_departure'),
               ),
+              if (showPriceSort || currentSort == 'listed_price')
+                _SortPill(
+                  label: l.findTravelersSortPrice,
+                  isSelected: currentSort == 'listed_price',
+                  onTap: () => onSortChanged('listed_price'),
+                ),
             ],
           ),
         ],
@@ -1355,6 +1372,10 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
   String? _rewardError;
   String? _notice;
 
+  /// Whether the sender chose "Offer a different amount". With a listed price
+  /// the sheet opens on it, one tap from sent.
+  bool _custom = false;
+
   @override
   void initState() {
     super.initState();
@@ -1363,7 +1384,9 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
     // sender who picked EUR 30.00 and tapped Send offer sent EUR 35.00 without
     // ever being told. Their own number is the default; "Use suggested" is
     // still one tap away.
+    final listed = widget.candidate.economics?.listed;
     final opening =
+        listed?.reward ??
         widget.requestSummary?.chosenRewardEurCents ??
         widget.candidate.economics?.recommendedReward ??
         widget.candidate.economics?.minimumReward;
@@ -1378,10 +1401,14 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
     super.dispose();
   }
 
+  /// The listed price while the sheet is on it, otherwise what was typed.
+  ListedPrice? get _offeringListed =>
+      _custom ? null : widget.candidate.economics?.listed;
+
   Future<void> _send() async {
     final l = L.of(context);
     final target = widget.candidate.proposal;
-    final cents = AppAmountField.centsOf(_reward);
+    final cents = _offeringListed?.reward ?? AppAmountField.centsOf(_reward);
 
     if (target == null) {
       setState(() => _notice = l.discoveryProposeBlocked);
@@ -1432,11 +1459,14 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
     // Floor moved: correct the field directly
     if (error.code == ApiErrorCode.rewardBelowMinimum) {
       final minimum = error.intExtra('minimum_reward_eur_cents');
-      setState(
-        () => _rewardError = minimum == null
+      setState(() {
+        // The listed price is gone from under the sender, so the field it was
+        // standing in for takes over and carries the reason.
+        _custom = true;
+        _rewardError = minimum == null
             ? l.staleRewardBelowMinimum
-            : l.offerBelowMinimum(Money.eurCents(minimum).format(locale)),
-      );
+            : l.offerBelowMinimum(Money.eurCents(minimum).format(locale));
+      });
       return;
     }
 
@@ -1496,14 +1526,36 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
     final recommendedReward = economics?.recommendedReward != null
         ? Money.eurCents(economics!.recommendedReward!)
         : null;
+    final listed = economics?.listed;
+    final offeringListed = _offeringListed;
+    final enteredCents = AppAmountField.centsOf(_reward);
 
     return AppSheet(
       title: l.offerProposeTitle,
       subtitle: traveler.displayName.isNotEmpty ? traveler.displayName : null,
-      footer: AppButton(
-        label: l.offerSend,
-        isLoading: _busy,
-        onPressed: canPropose ? _send : null,
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppButton(
+            label: offeringListed == null
+                ? l.offerSend
+                : l.offerSendListed(
+                    Money.eurCents(offeringListed.reward).format(locale),
+                  ),
+            isLoading: _busy,
+            onPressed: canPropose ? _send : null,
+          ),
+          if (offeringListed != null) ...[
+            const SizedBox(height: AppSpace.xs),
+            // Pinned beside the primary action, not scrolled out of sight:
+            // it is the one other way to make this offer.
+            AppButton(
+              label: l.offerDifferentAmount,
+              variant: AppButtonVariant.tertiary,
+              onPressed: _busy ? null : () => setState(() => _custom = true),
+            ),
+          ],
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1531,9 +1583,11 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
 
           const SizedBox(height: AppSpace.lg),
 
-          // Additive Boost Breakdown (when boost is present)
-          if (showsRequestTotal) ...[
+          if (offeringListed != null) ...[
+            // The traveller's own price for this parcel, where the offer
+            // starts. One tap sends it; the other way in is below.
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(AppSpace.md),
               decoration: BoxDecoration(
                 color: c.brandSoft,
@@ -1541,112 +1595,183 @@ class _ProposeSheetState extends ConsumerState<_ProposeSheet> {
                 border: Border.all(color: c.brand.withValues(alpha: 0.2)),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        l.moneyBaseReward,
-                        style: text.bodySmall?.copyWith(color: c.textSecondary),
-                      ),
-                      Text(
-                        Money.eurCents(
-                          request.chosenRewardEurCents,
-                        ).format(locale),
-                        style: text.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: c.textPrimary,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    l.offerListedLabel,
+                    style: text.bodySmall?.copyWith(color: c.textSecondary),
                   ),
                   const SizedBox(height: AppSpace.xxs),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        l.boostTitle,
-                        style: text.bodySmall?.copyWith(color: c.brandStrong),
-                      ),
-                      Text(
-                        '+${Money.eurCents(request.boostEurCents).format(locale)}',
-                        style: text.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: c.brandStrong,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        l.moneyTravelerReceives,
-                        style: text.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        Money.eurCents(
-                          request.totalOfferedRewardEurCents,
-                        ).format(locale),
-                        style: text.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: c.brandStrong,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    Money.eurCents(offeringListed.reward).format(locale),
+                    style: text.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: c.brandStrong,
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpace.lg),
-          ],
-
-          // Amount Field
-          AppAmountField(
-            label: l.offerBaseRewardLabel,
-            controller: _reward,
-            helper: minimumReward == null
-                ? null
-                : l.offerBelowMinimum(minimumReward.format(locale)),
-            errorText: _rewardError,
-            enabled: !_busy,
-            onChanged: (_) => setState(() {}),
-          ),
-
-          if (hasBoost) ...[
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              l.offerBoostAddedOnTop(
-                Money.eurCents(request.boostEurCents).format(locale),
+            if (hasBoost) ...[
+              const SizedBox(height: AppSpace.sm),
+              Text(
+                l.offerBoostAddedOnTop(
+                  Money.eurCents(request.boostEurCents).format(locale),
+                ),
+                style: text.bodySmall?.copyWith(color: c.textSecondary),
               ),
-              style: text.bodySmall?.copyWith(color: c.textSecondary),
+            ],
+            const SizedBox(height: AppSpace.md),
+            _EconomicsBreakdown(
+              economics: economics,
+              entered: offeringListed.reward,
+              hasBoost: hasBoost,
+            ),
+          ] else ...[
+            // Additive Boost Breakdown (when boost is present)
+            if (showsRequestTotal) ...[
+              Container(
+                padding: const EdgeInsets.all(AppSpace.md),
+                decoration: BoxDecoration(
+                  color: c.brandSoft,
+                  borderRadius: AppRadius.rMd,
+                  border: Border.all(color: c.brand.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l.moneyBaseReward,
+                          style: text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          Money.eurCents(
+                            request.chosenRewardEurCents,
+                          ).format(locale),
+                          style: text.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: c.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpace.xxs),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l.boostTitle,
+                          style: text.bodySmall?.copyWith(color: c.brandStrong),
+                        ),
+                        Text(
+                          '+${Money.eurCents(request.boostEurCents).format(locale)}',
+                          style: text.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: c.brandStrong,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l.moneyTravelerReceives,
+                          style: text.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: c.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          Money.eurCents(
+                            request.totalOfferedRewardEurCents,
+                          ).format(locale),
+                          style: text.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: c.brandStrong,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpace.lg),
+            ],
+
+            // Amount Field
+            AppAmountField(
+              label: l.offerBaseRewardLabel,
+              controller: _reward,
+              helper: minimumReward == null
+                  ? null
+                  : l.offerBelowMinimum(minimumReward.format(locale)),
+              errorText: _rewardError,
+              enabled: !_busy,
+              onChanged: (_) => setState(() {}),
+            ),
+
+            if (hasBoost) ...[
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                l.offerBoostAddedOnTop(
+                  Money.eurCents(request.boostEurCents).format(locale),
+                ),
+                style: text.bodySmall?.copyWith(color: c.textSecondary),
+              ),
+            ],
+
+            if (listed != null &&
+                enteredCents != null &&
+                enteredCents < listed.reward) ...[
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                l.offerBelowListedNote,
+                style: text.bodySmall?.copyWith(color: c.textSecondary),
+              ),
+            ],
+
+            if (recommendedReward != null) ...[
+              const SizedBox(height: AppSpace.xs),
+              AppButton(
+                label: l.offerUseRecommended,
+                variant: AppButtonVariant.tertiary,
+                expand: false,
+                onPressed: () => setState(
+                  () => _reward.text = amountFieldText(recommendedReward),
+                ),
+              ),
+            ],
+
+            if (listed != null) ...[
+              const SizedBox(height: AppSpace.xs),
+              AppButton(
+                label: l.offerUseListed,
+                variant: AppButtonVariant.tertiary,
+                expand: false,
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _custom = false;
+                        _rewardError = null;
+                      }),
+              ),
+            ],
+
+            const SizedBox(height: AppSpace.md),
+
+            // Authoritative Economics Breakdown
+            _EconomicsBreakdown(
+              economics: economics,
+              entered: enteredCents,
+              hasBoost: hasBoost,
             ),
           ],
-
-          if (recommendedReward != null) ...[
-            const SizedBox(height: AppSpace.xs),
-            AppButton(
-              label: l.offerUseRecommended,
-              variant: AppButtonVariant.tertiary,
-              expand: false,
-              onPressed: () => setState(
-                () => _reward.text = amountFieldText(recommendedReward),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: AppSpace.md),
-
-          // Authoritative Economics Breakdown
-          _EconomicsBreakdown(
-            economics: economics,
-            entered: AppAmountField.centsOf(_reward),
-            hasBoost: hasBoost,
-          ),
         ],
       ),
     );
@@ -1674,9 +1799,13 @@ class _EconomicsBreakdown extends StatelessWidget {
     final econ = economics;
     if (econ == null) return const SizedBox.shrink();
 
-    // Consume authoritative server economics block
+    // Consume authoritative server economics block. The listed price's own
+    // block when that is what was typed or chosen, never a guess at a fee.
+    final listed = econ.listed;
     final matchesMin = entered != null && entered == econ.minimumReward;
-    final block = matchesMin
+    final block = listed != null && entered == listed.reward
+        ? listed.economics
+        : matchesMin
         ? econ.minimumEconomics
         : econ.recommendedEconomics ?? econ.minimumEconomics;
     if (block == null) return const SizedBox.shrink();

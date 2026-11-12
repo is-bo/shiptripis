@@ -8996,6 +8996,180 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Drop-off'**
   String get dealHandoverDropoff;
+
+  /// No description provided for @journeyPriceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your price'**
+  String get journeyPriceTitle;
+
+  /// No description provided for @journeyPriceOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get journeyPriceOptional;
+
+  /// No description provided for @journeyPriceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders see your price plus Wassla\'s fee. Wassla\'s minimum for each parcel still applies.'**
+  String get journeyPriceNote;
+
+  /// No description provided for @journeyPricePerKgLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Price per kg'**
+  String get journeyPricePerKgLabel;
+
+  /// No description provided for @journeyPriceMinimumLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum per parcel'**
+  String get journeyPriceMinimumLabel;
+
+  /// No description provided for @journeyPriceErrorBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in both amounts, or leave both empty.'**
+  String get journeyPriceErrorBoth;
+
+  /// No description provided for @journeyPriceErrorMaximum.
+  ///
+  /// In en, this message translates to:
+  /// **'At most {amount}.'**
+  String journeyPriceErrorMaximum(String amount);
+
+  /// No description provided for @journeyPriceErrorTooHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'That amount is higher than Wassla allows.'**
+  String get journeyPriceErrorTooHigh;
+
+  /// No description provided for @journeyPriceDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Setting a price is not available right now.'**
+  String get journeyPriceDisabled;
+
+  /// No description provided for @journeyPriceNotEditable.
+  ///
+  /// In en, this message translates to:
+  /// **'The price can no longer be changed on this journey.'**
+  String get journeyPriceNotEditable;
+
+  /// No description provided for @journeyPriceNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No price set. Senders propose their own amount.'**
+  String get journeyPriceNone;
+
+  /// No description provided for @journeyPriceSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a price'**
+  String get journeyPriceSet;
+
+  /// No description provided for @journeyPriceChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get journeyPriceChange;
+
+  /// No description provided for @journeyPriceSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save price'**
+  String get journeyPriceSave;
+
+  /// No description provided for @journeyPriceRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove price'**
+  String get journeyPriceRemove;
+
+  /// No description provided for @journeyPriceSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Price saved.'**
+  String get journeyPriceSaved;
+
+  /// No description provided for @journeyPriceCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Price removed.'**
+  String get journeyPriceCleared;
+
+  /// No description provided for @journeyPriceAppliesToNew.
+  ///
+  /// In en, this message translates to:
+  /// **'A new price applies to offers made from now on. Offers and deals already made keep theirs.'**
+  String get journeyPriceAppliesToNew;
+
+  /// No description provided for @journeyPricePerKgValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} per kg'**
+  String journeyPricePerKgValue(String amount);
+
+  /// No description provided for @journeyPriceMinimumValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum {amount} per parcel'**
+  String journeyPriceMinimumValue(String amount);
+
+  /// No description provided for @tripPriceFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'from {perKg} per kg, minimum {minimum}'**
+  String tripPriceFrom(String perKg, String minimum);
+
+  /// No description provided for @findTravelersSortPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowest price'**
+  String get findTravelersSortPrice;
+
+  /// No description provided for @findTravelersListedPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} for this parcel'**
+  String findTravelersListedPrice(String amount);
+
+  /// No description provided for @offerListedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Their price for this parcel'**
+  String get offerListedLabel;
+
+  /// No description provided for @offerSendListed.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer {amount}'**
+  String offerSendListed(String amount);
+
+  /// No description provided for @offerDifferentAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer a different amount'**
+  String get offerDifferentAmount;
+
+  /// No description provided for @offerBelowListedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'That is below their price, so they may decline or counter.'**
+  String get offerBelowListedNote;
+
+  /// No description provided for @offerUseListed.
+  ///
+  /// In en, this message translates to:
+  /// **'Use their price'**
+  String get offerUseListed;
+
+  /// No description provided for @tripPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Price'**
+  String get tripPrice;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {
