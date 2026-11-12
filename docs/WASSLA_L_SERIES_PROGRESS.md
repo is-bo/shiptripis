@@ -24,7 +24,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | merged | `claude/project-thread-52tsvf` | #28 | `edb94d7` | `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md` |
 | L4A | Traveler pricing, backend | Opus | high | merged | `claude/project-thread-q374r4` | #29 | `5014497` | `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md` |
 | L4C | Housekeeping: test time limit and ferry distance cleanup | Opus | high | merged | `claude/project-thread-a448wo` | #30 | `c360dcf` | `docs/PHASE_L4C_HOUSEKEEPING.md` |
-| L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
+| L4B | Traveler pricing, mobile | Sonnet | medium | merged | `claude/project-thread-fyrhxt` | #31 | `c685db0` | `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md` |
 | L11A | Tracking number, backend | Opus | high | not_started | | | | |
 | L11B | Tracking number, mobile | Sonnet | medium | not_started | | | | |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | not_started | | | | |
@@ -53,7 +53,7 @@ table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L
 to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
 the board is otherwise still edited only by the orchestrator.
 
-**Next package:** L4B (Sonnet, medium effort), then L11A (Opus, high), then L11B (Sonnet, medium). Section 3 order.
+**Next package:** L11A (Opus, high effort), then L11B (Sonnet, medium), then L5A. Section 3 order.
 
 **Closed carry-over (L4C, PR #30, `c360dcf`):** L3A's backup ferry distances are removed (seed port coordinates, staff-typed kilometres, `distance_km` on `create_crossing`); a test pinned every shipped crossing's distance, match and price before the removal and passes unchanged after it. A city without catalogue coordinates is refused as a port (`sea_crossing_coordinates_missing`).
 

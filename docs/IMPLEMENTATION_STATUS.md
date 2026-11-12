@@ -2,8 +2,8 @@
 
 ## Wassla L4B — Traveler pricing, mobile (2026-11-12)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`
-untouched. No backend, migration or contract change.
+Status: **merged** (PR #31, `c685db0`, into `feature/discovery-professional-delivery`). No deployment;
+`main` untouched. No backend, migration or contract change.
 
 - Travelers can set "Price per kg" and "Minimum per parcel" (optional, both or neither) when creating
   or editing a journey and from the journey page, which changes it on its own endpoint even while the
