@@ -16,6 +16,7 @@ from apps.admin_panel.models import AdminAuditLog
 from apps.admin_panel.permissions import assign_admin_roles
 from apps.discovery.tests.support import STATIC_STORES
 from apps.locations.models import SeaCrossing
+from apps.locations.sea_crossings import great_circle_meters
 from apps.trips.models import Journey, JourneyLegProof
 from apps.trips.tests.sea_world import DRIVE, FLIGHT, SEA, SeaWorld
 
@@ -67,7 +68,6 @@ class SeaCrossingConsoleTests(ConsoleWorld, TestCase):
             "origin_city": "Barcelona",
             "destination_country": "DZ",
             "destination_city": "Algiers",
-            "distance_km": "",
             "reason": "Operator confirmed the line",
         }
         data.update(fields)
@@ -97,36 +97,39 @@ class SeaCrossingConsoleTests(ConsoleWorld, TestCase):
         self.assertNotIn("Turn off", body)
 
     def test_adding_a_crossing_resolves_cities_names_and_is_audited(self):
-        response = self.add(origin_city="Oran", origin_country="DZ",
-                            destination_city="Barcelona", destination_country="ES",
-                            distance_km="520")
+        response = self.add(origin_city="Oran", origin_country="DZ")
 
         self.assertEqual(response.status_code, 302)
         crossing = SeaCrossing.objects.get(
-            origin_locality=self.oran, destination_locality=self.barcelona
+            origin_locality=self.oran, destination_locality=self.algiers
         )
         self.assertFalse(crossing.is_active)  # off until staff turn it on
-        self.assertEqual(crossing.distance_meters, 520_000)
+        # Staff name the cities; the distance is always the catalogue's.
+        self.assertEqual(crossing.distance_meters, great_circle_meters(self.oran, self.algiers))
         audit = AdminAuditLog.objects.get(action="sea_crossing.created")
         self.assertEqual(audit.reason, "Operator confirmed the line")
         self.assertEqual(audit.actor, self.root)
 
     def test_a_crossing_can_start_on(self):
-        self.add(origin_city="Oran", origin_country="DZ",
-                 destination_city="Barcelona", destination_country="ES",
-                 distance_km="520", start_active="on")
+        self.add(origin_city="Oran", origin_country="DZ", start_active="on")
 
         self.assertTrue(
             SeaCrossing.objects.get(
-                origin_locality=self.oran, destination_locality=self.barcelona
+                origin_locality=self.oran, destination_locality=self.algiers
             ).is_active
         )
 
-    def test_a_city_without_coordinates_needs_a_distance(self):
+    def test_the_form_asks_for_no_distance(self):
+        body = self.body(self.get(self.root, self.new))
+
+        self.assertIn("From: city", body)
+        self.assertNotIn("kilometres", body)
+
+    def test_a_city_without_coordinates_is_refused(self):
         response = self.add(origin_city="Lille", origin_country="FR")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Distance", response.content.decode())
+        self.assertIn("no catalogue coordinates", self.body(response))
         self.assertFalse(
             SeaCrossing.objects.filter(origin_locality=self.lille).exists()
         )
@@ -141,17 +144,16 @@ class SeaCrossingConsoleTests(ConsoleWorld, TestCase):
         self.assertEqual(SeaCrossing.objects.count(), 3)
 
     def test_a_crossing_that_exists_is_refused(self):
-        response = self.add(origin_city="Marseille", origin_country="FR",
-                            destination_city="Algiers", destination_country="DZ",
-                            distance_km="753")
+        line = {"origin_country": "DZ", "origin_city": "Algiers", "destination_city": "Oran"}
+        self.assertEqual(self.add(**line).status_code, 302)
+
+        response = self.add(**line)
 
         self.assertIn("already exists", self.body(response))
-        self.assertEqual(SeaCrossing.objects.count(), 3)
+        self.assertEqual(SeaCrossing.objects.count(), 4)
 
     def test_a_reason_is_required(self):
-        response = self.add(origin_city="Oran", origin_country="DZ",
-                            destination_city="Barcelona", destination_country="ES",
-                            distance_km="520", reason="")
+        response = self.add(origin_city="Oran", origin_country="DZ", reason="")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(SeaCrossing.objects.count(), 3)

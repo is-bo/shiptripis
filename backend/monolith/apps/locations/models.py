@@ -751,10 +751,8 @@ class SeaCrossing(models.Model):
 
     ``distance_meters`` is the great-circle distance between the two cities,
     the method a flight leg uses (spec 5.4), frozen on the row when the crossing
-    is written. It comes from catalogue coordinates (every
-    launch-country city has them) and, only for a city without them, from the
-    reviewed port coordinates in ``apps/locations/data/sea_crossings.json``,
-    through the same haversine function either way.
+    is written. It always comes from the two cities' catalogue coordinates,
+    which every launch-country city has; a city without them cannot be a port.
 
     Staff create, activate and deactivate rows through
     `apps.locations.sea_crossings`, each with a reason and an audit entry.

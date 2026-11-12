@@ -9,9 +9,9 @@ Idempotent and conservative:
   command therefore never re-activates a crossing staff deactivated, and never
   rewrites a distance staff corrected.
 * New rows take their ``active`` flag from the file and their great-circle
-  distance from catalogue coordinates when both cities have them, otherwise
-  from the file's reviewed port coordinates, through the same haversine
-  function either way.
+  distance from the two cities' catalogue coordinates. A city without
+  coordinates is reported and its crossings are skipped (no launch-country
+  city lacks them: `test_every_launch_country_city_has_coordinates`).
 
 The default file ships inside the application image beside the geography
 manifest, which is what lets the VPS ``catalogue`` step run it.
@@ -27,7 +27,6 @@ from django.db import transaction
 
 from apps.locations.models import Place, SeaCrossing
 from apps.locations.sea_crossings import great_circle_meters, resolve_port
-from apps.routing.geometry import GeoPoint, haversine_meters
 
 DEFAULT_FILE = Path(__file__).resolve().parents[2] / "data" / "sea_crossings.json"
 
@@ -53,7 +52,6 @@ class Command(BaseCommand):
             raise CommandError(f"Cannot read sea crossings from {path}: {exc}") from exc
 
         resolved: dict[str, Place] = {}
-        fallback_points: dict[str, GeoPoint] = {}
         for slug, port in ports.items():
             place, problem = resolve_port(str(port["country"]), str(port["name"]))
             if place is None:
@@ -64,9 +62,6 @@ class Command(BaseCommand):
                 )
                 continue
             resolved[slug] = place
-            fallback_points[slug] = GeoPoint(
-                float(port["latitude"]), float(port["longitude"])
-            )
 
         created = existing = skipped = 0
         with transaction.atomic():
@@ -90,9 +85,14 @@ class Command(BaseCommand):
                     continue
                 distance = great_circle_meters(origin, destination)
                 if distance is None:
-                    distance = haversine_meters(
-                        fallback_points[origin_slug], fallback_points[destination_slug]
+                    skipped += 1
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"skipped crossing {origin_slug} -> {destination_slug}: "
+                            "a port city has no catalogue coordinates"
+                        )
                     )
+                    continue
                 crossing = SeaCrossing.objects.create(
                     origin_locality=origin,
                     destination_locality=destination,
