@@ -703,7 +703,7 @@ def _queue_rows(
         rows.append(
             {
                 "payout": raw.get("payout_reference") or "—",
-                "deal": raw.get("deal_reference") or "—",
+                "tracking_number": raw.get("tracking_number") or "—",
                 "traveler": raw.get("traveler_reference") or "—",
                 "eur": format_eur(raw["amount_eur_cents"])
                 if raw.get("amount_eur_cents") is not None

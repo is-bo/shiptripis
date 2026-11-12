@@ -97,7 +97,7 @@ def test_guest_receipt_never_echoes_private_deal_context():
         kind="guest_payment",
         context={
             "status": "succeeded",
-            "deal_reference": "PRIVATE-DEAL",
+            "tracking_number": "WSL-PRIVATE9",
             "recipient_name": "PRIVATE-NAME",
             "payment_reference": "PAY-test",
             "amount_eur_cents": 1200,

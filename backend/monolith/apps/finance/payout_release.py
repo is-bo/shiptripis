@@ -46,6 +46,7 @@ from datetime import datetime
 from django.db import transaction
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
 from apps.core.event_resources import deal_resources
 from apps.deals import lifecycle
@@ -416,7 +417,7 @@ def _notify_protection_ended(aggregate: LockedLifecycleAggregate) -> None:
     from apps.notifications.outbox import enqueue_message
 
     deal = aggregate.deal
-    context = {"deal_reference": f"ST-{deal.pk}"}
+    context = {"tracking_number": tracking.for_deal(deal)}
     for user_id, email in (
         (deal.sender_id, getattr(deal.sender, "email", "")),
         (deal.traveler_id, getattr(deal.traveler, "email", "")),
@@ -454,7 +455,7 @@ def _notify_payout_status(aggregate: LockedLifecycleAggregate, payout: Payout) -
             recipient_user_id=deal.traveler_id,
             deal_id=deal.pk,
             context={
-                "deal_reference": f"ST-{deal.pk}",
+                "tracking_number": tracking.for_deal(deal),
                 "payout_status": payout.status,
             },
         )

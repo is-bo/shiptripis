@@ -26,6 +26,7 @@ from rest_framework import serializers
 from apps.core.languages import CommunicationLanguage
 
 from apps.matching.public_contract import public_terms_snapshot
+from apps.parcels import tracking
 
 from .models import Deal, DealLegAllocation, DealTermsSnapshot
 from .recipient import recipient_projection
@@ -119,6 +120,7 @@ class DealSummarySerializer(serializers.ModelSerializer):
 
     terms = DealTermsSnapshotSerializer(read_only=True)
     leg_allocations = DealLegAllocationSerializer(many=True, read_only=True)
+    tracking_number = serializers.SerializerMethodField()
     activity_state = serializers.SerializerMethodField()
     attention = serializers.SerializerMethodField()
 
@@ -126,6 +128,7 @@ class DealSummarySerializer(serializers.ModelSerializer):
         model = Deal
         fields = (
             "id",
+            "tracking_number",
             "accepted_offer_id",
             "match_id",
             "delivery_request_id",
@@ -144,6 +147,9 @@ class DealSummarySerializer(serializers.ModelSerializer):
             "attention",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, deal: Deal) -> str:
+        return tracking.for_deal(deal)
 
     def get_attention(self, deal: Deal) -> dict:
         """The viewer's pending Deal actions, as the detail would state them.
@@ -194,6 +200,7 @@ class DealSerializer(serializers.ModelSerializer):
 
     terms = DealTermsSnapshotSerializer(read_only=True)
     leg_allocations = DealLegAllocationSerializer(many=True, read_only=True)
+    tracking_number = serializers.SerializerMethodField()
     timeline = serializers.SerializerMethodField()
     recipient = serializers.SerializerMethodField()
     handover = serializers.SerializerMethodField()
@@ -209,6 +216,9 @@ class DealSerializer(serializers.ModelSerializer):
     available_actions = serializers.SerializerMethodField()
     server_time = serializers.SerializerMethodField()
 
+    def get_tracking_number(self, deal: Deal) -> str:
+        return tracking.for_deal(deal)
+
     def get_server_time(self, deal):
         from django.utils import timezone
         return timezone.now()
@@ -221,6 +231,7 @@ class DealSerializer(serializers.ModelSerializer):
         model = Deal
         fields = (
             "id",
+            "tracking_number",
             "accepted_offer_id",
             "match_id",
             "delivery_request_id",

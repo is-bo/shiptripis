@@ -17,7 +17,7 @@
   {% if group.queue.rows %}
   <div class="st-rows-head" aria-hidden="true">
     <span>Payout</span>
-    <span>Deal &middot; Traveler</span>
+    <span>Tracking number &middot; Traveler</span>
     <span class="is-numeric">{% if manual %}Send exactly{% else %}Owed{% endif %}</span>
     <span>Waiting</span>
     <span>Status</span>
@@ -29,7 +29,7 @@
         {% if row.url %}<a href="{{ row.url }}">{{ row.payout|slice:":8" }}</a>{% else %}{{ row.payout|slice:":8" }}{% endif %}
       </span>
       <span class="st-row-who">
-        <span class="st-row-deal">{{ row.deal }}</span>
+        <span class="st-row-deal">{{ row.tracking_number }}</span>
         <span class="st-row-trav">{{ row.traveler }}</span>
       </span>
       <span class="st-row-money">

@@ -156,6 +156,10 @@ class GuestTokenValidationTests(GuestPaymentTestCase):
             self.scenario.delivery_request.pickup_location.private_label,
             self.scenario.delivery_request.delivery_location.private_label,
             str(self.order.public_reference),
+            # L11A: the parcel's tracking number is never on the guest surface.
+            self.scenario.delivery_request.tracking_number,
+            "WSL-",
+            "tracking_number",
         ):
             assert str(secret) not in body, secret
 

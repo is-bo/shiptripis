@@ -289,7 +289,7 @@ OutboundMessage.objects.update_or_create(
         kind=OutboundMessage.Kind.PAYMENT_SUCCEEDED,
         to_email="ok@example.invalid",
         status=OutboundMessage.Status.DISPATCHED,
-        context={"deal_reference": "D-1042"},
+        context={"tracking_number": "WSL-7K3M9QXD"},
         dispatched_at=now - timedelta(hours=3),
         transport_event_id="evt-outbox-ok",
     ),

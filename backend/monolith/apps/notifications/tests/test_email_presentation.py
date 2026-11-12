@@ -60,7 +60,7 @@ SAMPLE_CONTEXT = {
     "status": "pending",
     "payment_reference": "pay-test",
     "dispute_reference": "DSP-test",
-    "deal_reference": "DL-test",
+    "tracking_number": "WSL-7K3M9QXD",
     "summary": "A security event needs your attention.",
     "resolution_label": "refund the sender",
     "payout_status": "eligible",
@@ -145,7 +145,7 @@ class TextAndHtmlAgreeTests(TestCase):
     def test_both_parts_carry_the_same_heading_and_references(self):
         message = _message(OutboundMessage.Kind.DISPUTE_RESOLVED)
         _, text, html = outbox.render_parts(message)
-        for fragment in ("Your dispute has been resolved", "DSP-test", "DL-test"):
+        for fragment in ("Your dispute has been resolved", "DSP-test", "WSL-7K3M9QXD"):
             assert fragment in text
             assert fragment in html
 
@@ -339,7 +339,7 @@ class ADurableOutboxRendersRowsWrittenByAnOlderDeployTests(TestCase):
                 key="legacy-dispute-resolved",
                 kind=OutboundMessage.Kind.DISPUTE_RESOLVED,
                 to_email="legacy@example.invalid",
-                context={"deal_reference": "ST-1"},
+                context={"tracking_number": "WSL-7K3M9QXD"},
             )
         )
         for part in (text, html):
@@ -352,7 +352,7 @@ class ADurableOutboxRendersRowsWrittenByAnOlderDeployTests(TestCase):
                 key="legacy-payout-status",
                 kind=OutboundMessage.Kind.PAYOUT_STATUS,
                 to_email="legacy@example.invalid",
-                context={"deal_reference": "ST-1"},
+                context={"tracking_number": "WSL-7K3M9QXD"},
             )
         )
         for part in (text, html):
@@ -365,7 +365,7 @@ class ADurableOutboxRendersRowsWrittenByAnOlderDeployTests(TestCase):
                 key="current-dispute-resolved",
                 kind=OutboundMessage.Kind.DISPUTE_RESOLVED,
                 to_email="current@example.invalid",
-                context={"deal_reference": "ST-1", "resolution_label": "Partial split"},
+                context={"tracking_number": "WSL-7K3M9QXD", "resolution_label": "Partial split"},
             )
         )
         assert "as: Partial split." in text

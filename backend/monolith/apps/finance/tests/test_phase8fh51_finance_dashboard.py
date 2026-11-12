@@ -22,6 +22,7 @@ from django.db import connection
 from django.test import Client, override_settings
 from django.urls import reverse
 
+from apps.parcels import tracking
 from apps.admin_panel.finance_dashboard import default_mode
 from apps.admin_panel.permissions import assign_admin_roles
 from apps.core.admin_display import format_eur
@@ -413,7 +414,7 @@ def test_drilldown_rows_page_and_link_to_the_operational_record(world):
         )
     assert format_eur(expected["totals"]["amount_eur_cents"]) in page
     assert str(payout.public_reference) in page
-    assert f"ST-{payout.deal_id}" in page
+    assert tracking.for_deal(payout.deal) in page
     assert reverse("admin_console:payout-detail", args=[payout.pk]) in page
     assert "Back to the dashboard" in page
 

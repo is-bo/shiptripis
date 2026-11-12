@@ -333,6 +333,17 @@ class Phase2BDerivedGeometryPrivacyTests(TestCase):
         self._assert_no_forbidden_keys(travelers.data, "find-travelers")
         self._assert_no_forbidden_keys(requests.data, "compatible-requests")
         self._assert_no_forbidden_keys(quote.data, "quote")
+        # L11A: before a proposal exists the traveler has no tracking number,
+        # and no candidate list carries one (spec 16).
+        for name, payload in (
+            ("find-travelers", travelers.data),
+            ("compatible-requests", requests.data),
+            ("quote", quote.data),
+        ):
+            found = []
+            _walk(payload, lambda key, _value: found.append(key))
+            assert "tracking_number" not in found, name
+            assert "WSL-" not in json.dumps(payload, default=str), name
 
         candidate = quote.data
         proposal = sender.post(

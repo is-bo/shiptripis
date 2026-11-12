@@ -44,6 +44,7 @@ from django.db import transaction
 from django.db.models import Count, Max, Min, Q
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.core.event_resources import deal_resources
 from apps.core.financial_locks import (
     LockedLifecycleAggregate,
@@ -177,7 +178,7 @@ def visible_disputes_for(user_id: int):
         Dispute.objects.filter(
             Q(deal__sender_id=user_id) | Q(deal__traveler_id=user_id)
         )
-        .select_related("deal")
+        .select_related("deal__delivery_request")
         .prefetch_related("evidence", "events")
     )
 
@@ -419,7 +420,7 @@ def _notify_opened(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> Non
 
     deal = aggregate.deal
     context = {
-        "deal_reference": f"ST-{deal.pk}",
+        "tracking_number": tracking.for_deal(deal),
         "dispute_reference": f"DSP-{dispute.pk}",
     }
     for user_id, email in (
@@ -1489,7 +1490,7 @@ def _notify_resolved(aggregate: LockedLifecycleAggregate, dispute: Dispute) -> N
 
     deal = aggregate.deal
     context = {
-        "deal_reference": f"ST-{deal.pk}",
+        "tracking_number": tracking.for_deal(deal),
         "dispute_reference": f"DSP-{dispute.pk}",
         "resolution": dispute.resolution,
     }

@@ -18,6 +18,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.core.languages import CommunicationLanguage
+from apps.parcels import tracking
 
 from .models import (
     PaymentAttempt,
@@ -178,6 +179,7 @@ class PaymentOrderSerializer(serializers.ModelSerializer):
     refunds = PaymentRefundSerializer(many=True, read_only=True)
     deal_id = serializers.IntegerField(read_only=True)
     delivery_request_id = serializers.IntegerField(read_only=True)
+    tracking_number = serializers.CharField(read_only=True)
     settlement = serializers.SerializerMethodField()
 
     class Meta:
@@ -194,6 +196,7 @@ class PaymentOrderSerializer(serializers.ModelSerializer):
             "outstanding_eur_cents",
             "deal_id",
             "delivery_request_id",
+            "tracking_number",
             "paid_at",
             "created_at",
             "attempts",
@@ -215,6 +218,7 @@ class PaymentOrderSummarySerializer(serializers.ModelSerializer):
     )
     deal_id = serializers.IntegerField(read_only=True)
     delivery_request_id = serializers.IntegerField(read_only=True)
+    tracking_number = serializers.CharField(read_only=True)
 
     class Meta:
         model = PaymentOrder
@@ -230,6 +234,7 @@ class PaymentOrderSummarySerializer(serializers.ModelSerializer):
             "outstanding_eur_cents",
             "deal_id",
             "delivery_request_id",
+            "tracking_number",
             "paid_at",
             "created_at",
         )
@@ -245,6 +250,7 @@ class PayoutSerializer(serializers.ModelSerializer):
     """
 
     deal_id = serializers.IntegerField(read_only=True)
+    tracking_number = serializers.SerializerMethodField()
     payout_amount = serializers.SerializerMethodField()
     mobile = serializers.SerializerMethodField()
     reference = serializers.UUIDField(source="public_reference", read_only=True)
@@ -254,6 +260,7 @@ class PayoutSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "deal_id",
+            "tracking_number",
             "amount_eur_cents",
             "method",
             "status",
@@ -267,6 +274,9 @@ class PayoutSerializer(serializers.ModelSerializer):
             "mobile",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj: Payout) -> str:
+        return tracking.for_deal(obj.deal)
 
     def get_mobile(self, obj):
         from .payout_mobile import payout_status

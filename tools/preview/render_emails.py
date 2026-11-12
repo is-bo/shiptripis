@@ -21,10 +21,10 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 Kind = OutboundMessage.Kind
 
-REFERENCE = "SHP-4821-JIJ"
+TRACKING_NUMBER = "WSL-7K3M9QXD"
 
 COMMON = {
-    "deal_reference": REFERENCE,
+    "tracking_number": TRACKING_NUMBER,
     "origin_city": "Paris",
     "destination_city": "Jijel",
     "payment_reference": "PAY-9F2C-4471",

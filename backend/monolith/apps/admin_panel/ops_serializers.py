@@ -23,6 +23,7 @@ from apps.finance.models import (
 from apps.kyc.models import KycSubmission
 from apps.locations.models import Location
 from apps.matching.models import Match, Offer
+from apps.parcels import tracking
 from apps.ratings.models import Rating
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
@@ -196,6 +197,7 @@ class AdminFlightProofSerializer(serializers.ModelSerializer):
 
 
 class AdminRequestSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     status = serializers.CharField(source="lifecycle_status", read_only=True)
     sender_email = serializers.EmailField(source="sender.email", read_only=True)
     sender_name = serializers.CharField(source="sender.full_name", read_only=True)
@@ -218,6 +220,7 @@ class AdminRequestSerializer(serializers.ModelSerializer):
         ).DeliveryRequest
         fields = (
             "id",
+            "tracking_number",
             "sender_id",
             "sender_email",
             "sender_name",
@@ -251,6 +254,9 @@ class AdminRequestSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj) -> str:
+        return tracking.for_request(obj)
 
 
 class AdminJourneyLegSerializer(serializers.ModelSerializer):
@@ -327,6 +333,7 @@ class AdminJourneySerializer(serializers.ModelSerializer):
 
 
 class AdminMatchSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     sender_email = serializers.EmailField(source="sender.email", read_only=True)
     traveler_email = serializers.EmailField(source="traveler.email", read_only=True)
     offer_count = serializers.IntegerField(read_only=True)
@@ -335,6 +342,7 @@ class AdminMatchSerializer(serializers.ModelSerializer):
         model = Match
         fields = (
             "id",
+            "tracking_number",
             "parcel_id",
             "journey_id",
             "start_leg_id",
@@ -353,6 +361,9 @@ class AdminMatchSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj) -> str:
+        return tracking.for_request(obj.parcel)
 
 
 class AdminOfferSerializer(serializers.ModelSerializer):
@@ -386,6 +397,7 @@ class AdminOfferSerializer(serializers.ModelSerializer):
 
 
 class AdminDealSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     sender_email = serializers.EmailField(source="sender.email", read_only=True)
     traveler_email = serializers.EmailField(source="traveler.email", read_only=True)
     event_count = serializers.IntegerField(read_only=True)
@@ -396,6 +408,7 @@ class AdminDealSerializer(serializers.ModelSerializer):
         model = Deal
         fields = (
             "id",
+            "tracking_number",
             "delivery_request_id",
             "journey_id",
             "match_id",
@@ -426,6 +439,9 @@ class AdminDealSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj) -> str:
+        return tracking.for_deal(obj)
 
     def get_payout_status(self, obj):
         payout = getattr(obj, "payout", None)
@@ -514,6 +530,7 @@ class AdminDisputeEvidenceSerializer(serializers.ModelSerializer):
 
 
 class AdminDisputeSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     evidence = AdminDisputeEvidenceSerializer(many=True, read_only=True)
     deal_status = serializers.CharField(source="deal.status", read_only=True)
 
@@ -521,6 +538,7 @@ class AdminDisputeSerializer(serializers.ModelSerializer):
         model = Dispute
         fields = (
             "id",
+            "tracking_number",
             "public_reference",
             "deal_id",
             "deal_status",
@@ -549,6 +567,9 @@ class AdminDisputeSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_tracking_number(self, obj) -> str:
+        return tracking.for_deal(obj.deal)
+
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get("request")
@@ -560,6 +581,7 @@ class AdminDisputeSerializer(serializers.ModelSerializer):
 
 
 class AdminPaymentOrderSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     outstanding_eur_cents = serializers.IntegerField(read_only=True)
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
 
@@ -567,6 +589,7 @@ class AdminPaymentOrderSerializer(serializers.ModelSerializer):
         model = PaymentOrder
         fields = (
             "id",
+            "tracking_number",
             "public_reference",
             "owner_id",
             "owner_email",
@@ -588,8 +611,12 @@ class AdminPaymentOrderSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_tracking_number(self, obj) -> str:
+        return obj.tracking_number
+
 
 class AdminPaymentAttemptSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     order_reference = serializers.UUIDField(
         source="order.public_reference", read_only=True
     )
@@ -598,6 +625,7 @@ class AdminPaymentAttemptSerializer(serializers.ModelSerializer):
         model = PaymentAttempt
         fields = (
             "id",
+            "tracking_number",
             "order_id",
             "order_reference",
             "provider",
@@ -620,6 +648,9 @@ class AdminPaymentAttemptSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj) -> str:
+        return obj.order.tracking_number
 
 
 class AdminProviderEventSerializer(serializers.ModelSerializer):
@@ -645,6 +676,7 @@ class AdminProviderEventSerializer(serializers.ModelSerializer):
 
 
 class AdminRefundSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     order_reference = serializers.UUIDField(
         source="order.public_reference", read_only=True
     )
@@ -653,6 +685,7 @@ class AdminRefundSerializer(serializers.ModelSerializer):
         model = PaymentRefund
         fields = (
             "id",
+            "tracking_number",
             "order_id",
             "order_reference",
             "attempt_id",
@@ -673,14 +706,19 @@ class AdminRefundSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_tracking_number(self, obj) -> str:
+        return obj.order.tracking_number
+
 
 class AdminPayoutSerializer(serializers.ModelSerializer):
+    tracking_number = serializers.SerializerMethodField()
     traveler_email = serializers.EmailField(source="traveler.email", read_only=True)
 
     class Meta:
         model = Payout
         fields = (
             "id",
+            "tracking_number",
             "deal_id",
             "traveler_id",
             "traveler_email",
@@ -704,6 +742,9 @@ class AdminPayoutSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj) -> str:
+        return tracking.for_deal(obj.deal)
 
 
 class AdminScheduledJobSerializer(serializers.ModelSerializer):

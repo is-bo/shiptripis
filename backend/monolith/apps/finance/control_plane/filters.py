@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from apps.parcels import tracking
+
 from .definitions import OPERATION_STAGES, REPORTING_TIMEZONE
 
 
@@ -24,6 +26,18 @@ class Scope:
     search: str = ""
     currency: str = ""
     operation: str = ""
+
+    @property
+    def search_kind(self) -> str:
+        """What `search` names once parsed: a parcel, a traveler or a UUID."""
+
+        if not self.search:
+            return ""
+        if self.search.startswith("TR-"):
+            return "traveler"
+        if tracking.is_valid(self.search):
+            return "tracking_number"
+        return "reference"
 
     @classmethod
     def parse(cls, values, *, now=None):
@@ -72,9 +86,13 @@ class Scope:
             try:
                 search = str(UUID(search))
             except ValueError:
-                if not re.fullmatch(r"(?:ST|TR)-[1-9][0-9]{0,14}", search):
+                number = tracking.normalize(search)
+                if number is not None:
+                    search = number
+                elif not re.fullmatch(r"TR-[1-9][0-9]{0,14}", search):
                     raise ValidationError(
-                        "Search requires an exact payout/order UUID, ST-Deal or TR-Traveler reference."
+                        "Search requires an exact payout/order UUID, a tracking "
+                        "number or a TR-Traveler reference."
                     ) from None
         zone = ZoneInfo(REPORTING_TIMEZONE)
         today = (now or timezone.now()).astimezone(zone).date()

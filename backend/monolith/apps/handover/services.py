@@ -32,6 +32,7 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
 from apps.core.event_resources import deal_resources
 from apps.core.phase4_policy import HandoverPolicy, phase4_policy
@@ -364,7 +365,7 @@ def _arm_recipient_notification(
         language=recipient.communication_language,
         context={
             "recipient_name": recipient.full_name,
-            "deal_reference": f"ST-{deal.pk}",
+            "tracking_number": tracking.for_deal(deal),
             # Leave a missing name blank so the final renderer can translate
             # its own "Your sender" fallback in the snapshotted locale.
             "sender_name": getattr(deal.sender, "full_name", ""),
@@ -388,7 +389,7 @@ def _arm_recipient_notification(
             to_email=sender_email,
             recipient_user_id=deal.sender_id,
             deal_id=deal.pk,
-            context={"deal_reference": f"ST-{deal.pk}"},
+            context={"tracking_number": tracking.for_deal(deal)},
         )
     from apps.core.channels import DEAL_UPDATED, HANDOVER_DELIVERY_CODE_AVAILABLE
     from apps.core.redis_bus import publish_after_commit
@@ -981,7 +982,7 @@ def _notify_pickup_confirmed(aggregate: LockedLifecycleAggregate) -> None:
             recipient_user_id=deal.sender_id,
             deal_id=deal.pk,
             context={
-                "deal_reference": f"ST-{deal.pk}",
+                "tracking_number": tracking.for_deal(deal),
                 "buffer_minutes": max(
                     1,
                     lifecycle.lifecycle_value(deal, "delivery_code_buffer_seconds", 1_800)
@@ -1005,7 +1006,7 @@ def _notify_delivery_confirmed(aggregate: LockedLifecycleAggregate) -> None:
 
     deal = aggregate.deal
     context = {
-        "deal_reference": f"ST-{deal.pk}",
+        "tracking_number": tracking.for_deal(deal),
         "protection_ends_at": (
             deal.protection_ends_at.isoformat() if deal.protection_ends_at else ""
         ),
@@ -1054,7 +1055,7 @@ def _notify_delivery_confirmed(aggregate: LockedLifecycleAggregate) -> None:
             recipient_user_id=user_id,
             deal_id=deal.pk,
             context={
-                "deal_reference": f"ST-{deal.pk}",
+                "tracking_number": tracking.for_deal(deal),
                 "rating_window_ends_at": (
                     deal.rating_window_ends_at.isoformat()
                     if deal.rating_window_ends_at

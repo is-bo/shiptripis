@@ -323,14 +323,14 @@ class DurabilityTests(TestCase):
             key=f"pickup_confirmed:{scenario.deal.pk}",
             to_email="a@example.invalid",
             deal_id=scenario.deal.pk,
-            context={"deal_reference": "ST-1"},
+            context={"tracking_number": "WSL-7K3M9QXD"},
         )
         second = outbox.enqueue_message(
             kind=OutboundMessage.Kind.PICKUP_CONFIRMED,
             key=f"pickup_confirmed:{scenario.deal.pk}",
             to_email="a@example.invalid",
             deal_id=scenario.deal.pk,
-            context={"deal_reference": "ST-1"},
+            context={"tracking_number": "WSL-7K3M9QXD"},
         )
         assert first.pk == second.pk
         assert (
@@ -348,7 +348,7 @@ class DurabilityTests(TestCase):
             key=f"rating_available:{scenario.deal.pk}",
             to_email="a@example.invalid",
             deal_id=scenario.deal.pk,
-            context={"deal_reference": "ST-1"},
+            context={"tracking_number": "WSL-7K3M9QXD"},
         )
         outbox.cancel_message(key=message.key, reason="no longer true")
 

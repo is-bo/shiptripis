@@ -297,7 +297,8 @@ def _enqueue_payment_failed_email(
         to_email=order.owner.email,
         recipient_user_id=order.owner_id,
         deal_id=order.deal_id,
-        context=context,
+        # The tracking number is the owner's; the guest copy below never has it.
+        context={**context, "tracking_number": order.tracking_number},
     )
     if attempt.guest_link_id and attempt.guest_email:
         enqueue_message(
@@ -368,7 +369,8 @@ def _enqueue_refund_status_email(*, refund: PaymentRefund, status: str) -> None:
         to_email=order.owner.email,
         recipient_user_id=order.owner_id,
         deal_id=order.deal_id,
-        context=context,
+        # The tracking number is the owner's; the guest copy below never has it.
+        context={**context, "tracking_number": order.tracking_number},
     )
     if attempt.guest_link_id and attempt.guest_email:
         enqueue_message(

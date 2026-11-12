@@ -490,12 +490,35 @@ Detail: `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md`. Screenshots: `/mnt/project-
 
 ### L11A. Tracking number, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L11A_TRACKING_NUMBER.md`. Screenshots: `/mnt/project-files/l-series-screens/L11A/`.
+
+- Contract as built (names that differ from the plan): `ParcelRequest.tracking_number` (`varchar(12)`,
+  unique, `WSL-` plus 8 of `23456789ABCDEFGHJKMNPQRSTVWXYZ`), migrations `parcels/0011` to `0013`.
+  `apps/parcels/tracking.py`: `generate`, `normalize`, `is_valid`, `for_request`, `for_deal`,
+  `insert_with_new_number` (5 attempts, then `TrackingNumberUnavailable`). API key `tracking_number`
+  on parcels (sender only), matches, offers, deals, the deal payment view, payment orders
+  (`PaymentOrder.tracking_number`: a deposit or Boost names its request, a balance its deal),
+  payouts (and the mobile `payout_status` block), disputes and the JSON admin lists. Email contexts
+  carry `tracking_number`, shown as "Tracking number" / "Numéro de suivi" / "رقم التتبع". Finance
+  `Scope.search_kind`; console search helper `apps/admin_panel/tracking_search.py`.
+- Left for a later package: L11B shows the number in the app (read `tracking_number` from the
+  payloads above; the request detail carries it for the sender only). Every later package that names
+  a parcel uses `tracking.for_request` or `tracking.for_deal`, never a record id.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) No
+  guest payer email carries the number, including the deposit receipt the plan mentions: spec 16
+  lists who sees it and keeps it off the guest's page, and an existing test already forbade the guest
+  receipt from echoing deal context. (2) Console Payments and Payouts move the payer and traveler to
+  the second column so the number leads. (3) Background-job and technical-record pages keep record
+  ids. (4) Two console layout fixes found at the gate (the search box width on every list, the mono
+  heading) are included.
+- Tests (before and after counts): Django 2,722 passed before (integration branch at `6c00013`);
+  2,751 passed after, 0 skipped. Added 29 (`test_l11a_tracking_number.py` 28,
+  `test_l11a_tracking_migration.py` 1) plus new privacy assertions in four existing files; three
+  finance tests, four notification tests and one person-page test rewritten to the new rule (listed
+  in the phase doc). No list gained a query (table in the phase doc).
+- Known limits: immutability is enforced in `ParcelRequest.save`, so a queryset `update()` could
+  still change a number; nothing in the code does. Background-job pages name records by id.
 
 ### L11B. Tracking number, mobile
 

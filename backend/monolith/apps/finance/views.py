@@ -41,6 +41,7 @@ from apps.admin_panel.permissions import CanIssueRefunds, CanSettleManualRefunds
 from apps.admin_panel.services import record_admin_action
 from apps.deals.models import Deal
 from apps.parcels.models import DeliveryRequest
+from apps.parcels import tracking
 
 from .models import (
     PaymentAttempt,
@@ -154,7 +155,7 @@ def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
 
 def _order_queryset():
     return PaymentOrder.objects.select_related(
-        "deal", "delivery_request"
+        "deal__delivery_request", "delivery_request"
     ).prefetch_related(
         Prefetch("attempts", queryset=PaymentAttempt.objects.order_by("-created_at")),
         Prefetch("refunds", queryset=PaymentRefund.objects.order_by("-created_at")),
@@ -213,7 +214,9 @@ class PaymentOrderListView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        queryset = PaymentOrder.objects.filter(owner=request.user)
+        queryset = PaymentOrder.objects.filter(owner=request.user).select_related(
+            "delivery_request", "deal__delivery_request"
+        )
         if purpose := request.query_params.get("purpose"):
             queryset = queryset.filter(purpose=purpose)
         if order_status := request.query_params.get("status"):
@@ -548,7 +551,9 @@ class DealPaymentView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request, pk: int) -> Response:
-        deal = get_object_or_404(Deal.objects.select_related("terms"), pk=pk)
+        deal = get_object_or_404(
+            Deal.objects.select_related("terms", "delivery_request"), pk=pk
+        )
         if (
             request.user.id not in (deal.sender_id, deal.traveler_id)
             and not request.user.is_staff
@@ -565,6 +570,7 @@ class DealPaymentView(APIView):
         terms = getattr(deal, "terms", None)
         payload: dict = {
             "deal_id": deal.pk,
+            "tracking_number": tracking.for_deal(deal),
             "deal_status": deal.status,
             "currency": "EUR",
             "sender_total_eur_cents": int(terms.sender_total_minor) if terms else None,

@@ -30,6 +30,7 @@ from datetime import UTC, datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.core.financial_locks import lock_deal_lifecycle
 from . import payout_accounting
 from .models import (
@@ -98,7 +99,7 @@ def notify_payout_state(payout, code: str) -> None:
             recipient_user_id=deal.traveler_id,
             deal_id=deal.pk,
             context={
-                "deal_reference": f"ST-{deal.pk}",
+                "tracking_number": tracking.for_deal(deal),
                 "payout_status": payout.status,
                 "payout_event": code,
             },

@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
+from apps.parcels import tracking
+
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import allowed_countries, evaluate_readiness, expected_mode
 from .payout_manual_profiles import approved_profile
@@ -102,7 +104,7 @@ def payouts_for(user):
 def payout_read_rows(rows):
     """Load the bounded Finance/mobile page without a query per payout."""
     return rows.select_related(
-        "deal", "stripe_account", "active_instruction_version__stripe_account",
+        "deal__delivery_request", "stripe_account", "active_instruction_version__stripe_account",
         "active_instruction_version__dzd_profile_revision__evidence",
         "active_instruction_version__dzd_profile_revision__method",
     ).prefetch_related(
@@ -354,6 +356,7 @@ def payout_status(payout, *, at=None, context=None):
         # that editing the current method will repair a historical instruction.
         actions += context["actions"] if context else payout_summary(payout.traveler)["available_actions"]
     return {"reference": str(payout.public_reference), "deal_id": deal.pk,
+            "tracking_number": tracking.for_deal(deal),
             "rail": "stripe_eur" if payout.method == "stripe_transfer" else "manual_dzd" if payout.method == "manual" and payout.payout_currency == "DZD" else "unavailable",
             "settlement_currency": payout.payout_currency or None,
             "amount_eur_cents": int(payout.amount_eur_cents),

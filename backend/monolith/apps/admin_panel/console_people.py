@@ -74,6 +74,7 @@ from apps.kyc.models import KycSubmission
 from apps.matching.models import Offer
 from apps.matching.offer_economics import OfferEconomicsReader
 from apps.notifications.models import Notification
+from apps.parcels import tracking
 from apps.parcels.lifecycle import with_lifecycle
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.ratings.models import Rating
@@ -86,6 +87,7 @@ from .console_presenters import (
     money_cell,
     money_pair_cell,
     parcel_summary,
+    ref_cell,
     request_route_nodes,
     route_cell,
     status_cell,
@@ -692,20 +694,20 @@ def _requests_list(request, person, caps, source):
         window = " – ".join(filter(None, (_date_text(item.ready_window_start), _date_text(item.ready_window_end))))
         rows.append({
             "cells": (
-                text_cell(f"Request {item.pk}", parcel_summary(item), kind="strong",
-                          href=deal_href, opens_row=bool(deal_href)),
+                ref_cell(tracking.for_request(item), parcel_summary(item),
+                         href=deal_href, opens_row=bool(deal_href)),
                 route_cell(request_route_nodes(item)),
                 text_cell(window or "No ready window",
                           f"deliver by {_date_text(item.deadline_at)}" if item.deadline_at else ""),
                 money_cell(item.traveler_reward_eur_cents) if item.traveler_reward_eur_cents else text_cell("—"),
                 (money_cell(boost) if boost else text_cell("No Boost" if boost == 0 else "—")),
                 {**status_cell(item.lifecycle_status, REQUEST_STATUS_LABELS.get(item.lifecycle_status)),
-                 "secondary": f"Deal {item.latest_deal_id}" if item.latest_deal_id else ""},
+                 "secondary": "Deal agreed" if item.latest_deal_id else ""},
                 datetime_cell(item.created_at),
             )
         })
     return _list(
-        ("Request", "Route", "Dates", "Reward", "Boost", "State", "Created"),
+        ("Tracking number", "Route", "Dates", "Reward", "Boost", "State", "Created"),
         rows, page_obj=page, layout="requests",
         empty="This person has not posted a parcel request.",
         note="State follows the delivery lifecycle. A request opens its Deal once it has one.",
@@ -882,9 +884,9 @@ def build_deliveries(request, person, caps, header, source):
         payout = getattr(deal, "payout", None) if _has_payout(deal) else None
         rows.append({
             "cells": (
-                text_cell(f"Deal {deal.pk}", _date_text(deal.created_at),
-                          href=reverse("admin_console:deal-detail", args=(deal.pk,)),
-                          opens_row=True, kind="strong"),
+                ref_cell(tracking.for_deal(deal), _date_text(deal.created_at),
+                         href=reverse("admin_console:deal-detail", args=(deal.pk,)),
+                         opens_row=True),
                 text_cell("Sender" if is_sender else "Traveler"),
                 _person_cell(other, source=""),
                 route_cell(request_route_nodes(deal.delivery_request)),
@@ -905,7 +907,7 @@ def build_deliveries(request, person, caps, header, source):
     return {
         "segments": segments,
         "list": _list(
-            ("Deal", "Role", "Counterparty", "Route", "Lifecycle", "Payment", "Payout", "Amount"),
+            ("Tracking number", "Role", "Counterparty", "Route", "Lifecycle", "Payment", "Payout", "Amount"),
             rows, page_obj=page, layout="deals",
             empty="No Deals in this state.",
             note=("Delivery completion and payout completion are separate: a completed delivery "
@@ -938,6 +940,7 @@ def _has_terms(deal):
 def build_payments(request, person, caps, header, source):
     queryset = (
         PaymentOrder.objects.filter(owner=person)
+        .select_related("delivery_request", "deal__delivery_request")
         .prefetch_related(Prefetch(
             "attempts",
             queryset=PaymentAttempt.objects.order_by("-created_at", "-pk"),
@@ -950,9 +953,7 @@ def build_payments(request, person, caps, header, source):
     for order in page.object_list:
         attempts = list(order.attempts.all())
         latest = attempts[0] if attempts else None
-        subject = f"Deal {order.deal_id}" if order.deal_id else (
-            f"Request {order.delivery_request_id}" if order.delivery_request_id else ""
-        )
+        subject = order.tracking_number
         provider = "No attempt yet"
         provider_detail = ""
         if latest is not None:
@@ -1052,7 +1053,7 @@ def build_payouts(request, person, caps, header, source):
     if caps("view_payouts"):
         queryset = (
             Payout.objects.filter(traveler=person)
-            .select_related("deal")
+            .select_related("deal__delivery_request")
             .annotate(
                 receipts=Count("attempts__manual_receipts", distinct=True),
                 confirmed_receipts=Count(
@@ -1080,9 +1081,9 @@ def build_payouts(request, person, caps, header, source):
                 )
             rows.append({
                 "cells": (
-                    text_cell(f"Deal {payout.deal_id}", str(payout.public_reference)[:8],
-                              href=reverse("admin_console:payout-detail", args=(payout.pk,)),
-                              opens_row=True, kind="strong"),
+                    ref_cell(tracking.for_deal(payout.deal), str(payout.public_reference)[:8],
+                             href=reverse("admin_console:payout-detail", args=(payout.pk,)),
+                             opens_row=True),
                     money_pair_cell(payout.amount_eur_cents, settlement),
                     text_cell(rail),
                     status_cell(payout.status, payout.get_status_display()),
@@ -1108,7 +1109,7 @@ def build_payouts(request, person, caps, header, source):
 def _disputes_list(request, person, caps, source):
     queryset = (
         Dispute.objects.filter(Q(deal__sender=person) | Q(deal__traveler=person))
-        .select_related("deal", "opened_by")
+        .select_related("deal__delivery_request", "opened_by")
         .order_by("-opened_at", "-pk")
     )
     page = _page(request, queryset)
@@ -1120,7 +1121,7 @@ def _disputes_list(request, person, caps, source):
                 text_cell(str(dispute.public_reference)[:8], dispute.get_category_display(),
                           href=reverse("admin_console:dispute-detail", args=(dispute.pk,)),
                           opens_row=True, kind="strong"),
-                text_cell(f"Deal {dispute.deal_id}", href=deal_href),
+                ref_cell(tracking.for_deal(dispute.deal), href=deal_href),
                 _person_cell(dispute.opened_by, secondary=dispute.get_opened_by_role_display(), self_id=person.pk),
                 status_cell(dispute.status, dispute.get_status_display()),
                 datetime_cell(dispute.opened_at),
@@ -1129,7 +1130,7 @@ def _disputes_list(request, person, caps, source):
             )
         })
     return _list(
-        ("Dispute", "Deal", "Opened by", "State", "Opened", "Resolution"),
+        ("Dispute", "Tracking number", "Opened by", "State", "Opened", "Resolution"),
         rows, page_obj=page, layout="disputes",
         empty="This person has not been part of a dispute.",
     )
@@ -1140,7 +1141,7 @@ def _ratings_list(request, person, caps, source):
     base = _ratings_base(person)
     queryset = (
         base.filter(_revealed_q(now))
-        .select_related("rater", "ratee", "deal")
+        .select_related("rater", "ratee", "deal__delivery_request")
         .order_by("-created_at", "-pk")
     )
     page = _page(request, queryset)
@@ -1155,8 +1156,8 @@ def _ratings_list(request, person, caps, source):
                 _person_cell(other),
                 text_cell(f"{rating.score} / 5", "★" * rating.score),
                 datetime_cell(rating.created_at),
-                text_cell(f"Deal {rating.deal_id}",
-                          href=reverse("admin_console:deal-detail", args=(rating.deal_id,)) if caps("view_deals") else ""),
+                ref_cell(tracking.for_deal(rating.deal),
+                         href=reverse("admin_console:deal-detail", args=(rating.deal_id,)) if caps("view_deals") else ""),
             )
         })
     note = ""
@@ -1164,7 +1165,7 @@ def _ratings_list(request, person, caps, source):
         note = (f"{hidden} rating{'s are' if hidden != 1 else ' is'} still inside the blind review "
                 "window and not shown, exactly as the app keeps it from the other party.")
     return _list(
-        ("Direction", "Counterparty", "Score", "Date", "Deal"),
+        ("Direction", "Counterparty", "Score", "Date", "Tracking number"),
         rows, page_obj=page, layout="ratings",
         empty="No revealed ratings yet.", note=note,
     )
@@ -1178,15 +1179,24 @@ def _notifications_list(request, person, caps, source):
         .order_by("-created_at", "-pk")
     )
     page = _page(request, queryset)
+    deal_ids = {
+        int(item.deal_ref) for item in page.object_list if str(item.deal_ref or "").isdigit()
+    }
+    # One query for the page: the parcel each notification is about.
+    numbers = {
+        deal.pk: tracking.for_deal(deal)
+        for deal in Deal.objects.filter(pk__in=deal_ids).select_related("delivery_request")
+    } if deal_ids else {}
     rows = []
     for item in page.object_list:
         deal_ref = str(item.deal_ref or "")
+        deal_id = int(deal_ref) if deal_ref.isdigit() else None
         rows.append({
             "cells": (
                 text_cell(humanize_action(item.channel), kind="strong"),
-                text_cell(f"Deal {deal_ref}" if deal_ref.isdigit() else "—",
-                          href=reverse("admin_console:deal-detail", args=(int(deal_ref),))
-                          if deal_ref.isdigit() and caps("view_deals") else ""),
+                ref_cell(numbers.get(deal_id, "—"),
+                         href=reverse("admin_console:deal-detail", args=(deal_id,))
+                         if deal_id in numbers and caps("view_deals") else ""),
                 datetime_cell(item.created_at),
                 {"primary": "Read" if item.read_at else "Unread", "kind": "status",
                  "tone": "mute" if item.read_at else "info"},

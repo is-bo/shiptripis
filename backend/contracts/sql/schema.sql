@@ -3341,6 +3341,7 @@ CREATE TABLE public.parcels_request (
     origin_id character varying(3),
     sender_id bigint NOT NULL,
     target_traveler_id bigint,
+    tracking_number character varying(12) NOT NULL,
     CONSTRAINT parcels_origin_neq_destination CHECK ((NOT ((origin_id)::text = (destination_id)::text))),
     CONSTRAINT parcels_request_weight_kg_check CHECK ((weight_kg >= 0))
 );
@@ -5462,6 +5463,14 @@ ALTER TABLE ONLY public.parcels_product
 
 ALTER TABLE ONLY public.parcels_request
     ADD CONSTRAINT parcels_request_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: parcels_request parcels_request_tracking_number_9db0ee60_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.parcels_request
+    ADD CONSTRAINT parcels_request_tracking_number_9db0ee60_uniq UNIQUE (tracking_number);
 
 
 --
@@ -9190,6 +9199,13 @@ CREATE INDEX parcels_request_status_190c4686_like ON public.parcels_request USIN
 --
 
 CREATE INDEX parcels_request_target_traveler_id_f7c960d8 ON public.parcels_request USING btree (target_traveler_id);
+
+
+--
+-- Name: parcels_request_tracking_number_9db0ee60_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX parcels_request_tracking_number_9db0ee60_like ON public.parcels_request USING btree (tracking_number varchar_pattern_ops);
 
 
 --

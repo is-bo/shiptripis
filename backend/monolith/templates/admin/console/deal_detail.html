@@ -1,14 +1,14 @@
 {% extends "admin/base_site.html" %}
 {% load shiptrip_admin %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:deals' %}">Deals</a> &rsaquo; Deal {{ deal.pk }}</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:deals' %}">Deals</a> &rsaquo; {{ tracking_number }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console">
   <header class="st-page-head">
     <div>
       <p class="st-eyebrow">Marketplace Deal</p>
-      <h1>Deal {{ deal.pk }}</h1>
+      <h1 class="st-tracking-number">{{ tracking_number }}</h1>
       <p>{{ deal.sender.full_name|default:deal.sender.email }} sending with {{ deal.traveler.full_name|default:deal.traveler.email }}.</p>
     </div>
     <div class="st-page-aside">

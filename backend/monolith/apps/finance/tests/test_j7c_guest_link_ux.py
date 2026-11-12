@@ -429,6 +429,9 @@ class PublicPageTests(_BalanceCase):
             str(self.order.pk),
             str(request.pk),
             str(self.order.deal_id),
+            # L11A: the parcel's tracking number is never on the guest page.
+            request.tracking_number,
+            "WSL-",
             self.issued.link.token_seed,
             self.issued.link.token_hash,
         )

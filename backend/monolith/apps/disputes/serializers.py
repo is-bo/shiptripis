@@ -27,6 +27,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.deals.models import Deal
+from apps.parcels import tracking
 
 from .models import Dispute, DisputeEvent, DisputeEvidence
 from .services import ADMIN_SETTABLE_STATUSES
@@ -123,6 +124,7 @@ class DisputeSerializer(serializers.ModelSerializer):
     deal_id = serializers.IntegerField(read_only=True)
     opened_by_id = serializers.IntegerField(read_only=True)
     deal_status = serializers.CharField(source="deal.status", read_only=True)
+    tracking_number = serializers.SerializerMethodField()
     evidence = DisputeEvidenceSerializer(many=True, read_only=True)
     events = serializers.SerializerMethodField()
 
@@ -132,6 +134,7 @@ class DisputeSerializer(serializers.ModelSerializer):
             "id",
             "public_reference",
             "deal_id",
+            "tracking_number",
             "deal_status",
             "status",
             "category",
@@ -154,6 +157,9 @@ class DisputeSerializer(serializers.ModelSerializer):
             "events",
         )
         read_only_fields = fields
+
+    def get_tracking_number(self, obj: Dispute) -> str:
+        return tracking.for_deal(obj.deal)
 
     def get_events(self, obj: Dispute) -> list[dict]:
         return DisputeEventSerializer(
