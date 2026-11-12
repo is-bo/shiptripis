@@ -2,7 +2,7 @@
 
 ## Wassla L2B — discovery on Home, mobile (2026-11-12)
 
-Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+Status: **merged** (PR #25, `c2e279f`) into `feature/discovery-professional-delivery`. No deployment;
 `main` untouched.
 
 Home now shows the L2A discovery tiers below the member's own content: Matches for you, a one-time
