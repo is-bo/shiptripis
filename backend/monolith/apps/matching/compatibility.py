@@ -213,8 +213,9 @@ def _point(location: Location) -> GeoPoint:
 def _optional_leg_point(leg: JourneyLeg, *, origin: bool) -> GeoPoint | None:
     """A route endpoint from canonical Place or legacy Location, if it has one.
 
-    Most French and Spanish catalogue localities carry no coordinates, so a
-    canonical endpoint without a point is normal rather than corrupt.
+    Every launch-country catalogue city carries coordinates (the release-data
+    test enforces it), so ``None`` here is a crash guard for a place outside
+    that catalogue, never a normal route.
     """
 
     value = (leg.origin_place if origin else leg.destination_place) or (
@@ -628,10 +629,10 @@ def _route_distance(
                 else _optional_leg_point(leg, origin=False)
             )
             if carried_start is None or carried_end is None:
-                # A road leg between catalogue cities with no coordinates (most
-                # of France and Spain) has no measurable distance. It prices
-                # at the distance floor, exactly as posting pricing does,
-                # rather than failing the whole scan.
+                # Crash guard only: every launch-country city has
+                # coordinates. A leg that still lacks a point prices at the
+                # distance floor, as posting pricing does, rather than
+                # failing the whole scan.
                 distance = 0
                 method = "canonical_place_floor"
             else:

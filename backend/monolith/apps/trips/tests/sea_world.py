@@ -1,9 +1,10 @@
 """The L3A test world: the launch countries, three ferry ports and real gaps.
 
-The shape is the production catalogue's, including its awkward parts: French
-and Spanish cities carry no coordinates (only Algerian ones do), a sea leg
-joins two cities rather than two terminals, and a ferry line exists once per
-direction. Tests that need a sea leg build it here so every suite proves the
+The shape is the production catalogue's, including its awkward parts: a sea
+leg joins two cities rather than two terminals, and a ferry line exists once
+per direction. The French and Spanish cities here deliberately carry no
+coordinates, unlike the real catalogue, so these suites keep proving the
+distance-floor crash guard and the staff-given crossing distance. Tests that need a sea leg build it here so every suite proves the
 same geography.
 """
 
@@ -48,7 +49,7 @@ class SeaWorld:
                 ("DE", "Germany"),
             )
         }
-        # No coordinates, exactly like the real French and Spanish catalogue.
+        # No coordinates on purpose: exercises the crash guards (see above).
         self.lille = self.city("FR", "Lille")
         self.paris = self.city("FR", "Paris")
         self.lyon = self.city("FR", "Lyon")

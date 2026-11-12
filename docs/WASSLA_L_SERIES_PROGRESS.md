@@ -38,7 +38,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 
 **Next package:** L3B (Sonnet, high). It depends only on L3A, which is merged. L4A, L5A and L6A are also unblocked; section 3 order puts L3B first.
 
-**Open carry-over, must close before launch:** FR/ES city coordinates missing, so FR/ES road legs get floor pricing. The bundled catalogue has no coordinates for any French (34,875) or Spanish (8,132) city; a road leg between two of them prices at the distance floor, which is only a crash guard. Close it with official coordinates keyed by INSEE and INE code, a regenerated manifest with its digest pin, and a release-data test that fails on any launch-country city without coordinates (details in the L3A block). The `PushRepository.unregisterDevice` carry-over is closed: L2B removed it.
+**Closed carry-over:** FR/ES city coordinates. Every French (34,875) and Spanish (8,132) catalogue city now has official coordinates, joined by INSEE and INE code (France: `geo.api.gouv.fr` town hall points; Spain: Eurostat GISCO LAU 2024 boundary centroids), with source digests in the manifest and the digest pin updated. `test_every_launch_country_city_has_coordinates` fails if any DZ, FR, ES or DE city lacks them, so the distance floor is a crash guard only. Pull request: see the L3A block. The `PushRepository.unregisterDevice` carry-over is closed: L2B removed it.
 
 ## Handoff notes
 
@@ -199,12 +199,10 @@ factual. Use exactly these headings.
   `flightProofStatusChanged` and `proofOnlyForFlight` identifiers (their wire values already moved).
   Audit action names `flight_proof.*` and the `review_flight_proofs` permission keep their names
   (stored in audit and role rows). L6A adds the professional exemption inside `proofs.py` only.
-  **Open, must close before launch:** the bundled catalogue has no coordinates for any French
-  (34,875) or Spanish (8,132) city, so every French and Spanish road leg prices at the distance
-  floor. Closing it needs coordinates from an official source keyed by INSEE and INE code (for
-  example `geo.api.gouv.fr` and Eurostat GISCO LAU, both refused by this environment's network
-  policy), a regenerated manifest with its digest pin, and a release-data test that fails if any
-  launch-country city lacks coordinates. The floor stays only as a crash guard.
+  **Closed after L3A (FR/ES coordinates follow-up):** the bundled catalogue now gives every French
+  and Spanish city official coordinates keyed by INSEE and INE code (`geo.api.gouv.fr`, Eurostat
+  GISCO LAU 2024), the digest pin is updated, and a release-data test fails if any launch-country
+  city lacks coordinates. The floor stays only as a crash guard.
 - Switches added and their defaults: none new. L3A reads `sea_legs_enabled` (off), defined in L2A.
 - Deviations from the plan (what, why, approved by): branch is the harness name
   `claude/project-thread-bl54yl`; PR targets `feature/discovery-professional-delivery`. The seed file
@@ -228,9 +226,8 @@ factual. Use exactly these headings.
 - Tests (before and after counts): Django 2,539 passed before; 2,615 passed after (77 added: 46 in
   `test_l3a_routes.py`, 25 in `test_l3a_matching.py`, 6 in `test_l3a_ticket_copy.py`; two
   `phase8fa` tests of the removed helpers became one). Go unchanged and green. `makemigrations --check` clean; `schema.sql` regenerated (additions only).
-- Known limits: French and Spanish road legs price at the distance floor until those cities have
-  coordinates (the open carry-over above; matching and Find Travelers work, the price is the
-  minimum). Road distance everywhere is straight-line: no production route provider is configured.
+- Known limits: (closed since: French and Spanish road legs priced at the distance floor until the
+  coordinates follow-up above.) Road distance everywhere is straight-line: no production route provider is configured.
   The console has no crossing or pause screen until L3B; staff use the service functions.
 
 ### L3B. Routes for everyone, mobile and admin screens
