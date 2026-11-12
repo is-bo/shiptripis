@@ -2,7 +2,7 @@
 
 ## Wassla L5A — Progress updates and reminders, backend (2026-11-12)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main` untouched.
+Status: **merged** (PR #34, `73d5169`, into `feature/discovery-professional-delivery`). No deployment; `main` untouched.
 
 - A traveler reports "at the port" (sea legs), "departed" and "arrived" per leg, in order, no more than 24
   hours early, and can take a report back for 10 minutes. Each funded parcel on the leg gets a timeline

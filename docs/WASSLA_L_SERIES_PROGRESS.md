@@ -27,7 +27,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L4B | Traveler pricing, mobile | Sonnet | medium | merged | `claude/project-thread-fyrhxt` | #31 | `c685db0` | `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md` |
 | L11A | Tracking number, backend | Opus | high | merged | `claude/project-thread-5otrp2` | #32 | `1021c89` | `docs/PHASE_L11A_TRACKING_NUMBER.md` |
 | L11B | Tracking number, mobile | Sonnet | medium | merged | `claude/project-thread-14swqv` | #33 | `75640c0` | `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md` |
-| L5A | Progress updates and reminders, backend | Sonnet | medium | not_started | | | | |
+| L5A | Progress updates and reminders, backend | Sonnet | medium | merged | `claude/project-thread-lsol7m` | #34 | `73d5169` | `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md` |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | not_started | | | | |
 | L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | not_started | | | | |
 | L6B | Professional Mode, mobile | Sonnet | medium | not_started | | | | |
@@ -53,9 +53,11 @@ table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L
 to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
 the board is otherwise still edited only by the orchestrator.
 
-**Next package:** L5A (Sonnet, medium effort), then L5B (Sonnet, medium). Section 3 order.
+**Next package:** L5B (Sonnet, medium effort), then L6A (Opus, high). Section 3 order.
 
 **L11A judgment calls (accepted at the gate, for Ismail's end review):** (1) no guest payer email or page carries the tracking number, including the deposit receipt the plan mentions, because spec 16's list of who sees it leaves the guest out (spec wins over plan); (2) `GET /api/parcels/<id>` shows the number to the sender only, a traveler learns it from the proposal; (3) the console Payments and Payouts lists lead with the number, the payer or traveler moves to the second column; (4) background-job and technical-record pages keep record ids. The gate also fixed two console layout bugs that predate L11A: every list's search box was about 174 px wide instead of 340 px, and the deal heading lost its mono face.
+
+**L5A judgment calls (accepted at the gate, for Ismail's end review):** (1) paused journeys still take progress reports and get reminders, because funded deals continue; (2) a report that a later report depends on cannot be retracted (`progress_has_followup`); (3) a late `departed` report re-arms the arrival question under its own job key; (4) no reminder for `at_port`; (5) a retraction sends a neutral `deal.updated` refresh, no push. L9A's route changes must call `schedule_leg_reminders` after re-timing legs.
 
 **L11B judgment call (accepted at the gate, for Ismail's end review):** the posting-deposit screen does not show the tracking number, because the plan's list of screens leaves it out; `PaymentOrder.trackingNumber` is already read, so adding it is one line. Later mobile packages put `TrackingNumberView` (`mobile/lib/design/components/tracking.dart`) on their own parcel screens (rule 12).
 
