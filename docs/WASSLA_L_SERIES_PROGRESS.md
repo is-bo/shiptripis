@@ -350,12 +350,32 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 
 ### L4C. Housekeeping: test time limit and ferry distance cleanup
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L4C_HOUSEKEEPING.md`.
+
+- Contract as built (names that differ from the plan): CI's Django tests are four parallel jobs
+  `django-shard` (`Django — tests (shard K)`, 25-minute limit each). The check name
+  `Django — migrations + tests + lint` is kept; that job now only passes when every shard passed and
+  `config/test_shards.py verify` proves every collected test file ran in exactly one shard. Split by
+  whole file over `backend/monolith/config/test_durations.json`; pytest options `--shard=K/N` and
+  `--shard-report=PATH` in the root `conftest.py`. Durations: see the phase doc. Ferry: a port in
+  `sea_crossings.json` is `{country, name}` only; `create_crossing(actor, origin_locality_id,
+  destination_locality_id, reason, active=False)` (no `distance_km`); a city without catalogue
+  coordinates is refused with `sea_crossing_coordinates_missing` (codes
+  `sea_crossing_distance_required` / `_invalid` and `MAX_CROSSING_DISTANCE_KM` are gone); the console
+  form has no kilometres field.
+- Left for a later package: nothing. **Every later package:** a new test file runs in a shard
+  automatically (weighed as an average file). When the slowest shard passes 15 minutes, refresh
+  `config/test_durations.json` from a green run's `django-shard-report-*` artifacts
+  (`python config/test_shards.py merge DIR`), and add a matrix entry if that is not enough.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): none. Sharding was possible without weakening
+  anything, so the limit was not raised to 90 minutes. No column was left unused: `distance_meters`
+  is still written (from catalogue coordinates only) and read; only the backup's inputs went.
+- Tests (before and after counts): Django 2,703 passed before (integration branch at `e4c2530`);
+  2,722 passed after, 0 skipped. Added 19 (4 pinned shipped-crossing tests, 14 shard tests,
+  1 console test); 5 ferry tests rewritten to the new rule (listed in the phase doc).
+- Known limits: the split is only as even as `test_durations.json` is current; `verify` keeps it
+  complete whatever the balance. Lint and the migration check run in shard 1 only.
 
 ### L4B. Traveler pricing, mobile
 
