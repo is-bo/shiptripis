@@ -199,6 +199,12 @@ factual. Use exactly these headings.
   `flightProofStatusChanged` and `proofOnlyForFlight` identifiers (their wire values already moved).
   Audit action names `flight_proof.*` and the `review_flight_proofs` permission keep their names
   (stored in audit and role rows). L6A adds the professional exemption inside `proofs.py` only.
+  **Open, must close before launch:** the bundled catalogue has no coordinates for any French
+  (34,875) or Spanish (8,132) city, so every French and Spanish road leg prices at the distance
+  floor. Closing it needs coordinates from an official source keyed by INSEE and INE code (for
+  example `geo.api.gouv.fr` and Eurostat GISCO LAU, both refused by this environment's network
+  policy), a regenerated manifest with its digest pin, and a release-data test that fails if any
+  launch-country city lacks coordinates. The floor stays only as a crash guard.
 - Switches added and their defaults: none new. L3A reads `sea_legs_enabled` (off), defined in L2A.
 - Deviations from the plan (what, why, approved by): branch is the harness name
   `claude/project-thread-bl54yl`; PR targets `feature/discovery-professional-delivery`. The seed file
@@ -223,8 +229,9 @@ factual. Use exactly these headings.
   `test_l3a_routes.py`, 25 in `test_l3a_matching.py`, 6 in `test_l3a_ticket_copy.py`; two
   `phase8fa` tests of the removed helpers became one). Go unchanged and green. `makemigrations --check` clean; `schema.sql` regenerated (additions only).
 - Known limits: French and Spanish road legs price at the distance floor until those cities have
-  coordinates (the matching engine and Find Travelers work; the price is the minimum). The console
-  has no crossing or pause screen until L3B; staff use the service functions.
+  coordinates (the open carry-over above; matching and Find Travelers work, the price is the
+  minimum). Road distance everywhere is straight-line: no production route provider is configured.
+  The console has no crossing or pause screen until L3B; staff use the service functions.
 
 ### L3B. Routes for everyone, mobile and admin screens
 
