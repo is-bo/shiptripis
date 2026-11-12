@@ -112,13 +112,13 @@ class FlightProofStatusEmailTests(TestCase):
         )
 
         message = OutboundMessage.objects.get(
-            key=f"flight_proof_status:{proof.pk}:approved"
+            key=f"leg_proof_status:{proof.pk}:approved"
         )
         self.assertEqual(message.context["status"], "approved")
         self.assertEqual(message.language, "fr")
         self.assertEqual(
             OutboundMessage.objects.filter(
-                kind=OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
+                kind=OutboundMessage.Kind.LEG_PROOF_STATUS,
                 recipient_user=proof.leg.journey.traveler,
             ).count(),
             1,
@@ -141,7 +141,7 @@ class FlightProofStatusEmailTests(TestCase):
         )
 
         message = OutboundMessage.objects.get(
-            key=f"flight_proof_status:{proof.pk}:rejected"
+            key=f"leg_proof_status:{proof.pk}:rejected"
         )
         self.assertEqual(message.context["status"], "action_required")
         self.assertEqual(message.context["reason"], "Upload the complete ticket.")

@@ -157,7 +157,7 @@ class OutboundMessage(models.Model):
         PASSWORD_RESET = "password_reset", "Password reset"
         ADMIN_INVITATION = "admin_invitation", "Admin invitation"
         KYC_STATUS = "kyc_status", "KYC status"
-        FLIGHT_PROOF_STATUS = "flight_proof_status", "Flight proof status"
+        LEG_PROOF_STATUS = "leg_proof_status", "Ticket proof status"
         PAYMENT_REQUIRED = "payment_required", "Payment required"
         PAYMENT_PROCESSING = "payment_processing", "Payment processing"
         PAYMENT_FAILED = "payment_failed", "Payment failed"

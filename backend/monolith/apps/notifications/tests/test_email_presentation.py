@@ -35,7 +35,7 @@ from apps.notifications.models import OutboundMessage
 # Every kind the outbox knows how to build without opening a seal.
 NON_SECRET_KINDS = (
     OutboundMessage.Kind.KYC_STATUS,
-    OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
+    OutboundMessage.Kind.LEG_PROOF_STATUS,
     OutboundMessage.Kind.PAYMENT_REQUIRED,
     OutboundMessage.Kind.PAYMENT_PROCESSING,
     OutboundMessage.Kind.PAYMENT_FAILED,

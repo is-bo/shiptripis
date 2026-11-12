@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
@@ -19,7 +21,13 @@ from .constraints import (
     DEPARTURE_NOT_FUTURE_MESSAGE,
     first_departure_is_future,
 )
-from .models import Journey, JourneyLeg, JourneyLegProof
+from .models import Journey, JourneyLeg, JourneyLegProof, JourneyStopDetail
+from .proofs import (
+    journey_proof_gaps,
+    leg_requires_proof,
+    proof_gap_code,
+    proof_gap_message,
+)
 from .transport_rules import (
     MODE_UNAVAILABLE_CODE,
     check_leg_mode,
@@ -71,25 +79,16 @@ def validate_journey_verification_gates(journey: Journey, *, at=None) -> None:
             "Current traveler KYC approval is required for this journey.",
         )
 
-    flight_leg_ids = list(
-        JourneyLeg.objects.filter(
-            journey=journey,
-            mode=JourneyLeg.Mode.FLIGHT,
-        ).values_list("pk", flat=True)
-    )
-    if not flight_leg_ids:
-        return
-    approved_leg_ids = set(
-        JourneyLegProof.objects.filter(
-            leg_id__in=flight_leg_ids,
-            status=JourneyLegProof.Status.APPROVED,
-        ).values_list("leg_id", flat=True)
-    )
-    if approved_leg_ids != set(flight_leg_ids):
-        raise JourneyDomainError(
-            "flight_proof_not_approved",
-            "Every flight leg requires a currently approved transport proof.",
+    legs = JourneyLeg.objects.filter(journey=journey).annotate(
+        has_approved_proof_value=Exists(
+            JourneyLegProof.objects.filter(
+                leg_id=OuterRef("pk"), status=JourneyLegProof.Status.APPROVED
+            )
         )
+    )
+    gaps = journey_proof_gaps(legs.order_by("position", "pk"))
+    if gaps:
+        raise JourneyDomainError(proof_gap_code(gaps[0]), proof_gap_message(gaps[0]))
 
 
 def _validate_leg_sequence(
@@ -485,8 +484,8 @@ _ROUTE_SNAPSHOT_DEFAULTS = {
 }
 
 
-#: Leg fields whose change makes an approved flight proof prove a different
-#: flight.  Item for item, this is what a boarding pass actually evidences.
+#: Leg fields whose change makes an approved ticket prove a different trip.
+#: Item for item, this is what a boarding pass or a ferry booking evidences.
 _PROOF_BEARING_LEG_FIELDS = (
     "mode",
     "origin_place_id",
@@ -521,7 +520,7 @@ def _materially_changed_fields(existing: JourneyLeg, incoming: dict) -> list[str
 
 
 def _invalidate_leg_proofs(leg: JourneyLeg, *, changed_fields: list[str]) -> int:
-    """Send a changed flight leg's live proofs back for review.
+    """Send a changed ticket leg's live proofs back for review.
 
     An approved proof is demoted to pending rather than deleted.  The image is
     still the evidence a reviewer needs, and the reviewer's earlier decision
@@ -550,7 +549,7 @@ def _invalidate_leg_proofs(leg: JourneyLeg, *, changed_fields: list[str]) -> int
         history.append(
             {
                 "at": now.isoformat(),
-                "reason": "flight_leg_materially_changed",
+                "reason": "ticket_leg_materially_changed",
                 "changed_fields": changed_fields,
                 "previous_status": proof.status,
                 "previous_reviewer_id": proof.reviewer_id,
@@ -599,8 +598,14 @@ def replace_journey_route(
     destination_location,
     notes: str,
     legs: list[dict],
+    stops: Sequence[dict] = (),
+    refused_categories: Sequence[str] = (),
+    accepts_fragile: bool = True,
 ) -> JourneyRouteChange:
-    """Rewrite an editable journey's endpoints and whole leg chain.
+    """Rewrite an editable journey's endpoints, leg chain and route options.
+
+    The route options default to "no stop options, accepts everything", which
+    is what leaving them out of a whole-route write means.
 
     The chain is replaced as a unit under the aggregate lock.  Legs the client
     identified by ``id`` are updated in place, which is what carries an
@@ -662,12 +667,10 @@ def replace_journey_route(
                     setattr(existing, field, value)
                 existing.save()
                 updated += 1
-                # Only a flight leg carries proof, and only a change to what
+                # Only a ticket leg carries proof, and only a change to what
                 # the proof evidences invalidates it.  A capacity edit does
                 # not make a boarding pass wrong.
-                if changed and (
-                    existing.mode == JourneyLeg.Mode.FLIGHT or "mode" in changed
-                ):
+                if changed and (leg_requires_proof(existing) or "mode" in changed):
                     reset_for_review += _invalidate_leg_proofs(
                         existing, changed_fields=changed
                     )
@@ -685,11 +688,20 @@ def replace_journey_route(
         if removed_ids:
             JourneyLeg.objects.filter(pk__in=removed_ids).delete()
 
+        # Stop options are written under the same journey lock that
+        # acceptance takes first, and only while the journey is editable.
+        JourneyStopDetail.objects.filter(journey=locked).delete()
+        JourneyStopDetail.objects.bulk_create(
+            [JourneyStopDetail(journey=locked, **stop) for stop in stops]
+        )
+
         locked.start_place = start_place
         locked.destination_place = destination_place
         locked.start_location = start_location
         locked.destination_location = destination_location
         locked.notes = notes
+        locked.refused_categories = sorted(set(refused_categories))
+        locked.accepts_fragile = accepts_fragile
         locked.save(
             update_fields=[
                 "start_place",
@@ -697,6 +709,8 @@ def replace_journey_route(
                 "start_location",
                 "destination_location",
                 "notes",
+                "refused_categories",
+                "accepts_fragile",
                 "updated_at",
             ]
         )
@@ -719,3 +733,173 @@ def replace_journey_route(
         proofs_reset_for_review=reset_for_review,
         proofs_discarded=discarded,
     )
+
+
+# ---------------------------------------------------------------------------
+# Pausing a journey (spec 5.7)
+# ---------------------------------------------------------------------------
+
+#: Statuses in which a journey can be offered on, and so can be paused.
+PAUSABLE_JOURNEY_STATUSES = frozenset(
+    {Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS}
+)
+#: Staff may also pause a journey that is not live yet, so publishing it does
+#: not quietly make it discoverable.
+STAFF_PAUSABLE_JOURNEY_STATUSES = PAUSABLE_JOURNEY_STATUSES | EDITABLE_JOURNEY_STATUSES
+
+PAUSED_BY_STAFF_CODE = "journey_paused_by_staff"
+
+
+def _lock_journey(journey_id: int) -> Journey:
+    return Journey.objects.select_for_update(no_key=True).get(pk=journey_id)
+
+
+def _clear_pause(journey: Journey) -> None:
+    journey.paused_at = None
+    journey.paused_by_staff = False
+    journey.pause_reason = ""
+    journey.save(
+        update_fields=["paused_at", "paused_by_staff", "pause_reason", "updated_at"]
+    )
+
+
+def _pause_state(journey: Journey) -> dict:
+    return {
+        "paused_at": journey.paused_at.isoformat() if journey.paused_at else None,
+        "paused_by_staff": journey.paused_by_staff,
+        "pause_reason": journey.pause_reason,
+    }
+
+
+@transaction.atomic
+def pause_own_journey(*, journey: Journey, actor) -> Journey:
+    """The traveler pauses their own live journey. Idempotent.
+
+    The pause takes the journey row lock, which acceptance takes first, so an
+    acceptance either commits before the pause or sees it and refuses. Funded
+    deals are untouched: nothing here reads or writes them.
+    """
+
+    locked = _lock_journey(journey.pk)
+    if locked.traveler_id != actor.pk:
+        raise JourneyDomainError(
+            "journey_not_owned", "Only the journey owner can pause it."
+        )
+    if locked.paused_at is not None:
+        return locked
+    if locked.status not in PAUSABLE_JOURNEY_STATUSES:
+        raise JourneyDomainError(
+            "journey_not_pausable",
+            f"A journey in status '{locked.status}' cannot be paused.",
+        )
+    locked.paused_at = timezone.now()
+    locked.save(update_fields=["paused_at", "updated_at"])
+    return locked
+
+
+@transaction.atomic
+def resume_own_journey(*, journey: Journey, actor) -> Journey:
+    """The traveler lifts their own pause. A staff pause is not theirs to lift."""
+
+    locked = _lock_journey(journey.pk)
+    if locked.traveler_id != actor.pk:
+        raise JourneyDomainError(
+            "journey_not_owned", "Only the journey owner can resume it."
+        )
+    if locked.paused_at is None:
+        return locked
+    if locked.paused_by_staff:
+        raise JourneyDomainError(
+            PAUSED_BY_STAFF_CODE,
+            "Wassla staff paused this journey; contact support to resume it.",
+        )
+    _clear_pause(locked)
+    return locked
+
+
+def _require_journey_staff(actor) -> None:
+    from apps.admin_panel.permissions import has_admin_permission
+
+    if not has_admin_permission(actor, "manage_journeys"):
+        raise PermissionDenied("Pausing journeys requires manage_journeys.")
+
+
+def _staff_reason(reason: str) -> str:
+    cleaned = (reason or "").strip()
+    if not cleaned:
+        raise JourneyDomainError(
+            "journey_pause_reason_required", "A reason is required."
+        )
+    return cleaned
+
+
+@transaction.atomic
+def pause_journey(*, actor, journey_id: int, reason: str) -> Journey:
+    """Staff pause any journey that is not finished, with a reason. Audited.
+
+    A traveler's own pause becomes a staff pause, so the traveler can no
+    longer lift it.
+    """
+
+    _require_journey_staff(actor)
+    cleaned = _staff_reason(reason)
+    locked = _lock_journey(journey_id)
+    if locked.paused_by_staff:
+        return locked
+    if locked.status not in STAFF_PAUSABLE_JOURNEY_STATUSES:
+        raise JourneyDomainError(
+            "journey_not_pausable",
+            f"A journey in status '{locked.status}' cannot be paused.",
+        )
+    before = _pause_state(locked)
+    locked.paused_at = locked.paused_at or timezone.now()
+    locked.paused_by_staff = True
+    locked.pause_reason = cleaned[:500]
+    locked.save(
+        update_fields=["paused_at", "paused_by_staff", "pause_reason", "updated_at"]
+    )
+
+    from apps.admin_panel.services import record_admin_action
+
+    record_admin_action(
+        actor=actor,
+        action="journey.paused",
+        target=locked,
+        before=before,
+        after=_pause_state(locked),
+        reason=cleaned,
+    )
+    return locked
+
+
+@transaction.atomic
+def resume_journey(*, actor, journey_id: int, reason: str) -> Journey:
+    """Staff lift a staff pause, with a reason. Audited.
+
+    A traveler's own pause is the traveler's choice, so staff cannot lift it.
+    """
+
+    _require_journey_staff(actor)
+    cleaned = _staff_reason(reason)
+    locked = _lock_journey(journey_id)
+    if locked.paused_at is None:
+        return locked
+    if not locked.paused_by_staff:
+        raise JourneyDomainError(
+            "journey_paused_by_owner",
+            "The traveler paused this journey; only they can resume it.",
+        )
+    before = _pause_state(locked)
+    _clear_pause(locked)
+
+    from apps.admin_panel.services import record_admin_action
+
+    record_admin_action(
+        actor=actor,
+        action="journey.resumed",
+        target=locked,
+        before=before,
+        after=_pause_state(locked),
+        reason=cleaned,
+    )
+    return locked

@@ -135,7 +135,7 @@ void main() {
       );
       expect(
         pushLocation({
-          'channel': 'flight_proof.status_changed',
+          'channel': 'leg_proof.status_changed',
           'trip_id': '10',
         }),
         '/journeys/10',

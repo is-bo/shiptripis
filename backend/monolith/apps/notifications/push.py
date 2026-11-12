@@ -20,6 +20,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.core import channels
 from apps.core.languages import normalize_communication_language
 
 from .models import Notification, NotificationPreference, PushDevice
@@ -218,17 +219,17 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("تم تحديث التحقق من الهوية", "افتح Wassla لمراجعة القرار."),
         },
     ),
-    "flight_proof.status_changed": (
+    "leg_proof.status_changed": (
         "essential",
         "account",
         "",
         {
-            "en": ("Flight proof updated", "Open Wassla to review the decision."),
+            "en": ("Ticket updated", "Open Wassla to review the decision."),
             "fr": (
-                "Justificatif de vol mis à jour",
+                "Billet mis à jour",
                 "Ouvrez Wassla pour consulter la décision.",
             ),
-            "ar": ("تم تحديث إثبات الرحلة", "افتح Wassla لمراجعة القرار."),
+            "ar": ("تم تحديث التذكرة", "افتح Wassla لمراجعة القرار."),
         },
     ),
     "deal.cancelled": (
@@ -388,15 +389,30 @@ _STATUS_PUSH_COPY: dict[
         "fr": ("Votre KYC nécessite votre attention", "Ouvrez Wassla pour consulter la décision et la prochaine étape."),
         "ar": ("يتطلب التحقق انتباهك", "افتح Wassla لمراجعة القرار والخطوة التالية."),
     },
-    ("flight_proof.status_changed", "approved"): {
-        "en": ("Flight proof approved", "Your journey verification was updated."),
-        "fr": ("Justificatif de vol approuvé", "La vérification de votre trajet a été mise à jour."),
-        "ar": ("تمت الموافقة على إثبات الرحلة", "تم تحديث التحقق من رحلتك."),
+}
+
+#: Ticket review copy names the mode it is about (L3A): a traveler with a
+#: flight and a ferry on one journey must be told which ticket was decided.
+_TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
+    ("FLIGHT", "approved"): {
+        "en": ("Flight ticket approved", "Your journey verification was updated."),
+        "fr": ("Billet d'avion approuvé", "La vérification de votre trajet a été mise à jour."),
+        "ar": ("تمت الموافقة على تذكرة الطيران", "تم تحديث التحقق من رحلتك."),
     },
-    ("flight_proof.status_changed", "rejected"): {
-        "en": ("Flight proof needs attention", "Open Wassla to review the decision."),
-        "fr": ("Votre justificatif de vol nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
-        "ar": ("يتطلب إثبات الرحلة انتباهك", "افتح Wassla لمراجعة القرار."),
+    ("FLIGHT", "rejected"): {
+        "en": ("Flight ticket needs attention", "Open Wassla to review the decision."),
+        "fr": ("Votre billet d'avion nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
+        "ar": ("تذكرة الطيران تتطلب انتباهك", "افتح Wassla لمراجعة القرار."),
+    },
+    ("SEA", "approved"): {
+        "en": ("Ferry ticket approved", "Your journey verification was updated."),
+        "fr": ("Billet de ferry approuvé", "La vérification de votre trajet a été mise à jour."),
+        "ar": ("تمت الموافقة على تذكرة العبّارة", "تم تحديث التحقق من رحلتك."),
+    },
+    ("SEA", "rejected"): {
+        "en": ("Ferry ticket needs attention", "Open Wassla to review the decision."),
+        "fr": ("Votre billet de ferry nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
+        "ar": ("تذكرة العبّارة تتطلب انتباهك", "افتح Wassla لمراجعة القرار."),
     },
 }
 
@@ -539,6 +555,9 @@ def enqueue_fcm_for_event(
     category, android_channel, collapse_key, localized = spec
     status = str(payload.get("status", "")).strip().lower()
     localized = _STATUS_PUSH_COPY.get((channel, status), localized)
+    if channel == channels.LEG_PROOF_STATUS_CHANGED:
+        mode = str(payload.get("mode", "")).strip().upper()
+        localized = _TICKET_PUSH_COPY.get((mode, status), localized)
     pending_entries: list[dict[str, str]] = []
     for user_id, user_devices in by_user.items():
         if not _preference_allows(user_id, category, preferences):

@@ -50,6 +50,7 @@ from apps.locations.models import AirportLocalityMapping, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.ratings.models import Rating
 from apps.trips.models import JourneyLeg
+from apps.trips.proofs import STATE_APPROVED, leg_proof_state
 
 from .discovery import CandidateEvaluation
 from .public_contract import public_compatibility_payload, public_pricing_payload
@@ -480,19 +481,28 @@ def project_route(
 
 
 def primary_mode(segments: list[dict]) -> str | None:
-    """`FLIGHT` when any covered leg flies, otherwise the mode that is carrying.
+    """`FLIGHT` when any covered leg flies, then `SEA` when any sails.
 
-    Not the longest leg and not the first: if this parcel gets on a plane, the
-    plane is the fact that decides everything else about the trip — the proof,
-    the customs, the schedule the Sender cannot influence.
+    Not the longest leg and not the first: if this parcel gets on a plane or a
+    ferry, that is the fact that decides everything else about the trip — the
+    ticket, the customs, the schedule the Sender cannot influence. A plane
+    outranks a ferry because it is the stricter of the two.
     """
 
     modes = [segment.get("mode") for segment in segments if segment.get("mode")]
     if not modes:
         return None
-    if JourneyLeg.Mode.FLIGHT in modes:
-        return JourneyLeg.Mode.FLIGHT
+    for mode in (JourneyLeg.Mode.FLIGHT, JourneyLeg.Mode.SEA):
+        if mode in modes:
+            return mode
     return modes[0]
+
+
+#: "Ticket approved" reasons, in the order a Sender reads them.
+_TICKET_REASONS = (
+    (JourneyLeg.Mode.FLIGHT, "flight_proof_approved"),
+    (JourneyLeg.Mode.SEA, "sea_proof_approved"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +518,7 @@ def match_reasons(
     arrives_at,
     deadline_at,
     weight_kg,
-    has_flight_leg: bool,
+    approved_ticket_modes: frozenset[str],
 ) -> list[dict]:
     """"Why this trip fits", as codes the client localises.
 
@@ -543,8 +553,9 @@ def match_reasons(
     # stated here, once, inside the explanation — not badged on every row, where
     # a universal truth reads as a distinction.
     reasons.append({"code": "identity_verified", "params": {}})
-    if has_flight_leg:
-        reasons.append({"code": "flight_proof_approved", "params": {}})
+    for mode, code in _TICKET_REASONS:
+        if mode in approved_ticket_modes:
+            reasons.append({"code": code, "params": {}})
     return reasons
 
 
@@ -599,9 +610,10 @@ def candidate_payload(
         journey_leg_count=len(legs),
     )
     timing_fit = classify_timing_fit(arrives_at=arrival, deadline_at=deadline_at)
-    has_flight_leg = any(
-        (segment.get("mode") or "") == JourneyLeg.Mode.FLIGHT
-        for segment in route["segments"]
+    # A reason is stated only for a ticket that was actually approved, which
+    # `apps.trips.proofs` decides; the mode only names which ticket it is.
+    approved_ticket_modes = frozenset(
+        leg.mode for leg in covered_legs if leg_proof_state(leg) == STATE_APPROVED
     )
     start_leg_id = public_compatibility.get("start_leg_id")
     end_leg_id = public_compatibility.get("end_leg_id")
@@ -638,7 +650,7 @@ def candidate_payload(
             arrives_at=arrives_at,
             deadline_at=deadline_at.isoformat() if deadline_at else None,
             weight_kg=str(weight_kg) if weight_kg is not None else None,
-            has_flight_leg=has_flight_leg,
+            approved_ticket_modes=approved_ticket_modes,
         ),
         "caveats": list(public_compatibility.get("limitations") or []),
         # The propose sheet's own inputs. Deliberately four numbers and not the

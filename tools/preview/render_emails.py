@@ -71,9 +71,18 @@ CASES: list[tuple[str, str, dict]] = [
         {"status": "rejected", "reason": "The document photo is cut off at the top."},
     ),
     (
-        "flight-proof-status",
-        Kind.FLIGHT_PROOF_STATUS,
-        {"status": "approved", "reason": ""},
+        "flight-ticket-status",
+        Kind.LEG_PROOF_STATUS,
+        {"status": "approved", "reason": "", "mode": "FLIGHT"},
+    ),
+    (
+        "ferry-ticket-status",
+        Kind.LEG_PROOF_STATUS,
+        {
+            "status": "rejected",
+            "reason": "The booking reference is not readable.",
+            "mode": "SEA",
+        },
     ),
     ("payment-required", Kind.PAYMENT_REQUIRED, COMMON),
     ("payment-processing", Kind.PAYMENT_PROCESSING, COMMON),

@@ -39,7 +39,14 @@ def with_lifecycle(queryset, *, at=None):
 
 
 def discoverable(queryset, *, at=None):
+    """Journeys a member may find and offer on right now.
+
+    A paused journey is not discoverable (spec 5.7), whoever paused it; this
+    is the one filter every scan, listing and the Matches tier shares.
+    """
+
     return with_lifecycle(queryset, at=at).filter(
         lifecycle_status__in=[Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS],
         remaining_inventory=True,
+        paused_at__isnull=True,
     )

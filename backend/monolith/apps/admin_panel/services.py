@@ -399,7 +399,11 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
 
 @transaction.atomic
 def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""):
-    """Review one pending flight proof without exposing a generic status edit."""
+    """Review one pending ticket proof (flight or sea) without a generic status edit.
+
+    The name and the `review_flight_proofs` permission predate sea legs and
+    are kept: the permission code is stored in role rows (plan 2.9).
+    """
 
     from apps.trips.models import JourneyLegProof
 
@@ -443,8 +447,8 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
 
     traveler = proof.leg.journey.traveler
     enqueue_message(
-        kind=OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
-        key=f"flight_proof_status:{proof.pk}:{decision}",
+        kind=OutboundMessage.Kind.LEG_PROOF_STATUS,
+        key=f"leg_proof_status:{proof.pk}:{decision}",
         to_email=traveler.email,
         recipient_user_id=traveler.pk,
         context={
@@ -455,16 +459,18 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
             ),
             "reason": proof.rejection_reason,
             "journey_reference": f"J-{proof.leg.journey_id}",
+            "mode": proof.leg.mode,
         },
     )
-    from apps.core.channels import FLIGHT_PROOF_STATUS_CHANGED
+    from apps.core.channels import LEG_PROOF_STATUS_CHANGED
     from apps.core.redis_bus import publish_after_commit
 
     publish_after_commit(
-        FLIGHT_PROOF_STATUS_CHANGED,
+        LEG_PROOF_STATUS_CHANGED,
         {
             "proof_id": proof.pk,
             "journey_id": proof.leg.journey_id,
+            "mode": proof.leg.mode,
             "status": proof.status,
         },
         targets=[traveler.pk],

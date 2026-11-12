@@ -8,10 +8,15 @@ from decimal import Decimal
 from django.utils import timezone
 
 
-# The retired single-leg Trip contract already capped traveler capacity at
-# 200 kg. V1 Journey legs inherit that server-side ceiling rather than letting
-# a new client-only guess diverge from the established product boundary.
-MAX_JOURNEY_LEG_CAPACITY_KG = Decimal("200.00")
+# There is no product capacity cap for anyone (spec 5.5). These ceilings exist
+# only to catch a typo — 20 tonnes is a full lorry, not a suitcase — and the
+# mobile form mirrors them in L3B.
+MAX_JOURNEY_LEG_CAPACITY_KG = Decimal("20000.00")
+MAX_JOURNEY_LEG_CAPACITY_VOLUME_L = 200_000
+MAX_JOURNEY_LEG_CAPACITY_PARCELS = 10_000
+
+#: A stop's handover note is a sentence, not a document (spec 5.1).
+MAX_HANDOVER_NOTE_LENGTH = 280
 
 DEPARTURE_NOT_FUTURE_CODE = "journey_departure_not_future"
 DEPARTURE_NOT_FUTURE_MESSAGE = "The first leg departure must be in the future."

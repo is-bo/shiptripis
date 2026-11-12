@@ -97,8 +97,8 @@ msgstr "تحديث التحقق من الهوية في Wassla"
 msgid "Verification"
 msgstr "التحقق"
 
-msgid "Wassla flight proof update"
-msgstr "تحديث إثبات الرحلة في Wassla"
+msgid "Wassla flight ticket update"
+msgstr "تحديث تذكرة الطيران في Wassla"
 
 msgid "Payment needed for your Wassla delivery"
 msgstr "يلزم دفع مبلغ لمتابعة تسليم Wassla"
@@ -289,17 +289,17 @@ msgstr "يتطلب التحقق من هويتك اتخاذ إجراء"
 msgid "Open the Wassla app to see the next step."
 msgstr "افتح تطبيق Wassla لمعرفة الخطوة التالية."
 
-msgid "Your flight proof is approved."
-msgstr "تمت الموافقة على إثبات رحلتك."
+msgid "Your flight ticket is approved."
+msgstr "تمت الموافقة على تذكرة الطيران الخاصة بك."
 
-msgid "Your flight proof needs attention."
-msgstr "يتطلب إثبات رحلتك اتخاذ إجراء."
+msgid "Your flight ticket needs attention."
+msgstr "تتطلب تذكرة الطيران الخاصة بك اتخاذ إجراء."
 
-msgid "Your flight proof is approved"
-msgstr "تمت الموافقة على إثبات رحلتك"
+msgid "Your flight ticket is approved"
+msgstr "تمت الموافقة على تذكرة الطيران الخاصة بك"
 
-msgid "Your flight proof needs attention"
-msgstr "يتطلب إثبات رحلتك اتخاذ إجراء"
+msgid "Your flight ticket needs attention"
+msgstr "تتطلب تذكرة الطيران الخاصة بك اتخاذ إجراء"
 
 msgid "A payment is required before this delivery can continue."
 msgstr "يلزم الدفع قبل متابعة عملية التسليم هذه."
@@ -387,6 +387,24 @@ msgstr "راجع السبب وأرسل مستندات محدّثة."
 
 msgid "The verified flight leg can be used for matching."
 msgstr "يمكن استخدام مقطع الرحلة الجوية المتحقق منه في المطابقة."
+
+msgid "Wassla ferry ticket update"
+msgstr "تحديث تذكرة العبّارة في Wassla"
+
+msgid "Your ferry ticket is approved."
+msgstr "تمت الموافقة على تذكرة العبّارة الخاصة بك."
+
+msgid "Your ferry ticket needs attention."
+msgstr "تتطلب تذكرة العبّارة الخاصة بك اتخاذ إجراء."
+
+msgid "Your ferry ticket is approved"
+msgstr "تمت الموافقة على تذكرة العبّارة الخاصة بك"
+
+msgid "Your ferry ticket needs attention"
+msgstr "تتطلب تذكرة العبّارة الخاصة بك اتخاذ إجراء"
+
+msgid "The verified sea leg can be used for matching."
+msgstr "يمكن استخدام المقطع البحري المتحقق منه في المطابقة."
 
 msgid "Please review the reason and submit updated proof."
 msgstr "راجع السبب وأرسل إثباتًا محدّثًا."

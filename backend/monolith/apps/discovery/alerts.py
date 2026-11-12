@@ -69,7 +69,11 @@ def handle_route_alert_fanout(payload: dict) -> str:
         return "listings_disabled"
     at = timezone.now()
     if journey_id is not None:
-        journey = listable_journeys(at=at).filter(pk=journey_id).first()
+        journey = (
+            listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
+            .filter(pk=journey_id)
+            .first()
+        )
         if journey is None:
             return "not_listed"
         owner_id = journey.traveler_id

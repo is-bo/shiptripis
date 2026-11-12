@@ -535,4 +535,4 @@ class JourneyApiTests(APITestCase):
         )
 
         assert response.status_code == 400
-        assert response.data["code"] == "proof_only_for_flight"
+        assert response.data["code"] == "proof_not_required"

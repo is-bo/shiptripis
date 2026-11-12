@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from math import ceil, floor, isclose
 
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from apps.deals.models import Deal, DealLegAllocation
@@ -23,8 +23,10 @@ from apps.routing.providers import (
     RouteProviderUnavailable,
     get_route_provider,
 )
-from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.models import Journey, JourneyLeg, JourneyStopDetail
+from apps.trips.proofs import journey_proof_gaps, leg_requires_proof
 from apps.trips.services import has_current_kyc_approval
+from apps.trips.transport_rules import sea_legs_enabled, unavailable_sea_legs
 
 from .policy import Phase2Policy
 from .public_contract import (
@@ -33,7 +35,7 @@ from .public_contract import (
 )
 
 
-MATCHING_VERSION = "v1-matching-1"
+MATCHING_VERSION = "v1-matching-2"
 ACTIVE_DEAL_STATUSES = (
     Deal.Status.OFFER_ACCEPTED,
     Deal.Status.PAYMENT_REQUIRED,
@@ -208,15 +210,28 @@ def _point(location: Location) -> GeoPoint:
     return GeoPoint(float(location.latitude), float(location.longitude))
 
 
-def _leg_point(leg: JourneyLeg, *, origin: bool) -> GeoPoint:
-    """Get a route endpoint from canonical Place or legacy Location."""
+def _optional_leg_point(leg: JourneyLeg, *, origin: bool) -> GeoPoint | None:
+    """A route endpoint from canonical Place or legacy Location, if it has one.
+
+    Most French and Spanish catalogue localities carry no coordinates, so a
+    canonical endpoint without a point is normal rather than corrupt.
+    """
 
     value = (leg.origin_place if origin else leg.destination_place) or (
         leg.origin if origin else leg.destination
     )
     if value is None or value.latitude is None or value.longitude is None:
-        raise ValueError("Journey endpoint has no trusted coordinates")
+        return None
     return GeoPoint(float(value.latitude), float(value.longitude))
+
+
+def _leg_point(leg: JourneyLeg, *, origin: bool) -> GeoPoint:
+    """A route endpoint the caller cannot do without (legacy detour routing)."""
+
+    point = _optional_leg_point(leg, origin=origin)
+    if point is None:
+        raise ValueError("Journey endpoint has no trusted coordinates")
+    return point
 
 
 def _same_route_node(first: Location, second: Location) -> bool:
@@ -241,14 +256,153 @@ def _journey_legs(journey: Journey) -> list[JourneyLeg]:
     )
 
 
-def _approved_flight_proof(leg: JourneyLeg) -> bool:
-    annotated = getattr(leg, "has_approved_proof_value", None)
+def request_volume_litres(delivery_request: DeliveryRequest) -> Decimal | None:
+    """The parcel's volume from its dimensions, rounded up to the millilitre.
+
+    None when the sender gave no dimensions, which is allowed (Phase 8F-B):
+    such a parcel is then never refused for volume, and a leg that declares a
+    volume reports the `volume_unverified` caveat instead (spec 5.5).
+    """
+
+    dimensions = (
+        delivery_request.length_cm,
+        delivery_request.width_cm,
+        delivery_request.height_cm,
+    )
+    if any(value is None for value in dimensions):
+        return None
+    length, width, height = (Decimal(value) for value in dimensions)
+    return (length * width * height / Decimal(1000)).quantize(
+        Decimal("0.001"), rounding=ROUND_CEILING
+    )
+
+
+def _stop_details(journey: Journey) -> dict[int, JourneyStopDetail]:
+    cached = getattr(journey, "_matching_stop_details", None)
+    if cached is None:
+        cached = {
+            row.position: row
+            for row in JourneyStopDetail.objects.filter(journey_id=journey.pk)
+        }
+        journey._matching_stop_details = cached
+    return cached
+
+
+def _stop_accepts_pickup(journey: Journey, legs: list[JourneyLeg], node: int) -> bool:
+    """Whether the stop at route node ``node`` accepts a parcel being handed over."""
+
+    if node >= len(legs):
+        return False
+    annotated = getattr(legs[node], "origin_accepts_pickup_value", None)
     if annotated is not None:
         return bool(annotated)
-    return JourneyLegProof.objects.filter(
-        leg=leg,
-        status=JourneyLegProof.Status.APPROVED,
-    ).exists()
+    detail = _stop_details(journey).get(node)
+    return detail is None or detail.accepts_pickup
+
+
+def _stop_accepts_dropoff(journey: Journey, legs: list[JourneyLeg], node: int) -> bool:
+    """Whether the stop at route node ``node`` accepts a parcel being dropped off."""
+
+    if node < 1:
+        return False
+    annotated = getattr(legs[node - 1], "destination_accepts_dropoff_value", None)
+    if annotated is not None:
+        return bool(annotated)
+    detail = _stop_details(journey).get(node)
+    return detail is None or detail.accepts_dropoff
+
+
+@dataclass(frozen=True, slots=True)
+class LegReservation:
+    """What active allocations already hold on one leg."""
+
+    weight_kg: Decimal
+    volume_l: Decimal
+    parcels: int
+
+
+_NOTHING_RESERVED = LegReservation(Decimal("0"), Decimal("0"), 0)
+
+
+def _annotated_reservation(leg: JourneyLeg) -> LegReservation:
+    """The reservation a matching queryset annotated onto ``leg``."""
+
+    def value(name: str, default):
+        annotated = getattr(leg, name, None)
+        return default if annotated is None else annotated
+
+    return LegReservation(
+        weight_kg=Decimal(value("reserved_capacity_value", Decimal("0"))),
+        volume_l=Decimal(value("reserved_volume_value", Decimal("0"))),
+        parcels=int(value("reserved_parcels_value", 0)),
+    )
+
+
+def leg_reservations(
+    legs, *, at: datetime | None = None
+) -> dict[int, LegReservation]:
+    """What active allocations hold on each of ``legs``, in one query.
+
+    The acceptance lock calls this after taking the leg locks, so it reads
+    every allocation a competing acceptance committed before it.
+    """
+
+    leg_ids = [leg.pk for leg in legs]
+    rows = (
+        DealLegAllocation.objects.active(at=at)
+        .filter(journey_leg_id__in=leg_ids)
+        .values("journey_leg_id")
+        .annotate(
+            weight=Sum("allocated_weight_kg"),
+            volume=Sum("allocated_volume_l"),
+            parcels=Count("pk"),
+        )
+    )
+    reserved = {leg_id: _NOTHING_RESERVED for leg_id in leg_ids}
+    for row in rows:
+        reserved[row["journey_leg_id"]] = LegReservation(
+            weight_kg=row["weight"] or Decimal("0"),
+            volume_l=Decimal(row["volume"] or 0),
+            parcels=int(row["parcels"] or 0),
+        )
+    return reserved
+
+
+def _reserved_on_unannotated_legs(
+    legs: tuple[JourneyLeg, ...], *, at: datetime
+) -> dict[int, LegReservation]:
+    """Reservations for the legs no matching queryset annotated.
+
+    The acceptance lock evaluates freshly locked legs, which carry no
+    annotation, so the read happens inside its transaction after the locks.
+    """
+
+    unannotated = [leg for leg in legs if not hasattr(leg, "reserved_capacity_value")]
+    if not unannotated:
+        return {}
+    return leg_reservations(unannotated, at=at)
+
+
+def _node_index(anchor: RouteAnchor) -> int | None:
+    """The stop an anchor sits on, or None for a legacy point along a leg."""
+
+    if anchor.leg is not None:
+        return None
+    return int(round(anchor.position))
+
+
+def _journey_sea_switch(journey: Journey) -> bool:
+    """The "Sea legs" switch for this evaluation.
+
+    A scan reads it once and attaches it to every candidate as
+    ``sea_legs_enabled_value``; a single evaluation (offer creation,
+    acceptance) reads it here, inside its own transaction.
+    """
+
+    annotated = getattr(journey, "sea_legs_enabled_value", None)
+    if annotated is not None:
+        return bool(annotated)
+    return sea_legs_enabled()
 
 
 def _kyc_is_current(journey: Journey, *, at: datetime) -> bool:
@@ -435,46 +589,70 @@ def _route_distance(
 
         partial_start = index == start_index and pickup_anchor.leg is leg
         partial_end = index == end_index and delivery_anchor.leg is leg
-        carried_start = (
-            _point(pickup_location)
-            if partial_start and pickup_location
-            else _leg_point(leg, origin=True)
-        )
-        carried_end = (
-            _point(delivery_location)
-            if partial_end and delivery_location
-            else _leg_point(leg, origin=False)
-        )
 
-        if leg.mode == JourneyLeg.Mode.FLIGHT:
-            distance = haversine_meters(
-                _leg_point(leg, origin=True), _leg_point(leg, origin=False)
-            )
-            method = "great_circle_trusted_coordinates"
+        if leg.mode == JourneyLeg.Mode.SEA and leg.distance_meters is not None:
+            # The crossing's great-circle distance, snapshotted when the leg
+            # was written (spec 5.4): the same method as a flight leg.
+            distance = int(leg.distance_meters)
+            method = "great_circle_sea_crossing"
+            covered_distance = round(distance * covered_fraction)
+        elif leg.mode in (JourneyLeg.Mode.FLIGHT, JourneyLeg.Mode.SEA):
+            origin_point = _optional_leg_point(leg, origin=True)
+            destination_point = _optional_leg_point(leg, origin=False)
+            if origin_point is None or destination_point is None:
+                # Only reachable for a leg another gate already refuses
+                # (`flight_coordinates_trusted`), so it never prices a match.
+                distance = 0
+                method = "canonical_place_floor"
+            else:
+                distance = haversine_meters(origin_point, destination_point)
+                method = (
+                    "great_circle_trusted_coordinates"
+                    if leg.mode == JourneyLeg.Mode.FLIGHT
+                    else "great_circle_sea_crossing"
+                )
             covered_distance = round(distance * covered_fraction)
         elif not partial_start and not partial_end and leg.distance_meters is not None:
             distance = int(leg.distance_meters)
             method = "stored_routed_road_distance"
             covered_distance = distance
         else:
-            try:
-                route = provider.directions(
-                    [carried_start, carried_end],
-                    profile="drive",
-                )
-            except RouteProviderError:
-                distance = haversine_meters(carried_start, carried_end)
-                method = "straight_line_spatial_fallback"
-                limitations.append(
-                    f"leg_{leg.pk}_road_distance_unavailable_spatial_fallback_used"
-                )
+            carried_start = (
+                _point(pickup_location)
+                if partial_start and pickup_location
+                else _optional_leg_point(leg, origin=True)
+            )
+            carried_end = (
+                _point(delivery_location)
+                if partial_end and delivery_location
+                else _optional_leg_point(leg, origin=False)
+            )
+            if carried_start is None or carried_end is None:
+                # A road leg between catalogue cities with no coordinates (most
+                # of France and Spain) has no measurable distance. It prices
+                # at the distance floor, exactly as posting pricing does,
+                # rather than failing the whole scan.
+                distance = 0
+                method = "canonical_place_floor"
             else:
-                distance = route.distance_meters
-                method = (
-                    "provider_routed_partial_road_distance"
-                    if partial_start or partial_end
-                    else "provider_routed_road_distance"
-                )
+                try:
+                    route = provider.directions(
+                        [carried_start, carried_end],
+                        profile="drive",
+                    )
+                except RouteProviderError:
+                    distance = haversine_meters(carried_start, carried_end)
+                    method = "straight_line_spatial_fallback"
+                    limitations.append(
+                        f"leg_{leg.pk}_road_distance_unavailable_spatial_fallback_used"
+                    )
+                else:
+                    distance = route.distance_meters
+                    method = (
+                        "provider_routed_partial_road_distance"
+                        if partial_start or partial_end
+                        else "provider_routed_road_distance"
+                    )
             covered_distance = distance
         total += covered_distance
         components.append(
@@ -502,6 +680,7 @@ def evaluate_compatibility(
     at: datetime | None = None,
     route_provider: RouteProvider | None = None,
     _anchor_pair: tuple[RouteAnchor, RouteAnchor] | None = None,
+    _sea_legs_enabled: bool | None = None,
 ) -> CompatibilityResult:
     at = at or timezone.now()
     provider = route_provider or get_route_provider()
@@ -523,6 +702,8 @@ def evaluate_compatibility(
     )
     check("request_active", request_active)
     check("journey_active", journey.status in (Journey.Status.ACTIVE, Journey.Status.IN_PROGRESS))
+    # Spec 5.7: a paused journey accepts no new offers, whoever paused it.
+    check("journey_not_paused", journey.paused_at is None)
     accounts_eligible = all(
         (
             delivery_request.sender.is_active,
@@ -567,6 +748,20 @@ def evaluate_compatibility(
         delivery_request.customs_responsibilities_understood,
     )
     check("item_safety_eligible", all(safety_fields))
+    # Spec 5.6. A request with no category (none can be posted since V1) is
+    # never refused by category; fragility is an explicit sender declaration.
+    refused_categories = set(journey.refused_categories or ())
+    category_accepted = (
+        not delivery_request.category
+        or delivery_request.category not in refused_categories
+    )
+    fragile_accepted = journey.accepts_fragile or not delivery_request.fragile
+    check(
+        "item_accepted_by_traveler",
+        category_accepted and fragile_accepted,
+        category_accepted=category_accepted,
+        fragile_accepted=fragile_accepted,
+    )
     # Dimensions are optional from Phase 8F-B and are therefore no longer a
     # pricing input a request can be missing: `calculate_pricing_quote` reads
     # an absent set as zero volumetric weight. Weight and deadline remain
@@ -672,6 +867,10 @@ def evaluate_compatibility(
             )
         if len(ordered_pairs) > 1:
             rejected: list[CompatibilityResult] = []
+            if _sea_legs_enabled is None and any(
+                leg.mode == JourneyLeg.Mode.SEA for leg in legs
+            ):
+                _sea_legs_enabled = _journey_sea_switch(journey)
             for pair in sorted(ordered_pairs, key=pair_sort_key):
                 result = evaluate_compatibility(
                     delivery_request=delivery_request,
@@ -680,6 +879,7 @@ def evaluate_compatibility(
                     at=at,
                     route_provider=provider,
                     _anchor_pair=pair,
+                    _sea_legs_enabled=_sea_legs_enabled,
                 )
                 if result.compatible:
                     return result
@@ -715,6 +915,21 @@ def evaluate_compatibility(
         True,
         pickup_position=pickup_anchor.position,
         delivery_position=delivery_anchor.position,
+    )
+    # Spec 5.1: the parcel boards at a stop that accepts pickup and leaves at
+    # one that accepts drop-off. A legacy anchor along a road leg is not a
+    # stop and has no stop options.
+    pickup_node = _node_index(pickup_anchor)
+    delivery_node = _node_index(delivery_anchor)
+    check(
+        "stop_services_allow_handover",
+        (pickup_node is None or _stop_accepts_pickup(journey, legs, pickup_node))
+        and (
+            delivery_node is None
+            or _stop_accepts_dropoff(journey, legs, delivery_node)
+        ),
+        pickup_stop=pickup_node,
+        dropoff_stop=delivery_node,
     )
 
     pickup_detour = 0 if canonical_flow else pickup_anchor.detour_meters
@@ -890,16 +1105,41 @@ def evaluate_compatibility(
         else ceil(delivery_anchor.position) - 1
     )
     covered_legs = tuple(legs[start_index : end_index + 1])
-    journey_flight_legs = [leg for leg in legs if leg.mode == JourneyLeg.Mode.FLIGHT]
+    # Spec 5.3: a deactivated crossing or the switch turned off blocks new
+    # offers on every journey that uses it, not only on parcels that sail.
+    journey_sea_legs = [leg for leg in legs if leg.mode == JourneyLeg.Mode.SEA]
+    if journey_sea_legs and _sea_legs_enabled is None:
+        _sea_legs_enabled = _journey_sea_switch(journey)
+    unavailable_sea_leg_ids = [
+        leg.pk for leg in unavailable_sea_legs(journey_sea_legs, enabled=_sea_legs_enabled)
+    ]
+    check(
+        "sea_legs_available",
+        not unavailable_sea_leg_ids,
+        sea_leg_ids=[leg.pk for leg in journey_sea_legs],
+        unavailable_sea_leg_ids=unavailable_sea_leg_ids,
+    )
+    # Ticket proof: whether a leg needs one, and whether that need is met, is
+    # decided only by `apps.trips.proofs`. The gaps are reported under the
+    # mode's own gate so a client can say which ticket is missing.
+    proof_legs = [leg for leg in legs if leg_requires_proof(leg)]
+    gap_ids = {leg.pk for leg in journey_proof_gaps(proof_legs)}
+    journey_flight_legs = [
+        leg for leg in proof_legs if leg.mode == JourneyLeg.Mode.FLIGHT
+    ]
+    check(
+        "flight_proofs_approved",
+        not any(leg.pk in gap_ids for leg in journey_flight_legs),
+        flight_leg_ids=[leg.pk for leg in journey_flight_legs],
+    )
+    check(
+        "sea_proofs_approved",
+        not any(leg.pk in gap_ids for leg in journey_sea_legs),
+        sea_leg_ids=[leg.pk for leg in journey_sea_legs],
+    )
     covered_flight_legs = [
         leg for leg in covered_legs if leg.mode == JourneyLeg.Mode.FLIGHT
     ]
-    flight_proofs_ok = all(_approved_flight_proof(leg) for leg in journey_flight_legs)
-    check(
-        "flight_proofs_approved",
-        flight_proofs_ok,
-        flight_leg_ids=[leg.pk for leg in journey_flight_legs],
-    )
     if canonical_flow:
         trusted_flight_coordinates = all(
             leg.origin_place is not None
@@ -957,41 +1197,60 @@ def evaluate_compatibility(
     check("delivery_before_deadline", deadline_ok)
 
     leg_ids = [leg.pk for leg in covered_legs]
-    unannotated_ids = [
-        leg.pk for leg in covered_legs if not hasattr(leg, "reserved_capacity_value")
-    ]
-    reserved_by_leg = {}
-    if unannotated_ids:
-        reserved_by_leg = dict(
-            DealLegAllocation.objects.active(at=at)
-            .filter(journey_leg_id__in=unannotated_ids)
-            .values("journey_leg_id")
-            .annotate(total=Sum("allocated_weight_kg"))
-            .values_list("journey_leg_id", "total")
-        )
+    reserved_by_leg = _reserved_on_unannotated_legs(covered_legs, at=at)
     capacity_rows: list[dict] = []
     capacity_ok = delivery_request.actual_weight_kg is not None
+    volume_ok = True
+    parcels_ok = True
+    volume_unverified = False
     request_weight = Decimal(delivery_request.actual_weight_kg or 0)
+    request_volume = request_volume_litres(delivery_request)
     for leg in covered_legs:
-        reserved = getattr(leg, "reserved_capacity_value", None)
-        if reserved is None:
-            reserved = reserved_by_leg.get(leg.pk) or Decimal("0")
-        remaining = Decimal(leg.capacity_kg) - Decimal(reserved)
-        capacity_rows.append(
-            {
-                "journey_leg_id": leg.pk,
-                "capacity_kg": str(leg.capacity_kg),
-                "reserved_kg": str(reserved),
-                "remaining_kg": str(remaining),
-            }
+        reserved = (
+            reserved_by_leg[leg.pk]
+            if leg.pk in reserved_by_leg
+            else _annotated_reservation(leg)
         )
+        remaining = Decimal(leg.capacity_kg) - reserved.weight_kg
+        row = {
+            "journey_leg_id": leg.pk,
+            "capacity_kg": str(leg.capacity_kg),
+            "reserved_kg": str(reserved.weight_kg),
+            "remaining_kg": str(remaining),
+        }
         capacity_ok = capacity_ok and remaining >= request_weight
+        if leg.capacity_volume_l is not None:
+            remaining_volume = Decimal(leg.capacity_volume_l) - reserved.volume_l
+            row["capacity_volume_l"] = leg.capacity_volume_l
+            row["reserved_volume_l"] = str(reserved.volume_l)
+            if request_volume is None:
+                volume_unverified = True
+            else:
+                volume_ok = volume_ok and remaining_volume >= request_volume
+        if leg.capacity_parcels is not None:
+            row["capacity_parcels"] = leg.capacity_parcels
+            row["reserved_parcels"] = reserved.parcels
+            parcels_ok = parcels_ok and reserved.parcels < leg.capacity_parcels
+        capacity_rows.append(row)
     check(
         "capacity_available_on_every_leg",
         capacity_ok,
         covered_leg_ids=leg_ids,
         request_weight_kg=str(request_weight),
     )
+    check(
+        "volume_available_on_every_leg",
+        volume_ok,
+        covered_leg_ids=leg_ids,
+        request_volume_l=str(request_volume) if request_volume is not None else None,
+    )
+    check(
+        "parcel_slots_available_on_every_leg",
+        parcels_ok,
+        covered_leg_ids=leg_ids,
+    )
+    if volume_unverified:
+        limitations.append("volume_unverified")
 
     matched_distance, distance_method, components, distance_limitations = (
         _route_distance(

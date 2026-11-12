@@ -739,3 +739,63 @@ class GeographyCatalogueImport(models.Model):
 
     def __str__(self) -> str:
         return f"{self.content_sha256[:12]} @ {self.applied_at:%Y-%m-%d %H:%M}"
+
+
+class SeaCrossing(models.Model):
+    """One direction of a ferry line between two port cities (spec 5.3).
+
+    Port cities are ordinary catalogue localities: there is no port place type,
+    so city-identity matching is unchanged. A crossing only says "a ferry line
+    joins these two cities"; the traveler's ticket, reviewed for each sea leg,
+    is what proves a sailing.
+
+    ``distance_meters`` is the great-circle distance between the two cities,
+    the method a flight leg uses (spec 5.4). It is stored rather than derived
+    because the French and Spanish catalogue localities carry no coordinates:
+    it comes from catalogue coordinates when both cities have them and from
+    the reviewed port coordinates in ``tools/geography/sea_crossings.json``
+    otherwise, through the same haversine function either way.
+
+    Staff create, activate and deactivate rows through
+    `apps.locations.sea_crossings`, each with a reason and an audit entry.
+    Deactivating a row blocks new journeys and new offers on journeys that use
+    it; it never changes a funded deal.
+    """
+
+    origin_locality = models.ForeignKey(
+        Place,
+        on_delete=models.PROTECT,
+        related_name="sea_crossings_from",
+        limit_choices_to={"place_type": Place.PlaceType.LOCALITY},
+    )
+    destination_locality = models.ForeignKey(
+        Place,
+        on_delete=models.PROTECT,
+        related_name="sea_crossings_to",
+        limit_choices_to={"place_type": Place.PlaceType.LOCALITY},
+    )
+    distance_meters = models.PositiveIntegerField()
+    is_active = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "locations_sea_crossing"
+        ordering = ("origin_locality__name", "destination_locality__name", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("origin_locality", "destination_locality"),
+                name="geo_sea_crossing_pair_uniq",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(origin_locality=models.F("destination_locality")),
+                name="geo_sea_crossing_distinct_ports",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(distance_meters__gt=0),
+                name="geo_sea_crossing_positive_distance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.origin_locality_id} ⇢ {self.destination_locality_id}"

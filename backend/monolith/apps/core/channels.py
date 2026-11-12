@@ -39,7 +39,9 @@ HANDOVER_DELIVERY_CONFIRMED = "handover.delivery_confirmed"
 
 # kyc (Go owns the API, Django reflects status updates)
 KYC_STATUS_CHANGED = "kyc.status_changed"
-FLIGHT_PROOF_STATUS_CHANGED = "flight_proof.status_changed"
+#: A flight or sea leg's ticket proof was reviewed (L3A; was
+#: `flight_proof.status_changed`). Carries the leg's mode so copy can name it.
+LEG_PROOF_STATUS_CHANGED = "leg_proof.status_changed"
 
 # funded-delivery lifecycle
 DEAL_CANCELLED = "deal.cancelled"

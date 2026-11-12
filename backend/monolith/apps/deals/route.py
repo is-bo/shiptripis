@@ -18,7 +18,9 @@ counterparty may see. This returns `None` until `funded_at` exists.
 
 **Identifiers, places and times only.** No polyline, no route metadata, no
 airport metadata, no proof, no measured distance or duration, no capacity and no
-sight of the traveler's other allocations. `apps.trips.serializers` withholds
+sight of the traveler's other allocations. The one addition (L3A) is the
+handover window and note of the two stops this parcel uses, which spec 5.1
+reserves for exactly this audience. `apps.trips.serializers` withholds
 exactly that set from a non-owner and this projection is built from the frozen
 snapshot rather than by relaxing that serializer.
 
@@ -62,6 +64,11 @@ def funded_route(*, deal: Deal, viewer_id: int | None, is_staff: bool = False):
             "basis": BASIS_FUNDED_SNAPSHOT,
             "journey_id": deal.journey_id,
             "legs": [_snapshot_leg(row, deal) for row in legs],
+            "handover_stops": [
+                _snapshot_stop(row)
+                for row in (deal.arrival_snapshot or {}).get("handover_stops") or []
+                if isinstance(row, dict)
+            ],
         }
     # Current Journey rows are not historical evidence. Pre-I1 bookings without
     # a frozen route are honestly unavailable, even if allocations still exist.
@@ -88,6 +95,24 @@ def _snapshot_leg(row: dict, deal: Deal) -> dict:
         "depart_at": parse_instant(depart) if isinstance(depart, str) else None,
         "arrive_at": parse_instant(arrive) if isinstance(arrive, str) else None,
         "carries_parcel": True,
+    }
+
+
+def _snapshot_stop(row: dict) -> dict:
+    """The pickup or drop-off stop's handover window and note, as frozen.
+
+    This is the only payload that ever carries a stop's handover note to
+    anyone but the traveler (spec 5.1): a party of this deal, after funding.
+    """
+
+    start = row.get("window_start")
+    end = row.get("window_end")
+    return {
+        "role": row.get("role"),
+        "position": row.get("position"),
+        "handover_note": row.get("handover_note") or "",
+        "window_start": parse_instant(start) if isinstance(start, str) else None,
+        "window_end": parse_instant(end) if isinstance(end, str) else None,
     }
 
 

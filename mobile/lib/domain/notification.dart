@@ -59,7 +59,7 @@ enum NotificationChannel {
     'handover.delivery_code_available' => deliveryCodeAvailable,
     'handover.delivery_confirmed' => deliveryConfirmed,
     'kyc.status_changed' => kycStatusChanged,
-    'flight_proof.status_changed' => flightProofStatusChanged,
+    'leg_proof.status_changed' => flightProofStatusChanged,
     'deal.updated' => dealUpdated,
     'deal.cancelled' => dealCancelled,
     'deal.arrival_reported' => dealArrivalReported,

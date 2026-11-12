@@ -1,6 +1,10 @@
 from django.urls import path
 
-from .geography_views import GeographyCountryListView, GeographyPlaceSearchView
+from .geography_views import (
+    GeographyCountryListView,
+    GeographyPlaceSearchView,
+    SeaCrossingListView,
+)
 from .views import LocationDetailView, LocationListCreateView
 
 
@@ -16,5 +20,10 @@ urlpatterns = [
         "geography/places",
         GeographyPlaceSearchView.as_view(),
         name="geography-places",
+    ),
+    path(
+        "geography/sea-crossings",
+        SeaCrossingListView.as_view(),
+        name="geography-sea-crossings",
     ),
 ]

@@ -38,9 +38,7 @@ from apps.trips.services import (
 from apps.trips.transport_rules import (
     DRIVE,
     FLIGHT,
-    available_modes,
     check_leg_mode,
-    default_mode,
     drive_is_available,
 )
 
@@ -196,20 +194,20 @@ class TransportRuleTests(APITestCase, GeographyFixture):
         # become driveable by accident.
         assert drive_is_available("DZ", "MA") is False
         assert drive_is_available("MA", "MA") is True
-        assert available_modes("FR", "MA") == (FLIGHT,)
+        assert drive_is_available("FR", "MA") is False
 
-    def test_available_modes_narrow_across_the_boundary(self):
-        assert available_modes("DZ", "FR") == (FLIGHT,)
-        assert available_modes("DZ", "DZ") == (FLIGHT, DRIVE)
-
-    def test_defaults_help_without_inventing_an_impossible_mode(self):
-        assert default_mode(self.jijel, self.algiers) == DRIVE
-        assert default_mode(self.paris, self.berlin) == DRIVE
-        assert default_mode(self.alg, self.cdg) == FLIGHT
-        # Two localities across the boundary still default to FLIGHT even
-        # though neither of them is an airport: the alternative is a default
-        # nobody can travel.
-        assert default_mode(self.jijel, self.paris) == FLIGHT
+    def test_only_a_flight_crosses_the_boundary_without_a_ferry(self):
+        # L3A: `available_modes` and `default_mode` had no caller outside
+        # tests and were removed; `check_leg_mode` is the one rule.
+        assert check_leg_mode(
+            position=0, mode=DRIVE, origin=self.jijel, destination=self.paris
+        ) is not None
+        assert check_leg_mode(
+            position=0, mode=FLIGHT, origin=self.alg, destination=self.cdg
+        ) is None
+        assert check_leg_mode(
+            position=0, mode=DRIVE, origin=self.paris, destination=self.berlin
+        ) is None
 
     def test_check_leg_mode_only_objects_to_impossible_drives(self):
         assert (
@@ -1268,7 +1266,7 @@ class FlightProofUploadTests(APITestCase, GeographyFixture):
             response = self._upload(leg=self.drive_leg)
 
         assert response.status_code == 400
-        assert response.data["code"] == "proof_only_for_flight"
+        assert response.data["code"] == "proof_not_required"
 
     def test_a_published_journey_refuses_more_proof(self):
         Journey.objects.filter(pk=self.journey.pk).update(

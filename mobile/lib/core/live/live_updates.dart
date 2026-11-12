@@ -285,7 +285,7 @@ Set<LiveResource> resourcesForLiveEvent(
     'handover.delivery_code_available',
     'handover.delivery_confirmed',
     'kyc.status_changed',
-    'flight_proof.status_changed',
+    'leg_proof.status_changed',
     'deal.updated',
     'deal.cancelled',
     // I1A journey timing publishes three distinct arrival facts on three
@@ -374,7 +374,7 @@ Set<LiveResource> resourcesForLiveEvent(
 
   if (type.startsWith('parcel.')) {
     addRequest(deposit: true);
-  } else if (type.startsWith('flight_proof.')) {
+  } else if (type.startsWith('leg_proof.')) {
     addJourney();
     resources.add(const LiveResource.matches());
   } else if (type.startsWith('offer.')) {

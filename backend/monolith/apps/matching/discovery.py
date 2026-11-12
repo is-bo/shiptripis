@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from django.db.models import (
+    BooleanField,
     Case,
+    Count,
     DecimalField,
     Exists,
     IntegerField,
@@ -27,7 +29,8 @@ from apps.locations.models import AirportLocalityMapping, Place
 from apps.locations.serializers import PublicLocationSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import RouteProvider, get_route_provider
-from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.models import Journey, JourneyLeg, JourneyLegProof, JourneyStopDetail
+from apps.trips.transport_rules import sea_crossing_active_exists, sea_legs_enabled
 
 from .compatibility import (
     ACTIVE_DEAL_STATUSES,
@@ -208,18 +211,44 @@ def _place_matching_prefetches(*relations: str) -> list[Prefetch]:
     ]
 
 
+def _stop_flag(field: str, *, offset: int):
+    """The stop option at this leg's origin (offset 0) or destination (offset 1).
+
+    A stop with no detail row accepts both pickup and drop-off (spec 5.1).
+    """
+
+    position = OuterRef("position") + offset if offset else OuterRef("position")
+    return Coalesce(
+        Subquery(
+            JourneyStopDetail.objects.filter(
+                journey_id=OuterRef("journey_id"), position=position
+            ).values(field)[:1],
+            output_field=BooleanField(),
+        ),
+        Value(True),
+        output_field=BooleanField(),
+    )
+
+
 def _matching_leg_queryset(*, at):
     approved_proof = JourneyLegProof.objects.filter(
         leg_id=OuterRef("pk"),
         status=JourneyLegProof.Status.APPROVED,
     )
-    allocated = (
+    active_allocations = (
         DealLegAllocation.objects.active(at=at)
         .filter(journey_leg_id=OuterRef("pk"))
         .values("journey_leg_id")
-        .annotate(total=Sum("allocated_weight_kg"))
-        .values("total")[:1]
     )
+    allocated = active_allocations.annotate(total=Sum("allocated_weight_kg")).values(
+        "total"
+    )[:1]
+    allocated_volume = active_allocations.annotate(
+        total=Sum("allocated_volume_l")
+    ).values("total")[:1]
+    allocated_parcels = active_allocations.annotate(total=Count("pk")).values(
+        "total"
+    )[:1]
     decimal_field = DecimalField(max_digits=10, decimal_places=3)
     return (
         # K7-E: `__parent` because `Place.display_label` reads the parent for
@@ -240,6 +269,23 @@ def _matching_leg_queryset(*, at):
                 Value(Decimal("0.000")),
                 output_field=decimal_field,
             ),
+            # L3A. Volume and parcel slots already held, the active crossing a
+            # sea leg needs, and the two stop options a node anchor reads. As
+            # annotations rather than prefetches, so a scan's query count does
+            # not move.
+            reserved_volume_value=Coalesce(
+                Subquery(allocated_volume, output_field=decimal_field),
+                Value(Decimal("0.000")),
+                output_field=decimal_field,
+            ),
+            reserved_parcels_value=Coalesce(
+                Subquery(allocated_parcels, output_field=IntegerField()),
+                Value(0),
+                output_field=IntegerField(),
+            ),
+            sea_crossing_active_value=sea_crossing_active_exists(),
+            origin_accepts_pickup_value=_stop_flag("accepts_pickup", offset=0),
+            destination_accepts_dropoff_value=_stop_flag("accepts_dropoff", offset=1),
         )
         .order_by("position", "pk")
     )
@@ -267,6 +313,24 @@ def _matching_journey_queryset(*, at):
             )
         )
     )
+
+
+def _attach_sea_switch(journeys: list[Journey]) -> None:
+    """Read the "Sea legs" switch once for a scan, and only if it matters.
+
+    A scan with no sea leg reads nothing, which keeps Find Travelers and
+    compatible-requests at their pinned query counts.
+    """
+
+    if not any(
+        leg.mode == JourneyLeg.Mode.SEA
+        for journey in journeys
+        for leg in getattr(journey, "_matching_legs", ())
+    ):
+        return
+    enabled = sea_legs_enabled()
+    for journey in journeys:
+        journey.sea_legs_enabled_value = enabled
 
 
 def _adopt_leg_place_mappings(journey: Journey) -> None:
@@ -486,6 +550,7 @@ def compatible_journeys_for_request(
     journeys = list(queryset)
     for journey in journeys:
         _adopt_leg_place_mappings(journey)
+    _attach_sea_switch(journeys)
     evaluations = [
         evaluate_candidate(
             delivery_request=delivery_request,
@@ -522,6 +587,7 @@ def compatible_requests_for_journey(
     legs = list(journey._matching_legs)
     if not legs:
         return []
+    _attach_sea_switch([journey])
     first_departure = legs[0].depart_at
     # A pickup can occur inside the final DRIVE leg after that leg departs.
     # Use its arrival as the route coverage end; an open-ended leg conservatively

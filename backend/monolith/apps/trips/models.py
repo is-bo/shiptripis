@@ -242,6 +242,19 @@ class Journey(models.Model):
     )
     published_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="", max_length=2000)
+    #: What the traveler accepts (spec 5.6): `DeliveryRequest.category` codes
+    #: this journey refuses, sorted and unique, and whether it takes fragile
+    #: items. Written only through the route write serializer and enforced by
+    #: `item_accepted_by_traveler` in matching.
+    refused_categories = models.JSONField(default=list, blank=True)
+    accepts_fragile = models.BooleanField(default=True)
+    #: Pause (spec 5.7). A paused journey is not discoverable and accepts no
+    #: new offers; funded deals continue. `paused_by_staff` means only staff
+    #: may resume it, and a staff pause always carries its reason. The owner's
+    #: own pause carries none.
+    paused_at = models.DateTimeField(null=True, blank=True)
+    paused_by_staff = models.BooleanField(default=False)
+    pause_reason = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -297,7 +310,30 @@ class Journey(models.Model):
                 ),
                 name="journey_canonical_endpoints",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        paused_at__isnull=True,
+                        paused_by_staff=False,
+                        pause_reason="",
+                    )
+                    | models.Q(
+                        paused_at__isnull=False,
+                        paused_by_staff=False,
+                        pause_reason="",
+                    )
+                    | (
+                        models.Q(paused_at__isnull=False, paused_by_staff=True)
+                        & ~models.Q(pause_reason="")
+                    )
+                ),
+                name="journey_pause_consistent",
+            ),
         ]
+
+    @property
+    def is_paused(self) -> bool:
+        return self.paused_at is not None
 
     def __str__(self) -> str:
         return (
@@ -318,6 +354,7 @@ class JourneyLeg(models.Model):
     class Mode(models.TextChoices):
         FLIGHT = "FLIGHT", "Flight"
         DRIVE = "DRIVE", "Drive"
+        SEA = "SEA", "Sea"
 
     journey = models.ForeignKey(
         Journey,
@@ -361,6 +398,11 @@ class JourneyLeg(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
+    #: Optional secondary capacity (spec 5.5). Weight stays the main capacity.
+    #: Volume is enforced only against a request that has dimensions; a parcel
+    #: count is enforced whenever declared.
+    capacity_volume_l = models.PositiveIntegerField(null=True, blank=True)
+    capacity_parcels = models.PositiveSmallIntegerField(null=True, blank=True)
 
     # Mode-specific and provider-neutral route inputs. Matching/ranking is a
     # later phase; these fields preserve the route snapshot needed for it.
@@ -430,6 +472,21 @@ class JourneyLeg(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
+                    models.Q(capacity_volume_l__isnull=True)
+                    | models.Q(capacity_volume_l__gt=0)
+                )
+                & (
+                    models.Q(capacity_parcels__isnull=True)
+                    | models.Q(capacity_parcels__gt=0)
+                ),
+                name="journey_leg_positive_optional_capacity",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(mode="SEA") | models.Q(flight_number=""),
+                name="journey_leg_sea_has_no_flight_number",
+            ),
+            models.CheckConstraint(
+                condition=(
                     models.Q(arrive_at__isnull=True)
                     | models.Q(arrive_at__gt=models.F("depart_at"))
                 ),
@@ -441,8 +498,59 @@ class JourneyLeg(models.Model):
         return f"Journey #{self.journey_id} leg {self.position} ({self.mode})"
 
 
+class JourneyStopDetail(models.Model):
+    """Optional handover options for one stop of a Journey (spec 5.1).
+
+    A stop is a node of the leg chain: position 0 is the first leg's origin
+    and position ``n`` the last leg's destination. A journey with no rows
+    behaves exactly as before L3A: every stop accepts pickup and drop-off.
+
+    ``handover_note`` and the window are handover detail. The note is shown
+    only to the parties of a funded deal that uses the stop, through the frozen
+    funding snapshot (`apps.deals.arrival`), and to the owner.
+    """
+
+    journey = models.ForeignKey(
+        Journey,
+        on_delete=models.CASCADE,
+        related_name="stop_details",
+    )
+    position = models.PositiveSmallIntegerField()
+    accepts_pickup = models.BooleanField(default=True)
+    accepts_dropoff = models.BooleanField(default=True)
+    handover_note = models.CharField(max_length=280, blank=True, default="")
+    window_start = models.DateTimeField(null=True, blank=True)
+    window_end = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "trips_journey_stop_detail"
+        ordering = ["journey", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["journey", "position"],
+                name="journey_stop_detail_unique_position",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(window_start__isnull=True, window_end__isnull=True)
+                    | models.Q(
+                        window_start__isnull=False,
+                        window_end__isnull=False,
+                        window_end__gt=models.F("window_start"),
+                    )
+                ),
+                name="journey_stop_detail_window_ordered",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Journey #{self.journey_id} stop {self.position}"
+
+
 class JourneyLegProof(models.Model):
-    """Private transport proof for a flight leg.
+    """Private ticket proof for a flight or sea leg.
 
     Storage references are private implementation details. API serializers
     expose them only to the owning traveler; administrators retain access for

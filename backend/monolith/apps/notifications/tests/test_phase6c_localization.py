@@ -95,9 +95,9 @@ class LanguageSnapshotTests(TestCase):
             (OutboundMessage.Kind.PASSWORD_RESET, {}),
             (OutboundMessage.Kind.KYC_STATUS, {"status": "approved"}),
             (OutboundMessage.Kind.KYC_STATUS, {"status": "action_required"}),
-            (OutboundMessage.Kind.FLIGHT_PROOF_STATUS, {"status": "approved"}),
+            (OutboundMessage.Kind.LEG_PROOF_STATUS, {"status": "approved"}),
             (
-                OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
+                OutboundMessage.Kind.LEG_PROOF_STATUS,
                 {"status": "action_required"},
             ),
             (OutboundMessage.Kind.PAYMENT_FAILED, {"status": "failed"}),

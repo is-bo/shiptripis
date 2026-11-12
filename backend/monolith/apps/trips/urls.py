@@ -5,7 +5,9 @@ from .views import (
     JourneyDetailView,
     JourneyLegProofCreateView,
     JourneyListCreateView,
+    JourneyPauseView,
     JourneyPublishView,
+    JourneyResumeView,
 )
 
 urlpatterns = [
@@ -20,6 +22,12 @@ urlpatterns = [
         "journeys/<int:pk>/cancel",
         JourneyCancelView.as_view(),
         name="journeys-cancel",
+    ),
+    path("journeys/<int:pk>/pause", JourneyPauseView.as_view(), name="journeys-pause"),
+    path(
+        "journeys/<int:pk>/resume",
+        JourneyResumeView.as_view(),
+        name="journeys-resume",
     ),
     path(
         "journeys/<int:journey_pk>/legs/<int:leg_pk>/proof",

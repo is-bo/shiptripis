@@ -7,7 +7,9 @@ Endpoints:
   PATCH /api/journeys/<id>                              — edit while editable
   POST  /api/journeys/<id>/publish                      — publish
   POST  /api/journeys/<id>/cancel                       — cancel
-  POST  /api/journeys/<journey_id>/legs/<leg_id>/proof  — upload a flight proof
+  POST  /api/journeys/<id>/pause                        — pause (owner)
+  POST  /api/journeys/<id>/resume                       — resume (owner)
+  POST  /api/journeys/<journey_id>/legs/<leg_id>/proof  — upload a ticket proof
 
 Browsing other members' trips is `GET /api/discovery/trips` (L2A). The
 pre-V1 `/api/trips*` and `/api/airports` endpoints were removed in L1A;
@@ -58,13 +60,17 @@ from .serializers import (
     JourneySerializer,
     JourneyUpdateSerializer,
 )
+from .proofs import leg_requires_proof, proof_state_annotation
 from .services import (
     JourneyDomainError,
     cancel_journey,
     journey_editability,
+    pause_own_journey,
     publish_journey,
+    resume_own_journey,
     validate_journey_verification_gates,
 )
+from .transport_rules import unavailable_sea_legs
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
@@ -102,7 +108,10 @@ def _journey_queryset(*, include_proofs: bool = True):
         JourneyLeg.objects.select_related(
             "journey", "origin", "destination", "origin_place", "destination_place"
         )
-        .annotate(has_approved_proof_value=Exists(approved_proof))
+        .annotate(
+            has_approved_proof_value=Exists(approved_proof),
+            proof_state_value=proof_state_annotation(),
+        )
         .prefetch_related(*leg_prefetches)
         .order_by("position")
     )
@@ -115,6 +124,7 @@ def _journey_queryset(*, include_proofs: bool = True):
         "legacy_trip",
     ).prefetch_related(
         Prefetch("legs", queryset=leg_queryset),
+        "stop_details",
         Prefetch(
             "start_place__airport_mappings",
             queryset=active_mapping,
@@ -200,6 +210,10 @@ class JourneyDetailView(APIView):
                 validate_journey_verification_gates(journey)
             except JourneyDomainError as exc:
                 raise Http404("Journey is not currently matchable.") from exc
+            # A sea leg whose switch or crossing is closed closes the journey
+            # here too, exactly as listings and offers do (spec 5.3).
+            if unavailable_sea_legs(journey.legs.all()):
+                raise Http404("Journey is not currently matchable.")
         return Response(
             JourneySerializer(
                 journey,
@@ -331,8 +345,39 @@ class JourneyCancelView(APIView):
         )
 
 
+class _JourneyPauseView(APIView):
+    """Owner pause and resume (spec 5.7). Both are idempotent."""
+
+    permission_classes = (IsAuthenticated,)
+    action = None
+
+    def post(self, request: Request, pk: int) -> Response:
+        journey = get_object_or_404(Journey, pk=pk)
+        try:
+            journey = type(self).action(journey=journey, actor=request.user)
+        except JourneyDomainError as exc:
+            return Response(
+                {"code": exc.code, "detail": exc.message},
+                status=(
+                    status.HTTP_403_FORBIDDEN
+                    if exc.code == "journey_not_owned"
+                    else status.HTTP_409_CONFLICT
+                ),
+            )
+        journey = _journey_queryset().get(pk=journey.pk)
+        return Response(JourneySerializer(journey, context={"request": request}).data)
+
+
+class JourneyPauseView(_JourneyPauseView):
+    action = staticmethod(pause_own_journey)
+
+
+class JourneyResumeView(_JourneyPauseView):
+    action = staticmethod(resume_own_journey)
+
+
 class JourneyLegProofCreateView(APIView):
-    """Private flight proof for one leg of the caller's own draft journey.
+    """Private ticket proof for one flight or sea leg of the caller's own draft.
 
     Every refusal here carries a machine code. The screen on the other end is
     a phone with one image on it, and "something went wrong" is the difference
@@ -364,13 +409,13 @@ class JourneyLegProofCreateView(APIView):
         if leg.journey.traveler_id != request.user.pk:
             return self._error(
                 "journey_not_owned",
-                "Only the journey owner can add flight proof.",
+                "Only the journey owner can add ticket proof.",
                 status.HTTP_403_FORBIDDEN,
             )
-        if leg.mode != JourneyLeg.Mode.FLIGHT:
+        if not leg_requires_proof(leg):
             return self._error(
-                "proof_only_for_flight",
-                "Transport proof can only be added to flight legs.",
+                "proof_not_required",
+                "This leg needs no ticket proof.",
                 status.HTTP_400_BAD_REQUEST,
             )
         if leg.journey.status not in {
@@ -415,7 +460,7 @@ class JourneyLegProofCreateView(APIView):
         if kind not in self._ALLOWED_KINDS:
             return self._error(
                 "proof_kind_unknown",
-                "Unknown flight proof kind.",
+                "Unknown ticket proof kind.",
                 status.HTTP_400_BAD_REQUEST,
             )
 
@@ -452,7 +497,7 @@ class JourneyLegProofCreateView(APIView):
             # The provider's own message names buckets, keys and credentials.
             # It goes to the log with the request id and never to the phone.
             logger.exception(
-                "flight proof upload failed",
+                "ticket proof upload failed",
                 extra={"journey_id": journey_pk, "journey_leg_id": leg_pk},
             )
             return self._error(
