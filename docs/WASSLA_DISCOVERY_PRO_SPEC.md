@@ -618,6 +618,9 @@ moment of each call: never more, and less where this section says so.
   are clear, so "nothing to do" and "not checked" never look the same.
 - The server decides the order and the urgency. The helper only words it.
 - The console home page shows the same list, from the same code, for admins who use no AI.
+- **How-to answers.** The helper can also ask Wassla "how does this admin do X?". Wassla answers with
+  the tasks that admin's role allows, each as a few plain steps and the console link. The steps are
+  written once on the server, so the assistant never makes up a procedure.
 
 ### 20.6 Safety and record
 
@@ -631,9 +634,18 @@ moment of each call: never more, and less where this section says so.
 
 ### 20.7 The skill
 
-A short instruction file ("skill") tells the assistant how to use the helper. It is written last,
-after everything else in this document is built, and must be simple enough for a small, fast model to
-follow. It never contains a key.
+A short instruction file ("skill") tells the assistant how to use the helper. It must be simple enough
+for a small, fast model to follow, and its answers simple enough that someone new to the console can
+do the work. It never contains a key or a server address.
+
+- The admin starts it by typing **`/wassla`** and pasting what the console's "Copy" button gives them:
+  one line with the address and the key. That is the whole setup.
+- **Nothing after the key:** the assistant gives the briefing.
+- **Something after the key:** the assistant does that instead: answers "how do I ...?", explains one
+  parcel, person or payment, or prepares a change.
+- For the rest of the conversation the admin just asks; the key is not pasted again until it expires.
+- Ismail asked for the skill to be drafted on 2026-11-12, before the helper exists. The draft is in
+  `docs/admin-helper-skill/`. It is checked against the real helper, and proven, in the last package.
 
 ### 20.8 Switch
 
