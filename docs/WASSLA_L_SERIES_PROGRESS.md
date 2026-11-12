@@ -280,12 +280,52 @@ Detail: `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md`.
 
 ### L4A. Traveler pricing, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
+
+- Contract as built (names that differ from the plan): `Journey.price_per_kg_eur_cents` and
+  `min_price_eur_cents` (CHECK `journey_price_complete`), new append-only `trips.JourneyPriceChange`
+  as the journey's price audit trail. Rules in `apps/trips/pricing.py` (`check_price`,
+  `apply_journey_price`, `traveler_pricing_policy`). `PATCH /api/journeys/<id>/pricing` takes both keys
+  (nulls clear) and answers the journey; new `GET /api/journeys/pricing-policy` gives the editor the
+  switch and ceilings. Journey payload and trip card: `price` = `{price_per_kg_eur_cents,
+  min_price_eur_cents}` or null. Find Travelers: `economics.listed` = `{reward_eur_cents, economics,
+  price_per_kg_eur_cents, min_price_eur_cents, basis}` or null; sort `listed_price`. Codes:
+  `journey_price_invalid` (reasons `price_incomplete`, `price_per_kg_above_maximum` with
+  `max_price_per_kg_eur_cents`, `min_price_above_maximum` with `max_min_price_eur_cents`),
+  `traveler_pricing_disabled`, `journey_price_not_editable` (with `status`). Offer
+  `terms_snapshot.listed_price` (block or null), not in the public terms snapshot.
+- Left for a later package: L4B builds the app side (route editor and journey detail "Your price"
+  reading `pricing-policy`, Find Travelers card and sort, pre-filled propose sheet from
+  `economics.listed`, trip card line). A route edit (`PATCH /api/journeys/<id>`) must always send the
+  two price fields, because leaving them out clears the price (whole-route rule, like stops). Route
+  write refusals are list-wrapped by DRF like every route refusal; the pricing endpoint's are flat.
+  `POST /api/matches/quote` and traveler-side compatible-requests rows carry no listed price.
+- Switches added and their defaults: none new. L4A reads `marketplace.traveler_pricing`
+  (`enabled` on, `max_price_per_kg_eur_cents` 10,000, `max_min_price_eur_cents` 50,000), defined in
+  L2A, and adds them to the console's Marketplace features form. An unreadable revision reads as off.
+- Deviations from the plan (what, why, approved by): all judgment calls, not reviewed by Ismail.
+  (1) `listed_reward(journey, pricing_quote, *, enabled)`: the switch is passed in, read from the
+  same settings revision as the quote, so a scan costs no query and never mixes revisions.
+  (2) The price is also editable while the journey is `in_progress` (plan lists draft, pending
+  verification and active): an in-progress journey still takes offers on later legs, so its price
+  stays editable for exactly as long as it can be offered on. (3) The listed price is recorded on
+  every V1 offer's snapshot, counters included, since both go through `_v1_offer_values`; amounts are
+  untouched. (4) The audit trail is a dedicated table, not `AdminAuditLog`, because the actor is the
+  traveler, not staff, and has no reason to give. (5) Clearing a price or re-sending the stored one
+  is allowed with the switch off, so a route edit never fails on a price the traveler did not change.
+  (6) On a tie the basis names the traveler's terms first. (7) A non-owner sees no `price` on journey
+  detail while the switch is off; the owner always sees what they stored. (8) Console journey page
+  gained a price card and Django admin makes the price read-only.
+- Tests (before and after counts): Django 2,651 passed before (L3B); after: see PR. 48 added (25 in
+  `apps/matching/tests/test_l4a_listed_price.py`, 23 in `apps/trips/tests/test_l4a_journey_price.py`).
+  Two existing tests rewritten to the new contract: `test_phase_j4_find_travelers` economics key set
+  (gains `listed`) and `test_marketplace_policy` form save (expects the `traveler_pricing` section).
+  The finance suite passes with no edits. `makemigrations --check` clean; `schema.sql` regenerated
+  (additions only).
+- Known limits: a stored price above a ceiling that staff later lowered stays until the traveler
+  changes it (ceilings are typo guards applied at write time). The listed price shown by Find
+  Travelers is an unlocked read; the offer's snapshot is recomputed under the journey lock, so a
+  price change between the two is recorded faithfully and never changes the amount the sender typed.
 
 ### L4B. Traveler pricing, mobile
 

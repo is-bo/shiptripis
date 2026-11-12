@@ -6,6 +6,8 @@ from .views import (
     JourneyLegProofCreateView,
     JourneyListCreateView,
     JourneyPauseView,
+    JourneyPricingPolicyView,
+    JourneyPricingView,
     JourneyPublishView,
     JourneyResumeView,
 )
@@ -13,6 +15,16 @@ from .views import (
 urlpatterns = [
     path("journeys", JourneyListCreateView.as_view(), name="journeys-list-create"),
     path("journeys/<int:pk>", JourneyDetailView.as_view(), name="journeys-detail"),
+    path(
+        "journeys/pricing-policy",
+        JourneyPricingPolicyView.as_view(),
+        name="journeys-pricing-policy",
+    ),
+    path(
+        "journeys/<int:pk>/pricing",
+        JourneyPricingView.as_view(),
+        name="journeys-pricing",
+    ),
     path(
         "journeys/<int:pk>/publish",
         JourneyPublishView.as_view(),

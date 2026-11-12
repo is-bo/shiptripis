@@ -1,5 +1,24 @@
 # Waçla V1 Implementation Status
 
+## Wassla L4A — traveler pricing, backend (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`
+untouched.
+
+Any traveler can put a price on a journey: a price per kg and a minimum per parcel, in EUR cents, both
+or neither, within the policy's typo-guard ceilings, on create, on a route edit or through
+`PATCH /api/journeys/<id>/pricing` (allowed while the journey can still be offered on, even once the
+route is locked). Every change writes a `trips.JourneyPriceChange` row. `listed_reward` in
+`apps/matching/listed_price.py` is the only formula: the largest of ceil(price per kg × chargeable
+weight), the traveler's minimum and Wassla's minimum, with fee and total from
+`calculate_offer_economics`. Find Travelers carries it as `economics.listed` and sorts by it
+(`sort=listed_price`, unpriced last) with no extra query; the discovery trip card shows the price per kg
+and minimum. Offers are unchanged in what they accept (anything at or above Wassla's minimum) and
+record the listed price in `terms_snapshot.listed_price` for audit. The switch
+`marketplace.traveler_pricing.enabled` (on) and its ceilings are in the console's Marketplace features
+form; off means no new price and no price shown or pre-filled. Detail:
+`docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
+
 ## Wassla L3B — routes for everyone, mobile and admin screens (2026-11-12)
 
 Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`

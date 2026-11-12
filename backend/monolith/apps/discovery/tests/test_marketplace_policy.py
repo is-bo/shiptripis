@@ -165,6 +165,9 @@ class MarketplaceFormTests(TestCase):
             "action": "marketplace",
             "listings_enabled": "on",
             "interest_daily_cap": "4",
+            "traveler_pricing_enabled": "on",
+            "max_price_per_kg_eur": "100.00",
+            "max_min_price_eur": "500.00",
             "reason": "Pausing public profiles during review",
             "confirm": "on",
         }
@@ -193,6 +196,12 @@ class MarketplaceFormTests(TestCase):
                     "interest_daily_cap": 4,
                 },
                 "sea_legs_enabled": False,
+                # L4A put traveler pricing in the same form.
+                "traveler_pricing": {
+                    "enabled": True,
+                    "max_price_per_kg_eur_cents": 10_000,
+                    "max_min_price_eur_cents": 50_000,
+                },
             },
         )
         policy = marketplace_policy()

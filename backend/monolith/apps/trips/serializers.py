@@ -29,6 +29,14 @@ from .constraints import (
     MAX_JOURNEY_LEG_CAPACITY_VOLUME_L,
     first_departure_is_future,
 )
+from .pricing import (
+    NO_PRICE,
+    JourneyPrice,
+    JourneyPriceError,
+    apply_journey_price,
+    check_price,
+    traveler_pricing_policy,
+)
 from .proofs import leg_proof_state, leg_requires_proof
 from .stops import effective_stops, validate_stops
 from .transport_rules import (
@@ -266,6 +274,14 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
         max_length=len(ParcelRequest.ItemType.choices),
     )
     accepts_fragile = serializers.BooleanField(required=False, default=True)
+    # L4A. The traveler's price, part of the whole route like the options
+    # above: leaving the pair out of an edit clears it.
+    price_per_kg_eur_cents = serializers.IntegerField(
+        required=False, allow_null=True, default=None, min_value=1
+    )
+    min_price_eur_cents = serializers.IntegerField(
+        required=False, allow_null=True, default=None, min_value=1
+    )
 
     def validate_refused_categories(self, value: list[str]) -> list[str]:
         if len(set(value)) == len(ParcelRequest.ItemType.choices):
@@ -443,6 +459,11 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
             )
         self._validate_leg_modes(legs)
         attrs["stops"] = validate_stops(attrs.get("stops") or [], legs)
+        attrs["price"] = validated_price(
+            attrs.pop("price_per_kg_eur_cents"),
+            attrs.pop("min_price_eur_cents"),
+            current=JourneyPrice.of(self.instance) if self.instance else NO_PRICE,
+        )
         return attrs
 
     def _validate_leg_modes(self, legs: list[dict]) -> None:
@@ -559,22 +580,59 @@ def _attach_route_snapshots(legs: list[dict]) -> None:
         )
 
 
+def validated_price(
+    price_per_kg_eur_cents: int | None,
+    min_price_eur_cents: int | None,
+    *,
+    current: JourneyPrice,
+) -> JourneyPrice:
+    """The requested price pair, or a refusal with its machine code.
+
+    An unlocked pre-check for a clear 400; the write checks again under the
+    journey lock against the price stored at that moment.
+    """
+
+    price = JourneyPrice(price_per_kg_eur_cents, min_price_eur_cents)
+    try:
+        check_price(price, current=current)
+    except JourneyPriceError as exc:
+        raise serializers.ValidationError(exc.as_payload()) from exc
+    return price
+
+
+class JourneyPricingSerializer(serializers.Serializer):
+    """`PATCH /api/journeys/<id>/pricing`. Both keys, explicit nulls to clear."""
+
+    price_per_kg_eur_cents = serializers.IntegerField(allow_null=True, min_value=1)
+    min_price_eur_cents = serializers.IntegerField(allow_null=True, min_value=1)
+
+    def validate(self, attrs: dict) -> dict:
+        return {
+            "price": JourneyPrice(
+                attrs["price_per_kg_eur_cents"], attrs["min_price_eur_cents"]
+            )
+        }
+
+
 class JourneyCreateSerializer(JourneyRouteWriteSerializer):
     """Creates a fresh draft journey and its whole ordered leg chain."""
 
     def create(self, validated_data: dict) -> Journey:
         legs = validated_data.pop("legs")
         stops = validated_data.pop("stops")
+        price = validated_data.pop("price")
         for leg in legs:
             leg.pop("id", None)
         _attach_route_snapshots(legs)
+        traveler = self.context["request"].user
         with transaction.atomic():
             journey = Journey.objects.create(
-                traveler=self.context["request"].user,
+                traveler=traveler,
                 schema_version=2,
                 status=Journey.Status.DRAFT,
                 **validated_data,
             )
+            apply_journey_price(journey=journey, actor=traveler, price=price)
             JourneyLeg.objects.bulk_create(
                 [JourneyLeg(journey=journey, **leg) for leg in legs]
             )
@@ -639,6 +697,7 @@ class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
             stops=validated_data["stops"],
             refused_categories=validated_data["refused_categories"],
             accepts_fragile=validated_data["accepts_fragile"],
+            price=validated_data["price"],
         )
         self.route_change = result
         return result.journey
@@ -827,6 +886,7 @@ class JourneySerializer(serializers.ModelSerializer):
     edit_blocked_code = serializers.SerializerMethodField()
     stops = serializers.SerializerMethodField()
     pause = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Journey
@@ -847,6 +907,7 @@ class JourneySerializer(serializers.ModelSerializer):
             "refused_categories",
             "accepts_fragile",
             "pause",
+            "price",
             "editable",
             "edit_blocked_code",
             "created_at",
@@ -886,6 +947,26 @@ class JourneySerializer(serializers.ModelSerializer):
             "paused_at": obj.paused_at.isoformat() if obj.paused_at else None,
             "paused_by_staff": obj.paused_by_staff,
         }
+
+    def get_price(self, obj: Journey) -> dict | None:
+        """The traveler's price, as the trip card shows it.
+
+        The owner always sees what they stored, so the editor can show it
+        even while the switch is off. Anyone else sees it only while
+        traveler pricing is on, because only then is it a price they can be
+        offered at. The switch is read once per serializer, and only when a
+        non-owner looks at a priced journey.
+        """
+
+        price = JourneyPrice.of(obj)
+        if not price.is_set:
+            return None
+        if not self._is_owner(obj):
+            if not hasattr(self, "_pricing_on"):
+                self._pricing_on = traveler_pricing_policy() is not None
+            if not self._pricing_on:
+                return None
+        return price.as_public_dict()
 
     def get_editability(self):
         """The view's precomputed answer, or nothing for a non-owner.

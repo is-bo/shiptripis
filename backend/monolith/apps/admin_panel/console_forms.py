@@ -408,6 +408,33 @@ class MarketplaceFeaturesForm(ConsoleForm):
             "goes on."
         ),
     )
+    traveler_pricing_enabled = forms.BooleanField(
+        required=False,
+        label="Let travelers set a price",
+        help_text=(
+            "On: a traveler may set a price per kg and a minimum per parcel on a "
+            "route, and senders see it pre-filled. Wassla's minimum still applies "
+            "and the fee is still added on top. Off: no new price can be set and "
+            "no price is shown or pre-filled. Offers and deals already made keep "
+            "their amounts."
+        ),
+    )
+    max_price_per_kg_eur = forms.DecimalField(
+        min_value=Decimal("1.00"),
+        max_value=Decimal("1000.00"),
+        max_digits=7,
+        decimal_places=2,
+        label="Largest price per kg a traveler may set (€)",
+        help_text="A typo guard, applied when a price is set. Stored prices are not changed.",
+    )
+    max_min_price_eur = forms.DecimalField(
+        min_value=Decimal("1.00"),
+        max_value=Decimal("10000.00"),
+        max_digits=8,
+        decimal_places=2,
+        label="Largest minimum per parcel a traveler may set (€)",
+        help_text="A typo guard, applied when a price is set. Stored prices are not changed.",
+    )
     reason = forms.CharField(
         max_length=500,
         label="Reason for change",
@@ -416,6 +443,16 @@ class MarketplaceFeaturesForm(ConsoleForm):
     confirm = forms.BooleanField(
         label="I understand this changes what every member sees from the next request."
     )
+
+    def price_bounds_cents(self) -> dict[str, int]:
+        return {
+            "max_price_per_kg_eur_cents": decimal_to_scaled_integer(
+                self.cleaned_data["max_price_per_kg_eur"], 100, label="Price per kg"
+            ),
+            "max_min_price_eur_cents": decimal_to_scaled_integer(
+                self.cleaned_data["max_min_price_eur"], 100, label="Minimum per parcel"
+            ),
+        }
 
 
 class DisputeStatusForm(ConsoleForm):

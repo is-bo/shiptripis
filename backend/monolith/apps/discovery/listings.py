@@ -47,6 +47,7 @@ from apps.matching.find_travelers import first_name, project_route
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.trips.lifecycle import discoverable
 from apps.trips.models import Journey, JourneyLeg
+from apps.trips.pricing import JourneyPrice
 from apps.trips.proofs import proof_gap_exists
 from apps.trips.transport_rules import sea_crossing_active_exists
 
@@ -246,12 +247,19 @@ def _isoformat(value) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def trip_card(journey: Journey, *, trust: dict, at: datetime) -> dict:
+def trip_card(
+    journey: Journey, *, trust: dict, at: datetime, pricing_enabled: bool
+) -> dict:
     """Spec 4.2 trip card. Every key is written here, and nothing else ships.
 
     Stops are cities (`locality_block`), never an airport name, a street or a
     coordinate. The traveler appears by first name with the same trust summary
     Find Travelers shows for them, so the two screens can never disagree.
+
+    `price` is the traveler's own price per kg and minimum (L4A), never a
+    listed reward: a card is not about one parcel. It is null when the journey
+    has none or traveler pricing is off (``pricing_enabled``, read by the
+    caller from the same revision as its other switches).
     """
 
     legs = list(journey._matching_legs)
@@ -295,6 +303,9 @@ def trip_card(journey: Journey, *, trust: dict, at: datetime) -> dict:
         "next_departure_at": _isoformat(ahead[0].depart_at) if ahead else None,
         "arrives_at": _isoformat(legs[-1].arrive_at) if legs else None,
         "capacity_band": capacity_band(smallest_free),
+        "price": (
+            JourneyPrice.of(journey).as_public_dict() if pricing_enabled else None
+        ),
     }
 
 

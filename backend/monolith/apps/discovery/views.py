@@ -20,7 +20,11 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
-from apps.core.marketplace_policy import InvalidMarketplacePolicy, marketplace_policy
+from apps.core.marketplace_policy import (
+    InvalidMarketplacePolicy,
+    MarketplacePolicy,
+    marketplace_policy,
+)
 from apps.matching.discovery import phase2_policy
 from apps.matching.find_travelers import TRUST_AS_TRAVELER, trust_signals
 from apps.matching.policy import InvalidPhase2Policy
@@ -124,10 +128,19 @@ def _route_filter(values: dict) -> RouteFilter:
     )
 
 
-def _trip_cards(journeys: list, *, at) -> list[dict]:
+def _trip_cards(journeys: list, *, at, policy: MarketplacePolicy) -> list[dict]:
     traveler_ids = list(dict.fromkeys(journey.traveler_id for journey in journeys))
     trust = trust_signals(traveler_ids, at=at, side=TRUST_AS_TRAVELER)
-    return [trip_card(journey, trust=trust[journey.traveler_id], at=at) for journey in journeys]
+    pricing_enabled = policy.traveler_pricing.enabled
+    return [
+        trip_card(
+            journey,
+            trust=trust[journey.traveler_id],
+            at=at,
+            pricing_enabled=pricing_enabled,
+        )
+        for journey in journeys
+    ]
 
 
 def _profile_cards(profiles: list, *, at) -> list[dict]:
@@ -187,7 +200,7 @@ class TripsView(_DiscoveryView):
         if not route.has_origin:
             queryset = queryset.filter(next_departure__gte=departing_after)
         rows, next_offset = window(queryset, limit=values["limit"], offset=values["offset"])
-        return Response(_page(_trip_cards(rows, at=at), next_offset))
+        return Response(_page(_trip_cards(rows, at=at, policy=policy), next_offset))
 
 
 class RequestsView(_DiscoveryView):
@@ -291,7 +304,7 @@ class PersonView(_DiscoveryView):
                 .filter(traveler_id=profile.user_id)
                 .order_by("next_departure", "pk")[:PERSON_ITEMS_LIMIT]
             )
-            trips = _trip_cards(journeys, at=at)
+            trips = _trip_cards(journeys, at=at, policy=policy)
             requests = [
                 request_card(row)
                 for row in listable_requests(at=at)

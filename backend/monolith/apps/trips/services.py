@@ -22,6 +22,7 @@ from .constraints import (
     first_departure_is_future,
 )
 from .models import Journey, JourneyLeg, JourneyLegProof, JourneyStopDetail
+from .pricing import NO_PRICE, JourneyPrice, apply_journey_price, check_price
 from .proofs import (
     journey_proof_gaps,
     leg_requires_proof,
@@ -601,11 +602,13 @@ def replace_journey_route(
     stops: Sequence[dict] = (),
     refused_categories: Sequence[str] = (),
     accepts_fragile: bool = True,
+    price: JourneyPrice = NO_PRICE,
 ) -> JourneyRouteChange:
     """Rewrite an editable journey's endpoints, leg chain and route options.
 
-    The route options default to "no stop options, accepts everything", which
-    is what leaving them out of a whole-route write means.
+    The route options default to "no stop options, accepts everything, no
+    price", which is what leaving them out of a whole-route write means. The
+    price is checked again under the lock, against the price stored now.
 
     The chain is replaced as a unit under the aggregate lock.  Legs the client
     identified by ``id`` are updated in place, which is what carries an
@@ -620,6 +623,7 @@ def replace_journey_route(
     with transaction.atomic():
         locked = Journey.objects.select_for_update(no_key=True).get(pk=journey.pk)
         journey_editability(locked, actor=actor).raise_if_blocked()
+        check_price(price, current=JourneyPrice.of(locked))
 
         stored = {
             leg.pk: leg
@@ -714,6 +718,7 @@ def replace_journey_route(
                 "updated_at",
             ]
         )
+        apply_journey_price(journey=locked, actor=actor, price=price)
 
         # The chain is re-read and re-validated exactly as publication would,
         # so an edit can never leave a journey in a shape publish will refuse.

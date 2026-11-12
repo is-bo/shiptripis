@@ -1633,6 +1633,37 @@ def _traveler_accepts(journey) -> dict:
     }
 
 
+def _traveler_price(journey) -> dict:
+    """The traveler's own price and its last changes, newest first."""
+
+    def pair(per_kg, minimum) -> str:
+        if per_kg is None:
+            return "No price"
+        return f"{format_eur(per_kg)} per kg, minimum {format_eur(minimum)}"
+
+    changes = journey.price_changes.select_related("actor").order_by(
+        "-created_at", "-pk"
+    )[:5]
+    return {
+        "current": pair(journey.price_per_kg_eur_cents, journey.min_price_eur_cents),
+        "changes": [
+            {
+                "at": change.created_at,
+                "actor": change.actor.email,
+                "before": pair(
+                    change.price_per_kg_eur_cents_before,
+                    change.min_price_eur_cents_before,
+                ),
+                "after": pair(
+                    change.price_per_kg_eur_cents_after,
+                    change.min_price_eur_cents_after,
+                ),
+            }
+            for change in changes
+        ],
+    }
+
+
 @capability_required("view_journeys")
 def journey_detail(request, pk: int):
     journey = get_object_or_404(_journey_queryset(request), pk=pk)
@@ -1653,6 +1684,7 @@ def journey_detail(request, pk: int):
             "stops": _console_stops(journey, legs),
             "pause": pause_state(journey, may_manage=may_manage),
             "traveler_accepts": _traveler_accepts(journey),
+            "traveler_price": _traveler_price(journey),
         },
     )
 
@@ -3411,6 +3443,13 @@ def business_settings(request):
             "profiles_enabled": marketplace.discovery.profiles_enabled,
             "interest_daily_cap": marketplace.discovery.interest_daily_cap,
             "sea_legs_enabled": marketplace.sea_legs_enabled,
+            "traveler_pricing_enabled": marketplace.traveler_pricing.enabled,
+            "max_price_per_kg_eur": decimal_eur(
+                marketplace.traveler_pricing.max_price_per_kg_eur_cents
+            ),
+            "max_min_price_eur": decimal_eur(
+                marketplace.traveler_pricing.max_min_price_eur_cents
+            ),
         },
         auto_id="id_marketplace_%s",
     )
@@ -3504,6 +3543,7 @@ def business_settings(request):
                 )
             if action == "marketplace" and marketplace_form.is_valid():
                 data = marketplace_form.cleaned_data
+                bounds = marketplace_form.price_bounds_cents()
                 _save_settings_revision(
                     request,
                     path_updates={
@@ -3517,6 +3557,15 @@ def business_settings(request):
                             "interest_daily_cap"
                         ],
                         "marketplace.sea_legs_enabled": data["sea_legs_enabled"],
+                        "marketplace.traveler_pricing.enabled": data[
+                            "traveler_pricing_enabled"
+                        ],
+                        "marketplace.traveler_pricing.max_price_per_kg_eur_cents": bounds[
+                            "max_price_per_kg_eur_cents"
+                        ],
+                        "marketplace.traveler_pricing.max_min_price_eur_cents": bounds[
+                            "max_min_price_eur_cents"
+                        ],
                     },
                     commission_rate_bps=None,
                     reason=data["reason"],
