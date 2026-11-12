@@ -507,6 +507,12 @@ class DealEvent(models.Model):
         NO_SHOW_RECORDED = "no_show_recorded", "No-show recorded"
         RATING_SUBMITTED = "rating_submitted", "Rating submitted"
         RATING_REVEALED = "rating_revealed", "Ratings revealed"
+        # --- L5A traveler progress reports (a statement, never a status) ---
+        TRAVELER_PROGRESS = "traveler_progress", "Traveler reported progress"
+        TRAVELER_PROGRESS_RETRACTED = (
+            "traveler_progress_retracted",
+            "Traveler retracted a progress report",
+        )
 
     deal = models.ForeignKey(Deal, on_delete=models.PROTECT, related_name="events")
     kind = models.CharField(max_length=32, choices=Kind.choices)

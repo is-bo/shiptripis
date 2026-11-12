@@ -20,6 +20,7 @@ def resolved_notifications(user, *, at=None):
     from apps.finance.models import Payout
     from apps.matching.models import Offer
     from apps.ratings.models import Rating
+    from apps.trips.models import JourneyLegProgress
     from apps.ratings.services import review_window_open_q, with_review_deadline
     from apps.deals.lifecycle import IN_CARRIAGE_STATUSES
 
@@ -27,12 +28,17 @@ def resolved_notifications(user, *, at=None):
     rows = Notification.objects.filter(recipient=user)
     # Legacy payloads are untyped. Bound and validate IDs before casting so a
     # malformed historic event cannot break the entire inbox.
-    for name in ("deal_id", "match_id", "message_id", "offer_id"):
+    for name in ("deal_id", "match_id", "message_id", "offer_id", "leg_id"):
         rows = rows.alias(**{f"_{name}": Case(
             When(**{f"payload__{name}__regex": r"^[1-9][0-9]{0,17}$"},
                  then=Cast(KeyTextTransform(name, "payload"), BigIntegerField())),
             default=Value(None), output_field=BigIntegerField(),
         )})
+    reported = JourneyLegProgress.objects.filter(
+        leg_id=OuterRef("_leg_id"),
+        kind=OuterRef("_progress_kind"),
+        retracted_at__isnull=True,
+    )
     deals = Deal.objects.filter(Q(sender=user) | Q(traveler=user)).filter(
         Q(pk=OuterRef("_deal_id")) | Q(match_id=OuterRef("_match_id"))
     )
@@ -57,7 +63,7 @@ def resolved_notifications(user, *, at=None):
     setup_pending = [str(p.public_reference) for p in payouts if
                      payout_attention(p, context=context)["block_reason"] in
                      ("payout_setup_required", "payout_profile_needs_attention")]
-    rows = rows.alias(
+    rows = rows.alias(_progress_kind=KeyTextTransform("progress_kind", "payload")).alias(
         _owned_deal=Exists(deals),
         _payment=Exists(deals.filter(activity_q("active"), sender=user, funded_at__isnull=True)),
         _arrival=Exists(deals.filter(sender=user, delivery_confirmed_at__isnull=True,
@@ -68,6 +74,7 @@ def resolved_notifications(user, *, at=None):
                                        recipient__isnull=True).filter(activity_q("active"))),
         _delivery_code=Exists(deals.filter(sender=user, delivery_confirmed_at__isnull=True,
                                            funded_at__isnull=False).filter(activity_q("active"))),
+        _leg_reported=Exists(reported.filter(leg__journey__traveler=user)),
         _chat=Exists(ChatMessage.objects.filter(pk=OuterRef("_message_id"), read_at__isnull=True)
                      .filter(Q(match__sender=user) | Q(match__traveler=user)).exclude(sender=user)),
         _offer=Exists(Offer.objects.filter(Q(match__sender=user) | Q(match__traveler=user))
@@ -78,6 +85,7 @@ def resolved_notifications(user, *, at=None):
     return rows.annotate(resolved=Case(
         When(channel__in=["offer.accepted", "payment.failed", "payment.required"], _owned_deal=True,
              then=~Q(_payment=True)),
+        When(channel="journey.leg_reminder", then=Q(_leg_reported=True)),
         When(channel="deal.arrival_reported", then=~Q(_arrival=True)),
         When(channel__in=["rating.required", "rating.prompt"], then=~Q(_rating=True)),
         When(channel="dispute.action_required", then=~Q(_dispute=True)),

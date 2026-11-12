@@ -100,6 +100,9 @@ var subscribeChannels = []string{
 	// L2A discovery: route alerts and "I can carry this".
 	"discovery.route_alert",
 	"discovery.traveler_interested",
+	// L5A progress: the traveler's report reaches the sender; the reminder the traveler.
+	"deal.progress_reported",
+	"journey.leg_reminder",
 }
 
 // targetsEnvelope is the shared shape every Django publish carries.

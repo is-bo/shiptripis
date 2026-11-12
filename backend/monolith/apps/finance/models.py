@@ -1387,6 +1387,8 @@ class ScheduledJob(models.Model):
         PAYOUT_SWEEP = "payout_sweep", "Payout sweep"
         # --- L2A discovery ---
         DISCOVERY_ROUTE_ALERTS = "discovery_route_alerts", "Discovery route alerts"
+        # --- L5A progress reminders ---
+        LEG_REMINDER = "leg_reminder", "Leg progress reminder"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

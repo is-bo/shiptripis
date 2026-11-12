@@ -404,12 +404,36 @@ Detail: `docs/PHASE_L4B_TRAVELER_PRICING_MOBILE.md`. Screenshots: `/mnt/project-
 
 ### L5A. Progress updates and reminders, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md`.
+
+- Contract as built (names that differ from the plan): model `trips.JourneyLegProgress` (migration
+  `trips/0011`); `DealEvent` kinds `traveler_progress` and `traveler_progress_retracted`; `ScheduledJob`
+  kind `leg_reminder`; channels `deal.progress_reported` and `journey.leg_reminder`. Routes:
+  `GET /api/journeys/<id>/progress`, `POST /api/journeys/<id>/legs/<leg_id>/progress {kind}`,
+  `POST /api/journeys/<id>/progress/<progress_id>/retract`, `GET /api/journeys/progress/pending`
+  (`{results: [{journey_id, leg_id, kind, place_name, planned_at}]}`). Flat `{code, detail}` refusals:
+  `progress_out_of_order`, `progress_too_early` (+`available_at`), `progress_kind_not_allowed`,
+  `progress_retract_window_closed`, `progress_has_followup`, `journey_not_owned`, `journey_not_reportable`.
+  A repeat report is a 200 with the existing row. Timeline payload keys: `source`
+  (`traveler_reported`), `progress_id`, `progress_kind`, `leg_id`.
+- Left for a later package: L5B (stepper, Home question, sheet from the notification, sender timeline
+  lines). L9A's route changes must call `apps.trips.progress.schedule_leg_reminders(journey)` after
+  re-timing legs (the old jobs no-op on a moved time, the new times need their own). A staff report
+  (`source=staff`) is stored but has no endpoint yet.
+- Switches added and their defaults: none; reads the existing `marketplace.reminders` section
+  (on, 30 and 60 minutes, repeat after 180 minutes, 2 repeats).
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) Paused
+  journeys still take reports and get reminders, because funded deals continue (spec 5.7). (2) Retracting
+  a report that a later report depends on (`departed` under `arrived`, `arrived` under the next leg's
+  `departed`) is refused (`progress_has_followup`). (3) A late `departed` report re-arms the arrival
+  question under its own job key, because the first arrival job had already found "not yet departed" and
+  stopped. (4) Reminders are keyed to departed and arrived only; `at_port` has no reminder.
+  (5) A retraction sends a neutral `deal.updated` refresh to the sender, no push.
+- Tests (before and after counts): Django 2,751 passed before; 2,795 after (+44, `test_l5a_progress.py`),
+  0 skipped. The first full local run had 30 failures that were all HTTP 429 from my shell lacking CI's
+  `DRF_*_THROTTLE_RATE` variables; those five files pass (102) with them set.
+- Known limits: the pending-questions read runs one query per leg to check for a funded parcel (small
+  per traveler); a "Not yet" answer is the repeat chain itself, there is no snooze state.
 
 ### L5B. Progress updates and reminders, mobile
 

@@ -66,8 +66,16 @@ from .serializers import (
     JourneyListSerializer,
     JourneyLegProofSerializer,
     JourneyPricingSerializer,
+    JourneyProgressReportSerializer,
     JourneySerializer,
     JourneyUpdateSerializer,
+)
+from .progress import (
+    ProgressError,
+    pending_questions,
+    progress_view,
+    report_progress,
+    retract_progress,
 )
 from .proofs import leg_requires_proof, proof_state_annotation
 from .services import (
@@ -616,3 +624,82 @@ class JourneyLegProofCreateView(APIView):
             ).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+def _progress_row(row) -> dict:
+    return {
+        "id": row.pk,
+        "leg_id": row.leg_id,
+        "kind": row.kind,
+        "source": row.source,
+        "reported_at": row.reported_at,
+        "retracted_at": row.retracted_at,
+    }
+
+
+def _progress_refusal(exc: ProgressError) -> Response:
+    return Response(exc.as_payload(), status=exc.http_status)
+
+
+class JourneyProgressView(APIView):
+    """The owner's per-leg reports and the server-authored next actions (spec 11)."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        journey = get_object_or_404(Journey, pk=pk)
+        if journey.traveler_id != request.user.pk:
+            return Response(
+                {"code": "journey_not_owned", "detail": "Only the journey owner can read its progress."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return Response(progress_view(journey))
+
+
+class JourneyLegProgressView(APIView):
+    """`POST`: "at the port", "departed" or "arrived" for one leg. Owner only."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, journey_pk: int, leg_pk: int) -> Response:
+        get_object_or_404(Journey, pk=journey_pk)
+        body = JourneyProgressReportSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            result = report_progress(
+                journey_id=journey_pk,
+                leg_id=leg_pk,
+                actor=request.user,
+                kind=body.validated_data["kind"],
+            )
+        except ProgressError as exc:
+            return _progress_refusal(exc)
+        return Response(
+            _progress_row(result.progress),
+            status=status.HTTP_201_CREATED if result.created else status.HTTP_200_OK,
+        )
+
+
+class JourneyProgressRetractView(APIView):
+    """`POST`: take a report back within ten minutes of making it."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int, progress_pk: int) -> Response:
+        get_object_or_404(Journey, pk=pk)
+        try:
+            row = retract_progress(
+                journey_id=pk, progress_id=progress_pk, actor=request.user
+            )
+        except ProgressError as exc:
+            return _progress_refusal(exc)
+        return Response(_progress_row(row))
+
+
+class JourneyProgressPendingView(APIView):
+    """The reminder questions due for the caller right now, for Home."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        return Response({"results": pending_questions(request.user)})
