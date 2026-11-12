@@ -158,7 +158,7 @@ is about no parcel in particular, so it never carries a listed reward or economi
 - Two existing tests rewritten to the new contract: the J4 economics key set gains `listed`, and the
   L2A marketplace form test expects the `traveler_pricing` section the form now saves.
 
-Django: 2,651 passed before (L3B merged); see the pull request for the count after.
+Django: 2,654 passed before (integration branch at de7d538); 2,702 passed after (48 added, none removed).
 
 ## 10. Not done here (L4B and later)
 

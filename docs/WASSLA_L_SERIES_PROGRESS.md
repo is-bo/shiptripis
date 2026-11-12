@@ -316,7 +316,7 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
   (6) On a tie the basis names the traveler's terms first. (7) A non-owner sees no `price` on journey
   detail while the switch is off; the owner always sees what they stored. (8) Console journey page
   gained a price card and Django admin makes the price read-only.
-- Tests (before and after counts): Django 2,651 passed before (L3B); after: see PR. 48 added (25 in
+- Tests (before and after counts): Django 2,654 passed before (integration branch at `de7d538`); 2,702 passed after, 0 skipped. 48 added (25 in
   `apps/matching/tests/test_l4a_listed_price.py`, 23 in `apps/trips/tests/test_l4a_journey_price.py`).
   Two existing tests rewritten to the new contract: `test_phase_j4_find_travelers` economics key set
   (gains `listed`) and `test_marketplace_policy` form save (expects the `traveler_pricing` section).
