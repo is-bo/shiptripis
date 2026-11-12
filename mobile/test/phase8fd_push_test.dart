@@ -134,10 +134,7 @@ void main() {
         '/deals/9',
       );
       expect(
-        pushLocation({
-          'channel': 'leg_proof.status_changed',
-          'trip_id': '10',
-        }),
+        pushLocation({'channel': 'leg_proof.status_changed', 'trip_id': '10'}),
         '/journeys/10',
       );
       expect(
