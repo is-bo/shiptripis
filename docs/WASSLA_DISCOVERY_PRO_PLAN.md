@@ -1,6 +1,6 @@
 # Wassla Discovery and Professional Delivery Implementation Plan
 
-Written 2026-11-10, updated 2026-11-11 and 2026-11-12 (packages L11A to L17 added), for the orchestrator
+Written 2026-11-10, updated 2026-11-11 and 2026-11-12 (packages L4C and L11A to L17 added, order in section 3), for the orchestrator
 (the project coordinator). Product rules:
 `docs/WASSLA_DISCOVERY_PRO_SPEC.md` ("the spec"). Live status: `docs/WASSLA_L_SERIES_PROGRESS.md`
 ("the progress file").
@@ -21,9 +21,11 @@ The coordinator does exactly this, with no further questions:
 1. Read `CLAUDE.md`, the spec, sections 1 to 3 of this plan, and the progress file.
 2. In the progress file, find the package to work on:
    - a package that is `in_progress`, `in_review` or `changes_requested` is resumed first;
+   - then a `blocked` package whose question has been answered;
    - otherwise take the first `not_started` package in the order of section 3 whose "Depends on"
      packages are all `merged`.
-   A `blocked` package is not skipped silently: report what it is waiting on.
+   A package that is still `blocked` is passed over, never forgotten: see "When a package is blocked"
+   below.
 3. Mark it `in_progress` in the progress file on the integration branch (1.8).
 4. Start **one thread** for that package, with the **model and effort from section 3**, and give it the
    brief in 1.9 unchanged except for the package id.
@@ -34,14 +36,33 @@ The coordinator does exactly this, with no further questions:
    tell Ismail in one line what was merged.
 8. Repeat from step 2 until L10 is `merged`, then stop and hand Ismail the release report.
 
-One package at a time. Stop and ask Ismail only for the cases in 1.7. **Never merge into `main` and
-never deploy**; both need his explicit approval, given after L10.
+One package at a time. **Never merge into `main` and never deploy**; both need Ismail's explicit
+approval, given after L10.
+
+**When a package is blocked** (decided by Ismail on 2026-11-12: one question must not stop the whole
+build, and he is not watching it).
+- A question about what the spec or this plan means, or a judgment call between two ways of building
+  the same rule, goes to **the advisor** (the plan thread, 1.1). Its answer is recorded in the
+  progress file and the package continues. This is the normal path and it does not block.
+- Only what the advisor says it cannot settle, because it would change a product decision, a money
+  rule or the scope Ismail approved, waits for Ismail. The coordinator then marks the package
+  `blocked`, writes the question in "Questions for Ismail" with what each answer would lead to, and
+  **goes on with the next `not_started` package in section 3 order whose dependencies are all
+  `merged`**.
+- A package that depends on a blocked one waits with it. Nothing is built on a guess to keep moving.
+- When Ismail answers, the blocked package is resumed before any new package starts.
+- If nothing can run because everything left depends on a blocked package, stop and tell Ismail in
+  one message what is waiting on him.
 
 ### 1.1 Roles
 
 - **Orchestrator:** the project coordinator. Hands one work package at a time to an agent, reviews the result against the
   package's "Done when" list, and merges it into the integration branch. Never merges into `main`.
   Never deploys. Both need Ismail's explicit approval.
+- **Advisor:** the plan thread that wrote the spec and this plan. The coordinator and, through it, the
+  agents bring it problems, spec or plan questions and judgment calls. It answers, and corrects the
+  plan or spec in a docs-only commit when they are wrong or silent. It starts no package and merges
+  nothing. Ismail's rule: ask the advisor rather than him.
 - **Agent:** implements exactly one work package. Reads, in this order: `CLAUDE.md`, the progress file
   (the board and every earlier package's handoff notes), the spec, sections 1 and 2 of this plan, its
   own package, and the code the package names. Nothing else is in scope.
@@ -141,6 +162,10 @@ is rewritten to the new rule, and the pull request says which and why.
 11. **Status files.** Each package adds a short dated entry at the top of `docs/IMPLEMENTATION_STATUS.md`,
     writes `docs/PHASE_<id>_<NAME>.md` with what was built, the contract, and the test counts, and
     fills in its own handoff block in the progress file (1.8).
+12. **Tracking number.** From L11A on, every new payload, email, web page and screen that refers to a
+    parcel shows its tracking number, read through `apps/parcels/tracking.py` (2.10) on the server and
+    shown with L11B's shared widget in the app. No package prints a delivery id as a reference, and
+    no public discovery payload carries the number.
 
 ### 1.6 Gate review
 
@@ -152,12 +177,22 @@ Before merging a package the orchestrator checks, and records in the pull reques
   and money invariants;
 - for mobile packages: screenshots of every new screen in EN and AR, at 360 px wide, with the keyboard
   open where there is a form, in each state the package lists.
+- **The screenshots are kept** (Ismail, 2026-11-12, so he can review the look at the end without
+  opening pull requests). Every package that adds or changes a screen, mobile or console, saves its
+  gate screenshots as PNG files in the shared project folder
+  `/mnt/project-files/l-series-screens/<package id>/`, named `<screen>-<state>-<language>.png`, and
+  lists the file names in its phase doc. The gate does not pass without them. If a session cannot
+  reach that folder, the agent attaches them to the pull request and says so in its handoff notes,
+  and the coordinator copies them across. L10 assembles them into one gallery.
 
 ### 1.7 When to stop and ask
 
 Stop and report, without guessing, when: a spec rule cannot be implemented as written; a change would
 alter a money, code or matching result for an existing deal; a migration would need to drop or rewrite
 data; an existing test encodes behaviour the spec does not mention.
+
+The agent reports to the coordinator, the coordinator takes it to the advisor, and only what the
+advisor cannot settle waits for Ismail (1.0, "When a package is blocked").
 
 ### 1.8 The progress file: how agents coordinate
 
@@ -349,7 +384,10 @@ steps named in spec 19.1 are behind the second.
 | L3A | Routes for everyone, backend: sea, ticket proof, stops, capacity, pause | Opus | xhigh | L2A |
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | L3A |
 | L4A | Traveler pricing, backend | Opus | high | L3A |
-| L4B | Traveler pricing, mobile | Sonnet | medium | L4A, L3B |
+| L4C | Housekeeping: test time limit and ferry distance cleanup | Opus | high | L4A |
+| L4B | Traveler pricing, mobile | Sonnet | medium | L4A, L3B, L4C |
+| L11A | Tracking number, backend | Opus | high | L4C |
+| L11B | Tracking number, mobile | Sonnet | medium | L11A, L4B |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | L3A |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | L5A, L3B |
 | L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | L3A |
@@ -360,10 +398,8 @@ steps named in spec 19.1 are behind the second.
 | L8B | Custody and handoff, mobile | Sonnet | high | L8A, L7B |
 | L9A | Problems and route changes, backend | Opus | high | L8A |
 | L9B | Problems and route changes, mobile | Sonnet | medium | L9A, L8B |
-| L11A | Tracking number, backend | Opus | high | L9A |
-| L11B | Tracking number, mobile | Sonnet | medium | L11A, L9B |
-| L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | L11A |
-| L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | L12A, L11B |
+| L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | L9A, L11A |
+| L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | L12A, L9B, L11B |
 | L13A | Reviews, reports and moderation, backend | Opus | high | L12A |
 | L13B | Reviews, mobile | Sonnet | medium | L13A, L12B |
 | L14 | Staff two-step sign-in and finance exports (backend and console) | Opus | high | L13A |
@@ -373,9 +409,10 @@ steps named in spec 19.1 are behind the second.
 | L10 | Final acceptance | Opus | high | all, L17 included |
 
 This follows Ismail's order: cleanup, then discovery, then sea legs for everyone, then professional
-features. L11A to L17 were added on 2026-11-12 (spec 16 to 20) and run after L9B, in the order of this
-table; **L10 stays the last package**. Their numbers are higher than L10 only because L10 already had
-its name. The no-show reports of spec 12 were added to L9A and L9B, which had not started.
+features. L11A to L17 were added on 2026-11-12 (spec 16 to 20). **The order of this table is the order
+of work, not the numbers:** L4C first, then L4B, then the tracking number (L11A, L11B) so that every
+later package uses it, then L5A to L9B, then L12A to L17, and **L10 last**. The no-show reports of spec
+12 were added to L9A and L9B, which had not started.
 
 Why some of the additions are Opus although they look small (rule 1.2): L11A edits reference strings
 inside `apps/finance`, `apps/handover` and `apps/deals/cancellation.py`; L12A changes offers and calls
@@ -718,6 +755,38 @@ finance suite passes with no edits.
 **Done when.** A diff of every amount on an end-to-end deal created at the listed price equals the
 same deal created today by typing that amount by hand.
 
+### L4C. Housekeeping: test time limit and ferry distance cleanup (Opus, high effort)
+
+Added on 2026-11-12 from two carry-overs on the board. It runs **first**, before L4B, because the
+first item blocks merges. Opus because the second item sits next to pricing (1.2).
+
+**1. The Django CI job must not run out of time.** It takes 33 to 44 minutes against
+`timeout-minutes: 45` in `.github/workflows/ci.yml`, and grows with every package.
+- Preferred: split the Django test job into parallel shards (a matrix over `pytest` groups or
+  `pytest-split`, each shard with its own PostgreSQL service), keeping every other step and every
+  required check name that branch protection or the gate relies on. All shards must pass; none is
+  optional. The whole suite still runs on every pull request.
+- If sharding cannot be done without weakening anything, raise the limit to 90 minutes instead and say
+  why in the handoff notes.
+- No test is skipped, deleted, marked slow or moved out of the pull-request run to gain time.
+- Record the before and after durations. Target: the slowest shard, or the single job, finishes with
+  at least 40% of its limit unused.
+
+**2. Remove L3A's backup ferry distances.** The seed port coordinates in
+`apps/locations/data/sea_crossings.json`, the staff-entered kilometres on "Add a crossing"
+(`console_sea.py` and its form and template), and the `distance_km` parameter of `create_crossing` in
+`apps/locations/sea_crossings.py`, with whatever only they used. Every launch-country city has
+catalogue coordinates since pull request #27, so the fallback is dead.
+- Before removing, prove it is dead: a test over every seeded crossing shows both ends resolve to
+  catalogue coordinates.
+- A sea leg's distance, price quote and match result must be identical before and after for every
+  seeded crossing; a test pins them. If any differs, stop (1.7) and report instead of adjusting.
+- Additive-only still holds (1.5 rule 5): a stored column is left in place and no longer written or
+  read; say so in the handoff notes.
+
+**Done when.** Two consecutive CI runs on the pull request are green with the headroom above; the
+ferry tests pass; `docs/PHASE_L4C_HOUSEKEEPING.md` records the durations and what was removed.
+
 ### L4B. Traveler pricing, mobile (Sonnet, medium effort)
 
 - Route editor and journey detail: "Your price" with "Price per kg" and "Minimum per parcel", optional,
@@ -732,6 +801,73 @@ same deal created today by typing that amount by hand.
 
 **Done when.** Money tests (`money_test`, the perspective tests) pass unchanged, and a sender can go
 from a trip card to a sent offer at the listed price in three taps.
+
+### L11A. Tracking number, backend (Opus, high effort)
+
+Opus because the reference strings live in `apps/finance`, `apps/handover`, `apps/deals/cancellation.py`
+and `apps/disputes` (1.2). No amount, code or state changes in this package; if one seems needed, stop.
+
+It runs right after L4B (moved forward on 2026-11-12), so that every later package uses the tracking
+number from its first line instead of being reworked afterwards (1.5 rule 12).
+
+**Goal.** Spec 16. One number per parcel, created with the request, shown by every server surface
+that today shows `ST-<id>`, and searchable by staff.
+
+**Schema.** `parcels.ParcelRequest.tracking_number`: `CharField(max_length=12)`, unique. Added in the
+three steps Django documents for a unique column with a generated value: add it nullable, fill every
+existing row in a data migration, then make it non-null and unique. This is the one place in the
+series where a new column is tightened after it is filled; it is still additive (1.5 rule 5).
+`ParcelRequest.save` refuses a change to a saved row's number.
+
+**One module.** `apps/parcels/tracking.py` (2.10): `ALPHABET`, `generate()`, `normalize(text) ->
+str | None`, `for_request(request)`, `for_deal(deal)`. Creation retries on a unique collision, at most
+five times, then raises. Nothing else builds, parses or formats a tracking number.
+
+**Where it appears.**
+- API payloads, as `tracking_number`: the owner's request payloads; proposal and match payloads between
+  the two people of a proposal; deal payloads for both parties; the owner's payment order payloads;
+  the traveler's payout payloads; dispute payloads. Packages after this one add it to their own new
+  payloads (1.5 rule 12).
+- Not in: the five public discovery payloads of L2A, Find Travelers candidates, the compatible-requests
+  list before a proposal exists, and the guest payment view and page. The existing privacy tests gain
+  `tracking_number` and the pattern `WSL-` as forbidden.
+- Emails and notifications: every context that carries `deal_reference` carries `tracking_number`
+  instead, read through `for_deal`. Request-stage emails (posting deposit, guest payment receipt for a
+  deposit) carry it through `for_request`. The outbox templates and facts are updated in EN, FR and
+  AR. The key `deal_reference` and the string `ST-` no longer exist anywhere.
+- The delivery-code email to the recipient carries it. L8A's recipient and courier pages will show it
+  as "Wassla tracking number", with the courier's own reference labelled "courier reference".
+- Finance control plane: the search that accepts `ST-<deal>` accepts a tracking number instead
+  (`TR-<traveler>` is unchanged); the drill-down shows it.
+- Console: the requests, deals, disputes, payments, refunds and payouts lists search by tracking
+  number through `normalize` (exact match on the normalised value) and show it in the first column;
+  detail pages show it in the heading. The JSON admin lists accept the same search.
+
+**Tests.** Format and alphabet. A forced collision retries and succeeds; five collisions raise. A saved
+number cannot change. `normalize` accepts `wsl-7k3m9qxd`, `WSL7K3M9QXD`, `7K3M9QXD` and surrounding
+spaces, and refuses a wrong length or a forbidden character. A request that reopens after a cancelled
+deal keeps its number and the second deal shows the same one. Each email kind renders the number. The
+privacy tests. Console and control-plane search. Query counts of the touched list endpoints unchanged.
+
+**Done when.** `grep -R "ST-" backend/monolith/apps backend/monolith/templates` and
+`grep -R "deal_reference"` return nothing outside migrations and this plan's history; the data
+migration is proven on a database that already holds requests; the contract is in
+`docs/PHASE_L11A_TRACKING_NUMBER.md`.
+
+### L11B. Tracking number, mobile (Sonnet, medium effort)
+
+- Show the number on: the request detail, each proposal, the delivery screen heading (sender and
+  traveler), the payment screen, the dispute screen and the traveler's payout line. Later mobile
+  packages use the same widget on their own screens (1.5 rule 12). One shared widget in
+  `mobile/lib/design`:
+  the number in a monospaced style, a copy button with a confirmation, and a semantic label that reads
+  it character by character.
+- Always left to right, isolated, inside Arabic text (the pattern used for the guest link preview).
+- The number is display only: no screen, deep link or search opens a parcel from a typed number.
+- It never appears on a discovery card, a browse list, Find Travelers or a public preview.
+- Remove every place that printed a delivery id as a reference.
+- Tests: the widget in EN, FR and AR at 360 px; copy; the screens above with and without a number in a
+  cached older payload (render nothing, not a placeholder); zero untranslated keys.
 
 ### L5A. Progress updates and reminders, backend (Sonnet, medium effort)
 
@@ -1003,69 +1139,6 @@ times.
   senders must agree, and the pending state.
 - Sender: a screen comparing the old and new times with "Accept" and "Decline", and, on decline, the
   cancellation consequence text from the existing cancellation quote endpoint.
-
-### L11A. Tracking number, backend (Opus, high effort)
-
-Opus because the reference strings live in `apps/finance`, `apps/handover`, `apps/deals/cancellation.py`
-and `apps/disputes` (1.2). No amount, code or state changes in this package; if one seems needed, stop.
-
-**Goal.** Spec 16. One number per parcel, created with the request, shown by every server surface
-that today shows `ST-<id>`, and searchable by staff.
-
-**Schema.** `parcels.ParcelRequest.tracking_number`: `CharField(max_length=12)`, unique. Added in the
-three steps Django documents for a unique column with a generated value: add it nullable, fill every
-existing row in a data migration, then make it non-null and unique. This is the one place in the
-series where a new column is tightened after it is filled; it is still additive (1.5 rule 5).
-`ParcelRequest.save` refuses a change to a saved row's number.
-
-**One module.** `apps/parcels/tracking.py` (2.10): `ALPHABET`, `generate()`, `normalize(text) ->
-str | None`, `for_request(request)`, `for_deal(deal)`. Creation retries on a unique collision, at most
-five times, then raises. Nothing else builds, parses or formats a tracking number.
-
-**Where it appears.**
-- API payloads, as `tracking_number`: the owner's request payloads; proposal and match payloads between
-  the two people of a proposal; deal payloads for both parties; the owner's payment order payloads;
-  the traveler's payout payloads; dispute payloads; the problem, custody and handoff payloads of L8A
-  and L9A.
-- Not in: the five public discovery payloads of L2A, Find Travelers candidates, the compatible-requests
-  list before a proposal exists, and the guest payment view and page. The existing privacy tests gain
-  `tracking_number` and the pattern `WSL-` as forbidden.
-- Emails and notifications: every context that carries `deal_reference` carries `tracking_number`
-  instead, read through `for_deal`. Request-stage emails (posting deposit, guest payment receipt for a
-  deposit) carry it through `for_request`. The outbox templates and facts are updated in EN, FR and
-  AR. The key `deal_reference` and the string `ST-` no longer exist anywhere.
-- The recipient and courier pages of L8A show it as "Wassla tracking number"; the courier's own
-  reference keeps the label "courier reference".
-- Finance control plane: the search that accepts `ST-<deal>` accepts a tracking number instead
-  (`TR-<traveler>` is unchanged); the drill-down shows it.
-- Console: the requests, deals, disputes, payments, refunds and payouts lists search by tracking
-  number through `normalize` (exact match on the normalised value) and show it in the first column;
-  detail pages show it in the heading. The JSON admin lists accept the same search.
-
-**Tests.** Format and alphabet. A forced collision retries and succeeds; five collisions raise. A saved
-number cannot change. `normalize` accepts `wsl-7k3m9qxd`, `WSL7K3M9QXD`, `7K3M9QXD` and surrounding
-spaces, and refuses a wrong length or a forbidden character. A request that reopens after a cancelled
-deal keeps its number and the second deal shows the same one. Each email kind renders the number. The
-privacy tests. Console and control-plane search. Query counts of the touched list endpoints unchanged.
-
-**Done when.** `grep -R "ST-" backend/monolith/apps backend/monolith/templates` and
-`grep -R "deal_reference"` return nothing outside migrations and this plan's history; the data
-migration is proven on a database that already holds requests; the contract is in
-`docs/PHASE_L11A_TRACKING_NUMBER.md`.
-
-### L11B. Tracking number, mobile (Sonnet, medium effort)
-
-- Show the number on: the request detail, each proposal, the delivery screen heading (sender and
-  traveler), the payment screen, the dispute screen, the traveler's payout line, the manifest row
-  (L7B) and the problem and handoff screens (L8B, L9B). One shared widget in `mobile/lib/design`:
-  the number in a monospaced style, a copy button with a confirmation, and a semantic label that reads
-  it character by character.
-- Always left to right, isolated, inside Arabic text (the pattern used for the guest link preview).
-- The number is display only: no screen, deep link or search opens a parcel from a typed number.
-- It never appears on a discovery card, a browse list, Find Travelers or a public preview.
-- Remove every place that printed a delivery id as a reference.
-- Tests: the widget in EN, FR and AR at 360 px; copy; the screens above with and without a number in a
-  cached older payload (render nothing, not a placeholder); zero untranslated keys.
 
 ### L12A. Proposal deadline and trip-fit alerts, backend (Opus, high effort)
 
@@ -1532,7 +1605,11 @@ L10 runs last, after L17.
    every key refused at once).
 5. Migrations: every one additive, `sqlmigrate` output reviewed, `task check-drift` clean.
 6. Performance: the K-series budgets and all asserted query counts hold.
-7. Design review of every new screen in EN, FR and AR on a small phone and a tablet.
+7. Design review of every new screen in EN, FR and AR on a small phone and a tablet. Assemble the
+   kept gate screenshots (1.6) into one gallery for Ismail,
+   `/mnt/project-files/l-series-screens/gallery.html`: one section per package, each image captioned
+   with its screen, state and language. Take the missing ones for packages merged before 2026-11-12
+   (L2B, L3B) and for L4B if it has none.
 8. `docs/WASSLA_L_SERIES_RELEASE_REPORT.md` and `docs/IMPLEMENTATION_STATUS.md`.
 9. Hand Ismail the report, the list of switches that are still off, and the open decisions. **No merge
    into `main` and no deployment without his explicit approval.**
@@ -1575,6 +1652,22 @@ Not chosen, so not planned: profile photo and extra profile fields, the prohibit
 summary on the page a relative pays from, volume and a payout-account check on trips, SMS, a terms
 page with recorded acceptance, a computer version of the user app, and the four design choices (full
 payment before matching, a fixed grid, automatic assignment, weekly payouts).
+
+### 5.1d Before the unattended run (Ismail, 2026-11-12, evening)
+
+Ismail said he will not check on the build until it is done, asked what should change first, and
+accepted four of six suggestions:
+
+1. **Yes:** fix the test time limit first. It is package L4C, with the ferry distance carry-over.
+2. **Yes:** build the tracking number right after L4B (L11A, L11B moved forward; 1.5 rule 12).
+3. **No:** the AI helper does **not** ship switched off. It ships on, as spec 20.8 says.
+4. **Yes:** one question must not stop everything (1.0, "When a package is blocked").
+5. **No:** no package for a terms page with recorded acceptance or for the final prohibited-items
+   list. They are still needed before real users and remain outside this build.
+6. **Yes:** keep the gate screenshots in one place (1.6) and build a gallery in L10.
+
+He also asked that the coordinator be reminded to bring problems to the advisor and to use the model
+and effort of section 3 for every package, exactly.
 
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 

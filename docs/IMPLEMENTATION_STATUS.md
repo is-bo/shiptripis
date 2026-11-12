@@ -5,7 +5,10 @@
 Status: **planning only, no code**. Approved by Ismail on 2026-11-12.
 
 The specification gained sections 16 to 20 and the no-show reports in section 12; the plan gained
-packages L11A to L17, which run after L9B and before L10 (final acceptance stays last):
+packages L4C and L11A to L17. Order of work (plan section 3): L4C, L4B, L11A, L11B, L5A to L9B, L12A
+to L17, then L10 (final acceptance stays last):
+
+- L4C: the Django CI time limit and the removal of L3A's backup ferry distances. Runs first.
 
 - L11A, L11B: one tracking number per parcel (`WSL-` plus 8 characters), replacing `ST-<id>`.
 - L12A, L12B: a response deadline and reminder for proposals (they had no expiry before), and an alert
@@ -16,6 +19,9 @@ packages L11A to L17, which run after L9B and before L10 (final acceptance stays
   actions confirmed in the console, then the skill).
 - L9A, L9B: "the other person did not come" reports, decided by staff through the existing no-show
   action.
+- Running the plan: a question that only the owner can answer blocks its own package, not the build;
+  spec and plan questions go to the advisor (plan 1.0, 1.1); gate screenshots are kept for a final
+  gallery (plan 1.6). The `/wassla` skill draft is in `docs/admin-helper-skill/`.
 
 Detail: `docs/WASSLA_DISCOVERY_PRO_SPEC.md` sections 12 and 16 to 20,
 `docs/WASSLA_DISCOVERY_PRO_PLAN.md` sections 2.10 to 2.12, 3, 4 and 5.1b, and the board in

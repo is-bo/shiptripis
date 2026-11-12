@@ -23,7 +23,10 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L3A | Routes for everyone, backend | Opus | xhigh | merged | `claude/project-thread-bl54yl` | #26 | `b10cda8` | `docs/PHASE_L3A_ROUTES_BACKEND.md` |
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | merged | `claude/project-thread-52tsvf` | #28 | `edb94d7` | `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md` |
 | L4A | Traveler pricing, backend | Opus | high | merged | `claude/project-thread-q374r4` | #29 | `5014497` | `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md` |
+| L4C | Housekeeping: test time limit and ferry distance cleanup | Opus | high | not_started | | | | |
 | L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
+| L11A | Tracking number, backend | Opus | high | not_started | | | | |
+| L11B | Tracking number, mobile | Sonnet | medium | not_started | | | | |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | not_started | | | | |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | not_started | | | | |
 | L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | not_started | | | | |
@@ -34,8 +37,6 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L8B | Custody and handoff, mobile | Sonnet | high | not_started | | | | |
 | L9A | Problems and route changes, backend | Opus | high | not_started | | | | |
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
-| L11A | Tracking number, backend | Opus | high | not_started | | | | |
-| L11B | Tracking number, mobile | Sonnet | medium | not_started | | | | |
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | not_started | | | | |
 | L13A | Reviews, reports and moderation, backend | Opus | high | not_started | | | | |
@@ -47,15 +48,16 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
 
 **Added 2026-11-12 (approved by Ismail):** L11A to L17 above, and the no-show reports inside L9A and
-L9B (spec 12, 16 to 20; plan 5.1b). They run after L9B in the order of this table, which is plan
-section 3's order. L10 stays last. These rows were added by the plan thread on Ismail's instruction;
+L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of this
+table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L5A to L9B, then L12A
+to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
 the board is otherwise still edited only by the orchestrator.
 
-**Next package:** L4B (Sonnet, medium effort). It needs L4A and L3B, both merged. L5A (Sonnet, medium) and L6A (Opus, high) are also unblocked; section 3 order puts L4B first.
+**Next package:** L4C (Opus, high effort), then L4B (Sonnet, medium), then L11A (Opus, high). Section 3 order.
 
-**Open carry-over:** remove L3A's backup ferry distances: the seed port coordinates in `apps/locations/data/sea_crossings.json` and the staff-entered kilometres on "Add a crossing", with the `distance_km` parameter of `create_crossing` in `apps.locations.sea_crossings`. They are no longer needed now that every launch-country city has catalogue coordinates (PR #27). Until removed, they only apply to a city without coordinates.
+**Carry-over, now assigned to L4C:** remove L3A's backup ferry distances: the seed port coordinates in `apps/locations/data/sea_crossings.json` and the staff-entered kilometres on "Add a crossing", with the `distance_km` parameter of `create_crossing` in `apps.locations.sea_crossings`. They are no longer needed now that every launch-country city has catalogue coordinates (PR #27). Until removed, they only apply to a city without coordinates.
 
-**Open carry-over:** the Django CI job runs 33 to 44 minutes against its 45-minute `timeout-minutes` (`.github/workflows/ci.yml`); L4A's first attempt on `2537c73` was cancelled at 87% and passed on its one re-run. Raise the limit or split the suite before it blocks a package.
+**Carry-over, now assigned to L4C:** the Django CI job runs 33 to 44 minutes against its 45-minute `timeout-minutes` (`.github/workflows/ci.yml`); L4A's first attempt on `2537c73` was cancelled at 87% and passed on its one re-run. Raise the limit or split the suite before it blocks a package.
 
 **L4A judgment calls (accepted at the gate, not reviewed by Ismail):** (1) `listed_reward` takes `enabled=`, read from the quote's settings revision, so a scan adds no query; (2) the price stays editable while the journey is `in_progress`, because it still takes offers on later legs, and a test proves existing offers, deals, orders, ledger and payouts stay identical; (3) counter offers record `listed_price` too; (4) the price history is its own table `trips.JourneyPriceChange`, not `AdminAuditLog`, because the actor is the traveler; (5) clearing or re-sending the stored price is allowed with the switch off; (6) ties name the traveler's terms first; (7) a non-owner sees no `price` while the switch is off; (8) the console journey page shows the price and Django admin makes it read-only.
 
@@ -346,6 +348,15 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
   Travelers is an unlocked read; the offer's snapshot is recomputed under the journey lock, so a
   price change between the two is recorded faithfully and never changes the amount the sender typed.
 
+### L4C. Housekeeping: test time limit and ferry distance cleanup
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
 ### L4B. Traveler pricing, mobile
 
 - Contract as built (names that differ from the plan):
@@ -553,6 +564,7 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 | 2026-11-11 | Is a declined schedule change a traveler-caused cancellation? | Yes. |
 | 2026-11-11 | Keep "I can carry this"? | Yes. |
 | 2026-11-12 | Which gaps against the cahier des charges should be built? | Tracking number; alert to travelers whose trip fits plus a reminder before a proposal expires; "the other person did not come"; reviews on profiles with report and hide; admin export and two-step sign-in. |
+| 2026-11-12 | Before the unattended run: fix the test time limit first? Tracking number right after L4B? AI helper shipped off? One question must not stop everything? A legal package (terms, prohibited items)? Keep the screenshots? | Yes, yes, **no** (the helper ships on), yes, **no**, yes. Plan 5.1d. |
 | 2026-11-12 | AI helper: may it read everything and act directly? | No documents, bank details, delivery codes or chat contents. Money, ban, role and settings actions are prepared and confirmed in the console. Read key expires 8 hours after creation even in use; change key 30 minutes. The skill is written last. |
 
 ## Change log for the plan and spec
@@ -564,3 +576,4 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 | 2026-11-12 | Plan L3B: the staff-paused banner shows no reason, because L3A keeps the staff pause reason internal (the owner's payload carries only `paused_by_staff`). |
 | 2026-11-12 | Added packages L11A to L17 and the no-show reports in L9A and L9B (spec 12 and 16 to 20; plan 2.10 to 2.12, section 3, 5.1b, 5.1c). L10 stays the last package and gains their acceptance checks. Correction recorded in plan 5.1b: proposals had no expiry at the baseline; L12A adds it. |
 | 2026-11-12 | Skill drafted early at Ismail's request: `docs/admin-helper-skill/` (`/wassla` plus the pasted line; briefing by default; how-to answers). Spec 20.5 and 20.7 updated; L15 gained `GET tasks` and the one-line copy block; L17 now verifies and proves the draft instead of writing it. |
+| 2026-11-12 | Before the unattended run (plan 5.1d): added L4C (CI time limit, ferry distance cleanup) to run first; moved L11A and L11B to right after L4B and added rule 1.5.12; added the advisor role (1.1) and "When a package is blocked" (1.0); gate screenshots are kept in `/mnt/project-files/l-series-screens/` and L10 builds a gallery (1.6). |
