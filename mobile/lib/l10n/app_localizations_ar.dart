@@ -5158,4 +5158,108 @@ class LAr extends L {
 
   @override
   String get dealHandoverDropoff => 'التسليم';
+
+  @override
+  String get journeyPriceTitle => 'سعرك';
+
+  @override
+  String get journeyPriceOptional => 'اختياري';
+
+  @override
+  String get journeyPriceNote =>
+      'يرى المرسلون سعرك مضافًا إليه رسوم وصلة. ويبقى الحد الأدنى لوصلة لكل طرد ساريًا.';
+
+  @override
+  String get journeyPricePerKgLabel => 'السعر لكل كغ';
+
+  @override
+  String get journeyPriceMinimumLabel => 'الحد الأدنى لكل طرد';
+
+  @override
+  String get journeyPriceErrorBoth => 'أدخل المبلغين معًا أو اتركهما فارغين.';
+
+  @override
+  String journeyPriceErrorMaximum(String amount) {
+    return 'الحد الأقصى $amount.';
+  }
+
+  @override
+  String get journeyPriceErrorTooHigh => 'هذا المبلغ أعلى مما تسمح به وصلة.';
+
+  @override
+  String get journeyPriceDisabled => 'تحديد السعر غير متاح حاليًا.';
+
+  @override
+  String get journeyPriceNotEditable =>
+      'لم يعد بالإمكان تغيير السعر في هذه الرحلة.';
+
+  @override
+  String get journeyPriceNone =>
+      'لم يُحدَّد سعر. يقترح المرسلون مبلغهم بأنفسهم.';
+
+  @override
+  String get journeyPriceSet => 'حدّد سعرًا';
+
+  @override
+  String get journeyPriceChange => 'تغيير';
+
+  @override
+  String get journeyPriceSave => 'احفظ السعر';
+
+  @override
+  String get journeyPriceRemove => 'إزالة السعر';
+
+  @override
+  String get journeyPriceSaved => 'تم حفظ السعر.';
+
+  @override
+  String get journeyPriceCleared => 'تمت إزالة السعر.';
+
+  @override
+  String get journeyPriceAppliesToNew =>
+      'يسري السعر الجديد على العروض المقدَّمة من الآن فصاعدًا. وتحتفظ العروض والصفقات القائمة بسعرها.';
+
+  @override
+  String journeyPricePerKgValue(String amount) {
+    return '$amount لكل كغ';
+  }
+
+  @override
+  String journeyPriceMinimumValue(String amount) {
+    return 'الحد الأدنى $amount لكل طرد';
+  }
+
+  @override
+  String tripPriceFrom(String perKg, String minimum) {
+    return 'ابتداءً من $perKg لكل كغ، والحد الأدنى $minimum';
+  }
+
+  @override
+  String get findTravelersSortPrice => 'الأقل سعرًا';
+
+  @override
+  String findTravelersListedPrice(String amount) {
+    return '$amount لهذا الطرد';
+  }
+
+  @override
+  String get offerListedLabel => 'سعره لهذا الطرد';
+
+  @override
+  String offerSendListed(String amount) {
+    return 'اعرض $amount';
+  }
+
+  @override
+  String get offerDifferentAmount => 'اعرض مبلغًا آخر';
+
+  @override
+  String get offerBelowListedNote =>
+      'هذا أقل من سعره، لذا قد يرفض المسافر أو يقدّم عرضًا مقابلًا.';
+
+  @override
+  String get offerUseListed => 'استخدم سعره';
+
+  @override
+  String get tripPrice => 'السعر';
 }

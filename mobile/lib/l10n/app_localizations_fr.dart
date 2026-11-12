@@ -5226,4 +5226,111 @@ class LFr extends L {
 
   @override
   String get dealHandoverDropoff => 'Remise';
+
+  @override
+  String get journeyPriceTitle => 'Votre prix';
+
+  @override
+  String get journeyPriceOptional => 'Facultatif';
+
+  @override
+  String get journeyPriceNote =>
+      'Les expéditeurs voient votre prix plus les frais de Wassla. Le minimum de Wassla pour chaque colis s\'applique toujours.';
+
+  @override
+  String get journeyPricePerKgLabel => 'Prix par kg';
+
+  @override
+  String get journeyPriceMinimumLabel => 'Minimum par colis';
+
+  @override
+  String get journeyPriceErrorBoth =>
+      'Remplissez les deux montants, ou laissez les deux vides.';
+
+  @override
+  String journeyPriceErrorMaximum(String amount) {
+    return '$amount au maximum.';
+  }
+
+  @override
+  String get journeyPriceErrorTooHigh =>
+      'Ce montant dépasse ce que Wassla autorise.';
+
+  @override
+  String get journeyPriceDisabled =>
+      'Fixer un prix n\'est pas disponible pour le moment.';
+
+  @override
+  String get journeyPriceNotEditable =>
+      'Le prix ne peut plus être modifié sur ce trajet.';
+
+  @override
+  String get journeyPriceNone =>
+      'Aucun prix défini. Les expéditeurs proposent leur propre montant.';
+
+  @override
+  String get journeyPriceSet => 'Fixer un prix';
+
+  @override
+  String get journeyPriceChange => 'Modifier';
+
+  @override
+  String get journeyPriceSave => 'Enregistrer le prix';
+
+  @override
+  String get journeyPriceRemove => 'Retirer le prix';
+
+  @override
+  String get journeyPriceSaved => 'Prix enregistré.';
+
+  @override
+  String get journeyPriceCleared => 'Prix retiré.';
+
+  @override
+  String get journeyPriceAppliesToNew =>
+      'Un nouveau prix s\'applique aux offres faites à partir de maintenant. Les offres et accords existants gardent le leur.';
+
+  @override
+  String journeyPricePerKgValue(String amount) {
+    return '$amount par kg';
+  }
+
+  @override
+  String journeyPriceMinimumValue(String amount) {
+    return 'Minimum $amount par colis';
+  }
+
+  @override
+  String tripPriceFrom(String perKg, String minimum) {
+    return 'à partir de $perKg par kg, minimum $minimum';
+  }
+
+  @override
+  String get findTravelersSortPrice => 'Prix le plus bas';
+
+  @override
+  String findTravelersListedPrice(String amount) {
+    return '$amount pour ce colis';
+  }
+
+  @override
+  String get offerListedLabel => 'Son prix pour ce colis';
+
+  @override
+  String offerSendListed(String amount) {
+    return 'Proposer $amount';
+  }
+
+  @override
+  String get offerDifferentAmount => 'Proposer un autre montant';
+
+  @override
+  String get offerBelowListedNote =>
+      'C\'est en dessous de son prix : le voyageur peut refuser ou contre-proposer.';
+
+  @override
+  String get offerUseListed => 'Utiliser son prix';
+
+  @override
+  String get tripPrice => 'Prix';
 }

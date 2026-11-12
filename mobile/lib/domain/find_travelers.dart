@@ -338,6 +338,58 @@ class MatchReason {
   DateTime? get deadlineAt => readDate(params['deadline_at']);
 }
 
+/// Which term of the traveller's price set the listed price.
+enum ListedBasis {
+  perKg,
+  travelerMinimum,
+  wasslaMinimum,
+  unknown;
+
+  static ListedBasis parse(Object? raw) => readEnum(
+    raw,
+    ListedBasis.values,
+    fallback: ListedBasis.unknown,
+    aliases: const {
+      'per_kg': ListedBasis.perKg,
+      'traveler_minimum': ListedBasis.travelerMinimum,
+      'wassla_minimum': ListedBasis.wasslaMinimum,
+    },
+  );
+}
+
+/// What this traveller would charge for **this** parcel, worked out by the
+/// server: the largest of price per kg times the chargeable weight, the
+/// traveller's minimum and Wassla's minimum. It is where an offer starts, not
+/// a floor: the sender may offer less, down to Wassla's minimum.
+///
+/// [economics] is the exact block an offer of [reward] would freeze (what the
+/// traveller receives, Wassla's fee, the sender's total). The client adds
+/// nothing to it.
+class ListedPrice {
+  const ListedPrice({
+    required this.reward,
+    required this.economics,
+    required this.basis,
+  });
+
+  static ListedPrice? maybe(Object? raw) {
+    final json = readObject(raw);
+    if (json == null) return null;
+    final reward = readInt(json['reward_eur_cents']);
+    final economics = readObject(json['economics']);
+    if (reward == null || economics == null) return null;
+    return ListedPrice(
+      reward: reward,
+      economics: economics,
+      basis: ListedBasis.parse(json['basis']),
+    );
+  }
+
+  final int reward;
+  final Map<String, dynamic> economics;
+  final ListedBasis basis;
+}
+
 /// The four numbers the propose sheet renders. Nothing diagnostic.
 class CandidateEconomics {
   const CandidateEconomics({
@@ -346,6 +398,7 @@ class CandidateEconomics {
     this.minimumEconomics,
     this.recommendedReward,
     this.recommendedEconomics,
+    this.listed,
   });
 
   static CandidateEconomics? maybe(Object? raw) {
@@ -359,6 +412,7 @@ class CandidateEconomics {
       minimumEconomics: readObject(json['minimum_economics']),
       recommendedReward: readInt(json['recommended_reward_eur_cents']),
       recommendedEconomics: readObject(json['recommended_economics']),
+      listed: ListedPrice.maybe(json['listed']),
     );
   }
 
@@ -372,6 +426,10 @@ class CandidateEconomics {
   /// request; a Traveler browsing requests never receives it.
   final int? recommendedReward;
   final Map<String, dynamic>? recommendedEconomics;
+
+  /// The traveller's own price for this parcel, or null when the journey has
+  /// no price (or pricing is switched off).
+  final ListedPrice? listed;
 }
 
 /// Everything `POST /api/matches/propose` needs, echoed back unchanged.

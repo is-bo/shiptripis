@@ -121,6 +121,7 @@ Future<ProviderContainer> pumpDiscovery(
   DeviceProfile device = DeviceProfile.android,
   RoleContext role = RoleContext.sender,
   bool settle = true,
+  double? keyboardInset,
   List<RouteBase> extraRoutes = const [],
 }) async {
   final container = discoveryContainer(backend);
@@ -135,6 +136,7 @@ Future<ProviderContainer> pumpDiscovery(
     container: container,
     locale: locale,
     device: device,
+    keyboardInset: keyboardInset,
     routed: true,
     extraRoutes: [...discoveryMarkers(), ...extraRoutes],
   );

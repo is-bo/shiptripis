@@ -332,10 +332,12 @@ class JourneyRepository {
     List<String> refusedCategories = const [],
     bool acceptsFragile = true,
     String notes = '',
+    JourneyPrice? price,
   }) async => Journey.fromJson(
     await _api.postObject(
       '/api/journeys',
       body: {
+        ..._priceBody(price, always: false),
         'start_place_id': ?startPlaceId,
         'destination_place_id': ?destinationPlaceId,
         'start_location': ?startLocationId,
@@ -370,10 +372,14 @@ class JourneyRepository {
     String notes = '',
     int? startLocationId,
     int? destinationLocationId,
+    JourneyPrice? price,
   }) async {
     final body = await _api.patchObject(
       '/api/journeys/$id',
       body: {
+        // A whole-route edit that leaves the price out CLEARS it, exactly as a
+        // left-out stop does. So the price always goes, null included.
+        ..._priceBody(price, always: true),
         'start_place_id': startPlaceId,
         'destination_place_id': destinationPlaceId,
         'start_location': ?startLocationId,
@@ -394,6 +400,37 @@ class JourneyRepository {
       ),
     );
   }
+
+  static Map<String, int?> _priceBody(
+    JourneyPrice? price, {
+    required bool always,
+  }) => {
+    if (price != null || always) ...{
+      'price_per_kg_eur_cents': price?.perKgEurCents,
+      'min_price_eur_cents': price?.minimumEurCents,
+    },
+  };
+
+  /// Sets or clears the price on its own, so it can change while the route is
+  /// locked by a pending offer or a deal. A null [price] clears it. It only
+  /// affects offers created afterwards.
+  Future<Journey> setPrice(int id, JourneyPrice? price) async =>
+      Journey.fromJson(
+        await _api.patchObject(
+          '/api/journeys/$id/pricing',
+          body: _priceBody(price, always: true),
+        ),
+      );
+
+  /// Whether travellers may set a price, and the ceilings.
+  Future<TravelerPricingPolicy> pricingPolicy({
+    CancelToken? cancelToken,
+  }) async => TravelerPricingPolicy.fromJson(
+    await _api.getObject(
+      '/api/journeys/pricing-policy',
+      cancelToken: cancelToken,
+    ),
+  );
 
   /// The owner takes the journey out of discovery. Idempotent. Funded deals
   /// are untouched, and a pending offer stays pending but cannot be accepted

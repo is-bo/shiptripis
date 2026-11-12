@@ -34,6 +34,7 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
+import 'journey_price.dart';
 import 'journey_route_draft.dart';
 import 'journey_route_editor.dart' show routeCopyOf;
 import 'journey_route_section.dart';
@@ -54,6 +55,7 @@ class JourneyCreateScreen extends ConsumerStatefulWidget {
 class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
   final _notes = TextEditingController();
   late final _draft = widget.debugDraft ?? JourneyRouteDraft();
+  final _price = JourneyPriceDraft();
 
   bool _busy = false;
 
@@ -71,22 +73,29 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
     'refused_categories',
     'accepts_fragile',
     'notes',
+    'price_per_kg_eur_cents',
+    'min_price_eur_cents',
   };
 
   @override
   void dispose() {
     _notes.dispose();
     _draft.dispose();
+    _price.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (_busy) return;
     final l = L.of(context);
+    final policy = ref.read(travelerPricingPolicyProvider).value;
+    // The price is checked only while its fields are on screen.
+    final priceOk = policy?.enabled != true || _price.isValid(policy);
     if (!_draft.isValid(
-      routeCopyOf(context),
-      now: widget.debugNow?.call() ?? DateTime.now(),
-    )) {
+          routeCopyOf(context),
+          now: widget.debugNow?.call() ?? DateTime.now(),
+        ) ||
+        !priceOk) {
       setState(() => _showErrors = true);
       return;
     }
@@ -108,6 +117,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
             refusedCategories: _draft.refusedCategoryWire,
             acceptsFragile: _draft.acceptsFragile,
             notes: _notes.text.trim(),
+            price: _price.price,
           );
 
       if (!mounted) return;
@@ -124,11 +134,13 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
       if (!mounted) return;
       setState(() => _fieldErrors = FieldErrorMap.from(error));
       showRouteRefusalOnLeg(_draft, error);
-      AppSnack.failure(
-        context,
-        error,
-        fallback: journeyRouteFailure(context, error),
-      );
+      if (!_price.showRefusal(error)) {
+        AppSnack.failure(
+          context,
+          error,
+          fallback: journeyRouteFailure(context, error),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -159,6 +171,12 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               enabled: !_busy,
               showErrors: _showErrors,
               validateFutureDepartures: true,
+            ),
+
+            JourneyPriceSection(
+              draft: _price,
+              enabled: !_busy,
+              showErrors: _showErrors,
             ),
 
             const SizedBox(height: AppSpace.xl),
@@ -205,6 +223,8 @@ String? journeyRouteFailure(BuildContext context, ApiException error) {
     'journey_not_editable' => l.journeyEditBlockedStatus,
     'journey_has_dependent_state' => l.journeyEditBlockedDependent,
     'journey_not_owned' => l.journeyErrorNotOwned,
+    'traveler_pricing_disabled' => l.journeyPriceDisabled,
+    'journey_price_invalid' => l.journeyPriceErrorTooHigh,
     'journey_leg_not_found' => l.journeyEditStaleRoute,
     _ => null,
   };
