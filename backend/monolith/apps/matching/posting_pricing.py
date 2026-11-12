@@ -58,12 +58,12 @@ def estimate_request_route(delivery_request) -> RouteEstimate:
     """Great-circle distance between the request's own endpoints.
 
     Schema version 3 requests carry canonical places; version 2 carries
-    `Location` rows. Either may legitimately lack coordinates -- many
-    authoritative municipal catalogues publish no centroid, and a preferred pin
-    is optional operational data, never a pricing identity. When there are no
-    coordinates the distance is zero, which lands the estimate on the global
-    pricing floor: the fail-safe answer, not an error, because refusing to price
-    would leave a sender unable to post at all.
+    `Location` rows. Every launch-country catalogue city carries coordinates
+    (the release-data test enforces it); a preferred pin is optional
+    operational data, never a pricing identity. An endpoint without
+    coordinates is a crash guard only: the distance is zero, which lands the
+    estimate on the global pricing floor rather than leaving a sender unable
+    to post at all.
     """
 
     if getattr(delivery_request, "schema_version", 2) >= 3:

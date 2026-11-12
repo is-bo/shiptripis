@@ -40,6 +40,20 @@ Phase 8C matching.
   municipalities, 16 states and 401 district parents. Uninhabited
   municipality-free `Textkennzeichen=66` rows are excluded; the two inhabited
   `Textkennzeichen=65` rows are retained. The eight-digit AGS is preserved.
+- Coordinates for France and Spain come from two official supplements, joined
+  by official code and never by name. France: Etalab's **geo.api.gouv.fr**
+  communes endpoint (built from IGN Admin Express), keyed by INSEE code; the
+  town hall point (`mairie`) is used, the commune centre only when a commune
+  has none. Spain: Eurostat **GISCO LAU 2024** boundaries, keyed by
+  `ES_<INE code>`; GISCO publishes boundaries only, so the point is the area
+  centroid of the municipality's largest part (moved onto the part when the
+  centroid falls outside it). A catalogue city missing from its supplement, a
+  repeated code, or a point outside a plausibility box is a hard error. Each
+  supplement's SHA-256 is recorded in `sources`, its digest prefix is
+  appended to the row's `source_version` (`+GEOAPI-…`, `+GISCO-LAU-2024-…`),
+  and `metadata.coordinate_authority` names the source and basis. The
+  normalizer refuses a manifest in which any DZ, FR, ES or DE locality lacks
+  coordinates.
 - Airports use the maintained **OurAirports** CSV. The conservative V1 policy
   includes only large/medium/small airport records explicitly marked
   `scheduled_service=yes`. Closed fields, heliports, seaplane/balloon/glider
@@ -125,6 +139,18 @@ import_geography`), never part of container start. The import is one transaction
 reads as its previous state, never as a half-built one. Rehearsed on
 PostgreSQL 16 at 145.7 s and a 280 MB peak for the first import, 2.9 s for the
 skip.
+
+To refresh only the coordinates of the reviewed manifest, without pulling
+newer identity sources or airports:
+
+```text
+python tools/geography/normalize_sources.py --download --source-dir <dir> \
+  --supplement-coordinates backend/monolith/apps/locations/data/geography_manifest_2026.json.gz \
+  --gzip --output <new manifest.json.gz>
+```
+
+It changes coordinates, their provenance and `generated_at` only, and runs
+the full validation. The November 2026 FR/ES coordinates were added this way.
 
 To publish a revised catalogue: regenerate the manifest, gzip it with
 `mtime=0` so the artefact is reproducible, replace the bundled file, update

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import json
 import re
@@ -20,6 +21,7 @@ import urllib.request
 from urllib.parse import urlparse
 import zipfile
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
 from xml.etree import ElementTree as ET
@@ -37,6 +39,22 @@ DOWNLOADS = {
     "algeria_wilayas": "https://raw.githubusercontent.com/riadh2002/algeria-69-wilayas-1541-communes/main/data/wilayas.json",
     "algeria_communes": "https://raw.githubusercontent.com/riadh2002/algeria-69-wilayas-1541-communes/main/data/communes.json",
 }
+#: Official coordinate sources, keyed by the same official codes the identity
+#: sources use (INSEE commune code, INE province+municipality code). They add
+#: coordinates only: a code they publish that the identity source does not is
+#: ignored, and an identity-source code they lack is a hard error.
+COORDINATE_DOWNLOADS = {
+    "france_coordinates": "https://geo.api.gouv.fr/communes?fields=code,nom,centre,mairie&format=json",
+    "spain_coordinates": "https://gisco-services.ec.europa.eu/distribution/v2/lau/geojson/LAU_RG_01M_2024_4326.geojson",
+}
+COORDINATE_FILES = {
+    "france_coordinates": "geo-api-gouv-communes.json",
+    "spain_coordinates": "gisco-lau-2024.geojson",
+}
+#: Every locality in these countries must carry coordinates: distance pricing
+#: and airport recommendations depend on them. The floor price for a leg
+#: without them is a crash guard, never a product path.
+LAUNCH_COUNTRIES = ("DZ", "FR", "ES", "DE")
 ALLOWED_HOSTS = {
     "www.insee.fr",
     "www.ine.es",
@@ -45,6 +63,8 @@ ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
     "www.joradp.dz",
     "www.ons.dz",
+    "geo.api.gouv.fr",
+    "gisco-services.ec.europa.eu",
 }
 XML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -374,7 +394,7 @@ def _download(url: str, target: Path) -> None:
     request = urllib.request.Request(
         url, headers={"User-Agent": "ShipTrip-geography-import/1"}
     )
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - allow-list above
+    with urllib.request.urlopen(request, timeout=300) as response:  # noqa: S310 - allow-list above
         target.write_bytes(response.read())
 
 
@@ -1231,6 +1251,223 @@ def add_reviewed_served_locality_aliases(manifest: dict[str, Any]) -> None:
             )
 
 
+# --- Official coordinate supplements -----------------------------------------
+#
+# France: Etalab's geo.api.gouv.fr (DINUM, Licence Ouverte), built from IGN
+# Admin Express and keyed by INSEE code. The town hall point (``mairie``) is
+# used because it sits where people live; the polygon centre is the fallback
+# when a commune has no town hall point. Spain: Eurostat GISCO LAU 2024, keyed
+# by ``ES_<INE code>``. GISCO publishes boundaries only, so the point is the
+# area centroid of the municipality's largest part, moved onto the part
+# along a horizontal line when the centroid falls outside it (a crescent).
+
+
+def _decimal_text(value: Any) -> str:
+    """Render a JSON number as plain decimal text (never ``1e-05``)."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Coordinate is not a number: {value!r}")
+    return format(Decimal(repr(value)), "f")
+
+
+def _point(geometry: Any) -> tuple[float, float]:
+    if (
+        not isinstance(geometry, dict)
+        or geometry.get("type") != "Point"
+        or not isinstance(geometry.get("coordinates"), list)
+        or len(geometry["coordinates"]) != 2
+    ):
+        raise ValueError(f"Not a GeoJSON point: {geometry!r}")
+    longitude, latitude = geometry["coordinates"]
+    return latitude, longitude
+
+
+def _ring_area_centroid(ring: list[list[float]]) -> tuple[float, float, float]:
+    """Signed shoelace area and centroid (x, y) of one closed ring."""
+
+    area = cx = cy = 0.0
+    for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+        cross = x0 * y1 - x1 * y0
+        area += cross
+        cx += (x0 + x1) * cross
+        cy += (y0 + y1) * cross
+    area /= 2.0
+    if area == 0:
+        return 0.0, ring[0][0], ring[0][1]
+    return area, cx / (6.0 * area), cy / (6.0 * area)
+
+
+def _inside(x: float, y: float, rings: list[list[list[float]]]) -> bool:
+    inside = False
+    for ring in rings:
+        for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+            if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+                inside = not inside
+    return inside
+
+
+def _representative_point(geometry: dict[str, Any]) -> tuple[float, float]:
+    """Return (latitude, longitude) inside the geometry's largest part."""
+
+    kind = geometry.get("type")
+    if kind == "Polygon":
+        polygons = [geometry["coordinates"]]
+    elif kind == "MultiPolygon":
+        polygons = geometry["coordinates"]
+    else:
+        raise ValueError(f"Unsupported boundary geometry: {kind!r}")
+    best: tuple[float, float, float, list] | None = None
+    for polygon in polygons:
+        rings = [[point[:2] for point in ring] for ring in polygon]
+        outer_area, ox, oy = _ring_area_centroid(rings[0])
+        area = abs(outer_area)
+        sx, sy = ox * area, oy * area
+        for hole in rings[1:]:
+            hole_area, hx, hy = _ring_area_centroid(hole)
+            area -= abs(hole_area)
+            sx -= hx * abs(hole_area)
+            sy -= hy * abs(hole_area)
+        if area <= 0:
+            continue
+        if best is None or area > best[0]:
+            best = (area, sx / area, sy / area, rings)
+    if best is None:
+        raise ValueError("Boundary has no positive-area part")
+    _, x, y, rings = best
+    if not _inside(x, y, rings):
+        crossings = sorted(
+            x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+            for ring in rings
+            for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1])
+            if (y0 > y) != (y1 > y)
+        )
+        spans = list(zip(crossings[::2], crossings[1::2]))
+        if not spans:
+            raise ValueError("Boundary centroid line misses the boundary")
+        start, end = max(spans, key=lambda span: span[1] - span[0])
+        x = (start + end) / 2.0
+    return y, x
+
+
+def _within(latitude: float, longitude: float, box: tuple[float, float, float, float]) -> bool:
+    south, west, north, east = box
+    return south <= latitude <= north and west <= longitude <= east
+
+
+#: Generous plausibility boxes. A point outside its box is a source or join
+#: error, and the normalizer refuses it rather than ship it.
+METROPOLITAN_FRANCE_BOX = (41.0, -5.5, 51.5, 10.0)
+SPAIN_BOX = (27.4, -18.4, 44.0, 4.6)
+
+
+def apply_france_coordinates(path: Path, manifest: dict[str, Any]) -> str:
+    """Give every INSEE commune its geo.api.gouv.fr point. Returns the digest."""
+
+    digest = _sha256(path)
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    by_code: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        code = str(row.get("code", ""))
+        if code in by_code:
+            raise ValueError(f"geo.api.gouv.fr repeats commune {code}")
+        by_code[code] = row
+    version_suffix = f"+GEOAPI-{digest[:12]}"
+    for place in manifest["places"]:
+        if place["source"] != "insee-cog-commune":
+            continue
+        row = by_code.get(place["source_id"])
+        if row is None:
+            raise ValueError(
+                f"geo.api.gouv.fr has no point for INSEE commune {place['source_id']}"
+            )
+        basis = "mairie" if row.get("mairie") else "centre"
+        latitude, longitude = _point(row[basis])
+        if not place["source_id"].startswith("97") and not _within(
+            latitude, longitude, METROPOLITAN_FRANCE_BOX
+        ):
+            raise ValueError(f"Implausible point for INSEE commune {place['source_id']}")
+        place["latitude"] = _decimal_text(latitude)
+        place["longitude"] = _decimal_text(longitude)
+        place["source_version"] = place["source_version"].split("+GEOAPI-")[0] + version_suffix
+        place.setdefault("metadata", {})["coordinate_authority"] = (
+            f"geo.api.gouv.fr communes ({basis})"
+        )
+    return digest
+
+
+def apply_spain_coordinates(path: Path, manifest: dict[str, Any]) -> str:
+    """Give every INE municipality a point inside its GISCO LAU boundary."""
+
+    digest = _sha256(path)
+    collection = json.loads(path.read_text(encoding="utf-8"))
+    boundaries: dict[str, dict[str, Any]] = {}
+    for feature in collection.get("features", []):
+        properties = feature.get("properties") or {}
+        gisco_id = str(properties.get("GISCO_ID", ""))
+        if properties.get("CNTR_CODE") != "ES" or not gisco_id.startswith("ES_"):
+            continue
+        code = gisco_id[3:]
+        if code in boundaries:
+            raise ValueError(f"GISCO LAU repeats municipality {code}")
+        boundaries[code] = feature["geometry"]
+    version_suffix = f"+GISCO-LAU-2024-{digest[:12]}"
+    for place in manifest["places"]:
+        if place["source"] != "ine-municipality":
+            continue
+        geometry = boundaries.get(place["source_id"])
+        if geometry is None:
+            raise ValueError(
+                f"GISCO LAU 2024 has no boundary for INE municipality {place['source_id']}"
+            )
+        latitude, longitude = _representative_point(geometry)
+        if not _within(latitude, longitude, SPAIN_BOX):
+            raise ValueError(f"Implausible point for INE municipality {place['source_id']}")
+        place["latitude"] = f"{latitude:.5f}"
+        place["longitude"] = f"{longitude:.5f}"
+        place["source_version"] = (
+            place["source_version"].split("+GISCO-LAU-")[0] + version_suffix
+        )
+        place.setdefault("metadata", {})["coordinate_authority"] = (
+            "Eurostat GISCO LAU 2024 (boundary centroid)"
+        )
+    return digest
+
+
+def _coordinate_sources(france_digest: str, spain_digest: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "geo.api.gouv.fr communes",
+            "url": COORDINATE_DOWNLOADS["france_coordinates"],
+            "role": "France commune coordinates by INSEE code (town hall point)",
+            "sha256": france_digest,
+        },
+        {
+            "name": "Eurostat GISCO LAU 2024",
+            "url": COORDINATE_DOWNLOADS["spain_coordinates"],
+            "role": "Spain municipality coordinates by INE code (boundary centroid)",
+            "sha256": spain_digest,
+        },
+    ]
+
+
+def apply_coordinate_supplements(source_dir: Path, manifest: dict[str, Any]) -> None:
+    france = apply_france_coordinates(
+        source_dir / COORDINATE_FILES["france_coordinates"], manifest
+    )
+    spain = apply_spain_coordinates(
+        source_dir / COORDINATE_FILES["spain_coordinates"], manifest
+    )
+    names = {"geo.api.gouv.fr communes", "Eurostat GISCO LAU 2024"}
+    manifest["sources"] = [
+        row for row in manifest["sources"] if row.get("name") not in names
+    ] + _coordinate_sources(france, spain)
+
+
+def download_coordinate_sources(source_dir: Path) -> None:
+    for key, url in COORDINATE_DOWNLOADS.items():
+        _download(url, source_dir / COORDINATE_FILES[key])
+
+
 def validate_manifest(manifest: dict[str, Any]) -> None:
     """Fail closed on the launch-country and identity invariants."""
 
@@ -1282,6 +1519,18 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
         raise ValueError("Destatis 2026 municipality coverage changed unexpectedly")
     if by_country_type.get(("DE", "admin_region")) != 417:
         raise ValueError("Destatis 2026 parent coverage changed unexpectedly")
+    uncoordinated = [
+        f"{row['source']}:{row['source_id']}"
+        for row in places
+        if row["place_type"] == "locality"
+        and row["country_code"] in LAUNCH_COUNTRIES
+        and (row.get("latitude") in (None, "") or row.get("longitude") in (None, ""))
+    ]
+    if uncoordinated:
+        raise ValueError(
+            f"{len(uncoordinated)} launch-country localities lack coordinates, "
+            f"e.g. {uncoordinated[:5]!r}"
+        )
     airports = [row for row in places if row["place_type"] == "airport"]
     if not airports:
         raise ValueError("No airports were generated")
@@ -1417,6 +1666,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         france_dir.mkdir(exist_ok=True)
         with zipfile.ZipFile(source_dir / "france.zip") as archive:
             _extract_zip(archive, france_dir)
+        download_coordinate_sources(source_dir)
     manifest: dict[str, Any] = {
         "format_version": 1,
         "generated_at": date.today().isoformat(),
@@ -1485,6 +1735,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     parse_france(source_dir / "france.zip", manifest)
     parse_spain(source_dir / "26codmun.xlsx", manifest)
     parse_germany(source_dir / "germany.xlsx", manifest)
+    apply_coordinate_supplements(source_dir, manifest)
     parse_airports(source_dir / "airports.csv", manifest)
     if args.airport_mappings:
         mapping_path = Path(args.airport_mappings)
@@ -1503,6 +1754,30 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     return manifest
 
 
+def supplement_coordinates(args: argparse.Namespace) -> dict[str, Any]:
+    """Re-run only the coordinate step on a reviewed manifest.
+
+    The identity sources are pinned by digest in the reviewed manifest, and
+    regenerating them would quietly pull newer upstream codes and airports.
+    This path changes coordinates, their provenance and ``generated_at`` only,
+    then runs the same validation as a full build.
+    """
+
+    source_dir = Path(args.source_dir)
+    source_dir.mkdir(parents=True, exist_ok=True)
+    if args.download:
+        download_coordinate_sources(source_dir)
+    path = Path(args.supplement_coordinates)
+    raw = path.read_bytes()
+    if raw[:2] == bytes((0x1F, 0x8B)):
+        raw = gzip.decompress(raw)
+    manifest = json.loads(raw.decode("utf-8"))
+    apply_coordinate_supplements(source_dir, manifest)
+    manifest["generated_at"] = date.today().isoformat()
+    validate_manifest(manifest)
+    return manifest
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", default=".geography-sources")
@@ -1517,12 +1792,36 @@ def main() -> None:
         action="store_true",
         help="Download the fixed allow-listed sources first",
     )
-    args = parser.parse_args()
-    manifest = build(args)
-    output = Path(args.output)
-    output.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    parser.add_argument(
+        "--supplement-coordinates",
+        metavar="MANIFEST",
+        help=(
+            "Apply only the official coordinate supplements to an already "
+            "reviewed manifest (plain or .gz), leaving every identity, name "
+            "and mapping as reviewed. With --download, fetches only the "
+            "coordinate sources."
+        ),
     )
+    parser.add_argument(
+        "--gzip",
+        action="store_true",
+        help="Write the output gzipped with mtime 0, as the release bundles it",
+    )
+    args = parser.parse_args()
+    if args.supplement_coordinates:
+        manifest = supplement_coordinates(args)
+    else:
+        manifest = build(args)
+    output = Path(args.output)
+    payload = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+    if args.gzip:
+        with output.open("wb") as handle:
+            with gzip.GzipFile(
+                filename="", mode="wb", fileobj=handle, compresslevel=9, mtime=0
+            ) as packed:
+                packed.write(payload)
+    else:
+        output.write_bytes(payload)
     counts = {
         "countries": len(manifest["countries"]),
         "places": len(manifest["places"]),

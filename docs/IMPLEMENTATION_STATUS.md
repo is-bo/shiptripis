@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla — French and Spanish city coordinates (2026-11-12)
+
+Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+`main` untouched.
+
+Every French (34,875) and Spanish (8,132) catalogue city now has coordinates from an official source
+joined by official code: France from `geo.api.gouv.fr` (town hall point, by INSEE code), Spain from
+Eurostat GISCO LAU 2024 (boundary centroid of the largest part, by INE code). Identities, names,
+hierarchy, airports and mappings are unchanged; only coordinates, their provenance
+(`source_version` suffix, `metadata.coordinate_authority`, two `sources` rows with SHA-256) and
+`generated_at` changed. New uncompressed manifest SHA-256
+`4d11cbad0df3d2428f3f7d4c5ece7324f5083c75a8cafcf35a0efe1c03f266ee` (was `47bf4f76…`).
+`normalize_sources.py` gains the supplements, a `--supplement-coordinates` mode that refreshes only
+coordinates on the reviewed manifest, `--gzip`, and a gate refusing any DZ/FR/ES/DE city without
+coordinates; the release-data test enforces the same and checks real distances. French and Spanish
+road legs now price on distance; the distance floor remains only as a crash guard. Airport
+suggestions within 100 km now also work for French and Spanish cities without a served airport row.
+
 ## Wassla L3A — routes for everyone, backend (2026-11-12)
 
 Status: **merged** (PR #26, `b10cda8`) into `feature/discovery-professional-delivery`. No deployment;
