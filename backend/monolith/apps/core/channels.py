@@ -53,6 +53,10 @@ DEAL_UPDATED = "deal.updated"
 DEAL_ARRIVAL_REPORTED = "deal.arrival_reported"
 DEAL_ARRIVAL_CONFIRMED = "deal.arrival_confirmed"
 DEAL_ARRIVAL_DECLINED = "deal.arrival_declined"
+#: L5A. The traveler reported progress on a leg carrying the sender's parcel
+#: ("departed", "arrived", "at the port"). A statement by the traveler: it
+#: moves no deal status. Carries deal ids and the report kind, nothing else.
+DEAL_PROGRESS_REPORTED = "deal.progress_reported"
 DISPUTE_OPENED = "dispute.opened"
 DISPUTE_RESOLVED = "dispute.resolved"
 PAYOUT_STATUS_CHANGED = "payout.status_changed"
@@ -65,6 +69,12 @@ DISCOVERY_ROUTE_ALERT = "discovery.route_alert"
 #: "I can carry this": a traveler says one of their journeys fits the
 #: sender's request. Carries `request_id` and `journey_id`, never a price.
 DISCOVERY_TRAVELER_INTERESTED = "discovery.traveler_interested"
+
+# journey progress (L5A)
+#: "Did you depart from {city}?": asked of the traveler when a leg that carries
+#: a funded parcel passes its planned time with no report. Carries ids and the
+#: report kind asked about, never a city, a schedule or a parcel.
+JOURNEY_LEG_REMINDER = "journey.leg_reminder"
 
 # chat (Django owns persistence; Go chat-service relays this to live sockets)
 CHAT_MESSAGE_NEW = "chat.message.new"

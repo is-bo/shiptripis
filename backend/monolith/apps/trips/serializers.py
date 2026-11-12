@@ -18,6 +18,7 @@ from .models import (
     Journey,
     JourneyLeg,
     JourneyLegProof,
+    JourneyLegProgress,
     JourneyStopDetail,
 )
 from .constraints import (
@@ -1056,3 +1057,9 @@ class JourneyListSerializer(JourneySerializer):
     """Collection projection sharing Journey's authoritative field helpers."""
 
     legs = JourneyLegListSerializer(many=True, read_only=True)
+
+
+class JourneyProgressReportSerializer(serializers.Serializer):
+    """`POST /api/journeys/<id>/legs/<leg_id>/progress`."""
+
+    kind = serializers.ChoiceField(choices=JourneyLegProgress.Kind.choices)

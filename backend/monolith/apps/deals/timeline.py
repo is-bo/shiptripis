@@ -66,6 +66,12 @@ PARTY_VISIBLE_PAYLOAD_KEYS = frozenset(
         "arrival_policy_version",
         "starts_protection_window",
         "releases_delivery_code",
+        # L5A traveler progress: identifiers, a token and an ISO instant. `source`
+        # is the closed token "traveler_reported", the label the sender reads.
+        "source",
+        "progress_id",
+        "progress_kind",
+        "leg_id",
         # protection and payout
         "protection_ends_at",
         "protection_window_seconds",

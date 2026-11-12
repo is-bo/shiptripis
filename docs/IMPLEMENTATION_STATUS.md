@@ -1,5 +1,20 @@
 # Waçla V1 Implementation Status
 
+## Wassla L5A — Progress updates and reminders, backend (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main` untouched.
+
+- A traveler reports "at the port" (sea legs), "departed" and "arrived" per leg, in order, no more than 24
+  hours early, and can take a report back for 10 minutes. Each funded parcel on the leg gets a timeline
+  line marked "reported by the traveler" and its sender a notification. No deal field, status, amount or
+  payout gate changes.
+- Reminders are durable `leg_reminder` jobs scheduled when a journey is published; they ask only when the
+  leg carries a funded parcel and nothing was reported, repeat up to the admin setting, and resolve in the
+  inbox once answered. `GET /api/journeys/progress/pending` feeds Home.
+- Additive migrations (`trips/0011`, `deals/0011`, `finance/0028`), two new channels in all three places.
+
+Detail: `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md`.
+
 ## Wassla L11B — Tracking number, mobile (2026-11-12)
 
 Status: **merged** (PR #33, `75640c0`, into `feature/discovery-professional-delivery`). No backend, migration or

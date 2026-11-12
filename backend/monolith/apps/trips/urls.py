@@ -8,6 +8,10 @@ from .views import (
     JourneyPauseView,
     JourneyPricingPolicyView,
     JourneyPricingView,
+    JourneyLegProgressView,
+    JourneyProgressPendingView,
+    JourneyProgressRetractView,
+    JourneyProgressView,
     JourneyPublishView,
     JourneyResumeView,
 )
@@ -40,6 +44,26 @@ urlpatterns = [
         "journeys/<int:pk>/resume",
         JourneyResumeView.as_view(),
         name="journeys-resume",
+    ),
+    path(
+        "journeys/progress/pending",
+        JourneyProgressPendingView.as_view(),
+        name="journeys-progress-pending",
+    ),
+    path(
+        "journeys/<int:pk>/progress",
+        JourneyProgressView.as_view(),
+        name="journeys-progress",
+    ),
+    path(
+        "journeys/<int:journey_pk>/legs/<int:leg_pk>/progress",
+        JourneyLegProgressView.as_view(),
+        name="journey-leg-progress",
+    ),
+    path(
+        "journeys/<int:pk>/progress/<int:progress_pk>/retract",
+        JourneyProgressRetractView.as_view(),
+        name="journeys-progress-retract",
     ),
     path(
         "journeys/<int:journey_pk>/legs/<int:leg_pk>/proof",

@@ -232,6 +232,37 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("تم تحديث التذكرة", "افتح Wassla لمراجعة القرار."),
         },
     ),
+    # L5A. The traveler's statement about a leg carrying the sender's parcel.
+    # Essential: the sender is following the parcel. Ids only, so no city or
+    # schedule reaches a lock screen.
+    "deal.progress_reported": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("Update from your traveler", "Open Wassla to see the progress."),
+            "fr": (
+                "Nouvelle du voyageur",
+                "Ouvrez Wassla pour voir l'avancement.",
+            ),
+            "ar": ("تحديث من المسافر", "افتح Wassla لمعرفة التقدم."),
+        },
+    ),
+    # L5A. Asked of the traveler: did the leg depart or arrive. Essential,
+    # because a funded parcel is waiting on the answer.
+    "journey.leg_reminder": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("How is your trip going?", "Open Wassla to update your progress."),
+            "fr": (
+                "Où en est votre trajet ?",
+                "Ouvrez Wassla pour mettre à jour votre progression.",
+            ),
+            "ar": ("كيف تسير رحلتك؟", "افتح Wassla لتحديث تقدمك."),
+        },
+    ),
     "deal.cancelled": (
         "essential",
         "deliveries",

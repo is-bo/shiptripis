@@ -723,6 +723,14 @@ def handle_discovery_route_alerts(payload: dict) -> str:
     return handle_route_alert_fanout(payload)
 
 
+def handle_leg_reminder(payload: dict) -> str:
+    """L5A: "did you depart / arrive?" for a leg carrying a funded parcel."""
+
+    from apps.trips.progress import handle_leg_reminder as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -742,6 +750,7 @@ HANDLERS = {
     ScheduledJob.Kind.PAYOUT_ACCOUNT_REFRESH: handle_payout_account_refresh,
     ScheduledJob.Kind.PAYOUT_SWEEP: handle_payout_sweep,
     ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS: handle_discovery_route_alerts,
+    ScheduledJob.Kind.LEG_REMINDER: handle_leg_reminder,
 }
 
 

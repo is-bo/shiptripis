@@ -20,6 +20,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class Airport(models.Model):
@@ -404,6 +405,53 @@ class JourneyPriceChange(models.Model):
 
     def __str__(self) -> str:
         return f"Price change #{self.pk} on journey #{self.journey_id}"
+
+
+class JourneyLegProgress(models.Model):
+    """A traveler's statement about one leg: at the port, departed, arrived (spec 11).
+
+    A report is a statement, not a fact the platform vouches for. It changes
+    no deal status and moves no money; it is copied to the timeline of every
+    funded parcel on the leg, labelled as reported by the traveler. A report
+    can be retracted for a short while, which keeps the row and stamps
+    `retracted_at`; history is never deleted. One live row per leg and kind.
+    """
+
+    class Kind(models.TextChoices):
+        AT_PORT = "at_port", "At the port"
+        DEPARTED = "departed", "Departed"
+        ARRIVED = "arrived", "Arrived"
+
+    class Source(models.TextChoices):
+        TRAVELER = "traveler", "Traveler"
+        STAFF = "staff", "Staff"
+
+    leg = models.ForeignKey(
+        "trips.JourneyLeg", on_delete=models.CASCADE, related_name="progress_reports"
+    )
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    source = models.CharField(
+        max_length=10, choices=Source.choices, default=Source.TRAVELER
+    )
+    reported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    reported_at = models.DateTimeField(default=timezone.now)
+    retracted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "trips_journey_leg_progress"
+        ordering = ["reported_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["leg", "kind"],
+                condition=models.Q(retracted_at__isnull=True),
+                name="journey_leg_progress_one_live",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Progress #{self.pk} {self.kind} on leg #{self.leg_id}"
 
 
 class JourneyLeg(models.Model):

@@ -269,6 +269,10 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
     from apps.discovery.alerts import schedule_route_alerts
 
     schedule_route_alerts(journey_id=locked.pk)
+    # So are the "did you depart / arrive?" questions of L5A, one per leg.
+    from .progress import schedule_leg_reminders
+
+    schedule_leg_reminders(locked)
     return locked
 
 
@@ -728,6 +732,12 @@ def replace_journey_route(
             .order_by("position", "pk")
         )
         _validate_leg_sequence(locked, rewritten)
+        if locked.status == Journey.Status.ACTIVE:
+            # New times or new legs need their own reminders; the old jobs find
+            # the planned time moved and do nothing.
+            from .progress import schedule_leg_reminders
+
+            schedule_leg_reminders(locked)
 
     locked.refresh_from_db()
     return JourneyRouteChange(
