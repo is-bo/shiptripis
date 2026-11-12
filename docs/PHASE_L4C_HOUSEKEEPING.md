@@ -15,10 +15,12 @@ takes 5.2 minutes, so four shards stay well above the floor that one file sets.
 **After.** Four parallel jobs, `django-shard` (shards 1 to 4, `timeout-minutes: 25` each,
 `fail-fast: false`), each with its own PostgreSQL and Redis service.
 
+Both runs reported "all 153 test files and 2722 tests ran exactly once".
+
 | Run | Commit | Slowest shard job | Limit unused |
 | --- | --- | --- | --- |
 | 1 (run 43272745554), split from local measurements | `d278922` | shard 1: 13 min 10 s (pytest 11 min 53 s); others 10 min 12 s to 11 min 17 s | 47% |
-| 2 | CI_RUN_2 | CI_RUN_2_SLOWEST | CI_RUN_2_HEADROOM |
+| 2 (run 43275407631), split from CI measurements | `2bd7e62` | shard 3: 13 min 8 s (tests 11.7 min); others 9 min 47 s to 12 min 36 s | 47% |
 
 How it works:
 

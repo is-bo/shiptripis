@@ -8,7 +8,7 @@ untouched. No product change for members, no migration.
 - The Django tests run in CI as four parallel shards by whole test file (`config/test_shards.py`,
   measurements in `config/test_durations.json`). The required check `Django — migrations + tests +
   lint` keeps its name and fails unless every shard passed and every collected test ran exactly once.
-  The slowest shard took SLOWEST_SUMMARY against a 25-minute limit; the old single job took 33 to 44
+  On two consecutive runs the slowest shard took 13 min 10 s and 13 min 8 s against a 25-minute limit; the old single job took 33 to 44
   minutes against 45.
 - L3A's backup ferry distances are gone: no port coordinates in the seed file, no staff-typed
   kilometres, no `distance_km` on `create_crossing`. A crossing's distance comes from the catalogue
