@@ -452,3 +452,80 @@ class ListedPriceDealEquivalenceTests(PricedWorld, TestCase):
         # The only difference is the audit record of what was pre-filled.
         assert at_listed.terms.policy_snapshot["listed_price"] == listed
         assert typed.terms.policy_snapshot["listed_price"] is None
+
+
+class InProgressPriceChangeTests(PricedWorld, TestCase):
+    """A price change on a journey already under way touches nothing agreed.
+
+    The journey is in progress (a parcel is funded on its first leg) and a
+    second sender has a pending offer on its last leg. Changing the price
+    leaves every existing offer, deal, terms, order, attempt and ledger row
+    byte-identical; only an offer or a listing made afterwards sees it.
+    """
+
+    def setUp(self):
+        enable_mock_rail()
+        self.build_priced_world()
+        self.journey = self.make_journey(
+            self.traveler,
+            [(DRIVE, self.algiers, self.setif), (DRIVE, self.setif, self.constantine)],
+        )
+        self.set_price(self.journey, 900, 1_000)
+        self.first_leg, self.last_leg = self.journey.legs.order_by("position")
+
+    def offer_on(self, delivery_request, leg, reward: int) -> Offer:
+        return create_sender_offer(
+            sender=delivery_request.sender,
+            delivery_request=delivery_request,
+            journey=self.journey,
+            start_leg_id=leg.pk,
+            end_leg_id=leg.pk,
+            traveler_reward_eur_cents=reward,
+        )
+
+    @staticmethod
+    def agreed_rows() -> dict:
+        from apps.deals.models import DealTermsSnapshot
+        from apps.finance.models import Payout
+
+        return {
+            model.__name__: list(model.objects.order_by("pk").values())
+            for model in (
+                Offer,
+                Deal,
+                DealTermsSnapshot,
+                PaymentOrder,
+                PaymentAttempt,
+                LedgerEntry,
+                Payout,
+            )
+        }
+
+    def test_an_in_progress_price_change_reaches_only_future_offers(self):
+        funded_parcel = self.request_over(self.sender, self.journey, 0, 0, weight="2.40")
+        listed = self.evaluation(funded_parcel, self.journey).listed
+        offer = self.offer_on(funded_parcel, self.first_leg, listed.reward_eur_cents)
+        deal = accept_offer(pending_offer=offer, actor=self.traveler).deal
+        order = PaymentOrder.objects.get(deal=deal, purpose=PaymentOrder.Purpose.DEAL_BALANCE)
+        pay_order_with_mock(Client(), order)
+        later_sender = self.person("l4a-later@example.com")
+        pending_parcel = self.request_over(later_sender, self.journey, 1, 1, weight="2.40")
+        pending = self.offer_on(
+            pending_parcel,
+            self.last_leg,
+            self.evaluation(pending_parcel, self.journey).listed.reward_eur_cents,
+        )
+        Journey.objects.filter(pk=self.journey.pk).update(status=Journey.Status.IN_PROGRESS)
+        before = self.agreed_rows()
+        assert before["LedgerEntry"], "the funded deal posted ledger entries"
+
+        self.set_price(self.journey, 2_000, 4_000)
+
+        assert self.agreed_rows() == before
+        assert pending.terms_snapshot["listed_price"]["price_per_kg_eur_cents"] == 900
+        # Only what is made from now on sees the new price.
+        newest = self.request_over(self.sender, self.journey, 1, 1, weight="2.40")
+        row = self.row_for(self.find(newest), self.journey)
+        assert row["economics"]["listed"]["price_per_kg_eur_cents"] == 2_000
+        fresh = self.offer_on(newest, self.last_leg, row["economics"]["listed"]["reward_eur_cents"])
+        assert fresh.terms_snapshot["listed_price"] == row["economics"]["listed"]

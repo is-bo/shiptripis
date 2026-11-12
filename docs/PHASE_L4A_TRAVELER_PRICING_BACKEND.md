@@ -147,18 +147,20 @@ is about no parcel in particular, so it never carries a listed reward or economi
 
 ## 9. Tests
 
-- `apps/matching/tests/test_l4a_listed_price.py` (25): the formula at every boundary (rounding up, an
+- `apps/matching/tests/test_l4a_listed_price.py` (26): the formula at every boundary (rounding up, an
   exact product, each term winning, ties, economics), Find Travelers' `listed` and `listed_price` sort,
   switch off and unreadable policy, no extra query, offers below Wassla's minimum refused as before,
   below the listed price accepted and acceptable, snapshots unchanged by a price change, counters, and
   the done-when equivalence: every stored amount of a funded deal at the listed price (offer, terms,
-  payment orders, attempts, ledger) equals the same deal with the amount typed by hand.
+  payment orders, attempts, ledger) equals the same deal with the amount typed by hand; and on an
+  in-progress journey with a funded deal and a pending offer, a price change leaves every offer, deal,
+  terms, order, attempt, ledger and payout row identical while the next listing and offer use the new price.
 - `apps/trips/tests/test_l4a_journey_price.py` (23): create, edit, both-or-neither, bounds, the switch,
   the endpoint, the audit trail, visibility, the database constraint, the trip card, and the console.
 - Two existing tests rewritten to the new contract: the J4 economics key set gains `listed`, and the
   L2A marketplace form test expects the `traveler_pricing` section the form now saves.
 
-Django: 2,654 passed before (integration branch at de7d538); 2,702 passed after (48 added, none removed).
+Django: 2,654 passed before (integration branch at de7d538); 2,703 passed after (49 added, none removed).
 
 ## 10. Not done here (L4B and later)
 
