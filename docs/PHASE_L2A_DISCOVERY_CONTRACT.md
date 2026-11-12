@@ -259,3 +259,5 @@ Matches has at most 3 groups by design.
 `test_profiles.py`, `test_alerts.py`, `test_interest.py`, `test_admin.py`, `test_privacy.py`,
 `test_query_counts.py`. Existing tests extended: the parcel create path and the deposit publication
 path assert the fan-out job; the J13 lifecycle and posting-deposit tests use `/api/discovery/requests`.
+
+Counts: Django 2,438 passed before, 2,539 passed after (13 removed, 114 added), 0 skipped.

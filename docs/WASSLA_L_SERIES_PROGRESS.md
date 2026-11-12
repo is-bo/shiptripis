@@ -137,7 +137,10 @@ factual. Use exactly these headings.
   published trips and requests stay in Listings (spec 4.3: the profile is opt-in, listings are not); a
   banned member is absent everywhere. Discovery reuses the `matching_discovery` throttle scope, so no
   new setting. Reported to the orchestrator with the PR; not reviewed by Ismail.
-- Tests (before and after counts): TESTCOUNTS
+- Tests (before and after counts): Django 2,438 passed / 0 skipped before; 2,539 passed / 0 skipped
+  after (13 removed with the two endpoints; 114 added: 113 in `apps/discovery/tests`, 1 in
+  `apps/parcels`; the posting-deposit and J6.4 person-page tests gained assertions for the fan-out
+  job and the Discovery tab). Go unchanged and green (`go test -race ./...`).
 - Known limits: Matches costs 11 queries per group and has at most 3 groups (bounded, not flat in
   groups). No mobile change in this package, so nothing on Home uses these endpoints until L2B.
 

@@ -37,7 +37,9 @@ from apps.ratings.models import Rating
 from apps.ratings.services import submit_rating
 from apps.trips.models import Journey, JourneyLeg
 
-TABS = ("overview", "identity", "activity", "deliveries", "payments", "payouts", "trust", "audit")
+TABS = (
+    "overview", "identity", "activity", "deliveries", "payments", "payouts", "trust", "discovery", "audit"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -184,12 +186,14 @@ def test_every_role_sees_only_the_tabs_its_capabilities_own(world):
     traveler.save(update_fields=["phone"])
 
     expected = {
-        "support": {"overview", "identity", "activity", "deliveries", "trust", "audit"},
+        "support": {"overview", "identity", "activity", "deliveries", "trust", "discovery", "audit"},
         "ops": {"overview", "activity", "deliveries", "trust", "audit"},
         # Finance and Trust hold `view_deals`, so Activity shows them the offers
         # behind a Deal; requests and journeys stay Ops/Support views.
         "finance": {"overview", "identity", "activity", "deliveries", "payments", "payouts", "trust", "audit"},
-        "trust_verification": {"overview", "identity", "activity", "deliveries", "trust", "audit"},
+        "trust_verification": {
+            "overview", "identity", "activity", "deliveries", "trust", "discovery", "audit"
+        },
     }
     for role, tabs in expected.items():
         client = client_for(staff(f"j64-{role}@example.com", role))
