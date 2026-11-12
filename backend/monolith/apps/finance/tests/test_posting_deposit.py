@@ -282,16 +282,21 @@ class DepositPublicationTests(DepositTestCase):
         created = DeliveryRequest.objects.get(pk=response.data["id"])
         assert created.status == ParcelRequest.Status.AWAITING_DEPOSIT
         assert response.data["posting_deposit"]["status"] == "pending"
+        # Not open yet, so no route alert may fire for it.
+        assert not ScheduledJob.objects.filter(
+            kind=ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS
+        ).exists()
         assert response.data["posting_deposit"]["amount_eur_cents"] >= 300
 
     def test_an_unpublished_request_is_not_discoverable_or_proposable(self):
         response = self.client_for(self.scenario.traveler).get(
-            reverse("parcels-open-search")
+            reverse("discovery-requests")
         )
 
         assert response.status_code == 200
         assert all(
-            row["id"] != self.scenario.delivery_request.pk for row in response.data
+            row["request_id"] != self.scenario.delivery_request.pk
+            for row in response.data["results"]
         )
 
         from apps.matching.v1_services import RequestNotOpen, create_sender_offer
@@ -318,6 +323,11 @@ class DepositPublicationTests(DepositTestCase):
         order.refresh_from_db()
         assert order.status == PaymentOrder.Status.PAID
         assert self.scenario.delivery_request.status == ParcelRequest.Status.OPEN
+        # Opening is when route alerts fan out (L2A), recorded with the flip.
+        assert ScheduledJob.objects.filter(
+            kind=ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS,
+            key=f"discovery_route_alerts:request:{self.scenario.delivery_request.pk}",
+        ).exists()
 
     def test_a_redirect_alone_never_publishes_the_request(self):
         """Opening a checkout is not paying for it."""

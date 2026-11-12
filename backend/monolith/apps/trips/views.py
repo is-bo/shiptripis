@@ -3,14 +3,14 @@
 Endpoints:
   GET   /api/journeys                                   — list mine
   POST  /api/journeys                                   — create a draft
-  GET   /api/journeys/search                            — public search
   GET   /api/journeys/<id>                              — retrieve
   PATCH /api/journeys/<id>                              — edit while editable
   POST  /api/journeys/<id>/publish                      — publish
   POST  /api/journeys/<id>/cancel                       — cancel
   POST  /api/journeys/<journey_id>/legs/<leg_id>/proof  — upload a flight proof
 
-The pre-V1 `/api/trips*` and `/api/airports` endpoints were removed in L1A;
+Browsing other members' trips is `GET /api/discovery/trips` (L2A). The
+pre-V1 `/api/trips*` and `/api/airports` endpoints were removed in L1A;
 the `Trip` model stays because `Journey.legacy_trip` and historical matches
 reference it.
 """
@@ -18,24 +18,16 @@ reference it.
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
 
 from django.db import IntegrityError
 from django.db.models import (
-    DecimalField,
     Exists,
-    F,
     OuterRef,
     Prefetch,
     Q,
-    Subquery,
-    Sum,
-    Value,
 )
-from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -52,8 +44,6 @@ from apps.core.storage import (
     put_object,
     storage_for,
 )
-from apps.deals.models import DealLegAllocation
-from apps.kyc.models import KycSubmission
 from apps.locations.models import AirportLocalityMapping
 
 from .models import (
@@ -65,7 +55,6 @@ from .serializers import (
     JourneyCreateSerializer,
     JourneyListSerializer,
     JourneyLegProofSerializer,
-    JourneySearchFilterSerializer,
     JourneySerializer,
     JourneyUpdateSerializer,
 )
@@ -139,58 +128,6 @@ def _journey_queryset(*, include_proofs: bool = True):
     )
 
 
-def _public_journey_queryset():
-    active_mapping = AirportLocalityMapping.objects.filter(
-        active=True,
-        is_primary=True,
-        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
-        locality__active=True,
-    ).select_related("locality", "locality__parent")
-    approved_proof = JourneyLegProof.objects.filter(
-        leg_id=OuterRef("pk"),
-        status=JourneyLegProof.Status.APPROVED,
-    )
-    leg_queryset = (
-        JourneyLeg.objects.select_related(
-            "journey", "origin", "destination", "origin_place", "destination_place"
-        )
-        .annotate(has_approved_proof_value=Exists(approved_proof))
-        .prefetch_related(
-            Prefetch(
-                "origin_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
-            Prefetch(
-                "destination_place__airport_mappings",
-                queryset=active_mapping,
-                to_attr="_active_matching_mappings",
-            ),
-        )
-        .order_by("position")
-    )
-    return Journey.objects.select_related(
-        "traveler",
-        "start_location",
-        "destination_location",
-        "start_place",
-        "destination_place",
-        "legacy_trip",
-    ).prefetch_related(
-        Prefetch("legs", queryset=leg_queryset),
-        Prefetch(
-            "start_place__airport_mappings",
-            queryset=active_mapping,
-            to_attr="_active_matching_mappings",
-        ),
-        Prefetch(
-            "destination_place__airport_mappings",
-            queryset=active_mapping,
-            to_attr="_active_matching_mappings",
-        ),
-    )
-
-
 class JourneyListCreateView(APIView):
     """List the caller's journeys or create a new nested-leg draft."""
 
@@ -237,106 +174,6 @@ class JourneyListCreateView(APIView):
         return Response(
             JourneySerializer(journey, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
-        )
-
-
-class JourneySearchView(APIView):
-    """Search public, active V1 Journeys using coarse domain filters.
-
-    ``min_capacity_kg`` applies to every leg because capacity is segment
-    scoped. Results are ordered by the first departure and exposed through the
-    backward-compatible bare-array pagination contract.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        filters = JourneySearchFilterSerializer(data=request.query_params)
-        filters.is_valid(raise_exception=True)
-        values = filters.validated_data
-
-        leg_scope = JourneyLeg.objects.filter(journey_id=OuterRef("pk"))
-        approved_kyc = KycSubmission.objects.filter(
-            user_id=OuterRef("traveler_id"),
-            status=KycSubmission.Status.APPROVED,
-        ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-        approved_proof = JourneyLegProof.objects.filter(
-            leg_id=OuterRef("pk"),
-            status=JourneyLegProof.Status.APPROVED,
-        )
-        ineligible_flight_leg = (
-            JourneyLeg.objects.filter(
-                journey_id=OuterRef("pk"),
-                mode=JourneyLeg.Mode.FLIGHT,
-            )
-            .alias(has_approved_proof=Exists(approved_proof))
-            .filter(has_approved_proof=False)
-        )
-        from .lifecycle import discoverable
-        queryset = (
-            discoverable(_public_journey_queryset())
-            .exclude(traveler=request.user)
-            .alias(
-                has_legs=Exists(leg_scope),
-                has_current_kyc=Exists(approved_kyc),
-                has_ineligible_flight_leg=Exists(ineligible_flight_leg),
-                first_departure=Subquery(
-                    leg_scope.order_by("position").values("depart_at")[:1]
-                ),
-            )
-            .filter(
-                has_legs=True,
-                has_current_kyc=True,
-                has_ineligible_flight_leg=False,
-            )
-        )
-        if start_id := values.get("start_location_id"):
-            queryset = queryset.filter(start_location_id=start_id)
-        if destination_id := values.get("destination_location_id"):
-            queryset = queryset.filter(destination_location_id=destination_id)
-        if start_place_id := values.get("start_place_id"):
-            queryset = queryset.filter(start_place_id=start_place_id)
-        if destination_place_id := values.get("destination_place_id"):
-            queryset = queryset.filter(destination_place_id=destination_place_id)
-        if mode := values.get("mode"):
-            queryset = queryset.alias(
-                has_requested_mode=Exists(leg_scope.filter(mode=mode))
-            ).filter(has_requested_mode=True)
-        if departure_after := values.get("departure_after"):
-            queryset = queryset.filter(first_departure__gte=departure_after)
-        if min_capacity := values.get("min_capacity_kg"):
-            allocated = (
-                DealLegAllocation.objects.active()
-                .filter(
-                    journey_leg_id=OuterRef("pk"),
-                )
-                .values("journey_leg_id")
-                .annotate(total=Sum("allocated_weight_kg"))
-                .values("total")[:1]
-            )
-            decimal_field = DecimalField(max_digits=10, decimal_places=3)
-            queryset = queryset.alias(
-                has_under_capacity=Exists(
-                    leg_scope.annotate(
-                        reserved_capacity=Coalesce(
-                            Subquery(allocated, output_field=decimal_field),
-                            Value(Decimal("0.000")),
-                            output_field=decimal_field,
-                        )
-                    ).filter(
-                        capacity_kg__lt=F("reserved_capacity")
-                        + Value(min_capacity, output_field=decimal_field)
-                    )
-                )
-            ).filter(has_under_capacity=False)
-
-        queryset = queryset.order_by("first_departure", "pk")
-        return paginated_array_response(
-            request,
-            queryset,
-            serialize=lambda rows: JourneyListSerializer(
-                rows, many=True, context={"request": request}
-            ).data,
         )
 
 

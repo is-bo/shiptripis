@@ -110,12 +110,39 @@ factual. Use exactly these headings.
 
 ### L2A. Discovery backend and marketplace policy
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): `docs/PHASE_L2A_DISCOVERY_CONTRACT.md`.
+  Usual routes are a child table `PublicProfileRoute` (max 3, position kept) rather than a field, so
+  each end is a foreign key to a catalogue locality. The profile's public id is a uuid
+  (`PublicProfile.public_id`). `role` on People is the viewer's role (a sender sees travelers). Place
+  filters accept any place id, including an airport, and resolve it to its matching locality. The trip
+  card's `capacity_band` (`under_5kg`, `5_to_10kg`, `10_to_20kg`, `20kg_plus`) is the smallest free
+  weight across the legs still ahead; the spec's "existing public band" did not exist, and a journey
+  with a full leg ahead is not listed. The fan-out uses a `ScheduledJob` kind
+  `discovery_route_alerts` (choices-only migration `finance/0027`). `trust_signals(user_ids, side=)`
+  replaces `traveler_trust_signals` in `apps/matching/find_travelers.py` (same J4 result for travelers).
+- Left for a later package: L2B removes the mobile `searchPage`/`openFeedPage` callers of the two
+  removed endpoints and the client's handling of `airport_filter_retired` (no server code sends it
+  now), and maps `discovery.route_alert` and `discovery.traveler_interested`. L3A moves the
+  "flight leg needs an approved ticket" check in `apps/discovery/listings.py:listable_journeys` into
+  `proofs.py` (it then covers sea legs) and adds "not paused" to the listing and to
+  `matches.traveler_matches`; if pause must re-notify alerts on resume, the job key needs a suffix.
+  L4A adds the listed price to the trip card; L6A adds the pro badge and business name.
+- Switches added and their defaults: the whole `marketplace` section of spec 2.1 (defaults in the
+  contract, section 1); L2A reads `discovery.listings_enabled` (on), `discovery.profiles_enabled` (on)
+  and `discovery.interest_daily_cap` (10).
+- Deviations from the plan (what, why, approved by): branch is the harness name
+  `claude/project-thread-jms2kh`; PR targets `feature/discovery-professional-delivery`. The interest
+  cap is a rolling 24 hours and answers 429 (no calendar day is fair across Paris and Algiers). An
+  opted-out or hidden member is absent from People, the person page and person alerts, while their
+  published trips and requests stay in Listings (spec 4.3: the profile is opt-in, listings are not); a
+  banned member is absent everywhere. Discovery reuses the `matching_discovery` throttle scope, so no
+  new setting. Reported to the orchestrator with the PR; not reviewed by Ismail.
+- Tests (before and after counts): Django 2,438 passed / 0 skipped before; 2,539 passed / 0 skipped
+  after (13 removed with the two endpoints; 114 added: 113 in `apps/discovery/tests`, 1 in
+  `apps/parcels`; the posting-deposit and J6.4 person-page tests gained assertions for the fan-out
+  job and the Discovery tab). Go unchanged and green (`go test -race ./...`).
+- Known limits: Matches costs 11 queries per group and has at most 3 groups (bounded, not flat in
+  groups). No mobile change in this package, so nothing on Home uses these endpoints until L2B.
 
 ### L2B. Discovery on Home (mobile)
 

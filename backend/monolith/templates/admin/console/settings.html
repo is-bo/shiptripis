@@ -100,6 +100,18 @@
     </section>
   </div>
 
+  {# --- Marketplace features: L-series switches, one audited revision ----- #}
+  <section class="st-card" id="st-settings-marketplace">
+    <p class="st-eyebrow">Marketplace features</p>
+    <h2>Discovery on Home</h2>
+    <p>What members can browse beyond their own matches. A switched-off section disappears from the app for everyone at the next request; nothing a member already did is undone.</p>
+    <form method="post" action="#st-settings-marketplace" class="st-form">{% csrf_token %}
+      <input type="hidden" name="action" value="marketplace">
+      {{ marketplace_form.as_p }}
+      {% if may_manage %}<div class="st-split-actions"><button type="submit">Save marketplace features</button></div>{% endif %}
+    </form>
+  </section>
+
   <div class="st-grid st-grid-2">
     <section class="st-card" id="st-settings-boost">
       <p class="st-eyebrow">Protection &amp; handover</p>

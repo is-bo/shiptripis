@@ -1,5 +1,24 @@
 # Waçla V1 Implementation Status
 
+## Wassla L2A — discovery backend and marketplace policy (2026-11-12)
+
+Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+`main` untouched.
+
+The marketplace policy (`apps/core/marketplace_policy.py`) reads the `marketplace` section of the active
+business settings with the defaults of spec 2.1 and refuses unknown keys, wrong types and out-of-bound
+values at save time; the Settings page has a "Marketplace features" form for the three discovery
+switches. New app `apps.discovery` serves the three Home tiers under `/api/discovery/`: Matches (a
+fan-in over `find_travelers` and `compatible_requests_for_journey`), Listings (`trips`, `requests`,
+matched on canonical localities) and People (opt-in public profiles), plus the person page, the own
+profile with its exact public card, route alerts (durable `ScheduledJob` fan-out, one per alert per six
+hours) and "I can carry this" (engine-proven, capped, notification only). Two new channels,
+`discovery.route_alert` and `discovery.traveler_interested`, have push copy and are in the Go dispatcher.
+Staff can hide and show a public profile (audited) from a new Discovery tab on the person page.
+`GET /api/journeys/search` and `GET /api/parcels/open` are removed. Every public card is an allowlist,
+checked by a privacy walk over the five public payloads; query counts are flat at 1 and 20 rows.
+Contract: `docs/PHASE_L2A_DISCOVERY_CONTRACT.md`.
+
 ## Wassla L1B — mobile and docs cleanup (2026-11-11)
 
 Dead code removed from `mobile/lib` with no behaviour or visual change: unused repository methods

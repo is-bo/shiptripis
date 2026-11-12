@@ -273,6 +273,53 @@ class DeliveryV1CreateTests(APITestCase):
         publish.assert_called_once()
 
     @patch("apps.parcels.views.redis_bus.publish_after_commit")
+    def test_route_alerts_are_recorded_only_when_a_request_opens_at_creation(
+        self, publish
+    ):
+        from copy import deepcopy
+
+        from apps.core.business_settings import activate_business_settings
+        from apps.core.models import BusinessSettingsVersion
+        from apps.finance.models import ScheduledJob
+
+        alert_jobs = ScheduledJob.objects.filter(
+            kind=ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS
+        )
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            self._canonical_payload(),
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        # Deposit mode: the request waits for its deposit, so nothing fans out.
+        assert response.data["status"] == ParcelRequest.Status.AWAITING_DEPOSIT
+        assert not alert_jobs.exists()
+
+        active = BusinessSettingsVersion.objects.get(
+            status=BusinessSettingsVersion.Status.ACTIVE
+        )
+        policy = deepcopy(active.policy)
+        policy["payments"]["timing_mode"] = "after_acceptance"
+        activate_business_settings(
+            BusinessSettingsVersion.objects.create(
+                version=active.version + 1,
+                commission_rate_bps=active.commission_rate_bps,
+                pricing_version=active.pricing_version,
+                policy=policy,
+            )
+        )
+        response = self.client.post(
+            reverse("parcels-delivery-v1-create"),
+            self._canonical_payload(),
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        assert response.data["status"] == ParcelRequest.Status.OPEN
+        assert list(alert_jobs.values_list("key", flat=True)) == [
+            f"discovery_route_alerts:request:{response.data['id']}"
+        ]
+
+    @patch("apps.parcels.views.redis_bus.publish_after_commit")
     def test_canonical_creation_accepts_scoped_preferred_points(self, publish):
         response = self.client.post(
             reverse("parcels-delivery-v1-create"),
@@ -447,12 +494,6 @@ class DeliveryV1PrivacyAndAuthorizationTests(APITestCase):
         )
         assert outsider_response.status_code == 403
 
-    def test_open_feed_excludes_targeted_requests_and_keeps_locations_coarse(self):
-        response = _auth_client(self.outsider).get(reverse("parcels-open-search"))
-        assert response.status_code == 200
-        assert [row["id"] for row in response.data] == [self.open_request.id]
-        assert "private_label" not in response.data[0]["pickup_location"]
-
 
 class ParcelListTests(APITestCase):
     def setUp(self):
@@ -619,86 +660,3 @@ class ParcelMediaPrivacyTests(APITestCase):
         assert m["bytes"] == 12345
 
 
-class OpenParcelSearchTests(APITestCase):
-    def setUp(self):
-        self.sender = _make_user("send1@example.com")
-        self.other_sender = _make_user("send2@example.com")
-        self.traveler = _make_user("trav@example.com")
-
-        self.p_open = DeliveryRequest.objects.create(
-            sender=self.other_sender,
-            kind=ParcelRequest.Kind.DELIVERY,
-            origin_id="ALG",
-            destination_id="CDG",
-            weight_kg=2,
-            item_type="documents",
-            base_amount_dzd=3000,
-        )
-        self.p_own = DeliveryRequest.objects.create(
-            sender=self.sender,
-            kind=ParcelRequest.Kind.DELIVERY,
-            origin_id="ALG",
-            destination_id="CDG",
-            weight_kg=2,
-            item_type="documents",
-            base_amount_dzd=3000,
-        )
-        self.p_matched = DeliveryRequest.objects.create(
-            sender=self.other_sender,
-            kind=ParcelRequest.Kind.DELIVERY,
-            origin_id="ALG",
-            destination_id="CDG",
-            weight_kg=2,
-            item_type="documents",
-            base_amount_dzd=3000,
-            status=ParcelRequest.Status.MATCHED,
-        )
-        self.p_targeted = DeliveryRequest.objects.create(
-            sender=self.other_sender,
-            target_traveler=self.traveler,
-            kind=ParcelRequest.Kind.DELIVERY,
-            origin_id="ALG",
-            destination_id="CDG",
-            weight_kg=2,
-            item_type="documents",
-            base_amount_dzd=3000,
-        )
-        self.p_product = ProductRequest.objects.create(
-            sender=self.other_sender,
-            kind=ParcelRequest.Kind.PRODUCT,
-            origin_id="ALG",
-            destination_id="CDG",
-            weight_kg=2,
-            item_type="electronics",
-            product_price_dzd=20_000,
-        )
-
-    def test_legacy_open_requests_are_not_in_v1_feed(self):
-        c = _auth_client(self.sender)
-        r = c.get(reverse("parcels-open-search"))
-        assert r.status_code == 200
-        ids = {row["id"] for row in r.data}
-        assert ids == set()
-
-    def test_retired_airport_filters_are_rejected_instead_of_returning_nothing(self):
-        c = _auth_client(self.sender)
-
-        both = c.get(reverse("parcels-open-search") + "?origin=ALG&destination=CDG")
-        origin_only = c.get(reverse("parcels-open-search") + "?origin=ALG")
-
-        assert both.status_code == 400
-        assert both.data["code"] == "airport_filter_retired"
-        assert both.data["retired_parameters"] == ["destination", "origin"]
-        assert origin_only.status_code == 400
-        assert origin_only.data["retired_parameters"] == ["origin"]
-
-    def test_filters_by_max_weight(self):
-        c = _auth_client(self.traveler)
-        r = c.get(reverse("parcels-open-search") + "?max_weight_kg=1")
-        assert r.status_code == 200
-        assert r.data == []
-
-    def test_requires_auth(self):
-        c = APIClient()
-        r = c.get(reverse("parcels-open-search"))
-        assert r.status_code in (401, 403)

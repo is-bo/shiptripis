@@ -46,6 +46,7 @@ from apps.core.business_settings import (
     calculate_offer_economics,
     get_active_business_settings,
 )
+from apps.core.marketplace_policy import MarketplacePolicy
 from apps.core.models import BusinessSettingsVersion
 from apps.core.policy_display import boost_packages, policy_rows
 from apps.core.storage import readable_many, store_for_bucket, storage_for
@@ -114,6 +115,7 @@ from .console_forms import (
     JobResolutionForm,
     JobRetryForm,
     ManualPayoutForm,
+    MarketplaceFeaturesForm,
     ManualRefundForm,
     PaymentAttentionResolutionForm,
     PaymentReconcileForm,
@@ -3123,11 +3125,24 @@ def _dig(policy: dict, path: str):
     return node
 
 
+def _peek(policy: dict, path: str):
+    """`_dig` for a path a revision may not carry yet: absent reads as None."""
+
+    node = policy
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
 def _set_path(policy: dict, path: str, value) -> None:
+    # An optional section (`marketplace`) may be absent from the active
+    # revision; writing a key creates its parents rather than failing.
     node = policy
     parts = path.split(".")
     for part in parts[:-1]:
-        node = node[part]
+        node = node.setdefault(part, {})
     node[parts[-1]] = value
 
 
@@ -3144,7 +3159,7 @@ def _save_settings_revision(
             .first()
         )
         policy = deepcopy(active.policy)
-        before = {path: _dig(policy, path) for path in path_updates}
+        before = {path: _peek(policy, path) for path in path_updates}
         for path, value in path_updates.items():
             _set_path(policy, path, value)
         commission = (
@@ -3261,9 +3276,25 @@ def business_settings(request):
         initial=initial["providers"],
         auto_id="id_providers_%s",
     )
+    marketplace = MarketplacePolicy.from_settings(active)
+    marketplace_form = MarketplaceFeaturesForm(
+        request.POST if action == "marketplace" else None,
+        initial={
+            "listings_enabled": marketplace.discovery.listings_enabled,
+            "profiles_enabled": marketplace.discovery.profiles_enabled,
+            "interest_daily_cap": marketplace.discovery.interest_daily_cap,
+        },
+        auto_id="id_marketplace_%s",
+    )
     may_manage = has_admin_permission(request.user, "manage_settings")
     if not may_manage:
-        for form in (pricing_form, boost_form, fx_form, provider_form):
+        for form in (
+            pricing_form,
+            boost_form,
+            fx_form,
+            provider_form,
+            marketplace_form,
+        ):
             for field in form.fields.values():
                 field.disabled = True
     if request.method == "POST":
@@ -3342,6 +3373,34 @@ def business_settings(request):
                     request,
                     "admin_console:settings",
                     fragment="st-settings-fx",
+                )
+            if action == "marketplace" and marketplace_form.is_valid():
+                data = marketplace_form.cleaned_data
+                _save_settings_revision(
+                    request,
+                    path_updates={
+                        "marketplace.discovery.listings_enabled": data[
+                            "listings_enabled"
+                        ],
+                        "marketplace.discovery.profiles_enabled": data[
+                            "profiles_enabled"
+                        ],
+                        "marketplace.discovery.interest_daily_cap": data[
+                            "interest_daily_cap"
+                        ],
+                    },
+                    commission_rate_bps=None,
+                    reason=data["reason"],
+                )
+                messages.success(
+                    request,
+                    "Marketplace features were saved as a new audited version. "
+                    "They apply from the next request.",
+                )
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-marketplace",
                 )
             if action == "providers" and provider_form.is_valid():
                 _save_settings_revision(
@@ -3423,6 +3482,7 @@ def business_settings(request):
             "boost_form": boost_form,
             "fx_form": fx_form,
             "provider_form": provider_form,
+            "marketplace_form": marketplace_form,
             "may_manage": may_manage,
             "rows": policy_rows(
                 active.policy, commission_rate_bps=active.commission_rate_bps

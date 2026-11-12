@@ -18,9 +18,10 @@ repositories.dart`` and the providers in ``mobile/lib/app/app_state.dart``):
   Journey.
 * Operators (2 %): the server-rendered Admin console, at a slower pace.
 
-``GET /api/journeys/search`` and ``GET /api/parcels/open`` are deliberately
-absent: no app screen calls them (K7). The K6 mix modelled both, which is why
-its numbers are superseded.
+The K6 mix also modelled ``GET /api/journeys/search`` and ``GET /api/parcels/open``,
+which no app screen called (K7) and which L2A removed, which is why its numbers
+are superseded. The L2A ``/api/discovery/*`` tiers are not modelled yet: no
+screen calls them until L2B puts them on Home.
 
 Populations: senders 60 %, travelers 38 %, operators 2 %. Think time is 2-8 s
 between screens. Per-user endpoint throttles (matching discovery 10/min, chat

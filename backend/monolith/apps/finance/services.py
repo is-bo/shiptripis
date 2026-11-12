@@ -897,6 +897,9 @@ def _publish_request_after_deposit(order: PaymentOrder, *, at: datetime) -> None
         return
     request_row.status = ParcelRequest.Status.OPEN
     request_row.save(update_fields=["status", "updated_at"])
+    from apps.discovery.alerts import schedule_route_alerts
+
+    schedule_route_alerts(request_id=request_row.pk)
 
     delivery = DeliveryRequest.objects.filter(pk=order.delivery_request_id).first()
     deadline = getattr(delivery, "deadline_at", None)

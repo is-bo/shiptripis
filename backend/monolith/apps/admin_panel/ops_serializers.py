@@ -841,6 +841,10 @@ class AdminSettingsCreateSerializer(serializers.Serializer):
     def validate(self, attrs):
         """Run every existing policy parser before a revision reaches storage."""
 
+        from apps.core.marketplace_policy import (
+            InvalidMarketplacePolicy,
+            MarketplacePolicy,
+        )
         from apps.core.phase4_policy import InvalidPhase4Policy, Phase4Policy
         from apps.finance.policy import InvalidPaymentPolicy, Phase3Policy
         from apps.matching.policy import InvalidPhase2Policy, Phase2Policy
@@ -855,7 +859,13 @@ class AdminSettingsCreateSerializer(serializers.Serializer):
             Phase2Policy.from_settings(candidate)
             Phase3Policy.from_settings(candidate)
             Phase4Policy.from_settings(candidate)
-        except (InvalidPhase2Policy, InvalidPaymentPolicy, InvalidPhase4Policy) as exc:
+            MarketplacePolicy.from_settings(candidate)
+        except (
+            InvalidPhase2Policy,
+            InvalidPaymentPolicy,
+            InvalidPhase4Policy,
+            InvalidMarketplacePolicy,
+        ) as exc:
             raise serializers.ValidationError(
                 {
                     "policy": {

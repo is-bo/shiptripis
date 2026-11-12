@@ -55,5 +55,14 @@ DISPUTE_OPENED = "dispute.opened"
 DISPUTE_RESOLVED = "dispute.resolved"
 PAYOUT_STATUS_CHANGED = "payout.status_changed"
 
+# discovery (L2A). Marketplace-class pushes: both honour `marketplace_enabled`
+# and carry identifiers only, so a lock screen never shows a route or a name.
+#: A route alert's watched route has a new trip or request. Carries
+#: `alert_id` and one of `journey_id` / `request_id`.
+DISCOVERY_ROUTE_ALERT = "discovery.route_alert"
+#: "I can carry this": a traveler says one of their journeys fits the
+#: sender's request. Carries `request_id` and `journey_id`, never a price.
+DISCOVERY_TRAVELER_INTERESTED = "discovery.traveler_interested"
+
 # chat (Django owns persistence; Go chat-service relays this to live sockets)
 CHAT_MESSAGE_NEW = "chat.message.new"

@@ -286,6 +286,8 @@ class ParcelLifecycleTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["results"][0]["status"], "delivered")
         self.client.force_authenticate(self.scenario.traveler)
-        response = self.client.get("/api/parcels/open")
+        response = self.client.get("/api/discovery/requests")
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertNotIn(self.request_id, [row["id"] for row in response.data])
+        self.assertNotIn(
+            self.request_id, [row["request_id"] for row in response.data["results"]]
+        )
