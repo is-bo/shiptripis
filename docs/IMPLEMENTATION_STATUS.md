@@ -2,7 +2,7 @@
 
 ## Wassla — French and Spanish city coordinates (2026-11-12)
 
-Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+Status: **merged** (PR #27, `0119c96`) into `feature/discovery-professional-delivery`. No deployment;
 `main` untouched.
 
 Every French (34,875) and Spanish (8,132) catalogue city now has coordinates from an official source
