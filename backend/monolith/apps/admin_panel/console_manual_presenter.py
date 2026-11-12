@@ -43,6 +43,7 @@ from apps.finance.payout_domain import active_holds
 from apps.finance.payout_evidence import CHEQUE_LABELS, RECEIPT_LABELS
 from apps.finance.payout_manual_profiles import approved_profile
 from apps.finance.payout_setup_reconciliation import SETTLEMENT_BASES
+from apps.parcels import tracking
 from .permissions import has_admin_permission
 from .console_presenters import age_label, format_minor_amount
 
@@ -798,6 +799,7 @@ def manual_view(payout, *, user, revealed=None) -> dict:
         "payout": payout,
         "reference": str(payout.public_reference),
         "deal_id": payout.deal_id,
+        "tracking_number": tracking.for_deal(payout.deal),
         "traveler": {
             "name": _person(payout.traveler),
             "email": payout.traveler.email,

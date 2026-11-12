@@ -12,6 +12,14 @@ from .queries import Queries
 from .snapshot import consistent_read
 
 
+#: The parcel behind an order, through its request (deposit, Boost and, since
+#: J2, a balance) or, for a balance, through its deal.
+_ORDER_TRACKING_NUMBER = (
+    "order__delivery_request__tracking_number",
+    "order__deal__delivery_request__tracking_number",
+)
+
+
 def drilldown(
     scope,
     *,
@@ -122,7 +130,7 @@ def _drilldown(
     if query.kind == "payout":
         fields |= {
             "public_reference",
-            "deal_id",
+            "deal__delivery_request__tracking_number",
             "traveler_id",
             "status",
             "bucket",
@@ -154,7 +162,7 @@ def _drilldown(
     elif query.kind == "refund":
         fields |= {
             "order__public_reference",
-            "order__deal_id",
+            *_ORDER_TRACKING_NUMBER,
             "status",
             "provider",
             "succeeded_at",
@@ -172,7 +180,8 @@ def _drilldown(
         fields |= {
             "order__public_reference",
             "payout__public_reference",
-            "deal_id",
+            "deal__delivery_request__tracking_number",
+            *_ORDER_TRACKING_NUMBER,
             "transaction__kind",
             "transaction__created_at",
             "account",
@@ -215,8 +224,10 @@ def _drilldown(
             "amount_eur_cents": int(amount) * query.sign if amount is not None else None
         }
         for key, value in row.items():
-            if key in {"deal_id", "order__deal_id"}:
-                item["deal_reference"] = f"ST-{value}" if value else None
+            if key.endswith("tracking_number"):
+                # Several paths can name the parcel; the first one set wins.
+                if value or "tracking_number" not in item:
+                    item["tracking_number"] = value or None
             elif key == "traveler_id":
                 item["traveler_reference"] = f"TR-{value}"
             elif key == "public_reference":

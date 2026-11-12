@@ -52,8 +52,8 @@ msgstr "nécessite votre attention"
 msgid "updated"
 msgstr "mis à jour"
 
-msgid "Delivery reference"
-msgstr "Référence de livraison"
+msgid "Tracking number"
+msgstr "Numéro de suivi"
 
 msgid "Give this code to the traveler only once the parcel is physically in your hands. Entering it confirms delivery and starts the payment protection window."
 msgstr "Donnez ce code au voyageur uniquement lorsque le colis est physiquement entre vos mains. Sa saisie confirme la livraison et déclenche la période de protection du paiement."

@@ -343,9 +343,9 @@ def _facts(context: dict, *extra: tuple[str, str]) -> tuple[tuple[str, str], ...
     """
 
     rows = [(label, str(value)) for label, value in extra if value]
-    reference = context.get("deal_reference", "")
-    if reference:
-        rows.append((_("Delivery reference"), str(reference)))
+    tracking_number = context.get("tracking_number", "")
+    if tracking_number:
+        rows.append((_("Tracking number"), str(tracking_number)))
     return tuple(rows)
 
 
@@ -362,7 +362,6 @@ def _amount_fact(context: dict) -> tuple[str, str]:
 
 
 def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
-    reference = context.get("deal_reference", "")
     sender_name = context.get("sender_name", "") or _("Your sender")
     recipient_name = context.get("recipient_name", "")
     greeting = (
@@ -395,7 +394,7 @@ def _recipient_delivery_code(context: dict, secret: str) -> EmailDocument:
                 "before you have the parcel. Wassla will never ask you for it."
             )
         ),
-        facts=_facts({"deal_reference": reference}),
+        facts=_facts({"tracking_number": context.get("tracking_number", "")}),
     )
 
 
@@ -406,7 +405,6 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         raise SecretUnavailable("Invalid email context.")
     context = dict(message.context)
     kind = message.kind
-    reference = context.get("deal_reference", "")
 
     if kind == OutboundMessage.Kind.EMAIL_VERIFICATION:
         return EmailDocument(
@@ -566,7 +564,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             facts=_facts(
                 context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                (_("Payment reference"), context.get("payment_reference", "")),
                 _amount_fact(context),
             ),
         )
@@ -584,7 +582,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             facts=_facts(
                 context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                (_("Payment reference"), context.get("payment_reference", "")),
             ),
         )
     if kind == OutboundMessage.Kind.PAYMENT_FAILED:
@@ -599,7 +597,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             facts=_facts(
                 context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                (_("Payment reference"), context.get("payment_reference", "")),
                 _amount_fact(context),
             ),
         )
@@ -612,7 +610,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             paragraphs=(_("Your payment is confirmed and the delivery can continue."),),
             facts=_facts(
                 context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                (_("Payment reference"), context.get("payment_reference", "")),
                 _amount_fact(context),
             ),
         )
@@ -689,7 +687,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             facts=_facts(
                 context,
-                (_("Payment reference"), context.get("payment_reference", reference)),
+                (_("Payment reference"), context.get("payment_reference", "")),
                 _amount_fact(context),
             ),
         )

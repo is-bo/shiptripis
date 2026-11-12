@@ -55,7 +55,7 @@ def main():
                         "role": "support",
                         "status": "succeeded",
                         "payment_reference": "PAY-01234567-89ab-4cde-0123-456789abcdef",
-                        "deal_reference": "ST-01234567-89ab-4cde-0123-456789abcdef",
+                        "tracking_number": "WSL-7K3M9QXD",
                         "amount_eur_cents": 1234,
                         "event": "password_reset_completed",
                         "recipient_name": "Local recipient",

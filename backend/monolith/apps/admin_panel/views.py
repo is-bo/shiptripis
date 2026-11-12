@@ -69,6 +69,7 @@ from apps.ratings.models import Rating
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
+from . import tracking_search
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import (
     AdminBoostSerializer,
@@ -177,7 +178,9 @@ def _status_filter(queryset, request, *, field: str = "status"):
     return queryset.filter(**{field: value})
 
 
-def _search(queryset, request, fields):
+def _search(queryset, request, fields, *, tracking_paths=()):
+    """`q` matches any of `fields`, or exactly a tracking number (spec 16)."""
+
     term = request.query_params.get("q", "").strip()
     if not term:
         return queryset
@@ -188,6 +191,11 @@ def _search(queryset, request, fields):
     query = Q()
     for field in fields:
         query |= Q(**{f"{field}__icontains": term})
+    by_number = tracking_search.tracking_number_condition(term, tracking_paths)
+    if by_number is not None:
+        query |= by_number
+    elif not fields:
+        return queryset.none()
     return queryset.filter(query)
 
 
@@ -560,6 +568,7 @@ class AdminRequestListView(APIView):
                 "pickup_city",
                 "delivery_city",
             ),
+            tracking_paths=tracking_search.REQUEST,
         )
         return _paginate(request, queryset, AdminRequestSerializer)
 
@@ -598,12 +607,17 @@ class AdminMatchListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            Match.objects.select_related("sender", "traveler")
+            Match.objects.select_related("sender", "traveler", "parcel")
             .annotate(offer_count=Count("offers", distinct=True))
             .order_by("-created_at"),
             request,
         )
-        queryset = _search(queryset, request, ("sender__email", "traveler__email"))
+        queryset = _search(
+            queryset,
+            request,
+            ("sender__email", "traveler__email"),
+            tracking_paths=tracking_search.MATCH,
+        )
         return _paginate(request, queryset, AdminMatchSerializer)
 
 
@@ -624,7 +638,9 @@ class AdminDealListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            Deal.objects.select_related("sender", "traveler", "payout")
+            Deal.objects.select_related(
+                "sender", "traveler", "payout", "delivery_request"
+            )
             .annotate(
                 event_count=Count("events", distinct=True),
                 dispute_count=Count("disputes", distinct=True),
@@ -632,7 +648,12 @@ class AdminDealListView(APIView):
             .order_by("-created_at"),
             request,
         )
-        queryset = _search(queryset, request, ("sender__email", "traveler__email"))
+        queryset = _search(
+            queryset,
+            request,
+            ("sender__email", "traveler__email"),
+            tracking_paths=tracking_search.DEAL,
+        )
         return _paginate(request, queryset, AdminDealSerializer)
 
 
@@ -642,7 +663,7 @@ class AdminDealDetailView(APIView):
     def get(self, request, pk):
         deal = get_object_or_404(
             Deal.objects.select_related(
-                "sender", "traveler", "terms", "payout", "recipient"
+                "sender", "traveler", "terms", "payout", "recipient", "delivery_request"
             )
             .prefetch_related("events", "disputes")
             .annotate(
@@ -661,7 +682,9 @@ class AdminDisputeListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            Dispute.objects.select_related("deal", "opened_by", "resolved_by")
+            Dispute.objects.select_related(
+                "deal__delivery_request", "opened_by", "resolved_by"
+            )
             .prefetch_related("evidence")
             # The id tie-break keeps pages stable when timestamps collide, so
             # walking `next` meets every dispute exactly once (K7 D).
@@ -670,6 +693,9 @@ class AdminDisputeListView(APIView):
         )
         if deal_id := request.query_params.get("deal_id"):
             queryset = queryset.filter(deal_id=deal_id)
+        queryset = _search(
+            queryset, request, (), tracking_paths=tracking_search.DISPUTE
+        )
         return _paginate(request, queryset, AdminDisputeSerializer)
 
 
@@ -773,8 +799,13 @@ class AdminPaymentOrderListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            PaymentOrder.objects.select_related("owner").order_by("-created_at"),
+            PaymentOrder.objects.select_related(
+                "owner", "delivery_request", "deal__delivery_request"
+            ).order_by("-created_at"),
             request,
+        )
+        queryset = _search(
+            queryset, request, (), tracking_paths=tracking_search.ORDER
         )
         if purpose := request.query_params.get("purpose"):
             if purpose not in PaymentOrder.Purpose.values:
@@ -790,10 +821,13 @@ class AdminPaymentAttemptListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            PaymentAttempt.objects.select_related("order", "payer").order_by(
-                "-created_at"
-            ),
+            PaymentAttempt.objects.select_related(
+                "order__delivery_request", "order__deal__delivery_request", "payer"
+            ).order_by("-created_at"),
             request,
+        )
+        queryset = _search(
+            queryset, request, (), tracking_paths=tracking_search.ATTEMPT
         )
         if provider := request.query_params.get("provider"):
             if provider not in PaymentAttempt.Provider.values:
@@ -821,8 +855,13 @@ class AdminRefundListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            PaymentRefund.objects.select_related("order").order_by("-created_at"),
+            PaymentRefund.objects.select_related(
+                "order__delivery_request", "order__deal__delivery_request"
+            ).order_by("-created_at"),
             request,
+        )
+        queryset = _search(
+            queryset, request, (), tracking_paths=tracking_search.REFUND
         )
         if request.query_params.get("manual") == "true":
             queryset = queryset.filter(requires_manual_action=True)
@@ -893,7 +932,13 @@ class AdminPayoutListView(APIView):
 
     def get(self, request):
         queryset = _status_filter(
-            Payout.objects.select_related("traveler").order_by("-created_at"), request
+            Payout.objects.select_related(
+                "traveler", "deal__delivery_request"
+            ).order_by("-created_at"),
+            request,
+        )
+        queryset = _search(
+            queryset, request, (), tracking_paths=tracking_search.PAYOUT
         )
         return _paginate(request, queryset, AdminPayoutSerializer)
 

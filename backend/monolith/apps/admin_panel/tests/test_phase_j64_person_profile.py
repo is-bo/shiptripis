@@ -143,7 +143,8 @@ def test_a_super_admin_sees_the_whole_person_from_one_page(world):
     assert identity["kyc_list"]["rows"], "KYC submissions are listed"
 
     requests = tab(sender, "activity", view="requests")
-    assert f"Request {world.delivery_request.pk}" in requests.content.decode()
+    # Parcels are named by their tracking number (L11A), not a record id.
+    assert world.delivery_request.tracking_number in requests.content.decode()
     journeys = tab(traveler, "activity", view="journeys")
     assert f"Journey {world.base.journey.pk}" in journeys.content.decode()
     offers = tab(sender, "activity", view="offers")
@@ -153,7 +154,7 @@ def test_a_super_admin_sees_the_whole_person_from_one_page(world):
     assert offer_row["cells"][labels.index("Traveler total")]["primary"] != "—"
 
     deliveries = tab(sender, "deliveries").content.decode()
-    assert f"Deal {deal.pk}" in deliveries
+    assert deal.delivery_request.tracking_number in deliveries
     # The counterparty is a link to their own profile.
     assert reverse("admin_console:user-detail", args=(traveler.pk,)) in deliveries
 

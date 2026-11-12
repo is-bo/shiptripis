@@ -340,7 +340,7 @@ COUNT_NOUNS = {
 #: Column wording for the drilldown tables, keyed by the field name H5 emits.
 FIELD_LABELS = {
     "amount_eur_cents": "Amount",
-    "deal_reference": "Deal",
+    "tracking_number": "Tracking number",
     "traveler_reference": "Traveler",
     "payout_reference": "Payout",
     "order_reference": "Order",

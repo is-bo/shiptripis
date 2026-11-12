@@ -72,7 +72,7 @@ _NON_DRILLABLE = frozenset({"net_funded"})
 
 _DRILLDOWN_COLUMN_ORDER = (
     "payout_reference",
-    "deal_reference",
+    "tracking_number",
     "traveler_reference",
     "order_reference",
     "source_attempt_order_reference",
@@ -468,10 +468,10 @@ def build_rows(result, params, *, user):
                 "cells": cells,
                 "open_url": link,
                 # Fifty rows whose only link says "open this row" is fifty
-                # identical stops for a screen reader. The Deal reference is
+                # identical stops for a screen reader. The tracking number is
                 # already on the row and is short enough to be heard.
                 "open_label": "Open the operational record for "
-                + (raw.get("deal_reference") or raw.get("row_reference") or "this row"),
+                + (raw.get("tracking_number") or raw.get("row_reference") or "this row"),
             }
         )
         if not fields:

@@ -60,6 +60,7 @@ class ParcelMediaInline(admin.TabularInline):
 class ParcelRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "tracking_number",
         "kind",
         "sender",
         "origin",
@@ -69,7 +70,7 @@ class ParcelRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("kind", RequestStatusFilter, "origin", "destination")
-    search_fields = ("sender__email", "id")
+    search_fields = ("sender__email", "id", "tracking_number")
     autocomplete_fields = ("sender", "origin", "destination")
     date_hierarchy = "created_at"
     inlines = [ParcelMediaInline]
@@ -87,7 +88,7 @@ class ParcelRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         if obj is not None and obj.kind == ParcelRequest.Kind.PRODUCT:
             return tuple(field.name for field in self.model._meta.fields)
-        return ()
+        return ("tracking_number",)
 
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.kind == ParcelRequest.Kind.PRODUCT:
@@ -99,6 +100,7 @@ class ParcelRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
 class DeliveryRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "tracking_number",
         "sender",
         "schema_version",
         "origin",
@@ -110,7 +112,8 @@ class DeliveryRequestAdmin(RequestLifecycleAdminMixin, admin.ModelAdmin):
         "request_status",
     )
     list_filter = ("schema_version", RequestStatusFilter)
-    search_fields = ("sender__email", "title")
+    search_fields = ("sender__email", "title", "tracking_number")
+    readonly_fields = ("tracking_number",)
     autocomplete_fields = (
         "sender",
         "origin",

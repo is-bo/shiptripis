@@ -11,6 +11,7 @@ from django.test import RequestFactory, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.admin_panel.finance_control_plane import finance_control_plane
 from apps.admin_panel.permissions import assign_admin_roles
 from apps.deals.models import Deal
@@ -589,7 +590,9 @@ def test_mode_provider_rail_state_search_and_pagination(world):
         {"currency": "EUR"},
         {"state": "eligible"},
         {"search": str(payout.public_reference)},
-        {"search": f"ST-{s.deal.pk}"},
+        {"search": tracking.for_deal(s.deal)},
+        # Case, the prefix and the hyphen are optional (spec 16).
+        {"search": tracking.for_deal(s.deal)[4:].lower()},
         {"search": f"TR-{s.traveler.pk}"},
     ):
         rows = drilldown(scope(**filters), metric="traveler_outstanding", page_size=1)

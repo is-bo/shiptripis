@@ -7,7 +7,7 @@
 <main class="st-console">
   <header class="st-page-head">
     <div>
-      <p class="st-eyebrow">Protected case &middot; Deal {{ dispute.deal_id }}</p>
+      <p class="st-eyebrow">Protected case &middot; parcel {{ tracking_number }}</p>
       <h1>{{ dispute.get_category_display }}</h1>
       <p>Opened {{ dispute.opened_at|timesince }} ago by the {{ dispute.get_opened_by_role_display|lower }}, {{ dispute.opened_by.email }}.</p>
       <span class="st-page-ref">{{ dispute.public_reference }}</span>

@@ -297,7 +297,7 @@ class ArabicMixedDirectionTests(TestCase):
             eyebrow="الأمان",
             highlight=("الرمز", "AB12CD"),
             action=("افتح Wassla", "https://example.test/path?q=123"),
-            facts=(("المرجع", "ST-1234"),),
+            facts=(("المرجع", "WSL-7K3M9QXD"),),
         )
 
         text = to_text(
@@ -315,7 +315,7 @@ class ArabicMixedDirectionTests(TestCase):
         for value in (
             "AB12CD",
             "https://example.test/path?q=123",
-            "ST-1234",
+            "WSL-7K3M9QXD",
             "support@example.test",
         ):
             self.assertIn(f"\u2066{value}\u2069", text)

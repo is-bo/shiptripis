@@ -33,6 +33,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from apps.parcels import tracking
 from apps.core.financial_locks import LockedLifecycleAggregate, lock_deal_lifecycle
 from apps.core.event_resources import deal_resources
 from apps.matching.models import Match, MatchEvent
@@ -438,7 +439,7 @@ def _notify_cancelled(
 
     deal = aggregate.deal
     context = {
-        "deal_reference": f"ST-{deal.pk}",
+        "tracking_number": tracking.for_deal(deal),
         "cancelled_by_role": quote.actor_role,
     }
     for user_id, email in (

@@ -32,6 +32,7 @@ from django.db import connection
 from django.test import Client, override_settings
 from django.urls import reverse
 
+from apps.parcels import tracking
 from apps.admin_panel import finance_operations as ops
 from apps.admin_panel.permissions import assign_admin_roles
 from apps.core.admin_display import format_eur
@@ -352,7 +353,7 @@ def test_dzd_queue_shows_four_cohorts_with_safe_rows_and_names_what_cannot_move(
 
     # The row carries what an operator needs and nothing they must not have.
     assert str(payout.public_reference) in markup
-    assert f"ST-{payout.deal_id}" in markup
+    assert tracking.for_deal(payout.deal) in markup
     assert f"TR-{payout.traveler_id}" in markup
     assert format_eur(payout.amount_eur_cents) in markup
     assert "DZD" in markup

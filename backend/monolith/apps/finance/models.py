@@ -296,6 +296,21 @@ class PaymentOrder(models.Model):
     def is_collectable(self) -> bool:
         return self.status in self.COLLECTABLE_STATUSES
 
+    @property
+    def tracking_number(self) -> str:
+        """The number of the parcel this obligation is for (spec 16).
+
+        Every purpose names a parcel (`fin_order_reference_required`): a deposit
+        and a Boost through their request, a balance through its deal. For the
+        owner and staff only; a guest payer is never shown it.
+        """
+
+        from apps.parcels import tracking
+
+        if self.delivery_request_id is not None:
+            return tracking.for_request(self.delivery_request)
+        return tracking.for_deal(self.deal)
+
     def __str__(self) -> str:
         return (
             f"Order#{self.pk} {self.purpose} {self.amount_eur_cents}c "

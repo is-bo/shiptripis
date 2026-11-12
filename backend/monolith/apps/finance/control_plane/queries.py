@@ -409,9 +409,9 @@ class Queries:
                 else rows.filter(condition if scope.held == "true" else ~condition)
             )
         if scope.search:
-            if scope.search.startswith("ST-"):
-                rows = rows.filter(deal_id=int(scope.search[3:]))
-            elif scope.search.startswith("TR-"):
+            if scope.search_kind == "tracking_number":
+                rows = rows.filter(deal__delivery_request__tracking_number=scope.search)
+            elif scope.search_kind == "traveler":
                 rows = rows.filter(traveler_id=int(scope.search[3:]))
             else:
                 order_deals = (
@@ -435,21 +435,23 @@ class Queries:
         if self.has_cohort:
             rows = rows.annotate(linked_deal=source_deal())
             cohort = Q(linked_deal__in=self.payouts.values("deal_id"))
-            # Unbound deposit/Boost can still be looked up by their own UUID.
-            if (
-                self.scope.search
-                and not any(
-                    (
-                        self.scope.rail,
-                        self.scope.state,
-                        self.scope.held,
-                        self.scope.currency,
-                        self.scope.operation,
-                    )
+            # Unbound deposit/Boost can still be looked up by their own UUID,
+            # or by the tracking number of the parcel they are for.
+            if self.scope.search and not any(
+                (
+                    self.scope.rail,
+                    self.scope.state,
+                    self.scope.held,
+                    self.scope.currency,
+                    self.scope.operation,
                 )
-                and not self.scope.search.startswith(("ST-", "TR-"))
             ):
-                cohort |= Q(order__public_reference=self.scope.search)
+                if self.scope.search_kind == "reference":
+                    cohort |= Q(order__public_reference=self.scope.search)
+                elif self.scope.search_kind == "tracking_number":
+                    cohort |= Q(
+                        order__delivery_request__tracking_number=self.scope.search
+                    )
             rows = rows.filter(cohort)
         return rows.order_by()
 

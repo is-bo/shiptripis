@@ -23,8 +23,8 @@ from .views import (
 urlpatterns = [
     # One resource, two verbs, two names. Both entries resolve to the same
     # view, so `disputes-open` and `disputes-list` reverse to the same URL and
-    # POST and GET are both served -- which registering a POST-only view first
-    # would quietly break.
+    # POST and GET are both served -- which registering a view that accepts
+    # only POST first would quietly break.
     path(
         "deals/<int:pk>/disputes",
         DealDisputesView.as_view(),

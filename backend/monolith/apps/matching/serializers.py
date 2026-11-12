@@ -10,6 +10,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from apps.parcels.models import ParcelRequest
+from apps.parcels import tracking
 
 from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
 from .models import Match, Offer
@@ -78,6 +79,7 @@ def awaiting_party(offer: Offer, match: Match) -> tuple[str | None, int | None]:
 
 class OfferSerializer(serializers.ModelSerializer):
     proposer_id = serializers.IntegerField(read_only=True)
+    tracking_number = serializers.SerializerMethodField()
     terms_snapshot = serializers.SerializerMethodField()
     awaiting_party = serializers.SerializerMethodField()
     awaiting_user_id = serializers.SerializerMethodField()
@@ -88,6 +90,7 @@ class OfferSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "match",
+            "tracking_number",
             "parent_offer",
             "proposed_by",
             "proposer_id",
@@ -124,6 +127,10 @@ class OfferSerializer(serializers.ModelSerializer):
         if request is None or not request.user.is_authenticated:
             return None
         return request.user.id
+
+    def get_tracking_number(self, obj: Offer) -> str:
+        # Only the two people of the proposal ever receive an offer.
+        return tracking.for_request(self._match(obj).parcel)
 
     def get_terms_snapshot(self, obj: Offer) -> dict | None:
         # The stored snapshot keeps the whole business policy, the ranking
@@ -243,6 +250,7 @@ class MatchSerializer(serializers.ModelSerializer):
     start_leg_id = serializers.IntegerField(read_only=True)
     end_leg_id = serializers.IntegerField(read_only=True)
     deal_id = serializers.SerializerMethodField()
+    tracking_number = serializers.SerializerMethodField()
 
     parcel = _MatchParcelMini(read_only=True)
     latest_offer = serializers.SerializerMethodField()
@@ -257,6 +265,7 @@ class MatchSerializer(serializers.ModelSerializer):
         model = Match
         fields = (
             "id",
+            "tracking_number",
             "parcel_id",
             "trip_id",
             "journey_id",
@@ -296,6 +305,11 @@ class MatchSerializer(serializers.ModelSerializer):
 
     def get_traveler_name(self, obj: Match) -> str:
         return obj.traveler.full_name
+
+    def get_tracking_number(self, obj: Match) -> str:
+        # A match exists only once the sender has proposed: both people of
+        # the proposal may see the number.
+        return tracking.for_request(obj.parcel)
 
     def get_deal_id(self, obj: Match) -> int | None:
         try:

@@ -28,6 +28,8 @@ from django.utils import timezone
 
 from apps.trips.models import Airport
 
+from . import tracking
+
 
 class ParcelRequest(models.Model):
     """Base row for a sender's request.
@@ -118,6 +120,16 @@ class ParcelRequest(models.Model):
         max_length=16, choices=Status.choices, default=Status.OPEN, db_index=True
     )
 
+    #: The parcel's number for its whole life (spec 16). Drawn when the row is
+    #: created, never changed and never reused. Read it through
+    #: `apps.parcels.tracking.for_request` or `for_deal`.
+    tracking_number = models.CharField(
+        max_length=tracking.MAX_LENGTH,
+        unique=True,
+        editable=False,
+        default=tracking.generate,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -141,6 +153,47 @@ class ParcelRequest(models.Model):
 
     def __str__(self) -> str:
         return f"#{self.id} {self.kind} {self.origin_id or '?'}→{self.destination_id or '?'}"
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._stored_tracking_number = instance.__dict__.get("tracking_number")
+        return instance
+
+    def validate_unique(self, exclude=None):
+        # The unique index is the authority on a new number, and the first save
+        # draws another one on a collision; a read-then-insert check here would
+        # only turn that retry into a validation error.
+        super().validate_unique(exclude={*(exclude or ()), "tracking_number"})
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            self._refuse_tracking_number_change()
+            return super().save(*args, **kwargs)
+        if not tracking.is_valid(self.tracking_number):
+            raise ValidationError(
+                {"tracking_number": "This is not a Wassla tracking number."}
+            )
+        tracking.insert_with_new_number(
+            self, lambda: super(ParcelRequest, self).save(*args, **kwargs)
+        )
+        self._stored_tracking_number = self.tracking_number
+
+    def _refuse_tracking_number_change(self) -> None:
+        if "tracking_number" not in self.__dict__:
+            # Deferred and never assigned: nothing can have changed.
+            return
+        stored = getattr(self, "_stored_tracking_number", None)
+        if stored is None:
+            stored = (
+                ParcelRequest.objects.filter(pk=self.pk)
+                .values_list("tracking_number", flat=True)
+                .first()
+            )
+        if stored is not None and stored != self.tracking_number:
+            raise ValidationError(
+                {"tracking_number": "A parcel's tracking number never changes."}
+            )
 
 
 class DeliveryRequest(ParcelRequest):

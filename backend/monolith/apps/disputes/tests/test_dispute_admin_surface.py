@@ -61,7 +61,7 @@ class DisputeMoneyPositionTests(TestCase):
                 amount_eur_cents=3_000,
                 method=Payout.Method.MANUAL,
                 status=Payout.Status.NOT_ELIGIBLE,
-                reference="ADMIN-TEST-1",
+                reference="ADMINREF-1",
             ),
         )
         self.dispute = Dispute.objects.create(

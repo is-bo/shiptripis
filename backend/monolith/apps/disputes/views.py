@@ -133,7 +133,7 @@ def _party_deal(user_id: int, pk: int) -> Deal:
 def _all_disputes():
     """Every dispute, for a caller whose authority is not Deal membership."""
 
-    return Dispute.objects.select_related("deal").prefetch_related(
+    return Dispute.objects.select_related("deal__delivery_request").prefetch_related(
         "evidence", "events"
     )
 

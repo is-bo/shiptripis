@@ -274,7 +274,7 @@ class PayoutGatePreconditionTests(TestCase):
                 admin_actor_id=scenario.admin.pk,
                 payout_currency="EUR",
                 payout_amount_minor=int(payout.amount_eur_cents),
-                reference="TEST-REF-1",
+                reference="TESTREF-1",
             )
 
         rewind_deal(scenario.deal, timedelta(hours=49))
@@ -284,7 +284,7 @@ class PayoutGatePreconditionTests(TestCase):
             admin_actor_id=scenario.admin.pk,
             payout_currency="EUR",
             payout_amount_minor=int(payout.amount_eur_cents),
-            reference="TEST-REF-1",
+            reference="TESTREF-1",
         )
         assert settled.status == Payout.Status.PAID
 

@@ -1,5 +1,26 @@
 # Waçla V1 Implementation Status
 
+## Wassla L11A — Tracking number, backend (2026-11-12)
+
+Status: **in review** (pull request into `feature/discovery-professional-delivery`). No deployment;
+`main` untouched.
+
+- Every parcel request has one tracking number, `WSL-` and 8 characters without look-alikes (for
+  example `WSL-7K3M9QXD`), drawn on the first save, unique, and never changed; a reopened request
+  keeps it. Three migrations add, fill and lock the column; the fill is proven on a database that
+  already holds requests.
+- `apps/parcels/tracking.py` is the one place that creates, formats and parses the number. Every API
+  payload, email and console page that printed `ST-<id>` now shows it; the old deal reference and its
+  context key are gone from the code, templates and preview tools.
+- The sender, the traveler once a proposal exists, the recipient and staff see it. Public discovery,
+  Find Travelers, the price quote and every guest payment surface never carry it (privacy tests).
+- Staff find a parcel by typing its number (any case, with or without `WSL-` and the hyphen) in the
+  console lists, the finance control plane and the JSON admin lists. A number never opens anything by
+  itself.
+- No list gained a query per row.
+
+Detail: `docs/PHASE_L11A_TRACKING_NUMBER.md`.
+
 ## Wassla L4B — Traveler pricing, mobile (2026-11-12)
 
 Status: **merged** (PR #31, `c685db0`, into `feature/discovery-professional-delivery`). No deployment;

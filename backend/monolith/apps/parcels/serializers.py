@@ -13,6 +13,7 @@ from apps.locations.serializers import (
 )
 from apps.trips.serializers import AirportSerializer
 
+from . import tracking
 from .models import DeliveryRequest, ParcelMedia, ParcelRequest, ProductRequest
 
 
@@ -314,6 +315,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
     """Read serializer — picks subtype-specific fields off the concrete row."""
 
     status = serializers.SerializerMethodField()
+    tracking_number = serializers.SerializerMethodField()
     sender_id = serializers.IntegerField(source="sender.id", read_only=True)
     target_traveler_id = serializers.IntegerField(read_only=True, allow_null=True)
     origin = AirportSerializer(read_only=True)
@@ -354,6 +356,7 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
         model = ParcelRequest
         fields = (
             "id",
+            "tracking_number",
             "sender_id",
             "target_traveler_id",
             "kind",
@@ -400,6 +403,19 @@ class ParcelRequestSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def to_representation(self, instance: ParcelRequest) -> dict:
+        data = super().to_representation(instance)
+        # The sender's from creation (spec 16). A traveler learns it from the
+        # proposal they are part of, never from the request itself.
+        request = self.context.get("request")
+        viewer_id = getattr(getattr(request, "user", None), "id", None)
+        if viewer_id is None or viewer_id != instance.sender_id:
+            data.pop("tracking_number", None)
+        return data
+
+    def get_tracking_number(self, obj: ParcelRequest) -> str:
+        return tracking.for_request(obj)
 
     def get_status(self, obj: ParcelRequest) -> str:
         if hasattr(obj, "lifecycle_status"):

@@ -35,6 +35,7 @@ SECRETS = (
     "recipient.hidden@example.com",
     "+213777000111",
     "kyc/privacy-secret",  # KYC object key
+    "WSL-",  # any tracking number (L11A)
 )
 
 FORBIDDEN_KEYS = {
@@ -69,6 +70,7 @@ FORBIDDEN_KEYS = {
     "flight_number",
     "description",
     "declared_value_eur_cents",
+    "tracking_number",
 }
 
 

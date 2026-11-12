@@ -102,6 +102,7 @@ from apps.locations.models import (
     Place,
 )
 from apps.notifications.models import OutboundMessage
+from apps.parcels import tracking
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
@@ -154,6 +155,7 @@ from .console_presenters import (
     status_cell,
     text_cell,
 )
+from . import tracking_search
 from .console_journey_pause import pause_state
 from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
@@ -430,13 +432,26 @@ def _filter_choice(queryset, request, *, field="status"):
     return queryset.none()
 
 
-def _search(queryset, request, fields: tuple[str, ...]):
+def _search(
+    queryset,
+    request,
+    fields: tuple[str, ...],
+    *,
+    tracking_paths: tuple[str, ...] = (),
+):
+    """`q` matches any of `fields`, or exactly a tracking number (spec 16)."""
+
     query = request.GET.get("q", "").strip()[:200]
     if not query:
         return queryset
     condition = Q()
     for field in fields:
         condition |= Q(**{f"{field}__icontains": query})
+    by_number = tracking_search.tracking_number_condition(query, tracking_paths)
+    if by_number is not None:
+        condition |= by_number
+    elif not fields:
+        return queryset.none()
     return queryset.filter(condition)
 
 
@@ -1421,7 +1436,10 @@ def delivery_requests(request):
     ).order_by("-created_at")
     queryset = _filter_choice(queryset, request)
     queryset = _search(
-        queryset, request, ("title", "sender__email", "sender__full_name")
+        queryset,
+        request,
+        ("title", "sender__email", "sender__full_name"),
+        tracking_paths=tracking_search.REQUEST,
     )
     if request.GET.get("user_id", "").isdigit():
         queryset = queryset.filter(sender_id=request.GET["user_id"])
@@ -1429,7 +1447,7 @@ def delivery_requests(request):
     rows = [
         {
             "cells": (
-                text_cell(f"Request {item.pk}", parcel_summary(item), kind="strong"),
+                ref_cell(tracking.for_request(item), parcel_summary(item)),
                 text_cell(
                     item.sender.full_name or item.sender.email,
                     item.sender.email,
@@ -1447,13 +1465,13 @@ def delivery_requests(request):
         title="Delivery requests",
         description="Sender requests in product language, against the canonical route they were posted for.",
         eyebrow="Marketplace",
-        columns=("Request", "Sender", "Route", "State", "Created"),
+        columns=("Tracking number", "Sender", "Route", "State", "Created"),
         rows=rows,
         page_obj=page_obj,
         empty_title="No delivery requests found",
         empty_text="There are no requests in this state or search.",
         filter_choices=tuple(DeliveryRequest.Status.choices),
-        search_placeholder="Search request or Sender",
+        search_placeholder="Search tracking number, request or Sender",
     )
 
 
@@ -1707,7 +1725,12 @@ def _deal_queryset(request):
         .order_by("-created_at")
     )
     queryset = _filter_choice(queryset, request)
-    queryset = _search(queryset, request, ("sender__email", "traveler__email"))
+    queryset = _search(
+        queryset,
+        request,
+        ("sender__email", "traveler__email"),
+        tracking_paths=tracking_search.DEAL,
+    )
     if request.GET.get("user_id", "").isdigit():
         queryset = queryset.filter(
             Q(sender_id=request.GET["user_id"]) | Q(traveler_id=request.GET["user_id"])
@@ -1749,12 +1772,11 @@ def deals(request):
         rows.append(
             {
                 "cells": (
-                    text_cell(
-                        f"Deal {deal.pk}",
+                    ref_cell(
+                        tracking.for_deal(deal),
                         deal.created_at.strftime("%d %b %Y"),
                         href=reverse("admin_console:deal-detail", args=(deal.pk,)),
                         opens_row=True,
-                        kind="strong",
                     ),
                     text_cell(
                         deal.sender.full_name or deal.sender.email,
@@ -1780,7 +1802,7 @@ def deals(request):
         description="Agreed route, parties, money, payment, lifecycle and protection state.",
         eyebrow="Marketplace",
         columns=(
-            "Deal",
+            "Tracking number",
             "Sender to Traveler",
             "Route",
             "Traveler reward",
@@ -1795,7 +1817,7 @@ def deals(request):
         empty_title="No Deals found",
         empty_text="There are no Deals in this state or search.",
         filter_choices=tuple(Deal.Status.choices),
-        search_placeholder="Search Sender or Traveler",
+        search_placeholder="Search tracking number, Sender or Traveler",
     )
 
 
@@ -1819,8 +1841,9 @@ def deal_detail(request, pk: int):
         request,
         "admin/console/deal_detail.html",
         {
-            "title": f"Deal {deal.pk}",
+            "title": tracking.for_deal(deal),
             "deal": deal,
+            "tracking_number": tracking.for_deal(deal),
             "terms": getattr(deal, "terms", None),
             "route": request_route(deal.delivery_request),
             "route_nodes": request_route_nodes(deal.delivery_request),
@@ -1833,6 +1856,7 @@ def deal_detail(request, pk: int):
 def _dispute_queryset(request=None):
     queryset = (
         Dispute.objects.select_related(
+            "deal__delivery_request",
             "deal__sender",
             "deal__traveler",
             "deal__terms",
@@ -1859,6 +1883,7 @@ def _dispute_queryset(request=None):
         queryset,
         request,
         ("public_reference", "deal__sender__email", "deal__traveler__email"),
+        tracking_paths=tracking_search.DISPUTE,
     )
 
 
@@ -1878,9 +1903,9 @@ def disputes(request):
         rows.append(
             {
                 "cells": (
-                    text_cell(
-                        dispute.public_reference,
-                        f"Deal {dispute.deal_id}",
+                    ref_cell(
+                        tracking.for_deal(dispute.deal),
+                        str(dispute.public_reference),
                         href=admin_url(
                             request,
                             "admin_console:dispute-detail",
@@ -1888,7 +1913,6 @@ def disputes(request):
                             preserve_query=DISPUTE_QUEUE_QUERY,
                         ),
                         opens_row=True,
-                        kind="strong",
                     ),
                     text_cell(
                         dispute.deal.sender.full_name or dispute.deal.sender.email,
@@ -1917,7 +1941,7 @@ def disputes(request):
         description="One queue for age, participants, claim, evidence and the money held against it.",
         eyebrow="Disputes",
         columns=(
-            "Dispute",
+            "Tracking number",
             "Sender against Traveler",
             "Claim",
             "Age",
@@ -1932,7 +1956,7 @@ def disputes(request):
         else "No disputes found",
         empty_text="No case is waiting on a decision.",
         filter_choices=tuple(Dispute.Status.choices),
-        search_placeholder="Search reference or participant",
+        search_placeholder="Search tracking number, reference or participant",
     )
 
 
@@ -1948,8 +1972,9 @@ def _dispute_context(
     return {
         # The browser tab and the page name the claim, not the UUID. The
         # reference is still on the page for anyone who has to quote it.
-        "title": f"{dispute.get_category_display()} · Deal {dispute.deal_id}",
+        "title": f"{dispute.get_category_display()} · {tracking.for_deal(dispute.deal)}",
         "dispute": dispute,
+        "tracking_number": tracking.for_deal(dispute.deal),
         "status_form": status_form
         or DisputeStatusForm(
             initial={"status": dispute.status}, auto_id="id_status_%s"
@@ -2138,20 +2163,26 @@ def dispute_evidence(request, pk: int, evidence_id: int):
 @capability_required("view_payment_attempts", "view_payment_orders")
 def payments(request):
     queryset = PaymentAttempt.objects.select_related(
-        "order__owner", "order__deal", "payer"
+        "order__owner",
+        "order__delivery_request",
+        "order__deal__delivery_request",
+        "payer",
     ).order_by("-created_at")
     if request.GET.get("attention") == "1":
         queryset = payment_attention_queryset(queryset)
     else:
         queryset = _filter_choice(queryset, request)
-    query = request.GET.get("q", "").strip()[:200]
-    if query:
-        queryset = queryset.filter(
-            Q(order__public_reference__icontains=query)
-            | Q(payer__email__icontains=query)
-            | Q(guest_email__icontains=query)
-            | Q(provider_payment_id__icontains=query)
-        )
+    queryset = _search(
+        queryset,
+        request,
+        (
+            "order__public_reference",
+            "payer__email",
+            "guest_email",
+            "provider_payment_id",
+        ),
+        tracking_paths=tracking_search.ATTEMPT,
+    )
     page_obj = _page(request, queryset)
     rows = []
     for attempt in page_obj.object_list:
@@ -2169,16 +2200,15 @@ def payments(request):
         rows.append(
             {
                 "cells": (
+                    ref_cell(
+                        attempt.order.tracking_number,
+                        f"{attempt.order.get_purpose_display()} · "
+                        f"{attempt.order.public_reference}",
+                    ),
                     text_cell(
                         attempt.get_provider_display(),
                         payer,
                         secondary_href=_person_link(request, attempt.payer),
-                    ),
-                    text_cell(
-                        f"Deal {attempt.order.deal_id}"
-                        if attempt.order.deal_id
-                        else attempt.order.get_purpose_display(),
-                        str(attempt.order.public_reference),
                     ),
                     money_pair_cell(
                         attempt.amount_eur_cents,
@@ -2213,8 +2243,8 @@ def payments(request):
         description="The canonical EUR obligation leads; what a provider actually moved sits beside it.",
         eyebrow="Finance",
         columns=(
+            "Tracking number",
             "Provider / payer",
-            "Deal / reference",
             "Canonical EUR",
             "Provider settlement",
             "State",
@@ -2228,7 +2258,7 @@ def payments(request):
         else "No payments found",
         empty_text="No payment attempt matches this view.",
         filter_choices=tuple(PaymentAttempt.Status.choices),
-        search_placeholder="Search payer or reference",
+        search_placeholder="Search tracking number, payer or reference",
     )
 
 
@@ -2236,7 +2266,10 @@ def payments(request):
 def payment_detail(request, pk: int):
     attempt = get_object_or_404(
         PaymentAttempt.objects.select_related(
-            "order", "payer", "operational_resolved_by"
+            "order__delivery_request",
+            "order__deal__delivery_request",
+            "payer",
+            "operational_resolved_by",
         ),
         pk=pk,
     )
@@ -2288,6 +2321,7 @@ def payment_detail(request, pk: int):
         "admin/console/operations_detail.html",
         {
             "title": f"Payment attempt {attempt.pk}",
+            "tracking_number": attempt.order.tracking_number,
             "eyebrow": "Finance recovery",
             "description": (
                 "Provider reconciliation may discover money, but this screen "
@@ -2481,10 +2515,14 @@ def refund_request(request, attempt_id: int):
 
 @capability_required("issue_refunds", "settle_manual_refunds")
 def refunds(request):
-    queryset = PaymentRefund.objects.select_related("order__owner", "attempt").order_by(
-        "-created_at"
-    )
+    queryset = PaymentRefund.objects.select_related(
+        "order__owner",
+        "order__delivery_request",
+        "order__deal__delivery_request",
+        "attempt",
+    ).order_by("-created_at")
     queryset = _filter_choice(queryset, request)
+    queryset = _search(queryset, request, (), tracking_paths=tracking_search.REFUND)
     if request.GET.get("manual") == "1":
         queryset = queryset.filter(
             requires_manual_action=True,
@@ -2501,12 +2539,11 @@ def refunds(request):
         rows.append(
             {
                 "cells": (
-                    text_cell(
-                        f"Refund {refund.pk}",
+                    ref_cell(
+                        refund.order.tracking_number,
                         str(refund.order.public_reference),
                         href=reverse("admin_console:refund-detail", args=(refund.pk,)),
                         opens_row=True,
-                        kind="strong",
                     ),
                     text_cell(refund.get_reason_display()),
                     money_cell(refund.amount_eur_cents, emphasis=True),
@@ -2528,7 +2565,7 @@ def refunds(request):
         description="Requested and returned amounts, provider capability and what an operator still has to do.",
         eyebrow="Finance",
         columns=(
-            "Refund",
+            "Tracking number",
             "Reason",
             "Requested",
             "Returned",
@@ -2543,6 +2580,7 @@ def refunds(request):
         else "No refunds found",
         empty_text="No money is waiting to go back to a Sender.",
         filter_choices=tuple(PaymentRefund.Status.choices),
+        search_placeholder="Search tracking number",
     )
 
 
@@ -2550,7 +2588,12 @@ def refunds(request):
 def refund_detail(request, pk: int):
     refund = get_object_or_404(
         PaymentRefund.objects.select_related(
-            "order__owner", "attempt", "requested_by", "settled_by"
+            "order__owner",
+            "order__delivery_request",
+            "order__deal__delivery_request",
+            "attempt",
+            "requested_by",
+            "settled_by",
         ),
         pk=pk,
     )
@@ -2585,6 +2628,7 @@ def refund_detail(request, pk: int):
             "title": f"Refund {refund.pk}",
             "kind": "refund",
             "record": refund,
+            "tracking_number": refund.order.tracking_number,
             "form": form,
             "may_act": has_admin_permission(request.user, "settle_manual_refunds")
             and refund.requires_manual_action
@@ -2646,7 +2690,7 @@ def _payout_readiness(payout, *, holds: int) -> tuple[str, str, bool]:
 @capability_required("view_payouts")
 def payouts(request):
     queryset = (
-        Payout.objects.select_related("traveler", "deal")
+        Payout.objects.select_related("traveler", "deal__delivery_request")
         # One query for the page rather than a hold lookup per row. Deal-scoped
         # holds count too: a dispute hold is written against the Deal, and a row
         # that does not show it reads as ready when it is not.
@@ -2669,6 +2713,7 @@ def payouts(request):
         )
     else:
         queryset = _filter_choice(queryset, request)
+    queryset = _search(queryset, request, (), tracking_paths=tracking_search.PAYOUT)
     page_obj = _page(request, queryset)
     rows = []
     for payout in page_obj.object_list:
@@ -2690,17 +2735,18 @@ def payouts(request):
         rows.append(
             {
                 "cells": (
+                    # The tracking number is how an operator finds the parcel
+                    # behind a payout; the payout reference is what they quote
+                    # to a bank. Both, in one column.
+                    ref_cell(
+                        tracking.for_deal(payout.deal),
+                        str(payout.public_reference)[:8],
+                        href=reverse("admin_console:payout-detail", args=(payout.pk,)),
+                        opens_row=True,
+                    ),
                     text_cell(
                         payout.traveler.full_name or payout.traveler.email,
                         payout.traveler.email,
-                        href=reverse("admin_console:payout-detail", args=(payout.pk,)),
-                        opens_row=True,
-                        kind="strong",
-                    ),
-                    # The reference is what an operator quotes; the Deal is how
-                    # they find the shipment behind it. Both, in one column.
-                    ref_cell(
-                        str(payout.public_reference)[:8], "Deal %d" % payout.deal_id
                     ),
                     # EUR stays the larger line even on the DZD rail: the
                     # settlement figure is what gets typed into a bank, but the
@@ -2719,8 +2765,8 @@ def payouts(request):
         description="What Wassla owes each Traveler, whether it can move yet, and what is holding it.",
         eyebrow="Finance",
         columns=(
+            "Tracking number",
             "Traveler",
-            "Payout",
             "Owed",
             "Rail",
             "State",
@@ -2734,6 +2780,7 @@ def payouts(request):
         else "No payouts found",
         empty_text="No Traveler settlement is waiting.",
         filter_choices=tuple(Payout.Status.choices),
+        search_placeholder="Search tracking number",
     )
 
 
@@ -2855,7 +2902,9 @@ def payout_evidence(request, pk: int, reference):
 
 @capability_required("view_payouts")
 def payout_detail(request, pk: int):
-    payout = get_object_or_404(Payout.objects.select_related("traveler", "deal"), pk=pk)
+    payout = get_object_or_404(
+        Payout.objects.select_related("traveler", "deal__delivery_request"), pk=pk
+    )
     if payout.snapshot_version and payout.method == "manual":
         from .console_manual_payout import manual_detail
 
@@ -2908,6 +2957,7 @@ def payout_detail(request, pk: int):
             "title": f"Payout {payout.pk}",
             "kind": "payout",
             "record": payout,
+            "tracking_number": tracking.for_deal(payout.deal),
             "form": form,
             "stripe": stripe_panel,
             # The legacy manual-evidence form. On the Stripe rail there is no

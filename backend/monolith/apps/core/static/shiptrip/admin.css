@@ -587,6 +587,9 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   overflow-wrap: anywhere;
 }
 
+/* A page that is about one parcel is named by its tracking number (spec 16). */
+#content .st-page-head h1.st-tracking-number { font-family: var(--st-mono); letter-spacing: 0.02em; }
+
 .st-eyebrow {
   margin: 0 0 var(--st-2) !important;
   color: var(--st-accent) !important;
@@ -810,7 +813,7 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   border-radius: var(--st-r-3);
   background: var(--st-surface);
 }
-.st-filters .st-filter { display: flex; flex-direction: column; gap: 5px; }
+.st-filters .st-filter { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .st-filters label {
   color: var(--st-ink-3);
   font-size: var(--st-fs-micro);
@@ -818,7 +821,7 @@ div.breadcrumbs a:hover { color: var(--st-accent); text-decoration: underline; }
   letter-spacing: .05em;
   text-transform: uppercase;
 }
-.st-filters input[type="search"] { width: min(340px, 100%); }
+.st-filters input[type="search"] { width: 340px; max-width: 100%; }
 .st-filters a { align-self: center; padding: var(--st-2) var(--st-1); font-size: var(--st-fs-xs); }
 .st-filters button { align-self: flex-end; }
 

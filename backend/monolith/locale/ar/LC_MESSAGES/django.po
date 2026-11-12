@@ -52,8 +52,8 @@ msgstr "يتطلب الانتباه"
 msgid "updated"
 msgstr "محدّث"
 
-msgid "Delivery reference"
-msgstr "مرجع التسليم"
+msgid "Tracking number"
+msgstr "رقم التتبع"
 
 msgid "Give this code to the traveler only once the parcel is physically in your hands. Entering it confirms delivery and starts the payment protection window."
 msgstr "أعطِ هذا الرمز للمسافر فقط بعد أن يصبح الطرد بين يديك فعليًا. إدخال الرمز يؤكد التسليم ويبدأ فترة حماية الدفع."
