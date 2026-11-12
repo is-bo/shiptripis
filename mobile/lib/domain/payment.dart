@@ -490,6 +490,7 @@ class PaymentOrder {
     this.outstanding,
     this.dealId,
     this.deliveryRequestId,
+    this.trackingNumber,
     this.paidAt,
     this.createdAt,
     this.chargilyQuote,
@@ -522,6 +523,7 @@ class PaymentOrder {
     outstanding: Money.eurCentsOrNull(json['outstanding_eur_cents']),
     dealId: readInt(json['deal_id']),
     deliveryRequestId: readInt(json['delivery_request_id']),
+    trackingNumber: readTrackingNumber(json['tracking_number']),
     paidAt: readDate(json['paid_at']),
     createdAt: readDate(json['created_at']),
     attempts: readObjectList(
@@ -560,6 +562,10 @@ class PaymentOrder {
 
   final int? dealId;
   final int? deliveryRequestId;
+
+  /// The parcel's number: the request's for a posting deposit or a Boost, the
+  /// deal's for a balance. Shown to the order's owner.
+  final String? trackingNumber;
   final DateTime? paidAt;
   final DateTime? createdAt;
 
@@ -704,6 +710,7 @@ class DealPaymentState {
     required this.dealStatusRaw,
     required this.currency,
     required this.viewerIsTraveler,
+    this.trackingNumber,
     this.senderTotal,
     this.travelerReward,
     this.platformFee,
@@ -724,6 +731,7 @@ class DealPaymentState {
     return DealPaymentState(
       dealId: readInt(json['deal_id']) ?? 0,
       dealStatusRaw: readText(json['deal_status']),
+      trackingNumber: readTrackingNumber(json['tracking_number']),
       currency: readText(json['currency']).isEmpty
           ? 'EUR'
           : readText(json['currency']),
@@ -755,6 +763,7 @@ class DealPaymentState {
 
   final int dealId;
   final String dealStatusRaw;
+  final String? trackingNumber;
   final String currency;
   final Money? senderTotal;
   final Money? travelerReward;

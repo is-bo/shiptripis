@@ -311,6 +311,7 @@ class PayoutMobile {
     required this.messageKey,
     required this.protectionActive,
     required this.availableActions,
+    this.trackingNumber,
     this.settlementCurrency,
     this.dzdAmount,
     this.fxRateMicros,
@@ -333,6 +334,7 @@ class PayoutMobile {
     return PayoutMobile(
       reference: readText(json['reference']),
       dealId: readInt(json['deal_id']) ?? 0,
+      trackingNumber: readTrackingNumber(json['tracking_number']),
       rail: PayoutRail.parse(readString(json['rail'])),
       settlementCurrency: readString(json['settlement_currency']),
       amountEurCents: readInt(json['amount_eur_cents']) ?? 0,
@@ -369,6 +371,7 @@ class PayoutMobile {
 
   final String reference;
   final int dealId;
+  final String? trackingNumber;
   final PayoutRail rail;
   final String? settlementCurrency;
   final int amountEurCents;
@@ -444,6 +447,7 @@ class PayoutListItem {
     required this.method,
     required this.status,
     required this.reference,
+    this.trackingNumber,
     this.payoutCurrency,
     this.payoutAmountLabel,
     this.eligibleAt,
@@ -459,6 +463,7 @@ class PayoutListItem {
     method: readText(json['method']),
     status: readText(json['status']),
     reference: readText(json['reference']),
+    trackingNumber: readTrackingNumber(json['tracking_number']),
     payoutCurrency: readString(json['payout_currency']),
     payoutAmountLabel: readString(json['payout_amount']),
     eligibleAt: readDate(json['eligible_at']),
@@ -473,6 +478,7 @@ class PayoutListItem {
   final String method;
   final String status;
   final String reference;
+  final String? trackingNumber;
   final String? payoutCurrency;
   final String? payoutAmountLabel;
   final DateTime? eligibleAt;

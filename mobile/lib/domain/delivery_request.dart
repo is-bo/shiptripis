@@ -97,6 +97,7 @@ class DeliveryRequest {
     required this.media,
     required this.acknowledgements,
     this.itemPhotoMediaId,
+    this.trackingNumber,
     this.targetTravelerId,
     this.pickupLocation,
     this.deliveryLocation,
@@ -161,12 +162,16 @@ class DeliveryRequest {
         ).map(ParcelMedia.fromJson).toList(growable: false),
         acknowledgements: SafetyAcknowledgements.fromJson(json),
         itemPhotoMediaId: readInt(json['item_photo_media_id']),
+        trackingNumber: readTrackingNumber(json['tracking_number']),
         createdAt: readDate(json['created_at']),
         updatedAt: readDate(json['updated_at']),
       );
 
   final int id;
   final int senderId;
+
+  /// The parcel's number. The server sends it to the sender only.
+  final String? trackingNumber;
 
   /// Set when the sender addressed this request to one traveller. A private
   /// request is invisible to everyone else.

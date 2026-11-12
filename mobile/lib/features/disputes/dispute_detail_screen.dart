@@ -35,6 +35,7 @@ import '../../design/components/forms.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
@@ -284,6 +285,10 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
+          if (dispute.trackingNumber != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            TrackingNumberView(number: dispute.trackingNumber),
+          ],
           const SizedBox(height: AppSpace.lg),
 
           if (dispute.reasonText.isNotEmpty) ...[

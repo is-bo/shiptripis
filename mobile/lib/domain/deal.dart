@@ -766,6 +766,7 @@ class Deal {
     this.matchId,
     this.deliveryRequestId,
     this.journeyId,
+    this.trackingNumber,
     this.cancellationReason,
     this.fundedAt,
     this.agreedPickupAt,
@@ -804,6 +805,7 @@ class Deal {
     matchId: readInt(json['match_id']),
     deliveryRequestId: readInt(json['delivery_request_id']),
     journeyId: readInt(json['journey_id']),
+    trackingNumber: readTrackingNumber(json['tracking_number']),
     senderId: readInt(json['sender_id']) ?? 0,
     travelerId: readInt(json['traveler_id']) ?? 0,
     status: readEnum(
@@ -861,6 +863,9 @@ class Deal {
   final int? acceptedOfferId;
   final int? matchId;
   final int? deliveryRequestId;
+
+  /// The parcel's number, shown to both parties.
+  final String? trackingNumber;
   final int? journeyId;
   final int senderId;
   final int travelerId;

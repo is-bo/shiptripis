@@ -1,5 +1,20 @@
 # Waçla V1 Implementation Status
 
+## Wassla L11B — Tracking number, mobile (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend, migration or
+contract change; `main` untouched.
+
+- One shared widget, `TrackingNumberView`, shows the parcel's `WSL-` number in the mono face, always left
+  to right (also in Arabic), spelled out for screen readers, with a copy button that confirms. A payload
+  without a number renders nothing, not a placeholder.
+- Shown on request detail, the delivery screen, each proposal, the payment screen, the dispute screen,
+  and the traveler's payout detail and payout lines. Never on discovery, browse, Find Travelers or
+  public previews; nothing opens a parcel from a number.
+- Flutter tests 1,374 to 1,399; EN, FR and AR strings; gate screenshots in the shared project folder.
+
+Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`.
+
 ## Wassla L11A — Tracking number, backend (2026-11-12)
 
 Status: **merged** (PR #32, `1021c89`, into `feature/discovery-professional-delivery`). No deployment;

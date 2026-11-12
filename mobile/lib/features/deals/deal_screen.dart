@@ -37,6 +37,7 @@ import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/route.dart';
 import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
@@ -825,6 +826,10 @@ class _StatusHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           StatusPill(label: copy.label, tone: copy.tone, icon: copy.icon),
+          if (deal.trackingNumber != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            TrackingNumberView(number: deal.trackingNumber),
+          ],
           if (amount != null) ...[
             const SizedBox(height: AppSpace.lg),
             MoneyHero(

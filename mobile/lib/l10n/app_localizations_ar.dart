@@ -5262,4 +5262,13 @@ class LAr extends L {
 
   @override
   String get tripPrice => 'السعر';
+
+  @override
+  String get trackingNumberLabel => 'رقم التتبع';
+
+  @override
+  String get trackingNumberCopy => 'نسخ رقم التتبع';
+
+  @override
+  String get trackingNumberCopied => 'تم نسخ رقم التتبع';
 }

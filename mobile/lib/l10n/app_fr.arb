@@ -1525,5 +1525,8 @@
   "offerDifferentAmount": "Proposer un autre montant",
   "offerBelowListedNote": "C'est en dessous de son prix : le voyageur peut refuser ou contre-proposer.",
   "offerUseListed": "Utiliser son prix",
-  "tripPrice": "Prix"
+  "tripPrice": "Prix",
+  "trackingNumberLabel": "Numéro de suivi",
+  "trackingNumberCopy": "Copier le numéro de suivi",
+  "trackingNumberCopied": "Numéro de suivi copié"
 }

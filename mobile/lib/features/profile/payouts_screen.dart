@@ -19,6 +19,7 @@ import '../../design/components/feedback.dart';
 import '../../design/components/money.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/tracking.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
@@ -169,6 +170,10 @@ class _PayoutItemCard extends StatelessWidget {
               '${item.payoutAmountLabel} ${item.payoutCurrency}',
               style: text.bodySmall?.copyWith(color: c.textTertiary),
             ),
+          ],
+          if (item.trackingNumber != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            TrackingNumberView(number: item.trackingNumber, dense: true),
           ],
           const SizedBox(height: AppSpace.sm),
           Row(

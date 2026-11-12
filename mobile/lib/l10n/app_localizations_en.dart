@@ -5280,4 +5280,13 @@ class LEn extends L {
 
   @override
   String get tripPrice => 'Price';
+
+  @override
+  String get trackingNumberLabel => 'Tracking number';
+
+  @override
+  String get trackingNumberCopy => 'Copy tracking number';
+
+  @override
+  String get trackingNumberCopied => 'Tracking number copied';
 }

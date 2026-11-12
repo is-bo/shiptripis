@@ -2837,5 +2837,8 @@
   "offerDifferentAmount": "Offer a different amount",
   "offerBelowListedNote": "That is below their price, so they may decline or counter.",
   "offerUseListed": "Use their price",
-  "tripPrice": "Price"
+  "tripPrice": "Price",
+  "trackingNumberLabel": "Tracking number",
+  "trackingNumberCopy": "Copy tracking number",
+  "trackingNumberCopied": "Tracking number copied"
 }

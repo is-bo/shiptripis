@@ -34,6 +34,17 @@ double? readDouble(Object? raw) => switch (raw) {
   _ => null,
 };
 
+/// A parcel's tracking number (`WSL-7K3M9QXD`), or null when the payload has
+/// none. The server decides who may see it, so a payload without the key (a
+/// cached older one, a viewer who is not meant to see it) simply has no number.
+/// It is shown, never parsed or validated here: it identifies a parcel and
+/// authorises nothing.
+String? readTrackingNumber(Object? raw) {
+  if (raw is! String) return null;
+  final value = raw.trim();
+  return value.isEmpty ? null : value;
+}
+
 String? readString(Object? raw) {
   if (raw is String) return raw;
   if (raw == null) return null;

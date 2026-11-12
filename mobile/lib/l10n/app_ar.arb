@@ -1525,5 +1525,8 @@
   "offerDifferentAmount": "اعرض مبلغًا آخر",
   "offerBelowListedNote": "هذا أقل من سعره، لذا قد يرفض المسافر أو يقدّم عرضًا مقابلًا.",
   "offerUseListed": "استخدم سعره",
-  "tripPrice": "السعر"
+  "tripPrice": "السعر",
+  "trackingNumberLabel": "رقم التتبع",
+  "trackingNumberCopy": "نسخ رقم التتبع",
+  "trackingNumberCopied": "تم نسخ رقم التتبع"
 }
