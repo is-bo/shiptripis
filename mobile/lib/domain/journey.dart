@@ -1,8 +1,9 @@
-/// A traveller's journey: an ordered chain of flight and drive legs.
+/// A traveller's journey: an ordered chain of flight, sea and road legs.
 ///
 /// The V1 model is deliberately not "a flight". Paris → Algiers by air then
 /// Algiers → Jijel by road is one journey with two legs, and a sender's parcel
-/// may ride a sub-range of it. Every leg carries its own capacity, so the
+/// may ride a sub-range of it. A ferry between two port cities is a leg like
+/// any other. Every leg carries its own capacity, so the
 /// question "can you take 3 kg" is answered per leg, not per journey.
 ///
 /// Owner and counterparty see materially different leg objects: the owner gets
@@ -37,6 +38,94 @@ enum JourneyStatus {
 }
 
 enum ProofStatus { pending, approved, rejected, unknown }
+
+/// What the server says a leg's ticket needs, from `proof_state`.
+///
+/// The client never decides whether a leg needs a ticket or whether one is
+/// good enough: flight and sea legs need one, a road leg does not, and the
+/// server tells us which state each leg is in. A value this build has never
+/// heard of reads as [unknown] and blocks nothing it cannot explain.
+enum LegProofState {
+  notRequired,
+  missing,
+  pending,
+  approved,
+  rejected,
+  unknown;
+
+  static LegProofState parse(Object? raw) => switch (raw) {
+    'not_required' => notRequired,
+    'missing' => missing,
+    'pending' => pending,
+    'approved' => approved,
+    'rejected' => rejected,
+    _ => unknown,
+  };
+}
+
+/// What this stop accepts, and the handover detail the owner set for it.
+///
+/// [handoverNote] and the window are served only to the owner (and, after
+/// funding, to the two parties of a deal that uses the stop, through the
+/// deal's own route). Everyone else gets the flags alone.
+class JourneyStop {
+  const JourneyStop({
+    required this.position,
+    this.placeId,
+    this.acceptsPickup = true,
+    this.acceptsDropoff = true,
+    this.handoverNote = '',
+    this.windowStart,
+    this.windowEnd,
+  });
+
+  factory JourneyStop.fromJson(Map<String, dynamic> json) => JourneyStop(
+    position: readInt(json['position']) ?? 0,
+    placeId: readInt(json['place_id']),
+    acceptsPickup: json['accepts_pickup'] != false,
+    acceptsDropoff: json['accepts_dropoff'] != false,
+    handoverNote: readText(json['handover_note']),
+    windowStart: readDate(json['window_start']),
+    windowEnd: readDate(json['window_end']),
+  );
+
+  final int position;
+  final int? placeId;
+
+  /// What the stop *effectively* accepts: never a drop-off at the first stop
+  /// or a pickup at the last, whatever was set.
+  final bool acceptsPickup;
+  final bool acceptsDropoff;
+
+  final String handoverNote;
+  final DateTime? windowStart;
+  final DateTime? windowEnd;
+
+  bool get hasHandoverDetail =>
+      handoverNote.isNotEmpty || (windowStart != null && windowEnd != null);
+}
+
+/// The owner's view of a pause. Staff reasons are never served.
+class JourneyPause {
+  const JourneyPause({
+    required this.paused,
+    this.pausedAt,
+    this.pausedByStaff = false,
+  });
+
+  factory JourneyPause.fromJson(Map<String, dynamic> json) => JourneyPause(
+    paused: json['paused'] == true,
+    pausedAt: readDate(json['paused_at']),
+    pausedByStaff: json['paused_by_staff'] == true,
+  );
+
+  final bool paused;
+  final DateTime? pausedAt;
+
+  /// Staff paused it, so only staff can lift it and the traveller is told to
+  /// contact support.
+  final bool pausedByStaff;
+}
 
 class JourneyLegProof {
   const JourneyLegProof({
@@ -93,6 +182,10 @@ class JourneyLeg {
     required this.hasApprovedProof,
     required this.proofs,
     required this.isOwnerView,
+    this.proofRequired = false,
+    this.proofState = LegProofState.notRequired,
+    this.capacityVolumeLitres,
+    this.capacityParcels,
     this.arriveAt,
     this.distanceMeters,
     this.distanceBand,
@@ -122,8 +215,12 @@ class JourneyLeg {
       distanceMeters: readInt(json['distance_meters']),
       distanceBand: DistanceBand.maybe(json['distance_band']),
       routeDurationSeconds: readInt(json['route_duration_seconds']),
+      capacityVolumeLitres: readInt(json['capacity_volume_l']),
+      capacityParcels: readInt(json['capacity_parcels']),
       flightNumber: readText(json['flight_number']),
       hasApprovedProof: readBool(json['has_approved_proof']),
+      proofRequired: json['proof_required'] == true,
+      proofState: LegProofState.parse(json['proof_state']),
       proofs: readObjectList(
         json['proofs'],
       ).map(JourneyLegProof.fromJson).toList(growable: false),
@@ -157,20 +254,20 @@ class JourneyLeg {
   final List<JourneyLegProof> proofs;
   final bool isOwnerView;
 
-  /// A flight leg with no approved proof blocks the whole journey from
-  /// publishing. Drive legs never need one.
-  bool get needsProof => mode.requiresProof && !hasApprovedProof;
+  /// Optional extra limits the traveller declared. Remaining room is never
+  /// published; the server answers "does this fit" during discovery and again
+  /// at acceptance.
+  final int? capacityVolumeLitres;
+  final int? capacityParcels;
 
-  ProofStatus get proofStatus {
-    if (!mode.requiresProof) return ProofStatus.approved;
-    if (hasApprovedProof) return ProofStatus.approved;
-    if (proofs.isEmpty) return ProofStatus.unknown;
-    // A rejection is the more urgent fact when both exist.
-    if (proofs.any((p) => p.status == ProofStatus.rejected)) {
-      return ProofStatus.rejected;
-    }
-    return ProofStatus.pending;
-  }
+  /// The server's answer to "does this leg need a ticket". Flight and sea legs
+  /// do; a road leg does not. Never derived from [mode] on the client.
+  final bool proofRequired;
+  final LegProofState proofState;
+
+  /// A leg that needs a ticket and has no approved one blocks the whole
+  /// journey from publishing.
+  bool get needsProof => proofRequired && proofState != LegProofState.approved;
 }
 
 class Journey {
@@ -190,6 +287,10 @@ class Journey {
     this.updatedAt,
     this.editable,
     this.editBlockedCode,
+    this.stops = const [],
+    this.refusedCategories = const [],
+    this.acceptsFragile = true,
+    this.pause,
   });
 
   factory Journey.fromJson(Map<String, dynamic> json) => Journey(
@@ -215,6 +316,16 @@ class Journey {
     // "not this viewer's business", which is not the same as "no".
     editable: json['editable'] is bool ? json['editable'] as bool : null,
     editBlockedCode: readString(json['edit_blocked_code']),
+    stops: (readObjectList(json['stops']).map(JourneyStop.fromJson).toList()
+      ..sort((a, b) => a.position.compareTo(b.position))),
+    refusedCategories: [
+      for (final value in json['refused_categories'] as List? ?? const [])
+        if (value is String) value,
+    ],
+    acceptsFragile: json['accepts_fragile'] != false,
+    pause: readObject(json['pause']) == null
+        ? null
+        : JourneyPause.fromJson(readObject(json['pause'])!),
   );
 
   final int id;
@@ -241,6 +352,20 @@ class Journey {
   /// Why an edit is refused, when it is. One of `journey_not_editable`,
   /// `journey_has_dependent_state` or `journey_not_owned`.
   final String? editBlockedCode;
+
+  /// Every stop with what it accepts. Empty when the payload carried none.
+  final List<JourneyStop> stops;
+
+  /// The item categories the traveller will not carry, and whether they take
+  /// fragile items. Defaults match a journey that never set either.
+  final List<String> refusedCategories;
+  final bool acceptsFragile;
+
+  /// Owner only; null for anyone else, who never sees a paused journey.
+  final JourneyPause? pause;
+
+  bool get isPaused => pause?.paused ?? false;
+  bool get isPausedByStaff => pause?.pausedByStaff ?? false;
 
   /// True only when the server has said so. A journey whose payload said
   /// nothing is not assumed editable just because its status looks right.
@@ -296,8 +421,8 @@ class JourneyRouteChange {
   final int legsUpdated;
   final int legsRemoved;
 
-  /// Approved or pending proof that has to be reviewed again, because the
-  /// flight it evidenced materially changed.
+  /// Approved or pending ticket that has to be reviewed again, because the
+  /// flight or crossing it evidenced materially changed.
   final int proofsResetForReview;
 
   /// Proof that went with a leg the edit removed entirely.

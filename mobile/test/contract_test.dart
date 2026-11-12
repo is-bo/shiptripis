@@ -58,9 +58,9 @@ void main() {
       expect(TransportMode.parse(null), TransportMode.unknown);
     });
 
-    test('only a flight needs proof', () {
-      expect(TransportMode.flight.requiresProof, isTrue);
-      expect(TransportMode.drive.requiresProof, isFalse);
+    test('SEA is a mode of its own, in the same uppercase as the others', () {
+      expect(TransportMode.parse('SEA'), TransportMode.sea);
+      expect(TransportMode.sea.wire, 'SEA');
     });
   });
 
@@ -115,6 +115,8 @@ void main() {
         'capacity_kg': '10.00',
         'flight_number': 'AH1',
         'has_approved_proof': false,
+        'proof_required': true,
+        'proof_state': 'missing',
         'proofs': <Object>[],
       });
       expect(blocked.needsProof, isTrue);

@@ -1,14 +1,18 @@
 from django.urls import path
 
+from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
+
 from . import console_views as views
 from .console_discovery import profile_visibility
 from .console_identity_checks import identity_check_detail, identity_checks
+from .console_journey_pause import journey_pause_action
 from .console_people import person_profile
 from .console_payout_reviews import (
     payout_review_detail,
     payout_review_evidence,
     payout_reviews,
 )
+from .console_sea import sea_crossing_new, sea_crossing_toggle
 from .console_views import capability_required
 from .finance_control_plane import finance_control_plane
 from .finance_dashboard import finance_rows
@@ -80,6 +84,11 @@ urlpatterns = [
     path("marketplace/requests/", views.delivery_requests, name="requests"),
     path("marketplace/journeys/", views.journeys, name="journeys"),
     path("marketplace/journeys/<int:pk>/", views.journey_detail, name="journey-detail"),
+    path(
+        "marketplace/journeys/<int:pk>/<slug:action>/",
+        capability_required("manage_journeys")(journey_pause_action),
+        name="journey-pause",
+    ),
     path("marketplace/deals/", views.deals, name="deals"),
     path("marketplace/deals/<int:pk>/", views.deal_detail, name="deal-detail"),
     path("disputes/", views.disputes, name="disputes"),
@@ -162,6 +171,18 @@ urlpatterns = [
     ),
     path("system/email/", views.email_queue, name="email"),
     path("system/geography/", views.geography, name="geography"),
+    # L3B. Guarded by the permission the domain commands check, so the page
+    # and the command behind it cannot disagree about who may act.
+    path(
+        "system/geography/sea-crossings/new/",
+        capability_required(MANAGE_CROSSINGS_PERMISSION)(sea_crossing_new),
+        name="sea-crossing-new",
+    ),
+    path(
+        "system/geography/sea-crossings/<int:pk>/<slug:action>/",
+        capability_required(MANAGE_CROSSINGS_PERMISSION)(sea_crossing_toggle),
+        name="sea-crossing-toggle",
+    ),
     path("audit/", views.audit_log, name="audit"),
     path("technical/", views.technical_records, name="technical"),
 ]

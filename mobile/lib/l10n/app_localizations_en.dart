@@ -298,8 +298,8 @@ class LEn extends L {
       'Your identity check needs attention before you can do this.';
 
   @override
-  String get staleFlightProofInvalid =>
-      'Your flight proof needs attention before this journey can match.';
+  String get staleTicketInvalid =>
+      'A ticket on this journey needs attention before it can match.';
 
   @override
   String get staleReservationExpired => 'Your reserved space expired.';
@@ -835,11 +835,11 @@ class LEn extends L {
       'Nothing is visible to senders yet. Publish it when your flight proof is approved.';
 
   @override
-  String get journeyLegsNeedProofTitle => 'Flights that need proof';
+  String get journeyLegsNeedProofTitle => 'Tickets to check';
 
   @override
   String get journeyPublishBlockedProof =>
-      'Every flight leg needs approved proof before this can go live.';
+      'Every flight and ferry leg needs an approved ticket before this can go live.';
 
   @override
   String get journeyPublished =>
@@ -1032,15 +1032,15 @@ class LEn extends L {
 
   @override
   String get journeyEditProofNotice =>
-      'Changing a flight\'s airports, number or times means its proof no longer shows that flight, so we\'ll check it again.';
+      'Changing a flight or ferry leg\'s places, number or times means its ticket no longer shows that trip, so we\'ll check it again.';
 
   @override
   String get journeyEditProofWarningTitle =>
-      'Your flight proof will be checked again';
+      'Your ticket will be checked again';
 
   @override
   String get journeyEditProofWarningBody =>
-      'You\'ve changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can\'t go live until it\'s approved again.';
+      'You\'ve changed a leg that already has a ticket. That ticket no longer shows this trip, so it goes back for review and the journey can\'t go live until it\'s approved again.';
 
   @override
   String get proofErrorStorageUnavailable =>
@@ -1056,10 +1056,10 @@ class LEn extends L {
   String get proofRetry => 'Try again';
 
   @override
-  String get proofTitle => 'Flight proof';
+  String get proofTitle => 'Ticket proof';
 
   @override
-  String get proofExplainer =>
+  String get proofExplainerFlight =>
       'Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.';
 
   @override
@@ -2584,8 +2584,8 @@ class LEn extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count flights need proof',
-      one: '1 flight needs proof',
+      other: '$count tickets need checking',
+      one: '1 ticket needs checking',
     );
     return '$_temp0';
   }
@@ -4894,4 +4894,283 @@ class LEn extends L {
   @override
   String get notificationTravelerInterested =>
       'A traveler can carry your parcel';
+
+  @override
+  String get journeyModeSea => 'Ferry';
+
+  @override
+  String get routeSeaMode => 'Ferry';
+
+  @override
+  String get routeSeaSwitchedOff => 'Ferry legs are switched off for now.';
+
+  @override
+  String get routeSeaTicketNote =>
+      'A ferry leg needs your ticket checked before the journey can go live. You add it after saving.';
+
+  @override
+  String get routeSeaRefusedSwitchedOff =>
+      'Ferry legs are switched off right now. Choose another way to travel this part.';
+
+  @override
+  String get routeSeaRefusedNoCrossing =>
+      'No ferry line runs between these two cities in this direction right now.';
+
+  @override
+  String get routeSeaRefusedNotPort =>
+      'A ferry runs between port cities. Choose the city, not an airport, for each end of this part.';
+
+  @override
+  String get routeSeaLinesFailedTitle => 'Ferry lines didn\'t load';
+
+  @override
+  String get routeSeaLinesFailedBody =>
+      'Flights and road legs work as usual. Try again to add a ferry leg.';
+
+  @override
+  String get routeErrorSeaRefused =>
+      'A ferry leg on your route can\'t be used right now. The reason is shown on that leg.';
+
+  @override
+  String get journeyErrorStopInvalid =>
+      'One of your stops has handover options we can\'t use. Check the options on each stop.';
+
+  @override
+  String get routeCapacityMore => 'More capacity options';
+
+  @override
+  String get routeCapacityMoreHelp =>
+      'Optional. Leave a box empty to set no limit.';
+
+  @override
+  String get routeVolumeLabel => 'Volume (litres)';
+
+  @override
+  String get routeParcelsLabel => 'Number of parcels';
+
+  @override
+  String get routeVolumeInvalid =>
+      'Enter a whole number of litres from 1 to 200,000.';
+
+  @override
+  String get routeParcelsInvalid =>
+      'Enter a whole number of parcels from 1 to 10,000.';
+
+  @override
+  String get routeHandoverAction => 'Handover options';
+
+  @override
+  String get routeHandoverBoth => 'Takes pickups and drop-offs';
+
+  @override
+  String get routeHandoverPickups => 'Pickups only';
+
+  @override
+  String get routeHandoverDropoffs => 'Drop-offs only';
+
+  @override
+  String get routeHandoverNone => 'No handovers here';
+
+  @override
+  String routeHandoverSheetTitle(String stop) {
+    return 'Handover at $stop';
+  }
+
+  @override
+  String get routeHandoverPickupLabel => 'Accept pickups here';
+
+  @override
+  String get routeHandoverPickupHelp =>
+      'A sender can hand you a parcel at this stop.';
+
+  @override
+  String get routeHandoverDropoffLabel => 'Accept drop-offs here';
+
+  @override
+  String get routeHandoverDropoffHelp =>
+      'You can hand a parcel to its recipient at this stop.';
+
+  @override
+  String get routeHandoverWindowTitle => 'Time window';
+
+  @override
+  String get routeHandoverWindowHelp =>
+      'Optional. When you can meet at this stop.';
+
+  @override
+  String get routeHandoverWindowFrom => 'From';
+
+  @override
+  String get routeHandoverWindowTo => 'Until';
+
+  @override
+  String get routeHandoverWindowClear => 'Remove time window';
+
+  @override
+  String get routeHandoverNoteLabel => 'Note';
+
+  @override
+  String get routeHandoverNoteHint =>
+      'For example: meet at the café by the ferry terminal.';
+
+  @override
+  String get routeHandoverNoteSeen =>
+      'Only you see this until a delivery that uses this stop is paid for. Then the sender of that delivery sees it too.';
+
+  @override
+  String get routeWindowIncomplete =>
+      'Set both a start and an end, or remove the window.';
+
+  @override
+  String get routeWindowOrder => 'The window has to end after it starts.';
+
+  @override
+  String get routeWindowOutside =>
+      'The window has to fall between arriving at this stop and leaving it.';
+
+  @override
+  String get routeCarryTitle => 'What you carry';
+
+  @override
+  String get routeCarryHelp =>
+      'Switch off anything you won\'t take. Senders only find you for parcels you accept.';
+
+  @override
+  String get routeCarryFragile => 'Fragile items';
+
+  @override
+  String get routeCarryLastOne => 'At least one kind of item has to stay on.';
+
+  @override
+  String get journeyPauseAction => 'Pause journey';
+
+  @override
+  String get journeyPauseConfirmTitle => 'Pause this journey?';
+
+  @override
+  String get journeyPauseConfirmBody =>
+      'Senders stop finding it and nobody can start a new offer on it. Deliveries already paid for carry on, and an offer already pending can\'t be accepted until you resume.';
+
+  @override
+  String get journeyPaused => 'Journey paused.';
+
+  @override
+  String get journeyResumeAction => 'Resume journey';
+
+  @override
+  String get journeyResumed => 'Journey resumed.';
+
+  @override
+  String get journeyPausedBannerTitle => 'This journey is paused';
+
+  @override
+  String get journeyPausedBannerBody =>
+      'Senders can\'t find it and offers on it can\'t be accepted. Deliveries already paid for carry on as normal.';
+
+  @override
+  String get journeyPausedStaffBody =>
+      'Wassla paused this journey. Contact support to have it resumed.';
+
+  @override
+  String get journeyErrorNotPausable =>
+      'This journey can\'t be paused in its current state.';
+
+  @override
+  String get journeyErrorPausedByStaff =>
+      'Wassla paused this journey, so only support can resume it.';
+
+  @override
+  String journeyCapacityVolumeValue(int litres) {
+    return '$litres L';
+  }
+
+  @override
+  String journeyCapacityParcelsValue(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parcels',
+      one: '1 parcel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyHandoverTitle => 'Handover at your stops';
+
+  @override
+  String journeyHandoverWindow(String from, String to) {
+    return 'Between $from and $to';
+  }
+
+  @override
+  String get journeyCarryTitle => 'What you carry';
+
+  @override
+  String get journeyCarryAll => 'Takes every kind of item';
+
+  @override
+  String journeyCarryRefuses(String items) {
+    return 'Won\'t take: $items';
+  }
+
+  @override
+  String get journeyCarryNoFragile => 'No fragile items';
+
+  @override
+  String get proofExplainerSea =>
+      'Upload your ferry ticket or booking confirmation. We check it before your journey can match parcels.';
+
+  @override
+  String get proofChecklistTitle => 'A good photo shows';
+
+  @override
+  String get proofChecklistFlight =>
+      'Your name, the flight number, the date and both airports.';
+
+  @override
+  String get proofChecklistSea =>
+      'Your name, the ferry company, the date and both ports.';
+
+  @override
+  String get rejectSea =>
+      'A ferry line on this trip isn\'t available right now.';
+
+  @override
+  String get rejectPaused => 'The traveler has paused this trip.';
+
+  @override
+  String get rejectHandover =>
+      'The traveler doesn\'t take handovers at the places you need.';
+
+  @override
+  String get rejectNotAccepted =>
+      'The traveler doesn\'t take this kind of item.';
+
+  @override
+  String get rejectVolume =>
+      'There isn\'t enough room left for this parcel\'s size.';
+
+  @override
+  String get rejectParcelSlots => 'The traveler has no parcel places left.';
+
+  @override
+  String get findTravelersSeaProofApproved => 'Ferry ticket verified';
+
+  @override
+  String get findTravelersCaveatVolume =>
+      'This traveler limits volume and your request has no size, so we couldn\'t check that your parcel fits. They decide when they accept.';
+
+  @override
+  String get staleJourneyPaused =>
+      'This journey is paused, so nothing on it can be accepted until it resumes.';
+
+  @override
+  String get dealHandoverTitle => 'Where and when to meet';
+
+  @override
+  String get dealHandoverPickup => 'Pickup';
+
+  @override
+  String get dealHandoverDropoff => 'Drop-off';
 }

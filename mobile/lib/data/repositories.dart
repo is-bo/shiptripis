@@ -43,6 +43,7 @@ import '../domain/payout.dart';
 import '../domain/pricing.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
+import '../domain/sea_crossings.dart';
 
 // ---------------------------------------------------------------------------
 // Locations
@@ -144,6 +145,18 @@ class GeographyRepository {
         .toList(growable: false);
   }
 
+  /// The ferry lines a sea leg may use, and whether sea legs are switched on.
+  ///
+  /// Public and cacheable. A failure here must never block editing flight or
+  /// road legs, so callers treat it as "Sea is not offered right now".
+  Future<SeaCrossings> seaCrossings({CancelToken? cancelToken}) async =>
+      SeaCrossings.fromJson(
+        await _api.getObject(
+          '/api/geography/sea-crossings',
+          cancelToken: cancelToken,
+        ),
+      );
+
   Future<List<CanonicalPlace>> searchPlaces({
     required String countryCode,
     String query = '',
@@ -192,6 +205,8 @@ class JourneyLegDraft {
     required this.capacityKg,
     this.arriveAt,
     this.flightNumber = '',
+    this.capacityVolumeLitres,
+    this.capacityParcels,
   });
 
   /// The server's id for a leg this edit is *keeping*, and null for one it is
@@ -210,8 +225,13 @@ class JourneyLegDraft {
   final DateTime? arriveAt;
   final double capacityKg;
 
-  /// Required and non-empty for a flight leg; must be empty for a drive leg.
+  /// Required and non-empty for a flight leg; must be empty for a road or sea
+  /// leg.
   final String flightNumber;
+
+  /// Optional extra limits for the leg; null means "not limited".
+  final int? capacityVolumeLitres;
+  final int? capacityParcels;
 
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
@@ -224,17 +244,57 @@ class JourneyLegDraft {
     'depart_at': departAt.toUtc().toIso8601String(),
     if (arriveAt != null) 'arrive_at': arriveAt!.toUtc().toIso8601String(),
     'capacity_kg': capacityKg.toStringAsFixed(2),
+    // Explicit nulls: an edit rewrites the whole chain, so a limit the
+    // traveller removed has to be sent as removed.
+    'capacity_volume_l': capacityVolumeLitres,
+    'capacity_parcels': capacityParcels,
     'flight_number': flightNumber,
   };
 }
 
-/// The two modes a draft leg may declare. Deliberately not the parsed
+/// The modes a draft leg may declare. Deliberately not the parsed
 /// [TransportMode], which has an `unknown` member that must never be sent.
 enum TransportModeDraft {
   flight,
-  drive;
+  drive,
+  sea;
 
-  String get wire => this == flight ? 'FLIGHT' : 'DRIVE';
+  String get wire => switch (this) {
+    flight => 'FLIGHT',
+    drive => 'DRIVE',
+    sea => 'SEA',
+  };
+}
+
+/// What one stop accepts, as the create and edit endpoints want it.
+///
+/// Only stops that differ from the default (accepts pickup and drop-off, no
+/// window, no note) need to be sent; the server stores nothing for the rest.
+class JourneyStopDraft {
+  const JourneyStopDraft({
+    required this.position,
+    this.acceptsPickup = true,
+    this.acceptsDropoff = true,
+    this.handoverNote = '',
+    this.windowStart,
+    this.windowEnd,
+  });
+
+  final int position;
+  final bool acceptsPickup;
+  final bool acceptsDropoff;
+  final String handoverNote;
+  final DateTime? windowStart;
+  final DateTime? windowEnd;
+
+  Map<String, dynamic> toJson() => {
+    'position': position,
+    'accepts_pickup': acceptsPickup,
+    'accepts_dropoff': acceptsDropoff,
+    'handover_note': handoverNote,
+    'window_start': windowStart?.toUtc().toIso8601String(),
+    'window_end': windowEnd?.toUtc().toIso8601String(),
+  };
 }
 
 class JourneyRepository {
@@ -268,6 +328,9 @@ class JourneyRepository {
     int? startPlaceId,
     int? destinationPlaceId,
     required List<JourneyLegDraft> legs,
+    List<JourneyStopDraft> stops = const [],
+    List<String> refusedCategories = const [],
+    bool acceptsFragile = true,
     String notes = '',
   }) async => Journey.fromJson(
     await _api.postObject(
@@ -279,6 +342,9 @@ class JourneyRepository {
         'destination_location': ?destinationLocationId,
         'notes': notes,
         'legs': legs.map((l) => l.toJson()).toList(growable: false),
+        'stops': stops.map((s) => s.toJson()).toList(growable: false),
+        'refused_categories': refusedCategories,
+        'accepts_fragile': acceptsFragile,
       },
     ),
   );
@@ -298,6 +364,9 @@ class JourneyRepository {
     required int startPlaceId,
     required int destinationPlaceId,
     required List<JourneyLegDraft> legs,
+    List<JourneyStopDraft> stops = const [],
+    List<String> refusedCategories = const [],
+    bool acceptsFragile = true,
     String notes = '',
     int? startLocationId,
     int? destinationLocationId,
@@ -311,6 +380,11 @@ class JourneyRepository {
         'destination_location': ?destinationLocationId,
         'notes': notes,
         'legs': legs.map((l) => l.toJson()).toList(growable: false),
+        // An edit replaces the stop options as a whole, so the list always
+        // goes, even when it is empty.
+        'stops': stops.map((s) => s.toJson()).toList(growable: false),
+        'refused_categories': refusedCategories,
+        'accepts_fragile': acceptsFragile,
       },
     );
     return (
@@ -320,6 +394,16 @@ class JourneyRepository {
       ),
     );
   }
+
+  /// The owner takes the journey out of discovery. Idempotent. Funded deals
+  /// are untouched, and a pending offer stays pending but cannot be accepted
+  /// until the journey is resumed.
+  Future<Journey> pause(int id) async =>
+      Journey.fromJson(await _api.postObject('/api/journeys/$id/pause'));
+
+  /// Idempotent. A staff pause cannot be lifted here (`journey_paused_by_staff`).
+  Future<Journey> resume(int id) async =>
+      Journey.fromJson(await _api.postObject('/api/journeys/$id/resume'));
 
   /// Idempotent: publishing an already-active journey returns it unchanged.
   Future<Journey> publish(int id) async =>
@@ -339,8 +423,8 @@ class JourneyRepository {
     );
   }
 
-  /// Uploads flight proof for one leg. Only accepted before publication, and
-  /// only on a flight leg.
+  /// Uploads the ticket for one leg. Only accepted before publication, and
+  /// only on a flight or sea leg.
   /// [idempotencyKey] identifies the *file*, not the attempt. A phone that
   /// times out mid-upload retries, and without a key each retry would leave a
   /// reviewer another copy of the same boarding pass; with one, the server

@@ -29,8 +29,17 @@
         </select>
       </div>
     {% endif %}
+    {% for filter in extra_filters %}
+      <div class="st-filter">
+        <label for="st-filter-{{ filter.name }}">{{ filter.label }}</label>
+        <select id="st-filter-{{ filter.name }}" name="{{ filter.name }}">
+          <option value="">{{ filter.all_label }}</option>
+          {% for value, label in filter.choices %}<option value="{{ value }}"{% if filter.current == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    {% endfor %}
     <button class="button" type="submit">Apply</button>
-    {% if query or current_status %}<a class="button st-button-quiet st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
+    {% if has_filter %}<a class="button st-button-quiet st-filter-clear" href="{{ request.path }}">Clear filters</a>{% endif %}
   </form>
 
   {% if bulk_action_url %}<form method="post" action="{{ bulk_action_url }}" class="st-table-card" aria-label="{{ title }} results">{% csrf_token %}{% else %}<section class="st-table-card" aria-label="{{ title }} results">{% endif %}

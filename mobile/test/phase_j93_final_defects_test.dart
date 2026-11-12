@@ -63,6 +63,11 @@ const RouteCopy _routeCopy = (
   arriveRequired: 'arrive-required',
   arriveBeforeDepart: 'arrive-order',
   capacityInvalid: 'capacity-invalid',
+  volumeInvalid: 'volume',
+  parcelsInvalid: 'parcels',
+  windowIncomplete: 'window-incomplete',
+  windowOrder: 'window-order',
+  windowOutside: 'window-outside',
   required: 'required',
 );
 
@@ -214,7 +219,7 @@ void main() {
     }
   });
 
-  test('MOB-10 client enforces server 0.01–200 kg leg range', () {
+  test('MOB-10 client enforces server 0.01–20,000 kg leg range', () {
     final draft = JourneyRouteDraft()
       ..setOrigin(_place(1, 'Jijel'))
       ..setDestination(_place(2, 'Algiers'));
@@ -223,11 +228,11 @@ void main() {
     draft.setSegmentDeparture(0, now.add(const Duration(days: 1)));
     draft.setSegmentArrival(0, now.add(const Duration(days: 1, hours: 2)));
     final capacity = draft.segments.first.capacity;
-    for (final valid in ['0.01', '200.00']) {
+    for (final valid in ['0.01', '200.00', '20000.00']) {
       capacity.text = valid;
       expect(draft.issuesFor(0, _routeCopy, now: now).capacity, isNull);
     }
-    for (final invalid in ['0', '0.005', '200.001', '200.01', '50000']) {
+    for (final invalid in ['0', '0.005', '20000.001', '20000.01', '50000']) {
       capacity.text = invalid;
       expect(
         draft.issuesFor(0, _routeCopy, now: now).capacity,

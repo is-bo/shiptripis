@@ -24,39 +24,12 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Q
 
-from apps.locations.geography import normalize_search_name
 from apps.locations.models import Place, SeaCrossing
-from apps.locations.sea_crossings import great_circle_meters
+from apps.locations.sea_crossings import great_circle_meters, resolve_port
 from apps.routing.geometry import GeoPoint, haversine_meters
 
 DEFAULT_FILE = Path(__file__).resolve().parents[2] / "data" / "sea_crossings.json"
-
-
-def _resolve_port(country: str, name: str) -> tuple[Place | None, str]:
-    normalized = normalize_search_name(name)
-    candidates = list(
-        Place.objects.filter(
-            country_id=country,
-            place_type=Place.PlaceType.LOCALITY,
-            active=True,
-        )
-        .filter(
-            Q(normalized_name=normalized)
-            | Q(
-                alternate_name_records__normalized_name=normalized,
-                alternate_name_records__active=True,
-            )
-        )
-        .distinct()
-        .order_by("pk")[:2]
-    )
-    if not candidates:
-        return None, "no active catalogue city has this name"
-    if len(candidates) > 1:
-        return None, "more than one active catalogue city has this name"
-    return candidates[0], ""
 
 
 class Command(BaseCommand):
@@ -82,7 +55,7 @@ class Command(BaseCommand):
         resolved: dict[str, Place] = {}
         fallback_points: dict[str, GeoPoint] = {}
         for slug, port in ports.items():
-            place, problem = _resolve_port(str(port["country"]), str(port["name"]))
+            place, problem = resolve_port(str(port["country"]), str(port["name"]))
             if place is None:
                 self.stdout.write(
                     self.style.WARNING(

@@ -171,6 +171,7 @@ extension TransportModeIcon on TransportMode {
   IconData get icon => switch (this) {
     TransportMode.flight => Icons.flight_takeoff_rounded,
     TransportMode.drive => Icons.directions_car_filled_rounded,
+    TransportMode.sea => Icons.directions_boat_filled_rounded,
     TransportMode.unknown => Icons.more_horiz_rounded,
   };
 }
@@ -187,6 +188,7 @@ class ModeChip extends StatelessWidget {
     final accent = switch (mode) {
       TransportMode.flight => c.modeFlight,
       TransportMode.drive => c.modeDrive,
+      TransportMode.sea => c.modeSea,
       TransportMode.unknown => c.textTertiary,
     };
 

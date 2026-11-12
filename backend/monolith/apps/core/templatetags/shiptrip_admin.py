@@ -108,7 +108,7 @@ NAVIGATION = (
                 ("kyc-queue", "kyc-detail", "kyc-evidence"),
             ),
             (
-                "Flight proofs",
+                "Ticket proofs",
                 "admin_console:proof-queue",
                 ("view_flight_proofs",),
                 ("proof-queue", "proof-detail", "proof-evidence"),
@@ -567,8 +567,8 @@ QUEUES: tuple[Queue, ...] = (
         filters=Q(status="pending"),
     ),
     Queue(
-        label="Flight proofs to review",
-        hint="A flight leg is unmatchable until its proof is approved.",
+        label="Ticket proofs to review",
+        hint="A flight or ferry leg is unmatchable until its ticket is approved.",
         app_label="trips",
         model_name="journeylegproof",
         query="status__exact=pending",

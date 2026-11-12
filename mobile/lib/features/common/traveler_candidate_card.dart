@@ -26,6 +26,7 @@ Color modeAccentColor(BuildContext context, TransportMode mode) {
   return switch (mode) {
     TransportMode.flight => c.modeFlight,
     TransportMode.drive => c.modeDrive,
+    TransportMode.sea => c.modeSea,
     TransportMode.unknown => c.textTertiary,
   };
 }
@@ -262,11 +263,19 @@ class TravelerCandidateCard extends StatelessWidget {
         .where((m) => m != TransportMode.unknown)
         .toSet();
 
-    if (modes.contains(TransportMode.flight) &&
-        modes.contains(TransportMode.drive)) {
-      return '${transportModeLabel(context, TransportMode.flight)} + ${transportModeLabel(context, TransportMode.drive)}';
-    }
-    return transportModeLabel(context, candidate.primaryMode);
+    // Every mode the route uses, always in the same order, so two trips that
+    // fly and sail read alike.
+    final used = [
+      for (final mode in const [
+        TransportMode.flight,
+        TransportMode.sea,
+        TransportMode.drive,
+      ])
+        if (modes.contains(mode)) transportModeLabel(context, mode),
+    ];
+    return used.length > 1
+        ? used.join(' + ')
+        : transportModeLabel(context, candidate.primaryMode);
   }
 }
 

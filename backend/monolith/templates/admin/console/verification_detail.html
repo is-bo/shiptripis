@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load shiptrip_admin %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">{% if kind == 'kyc' %}KYC review{% else %}Flight proofs{% endif %}</a> &rsaquo; {{ title }}</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">{% if kind == 'kyc' %}KYC review{% else %}Ticket proofs{% endif %}</a> &rsaquo; {{ title }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console">
@@ -9,7 +9,7 @@
     <div>
       <p class="st-eyebrow">{{ subject }}</p>
       <h1>{{ title }}</h1>
-      <p>{% if kind == 'kyc' %}Decide whether this person's identity evidence is good enough to let them carry.{% else %}Decide whether this evidence proves the Traveler is actually booked on this flight.{% endif %}</p>
+      <p>{% if kind == 'kyc' %}Decide whether this person's identity evidence is good enough to let them carry.{% else %}Decide whether this evidence proves the Traveler is actually booked on this {{ leg_noun }}.{% endif %}</p>
     </div>
     <div class="st-page-aside">
       <span class="st-chip st-{{ record.status|status_tone }}">{{ record.get_status_display }}</span>
@@ -19,7 +19,7 @@
   {% if record.status == 'pending' %}
   <div class="st-alert st-alert-info">
     <strong>Waiting {{ waiting_for }}</strong>
-    <span>{% if kind == 'kyc' %}This Traveler cannot publish a journey until the submission is decided.{% else %}This flight leg cannot be matched until the proof is approved.{% endif %}</span>
+    <span>{% if kind == 'kyc' %}This Traveler cannot publish a journey until the submission is decided.{% else %}This {{ leg_noun }} leg cannot be matched until the ticket is approved.{% endif %}</span>
   </div>
   {% endif %}
 
@@ -58,9 +58,9 @@
               {% elif record.content_type == 'image/jpeg' or record.content_type == 'image/png' or record.content_type == 'image/webp' %}
                 <figure>
                   <a target="_blank" rel="noreferrer" href="{% url 'admin_console:proof-evidence' record.pk %}">
-                    <img loading="lazy" referrerpolicy="no-referrer" src="{% url 'admin_console:proof-evidence' record.pk %}" alt="Uploaded flight proof">
+                    <img loading="lazy" referrerpolicy="no-referrer" src="{% url 'admin_console:proof-evidence' record.pk %}" alt="Uploaded {{ leg_noun }} ticket">
                   </a>
-                  <figcaption><b>Flight proof</b><span>View evidence, full size &rarr;</span></figcaption>
+                  <figcaption><b>{{ ticket_label }}</b><span>View evidence, full size &rarr;</span></figcaption>
                 </figure>
               {% endif %}
             {% endif %}{% endfor %}
@@ -95,7 +95,7 @@
 
       <section class="st-card">
         <p class="st-eyebrow">Context</p>
-        <h2>{% if kind == 'kyc' %}Who this is{% else %}Which flight this is{% endif %}</h2>
+        <h2>{% if kind == 'kyc' %}Who this is{% else %}Which {{ leg_noun }} this is{% endif %}</h2>
 
         <div class="st-identity" data-row-link>
           <span class="st-avatar" aria-hidden="true">{{ applicant.full_name|default:applicant.email|slice:":1"|upper }}</span>
@@ -118,7 +118,9 @@
             <div><dt>Document expires</dt><dd>{{ record.expires_at|date:"d M Y"|default:"Not recorded" }}</dd></div>
           {% else %}
             <div><dt>Journey</dt><dd>{% if perms.admin_panel.view_journeys %}<a href="{% url 'admin_console:journey-detail' leg.journey_id %}">Journey {{ leg.journey_id }}</a>{% else %}Journey {{ leg.journey_id }}{% endif %}<small>Leg {{ leg.position|add:1 }}</small></dd></div>
-            <div><dt>Flight</dt><dd>{{ leg.flight_number|default:"Not provided" }}</dd></div>
+            <div><dt>Mode</dt><dd>{{ leg.get_mode_display }}</dd></div>
+            {% if leg.mode == 'FLIGHT' %}<div><dt>Flight</dt><dd>{{ leg.flight_number|default:"Not provided" }}</dd></div>{% endif %}
+            <div><dt>Document</dt><dd>{{ document_kind }}</dd></div>
             <div><dt>Departure</dt><dd>{{ leg.depart_at|date:"d M Y, H:i" }}</dd></div>
             <div><dt>Submitted</dt><dd>{{ record.created_at|date:"d M Y, H:i" }}<small>{{ waiting_for }} ago</small></dd></div>
             <div><dt>File</dt><dd>{{ record.content_type|default:"Type not recorded" }}<small>{{ record.bytes|default:0|filesizeformat }}</small></dd></div>
@@ -149,7 +151,7 @@
         <p class="st-eyebrow">Decision</p>
         <h2 id="st-decision-head">{% if kind == 'kyc' %}Approve or reject this identity{% else %}Approve or reject this proof{% endif %}</h2>
         {% if may_review and record.status == 'pending' %}
-        <p>Approving lets this {% if kind == 'kyc' %}Traveler publish journeys{% else %}flight leg be matched{% endif %}. Rejecting sends the reason below to them. Both decisions are audited.</p>
+        <p>Approving lets this {% if kind == 'kyc' %}Traveler publish journeys{% else %}{{ leg_noun }} leg be matched{% endif %}. Rejecting sends the reason below to them. Both decisions are audited.</p>
         <form method="post" action="#st-decision-head" class="st-form">{% csrf_token %}
           {{ form.non_field_errors }}
           <div class="st-field">

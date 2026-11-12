@@ -71,7 +71,7 @@ class ApiErrorCode {
   static const journeyProofUploadClosed = ApiErrorCode(
     'journey_proof_upload_closed',
   );
-  static const proofOnlyForFlight = ApiErrorCode('proof_not_required');
+  static const proofNotRequired = ApiErrorCode('proof_not_required');
   static const proofFileMissing = ApiErrorCode('proof_file_missing');
   static const proofFileTooLarge = ApiErrorCode('proof_file_too_large');
   static const proofMediaTypeUnsupported = ApiErrorCode(
@@ -89,6 +89,12 @@ class ApiErrorCode {
   static const journeyLegModeUnavailable = ApiErrorCode(
     'journey_leg_mode_unavailable',
   );
+  static const seaProofNotApproved = ApiErrorCode('sea_proof_not_approved');
+  static const journeyStopInvalid = ApiErrorCode('journey_stop_invalid');
+  static const journeyPaused = ApiErrorCode('journey_paused');
+  static const journeyPausedByStaff = ApiErrorCode('journey_paused_by_staff');
+  static const journeyPausedByOwner = ApiErrorCode('journey_paused_by_owner');
+  static const journeyNotPausable = ApiErrorCode('journey_not_pausable');
   static const flightProofNotApproved = ApiErrorCode(
     'flight_proof_not_approved',
   );
@@ -339,6 +345,8 @@ class ApiErrorCode {
     'match_not_pending',
     'capacity_exceeded',
     'flight_proof_not_approved',
+    'sea_proof_not_approved',
+    'journey_paused',
     'reward_below_minimum',
     'route_inputs_changed',
     'route_preflight_missing',

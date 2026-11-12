@@ -87,6 +87,8 @@ Map<String, dynamic> journeyFixture({
       'capacity_kg': '12.00',
       'flight_number': '',
       'has_approved_proof': false,
+      'proof_required': false,
+      'proof_state': 'not_required',
       'distance_meters': 300000,
       'proofs': const [],
     },
@@ -113,6 +115,12 @@ Map<String, dynamic> journeyFixture({
       'capacity_kg': '12.00',
       'flight_number': 'AH1006',
       'has_approved_proof': proofs.any((p) => p['status'] == 'approved'),
+      'proof_required': true,
+      'proof_state': proofs.any((p) => p['status'] == 'approved')
+          ? 'approved'
+          : proofs.isEmpty
+          ? 'missing'
+          : 'pending',
       'distance_meters': 1500000,
       'proofs': proofs,
     },

@@ -31,6 +31,37 @@
       <p><strong>No catalogue import is recorded.</strong> Canonical place selection is unavailable, so senders and travellers cannot create a request or a journey. The release applies its bundled catalogue on first boot; if this persists, check the deployment log for <span class="st-ref">geography catalogue import FAILED</span>.</p>
     {% endif %}
   </section>
+  <section class="st-card" id="st-sea-crossings">
+    <p class="st-eyebrow">Ferry lines</p>
+    <h2>Sea crossings</h2>
+    <p>The ferry lines travelers can build a sea leg on. A crossing is one direction between two catalogue cities; the return direction is its own row. Turning one off stops new sea legs and new offers on every journey that uses it, from the next request, and never touches a funded deal.</p>
+    {% if sea_switch is None %}
+      <p><span class="st-chip st-bad">Sea legs: unknown</span> The business settings cannot be read, so sea legs are treated as off.</p>
+    {% elif sea_switch %}
+      <p><span class="st-chip st-ok">Sea legs: on</span> Members can use the crossings that are on. The switch is in <a href="{% url 'admin_console:settings' %}#st-settings-marketplace">Settings</a>.</p>
+    {% else %}
+      <p><span class="st-chip st-mute">Sea legs: off</span> No sea leg can be created or matched, whatever is listed below. The switch is in <a href="{% url 'admin_console:settings' %}#st-settings-marketplace">Settings</a>.</p>
+    {% endif %}
+    {% if may_manage_crossings %}<div class="st-split-actions"><a class="button" href="{% url 'admin_console:sea-crossing-new' %}">Add a crossing</a></div>{% endif %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">From</th><th scope="col">To</th><th scope="col" class="is-numeric">Distance</th><th scope="col">State</th>{% if may_manage_crossings %}<th scope="col"><span class="st-visually-hidden">Change</span></th>{% endif %}</tr></thead>
+        <tbody>
+          {% for crossing in sea_crossings %}
+          <tr>
+            <td><strong>{{ crossing.origin.name }}</strong><small>{{ crossing.origin.country_id }}</small></td>
+            <td><strong>{{ crossing.destination.name }}</strong><small>{{ crossing.destination.country_id }}</small></td>
+            <td class="is-numeric">{{ crossing.kilometres }} km</td>
+            <td><span class="st-chip st-{% if crossing.is_active %}ok{% else %}mute{% endif %}">{% if crossing.is_active %}On{% else %}Off{% endif %}</span></td>
+            {% if may_manage_crossings %}<td><a href="{{ crossing.action.url }}">{{ crossing.action.label }}</a></td>{% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="{% if may_manage_crossings %}5{% else %}4{% endif %}">No sea crossings exist yet. The release seeds the reviewed list; add one here if it did not.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
   <section class="st-table-card">
     <div class="st-table-scroll">
       <table class="st-data-table">

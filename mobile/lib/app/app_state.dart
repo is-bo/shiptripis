@@ -33,6 +33,7 @@ import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
 import '../domain/rating.dart';
+import '../domain/sea_crossings.dart';
 
 /// A token that cancels this provider's read once nothing wants its answer:
 /// the provider is disposed (its screen left, its filter changed) or rebuilt
@@ -202,6 +203,20 @@ final _journeyDetailQuery = FutureProvider.autoDispose
         (cancel) => repo.byId(key.argument, cancelToken: cancel),
       );
     });
+
+/// The ferry lines and the "Sea legs" switch, for the route editor.
+///
+/// Its own provider so a failure stays local to Sea: editing flight and road
+/// legs never waits on it and never fails with it.
+final seaCrossingsProvider = FutureProvider.autoDispose<SeaCrossings>(
+  (ref) => ref
+      .watch(geographyRepositoryProvider)
+      .seaCrossings(cancelToken: cancelOnDispose(ref)),
+  // No silent retry loop: a failure shows the editor's own notice straight
+  // away, with a button, instead of staying "loading" for a minute.
+  retry: (_, _) => null,
+);
+
 final journeyDetailProvider = Provider.autoDispose
     .family<AsyncValue<Journey>, int>((ref, id) {
       return _projectLiveQuery(

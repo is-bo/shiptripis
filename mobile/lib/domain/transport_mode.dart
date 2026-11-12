@@ -4,7 +4,7 @@
 /// and models must not depend on widgets. The icon and colour for each mode
 /// are added back on in `design/components/status.dart`.
 ///
-/// The API sends `"FLIGHT"` / `"DRIVE"` in **uppercase** — the one enum in the
+/// The API sends `"FLIGHT"` / `"DRIVE"` / `"SEA"` in **uppercase** — the one enum in the
 /// whole V1 contract that does, which is exactly why parsing it is centralised
 /// here instead of spelled out at each call site.
 library;
@@ -12,6 +12,7 @@ library;
 enum TransportMode {
   flight,
   drive,
+  sea,
   unknown;
 
   static TransportMode parse(Object? raw) {
@@ -19,6 +20,7 @@ enum TransportMode {
     return switch (text) {
       'FLIGHT' => TransportMode.flight,
       'DRIVE' => TransportMode.drive,
+      'SEA' => TransportMode.sea,
       _ => TransportMode.unknown,
     };
   }
@@ -27,9 +29,7 @@ enum TransportMode {
   String get wire => switch (this) {
     TransportMode.flight => 'FLIGHT',
     TransportMode.drive => 'DRIVE',
+    TransportMode.sea => 'SEA',
     TransportMode.unknown => '',
   };
-
-  /// Only flight legs require transport proof before a journey can publish.
-  bool get requiresProof => this == TransportMode.flight;
 }

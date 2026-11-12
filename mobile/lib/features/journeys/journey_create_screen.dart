@@ -35,7 +35,8 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
 import 'journey_route_draft.dart';
-import 'journey_route_editor.dart';
+import 'journey_route_editor.dart' show routeCopyOf;
+import 'journey_route_section.dart';
 
 class JourneyCreateScreen extends ConsumerStatefulWidget {
   const JourneyCreateScreen({super.key, this.debugDraft, this.debugNow});
@@ -66,6 +67,9 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
     'start_place_id',
     'destination_place_id',
     'legs',
+    'stops',
+    'refused_categories',
+    'accepts_fragile',
     'notes',
   };
 
@@ -100,6 +104,9 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
             startPlaceId: _draft.startPlaceId,
             destinationPlaceId: _draft.destinationPlaceId,
             legs: _draft.toLegDrafts(),
+            stops: _draft.toStopDrafts(),
+            refusedCategories: _draft.refusedCategoryWire,
+            acceptsFragile: _draft.acceptsFragile,
             notes: _notes.text.trim(),
           );
 
@@ -116,6 +123,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _fieldErrors = FieldErrorMap.from(error));
+      showRouteRefusalOnLeg(_draft, error);
       AppSnack.failure(
         context,
         error,
@@ -146,8 +154,7 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
               const SizedBox(height: AppSpace.xl),
             ],
 
-            SectionHeader(title: l.routeStopsTitle, subtitle: l.routeStopsHelp),
-            JourneyRouteEditor(
+            JourneyRouteSection(
               draft: _draft,
               enabled: !_busy,
               showErrors: _showErrors,
@@ -184,7 +191,11 @@ class _JourneyCreateScreenState extends ConsumerState<JourneyCreateScreen> {
 String? journeyRouteFailure(BuildContext context, ApiException error) {
   final l = L.of(context);
   return switch (error.code.raw) {
-    'journey_leg_mode_unavailable' => l.routeErrorModeUnavailable,
+    'journey_leg_mode_unavailable' =>
+      error.stringExtra('reason') != null
+          ? l.routeErrorSeaRefused
+          : l.routeErrorModeUnavailable,
+    'journey_stop_invalid' => l.journeyErrorStopInvalid,
     'journey_legs_disconnected' => l.journeyErrorLegsDisconnected,
     'journey_endpoints_mismatch' => l.journeyErrorEndpointsMismatch,
     'journey_leg_endpoints_invalid' => l.journeyErrorLegEndpoints,
@@ -197,4 +208,13 @@ String? journeyRouteFailure(BuildContext context, ApiException error) {
     'journey_leg_not_found' => l.journeyEditStaleRoute,
     _ => null,
   };
+}
+
+/// Puts a refused ferry leg back on the leg it belongs to, so its reason shows
+/// there and not only in a message at the top.
+void showRouteRefusalOnLeg(JourneyRouteDraft draft, ApiException error) {
+  if (error.code.raw != 'journey_leg_mode_unavailable') return;
+  final position = error.intExtra('leg_position');
+  if (position == null) return;
+  draft.markSeaRefused(position, error.stringExtra('reason'));
 }

@@ -103,6 +103,12 @@ class _Ramp {
   static const lapis4 = Color(0xFFB6D0EB);
   static const lapis5 = Color(0xFFEAF2FB);
 
+  /// The ferry's mode colour: distinct from flight (blue) and drive (green)
+  /// and from every status tone, so a sea leg reads as its own thing on a
+  /// route line. The boat glyph carries the meaning; the colour only helps.
+  static const plum2 = Color(0xFF6C4A9E);
+  static const plum3 = Color(0xFFBFA6EA);
+
   // Sun — the signature ShipTrip accent. Reserved for the one marquee action
   // on a screen and for the selected navigation destination. It is the colour
   // people remember the app by, so it is never used as a status or a fill.
@@ -188,6 +194,7 @@ class AppColorScheme {
     required this.skeletonSheen,
     required this.modeFlight,
     required this.modeDrive,
+    required this.modeSea,
   });
 
   final Brightness brightness;
@@ -285,6 +292,7 @@ class AppColorScheme {
 
   final Color modeFlight;
   final Color modeDrive;
+  final Color modeSea;
 
   static const light = AppColorScheme(
     brightness: Brightness.light,
@@ -339,6 +347,7 @@ class AppColorScheme {
     skeletonSheen: _Ramp.parchmentSoft,
     modeFlight: _Ramp.lapis2,
     modeDrive: _Ramp.emerald3,
+    modeSea: _Ramp.plum2,
   );
 
   static const dark = AppColorScheme(
@@ -395,6 +404,7 @@ class AppColorScheme {
     skeletonSheen: Color(0xFF233746),
     modeFlight: _Ramp.lapis3,
     modeDrive: _Ramp.emerald4,
+    modeSea: _Ramp.plum3,
   );
 
   AppColorScheme lerpTo(AppColorScheme other, double t) {
@@ -447,6 +457,7 @@ class AppColorScheme {
       skeletonSheen: c(skeletonSheen, other.skeletonSheen),
       modeFlight: c(modeFlight, other.modeFlight),
       modeDrive: c(modeDrive, other.modeDrive),
+      modeSea: c(modeSea, other.modeSea),
     );
   }
 }

@@ -599,6 +599,7 @@ String transportModeLabel(BuildContext context, TransportMode mode) {
   return switch (mode) {
     TransportMode.flight => l.journeyModeFlight,
     TransportMode.drive => l.journeyModeDrive,
+    TransportMode.sea => l.journeyModeSea,
     TransportMode.unknown => l.stateUnexpectedTitle,
   };
 }

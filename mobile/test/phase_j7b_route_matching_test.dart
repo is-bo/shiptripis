@@ -410,6 +410,11 @@ void main() {
       arriveRequired: 'arrive-required',
       arriveBeforeDepart: 'arrive-order',
       capacityInvalid: 'capacity',
+      volumeInvalid: 'volume',
+      parcelsInvalid: 'parcels',
+      windowIncomplete: 'window-incomplete',
+      windowOrder: 'window-order',
+      windowOutside: 'window-outside',
       required: 'required',
     );
 

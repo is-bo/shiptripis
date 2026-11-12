@@ -11,7 +11,7 @@ that uses it, from the next request on (`apps.trips.transport_rules` and the
 never touches a funded deal, because nothing here or there reads a crossing
 after funding.
 
-The console screens are L3B; these functions are what they will call.
+The console's "Sea crossings" screens (`apps.admin_panel.console_sea`) call these.
 """
 
 from __future__ import annotations
@@ -21,6 +21,9 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
+from django.db.models import Q
+
+from apps.locations.geography import normalize_search_name
 
 from apps.routing.geometry import GeoPoint, haversine_meters
 
@@ -85,6 +88,39 @@ def great_circle_meters(origin: Place, destination: Place) -> int | None:
         GeoPoint(float(origin.latitude), float(origin.longitude)),
         GeoPoint(float(destination.latitude), float(destination.longitude)),
     )
+
+
+def resolve_port(country: str, name: str) -> tuple[Place | None, str]:
+    """The one active catalogue city called ``name`` in ``country``, or why not.
+
+    Matches the city's name or a source-backed alternate name. Never guesses:
+    no match and more than one match both answer ``None`` with a reason. The
+    seed command and the console's "Add a crossing" form share this, so staff
+    and the reviewed list resolve a port the same way.
+    """
+
+    normalized = normalize_search_name(name)
+    candidates = list(
+        Place.objects.filter(
+            country_id=country,
+            place_type=Place.PlaceType.LOCALITY,
+            active=True,
+        )
+        .filter(
+            Q(normalized_name=normalized)
+            | Q(
+                alternate_name_records__normalized_name=normalized,
+                alternate_name_records__active=True,
+            )
+        )
+        .distinct()
+        .order_by("pk")[:2]
+    )
+    if not candidates:
+        return None, "no active catalogue city has this name"
+    if len(candidates) > 1:
+        return None, "more than one active catalogue city has this name"
+    return candidates[0], ""
 
 
 def _port(place_id: int, field: str) -> Place:

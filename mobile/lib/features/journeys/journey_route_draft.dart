@@ -36,6 +36,12 @@
 /// and the route then reads
 ///
 ///     Jijel  —drive→  Algiers (ALG)  —flight→  Paris (CDG)
+///
+/// ## A ferry runs between cities, never airports
+///
+/// A sea segment joins two port *cities*, so it ignores the airport a stop was
+/// reached by: Marseille —sea→ Algiers is sent as Marseille and Algiers even
+/// when the same stops also carry airports for a flight on the other side.
 library;
 
 import 'package:flutter/widgets.dart';
@@ -44,7 +50,9 @@ import '../../core/format/locale_formats.dart';
 import '../../data/repositories.dart';
 import '../../design/components/forms.dart' show parseDecimalInput;
 import '../../domain/canonical_place.dart';
+import '../../domain/delivery_request.dart' show ItemCategory;
 import '../../domain/journey.dart';
+import '../../domain/sea_crossings.dart';
 import '../../domain/transport_mode.dart';
 import '../../domain/transport_rules.dart';
 
@@ -52,12 +60,67 @@ import '../../domain/transport_rules.dart';
 /// to have the whole journey refused.
 const int maxJourneyLegs = 20;
 
-/// The V1 per-leg ceiling shared with the server.
-const double maxJourneyLegCapacityKg = 200.0;
+/// The per-leg weight ceiling shared with the server. It is a typo guard, not
+/// a commercial limit, so it is far above anything one person carries.
+const double maxJourneyLegCapacityKg = 20000.0;
+
+/// The optional per-leg limits, as the server bounds them.
+const int maxJourneyLegVolumeLitres = 200000;
+const int maxJourneyLegParcels = 10000;
+
+/// The longest handover note the server stores.
+const int maxStopNoteLength = 280;
+
+/// The item categories a traveller can decline, in the order they are shown.
+/// `unknown` is a parse fallback, never something to choose.
+const List<ItemCategory> carryableCategories = [
+  ItemCategory.documents,
+  ItemCategory.smallBox,
+  ItemCategory.electronics,
+  ItemCategory.clothing,
+  ItemCategory.other,
+];
+
+String _categoryWire(ItemCategory category) => switch (category) {
+  ItemCategory.smallBox => 'small_box',
+  _ => category.name,
+};
+
+/// How a draft mode reads as the parsed [TransportMode] the design system
+/// knows how to draw.
+extension LegModeTransport on LegMode {
+  TransportMode get transport => switch (this) {
+    LegMode.flight => TransportMode.flight,
+    LegMode.drive => TransportMode.drive,
+    LegMode.sea => TransportMode.sea,
+  };
+}
 
 /// One stop on the route.
 class RouteStopDraft {
-  RouteStopDraft({required this.place, this.airport});
+  RouteStopDraft({
+    required this.place,
+    this.airport,
+    this.acceptsPickup = true,
+    this.acceptsDropoff = true,
+    this.windowStart,
+    this.windowEnd,
+    String note = '',
+  }) {
+    this.note.text = note;
+  }
+
+  /// Handover options for this stop. The defaults — accept both, no window, no
+  /// note — are what a stop that was never configured means, and are not sent.
+  bool acceptsPickup;
+  bool acceptsDropoff;
+  DateTime? windowStart;
+  DateTime? windowEnd;
+  final note = TextEditingController();
+
+  bool get hasWindow => windowStart != null && windowEnd != null;
+
+  void dispose() => note.dispose();
 
   /// What the traveller chose: usually a city, sometimes an airport directly.
   CanonicalPlace place;
@@ -95,9 +158,13 @@ class RouteSegmentDraft {
     this.arriveAt,
     String capacityKg = '',
     String flightNumber = '',
+    String volumeLitres = '',
+    String parcels = '',
   }) {
     capacity.text = capacityKg;
     this.flightNumber.text = flightNumber;
+    volume.text = volumeLitres;
+    this.parcels.text = parcels;
   }
 
   /// The server's leg id when this segment came from a saved journey. Kept
@@ -111,15 +178,27 @@ class RouteSegmentDraft {
   final capacity = TextEditingController();
   final flightNumber = TextEditingController();
 
-  TransportMode get displayMode =>
-      mode.isFlight ? TransportMode.flight : TransportMode.drive;
+  /// Optional extra limits. Empty means "not limited".
+  final volume = TextEditingController();
+  final parcels = TextEditingController();
 
-  TransportModeDraft get wireMode =>
-      mode.isFlight ? TransportModeDraft.flight : TransportModeDraft.drive;
+  TransportMode get displayMode => mode.transport;
+
+  TransportModeDraft get wireMode => switch (mode) {
+    LegMode.flight => TransportModeDraft.flight,
+    LegMode.drive => TransportModeDraft.drive,
+    LegMode.sea => TransportModeDraft.sea,
+  };
+
+  /// Whether the "More capacity options" disclosure has anything in it.
+  bool get hasExtraCapacity =>
+      volume.text.trim().isNotEmpty || parcels.text.trim().isNotEmpty;
 
   void dispose() {
     capacity.dispose();
     flightNumber.dispose();
+    volume.dispose();
+    parcels.dispose();
   }
 }
 
@@ -131,12 +210,22 @@ typedef SegmentIssues = ({
   String? capacity,
   String? flightNumber,
 
+  /// The optional per-leg limits, when what was typed is not allowed.
+  String? volume,
+  String? parcels,
+
+  /// The segment is a sea leg the server would refuse right now, and why.
+  SeaRefusal? sea,
+
   /// The segment must fly but one or both of its stops is not an airport.
   bool needsAirports,
 
   /// The two stops resolve to the same city, so there is no leg between them.
   bool stopsAreTheSamePlace,
 });
+
+/// What is wrong with one stop's handover options.
+typedef StopIssues = ({String? window});
 
 /// The stops, the segments derived from them, and the edits people make.
 ///
@@ -202,23 +291,64 @@ class JourneyRouteDraft extends ChangeNotifier {
       draft._segments.add(
         RouteSegmentDraft(
           id: leg.id,
-          mode: leg.mode == TransportMode.flight
-              ? LegMode.flight
-              : LegMode.drive,
+          mode: switch (leg.mode) {
+            TransportMode.flight => LegMode.flight,
+            TransportMode.sea => LegMode.sea,
+            _ => LegMode.drive,
+          },
           departAt: leg.departAt,
           arriveAt: leg.arriveAt,
           capacityKg: leg.capacityKg == null
               ? ''
               : leg.capacityKg!.toStringAsFixed(2),
           flightNumber: leg.flightNumber,
+          volumeLitres: leg.capacityVolumeLitres?.toString() ?? '',
+          parcels: leg.capacityParcels?.toString() ?? '',
         ),
       );
     }
+
+    // What each stop accepts, as the owner set it. A stop the payload does not
+    // list was never configured and keeps the defaults.
+    for (final detail in journey.stops) {
+      if (detail.position < 0 || detail.position >= draft._stops.length) {
+        continue;
+      }
+      final stop = draft._stops[detail.position];
+      stop.acceptsPickup = detail.acceptsPickup;
+      stop.acceptsDropoff = detail.acceptsDropoff;
+      stop.windowStart = detail.windowStart;
+      stop.windowEnd = detail.windowEnd;
+      stop.note.text = detail.handoverNote;
+    }
+
+    draft.refusedCategories.addAll([
+      for (final category in carryableCategories)
+        if (journey.refusedCategories.contains(_categoryWire(category)))
+          category,
+    ]);
+    draft.acceptsFragile = journey.acceptsFragile;
     return draft;
   }
 
   final List<RouteStopDraft> _stops = [];
   final List<RouteSegmentDraft> _segments = [];
+
+  /// What this traveller will not take. Empty — the default — takes
+  /// everything. Declining every category is not a journey, so the editor
+  /// never lets the last one be switched off.
+  final Set<ItemCategory> refusedCategories = {};
+  bool acceptsFragile = true;
+
+  /// The ferry lines, or null while they are loading or could not be loaded.
+  /// Null never blocks flight and road editing and never demotes a sea leg the
+  /// traveller already has; it only means Sea is not offered for a new one.
+  SeaCrossings? _crossings;
+  SeaCrossings? get seaCrossings => _crossings;
+
+  /// The server's own refusal of a sea leg, by segment, until the traveller
+  /// changes something. Shown on the leg it belongs to.
+  final Map<int, SeaRefusal> _serverRefusals = {};
 
   List<RouteStopDraft> get stops => List.unmodifiable(_stops);
   List<RouteSegmentDraft> get segments => List.unmodifiable(_segments);
@@ -236,7 +366,58 @@ class JourneyRouteDraft extends ChangeNotifier {
     for (final segment in _segments) {
       segment.dispose();
     }
+    for (final stop in _stops) {
+      stop.dispose();
+    }
     super.dispose();
+  }
+
+  // -------------------------------------------------------------------------
+  // Sea
+  // -------------------------------------------------------------------------
+
+  /// Gives the draft the server's ferry lines (or null when they cannot be
+  /// had). Notifies without reconciling: a list that arrives late or changes
+  /// must not silently rewrite a leg the traveller has already chosen.
+  void setSeaCrossings(SeaCrossings? crossings) {
+    if (identical(crossings, _crossings)) return;
+    _crossings = crossings;
+    notifyListeners();
+  }
+
+  /// Records the server's refusal of the sea leg at [position], so it shows on
+  /// that leg. A reason this build does not know is ignored: the generic
+  /// message already covers it.
+  void markSeaRefused(int position, String? reason) {
+    final refusal = SeaRefusal.fromServer(reason);
+    if (refusal == null || position < 0 || position >= _segments.length) {
+      return;
+    }
+    _serverRefusals[position] = refusal;
+    notifyListeners();
+  }
+
+  /// Why a sea leg on segment [index] is a problem now: what the server told
+  /// us on the last attempt, else what the ferry lines say.
+  SeaRefusal? seaProblemFor(int index) {
+    if (index < 0 ||
+        index >= _segments.length ||
+        !_segments[index].mode.isSea) {
+      return null;
+    }
+    return _serverRefusals[index] ??
+        seaRefusal(_stops[index].place, _stops[index + 1].place, _crossings);
+  }
+
+  /// True when Sea is missing from segment [index] only because the owner's
+  /// switch is off, which is the one absence worth a line of explanation.
+  bool seaSwitchedOffFor(int index) {
+    if (index < 0 || index >= _segments.length) return false;
+    return seaIsSwitchedOff(
+      _stops[index].place,
+      _stops[index + 1].place,
+      _crossings,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -316,6 +497,8 @@ class JourneyRouteDraft extends ChangeNotifier {
       inserted.endpoint,
       _stops[afterIndex + 2].endpoint,
     );
+    // Whatever the old span was, each half starts from a derived mode; a sea
+    // leg is never carried onto a half it may not fit.
 
     // The original segment becomes the first half: it keeps the departure the
     // traveller already entered, because that is still when they set off.
@@ -333,6 +516,8 @@ class JourneyRouteDraft extends ChangeNotifier {
     final second = RouteSegmentDraft(
       mode: secondMode,
       capacityKg: original.capacity.text,
+      volumeLitres: original.volume.text,
+      parcels: original.parcels.text,
       flightNumber: wasFlight && secondMode.isFlight && !firstMode.isFlight
           ? carriedFlightNumber
           : '',
@@ -344,7 +529,7 @@ class JourneyRouteDraft extends ChangeNotifier {
   /// Removes an intermediate stop and rejoins the two segments it separated.
   void removeStop(int index) {
     if (!isIntermediate(index)) return;
-    _stops.removeAt(index);
+    _stops.removeAt(index).dispose();
     // Keep the segment that arrives at this stop and let it run on to the
     // next one; the traveller's departure time for it is still correct.
     final surviving = _segments[index - 1];
@@ -408,8 +593,8 @@ class JourneyRouteDraft extends ChangeNotifier {
     if (index < 0 || index >= _segments.length) return;
     if (!modesFor(index).contains(mode)) return;
     _segments[index].mode = mode;
-    // A drive leg must arrive with an empty flight number, so the field is
-    // cleared rather than merely hidden.
+    // A road or sea leg must arrive with an empty flight number, so the field
+    // is cleared rather than merely hidden.
     if (!mode.isFlight) _segments[index].flightNumber.clear();
     _reconcile();
   }
@@ -427,13 +612,24 @@ class JourneyRouteDraft extends ChangeNotifier {
   }
 
   /// The modes segment [index] may legally declare.
+  ///
+  /// A sea leg the traveller already has stays in the set even if the ferry
+  /// lines no longer offer it, so the chooser keeps showing what is selected
+  /// and the reason is shown on the leg ([seaProblemFor]) rather than the leg
+  /// quietly turning into something else.
   Set<LegMode> modesFor(int index) {
     if (index < 0 || index >= _segments.length) return {LegMode.drive};
-    return availableModes(_stops[index].endpoint, _stops[index + 1].endpoint);
+    final modes = availableModes(
+      _stops[index].place,
+      _stops[index + 1].place,
+      crossings: _crossings,
+    );
+    if (_segments[index].mode.isSea) modes.add(LegMode.sea);
+    return modes;
   }
 
   /// True when this segment can only be a flight — Algeria to anywhere
-  /// outside it, and back.
+  /// outside it, and back, with no ferry line on offer.
   bool segmentMustFly(int index) => modesFor(index).length == 1;
 
   /// Re-derives everything that follows from the stops, and tells listeners.
@@ -441,15 +637,41 @@ class JourneyRouteDraft extends ChangeNotifier {
   /// Called after every structural change so a mode can never survive a stop
   /// edit that made it impossible.
   void _reconcile() {
+    _serverRefusals.clear();
     for (var i = 0; i < _segments.length; i++) {
-      final allowed = modesFor(i);
-      if (!allowed.contains(_segments[i].mode)) {
-        _segments[i].mode = allowed.first;
-        if (!_segments[i].mode.isFlight) _segments[i].flightNumber.clear();
-        _segments[i].id = null;
+      final segment = _segments[i];
+      final allowed = segment.mode.isSea ? _modesWithoutSwitch(i) : modesFor(i);
+      if (!allowed.contains(segment.mode)) {
+        segment.mode = allowed.first;
+        if (!segment.mode.isFlight) segment.flightNumber.clear();
+        segment.id = null;
       }
     }
     notifyListeners();
+  }
+
+  /// For a segment that is already a sea leg: the modes it may keep after a
+  /// structural edit. Sea survives unless the edit made it structurally
+  /// impossible (an airport stop, or a pair no line has ever joined). A switch
+  /// that is merely off does not demote it; that is shown on the leg instead.
+  Set<LegMode> _modesWithoutSwitch(int index) {
+    final modes = availableModes(
+      _stops[index].place,
+      _stops[index + 1].place,
+      crossings: _crossings,
+    );
+    final from = _stops[index].place;
+    final to = _stops[index + 1].place;
+    final possible =
+        !from.isAirport &&
+        !to.isAirport &&
+        (_crossings == null ||
+            _crossings!.hasLine(
+              from.matchingLocalityId,
+              to.matchingLocalityId,
+            ));
+    if (possible) modes.add(LegMode.sea);
+    return modes;
   }
 
   /// Fired by the editor when a text field changes, so previews and the
@@ -499,7 +721,7 @@ class JourneyRouteDraft extends ChangeNotifier {
       arrive = null;
     }
 
-    // The server accepts 0.01–200.00 kg with at most two decimal places.
+    // The server accepts 0.01–20,000.00 kg with at most two decimal places.
     // Check the typed precision too: rounding 0.005 on-device would make a
     // value appear valid that the authoritative DecimalField rejects.
     final capacityText = segment.capacity.text.trim();
@@ -518,6 +740,17 @@ class JourneyRouteDraft extends ChangeNotifier {
         ? copy.required
         : null;
 
+    final volume = _optionalWholeNumber(
+      segment.volume.text,
+      max: maxJourneyLegVolumeLitres,
+      message: copy.volumeInvalid,
+    );
+    final parcels = _optionalWholeNumber(
+      segment.parcels.text,
+      max: maxJourneyLegParcels,
+      message: copy.parcelsInvalid,
+    );
+
     final needsAirports =
         segment.mode.isFlight &&
         (!_stops[index].resolvesToAirport ||
@@ -534,6 +767,9 @@ class JourneyRouteDraft extends ChangeNotifier {
       arrive: arrive,
       capacity: capacity,
       flightNumber: flightNumber,
+      volume: volume,
+      parcels: parcels,
+      sea: seaProblemFor(index),
       needsAirports: needsAirports,
       stopsAreTheSamePlace: sameStop,
     );
@@ -548,12 +784,98 @@ class JourneyRouteDraft extends ChangeNotifier {
           issues.arrive != null ||
           issues.capacity != null ||
           issues.flightNumber != null ||
+          issues.volume != null ||
+          issues.parcels != null ||
+          issues.sea != null ||
           issues.needsAirports ||
           issues.stopsAreTheSamePlace) {
         return false;
       }
     }
+    for (var i = 0; i < _stops.length; i++) {
+      if (stopIssuesFor(i, copy).window != null) return false;
+    }
     return true;
+  }
+
+  /// Null for empty (not limited) or a whole number in `1..max`.
+  static String? _optionalWholeNumber(
+    String raw, {
+    required int max,
+    required String message,
+  }) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    final value = RegExp(r'^\d{1,9}$').hasMatch(text) ? int.parse(text) : null;
+    return value == null || value < 1 || value > max ? message : null;
+  }
+
+  /// The handover options of stop [index], checked the way the server does: a
+  /// window needs both ends, ends after it starts, and sits between arriving
+  /// at this stop and leaving it.
+  StopIssues stopIssuesFor(int index, RouteCopy copy) {
+    final stop = _stops[index];
+    final start = stop.windowStart;
+    final end = stop.windowEnd;
+    if (start == null && end == null) return (window: null);
+    if (start == null || end == null) return (window: copy.windowIncomplete);
+    if (!end.isAfter(start)) return (window: copy.windowOrder);
+    final arrives = index > 0 ? _segments[index - 1].arriveAt : null;
+    final leaves = index < _segments.length ? _segments[index].departAt : null;
+    if ((arrives != null && start.isBefore(arrives)) ||
+        (leaves != null && end.isAfter(leaves))) {
+      return (window: copy.windowOutside);
+    }
+    return (window: null);
+  }
+
+  // -------------------------------------------------------------------------
+  // Stop options
+  // -------------------------------------------------------------------------
+
+  /// What stop [index] really accepts: nothing is dropped off where the trip
+  /// starts, and nothing is picked up where it ends, whatever was set.
+  bool stopAcceptsPickup(int index) =>
+      index < _stops.length - 1 && _stops[index].acceptsPickup;
+  bool stopAcceptsDropoff(int index) =>
+      index > 0 && _stops[index].acceptsDropoff;
+
+  void setStopOptions(
+    int index, {
+    bool? acceptsPickup,
+    bool? acceptsDropoff,
+    DateTime? windowStart,
+    DateTime? windowEnd,
+    bool clearWindow = false,
+  }) {
+    if (index < 0 || index >= _stops.length) return;
+    final stop = _stops[index];
+    if (acceptsPickup != null) stop.acceptsPickup = acceptsPickup;
+    if (acceptsDropoff != null) stop.acceptsDropoff = acceptsDropoff;
+    if (clearWindow) {
+      stop.windowStart = null;
+      stop.windowEnd = null;
+    } else {
+      if (windowStart != null) stop.windowStart = windowStart;
+      if (windowEnd != null) stop.windowEnd = windowEnd;
+    }
+    notifyListeners();
+  }
+
+  void setCarries(ItemCategory category, {required bool carries}) {
+    if (carries) {
+      refusedCategories.remove(category);
+    } else {
+      // Declining everything is not a journey: the last one stays on.
+      if (refusedCategories.length >= carryableCategories.length - 1) return;
+      refusedCategories.add(category);
+    }
+    notifyListeners();
+  }
+
+  void setAcceptsFragile(bool value) {
+    acceptsFragile = value;
+    notifyListeners();
   }
 
   // -------------------------------------------------------------------------
@@ -566,15 +888,63 @@ class JourneyRouteDraft extends ChangeNotifier {
         id: _segments[i].id,
         position: i,
         mode: _segments[i].wireMode,
-        originPlaceId: _stops[i].endpoint.id,
-        destinationPlaceId: _stops[i + 1].endpoint.id,
+        // A ferry joins cities, so it never takes the airport a stop was
+        // reached by on its other side.
+        originPlaceId: _segments[i].mode.isSea
+            ? _stops[i].place.id
+            : _stops[i].endpoint.id,
+        destinationPlaceId: _segments[i].mode.isSea
+            ? _stops[i + 1].place.id
+            : _stops[i + 1].endpoint.id,
         departAt: _segments[i].departAt!,
         arriveAt: _segments[i].arriveAt,
         capacityKg: parseDecimalInput(_segments[i].capacity.text)!,
+        capacityVolumeLitres: int.tryParse(_segments[i].volume.text.trim()),
+        capacityParcels: int.tryParse(_segments[i].parcels.text.trim()),
         flightNumber: _segments[i].mode.isFlight
             ? _segments[i].flightNumber.text.trim()
             : '',
       ),
+  ];
+
+  /// The stops that differ from "accepts both, no window, no note". The first
+  /// stop never takes a drop-off and the last never a pickup, so those sides
+  /// follow the one that matters rather than being sent as a contradiction.
+  List<JourneyStopDraft> toStopDrafts() {
+    final last = _stops.length - 1;
+    final drafts = <JourneyStopDraft>[];
+    for (var i = 0; i < _stops.length; i++) {
+      final stop = _stops[i];
+      final bool pickup;
+      final bool dropoff;
+      if (i == 0) {
+        pickup = dropoff = stop.acceptsPickup;
+      } else if (i == last) {
+        pickup = dropoff = stop.acceptsDropoff;
+      } else {
+        pickup = stop.acceptsPickup;
+        dropoff = stop.acceptsDropoff;
+      }
+      final note = stop.note.text.trim();
+      if (pickup && dropoff && !stop.hasWindow && note.isEmpty) continue;
+      drafts.add(
+        JourneyStopDraft(
+          position: i,
+          acceptsPickup: pickup,
+          acceptsDropoff: dropoff,
+          handoverNote: note,
+          windowStart: stop.hasWindow ? stop.windowStart : null,
+          windowEnd: stop.hasWindow ? stop.windowEnd : null,
+        ),
+      );
+    }
+    return drafts;
+  }
+
+  /// Wire values of the categories this traveller will not take.
+  List<String> get refusedCategoryWire => [
+    for (final category in carryableCategories)
+      if (refusedCategories.contains(category)) _categoryWire(category),
   ];
 
   /// The journey's own endpoints: what the traveller named, not the airport
@@ -592,6 +962,11 @@ typedef RouteCopy = ({
   String arriveRequired,
   String arriveBeforeDepart,
   String capacityInvalid,
+  String volumeInvalid,
+  String parcelsInvalid,
+  String windowIncomplete,
+  String windowOrder,
+  String windowOutside,
   String required,
 });
 

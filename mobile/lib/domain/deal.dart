@@ -531,8 +531,48 @@ class DealRouteLeg {
   final bool carriesParcel;
 }
 
+/// The traveller's handover detail for one of the two stops a parcel uses,
+/// frozen when the deal was funded. Only the two parties of a funded deal ever
+/// receive it.
+class DealHandoverStop {
+  const DealHandoverStop({
+    required this.isPickup,
+    required this.position,
+    this.note = '',
+    this.windowStart,
+    this.windowEnd,
+  });
+
+  factory DealHandoverStop.fromJson(Map<String, dynamic> json) =>
+      DealHandoverStop(
+        isPickup: json['role'] != 'dropoff',
+        position: readInt(json['position']) ?? 0,
+        note: readText(json['handover_note']),
+        windowStart: readDate(json['window_start']),
+        windowEnd: readDate(json['window_end']),
+      );
+
+  /// Pickup or drop-off.
+  final bool isPickup;
+
+  /// The journey stop's position: a pickup is where leg `position` begins and
+  /// a drop-off is where leg `position - 1` ends.
+  final int position;
+  final String note;
+  final DateTime? windowStart;
+  final DateTime? windowEnd;
+
+  bool get hasWindow => windowStart != null && windowEnd != null;
+  bool get hasDetail => note.isNotEmpty || hasWindow;
+}
+
 class DealRoute {
-  const DealRoute({required this.basis, required this.legs, this.journeyId});
+  const DealRoute({
+    required this.basis,
+    required this.legs,
+    this.journeyId,
+    this.handoverStops = const [],
+  });
 
   factory DealRoute.fromJson(Map<String, dynamic> json) {
     final rawLegs = readObjectList(json['legs']);
@@ -543,6 +583,9 @@ class DealRoute {
       basis: DealRouteBasis.parse(readString(json['basis'])),
       journeyId: readInt(json['journey_id']),
       legs: legs,
+      handoverStops: readObjectList(
+        json['handover_stops'],
+      ).map(DealHandoverStop.fromJson).toList(growable: false),
     );
   }
 
@@ -554,6 +597,10 @@ class DealRoute {
   final DealRouteBasis basis;
   final int? journeyId;
   final List<DealRouteLeg> legs;
+
+  /// Where and when the traveller said they would hand over, for this deal's
+  /// two stops. Empty when they said nothing.
+  final List<DealHandoverStop> handoverStops;
 }
 
 /// The payout block nested on a Deal. Thinner than the standalone [Payout].

@@ -35,12 +35,17 @@ import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
+import '../../domain/delivery_request.dart' show ItemCategory;
 import '../../domain/discovery.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+import '../common/traveler_candidate_card.dart' show modeAccentColor;
+import '../requests/request_labels.dart' show itemCategoryLabel;
+import 'journey_create_screen.dart' show journeyRouteFailure;
 import 'journey_labels.dart';
+import 'journey_route_draft.dart' show carryableCategories;
 
 final _compatibleRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryResults, int>((ref, journeyId) async {
@@ -95,12 +100,70 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
       'journey_leg_arrival_required' => l.journeyErrorLegArrivalRequired,
       'journey_legs_disconnected' => l.journeyErrorLegsDisconnected,
       'journey_leg_time_order_invalid' => l.journeyErrorLegTimeOrder,
-      'journey_leg_mode_unavailable' => l.routeErrorModeUnavailable,
+      'journey_leg_mode_unavailable' ||
+      'journey_stop_invalid' => journeyRouteFailure(context, error),
       'traveler_kyc_not_approved' => l.kycRequiredForJourney,
-      'flight_proof_not_approved' => l.journeyPublishBlockedProof,
+      'flight_proof_not_approved' ||
+      'sea_proof_not_approved' => l.journeyPublishBlockedProof,
       'journey_not_owned' => l.journeyErrorNotOwned,
       _ => null,
     };
+  }
+
+  /// Takes the journey out of discovery. Reversible, so it asks once and says
+  /// what stays as it is: deals already paid for are untouched.
+  Future<void> _pause() async {
+    final l = L.of(context);
+    final confirmed = await confirmAction(
+      context,
+      title: l.journeyPauseConfirmTitle,
+      body: l.journeyPauseConfirmBody,
+      confirmLabel: l.journeyPauseAction,
+    );
+    if (!confirmed || !mounted) return;
+    await _changePause(
+      () => ref.read(journeyRepositoryProvider).pause(widget.journeyId),
+      l.journeyPaused,
+    );
+  }
+
+  Future<void> _resume() => _changePause(
+    () => ref.read(journeyRepositoryProvider).resume(widget.journeyId),
+    L.of(context).journeyResumed,
+  );
+
+  Future<void> _changePause(
+    Future<Journey> Function() change,
+    String success,
+  ) async {
+    setState(() => _busy = true);
+    final l = L.of(context);
+    try {
+      await change();
+      if (!mounted) return;
+      ref.invalidate(journeyDetailProvider(widget.journeyId));
+      refreshVolatileState(ref);
+      AppSnack.success(context, success);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      AppSnack.failure(
+        context,
+        error,
+        fallback: switch (error.code.raw) {
+          'journey_not_pausable' => l.journeyErrorNotPausable,
+          'journey_paused_by_staff' => l.journeyErrorPausedByStaff,
+          'journey_not_owned' => l.journeyErrorNotOwned,
+          _ => null,
+        },
+      );
+      // A pause that is already someone else's, or a journey that moved on:
+      // show what is true now.
+      if (error.isStale || error.code.raw == 'journey_paused_by_staff') {
+        ref.invalidate(journeyDetailProvider(widget.journeyId));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _cancel() async {
@@ -195,6 +258,15 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                           _Header(journey: data),
                           const SizedBox(height: AppSpace.xl),
 
+                          if (isOwner && data.isPaused) ...[
+                            _PausedBanner(
+                              journey: data,
+                              busy: _busy,
+                              onResume: _resume,
+                            ),
+                            const SizedBox(height: AppSpace.xl),
+                          ],
+
                           if (isOwner && data.status.isEditable) ...[
                             _Blockers(
                               legsNeedingProof: needProof,
@@ -237,6 +309,13 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                           ],
                           _Route(journey: data),
 
+                          // What only the owner set: where parcels change
+                          // hands and what they will not take.
+                          if (isOwner) ...[
+                            _HandoverSummary(journey: data),
+                            _CarrySummary(journey: data),
+                          ],
+
                           if (data.notes.isNotEmpty) ...[
                             const SizedBox(height: AppSpace.xl),
                             SectionHeader(title: l.journeyNotesLabel),
@@ -261,6 +340,15 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                         SliverList.list(
                           children: [
                             const SizedBox(height: AppSpace.xxl),
+                            if (data.status.isLive && !data.isPaused) ...[
+                              AppButton(
+                                label: l.journeyPauseAction,
+                                icon: Icons.pause_circle_outline_rounded,
+                                variant: AppButtonVariant.secondary,
+                                onPressed: _busy ? null : _pause,
+                              ),
+                              const SizedBox(height: AppSpace.md),
+                            ],
                             AppButton(
                               label: l.journeyCancel,
                               variant: AppButtonVariant.destructive,
@@ -403,9 +491,9 @@ class _Blockers extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.flight_takeoff_rounded,
+                    leg.mode.icon,
                     size: 20,
-                    color: context.colors.modeFlight,
+                    color: modeAccentColor(context, leg.mode),
                   ),
                   const SizedBox(width: AppSpace.md),
                   Expanded(
@@ -422,7 +510,7 @@ class _Blockers extends StatelessWidget {
                         ),
                         const SizedBox(height: AppSpace.xxs),
                         Text(
-                          _proofLabel(context, leg.proofStatus),
+                          legProofStateStyle(l, leg.proofState).label,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: context.colors.textSecondary),
                         ),
@@ -442,16 +530,6 @@ class _Blockers extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  String _proofLabel(BuildContext context, ProofStatus status) {
-    final l = L.of(context);
-    return switch (status) {
-      ProofStatus.approved => l.proofStatusApproved,
-      ProofStatus.pending => l.proofStatusPending,
-      ProofStatus.rejected => l.proofStatusRejected,
-      ProofStatus.unknown => l.proofStatusMissing,
-    };
   }
 }
 
@@ -508,16 +586,28 @@ class _Route extends StatelessWidget {
           mode: leg.mode,
           modeLabel: transportModeLabel(context, leg.mode),
           detail: _legDetail(context, leg),
-          capacityLabel: formatCapacity(context, leg.capacityKg),
-          // A flight whose proof was refused carries a state of its own, and
-          // the connector is where that belongs.
-          tone: leg.proofStatus == ProofStatus.rejected
+          capacityLabel: _capacityLabel(context, leg),
+          // A leg whose ticket was refused carries a state of its own, and the
+          // connector is where that belongs.
+          tone: leg.proofState == LegProofState.rejected
               ? StatusTone.bad
               : (leg.needsProof ? StatusTone.action : null),
         ),
     ];
 
     return RouteLine(stops: stops, segments: segments);
+  }
+
+  /// Weight first, then whichever extra limits the traveller declared.
+  String _capacityLabel(BuildContext context, JourneyLeg leg) {
+    final l = L.of(context);
+    return [
+      formatCapacity(context, leg.capacityKg),
+      if (leg.capacityVolumeLitres != null)
+        l.journeyCapacityVolumeValue(leg.capacityVolumeLitres!),
+      if (leg.capacityParcels != null)
+        l.journeyCapacityParcelsValue(leg.capacityParcels!),
+    ].where((part) => part.isNotEmpty).join(' · ');
   }
 
   /// Flight number for a flight; the distance the viewer is entitled to for a
@@ -531,6 +621,157 @@ class _Route extends StatelessWidget {
       return formatDistanceBand(context, leg.distanceBand);
     }
     return null;
+  }
+}
+
+/// The journey is out of discovery, and who can bring it back.
+///
+/// A traveller's own pause has a Resume button. A staff pause does not, and
+/// never says why: the reason stays with staff, and the traveller is told to
+/// contact support.
+class _PausedBanner extends StatelessWidget {
+  const _PausedBanner({
+    required this.journey,
+    required this.busy,
+    required this.onResume,
+  });
+
+  final Journey journey;
+  final bool busy;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final byStaff = journey.isPausedByStaff;
+
+    return InfoNotice(
+      title: l.journeyPausedBannerTitle,
+      message: byStaff ? l.journeyPausedStaffBody : l.journeyPausedBannerBody,
+      tone: StatusTone.waiting,
+      icon: Icons.pause_circle_outline_rounded,
+      actionLabel: byStaff ? null : l.journeyResumeAction,
+      onAction: byStaff || busy ? null : onResume,
+    );
+  }
+}
+
+/// Where parcels can change hands on this route, for the stops that say
+/// something: a window, a note, or a limit to pickups or drop-offs.
+class _HandoverSummary extends StatelessWidget {
+  const _HandoverSummary({required this.journey});
+
+  final Journey journey;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final locale = Localizations.localeOf(context);
+    final legs = journey.legs;
+    if (legs.isEmpty) return const SizedBox.shrink();
+
+    String name(int position) => position < legs.length
+        ? legOriginLabel(legs[position])
+        : legDestinationLabel(legs.last);
+
+    // A stop is worth listing when it is not the plain default.
+    final rows = [
+      for (final stop in journey.stops)
+        if (stop.hasHandoverDetail ||
+            !stop.acceptsPickup && stop.position < legs.length ||
+            !stop.acceptsDropoff && stop.position > 0)
+          stop,
+    ];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: l.journeyHandoverTitle),
+        AppInsetGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final stop in rows) ...[
+                Text(name(stop.position), style: text.titleSmall),
+                const SizedBox(height: AppSpace.xxs),
+                Text(
+                  _takes(l, stop, legs.length),
+                  style: text.bodySmall?.copyWith(color: c.textSecondary),
+                ),
+                if (stop.windowStart != null && stop.windowEnd != null)
+                  Text(
+                    l.journeyHandoverWindow(
+                      LocaleFormats.dateTime(locale, stop.windowStart!),
+                      LocaleFormats.dateTime(locale, stop.windowEnd!),
+                    ),
+                    style: text.bodySmall?.copyWith(color: c.textSecondary),
+                  ),
+                if (stop.handoverNote.isNotEmpty)
+                  Text(stop.handoverNote, style: text.bodySmall),
+                if (stop != rows.last) const SizedBox(height: AppSpace.md),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _takes(L l, JourneyStop stop, int legCount) {
+    final pickups = stop.acceptsPickup && stop.position < legCount;
+    final dropoffs = stop.acceptsDropoff && stop.position > 0;
+    return pickups && dropoffs
+        ? l.routeHandoverBoth
+        : pickups
+        ? l.routeHandoverPickups
+        : dropoffs
+        ? l.routeHandoverDropoffs
+        : l.routeHandoverNone;
+  }
+}
+
+/// What this traveller will not take, when that is anything.
+class _CarrySummary extends StatelessWidget {
+  const _CarrySummary({required this.journey});
+
+  final Journey journey;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final text = Theme.of(context).textTheme;
+    final refused = [
+      for (final category in carryableCategories)
+        if (journey.refusedCategories.contains(
+          category == ItemCategory.smallBox ? 'small_box' : category.name,
+        ))
+          itemCategoryLabel(l, category),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: l.journeyCarryTitle),
+        AppInsetGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                refused.isEmpty
+                    ? l.journeyCarryAll
+                    : l.journeyCarryRefuses(refused.join(', ')),
+                style: text.bodyMedium,
+              ),
+              if (!journey.acceptsFragile)
+                Text(l.journeyCarryNoFragile, style: text.bodyMedium),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 

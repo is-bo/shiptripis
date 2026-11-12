@@ -396,6 +396,18 @@ class MarketplaceFeaturesForm(ConsoleForm):
         label="\u201cI can carry this\u201d signals per traveler per day",
         help_text="Counted over the last 24 hours. Each signal sends the sender one notification.",
     )
+    sea_legs_enabled = forms.BooleanField(
+        required=False,
+        label="Allow sea legs",
+        help_text=(
+            "On: travelers can build, publish and be matched on sea legs over the "
+            "crossings that are on (Geography catalogue). Off: no sea leg can be "
+            "created, published or matched, and offers on a journey that has one "
+            "stop. Funded deals are never touched. Legal and customs requirements "
+            "for carrying parcels by sea are the owner's to confirm before this "
+            "goes on."
+        ),
+    )
     reason = forms.CharField(
         max_length=500,
         label="Reason for change",
