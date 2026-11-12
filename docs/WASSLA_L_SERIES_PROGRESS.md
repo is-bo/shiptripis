@@ -22,7 +22,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L2B | Discovery on Home (mobile) | Sonnet | high | merged | `claude/project-thread-qu26fd` | #25 | `c2e279f` | `docs/PHASE_L2B_DISCOVERY_HOME.md` |
 | L3A | Routes for everyone, backend | Opus | xhigh | merged | `claude/project-thread-bl54yl` | #26 | `b10cda8` | `docs/PHASE_L3A_ROUTES_BACKEND.md` |
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | merged | `claude/project-thread-52tsvf` | #28 | `edb94d7` | `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md` |
-| L4A | Traveler pricing, backend | Opus | high | not_started | | | | |
+| L4A | Traveler pricing, backend | Opus | high | merged | `claude/project-thread-q374r4` | #29 | `5014497` | `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md` |
 | L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | not_started | | | | |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | not_started | | | | |
@@ -36,9 +36,13 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance | Opus | high | not_started | | | | |
 
-**Next package:** L4A (Opus, high effort). It depends only on L3A, which is merged. L5A and L6A are also unblocked; section 3 order puts L4A first, then L4B, which needs L4A and L3B.
+**Next package:** L4B (Sonnet, medium effort). It needs L4A and L3B, both merged. L5A (Sonnet, medium) and L6A (Opus, high) are also unblocked; section 3 order puts L4B first.
 
 **Open carry-over:** remove L3A's backup ferry distances: the seed port coordinates in `apps/locations/data/sea_crossings.json` and the staff-entered kilometres on "Add a crossing", with the `distance_km` parameter of `create_crossing` in `apps.locations.sea_crossings`. They are no longer needed now that every launch-country city has catalogue coordinates (PR #27). Until removed, they only apply to a city without coordinates.
+
+**Open carry-over:** the Django CI job runs 33 to 44 minutes against its 45-minute `timeout-minutes` (`.github/workflows/ci.yml`); L4A's first attempt on `2537c73` was cancelled at 87% and passed on its one re-run. Raise the limit or split the suite before it blocks a package.
+
+**L4A judgment calls (accepted at the gate, not reviewed by Ismail):** (1) `listed_reward` takes `enabled=`, read from the quote's settings revision, so a scan adds no query; (2) the price stays editable while the journey is `in_progress`, because it still takes offers on later legs, and a test proves existing offers, deals, orders, ledger and payouts stay identical; (3) counter offers record `listed_price` too; (4) the price history is its own table `trips.JourneyPriceChange`, not `AdminAuditLog`, because the actor is the traveler; (5) clearing or re-sending the stored price is allowed with the switch off; (6) ties name the traveler's terms first; (7) a non-owner sees no `price` while the switch is off; (8) the console journey page shows the price and Django admin makes it read-only.
 
 **Closed carry-over:** FR/ES city coordinates. Every French (34,875) and Spanish (8,132) catalogue city now has official coordinates, joined by INSEE and INE code (France: `geo.api.gouv.fr` town hall points; Spain: Eurostat GISCO LAU 2024 boundary centroids), with source digests in the manifest and the digest pin updated. `test_every_launch_country_city_has_coordinates` fails if any DZ, FR, ES or DE city lacks them, so the distance floor is a crash guard only. Merged in PR #27 (`0119c96`). The `PushRepository.unregisterDevice` carry-over is closed: L2B removed it.
 
