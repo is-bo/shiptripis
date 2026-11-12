@@ -6,12 +6,10 @@ from .views import (
     JourneyLegProofCreateView,
     JourneyListCreateView,
     JourneyPublishView,
-    JourneySearchView,
 )
 
 urlpatterns = [
     path("journeys", JourneyListCreateView.as_view(), name="journeys-list-create"),
-    path("journeys/search", JourneySearchView.as_view(), name="journeys-search"),
     path("journeys/<int:pk>", JourneyDetailView.as_view(), name="journeys-detail"),
     path(
         "journeys/<int:pk>/publish",

@@ -167,6 +167,31 @@
     {% include "admin/console/_person_list.html" with list=body.list %}
     {% if tab == "trust" %}<p class="st-muted st-person-footnote">Conversations are private between the Sender and the Traveler; the console has no support access to chat, so none is shown here.</p>{% endif %}
 
+  {% elif tab == "discovery" %}
+    <section class="st-card">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Public profile</p><h2>Discovery</h2></div>
+        <span class="st-chip st-{{ body.profile.state.tone }}">{{ body.profile.state.label }}</span>
+      </div>
+      <dl class="st-facts">
+        <div><dt>Agreed to be shown</dt><dd>{% if body.profile.consented_at %}{{ body.profile.consented_at|date:"d M Y, H:i" }}<small>Wording {{ body.profile.consent_version }}</small>{% else %}Never{% endif %}</dd></div>
+        <div><dt>Usual routes</dt><dd>{% for route in body.profile.routes %}{{ route }}{% if not forloop.last %}<br>{% endif %}{% empty %}None chosen{% endfor %}</dd></div>
+        {% if body.profile.hidden %}
+        <div><dt>Hidden</dt><dd>{{ body.profile.hidden.at|date:"d M Y, H:i" }} by {{ body.profile.hidden.by }}<small>{{ body.profile.hidden.reason }}</small></dd></div>
+        {% endif %}
+      </dl>
+      {% if body.profile.action %}
+      <div class="st-split-actions">
+        <span class="st-spacer"></span>
+        <a class="button{% if body.profile.action.danger %} st-button-danger{% endif %}" href="{{ body.profile.action.url }}">{{ body.profile.action.label }}</a>
+      </div>
+      {% endif %}
+    </section>
+    <nav class="st-person-views" aria-label="Views">
+      {% for view in body.views %}<a href="{{ view.url }}" class="st-person-view{% if view.current %} is-current{% endif %}"{% if view.current %} aria-current="page"{% endif %}>{{ view.label }}</a>{% endfor %}
+    </nav>
+    {% include "admin/console/_person_list.html" with list=body.list %}
+
   {% elif tab == "deliveries" %}
     <nav class="st-person-views" aria-label="Delivery state">
       {% for segment in body.segments %}<a href="{{ segment.url }}" class="st-person-view{% if segment.current %} is-current{% endif %}"{% if segment.current %} aria-current="page"{% endif %}>{{ segment.label }} <b>{{ segment.count }}</b></a>{% endfor %}

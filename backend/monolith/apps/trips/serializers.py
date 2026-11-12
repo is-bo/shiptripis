@@ -543,21 +543,6 @@ class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
         return result.journey
 
 
-class JourneySearchFilterSerializer(serializers.Serializer):
-    start_location_id = serializers.IntegerField(min_value=1, required=False)
-    destination_location_id = serializers.IntegerField(min_value=1, required=False)
-    start_place_id = serializers.IntegerField(min_value=1, required=False)
-    destination_place_id = serializers.IntegerField(min_value=1, required=False)
-    mode = serializers.ChoiceField(choices=JourneyLeg.Mode.choices, required=False)
-    departure_after = serializers.DateTimeField(required=False)
-    min_capacity_kg = serializers.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        min_value=Decimal("0.01"),
-        required=False,
-    )
-
-
 class JourneyLegProofSerializer(serializers.ModelSerializer):
     reviewer_id = serializers.IntegerField(read_only=True)
 

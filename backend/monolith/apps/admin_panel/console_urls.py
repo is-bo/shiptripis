@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import console_views as views
+from .console_discovery import profile_visibility
 from .console_identity_checks import identity_check_detail, identity_checks
 from .console_people import person_profile
 from .console_payout_reviews import (
@@ -41,6 +42,11 @@ urlpatterns = [
     # J6.4. The Person profile replaces the old four-count user page at the same
     # route and name, so every existing link lands on the complete profile.
     path("users/<int:pk>/", person_profile, name="user-detail"),
+    path(
+        "users/<int:pk>/public-profile/",
+        capability_required("manage_users")(profile_visibility),
+        name="user-profile-visibility",
+    ),
     path("verification/kyc/", views.kyc_queue, name="kyc-queue"),
     path("verification/kyc/<int:pk>/", views.kyc_detail, name="kyc-detail"),
     path(

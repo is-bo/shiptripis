@@ -18,13 +18,11 @@ Per CLAUDE.md G6: every state change publishes via
 from __future__ import annotations
 
 import logging
-from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -235,68 +233,6 @@ class ParcelListView(APIView):
             # Same stable tie-break the open search uses, so paging a sender's
             # own requests cannot repeat or skip a row.
             qs.order_by("-created_at", "-pk"),
-            serialize=lambda rows: _serialize(rows, request, many=True).data,
-        )
-
-
-class OpenParcelSearchView(APIView):
-    """Public open-parcel feed for travelers looking for shipments to carry.
-
-    Returns untargeted OPEN delivery requests not owned by the caller. Filters:
-      ?max_weight_kg=5                decimal (parcel weight <= cap)
-    `?origin=`/`?destination=` IATA filtering is retired and returns 400: V1
-    requests carry Locations, not airports. Route-aware discovery lives at
-    GET /api/matches/compatible-requests.
-    ProductRequest history and targeted requests are never part of this feed.
-    Results ordered newest-first; capped at 100 rows.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        qs = (
-            _read_queryset()
-            .filter(
-                status=ParcelRequest.Status.OPEN,
-                kind=ParcelRequest.Kind.DELIVERY,
-                deliveryrequest__schema_version__in=(2, 3),
-                deadline_at__gt=timezone.now(),
-                target_traveler__isnull=True,
-            )
-            .exclude(sender=request.user)
-        )
-        # V1 delivery requests are created with origin/destination NULL and are
-        # routed by Location instead, so an IATA filter could only ever return
-        # an empty list. Reject it loudly rather than answering 200 with a
-        # silently impossible result set.
-        retired_filters = sorted(
-            {"origin", "destination"}.intersection(request.query_params)
-        )
-        if retired_filters:
-            return Response(
-                {
-                    "code": "airport_filter_retired",
-                    "detail": (
-                        "Airport origin/destination filtering is retired for V1 "
-                        "delivery requests. Use GET /api/matches/compatible-requests."
-                    ),
-                    "retired_parameters": retired_filters,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if w := request.query_params.get("max_weight_kg"):
-            try:
-                max_weight = Decimal(w)
-                qs = qs.filter(
-                    Q(weight_kg__lte=max_weight)
-                    | Q(deliveryrequest__actual_weight_kg__lte=max_weight)
-                )
-            except (InvalidOperation, ValueError):
-                pass
-        qs = qs.order_by("-created_at", "-pk")
-        return paginated_array_response(
-            request,
-            qs,
             serialize=lambda rows: _serialize(rows, request, many=True).data,
         )
 
@@ -578,6 +514,12 @@ class DeliveryV1CreateView(APIView):
                     # should not exist either, and rolling both back is the
                     # honest outcome. Nothing has been published yet.
                     raise _DepositRefused(exc) from exc
+            if parcel.status == ParcelRequest.Status.OPEN:
+                # Posted straight to the open pool: route alerts are recorded
+                # with it. A deposit-gated request records them when it opens.
+                from apps.discovery.alerts import schedule_route_alerts
+
+                schedule_route_alerts(request_id=parcel.pk)
             redis_bus.publish_after_commit(
                 channels.PARCEL_CREATED,
                 {

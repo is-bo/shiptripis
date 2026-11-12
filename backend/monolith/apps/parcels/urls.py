@@ -3,7 +3,6 @@ from django.urls import path
 from .pricing_api import PricingQuoteDraftView, RequestPricingView
 from .views import (
     DeliveryV1CreateView,
-    OpenParcelSearchView,
     ParcelCancelView,
     ParcelDetailView,
     ParcelItemPhotoStageView,
@@ -20,7 +19,6 @@ urlpatterns = [
         PricingQuoteDraftView.as_view(),
         name="parcels-pricing-quote",
     ),
-    path("parcels/open", OpenParcelSearchView.as_view(), name="parcels-open-search"),
     # Ahead of `parcels/<int:pk>` only by being a literal; kept adjacent to the
     # other collection routes so the ordering is visible rather than lucky.
     path(

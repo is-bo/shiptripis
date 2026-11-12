@@ -715,6 +715,14 @@ def handle_notification_dispatch(payload):
         raise RetryableJobError("Notification transport unavailable.", code="notification_transport_unavailable") from None
 
 
+def handle_discovery_route_alerts(payload: dict) -> str:
+    """L2A. Notify route alerts about one newly listed trip or request."""
+
+    from apps.discovery.alerts import handle_route_alert_fanout
+
+    return handle_route_alert_fanout(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -733,6 +741,7 @@ HANDLERS = {
     ScheduledJob.Kind.PAYOUT_RECONCILE: handle_payout_reconcile,
     ScheduledJob.Kind.PAYOUT_ACCOUNT_REFRESH: handle_payout_account_refresh,
     ScheduledJob.Kind.PAYOUT_SWEEP: handle_payout_sweep,
+    ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS: handle_discovery_route_alerts,
 }
 
 

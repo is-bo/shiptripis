@@ -264,6 +264,11 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
     locked.status = Journey.Status.ACTIVE
     locked.published_at = locked.published_at or at
     locked.save(update_fields=["status", "published_at", "updated_at"])
+    # Route alerts are a durable obligation recorded with the publication
+    # itself (L2A); the handler re-checks that the trip is still listed.
+    from apps.discovery.alerts import schedule_route_alerts
+
+    schedule_route_alerts(journey_id=locked.pk)
     return locked
 
 

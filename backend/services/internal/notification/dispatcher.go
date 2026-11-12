@@ -97,6 +97,9 @@ var subscribeChannels = []string{
 	"dispute.opened",
 	"dispute.resolved",
 	"payout.status_changed",
+	// L2A discovery: route alerts and "I can carry this".
+	"discovery.route_alert",
+	"discovery.traveler_interested",
 }
 
 // targetsEnvelope is the shared shape every Django publish carries.

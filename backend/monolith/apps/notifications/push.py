@@ -30,6 +30,7 @@ _FCM_MAX_TOKENS = 500
 _STREAM_MAXLEN = 10_000
 _SAFE_DATA_FIELDS = frozenset(
     {
+        "alert_id",
         "deal_id",
         "dispute_id",
         "journey_id",
@@ -329,6 +330,37 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Le statut de votre versement a été mis à jour.",
             ),
             "ar": ("تحديث التحويل", "تم تحديث حالة التحويل الخاص بك."),
+        },
+    ),
+    # L2A. Non-essential marketplace signals: a member who turned marketplace
+    # push off still finds both in the bell inbox.
+    "discovery.route_alert": (
+        "marketplace",
+        "deliveries",
+        "shiptrip_activity",
+        {
+            "en": ("New on your route", "Someone just published on a route you follow."),
+            "fr": (
+                "Nouveau sur votre trajet",
+                "Quelqu'un vient de publier sur un trajet que vous suivez.",
+            ),
+            "ar": ("جديد على مسارك", "نشر أحدهم للتو على مسار تتابعه."),
+        },
+    ),
+    "discovery.traveler_interested": (
+        "marketplace",
+        "deliveries",
+        "shiptrip_activity",
+        {
+            "en": (
+                "A traveler can carry your parcel",
+                "Open Wassla to see their trip and send an offer.",
+            ),
+            "fr": (
+                "Un voyageur peut transporter votre colis",
+                "Ouvrez Wassla pour voir son trajet et envoyer une offre.",
+            ),
+            "ar": ("مسافر يمكنه نقل طردك", "افتح Wassla لرؤية رحلته وإرسال عرض."),
         },
     ),
     "chat.message.new": (

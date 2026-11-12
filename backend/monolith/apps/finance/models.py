@@ -1370,6 +1370,8 @@ class ScheduledJob(models.Model):
         PAYOUT_RECONCILE = "payout_reconcile", "Payout reconciliation"
         PAYOUT_ACCOUNT_REFRESH = "payout_account_refresh", "Payout account refresh"
         PAYOUT_SWEEP = "payout_sweep", "Payout sweep"
+        # --- L2A discovery ---
+        DISCOVERY_ROUTE_ALERTS = "discovery_route_alerts", "Discovery route alerts"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

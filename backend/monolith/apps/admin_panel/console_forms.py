@@ -365,6 +365,47 @@ class ProviderSettingsForm(ConsoleForm):
     )
 
 
+class MarketplaceFeaturesForm(ConsoleForm):
+    """The L-series switches, saved as one audited settings revision.
+
+    Each field is read by the server at the moment of the action it governs,
+    so a change applies to the next request and never rewrites anything that
+    already happened. Later packages add their own switch here beside the
+    capability that reads it.
+    """
+
+    listings_enabled = forms.BooleanField(
+        required=False,
+        label="Show trips and parcel requests on Home",
+        help_text=(
+            "Published trips and open requests listed for other members. Matches "
+            "for a member's own request or trip are not affected."
+        ),
+    )
+    profiles_enabled = forms.BooleanField(
+        required=False,
+        label="Show public profiles on Home",
+        help_text=(
+            "Members who chose to be visible. Turning this off hides every public "
+            "profile at once; each member's own choice is kept."
+        ),
+    )
+    interest_daily_cap = forms.IntegerField(
+        min_value=1,
+        max_value=100,
+        label="\u201cI can carry this\u201d signals per traveler per day",
+        help_text="Counted over the last 24 hours. Each signal sends the sender one notification.",
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="Reason for change",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    confirm = forms.BooleanField(
+        label="I understand this changes what every member sees from the next request."
+    )
+
+
 class DisputeStatusForm(ConsoleForm):
     status = forms.ChoiceField(
         choices=(

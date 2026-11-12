@@ -1135,7 +1135,7 @@ class ReadCostTests(FindTravelersFixture, TestCase):
         self.assertEqual(forty_queries - len(scan.captured_queries), 2)
 
     def test_the_two_trust_aggregates_are_the_only_addition(self):
-        from apps.matching.find_travelers import traveler_trust_signals
+        from apps.matching.find_travelers import TRUST_AS_TRAVELER, trust_signals
 
         self._grow_to(12)
         candidates = self.candidates()
@@ -1143,7 +1143,7 @@ class ReadCostTests(FindTravelersFixture, TestCase):
         self.assertGreater(len(traveler_ids), 1)
 
         with CaptureQueriesContext(connection) as captured:
-            traveler_trust_signals(traveler_ids, at=timezone.now())
+            trust_signals(traveler_ids, at=timezone.now(), side=TRUST_AS_TRAVELER)
         self.assertEqual(len(captured.captured_queries), 2)
 
     def test_the_response_is_smaller_than_the_endpoint_it_supersedes(self):

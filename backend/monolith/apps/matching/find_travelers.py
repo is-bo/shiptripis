@@ -228,33 +228,43 @@ def _empty_trust() -> dict:
     }
 
 
-def traveler_trust_signals(traveler_ids: list[int], *, at: datetime) -> dict[int, dict]:
-    """Rating and completed-delivery history for a bounded set of Travelers.
+#: A trust summary of someone *as a Traveler* (the Find Travelers card). The
+#: alternative, `None`, is the whole person: every revealed rating they
+#: received and every delivery they completed on either side (L2A profile card).
+TRUST_AS_TRAVELER = "traveler"
 
-    Exactly two grouped queries, whatever the candidate count: both aggregates
-    are keyed by the already-filtered Traveler IDs rather than correlated per
-    row. A candidate list of one and a candidate list of forty cost the same.
+
+def trust_signals(
+    user_ids: list[int], *, at: datetime, side: str | None
+) -> dict[int, dict]:
+    """Rating and completed-delivery history for a bounded set of people.
+
+    A fixed number of grouped queries, whatever the candidate count: every
+    aggregate is keyed by the already-filtered IDs rather than correlated per
+    row. A list of one and a list of forty cost the same.
 
     **Ratings respect the blind window.** `apps.ratings.services.is_revealed` is
     "the window frozen on the row has passed, or both sides have spoken"; both
     halves are expressible in SQL, so an unrevealed rating is excluded here
-    exactly as it is excluded from the rating API. Only ratings written by a
-    Sender are counted — those are the ones describing this person *as a
-    Traveler*.
+    exactly as it is excluded from the rating API.
+
+    With `side=TRUST_AS_TRAVELER` only ratings written by a Sender and deals
+    the person carried count; with `None`, both sides of every deal do.
     """
 
-    if not traveler_ids:
+    if not user_ids:
         return {}
+    if side not in (TRUST_AS_TRAVELER, None):
+        raise ValueError(f"Unknown trust side {side!r}.")
 
     counterpart = Rating.objects.filter(deal_id=OuterRef("deal_id")).exclude(
         rater_role=OuterRef("rater_role")
     )
+    rating_scope = Rating.objects.filter(ratee_id__in=user_ids)
+    if side == TRUST_AS_TRAVELER:
+        rating_scope = rating_scope.filter(rater_role=Rating.RaterRole.SENDER)
     rating_rows = (
-        Rating.objects.filter(
-            ratee_id__in=traveler_ids,
-            rater_role=Rating.RaterRole.SENDER,
-        )
-        .annotate(counterpart_submitted=Exists(counterpart))
+        rating_scope.annotate(counterpart_submitted=Exists(counterpart))
         .filter(Q(review_window_ends_at__lte=at) | Q(counterpart_submitted=True))
         .values("ratee_id")
         .annotate(average=Avg("score"), rated_count=Count("id"))
@@ -265,24 +275,26 @@ def traveler_trust_signals(traveler_ids: list[int], *, at: datetime) -> dict[int
 
     # Completed delivery history, and only that. A published Journey, a sent
     # offer and a matched request are all things that have not happened yet.
-    delivery_rows = (
-        Deal.objects.filter(
-            traveler_id__in=traveler_ids,
-            status=Deal.Status.COMPLETED,
+    deliveries: dict[int, int] = {}
+    completed = Deal.objects.filter(status=Deal.Status.COMPLETED)
+    parties = ("traveler_id",) if side == TRUST_AS_TRAVELER else ("traveler_id", "sender_id")
+    for party in parties:
+        rows = (
+            completed.filter(**{f"{party}__in": user_ids})
+            .values(party)
+            .annotate(delivered=Count("id"))
         )
-        .values("traveler_id")
-        .annotate(delivered=Count("id"))
-    )
-    deliveries = {row["traveler_id"]: row["delivered"] for row in delivery_rows}
+        for row in rows:
+            deliveries[row[party]] = deliveries.get(row[party], 0) + row["delivered"]
 
     signals: dict[int, dict] = {}
-    for traveler_id in traveler_ids:
-        average, count = ratings.get(traveler_id, (None, 0))
-        signals[traveler_id] = {
+    for user_id in user_ids:
+        average, count = ratings.get(user_id, (None, 0))
+        signals[user_id] = {
             "rating": (
                 {"state": RATING_NEW, "average": None, "count": 0}
                 if not count or average is None
-                # One decimal. A Traveler with three ratings does not have a
+                # One decimal. A person with three ratings does not have a
                 # reputation measured to four.
                 else {
                     "state": RATING_RATED,
@@ -290,7 +302,7 @@ def traveler_trust_signals(traveler_ids: list[int], *, at: datetime) -> dict[int
                     "count": count,
                 }
             ),
-            "completed_deliveries": deliveries.get(traveler_id, 0),
+            "completed_deliveries": deliveries.get(user_id, 0),
         }
     return signals
 
@@ -785,7 +797,7 @@ def find_travelers(
             evaluation.journey.traveler_id for evaluation, _, _ in projections
         )
     )
-    signals = traveler_trust_signals(traveler_ids, at=at)
+    signals = trust_signals(traveler_ids, at=at, side=TRUST_AS_TRAVELER)
 
     rows = [
         candidate_payload(

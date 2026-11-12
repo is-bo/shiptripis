@@ -54,6 +54,7 @@ from django.utils import timezone
 from apps.core.admin_display import format_eur, humanize_action, humanize_object
 from apps.deals.activity import ACTIVE, ACTIVITY_STATES, CANCELLED, COMPLETED, activity_q
 from apps.deals.models import Deal, DealTermsSnapshot
+from apps.discovery.models import PublicProfile
 from apps.disputes.models import Dispute, DisputeEvidence
 from apps.finance.models import (
     DzdPayoutProfileRevision,
@@ -116,6 +117,7 @@ TABS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("payments", "Payments", ("view_payment_orders", "view_payment_attempts")),
     ("payouts", "Payouts", ("view_payouts", "view_finance_summary", "review_payout_profiles")),
     ("trust", "Trust & support", ("view_disputes", "view_ratings", "view_support_context")),
+    ("discovery", "Discovery", ("view_users",)),
     ("audit", "Audit", ("view_audit_log",)),
 )
 
@@ -1259,6 +1261,7 @@ def audit_about_q(person) -> Q:
         "disputes.disputeevidence": DisputeEvidence.objects.filter(
             Q(dispute__deal__sender=person) | Q(dispute__deal__traveler=person)
         ),
+        "discovery.publicprofile": PublicProfile.objects.filter(user=person),
     }
     condition = Q(target_type="accounts.user", target_id=str(person.pk))
     for target_type, queryset in targets.items():
@@ -1285,6 +1288,7 @@ AUDIT_RECORDS = {
     "deals.deal": "Deal",
     "disputes.dispute": "Dispute",
     "disputes.disputeevidence": "Dispute evidence",
+    "discovery.publicprofile": "Public profile",
 }
 
 #: Recorded automatically every time a review page computes the name check, so
@@ -1331,10 +1335,16 @@ def build_audit(request, person, caps, header, source):
             ("When", "What happened", "By", "Record"),
             rows, page_obj=page, layout="audit",
             empty="No audited administrative action concerns this person.",
-            note=("Account, identity, payout, payment, Deal and dispute actions. Values are never "
+            note=("Account, identity, public profile, payout, payment, Deal and dispute actions. Values are never "
                   "recorded, only that an action happened. Automatic name checks are in the full audit log."),
         ),
     }
+
+
+def build_discovery(request, person, caps, header, source):
+    from .console_discovery import build_discovery as build
+
+    return build(request, person, caps, header, source, tab_url=_tab_url, page=_page, list_=_list)
 
 
 BUILDERS = {
@@ -1345,6 +1355,7 @@ BUILDERS = {
     "payments": build_payments,
     "payouts": build_payouts,
     "trust": build_trust,
+    "discovery": build_discovery,
     "audit": build_audit,
 }
 
