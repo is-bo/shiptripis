@@ -271,7 +271,9 @@ Detail: `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md`.
 - Tests (before and after counts): Flutter 1,303 passed before; 1,351 after (48 added: 30 in
   `l3b_sea_route_model_test.dart`, 18 in `l3b_sea_screens_test.dart`; two existing tests updated for
   the new fixture fields and the 20,000 kg ceiling, one replaced for the deleted `requiresProof`).
-  `flutter analyze --fatal-infos` clean. Django: BACKEND_COUNTS. `makemigrations --check` clean (no
+  `flutter analyze --fatal-infos` clean. Django: 2,615 passed before (L3A); L3B adds 36 (34 in
+  `apps/admin_panel/tests/test_l3b_console.py`, 2 in `apps/discovery/tests/test_marketplace_policy.py`);
+  the full Django job in CI is green. `makemigrations --check` clean (no
   model change). Ruff check clean.
 - Known limits: the console journey page shows stops and capacity but staff cannot edit them (by
   design: the traveler owns them). A route with a ferry leg cannot be priced differently from a flight
