@@ -23,6 +23,7 @@ import pathlib
 import tempfile
 from copy import deepcopy
 from io import StringIO
+from urllib.parse import urlparse
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
@@ -32,13 +33,14 @@ from apps.locations.management.commands.import_geography import (
     read_manifest_bytes,
 )
 from apps.locations.models import GeographyCatalogueImport, Place
+from apps.routing.geometry import GeoPoint, haversine_meters
 
 #: SHA-256 of the reviewed manifest's *uncompressed* bytes. This is the release
 #: data gate: regenerating the catalogue from newer upstream sources changes it,
 #: and that has to be a deliberate reviewed change with this constant updated in
 #: the same commit, not a quiet one that lands on a phone.
 REVIEWED_MANIFEST_SHA256 = (
-    "47bf4f761cd7db1063a76abcc975a0579077fb29b888607661efd35f71288cd2"
+    "4d11cbad0df3d2428f3f7d4c5ece7324f5083c75a8cafcf35a0efe1c03f266ee"
 )
 
 #: The Phase 8B/8C reviewed coverage, per `docs/GEOGRAPHY_CATALOGUE.md`.
@@ -55,6 +57,16 @@ REVIEWED_COUNTS = {
     ("DE", "admin_region"): 417,
     ("DE", "locality"): 10749,
     ("DE", "airport"): 39,
+}
+
+
+#: Every city in these countries must carry coordinates.
+LAUNCH_COUNTRIES = {"DZ", "FR", "ES", "DE"}
+
+#: Official coordinate supplements and the only host each may come from.
+COORDINATE_SOURCES = {
+    "geo.api.gouv.fr communes": "geo.api.gouv.fr",
+    "Eurostat GISCO LAU 2024": "gisco-services.ec.europa.eu",
 }
 
 
@@ -106,6 +118,61 @@ class BundledManifestTests(TestCase):
         assert len(airports) == 161
         assert len(served) == 161, "an airport with two primary served rows is ambiguous"
         assert served_airports == airports
+
+    def test_every_launch_country_city_has_coordinates(self):
+        # Road pricing and airport suggestions measure between city points. A
+        # city without one prices at the distance floor, which is a crash
+        # guard and must never be how a launch-country route is priced.
+        missing = [
+            f"{place['country_code']} {place['source_id']} {place['name']}"
+            for place in self.manifest["places"]
+            if place["place_type"] == "locality"
+            and place["country_code"] in LAUNCH_COUNTRIES
+            and (
+                place.get("latitude") in (None, "")
+                or place.get("longitude") in (None, "")
+            )
+        ]
+
+        assert missing == [], f"{len(missing)} cities lack coordinates: {missing[:10]}"
+
+    def test_french_and_spanish_coordinates_record_their_official_source(self):
+        sources = {row["name"]: row for row in self.manifest["sources"]}
+        for name, host in COORDINATE_SOURCES.items():
+            assert name in sources, name
+            assert urlparse(sources[name]["url"]).hostname == host
+            assert len(sources[name]["sha256"]) == 64
+        expected = {
+            "insee-cog-commune": ("+GEOAPI-", "geo.api.gouv.fr communes"),
+            "ine-municipality": ("+GISCO-LAU-2024-", "Eurostat GISCO LAU 2024"),
+        }
+        for place in self.manifest["places"]:
+            if place["source"] not in expected:
+                continue
+            version_mark, authority = expected[place["source"]]
+            assert version_mark in place["source_version"], place["source_id"]
+            assert place["metadata"]["coordinate_authority"].startswith(authority)
+
+    def test_city_points_give_real_distances(self):
+        def point(source, code):
+            place = next(
+                row
+                for row in self.manifest["places"]
+                if row["source"] == source and row["source_id"] == code
+            )
+            return GeoPoint(float(place["latitude"]), float(place["longitude"]))
+
+        # Great circles between city points, against known values (km): a
+        # swapped axis or a join on the wrong code is off by hundreds.
+        for origin, destination, kilometres in (
+            (("insee-cog-commune", "75056"), ("insee-cog-commune", "13055"), 661),
+            (("insee-cog-commune", "59350"), ("insee-cog-commune", "69123"), 558),
+            (("ine-municipality", "28079"), ("ine-municipality", "08019"), 505),
+            (("ine-municipality", "41091"), ("ine-municipality", "46250"), 538),
+            (("insee-cog-commune", "13055"), ("algeria-commune", "1601"), 760),
+        ):
+            measured = haversine_meters(point(*origin), point(*destination)) / 1000
+            assert abs(measured - kilometres) < 15, (origin, destination, measured)
 
     def test_a_plain_manifest_reads_identically_to_the_packed_one(self):
         written = BUNDLED_MANIFEST.parent / "roundtrip-test.json"

@@ -179,8 +179,12 @@ changes an identity, or makes two nearby localities compatible.
   requires the exact per-country selectable-airport counts and exactly one
   primary served mapping per airport; an unresolved airport must be made
   unavailable rather than guessed.
-- Coordinates are source centroids/airport points and may be absent for some
-  administrative rows. Exact user meeting points remain in `Location`.
+- Coordinates are source points: Algerian supplement points, French town hall
+  points (geo.api.gouv.fr), Spanish GISCO LAU 2024 boundary centroids, German
+  Destatis points and airport points. Every DZ, FR, ES and DE locality has
+  one (the normalizer and the release-data test both enforce it);
+  administrative rows may lack one. Exact user meeting points remain in
+  `Location`.
 - The published ONS CGN baseline predates Law 26-06. Phase 8B deliberately
   keeps its stable official W/C commune identities while storing the 2026
   JORADP parent assignment separately; a future ONS post-law CGN publication

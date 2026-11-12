@@ -150,8 +150,8 @@ def create_crossing(
     """Add one direction of a ferry line.
 
     The distance is the catalogue great-circle distance when both cities have
-    coordinates. Most French and Spanish catalogue cities have none, so staff
-    then give the distance in kilometres, measured the same way.
+    coordinates, which every launch-country city does. Staff give the distance
+    in kilometres, measured the same way, only for a city without them.
     """
 
     _require_permission(actor)

@@ -201,7 +201,8 @@ class RouteForEveryoneTests(MatchingWorld, APITestCase):
         french = self.candidate(
             self.request_over(self.sender, self.journey, 0, 1), self.journey
         ).compatibility
-        # Uncoordinated catalogue cities price at the distance floor; the
+        # The crash guard: cities without coordinates (no launch-country
+        # city in the real catalogue) price at the distance floor; the
         # scan neither fails nor invents a distance.
         assert french.matched_distance_meters == 0
         assert french.matched_distance_method == "canonical_place_floor"
