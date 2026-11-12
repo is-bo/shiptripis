@@ -260,7 +260,7 @@ class CoveredLegAllowlistTests(Phase2BContractTestCase):
         """Simulate a later build adding a field to the internal leg summary."""
 
         internal = {
-            "matching_version": "v1-matching-1",
+            "matching_version": "v1-matching-2",
             "compatible": True,
             "rejection_codes": [],
             "covered_leg_ids": [1],

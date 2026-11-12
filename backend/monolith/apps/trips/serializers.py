@@ -6,9 +6,10 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.locations.models import Location, Place
+from apps.locations.models import Location, Place, SeaCrossing
 from apps.locations.serializers import PublicLocationSerializer
 from apps.matching.public_contract import distance_band
+from apps.parcels.models import ParcelRequest
 from apps.routing.geometry import GeoPoint
 from apps.routing.providers import RouteProviderError, get_route_provider
 
@@ -17,13 +18,19 @@ from .models import (
     Journey,
     JourneyLeg,
     JourneyLegProof,
+    JourneyStopDetail,
 )
 from .constraints import (
     DEPARTURE_NOT_FUTURE_CODE,
     DEPARTURE_NOT_FUTURE_MESSAGE,
+    MAX_HANDOVER_NOTE_LENGTH,
     MAX_JOURNEY_LEG_CAPACITY_KG,
+    MAX_JOURNEY_LEG_CAPACITY_PARCELS,
+    MAX_JOURNEY_LEG_CAPACITY_VOLUME_L,
     first_departure_is_future,
 )
+from .proofs import leg_proof_state, leg_requires_proof
+from .stops import effective_stops, validate_stops
 from .transport_rules import (
     MODE_UNAVAILABLE_CODE,
     check_leg_mode,
@@ -101,6 +108,21 @@ class JourneyLegInputSerializer(serializers.Serializer):
         min_value=Decimal("0.01"),
         max_value=MAX_JOURNEY_LEG_CAPACITY_KG,
     )
+    # Optional secondary capacity (spec 5.5); left out means "not limited".
+    capacity_volume_l = serializers.IntegerField(
+        min_value=1,
+        max_value=MAX_JOURNEY_LEG_CAPACITY_VOLUME_L,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    capacity_parcels = serializers.IntegerField(
+        min_value=1,
+        max_value=MAX_JOURNEY_LEG_CAPACITY_PARCELS,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
     flight_number = serializers.CharField(
         max_length=16, required=False, allow_blank=True, default=""
     )
@@ -170,9 +192,34 @@ class JourneyLegInputSerializer(serializers.Serializer):
                 )
         elif attrs.get("flight_number", "").strip():
             raise serializers.ValidationError(
-                {"flight_number": "Drive legs cannot have a flight number."}
+                {
+                    "flight_number": (
+                        "Sea legs cannot have a flight number."
+                        if attrs["mode"] == JourneyLeg.Mode.SEA
+                        else "Drive legs cannot have a flight number."
+                    )
+                }
             )
         return attrs
+
+
+class JourneyStopInputSerializer(serializers.Serializer):
+    """Optional handover options for one stop, by route node position."""
+
+    position = serializers.IntegerField(min_value=0)
+    accepts_pickup = serializers.BooleanField(required=False, default=True)
+    accepts_dropoff = serializers.BooleanField(required=False, default=True)
+    handover_note = serializers.CharField(
+        max_length=MAX_HANDOVER_NOTE_LENGTH,
+        required=False,
+        allow_blank=True,
+        default="",
+        trim_whitespace=True,
+    )
+    window_start = serializers.DateTimeField(
+        required=False, allow_null=True, default=None
+    )
+    window_end = serializers.DateTimeField(required=False, allow_null=True, default=None)
 
 
 class JourneyRouteWriteSerializer(serializers.Serializer):
@@ -206,6 +253,26 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
         required=False, allow_blank=True, max_length=2000, default=""
     )
     legs = JourneyLegInputSerializer(many=True, allow_empty=False, max_length=20)
+    # L3A. Each is part of the whole route the client sends, so leaving one
+    # out of an edit restores its default, exactly as a left-out leg field
+    # clears.
+    stops = JourneyStopInputSerializer(
+        many=True, required=False, default=list, max_length=21
+    )
+    refused_categories = serializers.ListField(
+        child=serializers.ChoiceField(choices=ParcelRequest.ItemType.choices),
+        required=False,
+        default=list,
+        max_length=len(ParcelRequest.ItemType.choices),
+    )
+    accepts_fragile = serializers.BooleanField(required=False, default=True)
+
+    def validate_refused_categories(self, value: list[str]) -> list[str]:
+        if len(set(value)) == len(ParcelRequest.ItemType.choices):
+            raise serializers.ValidationError(
+                "A journey must accept at least one kind of item."
+            )
+        return sorted(set(value))
 
     @staticmethod
     def _matching_place_id(place: Place) -> int | None:
@@ -375,6 +442,7 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
                 }
             )
         self._validate_leg_modes(legs)
+        attrs["stops"] = validate_stops(attrs.get("stops") or [], legs)
         return attrs
 
     def _validate_leg_modes(self, legs: list[dict]) -> None:
@@ -405,17 +473,43 @@ class JourneyRouteWriteSerializer(serializers.Serializer):
             )
 
 
-def _attach_drive_route_snapshots(legs: list[dict]) -> None:
-    """Fill each drive leg's server-owned route snapshot, in place.
+def _attach_sea_crossing_snapshot(leg: dict) -> None:
+    """A sea leg's distance is its crossing's great-circle distance (spec 5.4).
 
-    Provider failure is not fatal: a leg without a snapshot is still a valid
-    leg, and matching re-derives what it needs.  The client is never allowed
-    to supply these fields, which is why they are written here and nowhere
-    else.
+    The write rules have already proved an active crossing joins the two
+    ports, so the row exists; it is read again rather than trusted from the
+    client, and frozen on the leg so later pricing reads it without a join.
+    """
+
+    crossing = SeaCrossing.objects.get(
+        origin_locality=leg["origin_place"],
+        destination_locality=leg["destination_place"],
+    )
+    leg.update(
+        {
+            "distance_meters": crossing.distance_meters,
+            "route_provider": "sea_crossing",
+            "route_profile": "sea",
+            "route_captured_at": timezone.now(),
+            "route_metadata": {"sea_crossing_id": crossing.pk},
+        }
+    )
+
+
+def _attach_route_snapshots(legs: list[dict]) -> None:
+    """Fill each drive and sea leg's server-owned route snapshot, in place.
+
+    Provider failure is not fatal: a road leg without a snapshot is still a
+    valid leg, and matching re-derives what it needs.  The client is never
+    allowed to supply these fields, which is why they are written here and
+    nowhere else.
     """
 
     provider = get_route_provider(external_call_budget=max(1, len(legs)))
     for leg in legs:
+        if leg["mode"] == JourneyLeg.Mode.SEA:
+            _attach_sea_crossing_snapshot(leg)
+            continue
         if leg["mode"] != JourneyLeg.Mode.DRIVE:
             continue
         try:
@@ -470,9 +564,10 @@ class JourneyCreateSerializer(JourneyRouteWriteSerializer):
 
     def create(self, validated_data: dict) -> Journey:
         legs = validated_data.pop("legs")
+        stops = validated_data.pop("stops")
         for leg in legs:
             leg.pop("id", None)
-        _attach_drive_route_snapshots(legs)
+        _attach_route_snapshots(legs)
         with transaction.atomic():
             journey = Journey.objects.create(
                 traveler=self.context["request"].user,
@@ -482,6 +577,9 @@ class JourneyCreateSerializer(JourneyRouteWriteSerializer):
             )
             JourneyLeg.objects.bulk_create(
                 [JourneyLeg(journey=journey, **leg) for leg in legs]
+            )
+            JourneyStopDetail.objects.bulk_create(
+                [JourneyStopDetail(journey=journey, **stop) for stop in stops]
             )
         return journey
 
@@ -528,7 +626,7 @@ class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
         from .services import replace_journey_route
 
         legs = validated_data.pop("legs")
-        _attach_drive_route_snapshots(legs)
+        _attach_route_snapshots(legs)
         result = replace_journey_route(
             journey=instance,
             actor=self.context["request"].user,
@@ -538,6 +636,9 @@ class JourneyUpdateSerializer(JourneyRouteWriteSerializer):
             destination_location=validated_data.get("destination_location"),
             notes=validated_data.get("notes", ""),
             legs=legs,
+            stops=validated_data["stops"],
+            refused_categories=validated_data["refused_categories"],
+            accepts_fragile=validated_data["accepts_fragile"],
         )
         self.route_change = result
         return result.journey
@@ -592,6 +693,8 @@ class JourneyLegSerializer(serializers.ModelSerializer):
     destination_place = serializers.SerializerMethodField()
     proofs = JourneyLegProofSerializer(many=True, read_only=True)
     has_approved_proof = serializers.SerializerMethodField()
+    proof_required = serializers.SerializerMethodField()
+    proof_state = serializers.SerializerMethodField()
 
     class Meta:
         model = JourneyLeg
@@ -606,6 +709,8 @@ class JourneyLegSerializer(serializers.ModelSerializer):
             "depart_at",
             "arrive_at",
             "capacity_kg",
+            "capacity_volume_l",
+            "capacity_parcels",
             "distance_meters",
             "route_duration_seconds",
             "route_polyline",
@@ -618,11 +723,21 @@ class JourneyLegSerializer(serializers.ModelSerializer):
             "departure_airport_metadata",
             "arrival_airport_metadata",
             "has_approved_proof",
+            "proof_required",
+            "proof_state",
             "proofs",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_proof_required(self, obj: JourneyLeg) -> bool:
+        return leg_requires_proof(obj)
+
+    def get_proof_state(self, obj: JourneyLeg) -> str:
+        """Server-authored, so the app never decides proof from a mode."""
+
+        return leg_proof_state(obj)
 
     def get_has_approved_proof(self, obj: JourneyLeg) -> bool:
         annotated = getattr(obj, "has_approved_proof_value", None)
@@ -710,6 +825,8 @@ class JourneySerializer(serializers.ModelSerializer):
     legacy_trip_id = serializers.IntegerField(read_only=True)
     editable = serializers.SerializerMethodField()
     edit_blocked_code = serializers.SerializerMethodField()
+    stops = serializers.SerializerMethodField()
+    pause = serializers.SerializerMethodField()
 
     class Meta:
         model = Journey
@@ -726,12 +843,49 @@ class JourneySerializer(serializers.ModelSerializer):
             "published_at",
             "notes",
             "legs",
+            "stops",
+            "refused_categories",
+            "accepts_fragile",
+            "pause",
             "editable",
             "edit_blocked_code",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def _is_owner(self, obj: Journey) -> bool:
+        request = self.context.get("request")
+        return (
+            request is not None
+            and request.user.is_authenticated
+            and request.user.pk == obj.traveler_id
+        )
+
+    def get_stops(self, obj: Journey) -> list[dict]:
+        """Every stop with its effective options.
+
+        The handover note and window are handover detail: the owner sees
+        them here, and a funded deal's parties see the ones their deal uses
+        in that deal's route block. Nobody else sees them anywhere.
+        """
+
+        return effective_stops(
+            obj,
+            legs=list(obj.legs.all()),
+            include_handover_detail=self._is_owner(obj),
+        )
+
+    def get_pause(self, obj: Journey) -> dict | None:
+        """The owner's view of a pause. A non-owner never sees a paused journey."""
+
+        if not self._is_owner(obj):
+            return None
+        return {
+            "paused": obj.paused_at is not None,
+            "paused_at": obj.paused_at.isoformat() if obj.paused_at else None,
+            "paused_by_staff": obj.paused_by_staff,
+        }
 
     def get_editability(self):
         """The view's precomputed answer, or nothing for a non-owner.
@@ -762,6 +916,8 @@ class JourneySerializer(serializers.ModelSerializer):
             # owner could still change it. That is not their business.
             data.pop("editable", None)
             data.pop("edit_blocked_code", None)
+        if data.get("pause") is None:
+            data.pop("pause", None)
         return data
 
     @staticmethod

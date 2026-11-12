@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla L3A — routes for everyone, backend (2026-11-12)
+
+Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+`main` untouched.
+
+Sea legs exist: a `SEA` leg joins two catalogue cities on an active `locations.SeaCrossing`, only while
+the "Sea legs" switch is on (it ships off). The 38-row reviewed crossing list seeds idempotently
+(`seed_sea_crossings`, run by the VPS catalogue step) and staff manage lines through audited services;
+`GET /api/geography/sea-crossings` lists the live ones. `apps/trips/proofs.py` is now the only rule for
+"does this leg need a ticket": flight and sea legs need one for publication, matching and listings, and
+every journey leg carries a server-authored `proof_required` and `proof_state`. Routes gain per-stop
+pickup and drop-off options with a private handover window and note (served to a sender only in a
+funded deal), the traveler's refused categories and fragile choice, optional volume and parcel-slot
+capacity (reserved on acceptance, race-tested), and owner and staff pause (audited; a paused journey
+leaves every discovery surface and takes no offer). Matching adds seven checks and becomes
+`v1-matching-2`. The ticket channel is `leg_proof.status_changed` and its push and email copy name the
+mode. Detail: `docs/PHASE_L3A_ROUTES_BACKEND.md`.
+
 ## Wassla L2B — discovery on Home, mobile (2026-11-12)
 
 Status: **merged** (PR #25, `c2e279f`) into `feature/discovery-professional-delivery`. No deployment;

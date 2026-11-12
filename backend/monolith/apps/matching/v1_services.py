@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Min, Q, Sum
+from django.db.models import Min, Q
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -26,7 +26,9 @@ from apps.routing.providers import (
     get_route_provider,
 )
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.proofs import leg_requires_proof
 
+from .compatibility import leg_reservations, request_volume_litres
 from .discovery import evaluate_candidate, phase2_policy
 from .models import Match, MatchEvent, Offer
 from .offer_economics import commitment_terms
@@ -84,6 +86,12 @@ class RequestAlreadyMatched(OfferStateError):
 
 class JourneyNotActive(OfferStateError):
     code = "journey_not_active"
+
+
+class JourneyPaused(OfferStateError):
+    """The traveler or staff paused the journey; it takes no new offers."""
+
+    code = "journey_paused"
 
 
 class OfferNotPending(OfferStateError):
@@ -145,8 +153,8 @@ class IncompatibleCandidate(OfferStateError):
     """A hard compatibility gate failed with no more specific code.
 
     The failing gate names travel as `rejection_codes`; revoked traveler KYC is
-    `traveler_kyc_current` and a missing/withdrawn flight proof is
-    `flight_proofs_approved`.
+    `traveler_kyc_current` and a missing/withdrawn ticket proof is
+    `flight_proofs_approved` or `sea_proofs_approved`.
     """
 
     code = "incompatible_candidate"
@@ -204,8 +212,19 @@ class PriceBelowMinimum(OfferStateError):
 #: `incompatible_candidate` while still reporting its gate names.
 GATE_ERROR_CLASSES: tuple[tuple[str, type], ...] = (
     ("journey_active", JourneyNotActive),
+    ("journey_not_paused", JourneyPaused),
     ("request_active", RequestNotOpen),
     ("request_has_no_active_deal", RequestAlreadyMatched),
+)
+
+
+#: Every gate that means "this leg is full", by weight, volume or parcel slots.
+CAPACITY_GATES = frozenset(
+    {
+        "capacity_available_on_every_leg",
+        "volume_available_on_every_leg",
+        "parcel_slots_available_on_every_leg",
+    }
 )
 
 
@@ -440,7 +459,7 @@ def _validate_evaluation(
         raise RouteInputsChanged(str(exc)) from exc
     if not evaluation.compatibility.compatible:
         rejection_codes = evaluation.compatibility.rejection_codes
-        if "capacity_available_on_every_leg" in rejection_codes:
+        if CAPACITY_GATES.intersection(rejection_codes):
             raise CapacityExceeded(
                 "One or more covered journey legs no longer has enough capacity.",
                 journey_leg_ids=[
@@ -539,7 +558,7 @@ def _lock_acceptance_eligibility(
     legs: list[JourneyLeg],
     at,
 ) -> None:
-    """Freeze mutable account, KYC, and flight-proof gates for acceptance.
+    """Freeze mutable account, KYC, and ticket-proof gates for acceptance.
 
     Review transitions update KYC/proof rows before any related User row. Keep
     the same eligibility-witness -> User order here to avoid a User/KYC
@@ -556,10 +575,10 @@ def _lock_acceptance_eligibility(
     )
     journey.has_current_kyc_value = current_kyc is not None
 
-    flight_legs = [leg for leg in legs if leg.mode == JourneyLeg.Mode.FLIGHT]
+    proof_legs = [leg for leg in legs if leg_requires_proof(leg)]
     proof_witness_ids = list(
         JourneyLegProof.objects.filter(
-            leg_id__in=[leg.pk for leg in flight_legs],
+            leg_id__in=[leg.pk for leg in proof_legs],
             status=JourneyLegProof.Status.APPROVED,
         )
         .values("leg_id")
@@ -572,7 +591,7 @@ def _lock_acceptance_eligibility(
         .order_by("pk")
         .values_list("leg_id", flat=True)
     )
-    for leg in flight_legs:
+    for leg in proof_legs:
         leg.has_approved_proof_value = leg.pk in approved_proof_leg_ids
 
     locked_users = {
@@ -1077,18 +1096,19 @@ def _accept_offer_locked(
             "The delivery request has no valid V1 actual weight."
         )
     weight = Decimal(weight)
-    reserved_by_leg = dict(
-        DealLegAllocation.objects.active()
-        .filter(
-            journey_leg_id__in=[leg.id for leg in legs],
-        )
-        .values("journey_leg_id")
-        .annotate(total=Sum("allocated_weight_kg"))
-        .values_list("journey_leg_id", "total")
-    )
+    volume = request_volume_litres(request_row)
+    # Belt and braces after the locked evaluation: weight, volume and parcel
+    # slots are re-read together, after the leg locks, from the rows a
+    # competing acceptance may just have committed (spec 5.5).
+    reserved_by_leg = leg_reservations(legs)
     for leg in legs:
-        reserved = reserved_by_leg.get(leg.id) or Decimal("0")
-        if reserved + weight > leg.capacity_kg:
+        reserved = reserved_by_leg[leg.id]
+        full = reserved.weight_kg + weight > leg.capacity_kg
+        if leg.capacity_volume_l is not None and volume is not None:
+            full = full or reserved.volume_l + volume > leg.capacity_volume_l
+        if leg.capacity_parcels is not None:
+            full = full or reserved.parcels + 1 > leg.capacity_parcels
+        if full:
             raise CapacityExceeded(
                 f"Journey leg {leg.id} no longer has enough capacity.",
                 journey_leg_ids=[leg.id],
@@ -1169,6 +1189,7 @@ def _accept_offer_locked(
                 deal=deal,
                 journey_leg=leg,
                 allocated_weight_kg=weight,
+                allocated_volume_l=volume,
                 status=DealLegAllocation.Status.PENDING_PAYMENT,
                 expires_at=reservation_expires_at,
             )

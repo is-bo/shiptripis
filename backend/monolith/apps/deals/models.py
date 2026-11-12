@@ -565,6 +565,12 @@ class DealLegAllocation(models.Model):
         related_name="deal_allocations",
     )
     allocated_weight_kg = models.DecimalField(max_digits=8, decimal_places=3)
+    #: The request's volume in litres, frozen at acceptance from its
+    #: dimensions (L3A). Null when the request has no dimensions: such a
+    #: parcel holds a slot and weight but no measured volume.
+    allocated_volume_l = models.DecimalField(
+        max_digits=10, decimal_places=3, null=True, blank=True
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -585,6 +591,11 @@ class DealLegAllocation(models.Model):
             models.CheckConstraint(
                 condition=Q(allocated_weight_kg__gt=0),
                 name="deals_allocation_positive_weight",
+            ),
+            models.CheckConstraint(
+                condition=Q(allocated_volume_l__isnull=True)
+                | Q(allocated_volume_l__gt=0),
+                name="deals_allocation_positive_volume",
             ),
             models.UniqueConstraint(
                 fields=["deal", "journey_leg"],

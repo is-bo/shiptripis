@@ -165,7 +165,10 @@ V3 operator step with owner-supplied temporary credentials and an audited accoun
 identity. It is deliberately absent from automatic startup and daily maintenance;
 review that procedure and policy initialization before enabling public access.
 Geography import uses the bundled reviewed
-manifest with `--skip-if-current`, without `--deactivate-missing`.
+manifest with `--skip-if-current`, without `--deactivate-missing`. The same
+`catalogue` step then runs `seed_sea_crossings`, which creates only the
+reviewed sea crossings that do not exist yet (L3A); it never changes or
+re-activates a crossing staff edited, and the "Sea legs" switch stays off.
 
 To update, first rehearse the migration plan, backup restore and **old image
 against the new schema** on disposable data. Review expand/contract compatibility;

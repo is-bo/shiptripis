@@ -214,6 +214,7 @@ def build_funding_snapshot(
         "match_id": getattr(match, "pk", None),
         "matching_version": str(getattr(match, "matching_version", "") or ""),
         "route": [_leg_snapshot(leg) for leg in carrying],
+        "handover_stops": _handover_stops_snapshot(journey, carrying),
     }
 
     instant, basis, leg = _resolve_scheduled_arrival(
@@ -224,6 +225,46 @@ def build_funding_snapshot(
     snapshot["arrival_leg_id"] = leg.pk if leg is not None else None
     snapshot["arrival_leg_position"] = leg.position if leg is not None else None
     return instant, snapshot
+
+
+def _handover_stops_snapshot(journey, carrying) -> list[dict]:
+    """The traveler's options at the two stops this parcel uses (L3A).
+
+    Frozen with the route so the parties see the handover window and note the
+    deal was funded against. The funding transaction holds the journey, and a
+    journey's stop options can only change while it is still editable, which
+    no funded journey is.
+    """
+
+    if not carrying or journey is None:
+        return []
+    from apps.trips.models import JourneyStopDetail
+
+    pickup = int(carrying[0].position)
+    dropoff = int(carrying[-1].position) + 1
+    details = {
+        row.position: row
+        for row in JourneyStopDetail.objects.filter(
+            journey_id=journey.pk, position__in=(pickup, dropoff)
+        )
+    }
+    stops = []
+    for role, position in (("pickup", pickup), ("dropoff", dropoff)):
+        row = details.get(position)
+        stops.append(
+            {
+                "role": role,
+                "position": position,
+                "handover_note": row.handover_note if row else "",
+                "window_start": (
+                    row.window_start.isoformat() if row and row.window_start else None
+                ),
+                "window_end": (
+                    row.window_end.isoformat() if row and row.window_end else None
+                ),
+            }
+        )
+    return stops
 
 
 def _leg_snapshot(leg) -> dict:

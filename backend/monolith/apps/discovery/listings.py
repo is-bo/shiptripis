@@ -3,10 +3,12 @@
 Two rules shape every function here.
 
 **Listed means sellable now.** A trip is listed only while the matching engine
-itself could still offer on it: the lifecycle says it is active with inventory
-ahead (`trips.lifecycle.discoverable`), the traveler is an active, unbanned
-member with a current ID check, every ticket the journey needs is approved,
-and every leg still ahead has room. A request is listed only while it is open,
+itself could still offer on it: the lifecycle says it is active, unpaused and
+has inventory ahead (`trips.lifecycle.discoverable`), the traveler is an
+active, unbanned member with a current ID check, every ticket the journey
+needs is approved (`trips.proofs`), every sea leg's crossing is open and the
+switch is on, and every leg still ahead has room by weight, volume and parcel
+slots. A request is listed only while it is open,
 untargeted, unexpired, inside its ready window and free of any active Deal,
 the same scope `compatible_requests_for_journey` scans. Listing a row the
 engine would refuse is the failure this module exists to prevent.
@@ -24,9 +26,11 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db.models import (
+    Count,
     DecimalField,
     Exists,
     F,
+    IntegerField,
     OuterRef,
     Q,
     QuerySet,
@@ -42,7 +46,9 @@ from apps.matching.discovery import _matching_journey_queryset, _place_matching_
 from apps.matching.find_travelers import first_name, project_route
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.trips.lifecycle import discoverable
-from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.models import Journey, JourneyLeg
+from apps.trips.proofs import proof_gap_exists
+from apps.trips.transport_rules import sea_crossing_active_exists
 
 from .places import locality_block
 
@@ -145,35 +151,33 @@ def request_route_q(route: RouteFilter) -> Q:
 # ---------------------------------------------------------------------------
 
 
-def listable_journeys(*, at: datetime) -> QuerySet:
+def listable_journeys(*, at: datetime, sea_legs_enabled: bool) -> QuerySet:
     """Every journey a member may browse right now, with its card's rows loaded.
 
     The leg prefetch is matching's own (`_matching_journey_queryset`): it brings
     each stop's served mapping and the reserved weight per leg, so projecting a
     card reads nothing more.
 
-    The ticket check below is the one remaining mode comparison L2A adds; L3A
-    moves it into `apps/trips/proofs.py` with every other proof site (plan 6.1).
+    ``sea_legs_enabled`` is the "Sea legs" switch the caller read from its own
+    `marketplace_policy()` at the moment of the request. With it off, no
+    journey with a sea leg is listed; with it on, one is listed only while
+    every crossing it uses is active (spec 5.3).
     """
 
-    unproven_flight = (
-        JourneyLeg.objects.filter(journey_id=OuterRef("pk"), mode=JourneyLeg.Mode.FLIGHT)
-        .alias(
-            approved=Exists(
-                JourneyLegProof.objects.filter(
-                    leg_id=OuterRef("pk"), status=JourneyLegProof.Status.APPROVED
-                )
-            )
-        )
-        .filter(approved=False)
-    )
-    reserved = (
+    active_allocations = (
         DealLegAllocation.objects.active(at=at)
         .filter(journey_leg_id=OuterRef("pk"))
         .values("journey_leg_id")
-        .annotate(total=Sum("allocated_weight_kg"))
-        .values("total")[:1]
     )
+    reserved = active_allocations.annotate(total=Sum("allocated_weight_kg")).values(
+        "total"
+    )[:1]
+    reserved_volume = active_allocations.annotate(
+        total=Sum("allocated_volume_l")
+    ).values("total")[:1]
+    reserved_parcels = active_allocations.annotate(total=Count("pk")).values(
+        "total"
+    )[:1]
     full_leg_ahead = (
         JourneyLeg.objects.filter(journey_id=OuterRef("pk"), depart_at__gt=at)
         .annotate(
@@ -181,10 +185,29 @@ def listable_journeys(*, at: datetime) -> QuerySet:
                 Subquery(reserved, output_field=_DECIMAL),
                 Value(Decimal("0.000")),
                 output_field=_DECIMAL,
-            )
+            ),
+            reserved_volume=Coalesce(
+                Subquery(reserved_volume, output_field=_DECIMAL),
+                Value(Decimal("0.000")),
+                output_field=_DECIMAL,
+            ),
+            reserved_parcels=Coalesce(
+                Subquery(reserved_parcels, output_field=IntegerField()),
+                Value(0),
+                output_field=IntegerField(),
+            ),
         )
-        .filter(capacity_kg__lte=F("reserved_weight"))
+        .filter(
+            Q(capacity_kg__lte=F("reserved_weight"))
+            | Q(capacity_volume_l__isnull=False, capacity_volume_l__lte=F("reserved_volume"))
+            | Q(capacity_parcels__isnull=False, capacity_parcels__lte=F("reserved_parcels"))
+        )
     )
+    sea_legs = JourneyLeg.objects.filter(
+        journey_id=OuterRef("pk"), mode=JourneyLeg.Mode.SEA
+    )
+    if sea_legs_enabled:
+        sea_legs = sea_legs.alias(open=sea_crossing_active_exists()).filter(open=False)
     next_departure = (
         JourneyLeg.objects.filter(journey_id=OuterRef("pk"), depart_at__gt=at)
         .order_by("depart_at", "pk")
@@ -199,10 +222,11 @@ def listable_journeys(*, at: datetime) -> QuerySet:
             has_current_kyc_value=True,
         )
         .alias(
-            unproven_flight=Exists(unproven_flight),
+            proof_gap=proof_gap_exists(),
+            unavailable_sea_leg=Exists(sea_legs),
             full_leg_ahead=Exists(full_leg_ahead),
         )
-        .filter(unproven_flight=False, full_leg_ahead=False)
+        .filter(proof_gap=False, unavailable_sea_leg=False, full_leg_ahead=False)
         .annotate(next_departure=Subquery(next_departure))
         .filter(next_departure__isnull=False)
     )

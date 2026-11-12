@@ -97,8 +97,8 @@ msgstr "Mise à jour de votre vérification d'identité Wassla"
 msgid "Verification"
 msgstr "Vérification"
 
-msgid "Wassla flight proof update"
-msgstr "Mise à jour de votre justificatif de vol Wassla"
+msgid "Wassla flight ticket update"
+msgstr "Mise à jour de votre billet d'avion Wassla"
 
 msgid "Payment needed for your Wassla delivery"
 msgstr "Un paiement est requis pour votre livraison Wassla"
@@ -289,17 +289,17 @@ msgstr "Votre vérification d'identité nécessite votre attention"
 msgid "Open the Wassla app to see the next step."
 msgstr "Ouvrez l'application Wassla pour voir l'étape suivante."
 
-msgid "Your flight proof is approved."
-msgstr "Votre justificatif de vol est approuvé."
+msgid "Your flight ticket is approved."
+msgstr "Votre billet d'avion est approuvé."
 
-msgid "Your flight proof needs attention."
-msgstr "Votre justificatif de vol nécessite votre attention."
+msgid "Your flight ticket needs attention."
+msgstr "Votre billet d'avion nécessite votre attention."
 
-msgid "Your flight proof is approved"
-msgstr "Votre justificatif de vol est approuvé"
+msgid "Your flight ticket is approved"
+msgstr "Votre billet d'avion est approuvé"
 
-msgid "Your flight proof needs attention"
-msgstr "Votre justificatif de vol nécessite votre attention"
+msgid "Your flight ticket needs attention"
+msgstr "Votre billet d'avion nécessite votre attention"
 
 msgid "A payment is required before this delivery can continue."
 msgstr "Un paiement est requis avant que cette livraison puisse continuer."
@@ -387,6 +387,24 @@ msgstr "Consultez le motif et envoyez des documents mis à jour."
 
 msgid "The verified flight leg can be used for matching."
 msgstr "Le segment de vol vérifié peut être utilisé pour la mise en relation."
+
+msgid "Wassla ferry ticket update"
+msgstr "Mise à jour de votre billet de ferry Wassla"
+
+msgid "Your ferry ticket is approved."
+msgstr "Votre billet de ferry est approuvé."
+
+msgid "Your ferry ticket needs attention."
+msgstr "Votre billet de ferry nécessite votre attention."
+
+msgid "Your ferry ticket is approved"
+msgstr "Votre billet de ferry est approuvé"
+
+msgid "Your ferry ticket needs attention"
+msgstr "Votre billet de ferry nécessite votre attention"
+
+msgid "The verified sea leg can be used for matching."
+msgstr "Le segment maritime vérifié peut être utilisé pour la mise en relation."
 
 msgid "Please review the reason and submit updated proof."
 msgstr "Consultez le motif et envoyez un justificatif mis à jour."

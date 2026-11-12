@@ -84,7 +84,7 @@ var subscribeChannels = []string{
 	"handover.delivery_confirmed",
 	// kyc
 	"kyc.status_changed",
-	"flight_proof.status_changed",
+	"leg_proof.status_changed",
 	// funded delivery lifecycle
 	"deal.cancelled",
 	"deal.updated",

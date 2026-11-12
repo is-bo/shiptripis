@@ -758,7 +758,7 @@ class Phase2BPublicContractUnitTests(TestCase):
 
         payload = public_compatibility_payload(
             {
-                "matching_version": "v1-matching-1",
+                "matching_version": "v1-matching-2",
                 "compatible": True,
                 "covered_leg_ids": [7, 8],
                 "pickup_route_position": 0.4213,

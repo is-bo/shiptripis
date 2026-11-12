@@ -61,7 +61,7 @@ String? proofFailureCopy(BuildContext context, ApiException error) {
   final l = L.of(context);
   return switch (error.code.raw) {
     'journey_proof_upload_closed' => l.proofErrorUploadClosed,
-    'proof_only_for_flight' => l.proofDriveNotRequired,
+    'proof_not_required' => l.proofDriveNotRequired,
     'journey_not_owned' => l.journeyErrorNotOwned,
     'proof_file_missing' => l.proofChooseImage,
     'proof_file_too_large' => l.proofFileTooLarge,

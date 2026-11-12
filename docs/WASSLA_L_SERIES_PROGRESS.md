@@ -181,12 +181,57 @@ factual. Use exactly these headings.
 
 ### L3A. Routes for everyone, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): `docs/PHASE_L3A_ROUTES_BACKEND.md`.
+  `SeaCrossing` also stores `distance_meters` (French and Spanish catalogue cities have no
+  coordinates, so a great circle cannot be computed at match time); staff give it in km only when a
+  city has no coordinates. A sea refusal carries `reason` and no `required_mode` (a road refusal is
+  byte-identical to before). Stop refusals are `journey_stop_invalid` with a `reason`. Pause codes:
+  `journey_paused_by_staff`, `journey_paused_by_owner`, `journey_not_pausable`,
+  `journey_pause_reason_required`; a new offer on a paused journey is refused with `journey_paused`.
+  The funded route serves the handover window and note as `route.handover_stops`. Outbox kind
+  `leg_proof_status`, channel `leg_proof.status_changed`. The two L2A carry-overs are done: the ticket
+  check in `listable_journeys` goes through `proofs.proof_gap_exists()`, and "not paused" is in
+  `lifecycle.discoverable()`, which covers listings, both Matches roles, scans and journey detail.
+- Left for a later package: L3B builds the console screens over `create_crossing`,
+  `activate_crossing`, `deactivate_crossing`, `pause_journey` and `resume_journey`; moves the mobile
+  `maxJourneyLegCapacityKg` to 20000; maps the new codes (`sea_*` reasons, `journey_stop_invalid`,
+  pause codes, `journey_paused`, `sea_proof_not_approved`); and may rename the app's
+  `flightProofStatusChanged` and `proofOnlyForFlight` identifiers (their wire values already moved).
+  Audit action names `flight_proof.*` and the `review_flight_proofs` permission keep their names
+  (stored in audit and role rows). L6A adds the professional exemption inside `proofs.py` only.
+  **Open, must close before launch:** the bundled catalogue has no coordinates for any French
+  (34,875) or Spanish (8,132) city, so every French and Spanish road leg prices at the distance
+  floor. Closing it needs coordinates from an official source keyed by INSEE and INE code (for
+  example `geo.api.gouv.fr` and Eurostat GISCO LAU, both refused by this environment's network
+  policy), a regenerated manifest with its digest pin, and a release-data test that fails if any
+  launch-country city lacks coordinates. The floor stays only as a crash guard.
+- Switches added and their defaults: none new. L3A reads `sea_legs_enabled` (off), defined in L2A.
+- Deviations from the plan (what, why, approved by): branch is the harness name
+  `claude/project-thread-bl54yl`; PR targets `feature/discovery-professional-delivery`. The seed file
+  is `backend/monolith/apps/locations/data/sea_crossings.json`, not `tools/geography/`, because the
+  VPS image ships only `backend/monolith` (the `catalogue` step now runs the seed). `available_modes`,
+  `default_mode` and `flight_is_required` were removed rather than made place-aware: no production
+  code called them, and `check_leg_mode` is the one rule. `sea_legs_available` covers every sea leg
+  of the journey, not only the covered range: spec 5.3 says a deactivated crossing blocks new offers
+  "on every journey that uses it", and the spec wins. Volume and parcel-slot failures answer the
+  existing `capacity_exceeded`. No alias is kept for the renamed kind and channel (never in
+  production). The staff pause reason is internal; the owner sees only `paused_by_staff`. A stop left
+  at its defaults stores no row; refusing every category is refused. A pending offer stays pending
+  while paused and cannot be accepted until resume; resuming does not re-send route alerts.
+  Crossings are read, not locked, at acceptance (deactivation touches nothing else, so the read is
+  serially equivalent). Permissions: crossings use `manage_settings`, staff pause `manage_journeys`.
+  Pre-existing bug fixed: a road leg between catalogue cities without coordinates and without a stored
+  distance crashed the scan; it now prices at the distance floor. Existing tests edited (listed in
+  the PR): the version string, the renamed kind, channel and code, the 20,000 kg ceiling, and the two
+  `available_modes`/`default_mode` tests rewritten onto `check_leg_mode`. Reported to the orchestrator
+  with the PR; not reviewed by Ismail.
+- Tests (before and after counts): Django 2,539 passed before; 2,615 passed after (77 added: 46 in
+  `test_l3a_routes.py`, 25 in `test_l3a_matching.py`, 6 in `test_l3a_ticket_copy.py`; two
+  `phase8fa` tests of the removed helpers became one). Go unchanged and green. `makemigrations --check` clean; `schema.sql` regenerated (additions only).
+- Known limits: French and Spanish road legs price at the distance floor until those cities have
+  coordinates (the open carry-over above; matching and Find Travelers work, the price is the
+  minimum). Road distance everywhere is straight-line: no production route provider is configured.
+  The console has no crossing or pause screen until L3B; staff use the service functions.
 
 ### L3B. Routes for everyone, mobile and admin screens
 

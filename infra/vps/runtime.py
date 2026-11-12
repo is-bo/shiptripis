@@ -84,7 +84,8 @@ def maintenance(command: list[str]) -> None:
             raise RuntimeError("another VPS maintenance operation owns the database lock")
         try:
             allowed = {
-                "migrate", "import_geography", "check", "showmigrations", "inspect_redis_streams",
+                "migrate", "import_geography", "seed_sea_crossings", "check", "showmigrations",
+                "inspect_redis_streams",
                 "flushexpiredtokens", "prune_scheduled_jobs", "prune_push_devices",
                 "purge_staged_parcel_media", "sweep_published_events",
                 "audit_email_backlog", "review_email_backlog",

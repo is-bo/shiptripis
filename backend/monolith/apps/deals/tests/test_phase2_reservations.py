@@ -135,7 +135,7 @@ class Phase2ReservationLifecycleTests(TestCase):
             sender=self.sender,
             traveler=self.traveler,
             status=Match.Status.ACCEPTED,
-            matching_version="v1-matching-1",
+            matching_version="v1-matching-2",
             matched_distance_meters=400_000,
             compatibility_snapshot={"compatible": True},
             ranking_snapshot={"score": 900},
@@ -198,7 +198,7 @@ class Phase2ReservationLifecycleTests(TestCase):
             sender=self.sender,
             traveler=self.traveler,
             status=Match.Status.PENDING,
-            matching_version="v1-matching-1",
+            matching_version="v1-matching-2",
             matched_distance_meters=400_000,
         )
         offer = Offer.objects.create(
@@ -311,7 +311,7 @@ class Phase2ReservationLifecycleTests(TestCase):
                 candidate.save(update_fields=[field, "updated_at"])
 
         match.refresh_from_db()
-        assert match.matching_version == "v1-matching-1"
+        assert match.matching_version == "v1-matching-2"
         assert match.matched_distance_meters == 400_000
         assert match.compatibility_snapshot == {"compatible": True}
         assert match.ranking_snapshot == {"score": 900}

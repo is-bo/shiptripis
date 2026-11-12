@@ -14,7 +14,13 @@ from apps.core.http_cache import public_catalog_response
 
 from .geography import normalize_search_name
 from .geography_serializers import GeographyCountrySerializer, GeographyPlaceSerializer
-from .models import AirportLocalityMapping, Country, Place, PlaceAlternateName
+from .models import (
+    AirportLocalityMapping,
+    Country,
+    Place,
+    PlaceAlternateName,
+    SeaCrossing,
+)
 
 
 # Search discovery only.  Matching continues to use Place.resolve_matching_locality().
@@ -410,3 +416,53 @@ class GeographyPlaceSearchView(APIView):
             context={"search_metadata": search_metadata},
         )
         return paginator.get_paginated_response(serializer.data)
+
+
+def _port_card(place: Place) -> dict:
+    """A port city as the public catalogue already publishes it."""
+
+    return {
+        "id": place.pk,
+        "name": place.name,
+        "display_label": place.display_label,
+        "country_code": place.country_id,
+    }
+
+
+class SeaCrossingListView(APIView):
+    """`GET /api/geography/sea-crossings`: where a sea leg may go right now.
+
+    ``enabled`` is the admin "Sea legs" switch and ``crossings`` the active
+    rows, each direction its own entry. The app offers SEA on a segment only
+    when both are true for it; the server decides again on every write and
+    every match, so a stale cached copy can never create a sea leg.
+    """
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request: Request) -> Response:
+        from apps.trips.transport_rules import sea_legs_enabled
+
+        crossings = (
+            SeaCrossing.objects.filter(
+                is_active=True,
+                origin_locality__active=True,
+                destination_locality__active=True,
+            )
+            .select_related("origin_locality__parent", "destination_locality__parent")
+            .order_by("origin_locality__name", "destination_locality__name", "pk")
+        )
+        return public_catalog_response(
+            request,
+            {
+                "enabled": sea_legs_enabled(),
+                "crossings": [
+                    {
+                        "origin": _port_card(row.origin_locality),
+                        "destination": _port_card(row.destination_locality),
+                    }
+                    for row in crossings
+                ],
+            },
+            max_age=300,
+        )

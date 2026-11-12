@@ -501,24 +501,45 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                 _("Open the Wassla app to see the next step."),
             ),
         )
-    if kind == OutboundMessage.Kind.FLIGHT_PROOF_STATUS:
+    if kind == OutboundMessage.Kind.LEG_PROOF_STATUS:
         approved = context.get("status") == "approved"
+        # The copy names the ticket (L3A). Whole sentences per mode, never a
+        # spliced noun, so each language can phrase its own grammar.
+        sea = context.get("mode") == "SEA"
+        if sea:
+            subject = _("Wassla ferry ticket update")
+            preheader = (
+                _("Your ferry ticket is approved.")
+                if approved
+                else _("Your ferry ticket needs attention.")
+            )
+            heading = (
+                _("Your ferry ticket is approved")
+                if approved
+                else _("Your ferry ticket needs attention")
+            )
+            usable = _("The verified sea leg can be used for matching.")
+        else:
+            subject = _("Wassla flight ticket update")
+            preheader = (
+                _("Your flight ticket is approved.")
+                if approved
+                else _("Your flight ticket needs attention.")
+            )
+            heading = (
+                _("Your flight ticket is approved")
+                if approved
+                else _("Your flight ticket needs attention")
+            )
+            usable = _("The verified flight leg can be used for matching.")
         return EmailDocument(
-            subject=_("Wassla flight proof update"),
-            preheader=(
-                _("Your flight proof is approved.")
-                if approved
-                else _("Your flight proof needs attention.")
-            ),
+            subject=subject,
+            preheader=preheader,
             eyebrow=_("Verification"),
-            heading=(
-                _("Your flight proof is approved")
-                if approved
-                else _("Your flight proof needs attention")
-            ),
+            heading=heading,
             paragraphs=(
                 (
-                    _("The verified flight leg can be used for matching.")
+                    usable
                     if approved
                     else _("Please review the reason and submit updated proof.")
                 ),

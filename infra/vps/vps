@@ -255,9 +255,14 @@ def operate(resources: ExitStack) -> None:
         dc("up", "-d", "--wait", "postgres", "redis")
         maintenance("migrate", "--check")
         ready()
-    elif command in {"migrate", "catalogue"}:
+    elif command == "migrate":
         dc("up", "-d", "--wait", "postgres", "redis")
-        maintenance(*(["migrate", "--noinput"] if command == "migrate" else ["import_geography", "--skip-if-current"]))
+        maintenance("migrate", "--noinput")
+    elif command == "catalogue":
+        dc("up", "-d", "--wait", "postgres", "redis")
+        maintenance("import_geography", "--skip-if-current")
+        # Idempotent: creates only missing crossings, never re-activates one.
+        maintenance("seed_sea_crossings")
     elif command in {"backup-init", "backup", "snapshots", "verify"}:
         backup(*(["init"] if command == "backup-init" else [command, *rest]))
         if command == "backup":

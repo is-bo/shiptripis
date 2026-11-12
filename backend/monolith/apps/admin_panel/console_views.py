@@ -104,6 +104,10 @@ from apps.notifications.models import OutboundMessage
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.proofs import STATE_MISSING as PROOF_STATE_MISSING
+from apps.trips.proofs import STATE_PENDING as PROOF_STATE_PENDING
+from apps.trips.proofs import STATE_REJECTED as PROOF_STATE_REJECTED
+from apps.trips.proofs import leg_proof_state, leg_requires_proof
 
 from .console_forms import (
     BoostEconomicsSettingsForm,
@@ -1419,31 +1423,26 @@ def _journey_queryset(request):
 
 
 def _proof_summary(journey) -> tuple[str, str]:
-    flight_legs = [
-        leg for leg in journey.legs.all() if leg.mode == JourneyLeg.Mode.FLIGHT
-    ]
-    if not flight_legs:
+    """One line for the journey list: the worst ticket state among its legs.
+
+    Every state comes from `apps.trips.proofs`, so the console can never
+    disagree with publication about which legs need a ticket. Historical
+    rejected attempts do not hide a later approval.
+    """
+
+    states = {
+        leg_proof_state(leg) for leg in journey.legs.all() if leg_requires_proof(leg)
+    }
+    if not states:
         return "Not required", "mute"
-    # Publication requires an approved proof on EVERY flight leg. Historical
-    # rejected attempts do not invalidate a later approval.
-    missing_approval = [
-        list(leg.proofs.all())
-        for leg in flight_legs
-        if not any(
-            proof.status == JourneyLegProof.Status.APPROVED
-            for proof in leg.proofs.all()
-        )
-    ]
-    if not missing_approval:
-        return "Approved", "ok"
-    if any(not proofs for proofs in missing_approval):
-        return "Missing", "bad"
-    proofs = [proof for leg_proofs in missing_approval for proof in leg_proofs]
-    if any(proof.status == JourneyLegProof.Status.PENDING for proof in proofs):
-        return "Pending review", "attn"
-    if any(proof.status == JourneyLegProof.Status.REJECTED for proof in proofs):
-        return "Rejected", "bad"
-    return "Missing", "bad"
+    for state, label, tone in (
+        (PROOF_STATE_MISSING, "Missing", "bad"),
+        (PROOF_STATE_PENDING, "Pending review", "attn"),
+        (PROOF_STATE_REJECTED, "Rejected", "bad"),
+    ):
+        if state in states:
+            return label, tone
+    return "Approved", "ok"
 
 
 @capability_required("view_journeys")

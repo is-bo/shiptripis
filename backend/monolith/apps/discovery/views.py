@@ -167,7 +167,8 @@ class TripsView(_DiscoveryView):
         values = query.validated_data
         at = timezone.now()
         try:
-            if not marketplace_policy().discovery.listings_enabled:
+            policy = marketplace_policy()
+            if not policy.discovery.listings_enabled:
                 return Response(_DISABLED_PAGE)
             route = _route_filter(values)
         except PlaceNotFound as exc:
@@ -176,7 +177,7 @@ class TripsView(_DiscoveryView):
             return _refusal(exc)
         departing_after = max(at, values.get("departing_after") or at)
         queryset = (
-            listable_journeys(at=at)
+            listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
             .exclude(traveler=request.user)
             # With an origin, "departing after" is about the pickup stop's own
             # leg; the trip may have started earlier somewhere else.
@@ -286,7 +287,7 @@ class PersonView(_DiscoveryView):
         requests: list[dict] = []
         if policy.discovery.listings_enabled:
             journeys = list(
-                listable_journeys(at=at)
+                listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
                 .filter(traveler_id=profile.user_id)
                 .order_by("next_departure", "pk")[:PERSON_ITEMS_LIMIT]
             )

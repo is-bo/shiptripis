@@ -37,7 +37,7 @@ void main() {
         ('dispute.opened', {'dispute_id': 4}, const LiveResource.dispute(4)),
         ('payout.status_changed', {'deal_id': 3}, const LiveResource.payouts()),
         (
-          'flight_proof.status_changed',
+          'leg_proof.status_changed',
           {'trip_id': 5},
           const LiveResource.journey(5),
         ),

@@ -217,7 +217,7 @@ class JourneyDepartureIntegrityTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["status"], Journey.Status.ACTIVE)
 
-    def test_capacity_uses_the_existing_200_kg_server_ceiling(self):
+    def test_capacity_uses_the_20000_kg_typo_ceiling(self):
         accepted = self._create(
             self._payload(
                 self.now + timedelta(hours=1),
@@ -229,7 +229,7 @@ class JourneyDepartureIntegrityTests(APITestCase):
         rejected = self._create(
             self._payload(
                 self.now + timedelta(hours=1),
-                capacity="200.01",
+                capacity="20000.01",
             )
         )
         self.assertEqual(rejected.status_code, 400, rejected.data)

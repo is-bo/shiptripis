@@ -71,7 +71,7 @@ class ApiErrorCode {
   static const journeyProofUploadClosed = ApiErrorCode(
     'journey_proof_upload_closed',
   );
-  static const proofOnlyForFlight = ApiErrorCode('proof_only_for_flight');
+  static const proofOnlyForFlight = ApiErrorCode('proof_not_required');
   static const proofFileMissing = ApiErrorCode('proof_file_missing');
   static const proofFileTooLarge = ApiErrorCode('proof_file_too_large');
   static const proofMediaTypeUnsupported = ApiErrorCode(

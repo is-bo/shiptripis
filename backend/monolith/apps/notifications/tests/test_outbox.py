@@ -249,7 +249,7 @@ class DurabilityTests(TestCase):
     def test_inventory_kinds_have_safe_rendering_contracts(self):
         kinds = (
             OutboundMessage.Kind.KYC_STATUS,
-            OutboundMessage.Kind.FLIGHT_PROOF_STATUS,
+            OutboundMessage.Kind.LEG_PROOF_STATUS,
             OutboundMessage.Kind.PAYMENT_REQUIRED,
             OutboundMessage.Kind.PAYMENT_PROCESSING,
             OutboundMessage.Kind.PAYMENT_FAILED,
