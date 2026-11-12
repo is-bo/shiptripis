@@ -23,7 +23,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L3A | Routes for everyone, backend | Opus | xhigh | merged | `claude/project-thread-bl54yl` | #26 | `b10cda8` | `docs/PHASE_L3A_ROUTES_BACKEND.md` |
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | merged | `claude/project-thread-52tsvf` | #28 | `edb94d7` | `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md` |
 | L4A | Traveler pricing, backend | Opus | high | merged | `claude/project-thread-q374r4` | #29 | `5014497` | `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md` |
-| L4C | Housekeeping: test time limit and ferry distance cleanup | Opus | high | not_started | | | | |
+| L4C | Housekeeping: test time limit and ferry distance cleanup | Opus | high | merged | `claude/project-thread-a448wo` | #30 | `c360dcf` | `docs/PHASE_L4C_HOUSEKEEPING.md` |
 | L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
 | L11A | Tracking number, backend | Opus | high | not_started | | | | |
 | L11B | Tracking number, mobile | Sonnet | medium | not_started | | | | |
@@ -53,11 +53,11 @@ table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L
 to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
 the board is otherwise still edited only by the orchestrator.
 
-**Next package:** L4C (Opus, high effort), then L4B (Sonnet, medium), then L11A (Opus, high). Section 3 order.
+**Next package:** L4B (Sonnet, medium effort), then L11A (Opus, high), then L11B (Sonnet, medium). Section 3 order.
 
-**Carry-over, now assigned to L4C:** remove L3A's backup ferry distances: the seed port coordinates in `apps/locations/data/sea_crossings.json` and the staff-entered kilometres on "Add a crossing", with the `distance_km` parameter of `create_crossing` in `apps.locations.sea_crossings`. They are no longer needed now that every launch-country city has catalogue coordinates (PR #27). Until removed, they only apply to a city without coordinates.
+**Closed carry-over (L4C, PR #30, `c360dcf`):** L3A's backup ferry distances are removed (seed port coordinates, staff-typed kilometres, `distance_km` on `create_crossing`); a test pinned every shipped crossing's distance, match and price before the removal and passes unchanged after it. A city without catalogue coordinates is refused as a port (`sea_crossing_coordinates_missing`).
 
-**Carry-over, now assigned to L4C:** the Django CI job runs 33 to 44 minutes against its 45-minute `timeout-minutes` (`.github/workflows/ci.yml`); L4A's first attempt on `2537c73` was cancelled at 87% and passed on its one re-run. Raise the limit or split the suite before it blocks a package.
+**Closed carry-over (L4C):** the Django CI job is now four parallel shards (`Django — tests (shard K)`, 25-minute limit each); the check `Django — migrations + tests + lint` keeps its name and fails unless every shard passed and every collected test ran exactly once. Slowest shard about 13 minutes on three consecutive runs. When the slowest shard passes 15 minutes, refresh `backend/monolith/config/test_durations.json` from a green run's `django-shard-report-*` artifacts, then add a shard if needed (phase doc section 1).
 
 **L4A judgment calls (accepted at the gate, not reviewed by Ismail):** (1) `listed_reward` takes `enabled=`, read from the quote's settings revision, so a scan adds no query; (2) the price stays editable while the journey is `in_progress`, because it still takes offers on later legs, and a test proves existing offers, deals, orders, ledger and payouts stay identical; (3) counter offers record `listed_price` too; (4) the price history is its own table `trips.JourneyPriceChange`, not `AdminAuditLog`, because the actor is the traveler; (5) clearing or re-sending the stored price is allowed with the switch off; (6) ties name the traveler's terms first; (7) a non-owner sees no `price` while the switch is off; (8) the console journey page shows the price and Django admin makes it read-only.
 
