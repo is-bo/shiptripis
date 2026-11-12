@@ -1,5 +1,26 @@
 # Waçla V1 Implementation Status
 
+## Wassla L-series plan extended: L11A to L17 (2026-11-12)
+
+Status: **planning only, no code**. Approved by Ismail on 2026-11-12.
+
+The specification gained sections 16 to 20 and the no-show reports in section 12; the plan gained
+packages L11A to L17, which run after L9B and before L10 (final acceptance stays last):
+
+- L11A, L11B: one tracking number per parcel (`WSL-` plus 8 characters), replacing `ST-<id>`.
+- L12A, L12B: a response deadline and reminder for proposals (they had no expiry before), and an alert
+  to travelers whose trip really fits a new request.
+- L13A, L13B: the reviews behind a rating, with report, hide and remove.
+- L14: two-step sign-in for every staff account, and finance exports.
+- L15, L16, L17: the admin AI helper (per-admin keys with that admin's rights, a briefing, prepared
+  actions confirmed in the console, then the skill).
+- L9A, L9B: "the other person did not come" reports, decided by staff through the existing no-show
+  action.
+
+Detail: `docs/WASSLA_DISCOVERY_PRO_SPEC.md` sections 12 and 16 to 20,
+`docs/WASSLA_DISCOVERY_PRO_PLAN.md` sections 2.10 to 2.12, 3, 4 and 5.1b, and the board in
+`docs/WASSLA_L_SERIES_PROGRESS.md`.
+
 ## Wassla L4A — traveler pricing, backend (2026-11-12)
 
 Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`

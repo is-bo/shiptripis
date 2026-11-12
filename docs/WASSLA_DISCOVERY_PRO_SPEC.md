@@ -1,6 +1,7 @@
 # Wassla Discovery and Professional Delivery Specification
 
-Status: **locked by Ismail on 2026-11-10; four follow-up answers added on 2026-11-11.** Baseline: `feature/wassla-v3-baseline` at `dd7f820`.
+Status: **locked by Ismail on 2026-11-10; four follow-up answers added on 2026-11-11; additions approved by
+Ismail on 2026-11-12 (sections 16 to 20, and the no-show reports in section 12).** Baseline: `feature/wassla-v3-baseline` at `dd7f820`.
 Working branch: `feature/discovery-professional-delivery`.
 Build order and work packages: `docs/WASSLA_DISCOVERY_PRO_PLAN.md`.
 
@@ -29,6 +30,17 @@ not pick a different rule.
    when they forget. Senders see it in tracking.
 6. **Admin control.** One verification inbox, switches for the risky capabilities, pause, suspend and
    hide, all audited with a reason.
+
+Added on 2026-11-12:
+
+7. **Tracking number.** One friendly number per parcel, shown everywhere (section 16).
+8. **Proposals that do not hang.** A response deadline with a reminder, and an alert to travelers whose
+   trip fits a new parcel (section 17).
+9. **No-show reports.** Either side can say "the other person did not come" (section 12).
+10. **Reviews.** The comments behind a rating are readable, reportable and moderated (section 18).
+11. **Admin security and exports.** Two-step sign-in for staff and finance exports (section 19).
+12. **Admin AI helper.** Each admin can connect their own AI assistant to a briefing of their work, with
+    their own authority and nothing more (section 20).
 
 ## 2. What this overrides in the V1 specification
 
@@ -372,12 +384,19 @@ It never changes the deal's status. It is recorded beside the deal's state machi
 
 ## 12. Problems and route changes
 
-- A traveler or sender can report a problem on a parcel: sender unavailable, recipient unavailable,
-  parcel does not match, parcel damaged, crossing cancelled, customs delay, courier refused the parcel,
-  courier lost the parcel, tracking reference invalid, other.
+- A traveler or sender can report a problem on a parcel: sender unavailable, traveler did not come,
+  recipient unavailable, parcel does not match, parcel damaged, crossing cancelled, customs delay,
+  courier refused the parcel, courier lost the parcel, tracking reference invalid, other.
 - A problem is recorded, the other party is notified, and serious kinds go to staff. Reporting a
   problem never changes a deal's status. Money consequences come only through the existing dispute and
   cancellation rules.
+- **No-show reports (added 2026-11-12).** From the agreed pickup time until the pickup is confirmed,
+  the traveler can report "the sender did not come" (kind: sender unavailable) and the sender can
+  report "the traveler did not come". The button is on the delivery screen and needs one tap and an
+  optional note. The other person is notified at once and can answer in chat or report their own side.
+  Both kinds go to staff at once. Staff decide; only staff record a no-show, through the existing
+  no-show action with its existing money rule. A report alone refunds nothing, cancels nothing and
+  marks nobody. One open no-show report per person per delivery.
 - **Route changes.** A traveler may change the times of an active journey. Wassla lists the affected
   parcels, notifies their senders and keeps the original schedule on record. A change that would miss a
   parcel's deadline, or move its arrival by more than the policy threshold, needs the sender's
@@ -400,6 +419,8 @@ It never changes the deal's status. It is recorded beside the deal's state machi
   problems and route changes.
 - Every staff action writes an audit entry with actor, target, before, after and reason. Staff cannot
   edit a delivery or payment state except through the same guarded transitions the product uses.
+- Added on 2026-11-12: search by tracking number on every list (section 16); a queue of reported
+  reviews (section 18); two-step sign-in and finance exports (section 19); the AI helper (section 20).
 
 ## 14. Experience standard
 
@@ -423,3 +444,198 @@ invents one.
 | Fee | `calculate_offer_economics` in `apps/core/business_settings.py` |
 | Switches and settings | `core.BusinessSettingsVersion.policy`, a new `marketplace` section |
 | Delivery confirmation | `deals.lifecycle.apply_delivery_confirmed` |
+
+---
+
+# Additions approved on 2026-11-12
+
+Sections 16 to 20 were approved by Ismail on 2026-11-12, after a review of the app against the
+"cahier des charges" of 11 November 2026. They follow the same rule as the rest of this document: a
+rule here is a product decision. Section numbers 1 to 15 are unchanged so that existing references
+stay valid.
+
+## 16. Tracking number
+
+- Every delivery request gets **one tracking number when it is created**: `WSL-` followed by 8
+  characters taken from `23456789ABCDEFGHJKMNPQRSTVWXYZ` (no 0, 1, I, L, O or U, so it can be read
+  aloud and typed without mistakes). Example: `WSL-7K3M9QXD`. It is random, unique, never changed and
+  never reused.
+- It is the parcel's number for its whole life. The request, its proposals, the delivery, its
+  payments, refunds, payout, disputes, problems, custody history and courier handoff all show the same
+  number. A request that reopens after a cancelled delivery keeps its number.
+- It **replaces the `ST-<id>` reference** in every email, page and screen. No other human-facing
+  reference for a parcel exists. Payment references stay what they are.
+- Who sees it: the sender from creation; the traveler once a proposal exists between them; the
+  recipient in the delivery-code email and on the recipient page; staff everywhere. It is **never on a
+  public discovery card** and never on the page a relative pays from.
+- It identifies; it never authorises. Knowing a number opens nothing. There is no public "track by
+  number" page in this build.
+- When someone types it (admin search), case, the `WSL` prefix and the hyphen are optional.
+- A courier company's own tracking reference (section 10.2) is a different thing and is always
+  labelled "courier reference".
+
+## 17. Proposals that do not hang
+
+### 17.1 Response deadline and reminder
+
+- Every proposal and every counter-proposal has a **response deadline**: the time it was sent plus a
+  number of hours set in policy (default 48). Both people see "Answer by {day, time}".
+- The person who must answer gets **one reminder** before the deadline (default 12 hours before). No
+  reminder is sent when the whole delay is shorter than that.
+- At the deadline an unanswered proposal **expires**. It can no longer be accepted, refused or
+  countered. Both people are told. The sender is free to propose to someone else.
+- Expiry is neutral: nothing was reserved, no money moves, and it leaves no mark on either person.
+- The server refuses an answer from the deadline on, whether or not its timer has run yet.
+- Switch: response deadline on or off, with the two delays. It ships on. Off means new proposals have
+  no deadline; proposals that already have one keep it.
+
+### 17.2 Alert when a parcel fits a trip
+
+- When a request becomes open, Wassla finds the published trips that are **really compatible**, with
+  the existing engine and no second one, and tells each of those travelers once: "A parcel fits your
+  trip {from} to {to}".
+- The notification opens the request's public preview with that trip in focus, where the traveler can
+  tap "I can carry this" (section 4.4). **The sender still proposes first.** The alert is not an offer
+  and reserves nothing.
+- It carries only what the public request card shows (section 4.2).
+- Limits, all in policy: at most 30 travelers per request, best ranked first; at most 5 such alerts per
+  traveler per day; never twice for the same request and trip. It follows the traveler's "marketplace
+  activity" notification choice.
+- A traveler who would also receive a route alert (section 4.4) for the same request receives only
+  this one.
+- Switch: on or off. It ships on.
+
+## 18. Reviews, reports and moderation
+
+- Wherever a card shows a person's rating (section 4.2), the viewer can open that person's **reviews**:
+  for each rating that is already revealed, the score, the tags, the comment, the month and year, and
+  whether a sender or a traveler wrote it. The author's name is not shown.
+- The blind rule is unchanged: a rating appears only once both sides have rated or the rating period
+  has ended. Ratings are still never edited or deleted.
+- Anyone signed in who can read a review may **report it once**, with a reason (offensive, contains
+  personal information, not about this delivery, untrue, other) and an optional note. The rated person
+  can report from "My ratings".
+- Staff see reported reviews in a queue and decide, with a reason, audited:
+  - **dismiss** the report;
+  - **hide the comment**: the score and tags still count; the text is replaced by "Comment removed by
+    Wassla";
+  - **remove the rating**: it leaves every public average, count and list.
+  A decision can be reversed by staff.
+- The author is never told who reported. The reporter sees only "received" then "reviewed".
+- The rated person still sees a removed rating in "My ratings", marked "Removed by Wassla, not
+  counted".
+
+## 19. Admin security and exports
+
+### 19.1 Two-step sign-in for staff
+
+- Every staff account signs in with its password **and a 6-digit code from an authenticator app**.
+  There is no SMS or email code.
+- The first sign-in after this ships forces enrolment: a QR code and the same key as text, a code to
+  confirm, then 10 one-time recovery codes shown once.
+- Until the second step is done in the current session, no console page, no technical admin page and
+  no staff API answers.
+- Five wrong codes lock the second step for 15 minutes. A code cannot be used twice.
+- A Super Admin can reset another admin's second step, with a reason, audited; that admin enrols again
+  at their next sign-in. A server command does it for the last Super Admin.
+- A **fresh code** (entered in the last 10 minutes) is asked before: creating an AI helper key,
+  changing a staff role, resetting someone's second step.
+- It cannot be switched off from the console. Only a server setting for local development relaxes it,
+  and production refuses to start with that setting off.
+
+### 19.2 Finance exports
+
+- Finance can download, for a date range of at most 366 days: **Transactions** (one line per captured
+  payment and one per refund), **Commissions** (one line per funded delivery: traveler reward, Wassla
+  fee, sender total, refunds, fee kept) and **Payouts**.
+- Amounts are the recorded ones, never recalculated: euros with two decimals and a currency column, and
+  the dinar amount when the payment or payout used the Algerian rail.
+- Each line carries the tracking number, the references, dates, statuses, whether the owner or a guest
+  paid, and the people's internal ids and names. Never an email, a phone, an address, a bank detail or
+  document data.
+- A new permission, "export finance data", held by Finance and Super Admin. Every export is audited
+  with its kind, range and number of lines.
+- The format is CSV that opens correctly in Excel, with cells protected against spreadsheet formulas.
+
+## 20. Admin AI helper
+
+### 20.1 What it is
+
+An admin can connect an AI assistant of their own (for example Claude Code or Antigravity) to
+Wassla. The assistant reads a briefing of that admin's work, explains what needs doing and gives the
+link to the console page for each item. It acts as that admin, with exactly that admin's rights at the
+moment of each call: never more, and less where this section says so.
+
+### 20.2 Keys
+
+- Each admin has their own keys, created from the "AI helper" card on the console home page. A key is
+  shown **once**; Wassla keeps only a scrambled form of it.
+- **Read key:** expires **8 hours after it is created, even if it is in use**. The admin can create a
+  new one at any time; that stops the previous one.
+- **Change key:** created on demand, lasts **30 minutes**. The duration is a setting (5 to 60
+  minutes).
+- Creating either key needs a fresh two-step code (section 19.1).
+- A key stops working at once when: it expires; the admin stops it; a new key of the same kind is
+  created; the admin's account is deactivated or banned; the AI helper switch is turned off.
+- Rights are read from the admin's role **on every call**. A role change applies to the next call.
+
+### 20.3 What the helper can read
+
+- The work list, queues and records the admin's role may open in the console.
+- For each item: status, age, amounts, the tracking number and other references, the next step, and
+  the console link.
+- A person appears as first name, last initial and internal id, with a link to their console page.
+- **Never sent to the helper, whatever the admin's role:** identity documents, tickets, business
+  documents or any file or file link; document numbers; dates of birth; email addresses; phone numbers;
+  exact addresses and coordinates; bank and payout details; pickup and delivery codes; any key, token
+  or password; chat messages.
+- Text written by users (a dispute description, a problem note, a parcel title, a review) is sent only
+  on a record's detail, shortened, and always labelled as untrusted user text. It is never in the
+  briefing.
+- Work that needs eyes on a document (identity, ticket, professional, payout-method and courier
+  delivery reviews) is reported as a count with a link. The helper cannot decide it.
+
+### 20.4 What the helper can change
+
+- With a read key: nothing.
+- With a change key, **directly**: add an internal note to a delivery, a dispute or a person;
+  acknowledge a reported problem.
+- With a change key, **prepared only**: the helper prepares the action; nothing happens until the admin
+  opens the console, reads the summary and confirms. This covers: request a refund; change a dispute's
+  status or resolve it; record a no-show; ban or unban a user; hide or show a public profile; pause or
+  resume a journey; suspend or restore a professional; activate or deactivate a sea crossing; retry or
+  resolve a background job; retry a payout; moderate a review.
+- A prepared action is valid for 24 hours, is checked again when the admin confirms, and runs through
+  the same guarded action as the console button, with the admin's rights at that moment.
+- **Never through the helper, not even prepared:** staff accounts, roles and invitations; business
+  settings and switches; AI helper keys; two-step settings; revealing bank details; any review that
+  needs a document; the manual dinar payout steps.
+
+### 20.5 The briefing
+
+- One call returns the admin's work for now: each queue they may see, how many items wait, how long the
+  oldest has waited, how urgent it is, what to do, and the console link. It also lists the queues that
+  are clear, so "nothing to do" and "not checked" never look the same.
+- The server decides the order and the urgency. The helper only words it.
+- The console home page shows the same list, from the same code, for admins who use no AI.
+
+### 20.6 Safety and record
+
+- Every change made or prepared through the helper is in the admin audit log as that admin, marked
+  "via AI helper", with the key used.
+- Every call is recorded (time, key, address, result) and kept 30 days. The admin sees their own
+  recent calls on the AI helper page.
+- A key is sent only in the request header, over HTTPS. Calls are rate limited per key.
+- The helper's interface describes itself (what this admin may read and do, and the rules above), so
+  the instructions given to the assistant stay short.
+
+### 20.7 The skill
+
+A short instruction file ("skill") tells the assistant how to use the helper. It is written last,
+after everything else in this document is built, and must be simple enough for a small, fast model to
+follow. It never contains a key.
+
+### 20.8 Switch
+
+AI helper on or off, with the key durations, the validity of prepared actions and the rate limit. It
+ships on. Turning it off stops every key at once.

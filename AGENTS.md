@@ -39,7 +39,8 @@ Codex primarily owns Django/backend, Go services, database schema and migrations
 ## Discovery and professional delivery (L-series)
 
 Before any work on Home discovery, sea legs, traveler pricing, professional transporters, custody,
-courier handoff or progress reminders, also read:
+courier handoff, progress reminders, tracking numbers, proposal deadlines, reviews, staff two-step
+sign-in, finance exports or the admin AI helper, also read:
 
 - `docs/WASSLA_DISCOVERY_PRO_SPEC.md` (owner-approved addendum; overrides the V1 specification for the topics it covers)
 - `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model and effort per package, and the checks that close each one)

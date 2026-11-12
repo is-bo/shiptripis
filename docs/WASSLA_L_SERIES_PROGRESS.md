@@ -34,7 +34,22 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L8B | Custody and handoff, mobile | Sonnet | high | not_started | | | | |
 | L9A | Problems and route changes, backend | Opus | high | not_started | | | | |
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
-| L10 | Final acceptance | Opus | high | not_started | | | | |
+| L11A | Tracking number, backend | Opus | high | not_started | | | | |
+| L11B | Tracking number, mobile | Sonnet | medium | not_started | | | | |
+| L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
+| L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | not_started | | | | |
+| L13A | Reviews, reports and moderation, backend | Opus | high | not_started | | | | |
+| L13B | Reviews, mobile | Sonnet | medium | not_started | | | | |
+| L14 | Staff two-step sign-in and finance exports | Opus | high | not_started | | | | |
+| L15 | AI helper: keys and read access | Opus | xhigh | not_started | | | | |
+| L16 | AI helper: changes | Opus | xhigh | not_started | | | | |
+| L17 | AI helper skill | Sonnet | medium | not_started | | | | |
+| L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
+
+**Added 2026-11-12 (approved by Ismail):** L11A to L17 above, and the no-show reports inside L9A and
+L9B (spec 12, 16 to 20; plan 5.1b). They run after L9B in the order of this table, which is plan
+section 3's order. L10 stays last. These rows were added by the plan thread on Ismail's instruction;
+the board is otherwise still edited only by the orchestrator.
 
 **Next package:** L4B (Sonnet, medium effort). It needs L4A and L3B, both merged. L5A (Sonnet, medium) and L6A (Opus, high) are also unblocked; section 3 order puts L4B first.
 
@@ -430,6 +445,96 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 - Tests (before and after counts):
 - Known limits:
 
+### L11A. Tracking number, backend
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L11B. Tracking number, mobile
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L12A. Proposal deadline and trip-fit alerts, backend
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L12B. Proposal deadline and trip-fit alerts, mobile
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L13A. Reviews, reports and moderation, backend
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L13B. Reviews, mobile
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L14. Staff two-step sign-in and finance exports
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L15. AI helper: keys and read access
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L16. AI helper: changes
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L17. AI helper skill
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
 ### L10. Final acceptance
 
 - Contract as built (names that differ from the plan):
@@ -447,6 +552,8 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 | 2026-11-11 | Remove Railway files? | Yes. They do not stay on this branch. In L1A. |
 | 2026-11-11 | Is a declined schedule change a traveler-caused cancellation? | Yes. |
 | 2026-11-11 | Keep "I can carry this"? | Yes. |
+| 2026-11-12 | Which gaps against the cahier des charges should be built? | Tracking number; alert to travelers whose trip fits plus a reminder before a proposal expires; "the other person did not come"; reviews on profiles with report and hide; admin export and two-step sign-in. |
+| 2026-11-12 | AI helper: may it read everything and act directly? | No documents, bank details, delivery codes or chat contents. Money, ban, role and settings actions are prepared and confirmed in the console. Read key expires 8 hours after creation even in use; change key 30 minutes. The skill is written last. |
 
 ## Change log for the plan and spec
 
@@ -455,3 +562,4 @@ Detail: `docs/PHASE_L4A_TRAVELER_PRICING_BACKEND.md`.
 | 2026-11-10 | Spec and plan first written. |
 | 2026-11-11 | Added effort per package, the start runbook (plan 1.0), this progress file (plan 1.8), the agent brief (plan 1.9), the researched sea crossings (spec 5.3.1), Railway removal in L1A, and Ismail's answers. |
 | 2026-11-12 | Plan L3B: the staff-paused banner shows no reason, because L3A keeps the staff pause reason internal (the owner's payload carries only `paused_by_staff`). |
+| 2026-11-12 | Added packages L11A to L17 and the no-show reports in L9A and L9B (spec 12 and 16 to 20; plan 2.10 to 2.12, section 3, 5.1b, 5.1c). L10 stays the last package and gains their acceptance checks. Correction recorded in plan 5.1b: proposals had no expiry at the baseline; L12A adds it. |
