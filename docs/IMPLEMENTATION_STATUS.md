@@ -2,7 +2,7 @@
 
 ## Wassla L3A — routes for everyone, backend (2026-11-12)
 
-Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+Status: **merged** (PR #26, `b10cda8`) into `feature/discovery-professional-delivery`. No deployment;
 `main` untouched.
 
 Sea legs exist: a `SEA` leg joins two catalogue cities on an active `locations.SeaCrossing`, only while

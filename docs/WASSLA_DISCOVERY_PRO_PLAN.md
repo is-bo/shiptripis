@@ -608,7 +608,8 @@ Lille to Paris parcel using no capacity on the sea leg, proven by test.
   "Accept drop-offs here", an optional time window and an optional note with a line saying who will
   see it. A "What I carry" section for refused categories and fragile.
 - Ticket proof screen (`leg_proof_screen.dart`): copy and illustrations for flight and for ferry.
-- Journey detail: pause and resume, the paused banner, the staff-paused banner with the reason.
+- Journey detail: pause and resume, the paused banner, and the staff-paused banner, which tells the
+  traveler to contact support (L3A keeps the staff reason internal; the payload has `paused_by_staff`).
 - Sender side: Find Travelers, trip preview, offer and deal screens render sea legs, the
   `volume_unverified` caveat, and, after funding, the stop note and window.
 

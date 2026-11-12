@@ -20,7 +20,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L1B | Mobile and docs cleanup | Sonnet | medium | merged | `claude/project-thread-y61pdg` | #23 | `ae412a3` | |
 | L2A | Discovery backend and marketplace policy | Opus | high | merged | `claude/project-thread-jms2kh` | #24 | `46682bc` | `docs/PHASE_L2A_DISCOVERY_CONTRACT.md` |
 | L2B | Discovery on Home (mobile) | Sonnet | high | merged | `claude/project-thread-qu26fd` | #25 | `c2e279f` | `docs/PHASE_L2B_DISCOVERY_HOME.md` |
-| L3A | Routes for everyone, backend | Opus | xhigh | not_started | | | | |
+| L3A | Routes for everyone, backend | Opus | xhigh | merged | `claude/project-thread-bl54yl` | #26 | `b10cda8` | `docs/PHASE_L3A_ROUTES_BACKEND.md` |
 | L3B | Routes for everyone, mobile and admin screens | Sonnet | high | not_started | | | | |
 | L4A | Traveler pricing, backend | Opus | high | not_started | | | | |
 | L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
@@ -36,9 +36,9 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance | Opus | high | not_started | | | | |
 
-**Next package:** L3A (Opus, xhigh). It depends only on L2A, which is merged.
+**Next package:** L3B (Sonnet, high). It depends only on L3A, which is merged. L4A, L5A and L6A are also unblocked; section 3 order puts L3B first.
 
-**Carry-over:** `PushRepository.unregisterDevice` (mobile) has no caller. Sign-out should unregister the push installation, so whichever package touches sign-out or push wires it up (it was kept on purpose in L1B).
+**Open carry-over, must close before launch:** FR/ES city coordinates missing, so FR/ES road legs get floor pricing. The bundled catalogue has no coordinates for any French (34,875) or Spanish (8,132) city; a road leg between two of them prices at the distance floor, which is only a crash guard. Close it with official coordinates keyed by INSEE and INE code, a regenerated manifest with its digest pin, and a release-data test that fails on any launch-country city without coordinates (details in the L3A block). The `PushRepository.unregisterDevice` carry-over is closed: L2B removed it.
 
 ## Handoff notes
 
@@ -374,3 +374,4 @@ factual. Use exactly these headings.
 | --- | --- |
 | 2026-11-10 | Spec and plan first written. |
 | 2026-11-11 | Added effort per package, the start runbook (plan 1.0), this progress file (plan 1.8), the agent brief (plan 1.9), the researched sea crossings (spec 5.3.1), Railway removal in L1A, and Ismail's answers. |
+| 2026-11-12 | Plan L3B: the staff-paused banner shows no reason, because L3A keeps the staff pause reason internal (the owner's payload carries only `paused_by_staff`). |
