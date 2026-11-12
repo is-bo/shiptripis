@@ -21,7 +21,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L2A | Discovery backend and marketplace policy | Opus | high | merged | `claude/project-thread-jms2kh` | #24 | `46682bc` | `docs/PHASE_L2A_DISCOVERY_CONTRACT.md` |
 | L2B | Discovery on Home (mobile) | Sonnet | high | merged | `claude/project-thread-qu26fd` | #25 | `c2e279f` | `docs/PHASE_L2B_DISCOVERY_HOME.md` |
 | L3A | Routes for everyone, backend | Opus | xhigh | merged | `claude/project-thread-bl54yl` | #26 | `b10cda8` | `docs/PHASE_L3A_ROUTES_BACKEND.md` |
-| L3B | Routes for everyone, mobile and admin screens | Sonnet | high | not_started | | | | |
+| L3B | Routes for everyone, mobile and admin screens | Sonnet | high | merged | `claude/project-thread-52tsvf` | #28 | `edb94d7` | `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md` |
 | L4A | Traveler pricing, backend | Opus | high | not_started | | | | |
 | L4B | Traveler pricing, mobile | Sonnet | medium | not_started | | | | |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | not_started | | | | |
@@ -36,7 +36,9 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance | Opus | high | not_started | | | | |
 
-**Next package:** L3B (Sonnet, high). It depends only on L3A, which is merged. L4A, L5A and L6A are also unblocked; section 3 order puts L3B first.
+**Next package:** L4A (Opus, high effort). It depends only on L3A, which is merged. L5A and L6A are also unblocked; section 3 order puts L4A first, then L4B, which needs L4A and L3B.
+
+**Open carry-over:** remove L3A's backup ferry distances: the seed port coordinates in `apps/locations/data/sea_crossings.json` and the staff-entered kilometres on "Add a crossing", with the `distance_km` parameter of `create_crossing` in `apps.locations.sea_crossings`. They are no longer needed now that every launch-country city has catalogue coordinates (PR #27). Until removed, they only apply to a city without coordinates.
 
 **Closed carry-over:** FR/ES city coordinates. Every French (34,875) and Spanish (8,132) catalogue city now has official coordinates, joined by INSEE and INE code (France: `geo.api.gouv.fr` town hall points; Spain: Eurostat GISCO LAU 2024 boundary centroids), with source digests in the manifest and the digest pin updated. `test_every_launch_country_city_has_coordinates` fails if any DZ, FR, ES or DE city lacks them, so the distance floor is a crash guard only. Merged in PR #27 (`0119c96`). The `PushRepository.unregisterDevice` carry-over is closed: L2B removed it.
 
