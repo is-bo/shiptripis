@@ -167,18 +167,25 @@ jobs:
   # Runs against a real Postgres rather than SQLite: the schema uses
   # partial unique constraints and multi-table inheritance, so SQLite would
   # pass tests that Postgres rejects.
-  django:
-    name: Django — migrations + tests + lint
+  #
+  # The suite is split into parallel shards by whole test file (L4C). As one
+  # job it took 33-44 minutes on a hosted runner, dominated by Argon2 password
+  # hashing (settings/base.py, deliberately slow, with no test-time override)
+  # and by the Finance suites' control-plane snapshots, and was cancelled by
+  # its 45-minute limit. `config/test_shards.py` shares the files out over the
+  # measured seconds in `config/test_durations.json`; every shard runs, none is
+  # optional, and the `django` job below fails unless the shards together ran
+  # every collected test exactly once. Add a shard to the matrix when the
+  # slowest one passes 60% of its limit.
+  django-shard:
+    name: Django — tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # The suite takes ~13 min locally, dominated by Argon2 password hashing
-    # (settings/base.py:101 — deliberately slow, with no test-time override)
-    # and, since H5.2, by the Finance suites: five operator surfaces now render
-    # where one did, and every render is a full control-plane snapshot of
-    # roughly seventy annotated queries. Those tests are already consolidated so
-    # that each expensive world is built once and asked everything.
-    # 45 min leaves headroom on a slower runner while still failing a hang
-    # instead of burning GitHub's 6h default.
-    timeout-minutes: 45
+    # Each shard holds about a quarter of the suite; the limit only stops a hang.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     defaults:
       run:
         working-directory: backend/monolith
@@ -254,12 +261,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Lint and the migration check read the whole tree, so one shard runs
+      # them for all.
       - name: Lint (ruff)
+        if: matrix.shard == 1
         run: ruff check .
 
       # Catches a model changed without a migration — which would otherwise
       # surface as a runtime error on someone else's machine after a pull.
       - name: Check for missing migrations
+        if: matrix.shard == 1
         run: python manage.py makemigrations --check --dry-run
 
       - name: Run migrations
@@ -267,8 +278,54 @@ jobs:
 
       # pytest-django needs the settings module; there is no pytest.ini in
       # the repo, so it is passed explicitly rather than relying on one.
-      - name: pytest
-        run: python -m pytest -q --ds=config.settings.dev
+      - name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+        run: >-
+          python -m pytest -q --ds=config.settings.dev
+          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --shard-report=shard-report-${{ matrix.shard }}.json
+
+      - name: Keep the shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: django-shard-report-${{ matrix.shard }}
+          path: backend/monolith/shard-report-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The check name branch protection and the gate review rely on. It passes
+  # only when every shard passed and their reports add up to the whole suite.
+  django:
+    name: Django — migrations + tests + lint
+    needs: django-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        run: |
+          if [ "${{ needs.django-shard.result }}" != "success" ]; then
+            echo "::error::a Django test shard did not pass (${{ needs.django-shard.result }})"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: backend/monolith/config/test_shards.py
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: django-shard-report-*
+          path: shard-reports
+          merge-multiple: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: The shards ran every test exactly once
+        run: python backend/monolith/config/test_shards.py verify shard-reports
 
   # ── Production/static configuration ────────────────────────────────────
   production-safety:
