@@ -299,6 +299,20 @@ void main() {
       lessThanOrEqualTo(_coldStartBudget),
       reason: 'cold start sent ${cold.map((r) => r.path).toList()}',
     );
+    // L2B: Home's discovery sections are lazy list children below the member's
+    // own content. A member with live deliveries has pushed them off the
+    // first screen, so only the section that sits above that content (the
+    // matches, which is the one read whose answer changes what the top shows)
+    // may have been asked for; the trips, people and opt-in reads wait until
+    // the member scrolls to them.
+    final discovery = cold.where((r) => r.path.startsWith('/api/discovery'));
+    expect(
+      discovery.map((r) => r.path).toSet().difference({
+        '/api/discovery/matches',
+      }),
+      isEmpty,
+      reason: 'cold start read ${discovery.map((r) => r.path).toList()}',
+    );
     final lists = _dealLists(cold);
     expect(lists, hasLength(1), reason: 'one current-Deal read, one page');
     expect(lists.single.query['scope'], 'current');

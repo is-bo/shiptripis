@@ -54,3 +54,12 @@ bool requestHasRoute(DeliveryRequest request) =>
 
 bool _endpointKnown(CanonicalPlace? place, AppLocation? location) =>
     place != null || (location?.coarseLabel.isNotEmpty ?? false);
+
+/// The sender-facing name of an item category, in the app's language.
+String itemCategoryLabel(L l, ItemCategory category) => switch (category) {
+  ItemCategory.documents => l.requestCategoryDocuments,
+  ItemCategory.smallBox => l.requestCategorySmallBox,
+  ItemCategory.electronics => l.requestCategoryElectronics,
+  ItemCategory.clothing => l.requestCategoryClothing,
+  ItemCategory.other || ItemCategory.unknown => l.requestCategoryOther,
+};

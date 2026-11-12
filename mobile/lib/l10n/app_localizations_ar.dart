@@ -4408,4 +4408,478 @@ class LAr extends L {
   @override
   String get payResultDepositCredited =>
       'يُحتسب هذا العربون من إجمالي التوصيل عند قبول مسافر.';
+
+  @override
+  String get alertsTitle => 'تنبيهات المسارات';
+
+  @override
+  String get alertsIntro =>
+      'نرسل إشعارًا واحدًا على الأكثر لكل تنبيه كل بضع ساعات.';
+
+  @override
+  String get alertsEmptyTitle => 'لا توجد تنبيهات بعد';
+
+  @override
+  String get alertsEmptyBody =>
+      'احصل على إشعار عند ظهور رحلة أو طرد على مسار يهمّك.';
+
+  @override
+  String get alertAdd => 'إضافة تنبيه';
+
+  @override
+  String get alertAddTitle => 'تنبيه مسار جديد';
+
+  @override
+  String get alertAddSubtitle => 'سنُشعرك عند ظهور جديد على هذا المسار.';
+
+  @override
+  String get alertCreate => 'إنشاء التنبيه';
+
+  @override
+  String get alertPickCity => 'اختر مدينة';
+
+  @override
+  String get alertWatchLabel => 'تابع';
+
+  @override
+  String get alertWatchesTrips => 'رحلات جديدة';
+
+  @override
+  String get alertWatchesRequests => 'طرود جديدة';
+
+  @override
+  String alertFollowing(String name) {
+    return 'متابعة $name';
+  }
+
+  @override
+  String alertRemoveA11y(String route) {
+    return 'حذف التنبيه الخاص بـ $route';
+  }
+
+  @override
+  String get alertRemoved => 'تم حذف التنبيه';
+
+  @override
+  String get alertSwitchLabel => 'نبّهني بخصوص هذا المسار';
+
+  @override
+  String get alertTurnedOn => 'تم تفعيل التنبيه';
+
+  @override
+  String get alertTurnedOff => 'تم إيقاف التنبيه';
+
+  @override
+  String get alertLimitReached =>
+      'وصلت إلى الحد الأقصى من التنبيهات النشطة. احذف تنبيهًا لإضافة آخر.';
+
+  @override
+  String get alertSameCity => 'اختر مدينتين مختلفتين.';
+
+  @override
+  String get alertSelf => 'لا يمكنك متابعة نفسك.';
+
+  @override
+  String get browseTripsTitle => 'رحلات تنطلق قريبًا';
+
+  @override
+  String get browseRequestsTitle => 'طرود تبحث عن مسافر';
+
+  @override
+  String get browseTripsEmptyTitle => 'لا توجد رحلات حاليًا';
+
+  @override
+  String get browseTripsEmptyBody =>
+      'تظهر الرحلات هنا بمجرد نشرها من المسافرين.';
+
+  @override
+  String get browseTripsEmptyAction => 'أرسل طردًا';
+
+  @override
+  String get browseRequestsEmptyTitle => 'لا توجد طرود مفتوحة حاليًا';
+
+  @override
+  String get browseRequestsEmptyBody =>
+      'تظهر الطرود هنا بمجرد نشرها من المرسلين.';
+
+  @override
+  String get browseRequestsEmptyAction => 'أضف رحلة';
+
+  @override
+  String get browseNoMatchTitle => 'لا توجد نتائج';
+
+  @override
+  String get browseNoMatchBody =>
+      'لا شيء يطابق عوامل التصفية. جرّب مدنًا أخرى أو تاريخًا آخر.';
+
+  @override
+  String get browseClearFilters => 'مسح عوامل التصفية';
+
+  @override
+  String browseClearFilter(String label) {
+    return 'مسح $label';
+  }
+
+  @override
+  String get browseFilterFrom => 'من';
+
+  @override
+  String get browseFilterTo => 'إلى';
+
+  @override
+  String get browseFilterDate => 'ابتداءً من';
+
+  @override
+  String get countryAlgeria => 'الجزائر';
+
+  @override
+  String get countryFrance => 'فرنسا';
+
+  @override
+  String get countrySpain => 'إسبانيا';
+
+  @override
+  String get countryGermany => 'ألمانيا';
+
+  @override
+  String get corridorAll => 'كل المسارات';
+
+  @override
+  String corridorA11y(String from, String to) {
+    return 'من $from إلى $to';
+  }
+
+  @override
+  String get discoveryListingsOffTitle => 'غير متاح حاليًا';
+
+  @override
+  String get discoveryListingsOff =>
+      'تصفّح الرحلات والطرود متوقف مؤقتًا. تفقّد لاحقًا.';
+
+  @override
+  String get discoveryProfilesOffTitle => 'غير متاح حاليًا';
+
+  @override
+  String get discoveryProfilesOff =>
+      'الملفات العامة متوقفة مؤقتًا. تفقّد لاحقًا.';
+
+  @override
+  String get discoveryProfileGone => 'هذا الملف لم يعد متاحًا.';
+
+  @override
+  String get discoveryShowingEarlier => 'نعرض ما حمّلناه سابقًا';
+
+  @override
+  String get requestCarryAction => 'يمكنني حمله';
+
+  @override
+  String get carryExplain =>
+      'أخبر المرسل أنك تستطيع حمله. هذا ليس عرضًا: لا سعر ولا حجز، والمرسل هو من يقرر الخطوة التالية.';
+
+  @override
+  String get carryChooseTrip => 'أي رحلة؟';
+
+  @override
+  String get carryChooseTripHint => 'اختر الرحلة التي ستحمله عليها.';
+
+  @override
+  String get carryPublishTrip => 'أضف رحلة لحمله';
+
+  @override
+  String get carrySentTitle => 'تم إشعار المرسل';
+
+  @override
+  String get carryAlreadySentTitle => 'أُرسل مسبقًا';
+
+  @override
+  String get carrySentBody =>
+      'وصل المرسل إشعار واحد بأنك تستطيع حمله. يمكنه الاطلاع على رحلتك واقتراح توصيل. لا شيء محجوز.';
+
+  @override
+  String get carryIncompatible => 'هذا الطرد لا يناسب تلك الرحلة:';
+
+  @override
+  String get carryDailyCap => 'بلغت الحد اليومي لـ «يمكنني حمله». حاول غدًا.';
+
+  @override
+  String get carryRequestGone => 'هذا الطرد لم يعد مفتوحًا.';
+
+  @override
+  String get carryJourneyGone => 'هذه الرحلة لم تعد متاحة.';
+
+  @override
+  String get rejectCapacity => 'لا توجد مساحة كافية على كل مرحلة.';
+
+  @override
+  String get rejectDeadline => 'سيصل بعد الموعد النهائي.';
+
+  @override
+  String get rejectTiming => 'التواريخ غير متوافقة.';
+
+  @override
+  String get rejectRoute => 'الالتفاف عن المسار كبير جدًا.';
+
+  @override
+  String get rejectClosed => 'أحدهما لم يعد مفتوحًا.';
+
+  @override
+  String get rejectVerification => 'لم يكتمل توثيق المسافر.';
+
+  @override
+  String get rejectItem => 'لا يمكن نقل هذا الغرض في هذه الرحلة.';
+
+  @override
+  String get rejectGeneric => 'الرحلة والطرد غير متطابقين.';
+
+  @override
+  String get focusTripMissingTitle => 'هذه الرحلة لا تناسب هذا الطرد';
+
+  @override
+  String get focusTripMissingBody =>
+      'هذه الرحلة غير موجودة في قائمة المسافرين المناسبين.';
+
+  @override
+  String tripLeaves(String date) {
+    return 'تنطلق في $date';
+  }
+
+  @override
+  String get tripArrives => 'الوصول';
+
+  @override
+  String get tripSpace => 'المساحة المتاحة';
+
+  @override
+  String get tripCapacityUnder5 => 'أقل من 5 كغ متاحة';
+
+  @override
+  String get tripCapacity5to10 => 'من 5 إلى 10 كغ متاحة';
+
+  @override
+  String get tripCapacity10to20 => 'من 10 إلى 20 كغ متاحة';
+
+  @override
+  String get tripCapacity20Plus => '20 كغ أو أكثر متاحة';
+
+  @override
+  String get tripPreviewSubtitle => 'أنت من يقترح أولًا. لا يُحجز شيء من هنا.';
+
+  @override
+  String get tripChooseParcel => 'اختر أحد طرودك';
+
+  @override
+  String get tripPostForRoute => 'انشر طردًا لهذا المسار';
+
+  @override
+  String requestCardDeadline(String date) {
+    return 'قبل $date';
+  }
+
+  @override
+  String requestCardFrom(String name) {
+    return 'من $name';
+  }
+
+  @override
+  String get requestOfferedReward => 'المكافأة المعروضة';
+
+  @override
+  String publicRatingA11y(String rating) {
+    return 'التقييم $rating من 5';
+  }
+
+  @override
+  String get profileNoUsualRoutes => 'لا توجد مسارات معتادة';
+
+  @override
+  String get homeMatchesTitle => 'مطابقات لك';
+
+  @override
+  String get homeMatchesEmptyTitle => 'لا توجد مطابقات بعد';
+
+  @override
+  String get homeMatchesSenderNone =>
+      'انشر طردًا وسيظهر هنا المسافرون المناسبون له.';
+
+  @override
+  String get homeMatchesSenderWaiting =>
+      'لا يوجد مسافر مناسب لطرودك المفتوحة بعد. سيظهر هنا فور وجوده.';
+
+  @override
+  String get homeMatchesTravelerNone =>
+      'أضف رحلة وستظهر هنا الطرود المناسبة لها.';
+
+  @override
+  String get homeMatchesTravelerWaiting =>
+      'لا يوجد طرد مناسب لرحلاتك بعد. سيظهر هنا فور وجوده.';
+
+  @override
+  String get homeTripsTitle => 'رحلات تنطلق قريبًا';
+
+  @override
+  String get homeTripsEmptyBody => 'ستظهر هنا الرحلات التي توشك على الانطلاق.';
+
+  @override
+  String get homeRequestsTitle => 'طرود تبحث عن مسافر';
+
+  @override
+  String get homeRequestsEmptyBody => 'ستظهر هنا الطرود التي تبحث عن مسافر.';
+
+  @override
+  String get homeListingsEmptyTitle => 'لا شيء معروضًا بعد';
+
+  @override
+  String get homeListingsEmptyRouteTitle => 'لا شيء على هذا المسار بعد';
+
+  @override
+  String get homePeopleSenderTitle => 'مسافرون على Wassla';
+
+  @override
+  String get homePeopleTravelerTitle => 'مرسلون على Wassla';
+
+  @override
+  String get homePeopleEmptyTitle => 'لا توجد ملفات عامة بعد';
+
+  @override
+  String get homePeopleEmptyBody =>
+      'سيظهر هنا الأشخاص الذين يختارون عرض ملف عام.';
+
+  @override
+  String get optInTitle => 'كن ظاهرًا على Wassla';
+
+  @override
+  String get optInBody =>
+      'اسمح للمرسلين والمسافرين بالعثور عليك. يظهر فقط اسمك الأول وشارات الثقة والمسارات التي تختارها.';
+
+  @override
+  String get optInPreviewLabel => 'هذا ما سيراه الآخرون';
+
+  @override
+  String get optInShow => 'إظهار ملفي';
+
+  @override
+  String get optInNotNow => 'ليس الآن';
+
+  @override
+  String get personTitle => 'الملف';
+
+  @override
+  String get personGoneTitle => 'الملف غير متاح';
+
+  @override
+  String get personUsualRoutes => 'المسارات المعتادة';
+
+  @override
+  String personAlertHint(String name) {
+    return 'فعّل تنبيهًا لتعرف عندما ينشر $name على مسار.';
+  }
+
+  @override
+  String personNoUsualRoutes(String name) {
+    return 'لم يضف $name مسارات معتادة.';
+  }
+
+  @override
+  String personTrips(String name) {
+    return 'رحلات $name';
+  }
+
+  @override
+  String personRequests(String name) {
+    return 'طرود $name';
+  }
+
+  @override
+  String personNothingListed(String name) {
+    return 'ليس لدى $name رحلات قائمة أو طرود مفتوحة حاليًا.';
+  }
+
+  @override
+  String get publicProfileTitle => 'الملف العام';
+
+  @override
+  String get publicProfileIntro =>
+      'يتيح الملف العام للمرسلين والمسافرين العثور عليك ومتابعة مساراتك. وهو متوقف ما لم تفعّله، ويمكنك إيقافه في أي وقت.';
+
+  @override
+  String get publicShownTitle => 'ما يراه الآخرون';
+
+  @override
+  String get publicShownFirstName => 'اسمك الأول';
+
+  @override
+  String get publicShownTrust => 'هل هويتك موثّقة، وتقييمك، وتوصيلاتك المكتملة';
+
+  @override
+  String get publicShownMemberSince => 'شهر وسنة انضمامك';
+
+  @override
+  String get publicShownRoutes => 'المسارات المعتادة التي تختارها';
+
+  @override
+  String get publicNeverTitle => 'لا يظهر أبدًا';
+
+  @override
+  String get publicNeverContact =>
+      'اسم العائلة أو البريد الإلكتروني أو رقم الهاتف';
+
+  @override
+  String get publicNeverPlaces => 'عنوان أو موقع دقيق';
+
+  @override
+  String get publicShowSwitch => 'إظهار ملفي العام';
+
+  @override
+  String get publicSwitchOn => 'يمكن للآخرين العثور عليك.';
+
+  @override
+  String get publicSwitchOff => 'لا يستطيع الآخرون العثور عليك.';
+
+  @override
+  String get publicProfileOn => 'تم تفعيل ملفك العام';
+
+  @override
+  String get publicHiddenNotice => 'ملفك غير ظاهر للآخرين حاليًا.';
+
+  @override
+  String get publicRoutesTitle => 'المسارات المعتادة';
+
+  @override
+  String get publicRoutesHint =>
+      'حتى ثلاثة مسارات تسلكها أو ترسل عليها كثيرًا.';
+
+  @override
+  String get publicRoutesLimit => 'أضفت الحد الأقصى وهو ثلاثة مسارات.';
+
+  @override
+  String get publicRouteAdd => 'إضافة مسار معتاد';
+
+  @override
+  String get publicRouteFrom => 'المسار المعتاد: من';
+
+  @override
+  String get publicRouteTo => 'المسار المعتاد: إلى';
+
+  @override
+  String publicRouteRemove(String route) {
+    return 'حذف $route';
+  }
+
+  @override
+  String get publicRouteDuplicate => 'هذا المسار موجود بالفعل في ملفك.';
+
+  @override
+  String get publicPreviewTitle => 'بطاقتك العامة';
+
+  @override
+  String get publicPreviewVisible => 'هذا ما يراه الآخرون الآن.';
+
+  @override
+  String get publicPreviewHidden => 'هذا ما سيراه الآخرون إن فعّلته.';
+
+  @override
+  String get notificationRouteAlert => 'جديد على مسار تتابعه';
+
+  @override
+  String get notificationTravelerInterested => 'مسافر يستطيع حمل طردك';
 }

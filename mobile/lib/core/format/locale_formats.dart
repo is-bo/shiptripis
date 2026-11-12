@@ -44,6 +44,11 @@ abstract final class LocaleFormats {
   static String dayMonth(Locale locale, DateTime when) =>
       DateFormat.MMMd(intlTag(locale)).format(when.toLocal());
 
+  /// `November 2026` / `novembre 2026` — for "member since", where the day is
+  /// deliberately not shown.
+  static String monthYear(Locale locale, DateTime when) =>
+      DateFormat.yMMMM(intlTag(locale)).format(when);
+
   /// `14 March 2026`
   static String fullDate(Locale locale, DateTime when) =>
       DateFormat.yMMMMd(intlTag(locale)).format(when.toLocal());

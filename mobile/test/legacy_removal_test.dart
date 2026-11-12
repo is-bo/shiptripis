@@ -85,9 +85,9 @@ void main() {
     });
 
     test('the six retired refusal codes are not recognised', () {
-      // No server code sends them. The three still sent are kept in
-      // error_codes.dart: product_request_retired, legacy_contract_not_supported
-      // and airport_filter_retired.
+      // No server code sends them. The two still sent are kept in
+      // error_codes.dart: product_request_retired and
+      // legacy_contract_not_supported.
       for (final code in [
         'legacy_matching_flow_retired',
         'legacy_delivery_flow_retired',
@@ -97,6 +97,24 @@ void main() {
         'legacy_payment_retired',
       ]) {
         _expectAbsent(source, RegExp(code));
+      }
+    });
+
+    test('the shallow journey-search and open-feed reads stay deleted', () {
+      // L2B replaced them with the discovery reads, which carry the same rows
+      // as cards and page on the server's own cursor. Nothing may read the
+      // old endpoints, and the airport-only filter code is not recognised.
+      for (final name in [
+        'searchPage',
+        'openFeedPage',
+        'JourneySearchPage',
+        'OpenRequestPage',
+        'discoveryPageSize',
+        'airport_filter_retired',
+        '/api/journeys/search',
+        '/api/parcels/open',
+      ]) {
+        _expectAbsent(source, RegExp(RegExp.escape(name)));
       }
     });
 

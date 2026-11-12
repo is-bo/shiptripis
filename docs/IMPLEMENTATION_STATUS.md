@@ -1,5 +1,21 @@
 # Waçla V1 Implementation Status
 
+## Wassla L2B — discovery on Home, mobile (2026-11-12)
+
+Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;
+`main` untouched.
+
+Home now shows the L2A discovery tiers below the member's own content: Matches for you, a one-time
+opt-in card, Trips leaving soon or Parcels looking for a traveler with corridor chips, and a People
+row. Browse trips, Browse requests and People page lazily on the server's cursor with from, to and
+date filters and a preview sheet; "I can carry this" is a signal, never an offer. Person page with a
+route-alert switch per usual route; Profile gains Public profile (opt-in, off by default, exact
+preview) and Route alerts. The two new notification channels open the right screen from the bell,
+from push and from the live socket. Every section loads on its own and has skeleton, empty, error,
+and disabled states; a cold start to Home still costs 7 requests. Old `searchPage` and `openFeedPage`
+callers are removed. Detail: `docs/PHASE_L2B_DISCOVERY_HOME.md`. Analyzer clean; Flutter 1,299 passed
+(1,087 before).
+
 ## Wassla L2A — discovery backend and marketplace policy (2026-11-12)
 
 Status: **in review**, pull request into `feature/discovery-professional-delivery`. No deployment;

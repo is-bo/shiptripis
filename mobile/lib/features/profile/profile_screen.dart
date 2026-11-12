@@ -94,6 +94,16 @@ class ProfileScreen extends ConsumerWidget {
 
             SectionHeader(title: l.profileAccount),
             _Row(
+              icon: Icons.public_rounded,
+              label: l.publicProfileTitle,
+              onTap: () => context.openPublicProfile(),
+            ),
+            _Row(
+              icon: Icons.add_alert_outlined,
+              label: l.alertsTitle,
+              onTap: () => context.openRouteAlerts(),
+            ),
+            _Row(
               icon: Icons.notifications_active_outlined,
               label: l.profileNotificationSettings,
               onTap: () => context.pushNamed(Routes.profileNotifications),

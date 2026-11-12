@@ -2401,5 +2401,248 @@
   },
   "guestPayHandoffTitle": "Finish on the payment page",
   "guestPayHandoffBody": "Complete the payment on our payment partner's secure page. That page will show you the result, and the person who asked you will see it in Wassla.",
-  "payResultDepositCredited": "This deposit counts toward your delivery total when a traveler accepts."
+  "payResultDepositCredited": "This deposit counts toward your delivery total when a traveler accepts.",
+  "alertsTitle": "Route alerts",
+  "alertsIntro": "We send at most one notification per alert every few hours.",
+  "alertsEmptyTitle": "No route alerts yet",
+  "alertsEmptyBody": "Get a notification when a trip or a parcel appears on a route you care about.",
+  "alertAdd": "Add alert",
+  "alertAddTitle": "New route alert",
+  "alertAddSubtitle": "We'll notify you when something new appears on this route.",
+  "alertCreate": "Create alert",
+  "alertPickCity": "Choose a city",
+  "alertWatchLabel": "Watch for",
+  "alertWatchesTrips": "New trips",
+  "alertWatchesRequests": "New parcels",
+  "alertFollowing": "Following {name}",
+  "@alertFollowing": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "alertRemoveA11y": "Remove alert for {route}",
+  "@alertRemoveA11y": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "alertRemoved": "Alert removed",
+  "alertSwitchLabel": "Alert me about this route",
+  "alertTurnedOn": "Alert turned on",
+  "alertTurnedOff": "Alert turned off",
+  "alertLimitReached": "You have reached the maximum number of active alerts. Remove one to add another.",
+  "alertSameCity": "Choose two different cities.",
+  "alertSelf": "You can't follow yourself.",
+  "browseTripsTitle": "Trips leaving soon",
+  "browseRequestsTitle": "Parcels looking for a traveler",
+  "browseTripsEmptyTitle": "No trips right now",
+  "browseTripsEmptyBody": "Trips appear here as soon as travelers publish them.",
+  "browseTripsEmptyAction": "Send a parcel",
+  "browseRequestsEmptyTitle": "No open parcels right now",
+  "browseRequestsEmptyBody": "Parcels appear here as soon as senders post them.",
+  "browseRequestsEmptyAction": "Add a journey",
+  "browseNoMatchTitle": "No results",
+  "browseNoMatchBody": "Nothing matches these filters. Try other cities or another date.",
+  "browseClearFilters": "Clear filters",
+  "browseClearFilter": "Clear {label}",
+  "@browseClearFilter": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "browseFilterFrom": "From",
+  "browseFilterTo": "To",
+  "browseFilterDate": "From date",
+  "countryAlgeria": "Algeria",
+  "countryFrance": "France",
+  "countrySpain": "Spain",
+  "countryGermany": "Germany",
+  "corridorAll": "All routes",
+  "corridorA11y": "From {from} to {to}",
+  "@corridorA11y": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "discoveryListingsOffTitle": "Not available right now",
+  "discoveryListingsOff": "Browsing trips and parcels is paused for now. Please check back later.",
+  "discoveryProfilesOffTitle": "Not available right now",
+  "discoveryProfilesOff": "Public profiles are paused for now. Please check back later.",
+  "discoveryProfileGone": "This profile is no longer available.",
+  "discoveryShowingEarlier": "Showing what we loaded earlier",
+  "requestCarryAction": "I can carry this",
+  "carryExplain": "Tell the sender you could carry this. It isn't an offer: there is no price, nothing is reserved, and the sender decides what happens next.",
+  "carryChooseTrip": "Which trip?",
+  "carryChooseTripHint": "Pick the journey you would carry this on.",
+  "carryPublishTrip": "Add a journey to carry this",
+  "carrySentTitle": "Sender notified",
+  "carryAlreadySentTitle": "Already sent",
+  "carrySentBody": "The sender got one notification that you can carry this. They can look at your trip and propose a delivery. Nothing is reserved.",
+  "carryIncompatible": "This parcel doesn't fit that trip:",
+  "carryDailyCap": "You have reached today's limit for \"I can carry this\". Try again tomorrow.",
+  "carryRequestGone": "That parcel is no longer open.",
+  "carryJourneyGone": "That trip is no longer available.",
+  "rejectCapacity": "There isn't enough space left on every leg.",
+  "rejectDeadline": "It would arrive after the deadline.",
+  "rejectTiming": "The dates don't line up.",
+  "rejectRoute": "The detour from the route is too large.",
+  "rejectClosed": "One of them is no longer open.",
+  "rejectVerification": "The traveler's verification isn't complete.",
+  "rejectItem": "This item can't be carried on this trip.",
+  "rejectGeneric": "The trip and the parcel don't match.",
+  "focusTripMissingTitle": "That trip doesn't fit this parcel",
+  "focusTripMissingBody": "This trip isn't in your list of compatible travelers.",
+  "tripLeaves": "Leaves {date}",
+  "@tripLeaves": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "tripArrives": "Arrives",
+  "tripSpace": "Space left",
+  "tripCapacityUnder5": "Under 5 kg left",
+  "tripCapacity5to10": "5–10 kg left",
+  "tripCapacity10to20": "10–20 kg left",
+  "tripCapacity20Plus": "20 kg or more left",
+  "tripPreviewSubtitle": "You propose first. Nothing is booked from here.",
+  "tripChooseParcel": "Choose one of your parcels",
+  "tripPostForRoute": "Post a parcel for this route",
+  "requestCardDeadline": "By {date}",
+  "@requestCardDeadline": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "requestCardFrom": "From {name}",
+  "@requestCardFrom": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "requestOfferedReward": "Offered reward",
+  "publicRatingA11y": "Rated {rating} out of 5",
+  "@publicRatingA11y": {
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      }
+    }
+  },
+  "profileNoUsualRoutes": "No usual routes shown",
+  "homeMatchesTitle": "Matches for you",
+  "homeMatchesEmptyTitle": "No matches yet",
+  "homeMatchesSenderNone": "Post a parcel and the travelers who fit it will show up here.",
+  "homeMatchesSenderWaiting": "No traveler fits your open parcels yet. We'll show them here as soon as one does.",
+  "homeMatchesTravelerNone": "Add a journey and the parcels that fit it will show up here.",
+  "homeMatchesTravelerWaiting": "No parcel fits your journeys yet. We'll show them here as soon as one does.",
+  "homeTripsTitle": "Trips leaving soon",
+  "homeTripsEmptyBody": "Trips that are about to leave will show up here.",
+  "homeRequestsTitle": "Parcels looking for a traveler",
+  "homeRequestsEmptyBody": "Parcels that need a traveler will show up here.",
+  "homeListingsEmptyTitle": "Nothing listed yet",
+  "homeListingsEmptyRouteTitle": "Nothing on this route yet",
+  "homePeopleSenderTitle": "Travelers on Wassla",
+  "homePeopleTravelerTitle": "Senders on Wassla",
+  "homePeopleEmptyTitle": "No public profiles yet",
+  "homePeopleEmptyBody": "People who choose to show a public profile will appear here.",
+  "optInTitle": "Be found on Wassla",
+  "optInBody": "Let senders and travelers find you. Only your first name, your trust badges and the routes you choose are shown.",
+  "optInPreviewLabel": "This is what others would see",
+  "optInShow": "Show my profile",
+  "optInNotNow": "Not now",
+  "personTitle": "Profile",
+  "personGoneTitle": "Profile unavailable",
+  "personUsualRoutes": "Usual routes",
+  "personAlertHint": "Turn on an alert to hear when {name} posts on a route.",
+  "@personAlertHint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "personNoUsualRoutes": "{name} hasn't added usual routes.",
+  "@personNoUsualRoutes": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "personTrips": "{name}'s trips",
+  "@personTrips": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "personRequests": "{name}'s parcels",
+  "@personRequests": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "personNothingListed": "{name} has no live trips or open parcels right now.",
+  "@personNothingListed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "publicProfileTitle": "Public profile",
+  "publicProfileIntro": "A public profile lets senders and travelers find you and follow your routes. It is off unless you turn it on, and you can turn it off at any time.",
+  "publicShownTitle": "What others see",
+  "publicShownFirstName": "Your first name",
+  "publicShownTrust": "Whether your identity is verified, your rating and your completed deliveries",
+  "publicShownMemberSince": "The month and year you joined",
+  "publicShownRoutes": "The usual routes you choose",
+  "publicNeverTitle": "Never shown",
+  "publicNeverContact": "Your last name, email or phone number",
+  "publicNeverPlaces": "An exact address or position",
+  "publicShowSwitch": "Show my public profile",
+  "publicSwitchOn": "Others can find you.",
+  "publicSwitchOff": "Others can't find you.",
+  "publicProfileOn": "Your public profile is on",
+  "publicHiddenNotice": "Your profile is not currently visible to others.",
+  "publicRoutesTitle": "Usual routes",
+  "publicRoutesHint": "Up to three routes you often travel or send on.",
+  "publicRoutesLimit": "You've added the maximum of three routes.",
+  "publicRouteAdd": "Add a usual route",
+  "publicRouteFrom": "Usual route: from",
+  "publicRouteTo": "Usual route: to",
+  "publicRouteRemove": "Remove {route}",
+  "@publicRouteRemove": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "publicRouteDuplicate": "That route is already on your profile.",
+  "publicPreviewTitle": "Your public card",
+  "publicPreviewVisible": "This is what others see right now.",
+  "publicPreviewHidden": "This is what others would see if you turn it on.",
+  "notificationRouteAlert": "New on a route you follow",
+  "notificationTravelerInterested": "A traveler can carry your parcel"
 }

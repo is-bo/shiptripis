@@ -33,6 +33,7 @@ import 'package:go_router/go_router.dart';
 import '../core/session/session.dart';
 import '../domain/canonical_place.dart';
 import '../domain/location.dart';
+import '../domain/public_discovery.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/auth/sign_up_screen.dart';
@@ -47,6 +48,10 @@ import '../features/deals/pickup_screen.dart';
 import '../features/deals/rate_screen.dart';
 import '../features/deals/recipient_screen.dart';
 import '../features/deliveries/deliveries_screen.dart';
+import '../features/discovery/alerts_screen.dart';
+import '../features/discovery/browse_screens.dart';
+import '../features/discovery/person_screen.dart';
+import '../features/discovery/public_profile_screen.dart';
 import '../features/disputes/dispute_detail_screen.dart';
 import '../features/disputes/dispute_open_screen.dart';
 import '../features/guest/guest_pay_screen.dart';
@@ -97,6 +102,11 @@ abstract final class Routes {
 
   static const notifications = 'notifications';
 
+  static const browseTrips = 'browse-trips';
+  static const browseRequests = 'browse-requests';
+  static const browsePeople = 'browse-people';
+  static const person = 'person';
+
   static const requestCreate = 'request-create';
   static const requestDetail = 'request-detail';
   static const requestDeposit = 'request-deposit';
@@ -132,6 +142,8 @@ abstract final class Routes {
   static const profileNotifications = 'profile-notifications';
   static const profileAppearance = 'profile-appearance';
   static const profileRatings = 'profile-ratings';
+  static const profilePublic = 'profile-public';
+  static const profileAlerts = 'profile-alerts';
   static const profilePayouts = 'profile-payouts';
   static const profilePayoutMethods = 'profile-payout-methods';
   static const dzdProfileSetup = 'dzd-profile-setup';
@@ -308,11 +320,57 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const NotificationsScreen(),
       ),
 
+      // ---- Discovery ----
+      GoRoute(
+        path: '/discover/trips',
+        name: Routes.browseTrips,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => BrowseTripsScreen(
+          corridor: _corridor(state),
+          alertId: int.tryParse(state.uri.queryParameters['alert'] ?? ''),
+          focusJourneyId: int.tryParse(
+            state.uri.queryParameters['focus'] ?? '',
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/discover/requests',
+        name: Routes.browseRequests,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => BrowseRequestsScreen(
+          corridor: _corridor(state),
+          alertId: int.tryParse(state.uri.queryParameters['alert'] ?? ''),
+          focusRequestId: int.tryParse(
+            state.uri.queryParameters['focus'] ?? '',
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/discover/people',
+        name: Routes.browsePeople,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BrowsePeopleScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            name: Routes.person,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                PersonScreen(profileId: state.pathParameters['id'] ?? ''),
+          ),
+        ],
+      ),
+
       GoRoute(
         path: '/requests/new',
         name: Routes.requestCreate,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const RequestCreateScreen(),
+        builder: (context, state) {
+          final prefill = state.extra;
+          return RequestCreateScreen(
+            prefill: prefill is RequestRoutePrefill ? prefill : null,
+          );
+        },
       ),
       GoRoute(
         path: '/requests/:id',
@@ -332,8 +390,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'discovery',
             name: Routes.requestDiscovery,
             parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) =>
-                DiscoveryScreen(requestId: _id(state, 'id')),
+            builder: (context, state) => DiscoveryScreen(
+              requestId: _id(state, 'id'),
+              // A trip chosen in Browse, or named by an "I can carry this"
+              // notification. Opens that trip's card once the list has it.
+              focusJourneyId: int.tryParse(
+                state.uri.queryParameters['journey'] ?? '',
+              ),
+            ),
           ),
           GoRoute(
             path: 'boost',
@@ -514,6 +578,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AppearanceScreen(),
       ),
       GoRoute(
+        path: '/profile/public',
+        name: Routes.profilePublic,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PublicProfileScreen(),
+      ),
+      GoRoute(
+        path: '/profile/alerts',
+        name: Routes.profileAlerts,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AlertsScreen(),
+      ),
+      GoRoute(
         path: '/profile/ratings',
         name: Routes.profileRatings,
         parentNavigatorKey: _rootNavigatorKey,
@@ -556,6 +632,15 @@ final routerProvider = Provider<GoRouter>((ref) {
 int _id(GoRouterState state, String key) =>
     int.tryParse(state.pathParameters[key] ?? '') ?? 0;
 
+/// The corridor a Browse link names: an origin and a destination country.
+Corridor? _corridor(GoRouterState state) {
+  final origin = state.uri.queryParameters['from'];
+  final destination = state.uri.queryParameters['to'];
+  if (origin == null || destination == null) return null;
+  final corridor = Corridor(origin.toUpperCase(), destination.toUpperCase());
+  return Corridor.launchCorridors.contains(corridor) ? corridor : null;
+}
+
 // ---------------------------------------------------------------------------
 // Navigation helpers
 // ---------------------------------------------------------------------------
@@ -566,7 +651,17 @@ extension AppNavigation on BuildContext {
   void goHome() => goNamed(Routes.home);
   void goDeliveries() => goNamed(Routes.deliveries);
 
-  Future<void> openRequestCreate() => pushNamed(Routes.requestCreate);
+  /// Opens the request form, optionally with the route already chosen (a trip
+  /// the sender found in Browse).
+  Future<void> openRequestCreate({
+    CanonicalPlace? pickup,
+    CanonicalPlace? delivery,
+  }) => pushNamed(
+    Routes.requestCreate,
+    extra: pickup == null && delivery == null
+        ? null
+        : RequestRoutePrefill(pickup: pickup, delivery: delivery),
+  );
 
   void openRequest(int id) =>
       pushNamed(Routes.requestDetail, pathParameters: {'id': '$id'});
@@ -574,8 +669,54 @@ extension AppNavigation on BuildContext {
   void openDeposit(int requestId) =>
       pushNamed(Routes.requestDeposit, pathParameters: {'id': '$requestId'});
 
-  void openDiscovery(int requestId) =>
-      pushNamed(Routes.requestDiscovery, pathParameters: {'id': '$requestId'});
+  /// Find Travelers for one request. [focusJourneyId] puts one trip in focus:
+  /// its card opens as soon as the list has it, or the server's reason for
+  /// not listing it is shown.
+  void openDiscovery(int requestId, {int? focusJourneyId}) => pushNamed(
+    Routes.requestDiscovery,
+    pathParameters: {'id': '$requestId'},
+    queryParameters: {if (focusJourneyId != null) 'journey': '$focusJourneyId'},
+  );
+
+  /// Browse trips. [alertId] and [focusJourneyId] come from a route-alert
+  /// notification: the alert's own route becomes the filter and the trip that
+  /// triggered it opens.
+  void openBrowseTrips({
+    Corridor? corridor,
+    int? alertId,
+    int? focusJourneyId,
+  }) => pushNamed(
+    Routes.browseTrips,
+    queryParameters: {
+      if (corridor != null) 'from': corridor.originCountry,
+      if (corridor != null) 'to': corridor.destinationCountry,
+      if (alertId != null) 'alert': '$alertId',
+      if (focusJourneyId != null) 'focus': '$focusJourneyId',
+    },
+  );
+
+  void openBrowseRequests({
+    Corridor? corridor,
+    int? alertId,
+    int? focusRequestId,
+  }) => pushNamed(
+    Routes.browseRequests,
+    queryParameters: {
+      if (corridor != null) 'from': corridor.originCountry,
+      if (corridor != null) 'to': corridor.destinationCountry,
+      if (alertId != null) 'alert': '$alertId',
+      if (focusRequestId != null) 'focus': '$focusRequestId',
+    },
+  );
+
+  void openBrowsePeople() => pushNamed(Routes.browsePeople);
+
+  void openPerson(String profileId) =>
+      pushNamed(Routes.person, pathParameters: {'id': profileId});
+
+  void openPublicProfile() => pushNamed(Routes.profilePublic);
+
+  void openRouteAlerts() => pushNamed(Routes.profileAlerts);
 
   void openBoost(int requestId) =>
       pushNamed(Routes.requestBoost, pathParameters: {'id': '$requestId'});

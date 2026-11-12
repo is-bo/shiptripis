@@ -14,6 +14,8 @@
 /// - Safe state handling for `results`, `no_candidates`, `request_ineligible`, and errors.
 library;
 
+import 'dart:async';
+
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +41,8 @@ import '../../design/tokens.dart';
 import '../../domain/find_travelers.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
+import '../common/traveler_candidate_card.dart';
+import '../discovery/discovery_actions.dart' show rejectionReasons;
 import 'checkout_section.dart';
 
 // ---------------------------------------------------------------------------
@@ -328,15 +332,95 @@ final findTravelersControllerProvider = ChangeNotifierProvider.autoDispose
 // Screen
 // ---------------------------------------------------------------------------
 
-class DiscoveryScreen extends ConsumerWidget {
-  const DiscoveryScreen({required this.requestId, super.key});
+class DiscoveryScreen extends ConsumerStatefulWidget {
+  const DiscoveryScreen({
+    required this.requestId,
+    this.focusJourneyId,
+    super.key,
+  });
 
   final int requestId;
 
+  /// A trip to put in focus: opened from Browse, or named by an "I can carry
+  /// this" notification. Its card opens as soon as the list holds it. If the
+  /// whole list is read and it is not there, the screen says why, using the
+  /// server's own verdict for the pair, and leaves the list as it is.
+  final int? focusJourneyId;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DiscoveryScreen> createState() => _DiscoveryScreenState();
+}
+
+class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
+  int get requestId => widget.requestId;
+
+  /// The focus has been dealt with: opened, or explained.
+  bool _focusDone = false;
+
+  /// Why the focused trip is not in the list, as the server's machine codes.
+  /// Null until it has been asked; empty when the server gave none.
+  List<String>? _focusMissingCodes;
+
+  /// Looks for the focused trip in what has been read so far. One step per
+  /// frame: open it if it is there, read the next page if there is one, and
+  /// explain its absence when the list is exhausted.
+  void _resolveFocus(FindTravelersController controller) {
+    final focus = widget.focusJourneyId;
+    final state = controller.state;
+    if (focus == null || _focusDone || state == null || controller.isLoading) {
+      return;
+    }
+
+    final found = state.candidates
+        .where((candidate) => candidate.journeyId == focus)
+        .firstOrNull;
+    if (found != null) {
+      _focusDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openTripDetail(context, ref, found, state));
+      });
+      return;
+    }
+
+    final canReadMore =
+        state.envelopeState == DiscoveryState.results &&
+        state.hasMore &&
+        state.paginationError == null;
+    if (canReadMore) {
+      if (!state.isLoadingMore) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(controller.loadMore());
+        });
+      }
+      return;
+    }
+
+    _focusDone = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_explainMissingFocus(focus));
+    });
+  }
+
+  Future<void> _explainMissingFocus(int journeyId) async {
+    List<String> codes = const [];
+    try {
+      await ref
+          .read(matchingRepositoryProvider)
+          .quote(parcelId: requestId, journeyId: journeyId);
+    } on ApiException catch (error) {
+      if (error.code == ApiErrorCode.incompatibleCandidate) {
+        codes = error.stringListExtra('rejection_codes');
+      }
+    }
+    if (!mounted) return;
+    setState(() => _focusMissingCodes = codes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l = L.of(context);
     final controller = ref.watch(findTravelersControllerProvider(requestId));
+    _resolveFocus(controller);
 
     return AppScaffold(
       topBar: AppTopBar(title: l.discoveryTravelersTitle, showBack: true),
@@ -366,7 +450,7 @@ class DiscoveryScreen extends ConsumerWidget {
             return const SizedBox.shrink();
           }
 
-          return switch (state.envelopeState) {
+          final body = switch (state.envelopeState) {
             DiscoveryState.noCandidates => _NoCandidatesView(
               requestId: requestId,
               onRefresh: () => controller.refresh(),
@@ -390,6 +474,31 @@ class DiscoveryScreen extends ConsumerWidget {
                           _openTripDetail(context, ref, candidate, state),
                     ),
           };
+
+          final missing = _focusMissingCodes;
+          if (missing == null) return body;
+          final reasons = rejectionReasons(l, missing);
+          return Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpace.gutter,
+                  AppSpace.md,
+                  AppSpace.gutter,
+                  0,
+                ),
+                child: InfoNotice(
+                  title: l.focusTripMissingTitle,
+                  message: reasons.isEmpty
+                      ? l.focusTripMissingBody
+                      : reasons.map((reason) => '• $reason').join('\n'),
+                  tone: StatusTone.waiting,
+                  icon: Icons.info_outline_rounded,
+                ),
+              ),
+              Expanded(child: body),
+            ],
+          );
         },
       ),
     );
@@ -507,7 +616,7 @@ class _CandidateListView extends StatelessWidget {
               final candidate = state.candidates[candidateIndex];
               return Padding(
                 padding: const EdgeInsets.only(bottom: AppSpace.md),
-                child: _TravelerCard(
+                child: TravelerCandidateCard(
                   candidate: candidate,
                   onTap: candidate.can(CandidateAction.viewJourney)
                       ? () => onCandidateTap(candidate)
@@ -694,317 +803,6 @@ class _ListFooter extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Compact Candidate Card (~155dp UX target)
-// ---------------------------------------------------------------------------
-
-class _TravelerCard extends StatelessWidget {
-  const _TravelerCard({required this.candidate, required this.onTap});
-
-  final TravelerCandidate candidate;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final c = context.colors;
-    final text = Theme.of(context).textTheme;
-    final locale = Localizations.localeOf(context);
-
-    final traveler = candidate.traveler;
-    final canView = candidate.can(CandidateAction.viewJourney);
-
-    // Stops for InlineRoute
-    final stops = candidate.route.stops
-        .map((s) => InlineRouteStop(label: s.label, airportIata: s.airportIata))
-        .toList(growable: false);
-
-    // Travel meta: Mode · Date
-    final modeLabel = _modeSummary(context, candidate);
-    final departureText = candidate.departsAt != null
-        ? LocaleFormats.dayMonth(locale, candidate.departsAt!)
-        : null;
-    final travelMeta = departureText != null
-        ? '$modeLabel · $departureText'
-        : modeLabel;
-
-    // A Traveler with no display name used to be labelled "View trip", which
-    // read as a person called View trip. The row keeps its shape without
-    // inventing one.
-    final displayName = traveler.displayName.trim();
-    final hasName = displayName.isNotEmpty;
-
-    // Was `discoveryTravelersTitle`, so a screen reader read "Travelers for
-    // this parcel" once per card and never said who or where.
-    final routeLabel = candidate.route.stops
-        .map((s) => s.label)
-        .where((label) => label.isNotEmpty)
-        .join(' — ');
-
-    return AppCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(AppSpace.md),
-      semanticLabel: [
-        if (hasName) displayName,
-        if (routeLabel.isNotEmpty) routeLabel,
-        travelMeta,
-      ].join(' · '),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Row 1 — Person: Avatar / Name / Rating or New
-          Row(
-            children: [
-              AppAvatar(
-                initials: _initial(traveler.displayName),
-                name: hasName ? displayName : '',
-                size: 34,
-                isVerified: traveler.identityVerified,
-              ),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: hasName
-                    ? Text(
-                        displayName,
-                        style: text.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              const SizedBox(width: AppSpace.xs),
-              if (traveler.rating.hasScore)
-                Semantics(
-                  label: '${traveler.rating.average!.toStringAsFixed(1)} stars',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.star_rounded, size: 16, color: c.attention),
-                      const SizedBox(width: 2),
-                      Text(
-                        traveler.rating.average!.toStringAsFixed(1),
-                        style: text.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: c.brandSoft,
-                    borderRadius: AppRadius.rPill,
-                  ),
-                  child: Text(
-                    l.findTravelersNewTraveller,
-                    style: text.labelSmall?.copyWith(
-                      color: c.brandStrong,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-
-          const SizedBox(height: AppSpace.sm),
-
-          // Row 2 — Route: Horizontal InlineRoute with strict RTL travel sequence
-          InlineRoute(
-            stops: stops,
-            continuesBefore: candidate.route.continuesBefore,
-            continuesAfter: candidate.route.continuesAfter,
-          ),
-
-          const SizedBox(height: AppSpace.sm),
-
-          // Row 3 — Travel meta (Mode · Date) + Match quality (Route fit)
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.xs,
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width - 64,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      candidate.primaryMode.icon,
-                      size: 14,
-                      color: _modeAccent(context, candidate.primaryMode),
-                    ),
-                    const SizedBox(width: AppSpace.xs),
-                    Flexible(
-                      child: Text(
-                        travelMeta,
-                        style: text.bodySmall?.copyWith(
-                          color: c.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _RouteFitBadge(routeFit: candidate.routeFit),
-            ],
-          ),
-
-          const SizedBox(height: AppSpace.sm),
-
-          // Row 4 — Trust + Action (Deliveries count + View trip)
-          Row(
-            children: [
-              Expanded(
-                child: traveler.completedDeliveries > 0
-                    ? Text(
-                        l.findTravelersDeliveries(traveler.completedDeliveries),
-                        style: text.bodySmall?.copyWith(
-                          color: c.textTertiary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              if (canView)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      l.findTravelersViewTrip,
-                      style: text.labelMedium?.copyWith(
-                        color: c.brandInk,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: c.brandInk,
-                    ),
-                  ],
-                )
-              else
-                Text(
-                  l.findTravelersViewTrip,
-                  style: text.labelMedium?.copyWith(color: c.textTertiary),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _initial(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'T';
-    return trimmed.characters.first.toUpperCase();
-  }
-
-  static String _modeSummary(
-    BuildContext context,
-    TravelerCandidate candidate,
-  ) {
-    final modes = candidate.route.segments
-        .map((s) => s.mode)
-        .where((m) => m != TransportMode.unknown)
-        .toSet();
-
-    if (modes.contains(TransportMode.flight) &&
-        modes.contains(TransportMode.drive)) {
-      return '${transportModeLabel(context, TransportMode.flight)} + ${transportModeLabel(context, TransportMode.drive)}';
-    }
-    return transportModeLabel(context, candidate.primaryMode);
-  }
-
-  static Color _modeAccent(BuildContext context, TransportMode mode) {
-    final c = context.colors;
-    return switch (mode) {
-      TransportMode.flight => c.modeFlight,
-      TransportMode.drive => c.modeDrive,
-      TransportMode.unknown => c.textTertiary,
-    };
-  }
-}
-
-class _RouteFitBadge extends StatelessWidget {
-  const _RouteFitBadge({required this.routeFit});
-
-  final RouteFit routeFit;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = L.of(context);
-    final text = Theme.of(context).textTheme;
-
-    // A fit the client has never heard of is not a fit it may name. Claiming
-    // "Compatible route" for an unknown verdict is the client scoring the match,
-    // which is exactly what this screen does not do; the badge degrades away
-    // instead and the rest of the card still reads.
-    final (String label, StatusTone tone)? classified = switch (routeFit) {
-      RouteFit.excellent => (l.findTravelersRouteFitExcellent, StatusTone.good),
-      RouteFit.good => (l.findTravelersRouteFitGood, StatusTone.progress),
-      RouteFit.compatible => (
-        l.findTravelersRouteFitCompatible,
-        StatusTone.neutral,
-      ),
-      RouteFit.unknown => null,
-    };
-    if (classified == null) return const SizedBox.shrink();
-    final (label, tone) = classified;
-
-    final style = StatusStyle.of(context, tone);
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width - 64,
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: style.background,
-          borderRadius: AppRadius.rPill,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            StatusDot(tone: tone, size: 6),
-            const SizedBox(width: AppSpace.xs),
-            Flexible(
-              child: Text(
-                label,
-                style: text.labelSmall?.copyWith(
-                  color: style.foreground,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Candidate Detail / "View Trip" Sheet
 // ---------------------------------------------------------------------------
 
@@ -1049,7 +847,7 @@ class _TripDetailSheet extends StatelessWidget {
             child: Row(
               children: [
                 AppAvatar(
-                  initials: _TravelerCard._initial(traveler.displayName),
+                  initials: travelerInitial(traveler.displayName),
                   name: traveler.displayName,
                   size: 44,
                   isVerified: traveler.identityVerified,
@@ -1398,7 +1196,7 @@ class _TripSchedule extends StatelessWidget {
           Icon(
             candidate.primaryMode.icon,
             size: 15,
-            color: _TravelerCard._modeAccent(context, candidate.primaryMode),
+            color: modeAccentColor(context, candidate.primaryMode),
           ),
           const SizedBox(width: AppSpace.xs),
           Expanded(

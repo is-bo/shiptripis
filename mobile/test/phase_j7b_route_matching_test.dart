@@ -177,6 +177,7 @@ Future<void> _pumpList(
   Locale locale = const Locale('en'),
 }) async {
   final backend = FakeBackend()
+    ..emptyDiscovery()
     ..on('GET', '/api/me', FakeResponse(200, meFixture()))
     ..on('GET', '/api/deals', FakeResponse(200, <Object>[]))
     ..on('GET', '/api/matches', FakeResponse(200, <Object>[]))
