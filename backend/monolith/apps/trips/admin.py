@@ -6,6 +6,7 @@ from .models import (
     Journey,
     JourneyLeg,
     JourneyLegProof,
+    JourneyPriceChange,
     Trip,
     TripStopover,
 )
@@ -82,6 +83,28 @@ class JourneyLegInline(admin.TabularInline):
         return obj is None or obj.status == Journey.Status.DRAFT
 
 
+class JourneyPriceChangeInline(admin.TabularInline):
+    """The price's audit trail. Written only by `apps.trips.pricing`."""
+
+    model = JourneyPriceChange
+    extra = 0
+    can_delete = False
+    fields = readonly_fields = (
+        "created_at",
+        "actor",
+        "price_per_kg_eur_cents_before",
+        "min_price_eur_cents_before",
+        "price_per_kg_eur_cents_after",
+        "min_price_eur_cents_after",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Journey)
 class JourneyAdmin(admin.ModelAdmin):
     list_display = (
@@ -101,11 +124,20 @@ class JourneyAdmin(admin.ModelAdmin):
         "destination_location",
         "legacy_trip",
     )
-    inlines = (JourneyLegInline,)
+    inlines = (JourneyLegInline, JourneyPriceChangeInline)
     date_hierarchy = "created_at"
 
     def get_readonly_fields(self, request, obj=None):
-        fields = ["status", "published_at", "created_at", "updated_at"]
+        # The price is the traveler's and changes only through the audited
+        # service, never through this form.
+        fields = [
+            "status",
+            "published_at",
+            "price_per_kg_eur_cents",
+            "min_price_eur_cents",
+            "created_at",
+            "updated_at",
+        ]
         if obj is not None and obj.status != Journey.Status.DRAFT:
             fields.extend(
                 (

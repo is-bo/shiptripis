@@ -9,6 +9,8 @@ Endpoints:
   POST  /api/journeys/<id>/cancel                       — cancel
   POST  /api/journeys/<id>/pause                        — pause (owner)
   POST  /api/journeys/<id>/resume                       — resume (owner)
+  PATCH /api/journeys/<id>/pricing                      — set or clear the price (owner)
+  GET   /api/journeys/pricing-policy                    — is pricing on, and its bounds
   POST  /api/journeys/<journey_id>/legs/<leg_id>/proof  — upload a ticket proof
 
 Browsing other members' trips is `GET /api/discovery/trips` (L2A). The
@@ -53,10 +55,17 @@ from .models import (
     JourneyLeg,
     JourneyLegProof,
 )
+from .pricing import (
+    PRICE_INVALID_CODE,
+    JourneyPriceError,
+    set_own_journey_price,
+    traveler_pricing_policy,
+)
 from .serializers import (
     JourneyCreateSerializer,
     JourneyListSerializer,
     JourneyLegProofSerializer,
+    JourneyPricingSerializer,
     JourneySerializer,
     JourneyUpdateSerializer,
 )
@@ -267,6 +276,10 @@ class JourneyDetailView(APIView):
                     else status.HTTP_409_CONFLICT
                 ),
             )
+        except JourneyPriceError as exc:
+            # Only when the stored price or the switch moved between the
+            # serializer's check and the locked write.
+            return Response(exc.as_payload(), status=status.HTTP_409_CONFLICT)
 
         change = serializer.route_change
         fresh = _journey_queryset().get(pk=journey.pk)
@@ -374,6 +387,72 @@ class JourneyPauseView(_JourneyPauseView):
 
 class JourneyResumeView(_JourneyPauseView):
     action = staticmethod(resume_own_journey)
+
+
+class JourneyPricingView(APIView):
+    """The owner sets, changes or clears the price (spec 8).
+
+    Allowed while the journey can still be offered on, even once the route
+    itself is locked by a pending offer or a deal: a price change reaches only
+    offers created afterwards, so it cannot move anything already agreed.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def patch(self, request: Request, pk: int) -> Response:
+        journey = get_object_or_404(Journey, pk=pk)
+        body = JourneyPricingSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            journey = set_own_journey_price(
+                journey_id=journey.pk,
+                actor=request.user,
+                price=body.validated_data["price"],
+            )
+        except JourneyPriceError as exc:
+            if exc.code == "journey_not_owned":
+                response_status = status.HTTP_403_FORBIDDEN
+            elif exc.code == PRICE_INVALID_CODE:
+                response_status = status.HTTP_400_BAD_REQUEST
+            else:
+                response_status = status.HTTP_409_CONFLICT
+            return Response(exc.as_payload(), status=response_status)
+        fresh = _journey_queryset().get(pk=journey.pk)
+        return Response(
+            JourneySerializer(
+                fresh,
+                context={
+                    "request": request,
+                    "editability": journey_editability(fresh, actor=request.user),
+                },
+            ).data
+        )
+
+
+class JourneyPricingPolicyView(APIView):
+    """What the route editor needs before it offers a price field.
+
+    The switch and the two typo-guard ceilings, read at the moment of the
+    request. Off is a normal answer, not an error: the editor renders its
+    "not available" state from it.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        policy = traveler_pricing_policy()
+        return Response(
+            {
+                "enabled": policy is not None,
+                "currency": "EUR",
+                "max_price_per_kg_eur_cents": (
+                    policy.max_price_per_kg_eur_cents if policy else None
+                ),
+                "max_min_price_eur_cents": (
+                    policy.max_min_price_eur_cents if policy else None
+                ),
+            }
+        )
 
 
 class JourneyLegProofCreateView(APIView):

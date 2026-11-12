@@ -30,6 +30,7 @@ from apps.locations.serializers import PublicLocationSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.providers import RouteProvider, get_route_provider
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof, JourneyStopDetail
+from apps.trips.pricing import traveler_pricing_policy
 from apps.trips.transport_rules import sea_crossing_active_exists, sea_legs_enabled
 
 from .compatibility import (
@@ -38,6 +39,7 @@ from .compatibility import (
     evaluate_compatibility,
     _matching_locality_id,
 )
+from .listed_price import ListedPrice, listed_reward
 from .policy import Phase2Policy
 from .pricing import PricingQuote, calculate_pricing_quote
 from .public_contract import public_compatibility_payload, public_pricing_payload
@@ -51,6 +53,8 @@ class CandidateEvaluation:
     compatibility: CompatibilityResult
     pricing: PricingQuote | None
     ranking: dict | None
+    #: The traveler's listed price for this parcel (L4A), or `None`.
+    listed: ListedPrice | None = None
 
     def _request_block(self) -> dict:
         def place_summary(place):
@@ -408,6 +412,7 @@ def evaluate_candidate(
     )
     pricing = None
     ranking = None
+    listed = None
     if compatibility.compatible:
         assert compatibility.matched_distance_meters is not None
         assert compatibility.delivery_at is not None
@@ -425,12 +430,21 @@ def evaluate_candidate(
             policy=policy,
             at=at,
         )
+        if journey.has_price:
+            # The switch comes from the revision that priced this match, so a
+            # listed price never mixes two revisions. Parsed, not queried.
+            listed = listed_reward(
+                journey,
+                pricing,
+                enabled=traveler_pricing_policy(policy.settings_version) is not None,
+            )
     return CandidateEvaluation(
         delivery_request=delivery_request,
         journey=journey,
         compatibility=compatibility,
         pricing=pricing,
         ranking=ranking,
+        listed=listed,
     )
 
 

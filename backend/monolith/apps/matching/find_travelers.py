@@ -79,7 +79,14 @@ COMFORTABLE_DEADLINE_SLACK = timedelta(hours=24)
 #: Frozen sort vocabulary.
 SORT_BEST_MATCH = "best_match"
 SORT_SOONEST_DEPARTURE = "soonest_departure"
-SORT_VALUES: tuple[str, ...] = (SORT_BEST_MATCH, SORT_SOONEST_DEPARTURE)
+#: L4A. Lowest listed price first; journeys without one keep best-match
+#: order after every priced journey.
+SORT_LISTED_PRICE = "listed_price"
+SORT_VALUES: tuple[str, ...] = (
+    SORT_BEST_MATCH,
+    SORT_SOONEST_DEPARTURE,
+    SORT_LISTED_PRICE,
+)
 
 #: Frozen envelope states. All three are HTTP 200 — none of them is a failure,
 #: and J5 must not render any of them as one.
@@ -656,7 +663,8 @@ def candidate_payload(
         # The propose sheet's own inputs. Deliberately four numbers and not the
         # whole pricing block: bands, precision tags, version strings and
         # adjustment flags are diagnostics, and a sheet that asks "how much are
-        # you offering" renders none of them.
+        # you offering" renders none of them. `listed` (L4A) is the traveler's
+        # price for this parcel, the sheet's pre-filled amount, or null.
         "economics": (
             None
             if public_pricing is None
@@ -670,6 +678,7 @@ def candidate_payload(
                     "recommended_reward_eur_cents"
                 ),
                 "recommended_economics": public_pricing.get("recommended_economics"),
+                "listed": evaluation.listed.as_dict() if evaluation.listed else None,
             }
         ),
         # Echoed back unchanged by `POST /api/matches/propose`. A recomputed
@@ -697,6 +706,13 @@ def candidate_payload(
 # ---------------------------------------------------------------------------
 # The page
 # ---------------------------------------------------------------------------
+
+
+def _listed_price_key(row: dict) -> tuple[bool, int]:
+    listed = (row.get("economics") or {}).get("listed")
+    if listed is None:
+        return (True, 0)
+    return (False, listed["reward_eur_cents"])
 
 
 def request_block(delivery_request: DeliveryRequest, *, pricing: dict | None) -> dict:
@@ -833,6 +849,11 @@ def find_travelers(
                 row["journey_id"],
             )
         )
+    elif sort == SORT_LISTED_PRICE:
+        # Python's sort is stable and `rows` arrive in the authoritative
+        # best-match order, so equal prices, and every unpriced journey, keep
+        # that order. The page is therefore as deterministic as best match.
+        rows.sort(key=_listed_price_key)
 
     total = len(rows)
     window = tuple(rows[offset : offset + limit])

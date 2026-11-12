@@ -879,6 +879,9 @@ class PageTests(FindTravelersFixture, TestCase):
         self.assertEqual(economics["currency"], "EUR")
         self.assertIsNotNone(economics["minimum_reward_eur_cents"])
         self.assertIsNotNone(economics["recommended_reward_eur_cents"])
+        # L4A added `listed`, the traveler's price for this parcel; this
+        # journey has none, so it is null (apps/matching/tests/test_l4a_pricing.py).
+        self.assertIsNone(economics["listed"])
         self.assertEqual(
             set(economics),
             {
@@ -887,6 +890,7 @@ class PageTests(FindTravelersFixture, TestCase):
                 "minimum_economics",
                 "recommended_reward_eur_cents",
                 "recommended_economics",
+                "listed",
             },
         )
 

@@ -419,6 +419,10 @@ def _v1_offer_values(
         "reservation": {
             "payment_grace_seconds": policy.payment_grace_seconds,
         },
+        # L4A, for audit: the traveler's listed price for this parcel at the
+        # moment this offer was made, read under the journey lock, or null.
+        # It is a record, never a term: the reward above is what was offered.
+        "listed_price": evaluation.listed.as_dict() if evaluation.listed else None,
     }
     return {
         **economics,

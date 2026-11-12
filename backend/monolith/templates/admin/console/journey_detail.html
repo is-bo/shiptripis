@@ -116,6 +116,17 @@
           <div><dt>Fragile items</dt><dd>{% if traveler_accepts.fragile %}Accepted{% else %}Not accepted{% endif %}</dd></div>
         </dl>
       </section>
+      <section class="st-card" id="st-journey-price">
+        <p class="st-eyebrow">Traveler&rsquo;s price</p>
+        <h2>{{ traveler_price.current }}</h2>
+        <p class="st-muted">Senders see it pre-filled, never below Wassla&rsquo;s minimum, with the fee on top. A change reaches only offers made afterwards.</p>
+        {% if traveler_price.changes %}
+        <table class="st-keyvalues">
+          <thead><tr><th scope="col">Changed</th><th scope="col">From</th><th scope="col">To</th></tr></thead>
+          <tbody>{% for change in traveler_price.changes %}<tr><th scope="row">{{ change.at|date:"d M Y, H:i" }}<br><span class="st-muted">{{ change.actor }}</span></th><td>{{ change.before }}</td><td>{{ change.after }}</td></tr>{% endfor %}</tbody>
+        </table>
+        {% endif %}
+      </section>
     </aside>
   </div>
 </main>

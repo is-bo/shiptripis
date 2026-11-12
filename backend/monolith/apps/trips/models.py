@@ -255,6 +255,13 @@ class Journey(models.Model):
     paused_at = models.DateTimeField(null=True, blank=True)
     paused_by_staff = models.BooleanField(default=False)
     pause_reason = models.CharField(max_length=500, blank=True, default="")
+    #: The traveler's own price (spec 8): EUR cents per kg of chargeable
+    #: weight and a minimum per parcel. Both or neither; a journey with
+    #: neither behaves exactly as an unpriced one always has. Written only by
+    #: `apps.trips.pricing.apply_journey_price`, which records each change in
+    #: `JourneyPriceChange`; read only by `apps.matching.listed_price`.
+    price_per_kg_eur_cents = models.PositiveIntegerField(null=True, blank=True)
+    min_price_eur_cents = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -329,11 +336,32 @@ class Journey(models.Model):
                 ),
                 name="journey_pause_consistent",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        price_per_kg_eur_cents__isnull=True,
+                        min_price_eur_cents__isnull=True,
+                    )
+                    # Explicit non-null: a CHECK passes when it evaluates to
+                    # NULL, and `NULL >= 1` is NULL, not false.
+                    | models.Q(
+                        price_per_kg_eur_cents__isnull=False,
+                        min_price_eur_cents__isnull=False,
+                        price_per_kg_eur_cents__gte=1,
+                        min_price_eur_cents__gte=1,
+                    )
+                ),
+                name="journey_price_complete",
+            ),
         ]
 
     @property
     def is_paused(self) -> bool:
         return self.paused_at is not None
+
+    @property
+    def has_price(self) -> bool:
+        return self.price_per_kg_eur_cents is not None
 
     def __str__(self) -> str:
         return (
@@ -341,6 +369,41 @@ class Journey(models.Model):
             f"{self.start_place_id or self.start_location_id}"
             f"→{self.destination_place_id or self.destination_location_id}"
         )
+
+
+class JourneyPriceChange(models.Model):
+    """One change of a journey's traveler price, append-only (spec 8).
+
+    The audit trail of the price: who set it, from what, to what, and when.
+    A price change never touches an existing offer or deal (each froze its own
+    `listed_price` in its terms snapshot), so this history is the only record
+    of what a sender would have seen pre-filled at a given moment.
+    """
+
+    journey = models.ForeignKey(
+        Journey, on_delete=models.PROTECT, related_name="price_changes"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    price_per_kg_eur_cents_before = models.PositiveIntegerField(null=True, blank=True)
+    min_price_eur_cents_before = models.PositiveIntegerField(null=True, blank=True)
+    price_per_kg_eur_cents_after = models.PositiveIntegerField(null=True, blank=True)
+    min_price_eur_cents_after = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "trips_journey_price_change"
+        ordering = ["created_at", "pk"]
+        indexes = [
+            models.Index(
+                fields=["journey", "created_at"],
+                name="journey_price_change_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Price change #{self.pk} on journey #{self.journey_id}"
 
 
 class JourneyLeg(models.Model):
