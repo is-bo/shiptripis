@@ -2,7 +2,7 @@
 
 ## Wassla L11B — Tracking number, mobile (2026-11-12)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend, migration or
+Status: **merged** (PR #33, `75640c0`, into `feature/discovery-professional-delivery`). No backend, migration or
 contract change; `main` untouched.
 
 - One shared widget, `TrackingNumberView`, shows the parcel's `WSL-` number in the mono face, always left
