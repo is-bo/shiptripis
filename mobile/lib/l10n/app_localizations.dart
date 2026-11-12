@@ -633,11 +633,11 @@ abstract class L {
   /// **'Your identity check needs attention before you can do this.'**
   String get staleKycInvalid;
 
-  /// No description provided for @staleFlightProofInvalid.
+  /// No description provided for @staleTicketInvalid.
   ///
   /// In en, this message translates to:
-  /// **'Your flight proof needs attention before this journey can match.'**
-  String get staleFlightProofInvalid;
+  /// **'A ticket on this journey needs attention before it can match.'**
+  String get staleTicketInvalid;
 
   /// No description provided for @staleReservationExpired.
   ///
@@ -1638,13 +1638,13 @@ abstract class L {
   /// No description provided for @journeyLegsNeedProofTitle.
   ///
   /// In en, this message translates to:
-  /// **'Flights that need proof'**
+  /// **'Tickets to check'**
   String get journeyLegsNeedProofTitle;
 
   /// No description provided for @journeyPublishBlockedProof.
   ///
   /// In en, this message translates to:
-  /// **'Every flight leg needs approved proof before this can go live.'**
+  /// **'Every flight and ferry leg needs an approved ticket before this can go live.'**
   String get journeyPublishBlockedProof;
 
   /// No description provided for @journeyPublished.
@@ -1938,19 +1938,19 @@ abstract class L {
   /// No description provided for @journeyEditProofNotice.
   ///
   /// In en, this message translates to:
-  /// **'Changing a flight\'s airports, number or times means its proof no longer shows that flight, so we\'ll check it again.'**
+  /// **'Changing a flight or ferry leg\'s places, number or times means its ticket no longer shows that trip, so we\'ll check it again.'**
   String get journeyEditProofNotice;
 
   /// No description provided for @journeyEditProofWarningTitle.
   ///
   /// In en, this message translates to:
-  /// **'Your flight proof will be checked again'**
+  /// **'Your ticket will be checked again'**
   String get journeyEditProofWarningTitle;
 
   /// No description provided for @journeyEditProofWarningBody.
   ///
   /// In en, this message translates to:
-  /// **'You\'ve changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can\'t go live until it\'s approved again.'**
+  /// **'You\'ve changed a leg that already has a ticket. That ticket no longer shows this trip, so it goes back for review and the journey can\'t go live until it\'s approved again.'**
   String get journeyEditProofWarningBody;
 
   /// No description provided for @proofErrorStorageUnavailable.
@@ -1980,14 +1980,14 @@ abstract class L {
   /// No description provided for @proofTitle.
   ///
   /// In en, this message translates to:
-  /// **'Flight proof'**
+  /// **'Ticket proof'**
   String get proofTitle;
 
-  /// No description provided for @proofExplainer.
+  /// No description provided for @proofExplainerFlight.
   ///
   /// In en, this message translates to:
   /// **'Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.'**
-  String get proofExplainer;
+  String get proofExplainerFlight;
 
   /// No description provided for @proofDriveNotRequired.
   ///
@@ -4542,7 +4542,7 @@ abstract class L {
   /// No description provided for @journeyProofNeeded.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 flight needs proof} other{{count} flights need proof}}'**
+  /// **'{count, plural, =1{1 ticket needs checking} other{{count} tickets need checking}}'**
   String journeyProofNeeded(int count);
 
   /// No description provided for @onboardingGetStarted.
@@ -8534,6 +8534,468 @@ abstract class L {
   /// In en, this message translates to:
   /// **'A traveler can carry your parcel'**
   String get notificationTravelerInterested;
+
+  /// No description provided for @journeyModeSea.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry'**
+  String get journeyModeSea;
+
+  /// No description provided for @routeSeaMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry'**
+  String get routeSeaMode;
+
+  /// No description provided for @routeSeaSwitchedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry legs are switched off for now.'**
+  String get routeSeaSwitchedOff;
+
+  /// No description provided for @routeSeaTicketNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A ferry leg needs your ticket checked before the journey can go live. You add it after saving.'**
+  String get routeSeaTicketNote;
+
+  /// No description provided for @routeSeaRefusedSwitchedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry legs are switched off right now. Choose another way to travel this part.'**
+  String get routeSeaRefusedSwitchedOff;
+
+  /// No description provided for @routeSeaRefusedNoCrossing.
+  ///
+  /// In en, this message translates to:
+  /// **'No ferry line runs between these two cities in this direction right now.'**
+  String get routeSeaRefusedNoCrossing;
+
+  /// No description provided for @routeSeaRefusedNotPort.
+  ///
+  /// In en, this message translates to:
+  /// **'A ferry runs between port cities. Choose the city, not an airport, for each end of this part.'**
+  String get routeSeaRefusedNotPort;
+
+  /// No description provided for @routeSeaLinesFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry lines didn\'t load'**
+  String get routeSeaLinesFailedTitle;
+
+  /// No description provided for @routeSeaLinesFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Flights and road legs work as usual. Try again to add a ferry leg.'**
+  String get routeSeaLinesFailedBody;
+
+  /// No description provided for @routeErrorSeaRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'A ferry leg on your route can\'t be used right now. The reason is shown on that leg.'**
+  String get routeErrorSeaRefused;
+
+  /// No description provided for @journeyErrorStopInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'One of your stops has handover options we can\'t use. Check the options on each stop.'**
+  String get journeyErrorStopInvalid;
+
+  /// No description provided for @routeCapacityMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More capacity options'**
+  String get routeCapacityMore;
+
+  /// No description provided for @routeCapacityMoreHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Leave a box empty to set no limit.'**
+  String get routeCapacityMoreHelp;
+
+  /// No description provided for @routeVolumeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume (litres)'**
+  String get routeVolumeLabel;
+
+  /// No description provided for @routeParcelsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of parcels'**
+  String get routeParcelsLabel;
+
+  /// No description provided for @routeVolumeInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of litres from 1 to 200,000.'**
+  String get routeVolumeInvalid;
+
+  /// No description provided for @routeParcelsInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of parcels from 1 to 10,000.'**
+  String get routeParcelsInvalid;
+
+  /// No description provided for @routeHandoverAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Handover options'**
+  String get routeHandoverAction;
+
+  /// No description provided for @routeHandoverBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Takes pickups and drop-offs'**
+  String get routeHandoverBoth;
+
+  /// No description provided for @routeHandoverPickups.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickups only'**
+  String get routeHandoverPickups;
+
+  /// No description provided for @routeHandoverDropoffs.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop-offs only'**
+  String get routeHandoverDropoffs;
+
+  /// No description provided for @routeHandoverNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No handovers here'**
+  String get routeHandoverNone;
+
+  /// Title of the sheet for one stop's handover options.
+  ///
+  /// In en, this message translates to:
+  /// **'Handover at {stop}'**
+  String routeHandoverSheetTitle(String stop);
+
+  /// No description provided for @routeHandoverPickupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept pickups here'**
+  String get routeHandoverPickupLabel;
+
+  /// No description provided for @routeHandoverPickupHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'A sender can hand you a parcel at this stop.'**
+  String get routeHandoverPickupHelp;
+
+  /// No description provided for @routeHandoverDropoffLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept drop-offs here'**
+  String get routeHandoverDropoffLabel;
+
+  /// No description provided for @routeHandoverDropoffHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'You can hand a parcel to its recipient at this stop.'**
+  String get routeHandoverDropoffHelp;
+
+  /// No description provided for @routeHandoverWindowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Time window'**
+  String get routeHandoverWindowTitle;
+
+  /// No description provided for @routeHandoverWindowHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. When you can meet at this stop.'**
+  String get routeHandoverWindowHelp;
+
+  /// No description provided for @routeHandoverWindowFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get routeHandoverWindowFrom;
+
+  /// No description provided for @routeHandoverWindowTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Until'**
+  String get routeHandoverWindowTo;
+
+  /// No description provided for @routeHandoverWindowClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove time window'**
+  String get routeHandoverWindowClear;
+
+  /// No description provided for @routeHandoverNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get routeHandoverNoteLabel;
+
+  /// No description provided for @routeHandoverNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For example: meet at the café by the ferry terminal.'**
+  String get routeHandoverNoteHint;
+
+  /// No description provided for @routeHandoverNoteSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you see this until a delivery that uses this stop is paid for. Then the sender of that delivery sees it too.'**
+  String get routeHandoverNoteSeen;
+
+  /// No description provided for @routeWindowIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Set both a start and an end, or remove the window.'**
+  String get routeWindowIncomplete;
+
+  /// No description provided for @routeWindowOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'The window has to end after it starts.'**
+  String get routeWindowOrder;
+
+  /// No description provided for @routeWindowOutside.
+  ///
+  /// In en, this message translates to:
+  /// **'The window has to fall between arriving at this stop and leaving it.'**
+  String get routeWindowOutside;
+
+  /// No description provided for @routeCarryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What you carry'**
+  String get routeCarryTitle;
+
+  /// No description provided for @routeCarryHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch off anything you won\'t take. Senders only find you for parcels you accept.'**
+  String get routeCarryHelp;
+
+  /// No description provided for @routeCarryFragile.
+  ///
+  /// In en, this message translates to:
+  /// **'Fragile items'**
+  String get routeCarryFragile;
+
+  /// No description provided for @routeCarryLastOne.
+  ///
+  /// In en, this message translates to:
+  /// **'At least one kind of item has to stay on.'**
+  String get routeCarryLastOne;
+
+  /// No description provided for @journeyPauseAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause journey'**
+  String get journeyPauseAction;
+
+  /// No description provided for @journeyPauseConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause this journey?'**
+  String get journeyPauseConfirmTitle;
+
+  /// No description provided for @journeyPauseConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders stop finding it and nobody can start a new offer on it. Deliveries already paid for carry on, and an offer already pending can\'t be accepted until you resume.'**
+  String get journeyPauseConfirmBody;
+
+  /// No description provided for @journeyPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Journey paused.'**
+  String get journeyPaused;
+
+  /// No description provided for @journeyResumeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume journey'**
+  String get journeyResumeAction;
+
+  /// No description provided for @journeyResumed.
+  ///
+  /// In en, this message translates to:
+  /// **'Journey resumed.'**
+  String get journeyResumed;
+
+  /// No description provided for @journeyPausedBannerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey is paused'**
+  String get journeyPausedBannerTitle;
+
+  /// No description provided for @journeyPausedBannerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders can\'t find it and offers on it can\'t be accepted. Deliveries already paid for carry on as normal.'**
+  String get journeyPausedBannerBody;
+
+  /// No description provided for @journeyPausedStaffBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla paused this journey. Contact support to have it resumed.'**
+  String get journeyPausedStaffBody;
+
+  /// No description provided for @journeyErrorNotPausable.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey can\'t be paused in its current state.'**
+  String get journeyErrorNotPausable;
+
+  /// No description provided for @journeyErrorPausedByStaff.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla paused this journey, so only support can resume it.'**
+  String get journeyErrorPausedByStaff;
+
+  /// A leg's optional volume limit.
+  ///
+  /// In en, this message translates to:
+  /// **'{litres} L'**
+  String journeyCapacityVolumeValue(int litres);
+
+  /// No description provided for @journeyCapacityParcelsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 parcel} other{{count} parcels}}'**
+  String journeyCapacityParcelsValue(int count);
+
+  /// No description provided for @journeyHandoverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Handover at your stops'**
+  String get journeyHandoverTitle;
+
+  /// A stop's meeting window.
+  ///
+  /// In en, this message translates to:
+  /// **'Between {from} and {to}'**
+  String journeyHandoverWindow(String from, String to);
+
+  /// No description provided for @journeyCarryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What you carry'**
+  String get journeyCarryTitle;
+
+  /// No description provided for @journeyCarryAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Takes every kind of item'**
+  String get journeyCarryAll;
+
+  /// The item kinds the traveler declines.
+  ///
+  /// In en, this message translates to:
+  /// **'Won\'t take: {items}'**
+  String journeyCarryRefuses(String items);
+
+  /// No description provided for @journeyCarryNoFragile.
+  ///
+  /// In en, this message translates to:
+  /// **'No fragile items'**
+  String get journeyCarryNoFragile;
+
+  /// No description provided for @proofExplainerSea.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload your ferry ticket or booking confirmation. We check it before your journey can match parcels.'**
+  String get proofExplainerSea;
+
+  /// No description provided for @proofChecklistTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A good photo shows'**
+  String get proofChecklistTitle;
+
+  /// No description provided for @proofChecklistFlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name, the flight number, the date and both airports.'**
+  String get proofChecklistFlight;
+
+  /// No description provided for @proofChecklistSea.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name, the ferry company, the date and both ports.'**
+  String get proofChecklistSea;
+
+  /// No description provided for @rejectSea.
+  ///
+  /// In en, this message translates to:
+  /// **'A ferry line on this trip isn\'t available right now.'**
+  String get rejectSea;
+
+  /// No description provided for @rejectPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler has paused this trip.'**
+  String get rejectPaused;
+
+  /// No description provided for @rejectHandover.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler doesn\'t take handovers at the places you need.'**
+  String get rejectHandover;
+
+  /// No description provided for @rejectNotAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler doesn\'t take this kind of item.'**
+  String get rejectNotAccepted;
+
+  /// No description provided for @rejectVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'There isn\'t enough room left for this parcel\'s size.'**
+  String get rejectVolume;
+
+  /// No description provided for @rejectParcelSlots.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler has no parcel places left.'**
+  String get rejectParcelSlots;
+
+  /// No description provided for @findTravelersSeaProofApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry ticket verified'**
+  String get findTravelersSeaProofApproved;
+
+  /// No description provided for @findTravelersCaveatVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'This traveler limits volume and your request has no size, so we couldn\'t check that your parcel fits. They decide when they accept.'**
+  String get findTravelersCaveatVolume;
+
+  /// No description provided for @staleJourneyPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'This journey is paused, so nothing on it can be accepted until it resumes.'**
+  String get staleJourneyPaused;
+
+  /// No description provided for @dealHandoverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where and when to meet'**
+  String get dealHandoverTitle;
+
+  /// No description provided for @dealHandoverPickup.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup'**
+  String get dealHandoverPickup;
+
+  /// No description provided for @dealHandoverDropoff.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop-off'**
+  String get dealHandoverDropoff;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

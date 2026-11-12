@@ -376,7 +376,7 @@ class _Row extends StatelessWidget {
         Icons.info_outline_rounded,
       ),
       NotificationChannel.kycStatusChanged ||
-      NotificationChannel.flightProofStatusChanged => (
+      NotificationChannel.legProofStatusChanged => (
         l.notificationAccount,
         Icons.verified_user_outlined,
       ),

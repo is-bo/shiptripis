@@ -111,7 +111,7 @@
   "staleRewardBelowMinimum": "The minimum reward has changed.",
   "staleRouteChanged": "The route details changed. We've refreshed the price.",
   "staleKycInvalid": "Your identity check needs attention before you can do this.",
-  "staleFlightProofInvalid": "Your flight proof needs attention before this journey can match.",
+  "staleTicketInvalid": "A ticket on this journey needs attention before it can match.",
   "staleReservationExpired": "Your reserved space expired.",
   "staleDealClosed": "This delivery is closed.",
   "stalePayoutProfileInvalid": "Your payout details changed while you were on this page. Pull down to refresh, then try again.",
@@ -285,8 +285,8 @@
   "journeySaveDraft": "Save journey",
   "journeyCreatedDraft": "Saved as a draft. Add flight proof, then publish it.",
   "journeyDraftNextSteps": "Nothing is visible to senders yet. Publish it when your flight proof is approved.",
-  "journeyLegsNeedProofTitle": "Flights that need proof",
-  "journeyPublishBlockedProof": "Every flight leg needs approved proof before this can go live.",
+  "journeyLegsNeedProofTitle": "Tickets to check",
+  "journeyPublishBlockedProof": "Every flight and ferry leg needs an approved ticket before this can go live.",
   "journeyPublished": "Your journey is live. Senders heading your way can see it.",
   "journeyErrorNotPublishable": "This journey can't be published from where it is now.",
   "journeyErrorNoLegs": "This journey has no legs, so there is nothing to publish.",
@@ -378,15 +378,15 @@
   "journeyEditBlockedStatus": "This journey can no longer be edited because it is already published. Cancel it and create a new one if the route has changed.",
   "journeyEditBlockedDependent": "This journey can no longer be edited because a sender is already counting on this route.",
   "journeyEditStaleRoute": "This route changed while you were editing it. Reopen it and try again.",
-  "journeyEditProofNotice": "Changing a flight's airports, number or times means its proof no longer shows that flight, so we'll check it again.",
-  "journeyEditProofWarningTitle": "Your flight proof will be checked again",
-  "journeyEditProofWarningBody": "You've changed a flight that already has proof. That proof no longer shows this flight, so it goes back for review and the journey can't go live until it's approved again.",
+  "journeyEditProofNotice": "Changing a flight or ferry leg's places, number or times means its ticket no longer shows that trip, so we'll check it again.",
+  "journeyEditProofWarningTitle": "Your ticket will be checked again",
+  "journeyEditProofWarningBody": "You've changed a leg that already has a ticket. That ticket no longer shows this trip, so it goes back for review and the journey can't go live until it's approved again.",
   "proofErrorStorageUnavailable": "We couldn't store your file just now.",
   "proofRetryTitle": "Upload didn't finish",
   "proofRetryFileKept": "Your image is still selected.",
   "proofRetry": "Try again",
-  "proofTitle": "Flight proof",
-  "proofExplainer": "Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.",
+  "proofTitle": "Ticket proof",
+  "proofExplainerFlight": "Upload your boarding pass or booking confirmation. We check it before your journey can match parcels.",
   "proofDriveNotRequired": "Driving legs don't need any proof.",
   "proofUpload": "Upload proof",
   "proofStatusMissing": "Not uploaded",
@@ -1309,7 +1309,7 @@
       }
     }
   },
-  "journeyProofNeeded": "{count, plural, =1{1 flight needs proof} other{{count} flights need proof}}",
+  "journeyProofNeeded": "{count, plural, =1{1 ticket needs checking} other{{count} tickets need checking}}",
   "@journeyProofNeeded": {
     "placeholders": {
       "count": {
@@ -2644,5 +2644,124 @@
   "publicPreviewVisible": "This is what others see right now.",
   "publicPreviewHidden": "This is what others would see if you turn it on.",
   "notificationRouteAlert": "New on a route you follow",
-  "notificationTravelerInterested": "A traveler can carry your parcel"
+  "notificationTravelerInterested": "A traveler can carry your parcel",
+  "journeyModeSea": "Ferry",
+  "routeSeaMode": "Ferry",
+  "routeSeaSwitchedOff": "Ferry legs are switched off for now.",
+  "routeSeaTicketNote": "A ferry leg needs your ticket checked before the journey can go live. You add it after saving.",
+  "routeSeaRefusedSwitchedOff": "Ferry legs are switched off right now. Choose another way to travel this part.",
+  "routeSeaRefusedNoCrossing": "No ferry line runs between these two cities in this direction right now.",
+  "routeSeaRefusedNotPort": "A ferry runs between port cities. Choose the city, not an airport, for each end of this part.",
+  "routeSeaLinesFailedTitle": "Ferry lines didn't load",
+  "routeSeaLinesFailedBody": "Flights and road legs work as usual. Try again to add a ferry leg.",
+  "routeErrorSeaRefused": "A ferry leg on your route can't be used right now. The reason is shown on that leg.",
+  "journeyErrorStopInvalid": "One of your stops has handover options we can't use. Check the options on each stop.",
+  "routeCapacityMore": "More capacity options",
+  "routeCapacityMoreHelp": "Optional. Leave a box empty to set no limit.",
+  "routeVolumeLabel": "Volume (litres)",
+  "routeParcelsLabel": "Number of parcels",
+  "routeVolumeInvalid": "Enter a whole number of litres from 1 to 200,000.",
+  "routeParcelsInvalid": "Enter a whole number of parcels from 1 to 10,000.",
+  "routeHandoverAction": "Handover options",
+  "routeHandoverBoth": "Takes pickups and drop-offs",
+  "routeHandoverPickups": "Pickups only",
+  "routeHandoverDropoffs": "Drop-offs only",
+  "routeHandoverNone": "No handovers here",
+  "routeHandoverSheetTitle": "Handover at {stop}",
+  "@routeHandoverSheetTitle": {
+    "description": "Title of the sheet for one stop's handover options.",
+    "placeholders": {
+      "stop": {
+        "type": "String"
+      }
+    }
+  },
+  "routeHandoverPickupLabel": "Accept pickups here",
+  "routeHandoverPickupHelp": "A sender can hand you a parcel at this stop.",
+  "routeHandoverDropoffLabel": "Accept drop-offs here",
+  "routeHandoverDropoffHelp": "You can hand a parcel to its recipient at this stop.",
+  "routeHandoverWindowTitle": "Time window",
+  "routeHandoverWindowHelp": "Optional. When you can meet at this stop.",
+  "routeHandoverWindowFrom": "From",
+  "routeHandoverWindowTo": "Until",
+  "routeHandoverWindowClear": "Remove time window",
+  "routeHandoverNoteLabel": "Note",
+  "routeHandoverNoteHint": "For example: meet at the café by the ferry terminal.",
+  "routeHandoverNoteSeen": "Only you see this until a delivery that uses this stop is paid for. Then the sender of that delivery sees it too.",
+  "routeWindowIncomplete": "Set both a start and an end, or remove the window.",
+  "routeWindowOrder": "The window has to end after it starts.",
+  "routeWindowOutside": "The window has to fall between arriving at this stop and leaving it.",
+  "routeCarryTitle": "What you carry",
+  "routeCarryHelp": "Switch off anything you won't take. Senders only find you for parcels you accept.",
+  "routeCarryFragile": "Fragile items",
+  "routeCarryLastOne": "At least one kind of item has to stay on.",
+  "journeyPauseAction": "Pause journey",
+  "journeyPauseConfirmTitle": "Pause this journey?",
+  "journeyPauseConfirmBody": "Senders stop finding it and nobody can start a new offer on it. Deliveries already paid for carry on, and an offer already pending can't be accepted until you resume.",
+  "journeyPaused": "Journey paused.",
+  "journeyResumeAction": "Resume journey",
+  "journeyResumed": "Journey resumed.",
+  "journeyPausedBannerTitle": "This journey is paused",
+  "journeyPausedBannerBody": "Senders can't find it and offers on it can't be accepted. Deliveries already paid for carry on as normal.",
+  "journeyPausedStaffBody": "Wassla paused this journey. Contact support to have it resumed.",
+  "journeyErrorNotPausable": "This journey can't be paused in its current state.",
+  "journeyErrorPausedByStaff": "Wassla paused this journey, so only support can resume it.",
+  "journeyCapacityVolumeValue": "{litres} L",
+  "@journeyCapacityVolumeValue": {
+    "description": "A leg's optional volume limit.",
+    "placeholders": {
+      "litres": {
+        "type": "int"
+      }
+    }
+  },
+  "journeyCapacityParcelsValue": "{count, plural, =1{1 parcel} other{{count} parcels}}",
+  "@journeyCapacityParcelsValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "journeyHandoverTitle": "Handover at your stops",
+  "journeyHandoverWindow": "Between {from} and {to}",
+  "@journeyHandoverWindow": {
+    "description": "A stop's meeting window.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyCarryTitle": "What you carry",
+  "journeyCarryAll": "Takes every kind of item",
+  "journeyCarryRefuses": "Won't take: {items}",
+  "@journeyCarryRefuses": {
+    "description": "The item kinds the traveler declines.",
+    "placeholders": {
+      "items": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyCarryNoFragile": "No fragile items",
+  "proofExplainerSea": "Upload your ferry ticket or booking confirmation. We check it before your journey can match parcels.",
+  "proofChecklistTitle": "A good photo shows",
+  "proofChecklistFlight": "Your name, the flight number, the date and both airports.",
+  "proofChecklistSea": "Your name, the ferry company, the date and both ports.",
+  "rejectSea": "A ferry line on this trip isn't available right now.",
+  "rejectPaused": "The traveler has paused this trip.",
+  "rejectHandover": "The traveler doesn't take handovers at the places you need.",
+  "rejectNotAccepted": "The traveler doesn't take this kind of item.",
+  "rejectVolume": "There isn't enough room left for this parcel's size.",
+  "rejectParcelSlots": "The traveler has no parcel places left.",
+  "findTravelersSeaProofApproved": "Ferry ticket verified",
+  "findTravelersCaveatVolume": "This traveler limits volume and your request has no size, so we couldn't check that your parcel fits. They decide when they accept.",
+  "staleJourneyPaused": "This journey is paused, so nothing on it can be accepted until it resumes.",
+  "dealHandoverTitle": "Where and when to meet",
+  "dealHandoverPickup": "Pickup",
+  "dealHandoverDropoff": "Drop-off"
 }

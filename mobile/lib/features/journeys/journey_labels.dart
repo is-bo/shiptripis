@@ -11,12 +11,15 @@
 /// than an empty label when there is genuinely nothing to say.
 library;
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
 import '../../design/components/place.dart';
+import '../../design/components/status.dart';
 import '../../domain/canonical_place.dart';
 import '../../domain/journey.dart';
 import '../../domain/location.dart';
+import '../../l10n/app_localizations.dart';
 
 const String _unknown = '—';
 
@@ -62,3 +65,34 @@ String journeyDestinationLabel(Journey journey) {
   final last = journey.legs.isEmpty ? null : journey.legs.last;
   return last == null ? _unknown : legDestinationLabel(last);
 }
+
+/// How a leg's ticket reads: the state the server reports, as a label, a tone
+/// and an icon. A leg that needs none, or a state this build does not know,
+/// reads as "not uploaded" rather than as approved.
+({String label, StatusTone tone, IconData icon}) legProofStateStyle(
+  L l,
+  LegProofState state,
+) => switch (state) {
+  LegProofState.approved => (
+    label: l.proofStatusApproved,
+    tone: StatusTone.good,
+    icon: Icons.check_circle_rounded,
+  ),
+  LegProofState.pending => (
+    label: l.proofStatusPending,
+    tone: StatusTone.waiting,
+    icon: Icons.hourglass_top_rounded,
+  ),
+  LegProofState.rejected => (
+    label: l.proofStatusRejected,
+    tone: StatusTone.bad,
+    icon: Icons.error_outline_rounded,
+  ),
+  LegProofState.missing ||
+  LegProofState.notRequired ||
+  LegProofState.unknown => (
+    label: l.proofStatusMissing,
+    tone: StatusTone.action,
+    icon: Icons.upload_file_outlined,
+  ),
+};

@@ -69,8 +69,15 @@ List<String> rejectionReasons(L l, Iterable<String> codes) {
       'accounts_eligible' ||
       'traveler_kyc_current' ||
       'target_traveler_eligible' ||
-      'flight_proofs_approved' => l.rejectVerification,
+      'flight_proofs_approved' ||
+      'sea_proofs_approved' => l.rejectVerification,
       'item_safety_eligible' => l.rejectItem,
+      'item_accepted_by_traveler' => l.rejectNotAccepted,
+      'sea_legs_available' => l.rejectSea,
+      'journey_not_paused' => l.rejectPaused,
+      'stop_services_allow_handover' => l.rejectHandover,
+      'volume_available_on_every_leg' => l.rejectVolume,
+      'parcel_slots_available_on_every_leg' => l.rejectParcelSlots,
       _ => l.rejectGeneric,
     });
   }

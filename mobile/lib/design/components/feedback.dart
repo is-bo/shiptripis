@@ -195,7 +195,9 @@ String staleMessage(BuildContext context, ApiErrorCode code) {
     'reward_below_minimum' => l.staleRewardBelowMinimum,
     'route_inputs_changed' || 'route_preflight_missing' => l.staleRouteChanged,
     'kyc_not_verified' || 'kyc_invalid' => l.staleKycInvalid,
-    'flight_proof_not_approved' => l.staleFlightProofInvalid,
+    'flight_proof_not_approved' ||
+    'sea_proof_not_approved' => l.staleTicketInvalid,
+    'journey_paused' => l.staleJourneyPaused,
     'reservation_expired' ||
     'invalid_reservation_grace' => l.staleReservationExpired,
     'deal_closed' => l.staleDealClosed,

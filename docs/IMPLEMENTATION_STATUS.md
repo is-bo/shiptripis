@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla L3B — routes for everyone, mobile and admin screens (2026-11-12)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No deployment; `main`
+untouched.
+
+A traveler can now build a route with a ferry leg: Lille → Marseille → Algiers → Constantine works on
+a 360 px phone in Arabic. The route editor offers Ferry only where the server's crossing list joins two
+cities and the owner's switch is on, says in one line when the switch is the only thing missing, shows a
+refused ferry leg's reason on that leg, and never lets a failed list block a flight or road leg. Legs
+take optional volume and parcel limits; each stop takes pickups and drop-offs, a time window and a note
+(with a line saying who sees it); a "What you carry" section sets refused categories and fragile items.
+The ticket screen speaks for a flight or a ferry and follows the server's `proof_required` and
+`proof_state`. Journey detail pauses and resumes (a staff pause shows no reason and no Resume). Senders
+see ferry legs, "Ferry ticket verified", a volume caveat and, after funding, the meeting window and
+note. The console gains Sea crossings in Geography, the Sea legs switch in Settings, Ticket proofs with
+a Mode column and filter, and pause, stops, carry options and per-leg capacity on journey detail.
+Detail: `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md`.
+
 ## Wassla L3A — routes for everyone, backend (2026-11-12)
 
 Status: **merged** (PR #26, `b10cda8`) into `feature/discovery-professional-delivery`. No deployment;

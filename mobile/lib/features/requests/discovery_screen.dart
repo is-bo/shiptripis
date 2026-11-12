@@ -964,6 +964,7 @@ class _TripDetailSheet extends StatelessWidget {
           ),
 
           _TripChecks(candidate: candidate),
+          _TripCaveats(candidate: candidate),
 
           if (!canPropose) ...[
             const SizedBox(height: AppSpace.md),
@@ -1223,7 +1224,7 @@ class _TripSchedule extends StatelessWidget {
 
 /// What ShipTrip checked, kept apart from why the route fits.
 ///
-/// `identity_verified` and `flight_proof_approved` used to sit in the same
+/// `identity_verified` and the ticket checks used to sit in the same
 /// ticked list as "Picks up in Paris", which read as though having a verified
 /// passport were a reason the route suited the parcel.
 class _TripChecks extends StatelessWidget {
@@ -1242,7 +1243,9 @@ class _TripChecks extends StatelessWidget {
         if (reason.code == 'identity_verified')
           l.findTravelersIdentityVerified
         else if (reason.code == 'flight_proof_approved')
-          l.findTravelersFlightProofApproved,
+          l.findTravelersFlightProofApproved
+        else if (reason.code == 'sea_proof_approved')
+          l.findTravelersSeaProofApproved,
     ];
     if (items.isEmpty) return const SizedBox.shrink();
 
@@ -1281,6 +1284,32 @@ class _TripChecks extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// What the server could not fully check, said plainly.
+///
+/// The one caveat a sender can act on is `volume_unverified`: the traveller
+/// limits volume on a leg and this request has no dimensions, so the fit was
+/// not checked. Other caveats are for support and stay unspoken.
+class _TripCaveats extends StatelessWidget {
+  const _TripCaveats({required this.candidate});
+
+  final TravelerCandidate candidate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!candidate.caveats.contains('volume_unverified')) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.lg),
+      child: InfoNotice(
+        message: L.of(context).findTravelersCaveatVolume,
+        tone: StatusTone.waiting,
+        icon: Icons.straighten_rounded,
       ),
     );
   }

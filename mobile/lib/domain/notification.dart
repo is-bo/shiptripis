@@ -30,7 +30,7 @@ enum NotificationChannel {
   deliveryCodeAvailable,
   deliveryConfirmed,
   kycStatusChanged,
-  flightProofStatusChanged,
+  legProofStatusChanged,
   dealUpdated,
   dealCancelled,
   dealArrivalReported,
@@ -59,7 +59,7 @@ enum NotificationChannel {
     'handover.delivery_code_available' => deliveryCodeAvailable,
     'handover.delivery_confirmed' => deliveryConfirmed,
     'kyc.status_changed' => kycStatusChanged,
-    'leg_proof.status_changed' => flightProofStatusChanged,
+    'leg_proof.status_changed' => legProofStatusChanged,
     'deal.updated' => dealUpdated,
     'deal.cancelled' => dealCancelled,
     'deal.arrival_reported' => dealArrivalReported,
@@ -249,7 +249,7 @@ class AppNotification {
       final int id => OpenRequest(id),
       _ => null,
     },
-    NotificationChannel.flightProofStatusChanged => switch (journeyId) {
+    NotificationChannel.legProofStatusChanged => switch (journeyId) {
       final int id => OpenJourney(id),
       _ => null,
     },

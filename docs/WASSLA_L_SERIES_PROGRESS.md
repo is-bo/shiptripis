@@ -235,12 +235,47 @@ factual. Use exactly these headings.
 
 ### L3B. Routes for everyone, mobile and admin screens
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md`.
+
+- Contract as built (names that differ from the plan): no new endpoint; the app reads
+  `GET /api/geography/sea-crossings`, `proof_required` and `proof_state`, `stops`,
+  `refused_categories`, `accepts_fragile`, `pause`, per-leg `capacity_volume_l` and
+  `capacity_parcels`, and a funded deal's `route.handover_stops`, and writes `stops`,
+  `refused_categories`, `accepts_fragile` and the two capacity fields on create and edit (an edit
+  always sends them, with explicit nulls for a limit that was removed), plus
+  `POST /api/journeys/<id>/pause` and `/resume`. Console routes: `sea-crossing-new`,
+  `sea-crossing-toggle`, `journey-pause`. `resolve_port(country, name)` moved into
+  `apps.locations.sea_crossings` so the add form and the seed use one resolver. Mobile renames:
+  `legProofStatusChanged`, `proofNotRequired`, `staleTicketInvalid`, `proofExplainerFlight`;
+  `TransportMode.requiresProof` is deleted.
+- Left for a later package: nothing from L3A is open on the app or console side. Booking reference for
+  a ferry ticket is not stored anywhere (the queue shows the document kind where a flight shows its
+  number); adding one is a backend change for L6A or later if wanted. There is no in-app link to
+  support, so the staff-paused banner is text only. L6A adds the professional ticket exemption inside
+  `proofs.py` and the proof screen already follows `proof_required`, so it needs no app change.
+- Switches added and their defaults: none new. The console now exposes `sea_legs_enabled` (off) in
+  Settings → Marketplace features, with a warning line.
+- Deviations from the plan (what, why, approved by): all judgment calls, none reviewed by Ismail.
+  (1) Ferry queue "reference" column shows the document kind: no booking-reference field exists.
+  (2) Sea is never pre-selected; flight stays the derived default, so nobody boards a ferry by
+  accident. (3) The traveler word is "Ferry", the console word is "Sea". (4) Ticket-proof URL paths,
+  permission names and audit action names keep `flight_proof`: they live in stored rows and links.
+  (5) The Sea legs switch lives in the existing Marketplace features form, not a new card.
+  (6) The first stop shows only the pickup switch and the last only the drop-off switch, and the
+  request never contradicts the server's normalisation. (7) The ferry mode colour is a plum that no
+  status tone uses. (8) The ferry list has its own provider with retry off, so a failure shows the
+  notice at once instead of loading for a minute. (9) `ApiException.intExtra` now unwraps a
+  one-element list, and `stringExtra` is new: a refusal raised from a serializer wraps every value.
+  (10) The "What you carry" section appears once two stops exist. (11) Ticket kinds on the proof
+  screen stay ticket, boarding pass and booking for both modes; the server owns validation.
+- Tests (before and after counts): Flutter 1,303 passed before; 1,351 after (48 added: 30 in
+  `l3b_sea_route_model_test.dart`, 18 in `l3b_sea_screens_test.dart`; two existing tests updated for
+  the new fixture fields and the 20,000 kg ceiling, one replaced for the deleted `requiresProof`).
+  `flutter analyze --fatal-infos` clean. Django: BACKEND_COUNTS. `makemigrations --check` clean (no
+  model change). Ruff check clean.
+- Known limits: the console journey page shows stops and capacity but staff cannot edit them (by
+  design: the traveler owns them). A route with a ferry leg cannot be priced differently from a flight
+  until L4A. The French and Spanish coordinates carry-over above is untouched by this package.
 
 ### L4A. Traveler pricing, backend
 

@@ -293,8 +293,8 @@ class LAr extends L {
       'يحتاج التحقق من هويتك إلى الانتباه قبل أن تتمكن من فعل هذا.';
 
   @override
-  String get staleFlightProofInvalid =>
-      'يحتاج إثبات رحلتك الجوية إلى الانتباه قبل أن تتمكن هذه الرحلة من المطابقة.';
+  String get staleTicketInvalid =>
+      'تحتاج تذكرة في هذه الرحلة إلى الانتباه قبل أن تتمكن من المطابقة.';
 
   @override
   String get staleReservationExpired => 'انتهت صلاحية المساحة المحجوزة لك.';
@@ -828,11 +828,11 @@ class LAr extends L {
       'لا شيء مرئي للمُرسِلين بعد. انشرها عند الموافقة على إثبات رحلتك الجوية.';
 
   @override
-  String get journeyLegsNeedProofTitle => 'الرحلات الجوية التي تحتاج إثباتًا';
+  String get journeyLegsNeedProofTitle => 'تذاكر تحتاج إلى التحقق';
 
   @override
   String get journeyPublishBlockedProof =>
-      'تحتاج كل مرحلة جوية إلى إثبات معتمد قبل أن يمكن نشر هذه الرحلة.';
+      'تحتاج كل مرحلة بالطائرة أو الباخرة إلى تذكرة معتمدة قبل النشر.';
 
   @override
   String get journeyPublished =>
@@ -1031,14 +1031,14 @@ class LAr extends L {
 
   @override
   String get journeyEditProofNotice =>
-      'تغيير مطارات الرحلة أو رقمها أو مواعيدها يعني أن إثباتها لم يعد يخصّ تلك الرحلة، لذا سنراجعه من جديد.';
+      'تغيير أماكن أو رقم أو مواعيد مرحلة بالطائرة أو الباخرة يعني أن تذكرتها لم تعد تثبت تلك الرحلة، لذلك سنراجعها من جديد.';
 
   @override
-  String get journeyEditProofWarningTitle => 'سيُعاد التحقق من إثبات رحلتك';
+  String get journeyEditProofWarningTitle => 'ستُراجَع تذكرتك من جديد';
 
   @override
   String get journeyEditProofWarningBody =>
-      'لقد غيّرت رحلة لها إثبات بالفعل. لم يعد ذلك الإثبات يخصّ هذه الرحلة، لذا سيعود إلى المراجعة ولن تُنشر الرحلة حتى تتم الموافقة عليه من جديد.';
+      'غيّرت مرحلة لها تذكرة بالفعل. لم تعد التذكرة تثبت هذه الرحلة، فتعود للمراجعة ولا يمكن نشر الرحلة قبل اعتمادها من جديد.';
 
   @override
   String get proofErrorStorageUnavailable =>
@@ -1054,10 +1054,10 @@ class LAr extends L {
   String get proofRetry => 'أعد المحاولة';
 
   @override
-  String get proofTitle => 'إثبات الرحلة الجوية';
+  String get proofTitle => 'إثبات التذكرة';
 
   @override
-  String get proofExplainer =>
+  String get proofExplainerFlight =>
       'ارفع بطاقة الصعود إلى الطائرة أو تأكيد الحجز. نتحقق منها قبل أن تتمكن رحلتك من مطابقة الطرود.';
 
   @override
@@ -2582,12 +2582,12 @@ class LAr extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count رحلة تحتاج إثباتًا',
-      many: '$count رحلة تحتاج إثباتًا',
-      few: '$count رحلات تحتاج إثباتًا',
-      two: 'رحلتان تحتاجان إثباتًا',
-      one: 'رحلة واحدة تحتاج إثباتًا',
-      zero: 'لا رحلات تحتاج إثباتًا',
+      other: '$count تذكرة تحتاج إلى التحقق',
+      many: '$count تذكرة تحتاج إلى التحقق',
+      few: '$count تذاكر تحتاج إلى التحقق',
+      two: 'تذكرتان تحتاجان إلى التحقق',
+      one: 'تذكرة واحدة تحتاج إلى التحقق',
+      zero: 'لا تذاكر تحتاج إلى التحقق',
     );
     return '$_temp0';
   }
@@ -4882,4 +4882,280 @@ class LAr extends L {
 
   @override
   String get notificationTravelerInterested => 'مسافر يستطيع حمل طردك';
+
+  @override
+  String get journeyModeSea => 'باخرة';
+
+  @override
+  String get routeSeaMode => 'باخرة';
+
+  @override
+  String get routeSeaSwitchedOff => 'رحلات الباخرة متوقفة حاليًا.';
+
+  @override
+  String get routeSeaTicketNote =>
+      'تحتاج رحلة الباخرة إلى التحقق من تذكرتك قبل نشر الرحلة. تضيف التذكرة بعد الحفظ.';
+
+  @override
+  String get routeSeaRefusedSwitchedOff =>
+      'رحلات الباخرة متوقفة الآن. اختر وسيلة أخرى لهذا الجزء.';
+
+  @override
+  String get routeSeaRefusedNoCrossing =>
+      'لا يوجد خط باخرة بين هاتين المدينتين في هذا الاتجاه حاليًا.';
+
+  @override
+  String get routeSeaRefusedNotPort =>
+      'تربط الباخرة بين مدن الموانئ. اختر المدينة لا المطار عند كل طرف من هذا الجزء.';
+
+  @override
+  String get routeSeaLinesFailedTitle => 'تعذّر تحميل خطوط الباخرة';
+
+  @override
+  String get routeSeaLinesFailedBody =>
+      'الرحلات الجوية والبرية تعمل كالمعتاد. أعد المحاولة لإضافة رحلة باخرة.';
+
+  @override
+  String get routeErrorSeaRefused =>
+      'لا يمكن استخدام رحلة باخرة على مسارك الآن. السبب موضح عند ذلك الجزء.';
+
+  @override
+  String get journeyErrorStopInvalid =>
+      'خيارات التسليم في إحدى محطاتك غير صالحة. راجع خيارات كل محطة.';
+
+  @override
+  String get routeCapacityMore => 'خيارات سعة إضافية';
+
+  @override
+  String get routeCapacityMoreHelp => 'اختياري. اترك الحقل فارغًا لعدم وضع حد.';
+
+  @override
+  String get routeVolumeLabel => 'الحجم (لتر)';
+
+  @override
+  String get routeParcelsLabel => 'عدد الطرود';
+
+  @override
+  String get routeVolumeInvalid =>
+      'أدخل عددًا صحيحًا من اللترات بين 1 و200,000.';
+
+  @override
+  String get routeParcelsInvalid =>
+      'أدخل عددًا صحيحًا من الطرود بين 1 و10,000.';
+
+  @override
+  String get routeHandoverAction => 'خيارات التسليم';
+
+  @override
+  String get routeHandoverBoth => 'استلام وتسليم الطرود';
+
+  @override
+  String get routeHandoverPickups => 'استلام الطرود فقط';
+
+  @override
+  String get routeHandoverDropoffs => 'تسليم الطرود فقط';
+
+  @override
+  String get routeHandoverNone => 'لا تسليم هنا';
+
+  @override
+  String routeHandoverSheetTitle(String stop) {
+    return 'التسليم في $stop';
+  }
+
+  @override
+  String get routeHandoverPickupLabel => 'قبول الاستلام هنا';
+
+  @override
+  String get routeHandoverPickupHelp =>
+      'يمكن للمرسل تسليمك طردًا في هذه المحطة.';
+
+  @override
+  String get routeHandoverDropoffLabel => 'قبول التسليم هنا';
+
+  @override
+  String get routeHandoverDropoffHelp =>
+      'يمكنك تسليم الطرد لمستلمه في هذه المحطة.';
+
+  @override
+  String get routeHandoverWindowTitle => 'فترة زمنية';
+
+  @override
+  String get routeHandoverWindowHelp =>
+      'اختياري. متى يمكنك اللقاء في هذه المحطة.';
+
+  @override
+  String get routeHandoverWindowFrom => 'من';
+
+  @override
+  String get routeHandoverWindowTo => 'حتى';
+
+  @override
+  String get routeHandoverWindowClear => 'إزالة الفترة الزمنية';
+
+  @override
+  String get routeHandoverNoteLabel => 'ملاحظة';
+
+  @override
+  String get routeHandoverNoteHint => 'مثال: نلتقي في المقهى قرب محطة الباخرة.';
+
+  @override
+  String get routeHandoverNoteSeen =>
+      'أنت وحدك ترى هذا إلى أن تُدفع قيمة توصيلة تمر بهذه المحطة. عندها يراه مرسل تلك التوصيلة أيضًا.';
+
+  @override
+  String get routeWindowIncomplete =>
+      'حدّد البداية والنهاية معًا أو أزل الفترة.';
+
+  @override
+  String get routeWindowOrder => 'يجب أن تنتهي الفترة بعد بدايتها.';
+
+  @override
+  String get routeWindowOutside =>
+      'يجب أن تقع الفترة بين وصولك إلى هذه المحطة ومغادرتك لها.';
+
+  @override
+  String get routeCarryTitle => 'ما تحمله';
+
+  @override
+  String get routeCarryHelp =>
+      'أوقف ما لن تحمله. لا يجدك المرسلون إلا للطرود التي تقبلها.';
+
+  @override
+  String get routeCarryFragile => 'الأشياء القابلة للكسر';
+
+  @override
+  String get routeCarryLastOne => 'يجب أن يبقى نوع واحد على الأقل مفعّلًا.';
+
+  @override
+  String get journeyPauseAction => 'إيقاف الرحلة مؤقتًا';
+
+  @override
+  String get journeyPauseConfirmTitle => 'هل تريد إيقاف هذه الرحلة مؤقتًا؟';
+
+  @override
+  String get journeyPauseConfirmBody =>
+      'يتوقف المرسلون عن العثور عليها ولا يمكن لأحد تقديم عرض جديد عليها. تستمر التوصيلات المدفوعة، ولا يمكن قبول عرض معلّق قبل الاستئناف.';
+
+  @override
+  String get journeyPaused => 'تم إيقاف الرحلة مؤقتًا.';
+
+  @override
+  String get journeyResumeAction => 'استئناف الرحلة';
+
+  @override
+  String get journeyResumed => 'تم استئناف الرحلة.';
+
+  @override
+  String get journeyPausedBannerTitle => 'هذه الرحلة متوقفة مؤقتًا';
+
+  @override
+  String get journeyPausedBannerBody =>
+      'لا يجده المرسلون ولا يمكن قبول العروض عليه. تستمر التوصيلات المدفوعة كالمعتاد.';
+
+  @override
+  String get journeyPausedStaffBody =>
+      'أوقفت Wassla هذه الرحلة مؤقتًا. تواصل مع الدعم لاستئنافها.';
+
+  @override
+  String get journeyErrorNotPausable =>
+      'لا يمكن إيقاف هذه الرحلة مؤقتًا في حالتها الحالية.';
+
+  @override
+  String get journeyErrorPausedByStaff =>
+      'أوقفت Wassla هذه الرحلة، لذلك لا يستطيع استئنافها إلا الدعم.';
+
+  @override
+  String journeyCapacityVolumeValue(int litres) {
+    return '$litres لتر';
+  }
+
+  @override
+  String journeyCapacityParcelsValue(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count طرد',
+      many: '$count طردًا',
+      few: '$count طرود',
+      two: 'طردان',
+      one: 'طرد واحد',
+      zero: 'لا طرود',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyHandoverTitle => 'التسليم في محطاتك';
+
+  @override
+  String journeyHandoverWindow(String from, String to) {
+    return 'بين $from و$to';
+  }
+
+  @override
+  String get journeyCarryTitle => 'ما تحمله';
+
+  @override
+  String get journeyCarryAll => 'يقبل كل أنواع الأشياء';
+
+  @override
+  String journeyCarryRefuses(String items) {
+    return 'لا يحمل: $items';
+  }
+
+  @override
+  String get journeyCarryNoFragile => 'لا أشياء قابلة للكسر';
+
+  @override
+  String get proofExplainerSea =>
+      'ارفع تذكرة الباخرة أو تأكيد الحجز. نتحقق منها قبل أن تتمكن رحلتك من استقبال الطرود.';
+
+  @override
+  String get proofChecklistTitle => 'الصورة الجيدة تُظهر';
+
+  @override
+  String get proofChecklistFlight => 'اسمك ورقم الرحلة والتاريخ والمطارين.';
+
+  @override
+  String get proofChecklistSea => 'اسمك وشركة الباخرة والتاريخ والميناءين.';
+
+  @override
+  String get rejectSea => 'خط باخرة في هذه الرحلة غير متاح حاليًا.';
+
+  @override
+  String get rejectPaused => 'أوقف المسافر هذه الرحلة مؤقتًا.';
+
+  @override
+  String get rejectHandover =>
+      'لا يسلّم المسافر الطرود في الأماكن التي تحتاجها.';
+
+  @override
+  String get rejectNotAccepted => 'لا يقبل المسافر هذا النوع من الأشياء.';
+
+  @override
+  String get rejectVolume => 'لا توجد مساحة كافية لحجم هذا الطرد.';
+
+  @override
+  String get rejectParcelSlots => 'لم يتبقَّ للمسافر مكان لطرد آخر.';
+
+  @override
+  String get findTravelersSeaProofApproved => 'تم التحقق من تذكرة الباخرة';
+
+  @override
+  String get findTravelersCaveatVolume =>
+      'يحدّد هذا المسافر الحجم وطلبك بلا أبعاد، فلم نستطع التحقق من أن طردك يتسع. هو من يقرر عند القبول.';
+
+  @override
+  String get staleJourneyPaused =>
+      'هذه الرحلة متوقفة مؤقتًا، فلا يمكن قبول أي شيء عليها قبل استئنافها.';
+
+  @override
+  String get dealHandoverTitle => 'أين ومتى تلتقيان';
+
+  @override
+  String get dealHandoverPickup => 'الاستلام';
+
+  @override
+  String get dealHandoverDropoff => 'التسليم';
 }

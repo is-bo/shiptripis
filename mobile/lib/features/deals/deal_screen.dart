@@ -675,6 +675,7 @@ class _RouteSection extends StatelessWidget {
       final modeLabel = switch (leg.mode) {
         TransportMode.flight => l.routeFlightMode,
         TransportMode.drive => l.routeDriveMode,
+        TransportMode.sea => l.routeSeaMode,
         TransportMode.unknown => l.routeTitle,
       };
 
@@ -727,8 +728,80 @@ class _RouteSection extends StatelessWidget {
               ],
             ),
           ),
+          _HandoverDetails(route: r),
         ],
       ),
+    );
+  }
+}
+
+/// Where and when to meet, as the traveller set it for the two stops this
+/// parcel uses. Shown only once the deal is funded: the route this sits under
+/// is itself withheld until then, and the server sends the note to no one else.
+class _HandoverDetails extends StatelessWidget {
+  const _HandoverDetails({required this.route});
+
+  final DealRoute route;
+
+  /// The place a handover stop refers to: a pickup is the start of leg
+  /// `position`, a drop-off the end of leg `position - 1`.
+  DealRouteEndpoint? _place(DealHandoverStop stop) {
+    final legPosition = stop.isPickup ? stop.position : stop.position - 1;
+    final leg = route.legs.where((l) => l.position == legPosition).firstOrNull;
+    return stop.isPickup ? leg?.origin : leg?.destination;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stops = route.handoverStops.where((s) => s.hasDetail).toList();
+    if (stops.isEmpty) return const SizedBox.shrink();
+
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final locale = Localizations.localeOf(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: l.dealHandoverTitle),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final stop in stops) ...[
+                if (stop != stops.first) const SizedBox(height: AppSpace.lg),
+                Text(
+                  [
+                    stop.isPickup
+                        ? l.dealHandoverPickup
+                        : l.dealHandoverDropoff,
+                    if (_place(stop) != null)
+                      (_place(stop)!.displayLabel.isNotEmpty
+                          ? _place(stop)!.displayLabel
+                          : _place(stop)!.name),
+                  ].join(' · '),
+                  style: text.titleSmall,
+                ),
+                if (stop.hasWindow) ...[
+                  const SizedBox(height: AppSpace.xxs),
+                  Text(
+                    l.journeyHandoverWindow(
+                      LocaleFormats.dateTime(locale, stop.windowStart!),
+                      LocaleFormats.dateTime(locale, stop.windowEnd!),
+                    ),
+                    style: text.bodySmall?.copyWith(color: c.textSecondary),
+                  ),
+                ],
+                if (stop.note.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.xxs),
+                  Text(stop.note, style: text.bodyMedium),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

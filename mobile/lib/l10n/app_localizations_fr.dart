@@ -301,8 +301,8 @@ class LFr extends L {
       'Votre vérification d’identité doit être réglée avant de pouvoir faire cela.';
 
   @override
-  String get staleFlightProofInvalid =>
-      'Votre justificatif de vol doit être réglé avant que ce trajet puisse être mis en correspondance.';
+  String get staleTicketInvalid =>
+      'Un billet de ce trajet doit être réglé avant qu\'il puisse être mis en correspondance.';
 
   @override
   String get staleReservationExpired => 'Votre réservation d’espace a expiré.';
@@ -843,11 +843,11 @@ class LFr extends L {
       'Rien n’est encore visible pour les expéditeurs. Publiez-le une fois votre justificatif de vol approuvé.';
 
   @override
-  String get journeyLegsNeedProofTitle => 'Vols nécessitant un justificatif';
+  String get journeyLegsNeedProofTitle => 'Billets à vérifier';
 
   @override
   String get journeyPublishBlockedProof =>
-      'Chaque étape en avion doit avoir un justificatif approuvé avant la mise en ligne.';
+      'Chaque tronçon en avion ou en ferry doit avoir un billet approuvé avant la mise en ligne.';
 
   @override
   String get journeyPublished =>
@@ -1042,15 +1042,15 @@ class LFr extends L {
 
   @override
   String get journeyEditProofNotice =>
-      'Modifier les aéroports, le numéro ou les horaires d\'un vol rend son justificatif obsolète : nous le revérifierons.';
+      'Modifier les lieux, le numéro ou les horaires d\'un tronçon en avion ou en ferry signifie que son billet ne correspond plus : nous le vérifierons à nouveau.';
 
   @override
   String get journeyEditProofWarningTitle =>
-      'Votre justificatif de vol sera revérifié';
+      'Votre billet sera vérifié à nouveau';
 
   @override
   String get journeyEditProofWarningBody =>
-      'Vous avez modifié un vol qui possède déjà un justificatif. Ce justificatif ne correspond plus à ce vol : il repasse en vérification et le trajet ne pourra être publié qu\'après une nouvelle approbation.';
+      'Vous avez modifié un tronçon qui a déjà un billet. Ce billet ne correspond plus : il repart en vérification et le trajet ne peut pas être mis en ligne avant son approbation.';
 
   @override
   String get proofErrorStorageUnavailable =>
@@ -1066,10 +1066,10 @@ class LFr extends L {
   String get proofRetry => 'Réessayer';
 
   @override
-  String get proofTitle => 'Justificatif de vol';
+  String get proofTitle => 'Justificatif de billet';
 
   @override
-  String get proofExplainer =>
+  String get proofExplainerFlight =>
       'Téléversez votre carte d’embarquement ou votre confirmation de réservation. Nous la vérifions avant que votre trajet puisse être associé à des colis.';
 
   @override
@@ -2600,8 +2600,8 @@ class LFr extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count vols nécessitent un justificatif',
-      one: '1 vol nécessite un justificatif',
+      other: '$count billets à vérifier',
+      one: '1 billet à vérifier',
     );
     return '$_temp0';
   }
@@ -4943,4 +4943,287 @@ class LFr extends L {
   @override
   String get notificationTravelerInterested =>
       'Un voyageur peut transporter votre colis';
+
+  @override
+  String get journeyModeSea => 'Ferry';
+
+  @override
+  String get routeSeaMode => 'Ferry';
+
+  @override
+  String get routeSeaSwitchedOff =>
+      'Les traversées en ferry sont désactivées pour le moment.';
+
+  @override
+  String get routeSeaTicketNote =>
+      'Une traversée en ferry doit être justifiée par votre billet avant la mise en ligne du trajet. Vous l\'ajoutez après l\'enregistrement.';
+
+  @override
+  String get routeSeaRefusedSwitchedOff =>
+      'Les traversées en ferry sont désactivées en ce moment. Choisissez un autre moyen pour ce tronçon.';
+
+  @override
+  String get routeSeaRefusedNoCrossing =>
+      'Aucune ligne de ferry ne relie ces deux villes dans ce sens pour le moment.';
+
+  @override
+  String get routeSeaRefusedNotPort =>
+      'Un ferry relie des villes portuaires. Choisissez la ville, pas un aéroport, pour chaque extrémité de ce tronçon.';
+
+  @override
+  String get routeSeaLinesFailedTitle =>
+      'Les lignes de ferry n\'ont pas pu être chargées';
+
+  @override
+  String get routeSeaLinesFailedBody =>
+      'Les vols et les trajets en voiture fonctionnent normalement. Réessayez pour ajouter une traversée en ferry.';
+
+  @override
+  String get routeErrorSeaRefused =>
+      'Une traversée en ferry de votre trajet n\'est pas utilisable pour le moment. Le motif est indiqué sur ce tronçon.';
+
+  @override
+  String get journeyErrorStopInvalid =>
+      'Les options de remise d\'un de vos arrêts ne sont pas valides. Vérifiez les options de chaque arrêt.';
+
+  @override
+  String get routeCapacityMore => 'Plus d\'options de capacité';
+
+  @override
+  String get routeCapacityMoreHelp =>
+      'Facultatif. Laissez un champ vide pour ne fixer aucune limite.';
+
+  @override
+  String get routeVolumeLabel => 'Volume (litres)';
+
+  @override
+  String get routeParcelsLabel => 'Nombre de colis';
+
+  @override
+  String get routeVolumeInvalid =>
+      'Saisissez un nombre entier de litres entre 1 et 200 000.';
+
+  @override
+  String get routeParcelsInvalid =>
+      'Saisissez un nombre entier de colis entre 1 et 10 000.';
+
+  @override
+  String get routeHandoverAction => 'Options de remise';
+
+  @override
+  String get routeHandoverBoth => 'Prise en charge et remise';
+
+  @override
+  String get routeHandoverPickups => 'Prise en charge uniquement';
+
+  @override
+  String get routeHandoverDropoffs => 'Remise uniquement';
+
+  @override
+  String get routeHandoverNone => 'Aucune remise ici';
+
+  @override
+  String routeHandoverSheetTitle(String stop) {
+    return 'Remise à $stop';
+  }
+
+  @override
+  String get routeHandoverPickupLabel => 'Accepter les prises en charge ici';
+
+  @override
+  String get routeHandoverPickupHelp =>
+      'Un expéditeur peut vous confier un colis à cet arrêt.';
+
+  @override
+  String get routeHandoverDropoffLabel => 'Accepter les remises ici';
+
+  @override
+  String get routeHandoverDropoffHelp =>
+      'Vous pouvez remettre un colis à son destinataire à cet arrêt.';
+
+  @override
+  String get routeHandoverWindowTitle => 'Plage horaire';
+
+  @override
+  String get routeHandoverWindowHelp =>
+      'Facultatif. Quand vous pouvez retrouver quelqu\'un à cet arrêt.';
+
+  @override
+  String get routeHandoverWindowFrom => 'De';
+
+  @override
+  String get routeHandoverWindowTo => 'Jusqu\'à';
+
+  @override
+  String get routeHandoverWindowClear => 'Supprimer la plage horaire';
+
+  @override
+  String get routeHandoverNoteLabel => 'Note';
+
+  @override
+  String get routeHandoverNoteHint =>
+      'Par exemple : rendez-vous au café près du terminal des ferries.';
+
+  @override
+  String get routeHandoverNoteSeen =>
+      'Vous seul le voyez, jusqu\'à ce qu\'une livraison passant par cet arrêt soit payée. L\'expéditeur de cette livraison le voit alors aussi.';
+
+  @override
+  String get routeWindowIncomplete =>
+      'Indiquez un début et une fin, ou supprimez la plage.';
+
+  @override
+  String get routeWindowOrder => 'La plage doit se terminer après son début.';
+
+  @override
+  String get routeWindowOutside =>
+      'La plage doit se situer entre votre arrivée à cet arrêt et votre départ.';
+
+  @override
+  String get routeCarryTitle => 'Ce que vous transportez';
+
+  @override
+  String get routeCarryHelp =>
+      'Désactivez ce que vous refusez. Les expéditeurs ne vous trouvent que pour les colis que vous acceptez.';
+
+  @override
+  String get routeCarryFragile => 'Objets fragiles';
+
+  @override
+  String get routeCarryLastOne =>
+      'Au moins un type d\'objet doit rester activé.';
+
+  @override
+  String get journeyPauseAction => 'Mettre en pause';
+
+  @override
+  String get journeyPauseConfirmTitle => 'Mettre ce trajet en pause ?';
+
+  @override
+  String get journeyPauseConfirmBody =>
+      'Les expéditeurs ne le trouvent plus et personne ne peut y faire de nouvelle offre. Les livraisons déjà payées continuent, et une offre en attente ne peut pas être acceptée avant la reprise.';
+
+  @override
+  String get journeyPaused => 'Trajet mis en pause.';
+
+  @override
+  String get journeyResumeAction => 'Reprendre le trajet';
+
+  @override
+  String get journeyResumed => 'Trajet repris.';
+
+  @override
+  String get journeyPausedBannerTitle => 'Ce trajet est en pause';
+
+  @override
+  String get journeyPausedBannerBody =>
+      'Les expéditeurs ne le trouvent pas et les offres ne peuvent pas être acceptées. Les livraisons déjà payées continuent normalement.';
+
+  @override
+  String get journeyPausedStaffBody =>
+      'Wassla a mis ce trajet en pause. Contactez l\'assistance pour le faire reprendre.';
+
+  @override
+  String get journeyErrorNotPausable =>
+      'Ce trajet ne peut pas être mis en pause dans son état actuel.';
+
+  @override
+  String get journeyErrorPausedByStaff =>
+      'Wassla a mis ce trajet en pause : seule l\'assistance peut le reprendre.';
+
+  @override
+  String journeyCapacityVolumeValue(int litres) {
+    return '$litres L';
+  }
+
+  @override
+  String journeyCapacityParcelsValue(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count colis',
+      one: '1 colis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get journeyHandoverTitle => 'Remise à vos arrêts';
+
+  @override
+  String journeyHandoverWindow(String from, String to) {
+    return 'Entre $from et $to';
+  }
+
+  @override
+  String get journeyCarryTitle => 'Ce que vous transportez';
+
+  @override
+  String get journeyCarryAll => 'Accepte tous les types d\'objets';
+
+  @override
+  String journeyCarryRefuses(String items) {
+    return 'Refuse : $items';
+  }
+
+  @override
+  String get journeyCarryNoFragile => 'Pas d\'objets fragiles';
+
+  @override
+  String get proofExplainerSea =>
+      'Envoyez votre billet de ferry ou votre confirmation de réservation. Nous le vérifions avant que votre trajet puisse recevoir des colis.';
+
+  @override
+  String get proofChecklistTitle => 'Une bonne photo montre';
+
+  @override
+  String get proofChecklistFlight =>
+      'Votre nom, le numéro de vol, la date et les deux aéroports.';
+
+  @override
+  String get proofChecklistSea =>
+      'Votre nom, la compagnie de ferry, la date et les deux ports.';
+
+  @override
+  String get rejectSea =>
+      'Une ligne de ferry de ce trajet n\'est pas disponible pour le moment.';
+
+  @override
+  String get rejectPaused => 'Le voyageur a mis ce trajet en pause.';
+
+  @override
+  String get rejectHandover =>
+      'Le voyageur ne fait pas de remise aux endroits dont vous avez besoin.';
+
+  @override
+  String get rejectNotAccepted =>
+      'Le voyageur n\'accepte pas ce type d\'objet.';
+
+  @override
+  String get rejectVolume =>
+      'Il ne reste pas assez de place pour la taille de ce colis.';
+
+  @override
+  String get rejectParcelSlots =>
+      'Le voyageur n\'a plus de place pour un colis.';
+
+  @override
+  String get findTravelersSeaProofApproved => 'Billet de ferry vérifié';
+
+  @override
+  String get findTravelersCaveatVolume =>
+      'Ce voyageur limite le volume et votre demande n\'a pas de dimensions : nous n\'avons pas pu vérifier que votre colis tient. Il décide à l\'acceptation.';
+
+  @override
+  String get staleJourneyPaused =>
+      'Ce trajet est en pause : rien ne peut y être accepté avant sa reprise.';
+
+  @override
+  String get dealHandoverTitle => 'Où et quand se retrouver';
+
+  @override
+  String get dealHandoverPickup => 'Prise en charge';
+
+  @override
+  String get dealHandoverDropoff => 'Remise';
 }

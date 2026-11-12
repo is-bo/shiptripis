@@ -131,12 +131,23 @@ class ApiException implements Exception {
   /// noise in a normal error message.
   String? get requestId => extras['request_id'] as String?;
 
-  int? intExtra(String key) => switch (extras[key]) {
+  /// A domain value as one scalar. A refusal raised from
+  /// `Serializer.validate` arrives with every value wrapped in a one-element
+  /// list, so `leg_position` is `["2"]` there and `2` everywhere else.
+  Object? _scalarExtra(String key) {
+    final raw = extras[key];
+    return raw is List ? raw.firstOrNull : raw;
+  }
+
+  int? intExtra(String key) => switch (_scalarExtra(key)) {
     final int v => v,
     final num v => v.toInt(),
     final String v => int.tryParse(v),
     _ => null,
   };
+
+  String? stringExtra(String key) =>
+      _scalarExtra(key) is String ? _scalarExtra(key) as String : null;
 
   DateTime? dateExtra(String key) {
     final raw = extras[key];

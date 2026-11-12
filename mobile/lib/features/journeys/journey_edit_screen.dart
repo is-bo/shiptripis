@@ -40,9 +40,11 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
-import 'journey_create_screen.dart' show journeyRouteFailure;
+import 'journey_create_screen.dart'
+    show journeyRouteFailure, showRouteRefusalOnLeg;
 import 'journey_route_draft.dart';
-import 'journey_route_editor.dart';
+import 'journey_route_editor.dart' show routeCopyOf;
+import 'journey_route_section.dart';
 
 class JourneyEditScreen extends ConsumerStatefulWidget {
   const JourneyEditScreen({required this.journeyId, super.key});
@@ -69,6 +71,9 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
     'start_place_id',
     'destination_place_id',
     'legs',
+    'stops',
+    'refused_categories',
+    'accepts_fragile',
     'notes',
   };
 
@@ -123,6 +128,9 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
             startPlaceId: draft.startPlaceId,
             destinationPlaceId: draft.destinationPlaceId,
             legs: draft.toLegDrafts(),
+            stops: draft.toStopDrafts(),
+            refusedCategories: draft.refusedCategoryWire,
+            acceptsFragile: draft.acceptsFragile,
             notes: _notes.text.trim(),
           );
 
@@ -140,6 +148,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _fieldErrors = FieldErrorMap.from(error));
+      showRouteRefusalOnLeg(draft, error);
       AppSnack.failure(
         context,
         error,
@@ -161,7 +170,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
   bool _wouldInvalidateProof(Journey journey, JourneyRouteDraft draft) {
     final proven = {
       for (final leg in journey.legs)
-        if (leg.mode.requiresProof && leg.proofs.isNotEmpty) leg.id: leg,
+        if (leg.proofRequired && leg.proofs.isNotEmpty) leg.id: leg,
     };
     if (proven.isEmpty) return false;
 
@@ -173,10 +182,18 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
       kept.add(id);
       final leg = proven[id];
       if (leg == null) continue;
+      // A ferry joins cities and a flight joins airports, so each is compared
+      // on the places it actually travels between.
+      final from = segment.mode.isSea
+          ? draft.stops[i].place
+          : draft.stops[i].endpoint;
+      final to = segment.mode.isSea
+          ? draft.stops[i + 1].place
+          : draft.stops[i + 1].endpoint;
       final changed =
-          !segment.mode.isFlight ||
-          leg.originPlace?.id != draft.stops[i].endpoint.id ||
-          leg.destinationPlace?.id != draft.stops[i + 1].endpoint.id ||
+          segment.displayMode != leg.mode ||
+          leg.originPlace?.id != from.id ||
+          leg.destinationPlace?.id != to.id ||
           _normalisedFlightNumber(leg.flightNumber) !=
               _normalisedFlightNumber(segment.flightNumber.text) ||
           leg.departAt != segment.departAt ||
@@ -232,11 +249,7 @@ class _JourneyEditScreenState extends ConsumerState<JourneyEditScreen> {
                   const SizedBox(height: AppSpace.xl),
                 ],
 
-                SectionHeader(
-                  title: l.routeStopsTitle,
-                  subtitle: l.routeStopsHelp,
-                ),
-                JourneyRouteEditor(
+                JourneyRouteSection(
                   draft: draft,
                   enabled: !_busy,
                   showErrors: _showErrors,

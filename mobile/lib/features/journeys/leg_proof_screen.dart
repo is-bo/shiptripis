@@ -1,6 +1,6 @@
-/// Flight proof for one leg.
+/// The ticket for one leg: a flight's boarding pass or a ferry's ticket.
 ///
-/// Proof is what lets a sender believe the flight is real, so the screen leads
+/// Proof is what lets a sender believe the trip is real, so the screen leads
 /// with that rather than treating it as paperwork.
 ///
 /// The server verifies the file's actual bytes against its declared type, so a
@@ -31,6 +31,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/traveler_candidate_card.dart' show modeAccentColor;
 import 'journey_labels.dart';
 
 /// What the server accepts. Duplicated here only to avoid a doomed upload.
@@ -229,7 +230,9 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
             );
           }
 
-          if (!leg.mode.requiresProof) {
+          // Whether a leg needs a ticket is the server's answer, never a guess
+          // from its mode.
+          if (!leg.proofRequired) {
             return AppEmptyState(
               title: l.proofTitle,
               body: l.proofDriveNotRequired,
@@ -246,21 +249,10 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
                 ? AppScrollPadding.page(context)
                 : AppScrollPadding.pageWithFooter(context),
             children: [
-              Text(
-                l.proofLegLabel(
-                  leg.position + 1,
-                  legOriginLabel(leg),
-                  legDestinationLabel(leg),
-                ),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              _LegHeading(leg: leg),
               const SizedBox(height: AppSpace.lg),
 
-              InfoNotice(
-                message: l.proofExplainer,
-                tone: StatusTone.progress,
-                icon: Icons.verified_user_outlined,
-              ),
+              _ProofGuide(mode: leg.mode),
               const SizedBox(height: AppSpace.xl),
 
               if (leg.proofs.isNotEmpty) ...[
@@ -386,6 +378,104 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
   }
 }
 
+/// Which leg this is, and where its ticket stands.
+class _LegHeading extends StatelessWidget {
+  const _LegHeading({required this.leg});
+
+  final JourneyLeg leg;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final style = legProofStateStyle(l, leg.proofState);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            l.proofLegLabel(
+              leg.position + 1,
+              legOriginLabel(leg),
+              legDestinationLabel(leg),
+            ),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(width: AppSpace.sm),
+        StatusPill(
+          label: style.label,
+          tone: style.tone,
+          icon: style.icon,
+          compact: true,
+        ),
+      ],
+    );
+  }
+}
+
+/// What to upload, in the words and picture of the trip being proved.
+///
+/// A ferry ticket and a boarding pass are different documents with different
+/// things worth checking, so each mode gets its own explanation and its own
+/// short list of what the photo has to show, beside a glyph that matches the
+/// leg's mode colour on the route line.
+class _ProofGuide extends StatelessWidget {
+  const _ProofGuide({required this.mode});
+
+  final TransportMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final isSea = mode == TransportMode.sea;
+    final accent = modeAccentColor(context, mode);
+
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExcludeSemantics(
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(mode.icon, color: accent, size: 22),
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSea ? l.proofExplainerSea : l.proofExplainerFlight,
+                  style: text.bodyMedium,
+                ),
+                const SizedBox(height: AppSpace.md),
+                Text(
+                  l.proofChecklistTitle,
+                  style: text.labelMedium?.copyWith(color: c.textSecondary),
+                ),
+                const SizedBox(height: AppSpace.xxs),
+                Text(
+                  isSea ? l.proofChecklistSea : l.proofChecklistFlight,
+                  style: text.bodySmall?.copyWith(color: c.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProofCard extends StatelessWidget {
   const _ProofCard({required this.proof});
 
@@ -427,10 +517,12 @@ class _ProofCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  proof.kind.replaceAll('_', ' '),
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                child: Text(switch (proof.kind) {
+                  'ticket' => l.proofKindTicket,
+                  'boarding_pass' => l.proofKindBoardingPass,
+                  'booking_confirmation' => l.proofKindBookingConfirmation,
+                  final other => other.replaceAll('_', ' '),
+                }, style: Theme.of(context).textTheme.titleSmall),
               ),
               StatusPill(label: label, tone: tone, icon: icon, compact: true),
             ],

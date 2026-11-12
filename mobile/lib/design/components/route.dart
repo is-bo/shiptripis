@@ -232,6 +232,7 @@ class _SegmentRow extends StatelessWidget {
         : switch (segment.mode) {
             TransportMode.flight => c.modeFlight,
             TransportMode.drive => c.modeDrive,
+            TransportMode.sea => c.modeSea,
             TransportMode.unknown => c.textTertiary,
           };
 
