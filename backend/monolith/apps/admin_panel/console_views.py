@@ -34,6 +34,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.core.admin_display import (
     format_eur,
@@ -108,6 +109,7 @@ from apps.trips.proofs import STATE_MISSING as PROOF_STATE_MISSING
 from apps.trips.proofs import STATE_PENDING as PROOF_STATE_PENDING
 from apps.trips.proofs import STATE_REJECTED as PROOF_STATE_REJECTED
 from apps.trips.proofs import leg_proof_state, leg_requires_proof
+from apps.trips.stops import effective_stops
 
 from .console_forms import (
     BoostEconomicsSettingsForm,
@@ -152,6 +154,8 @@ from .console_presenters import (
     status_cell,
     text_cell,
 )
+from .console_journey_pause import pause_state
+from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import AdminSettingsCreateSerializer
@@ -183,9 +187,14 @@ KYC_QUEUE_QUERY = {
     "status": frozenset(value for value, _ in KycSubmission.Status.choices),
     "page": positive_page,
 }
+PROOF_MODES = (
+    (JourneyLeg.Mode.FLIGHT.value, "Flight"),
+    (JourneyLeg.Mode.SEA.value, "Sea"),
+)
 PROOF_QUEUE_QUERY = {
     "q": bounded_query_text,
     "status": frozenset(value for value, _ in JourneyLegProof.Status.choices),
+    "mode": frozenset(value for value, _ in PROOF_MODES),
     "page": positive_page,
 }
 DISPUTE_QUEUE_QUERY = {
@@ -211,7 +220,7 @@ ROLE_DESCRIPTIONS = {
         "worker queues. Cannot read private evidence."
     ),
     AdminRole.TRUST: (
-        "Reviews KYC, flight proofs and dispute evidence, with relevant user "
+        "Reviews KYC, ticket proofs and dispute evidence, with relevant user "
         "and Deal context."
     ),
     AdminRole.SUPER_ADMIN: (
@@ -328,6 +337,7 @@ def _table(
     eyebrow: str = "Operations",
     bulk_action_url: str = "",
     bulk_form=None,
+    extra_filters: tuple[dict, ...] = (),
 ):
     # A column of amounts has to line up under a header that agrees with it, or
     # the alignment reads as an accident. The cell kind already says which
@@ -380,6 +390,12 @@ def _table(
             "empty_title": empty_title,
             "empty_text": empty_text,
             "filter_choices": filter_choices,
+            "extra_filters": extra_filters,
+            "has_filter": bool(
+                request.GET.get("q")
+                or request.GET.get("status")
+                or any(item["current"] for item in extra_filters)
+            ),
             "current_status": request.GET.get("status", ""),
             "query": request.GET.get("q", ""),
             "search_placeholder": search_placeholder,
@@ -429,7 +445,7 @@ def _search(queryset, request, fields: tuple[str, ...]):
 #: unreachable.
 _STORAGE_LABELS = {
     "parcel": ("Parcel photos and private media", "Item photos senders upload."),
-    "proof": ("Flight proof", "Boarding passes and tickets awaiting review."),
+    "proof": ("Ticket proofs", "Flight and ferry tickets awaiting review."),
     "dispute": ("Dispute evidence", "Files parties attach to a dispute."),
     "kyc": ("Identity evidence", "KYC documents and selfies awaiting review."),
 }
@@ -614,8 +630,8 @@ def _attention_items(user, *, provider_rows=()) -> list[dict]:
     )
     add(
         "view_flight_proofs",
-        "Flight proofs to review",
-        "Flight legs are not matchable until their proof is approved.",
+        "Ticket proofs to review",
+        "Flight and ferry legs are not matchable until their ticket is approved.",
         JourneyLegProof.objects.filter(status=JourneyLegProof.Status.PENDING).count(),
         "admin_console:proof-queue",
         "status=pending",
@@ -1182,6 +1198,10 @@ def _proof_queryset(request=None):
     if request is None:
         return queryset
     queryset = _filter_choice(queryset, request)
+    mode = request.GET.get("mode", "").strip()
+    if mode:
+        known = mode in dict(PROOF_MODES)
+        queryset = queryset.filter(leg__mode=mode) if known else queryset.none()
     return _search(
         queryset,
         request,
@@ -1191,6 +1211,31 @@ def _proof_queryset(request=None):
             "leg__flight_number",
         ),
     )
+
+
+#: What the traveler's document is called, by the kind the app stores.
+_DOCUMENT_KINDS = {
+    "ticket": "Ticket",
+    "boarding_pass": "Boarding pass",
+    "booking_confirmation": "Booking confirmation",
+}
+
+
+def _document_kind(proof) -> str:
+    return _DOCUMENT_KINDS.get(proof.kind, proof.kind.replace("_", " ").capitalize())
+
+
+def _ticket_reference(proof) -> str:
+    """What identifies this ticket in a list: a flight number, else the document.
+
+    A ferry leg has no flight number and the app records no booking reference
+    for it, so the queue names the document the traveler sent instead.
+    """
+
+    leg = proof.leg
+    if leg.mode == JourneyLeg.Mode.FLIGHT:
+        return leg.flight_number or "Flight number not provided"
+    return _document_kind(proof)
 
 
 @capability_required("view_flight_proofs")
@@ -1215,8 +1260,9 @@ def flight_proof_queue(request):
                         kind="strong",
                     ),
                     route_cell(_leg_route_nodes(leg)),
+                    text_cell(leg.get_mode_display(), kind="strong"),
                     text_cell(
-                        leg.flight_number or "Flight number not provided",
+                        _ticket_reference(proof),
                         f"Departs {leg.depart_at.strftime('%d %b %Y, %H:%M')}",
                     ),
                     status_cell(proof.status, proof.get_status_display()),
@@ -1226,20 +1272,31 @@ def flight_proof_queue(request):
         )
     return _table(
         request,
-        title="Flight-proof review",
-        description="Review the actual proof next to its Traveler, route, flight and date.",
+        title="Ticket proofs",
+        description=(
+            "Review each flight or ferry ticket next to its Traveler, route and date."
+        ),
         eyebrow="Verification",
-        columns=("Traveler", "Leg route", "Flight", "State", "Submitted"),
+        columns=("Traveler", "Leg route", "Mode", "Ticket", "State", "Submitted"),
         rows=rows,
         page_obj=page_obj,
         empty_title=(
-            "No flight proofs waiting"
+            "No ticket proofs waiting"
             if request.GET.get("status") == "pending"
-            else "No flight proofs"
+            else "No ticket proofs"
         ),
-        empty_text="No flight leg is waiting on a transport decision.",
+        empty_text="No flight or ferry leg is waiting on a ticket decision.",
         filter_choices=tuple(JourneyLegProof.Status.choices),
-        search_placeholder="Search Traveler or flight",
+        extra_filters=(
+            {
+                "name": "mode",
+                "label": "Mode",
+                "all_label": "All modes",
+                "choices": PROOF_MODES,
+                "current": request.GET.get("mode", ""),
+            },
+        ),
+        search_placeholder="Search Traveler or flight number",
     )
 
 
@@ -1249,11 +1306,11 @@ def flight_proof_detail(request, pk: int):
     form = ReviewDecisionForm(request.POST or None)
     if request.method == "POST":
         if not has_admin_permission(request.user, "review_flight_proofs"):
-            raise PermissionDenied("Flight-proof review permission is required.")
+            raise PermissionDenied("Ticket review permission is required.")
         if _handle_review(request, form, kind="proof", object_id=proof.pk):
             messages.success(
                 request,
-                "Flight-proof decision saved and audited. Review the Decision section for the current status.",
+                "Ticket decision saved and audited. Review the Decision section for the current status.",
             )
             return admin_redirect(
                 request,
@@ -1281,7 +1338,14 @@ def flight_proof_detail(request, pk: int):
             "title": proof.leg.journey.traveler.full_name
             or proof.leg.journey.traveler.email,
             "kind": "proof",
-            "subject": "Transport verification",
+            "subject": "Ticket verification",
+            "leg_noun": "flight" if proof.leg.mode == JourneyLeg.Mode.FLIGHT else "ferry crossing",
+            "ticket_label": (
+                "Flight ticket"
+                if proof.leg.mode == JourneyLeg.Mode.FLIGHT
+                else "Ferry ticket"
+            ),
+            "document_kind": _document_kind(proof),
             "record": proof,
             "applicant": proof.leg.journey.traveler,
             "leg": proof.leg,
@@ -1302,7 +1366,11 @@ def flight_proof_detail(request, pk: int):
             "evidence": (
                 {
                     "slot": "proof",
-                    "label": "Flight proof",
+                    "label": (
+                        "Flight ticket"
+                        if proof.leg.mode == JourneyLeg.Mode.FLIGHT
+                        else "Ferry ticket"
+                    ),
                     "previewable": proof.content_type
                     in ("image/jpeg", "image/png", "image/webp"),
                     "available": proof_available,
@@ -1412,7 +1480,7 @@ def _journey_queryset(request):
             "start_location",
             "destination_location",
         )
-        .prefetch_related(Prefetch("legs", queryset=legs))
+        .prefetch_related(Prefetch("legs", queryset=legs), "stop_details")
         .order_by("-created_at")
     )
     queryset = _filter_choice(queryset, request)
@@ -1443,6 +1511,20 @@ def _proof_summary(journey) -> tuple[str, str]:
         if state in states:
             return label, tone
     return "Approved", "ok"
+
+
+def _journey_state_cell(journey) -> dict:
+    """The journey's status, with a pause shown ahead of it: it is what an
+    operator scanning the list most needs to see."""
+
+    if journey.paused_at is None:
+        return status_cell(journey.status, journey.get_status_display())
+    label = "Paused by staff" if journey.paused_by_staff else "Paused by traveler"
+    return {
+        "primary": f"{label} · {journey.get_status_display()}",
+        "kind": "status",
+        "tone": "attn",
+    }
 
 
 @capability_required("view_journeys")
@@ -1484,14 +1566,14 @@ def journeys(request):
                         legs[0].depart_at.strftime("%H:%M") if legs else "",
                     ),
                     {"primary": proof_text, "kind": "status", "tone": proof_tone},
-                    status_cell(journey.status, journey.get_status_display()),
+                    _journey_state_cell(journey),
                 )
             }
         )
     return _table(
         request,
         title="Journeys",
-        description="Ordered flight and drive legs, segment capacity and proof readiness in one queue.",
+        description="Ordered flight, road and sea legs, segment capacity and ticket readiness in one queue.",
         eyebrow="Marketplace",
         columns=(
             "Journey",
@@ -1499,7 +1581,7 @@ def journeys(request):
             "Ordered route",
             "Capacity",
             "Departs",
-            "Flight proof",
+            "Tickets",
             "State",
         ),
         rows=rows,
@@ -1511,11 +1593,54 @@ def journeys(request):
     )
 
 
+def _console_stops(journey, legs) -> list[dict]:
+    """Every stop with what it accepts and the handover detail staff may read."""
+
+    rows = []
+    for stop in effective_stops(journey, legs=legs, include_handover_detail=True):
+        position = stop["position"]
+        place = (
+            legs[0].origin_place if position == 0 else legs[position - 1].destination_place
+        )
+        window = ""
+        if stop["window_start"] and stop["window_end"]:
+            start = timezone.localtime(parse_datetime(stop["window_start"]))
+            end = timezone.localtime(parse_datetime(stop["window_end"]))
+            window = f"{start:%d %b %H:%M} to {end:%d %b %H:%M}"
+        rows.append(
+            {
+                "position": position + 1,
+                "label": place_label(place),
+                "pickup": stop["accepts_pickup"],
+                "dropoff": stop["accepts_dropoff"],
+                "window": window,
+                "note": stop["handover_note"],
+            }
+        )
+    return rows
+
+
+def _traveler_accepts(journey) -> dict:
+    categories = list(journey.refused_categories or [])
+    return {
+        "refused": ", ".join(
+            ParcelRequest.ItemType(category).label
+            if category in ParcelRequest.ItemType.values
+            else category
+            for category in categories
+        ),
+        "fragile": journey.accepts_fragile,
+    }
+
+
 @capability_required("view_journeys")
 def journey_detail(request, pk: int):
     journey = get_object_or_404(_journey_queryset(request), pk=pk)
-    for leg in journey.legs.all():
+    legs = list(journey.legs.all())
+    for leg in legs:
         leg.console_route_nodes = _leg_route_nodes(leg)
+        leg.console_proof_state = leg_proof_state(leg)
+    may_manage = has_admin_permission(request.user, "manage_journeys")
     return _render(
         request,
         "admin/console/journey_detail.html",
@@ -1525,6 +1650,9 @@ def journey_detail(request, pk: int):
             "route": journey_route(journey),
             "route_nodes": journey_route_nodes(journey),
             "proof_summary": _proof_summary(journey),
+            "stops": _console_stops(journey, legs),
+            "pause": pause_state(journey, may_manage=may_manage),
+            "traveler_accepts": _traveler_accepts(journey),
         },
     )
 
@@ -3282,6 +3410,7 @@ def business_settings(request):
             "listings_enabled": marketplace.discovery.listings_enabled,
             "profiles_enabled": marketplace.discovery.profiles_enabled,
             "interest_daily_cap": marketplace.discovery.interest_daily_cap,
+            "sea_legs_enabled": marketplace.sea_legs_enabled,
         },
         auto_id="id_marketplace_%s",
     )
@@ -3387,6 +3516,7 @@ def business_settings(request):
                         "marketplace.discovery.interest_daily_cap": data[
                             "interest_daily_cap"
                         ],
+                        "marketplace.sea_legs_enabled": data["sea_legs_enabled"],
                     },
                     commission_rate_bps=None,
                     reason=data["reason"],
@@ -4172,6 +4302,9 @@ def geography(request):
             # cannot answer "is this the catalogue the release shipped?" after a
             # partial or a superseded import; the digest can.
             "catalogue_import": GeographyCatalogueImport.objects.first(),
+            "sea_switch": sea_switch_state(),
+            "sea_crossings": crossing_rows(request.user),
+            "may_manage_crossings": may_manage_crossings(request.user),
         },
     )
 

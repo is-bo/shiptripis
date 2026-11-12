@@ -753,7 +753,7 @@ class SeaCrossing(models.Model):
     the method a flight leg uses (spec 5.4). It is stored rather than derived
     because the French and Spanish catalogue localities carry no coordinates:
     it comes from catalogue coordinates when both cities have them and from
-    the reviewed port coordinates in ``tools/geography/sea_crossings.json``
+    the reviewed port coordinates in ``apps/locations/data/sea_crossings.json``
     otherwise, through the same haversine function either way.
 
     Staff create, activate and deactivate rows through

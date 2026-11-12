@@ -191,7 +191,8 @@ class MarketplaceFormTests(TestCase):
                     "listings_enabled": True,
                     "profiles_enabled": False,
                     "interest_daily_cap": 4,
-                }
+                },
+                "sea_legs_enabled": False,
             },
         )
         policy = marketplace_policy()
@@ -201,6 +202,29 @@ class MarketplaceFormTests(TestCase):
         self.assertEqual(audit.reason, "Pausing public profiles during review")
         self.assertIsNone(audit.before["marketplace.discovery.profiles_enabled"])
         self.assertFalse(audit.after["marketplace.discovery.profiles_enabled"])
+
+    def test_the_sea_legs_switch_is_saved_with_the_form_and_audited(self):
+        self._grant("super_admin")
+
+        self._post(sea_legs_enabled="on")
+
+        self.assertTrue(marketplace_policy().sea_legs_enabled)
+        audit = AdminAuditLog.objects.get(action="settings.version_created")
+        self.assertIsNone(audit.before["marketplace.sea_legs_enabled"])
+        self.assertTrue(audit.after["marketplace.sea_legs_enabled"])
+
+        self._post(reason="Customs question open")
+
+        self.assertFalse(marketplace_policy().sea_legs_enabled)
+
+    def test_the_settings_page_warns_what_sea_legs_enables(self):
+        self._grant("super_admin")
+        self.client.force_login(self.admin)
+
+        body = self.client.get(reverse("admin_console:settings")).content.decode()
+
+        self.assertIn("Allow sea legs", body)
+        self.assertIn("customs", body)
 
     def test_a_viewer_without_manage_settings_cannot_save(self):
         self._grant("support")
