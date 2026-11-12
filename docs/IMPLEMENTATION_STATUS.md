@@ -2,7 +2,7 @@
 
 ## Wassla L5B — Progress updates and reminders, mobile (2026-11-12)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
+Status: **merged** (PR #35, `c078060`, into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
 
 - Journey page "Trip progress" stepper with one button for the next step the server offers and a 10-minute
   undo; Home asks "Did you depart from {place}?"; the reminder push and inbox row open the same question as

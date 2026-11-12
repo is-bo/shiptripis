@@ -28,7 +28,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L11A | Tracking number, backend | Opus | high | merged | `claude/project-thread-5otrp2` | #32 | `1021c89` | `docs/PHASE_L11A_TRACKING_NUMBER.md` |
 | L11B | Tracking number, mobile | Sonnet | medium | merged | `claude/project-thread-14swqv` | #33 | `75640c0` | `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md` |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | merged | `claude/project-thread-lsol7m` | #34 | `73d5169` | `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md` |
-| L5B | Progress updates and reminders, mobile | Sonnet | medium | not_started | | | | |
+| L5B | Progress updates and reminders, mobile | Sonnet | medium | merged | `claude/project-thread-s4d2gr` | #35 | `c078060` | `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md` |
 | L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | not_started | | | | |
 | L6B | Professional Mode, mobile | Sonnet | medium | not_started | | | | |
 | L7A | Manifest, backend projections | Sonnet | medium | not_started | | | | |
@@ -53,7 +53,7 @@ table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L
 to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
 the board is otherwise still edited only by the orchestrator.
 
-**Next package:** L5B (Sonnet, medium effort), then L6A (Opus, high). Section 3 order.
+**Next package:** L6A (Opus, high effort), then L6B (Sonnet, medium). Section 3 order.
 
 **L11A judgment calls (accepted at the gate, for Ismail's end review):** (1) no guest payer email or page carries the tracking number, including the deposit receipt the plan mentions, because spec 16's list of who sees it leaves the guest out (spec wins over plan); (2) `GET /api/parcels/<id>` shows the number to the sender only, a traveler learns it from the proposal; (3) the console Payments and Payouts lists lead with the number, the payer or traveler moves to the second column; (4) background-job and technical-record pages keep record ids. The gate also fixed two console layout bugs that predate L11A: every list's search box was about 174 px wide instead of 340 px, and the deal heading lost its mono face.
 
@@ -439,12 +439,25 @@ Detail: `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md`.
 
 ### L5B. Progress updates and reminders, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md`. Screenshots: `l-series-screens/L5B/` (EN and AR).
+
+- Contract as built (names that differ from the plan): no backend change. Reminder deep link is
+  `/journeys/<id>?leg=<leg_id>&ask=<kind>`; new `LiveResource.progress` for Home's question; the sender's
+  timeline lines come from the deal's existing `timeline` array (`traveler_progress`, minus any
+  `traveler_progress_retracted` with the same `progress_id`).
+- Left for a later package: nothing from this package. L9A's route changes still owe the
+  `schedule_leg_reminders` call (see L5A).
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) "Not yet"
+  hides the question for the app session only; there is no server snooze (L5A has none). (2) Timeline
+  lines show on the sender's view only; the traveler has the stepper. (3) A reminder opens its sheet only
+  if the server still offers that step, otherwise just the stepper. (4) Home reads the pending questions
+  only when the traveler has a live journey (no extra request for senders).
+- Tests (before and after counts): Flutter 1,399 passed before, 1,428 after (+29,
+  `test/l5b_progress_test.dart`). Two older journey-detail tests gained a `/progress` route. Analyze
+  `--fatal-infos` and format clean; all 10 CI checks green including Schema drift.
+- Known limits: no connectivity detection; the offline message appears after a failed attempt, and the
+  "Needs a connection" line is always shown under the button.
 
 ### L6A. Professional profile, verification, admin inbox, proof skip
 
