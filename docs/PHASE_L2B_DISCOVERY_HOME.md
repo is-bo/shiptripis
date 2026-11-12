@@ -53,7 +53,7 @@ unregisters on sign-out), and `test/k6_discovery_paging_test.dart` (replaced by
 
 ## Checks
 
-`flutter analyze --no-pub --fatal-infos` clean. `flutter test`: 1,299 passed. New suites:
+`flutter analyze --no-pub --fatal-infos` clean. `flutter test`: 1,303 passed. New suites:
 `l2b_discovery_repository_test`, `l2b_discovery_state_test`, `l2b_home_discovery_test`,
 `l2b_browse_test`, `l2b_person_profile_alerts_test`, `l2b_deep_links_test`, `l2b_layout_test` (every
 discovery screen on every device profile in English and Arabic: no overflow, last row clear of the

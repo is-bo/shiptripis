@@ -134,32 +134,14 @@ FakeBackend _full() {
     );
 }
 
-typedef _Screen = ({
-  String name,
-  Widget Function() build,
-  bool shell,
-  Set<DeviceProfile> skip,
-});
+typedef _Screen = ({String name, Widget Function() build, bool shell});
 
-_Screen _screen(
-  String name,
-  Widget Function() build, {
-  bool shell = false,
-  Set<DeviceProfile> skip = const {},
-}) => (name: name, build: build, shell: shell, skip: skip);
+_Screen _screen(String name, Widget Function() build, {bool shell = false}) =>
+    (name: name, build: build, shell: shell);
 
 final _screens = <_Screen>[
   _screen('Home', () => const HomeScreen(), shell: true),
-  _screen(
-    'Profile',
-    () => const ProfileScreen(),
-    shell: true,
-    // The existing language and appearance rows put their value beside an
-    // `Expanded` label with no room to give; in the test font (every glyph a
-    // full em wide) they overflow at 320dp and at 1.6x text. Not rows this
-    // package added, so not reshaped here: carried to the report.
-    skip: const {DeviceProfile.smallAndroid, DeviceProfile.largeText},
-  ),
+  _screen('Profile', () => const ProfileScreen(), shell: true),
   _screen('Browse trips', () => const BrowseTripsScreen()),
   _screen('Browse requests', () => const BrowseRequestsScreen()),
   _screen('People', () => const BrowsePeopleScreen()),
@@ -212,9 +194,7 @@ void main() {
   for (final locale in const [Locale('en'), Locale('ar')]) {
     group('layout in ${locale.languageCode}', () {
       for (final screen in _screens) {
-        for (final device in DeviceProfile.all.where(
-          (d) => !screen.skip.contains(d),
-        )) {
+        for (final device in DeviceProfile.all) {
           testWidgets('${screen.name} on ${device.name}', (tester) async {
             final widget = screen.shell
                 ? _Shell(child: screen.build())

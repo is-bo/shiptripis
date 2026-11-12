@@ -13,7 +13,7 @@ route-alert switch per usual route; Profile gains Public profile (opt-in, off by
 preview) and Route alerts. The two new notification channels open the right screen from the bell,
 from push and from the live socket. Every section loads on its own and has skeleton, empty, error,
 and disabled states; a cold start to Home still costs 7 requests. Old `searchPage` and `openFeedPage`
-callers are removed. Detail: `docs/PHASE_L2B_DISCOVERY_HOME.md`. Analyzer clean; Flutter 1,299 passed
+callers are removed. Detail: `docs/PHASE_L2B_DISCOVERY_HOME.md`. Analyzer clean; Flutter 1,303 passed
 (1,087 before).
 
 ## Wassla L2A — discovery backend and marketplace policy (2026-11-12)
