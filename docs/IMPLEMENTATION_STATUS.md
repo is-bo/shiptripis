@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla L4C — CI time limit and backup ferry distances (2026-11-12)
+
+Status: **in review** (PR #30 into `feature/discovery-professional-delivery`). No deployment; `main`
+untouched. No product change for members, no migration.
+
+- The Django tests run in CI as four parallel shards by whole test file (`config/test_shards.py`,
+  measurements in `config/test_durations.json`). The required check `Django — migrations + tests +
+  lint` keeps its name and fails unless every shard passed and every collected test ran exactly once.
+  On two consecutive runs the slowest shard took 13 min 10 s and 13 min 8 s against a 25-minute limit; the old single job took 33 to 44
+  minutes against 45.
+- L3A's backup ferry distances are gone: no port coordinates in the seed file, no staff-typed
+  kilometres, no `distance_km` on `create_crossing`. A crossing's distance comes from the catalogue
+  only; a city without coordinates cannot be a port (`sea_crossing_coordinates_missing`). A test
+  written before the removal pins every shipped crossing's distance and the match and price of a
+  sailing on every live line, and passes unchanged after it.
+
+Detail: `docs/PHASE_L4C_HOUSEKEEPING.md`.
+
 ## Wassla L-series plan extended: L11A to L17 (2026-11-12)
 
 Status: **planning only, no code**. Approved by Ismail on 2026-11-12.

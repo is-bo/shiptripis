@@ -17,25 +17,18 @@ The console's "Sea crossings" screens (`apps.admin_panel.console_sea`) call thes
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from apps.locations.geography import normalize_search_name
-
 from apps.routing.geometry import GeoPoint, haversine_meters
 
 from .models import Place, SeaCrossing
 
 #: Crossings are geography configuration, which staff manage under Settings.
 MANAGE_CROSSINGS_PERMISSION = "manage_settings"
-
-#: The longest line in the seeded list is about 760 km; nothing in the
-#: Mediterranean is ten times that. The ceiling exists to catch a typo.
-MAX_CROSSING_DISTANCE_KM = Decimal("5000")
-
 
 @dataclass(frozen=True)
 class SeaCrossingError(Exception):
@@ -145,13 +138,12 @@ def create_crossing(
     destination_locality_id: int,
     reason: str,
     active: bool = False,
-    distance_km: Decimal | None = None,
 ) -> SeaCrossing:
     """Add one direction of a ferry line.
 
-    The distance is the catalogue great-circle distance when both cities have
-    coordinates, which every launch-country city does. Staff give the distance
-    in kilometres, measured the same way, only for a city without them.
+    The distance is the great-circle distance between the two cities'
+    catalogue coordinates, which every launch-country city has. A city
+    without them is refused rather than given a distance from anywhere else.
     """
 
     _require_permission(actor)
@@ -164,19 +156,10 @@ def create_crossing(
         )
     distance = great_circle_meters(origin, destination)
     if distance is None:
-        if distance_km is None:
-            raise SeaCrossingError(
-                "sea_crossing_distance_required",
-                "One of these cities has no catalogue coordinates; give the "
-                "great-circle distance in kilometres.",
-            )
-        if not Decimal("0") < Decimal(distance_km) <= MAX_CROSSING_DISTANCE_KM:
-            raise SeaCrossingError(
-                "sea_crossing_distance_invalid",
-                f"The distance must be above 0 and at most {MAX_CROSSING_DISTANCE_KM} km.",
-            )
-        distance = int(
-            (Decimal(distance_km) * 1000).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        raise SeaCrossingError(
+            "sea_crossing_coordinates_missing",
+            "One of these cities has no catalogue coordinates, so the crossing "
+            "has no distance.",
         )
     try:
         with transaction.atomic():

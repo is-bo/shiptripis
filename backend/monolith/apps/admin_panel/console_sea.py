@@ -9,8 +9,6 @@ disagree about who may act or what a change does.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from django import forms
 from django.contrib import messages
 from django.http import Http404
@@ -22,7 +20,6 @@ from apps.core.marketplace_policy import InvalidMarketplacePolicy, marketplace_p
 from apps.locations.models import Country, SeaCrossing
 from apps.locations.sea_crossings import (
     MANAGE_CROSSINGS_PERMISSION,
-    MAX_CROSSING_DISTANCE_KM,
     SeaCrossingError,
     activate_crossing,
     create_crossing,
@@ -38,10 +35,10 @@ ANCHOR = "#st-sea-crossings"
 
 #: Refusals that belong to a field of the add form rather than to the page.
 _FIELD_FOR_CODE = {
-    "sea_crossing_distance_required": "distance_km",
-    "sea_crossing_distance_invalid": "distance_km",
     "sea_crossing_ports_identical": "destination_city",
-    "sea_crossing_exists": None,  # a form-level error
+    # Form-level errors: they concern the pair, not one field.
+    "sea_crossing_coordinates_missing": None,
+    "sea_crossing_exists": None,
 }
 
 
@@ -109,19 +106,6 @@ class SeaCrossingForm(ConsoleForm):
         label="To: city",
         help_text="The catalogue name, for example Algiers.",
     )
-    distance_km = forms.DecimalField(
-        required=False,
-        min_value=Decimal("0.001"),
-        max_value=MAX_CROSSING_DISTANCE_KM,
-        max_digits=7,
-        decimal_places=3,
-        label="Distance in kilometres",
-        help_text=(
-            "Needed only when a city has no catalogue coordinates (most French "
-            "and Spanish cities). Great-circle distance, measured the same way "
-            "as a flight."
-        ),
-    )
     start_active = forms.BooleanField(
         required=False,
         label="Turn it on straight away",
@@ -186,7 +170,6 @@ def sea_crossing_new(request):
                 destination_locality_id=form.destination.pk,
                 reason=data["reason"],
                 active=data["start_active"],
-                distance_km=data["distance_km"],
             )
         except SeaCrossingError as exc:
             if exc.code in _FIELD_FOR_CODE:

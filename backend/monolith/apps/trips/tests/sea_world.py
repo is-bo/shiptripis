@@ -4,8 +4,9 @@ The shape is the production catalogue's, including its awkward parts: a sea
 leg joins two cities rather than two terminals, and a ferry line exists once
 per direction. The French and Spanish cities here deliberately carry no
 coordinates, unlike the real catalogue, so these suites keep proving the
-distance-floor crash guard and the staff-given crossing distance. Tests that need a sea leg build it here so every suite proves the
-same geography.
+distance-floor crash guard and that a city without coordinates cannot become
+a port. Tests that need a sea leg build it here so every suite proves the same
+geography.
 """
 
 from __future__ import annotations

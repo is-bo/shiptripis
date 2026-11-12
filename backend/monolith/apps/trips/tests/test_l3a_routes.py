@@ -37,12 +37,13 @@ from apps.admin_panel.models import AdminAuditLog
 from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 from apps.core.marketplace_policy import InvalidMarketplacePolicy
 from apps.locations.management.commands.seed_sea_crossings import DEFAULT_FILE
-from apps.locations.models import PlaceAlternateName, SeaCrossing
+from apps.locations.models import Place, PlaceAlternateName, SeaCrossing
 from apps.locations.sea_crossings import (
     SeaCrossingError,
     activate_crossing,
     create_crossing,
     deactivate_crossing,
+    great_circle_meters,
 )
 from apps.trips.models import Journey, JourneyLegProof, JourneyStopDetail
 from apps.trips.services import JourneyDomainError, pause_journey, resume_journey
@@ -705,27 +706,19 @@ class SeaCrossingServiceTests(SeaWorld, TestCase):
         assert audit.reason == "New ferry line"
         assert audit.after["is_active"] is False
 
-    def test_a_city_without_coordinates_needs_a_stated_distance(self):
-        self.refused("sea_crossing_distance_required", lambda: self.create(self.barcelona, self.algiers))
-        for distance in (Decimal("0"), Decimal("5000.001")):
-            with self.subTest(distance=distance):
-                self.refused(
-                    "sea_crossing_distance_invalid",
-                    lambda: self.create(self.barcelona, self.algiers, distance_km=distance),
-                )
-
-        crossing = self.create(self.barcelona, self.algiers, distance_km=Decimal("517.4"), active=True)
-
-        assert crossing.distance_meters == 517_400
-        assert crossing.is_active is True
+    def test_a_city_without_coordinates_cannot_be_a_port(self):
+        # No launch-country city lacks coordinates in the real catalogue; a
+        # crossing never takes its distance from anywhere but the catalogue.
+        self.refused("sea_crossing_coordinates_missing", lambda: self.create(self.barcelona, self.algiers))
+        self.refused("sea_crossing_coordinates_missing", lambda: self.create(self.algiers, self.barcelona))
+        assert not SeaCrossing.objects.filter(origin_locality=self.barcelona, destination_locality=self.algiers).exists()
+        assert not AdminAuditLog.objects.exists()
 
     def test_a_line_joins_two_different_active_cities_once_per_direction(self):
         self.refused("sea_crossing_port_invalid", lambda: self.create(self.alg, self.marseille))
         self.refused("sea_crossing_ports_identical", lambda: self.create(self.oran, self.oran))
-        self.refused(
-            "sea_crossing_exists",
-            lambda: self.create(self.marseille, self.algiers, distance_km=Decimal("753")),
-        )
+        self.create(self.algiers, self.oran)
+        self.refused("sea_crossing_exists", lambda: self.create(self.algiers, self.oran))
         self.oran.active = False
         self.oran.save(update_fields=["active"])
         self.refused("sea_crossing_port_invalid", lambda: self.create(self.algiers, self.oran))
@@ -804,17 +797,24 @@ class SeedSeaCrossingsTests(SeaWorld, TestCase):
             source_id="alt-alger",
             source_version="l3a",
         )
+        # The real catalogue gives Marseille coordinates; this world's French
+        # cities have none, so the seed test sets them here.
+        Place.objects.filter(pk=self.marseille.pk).update(
+            latitude=Decimal("43.296500"), longitude=Decimal("5.369800")
+        )
+        self.marseille.refresh_from_db()
         # Two catalogue cities share this name: the seed must not guess.
         self.city("DZ", "Bordj", "36.0", "4.0", suffix="east")
         self.city("DZ", "Bordj", "36.1", "4.1", suffix="west")
         self.document = {
             "version": "test-1",
             "ports": {
-                "marseille": {"country": "FR", "name": "Marseille", "latitude": 43.2965, "longitude": 5.3698},
-                "alger": {"country": "DZ", "name": "Alger", "latitude": 36.7763, "longitude": 3.0585},
-                "oran": {"country": "DZ", "name": "Oran", "latitude": 35.6971, "longitude": -0.6308},
-                "bordj": {"country": "DZ", "name": "Bordj", "latitude": 36.0, "longitude": 4.0},
-                "atlantis": {"country": "DZ", "name": "Atlantis", "latitude": 36.0, "longitude": 4.0},
+                "marseille": {"country": "FR", "name": "Marseille"},
+                "alger": {"country": "DZ", "name": "Alger"},
+                "oran": {"country": "DZ", "name": "Oran"},
+                "bordj": {"country": "DZ", "name": "Bordj"},
+                "atlantis": {"country": "DZ", "name": "Atlantis"},
+                "barcelona": {"country": "ES", "name": "Barcelona"},
             },
             "crossings": [
                 {"from": "marseille", "to": "alger", "active": True},
@@ -822,6 +822,7 @@ class SeedSeaCrossingsTests(SeaWorld, TestCase):
                 {"from": "alger", "to": "oran", "active": False},
                 {"from": "bordj", "to": "oran", "active": True},
                 {"from": "atlantis", "to": "oran", "active": True},
+                {"from": "barcelona", "to": "alger", "active": True},
             ],
         }
 
@@ -836,14 +837,17 @@ class SeedSeaCrossingsTests(SeaWorld, TestCase):
     def test_the_seed_creates_reviewed_lines_and_reports_what_it_skipped(self):
         output = self.seed()
 
-        assert "sea crossings: 3 created, 0 already present, 2 skipped" in output
+        assert "sea crossings: 3 created, 0 already present, 3 skipped" in output
         assert "more than one active catalogue city has this name" in output
         assert "no active catalogue city has this name" in output
+        # A city without catalogue coordinates gets no distance from anywhere.
+        assert "skipped crossing barcelona -> alger: a port city has no catalogue coordinates" in output
+        assert not SeaCrossing.objects.filter(origin_locality=self.barcelona, destination_locality=self.alger).exists()
         marseille_alger = SeaCrossing.objects.get(
             origin_locality=self.marseille, destination_locality=self.alger
         )
         assert marseille_alger.is_active is True
-        # Marseille has no catalogue coordinates: the file's reviewed ones.
+        assert marseille_alger.distance_meters == great_circle_meters(self.marseille, self.alger)
         assert 740_000 < marseille_alger.distance_meters < 770_000
         alger_oran = SeaCrossing.objects.get(origin_locality=self.alger, destination_locality=self.oran)
         assert alger_oran.is_active is False
@@ -860,7 +864,7 @@ class SeedSeaCrossingsTests(SeaWorld, TestCase):
 
         output = self.seed()
 
-        assert "sea crossings: 0 created, 3 already present, 2 skipped" in output
+        assert "sea crossings: 0 created, 3 already present, 3 skipped" in output
         line.refresh_from_db()
         assert (line.is_active, line.distance_meters) == (False, 760_000)
         assert AdminAuditLog.objects.filter(action="sea_crossing.seeded").count() == 3
