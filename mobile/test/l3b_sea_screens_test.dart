@@ -636,6 +636,11 @@ void main() {
         )
         ..on(
           'GET',
+          '/api/journeys/7/progress',
+          FakeResponse(200, {'journey_id': 7, 'status': 'active', 'legs': []}),
+        )
+        ..on(
+          'GET',
           '/api/matches/compatible-requests',
           FakeResponse(200, {'candidates': []}),
         );

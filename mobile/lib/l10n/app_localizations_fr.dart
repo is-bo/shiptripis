@@ -5342,4 +5342,133 @@ class LFr extends L {
 
   @override
   String get trackingNumberCopied => 'Numéro de suivi copié';
+
+  @override
+  String get progressTitle => 'Avancement du trajet';
+
+  @override
+  String get progressIntro =>
+      'Dites aux expéditeurs comment se passe votre trajet. Ils voient votre information indiquée comme signalée par vous. Elle ne déclenche jamais de paiement.';
+
+  @override
+  String get progressActionAtPort => 'Je suis au port';
+
+  @override
+  String get progressActionDeparted => 'Je suis parti';
+
+  @override
+  String get progressActionArrived => 'Je suis arrivé';
+
+  @override
+  String get progressReportedAtPort => 'Au port';
+
+  @override
+  String get progressReportedDeparted => 'Parti';
+
+  @override
+  String get progressReportedArrived => 'Arrivé';
+
+  @override
+  String progressAvailableFrom(String time) {
+    return 'Vous pourrez le signaler à partir de $time.';
+  }
+
+  @override
+  String get progressNeedsNetwork =>
+      'Nécessite une connexion. Rien n\'est enregistré pour plus tard.';
+
+  @override
+  String get progressUndo => 'Annuler';
+
+  @override
+  String get progressUndoHint =>
+      'Vous pouvez annuler une information pendant 10 minutes.';
+
+  @override
+  String get progressSent => 'Information transmise aux expéditeurs.';
+
+  @override
+  String get progressUndone => 'Information retirée.';
+
+  @override
+  String get progressErrorOffline =>
+      'Pas de connexion : votre information n\'a pas été envoyée. Réessayez une fois reconnecté.';
+
+  @override
+  String get progressErrorTooEarly =>
+      'C\'est trop tôt pour le signaler. Les signalements ouvrent 24 heures avant l\'heure prévue.';
+
+  @override
+  String get progressErrorOutOfOrder =>
+      'Cette étape ne vient pas maintenant. Tirez vers le bas pour actualiser.';
+
+  @override
+  String get progressErrorNotReportable =>
+      'Ce trajet ne peut pas recevoir d\'informations pour le moment.';
+
+  @override
+  String get progressErrorUndoClosed =>
+      'Les 10 minutes pour annuler cette information sont écoulées.';
+
+  @override
+  String get progressErrorHasFollowup =>
+      'Une information plus récente en dépend, elle ne peut donc pas être annulée.';
+
+  @override
+  String progressQuestionDeparted(String place) {
+    return 'Êtes-vous parti de $place ?';
+  }
+
+  @override
+  String get progressQuestionDepartedBare => 'Êtes-vous parti ?';
+
+  @override
+  String progressQuestionArrived(String place) {
+    return 'Êtes-vous arrivé à $place ?';
+  }
+
+  @override
+  String get progressQuestionArrivedBare => 'Êtes-vous arrivé ?';
+
+  @override
+  String progressQuestionAtPort(String place) {
+    return 'Êtes-vous au port de $place ?';
+  }
+
+  @override
+  String get progressQuestionAtPortBare => 'Êtes-vous au port ?';
+
+  @override
+  String get progressYesDeparted => 'Oui, je suis parti';
+
+  @override
+  String get progressYesArrived => 'Oui, je suis arrivé';
+
+  @override
+  String get progressYesAtPort => 'Oui, je suis là';
+
+  @override
+  String get progressNotYet => 'Pas encore';
+
+  @override
+  String get progressQuestionBody =>
+      'Les expéditeurs qui ont un colis sur cette étape verront votre réponse, indiquée comme signalée par vous.';
+
+  @override
+  String get dealProgressAtPort => 'Votre voyageur est au port';
+
+  @override
+  String get dealProgressDeparted => 'Votre voyageur est parti';
+
+  @override
+  String get dealProgressArrived => 'Votre voyageur est arrivé';
+
+  @override
+  String get dealProgressReportedBy => 'Signalé par le voyageur';
+
+  @override
+  String get notificationProgressReported => 'Nouvelle de votre voyageur';
+
+  @override
+  String get notificationLegReminder => 'Où en est votre trajet ?';
 }

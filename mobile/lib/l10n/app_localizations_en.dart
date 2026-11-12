@@ -5289,4 +5289,132 @@ class LEn extends L {
 
   @override
   String get trackingNumberCopied => 'Tracking number copied';
+
+  @override
+  String get progressTitle => 'Trip progress';
+
+  @override
+  String get progressIntro =>
+      'Tell senders how your trip is going. They see your update marked as reported by you. It never moves a payment.';
+
+  @override
+  String get progressActionAtPort => 'I\'m at the port';
+
+  @override
+  String get progressActionDeparted => 'I\'ve departed';
+
+  @override
+  String get progressActionArrived => 'I\'ve arrived';
+
+  @override
+  String get progressReportedAtPort => 'At the port';
+
+  @override
+  String get progressReportedDeparted => 'Departed';
+
+  @override
+  String get progressReportedArrived => 'Arrived';
+
+  @override
+  String progressAvailableFrom(String time) {
+    return 'You can report this from $time.';
+  }
+
+  @override
+  String get progressNeedsNetwork =>
+      'Needs a connection. Nothing is saved for later.';
+
+  @override
+  String get progressUndo => 'Undo';
+
+  @override
+  String get progressUndoHint => 'You can undo an update for 10 minutes.';
+
+  @override
+  String get progressSent => 'Update shared with the senders.';
+
+  @override
+  String get progressUndone => 'Update removed.';
+
+  @override
+  String get progressErrorOffline =>
+      'No connection, so your update was not sent. Try again when you are back online.';
+
+  @override
+  String get progressErrorTooEarly =>
+      'It is too early to report this. Reports open 24 hours before the planned time.';
+
+  @override
+  String get progressErrorOutOfOrder =>
+      'That step does not come next. Pull down to refresh.';
+
+  @override
+  String get progressErrorNotReportable =>
+      'This journey cannot take updates right now.';
+
+  @override
+  String get progressErrorUndoClosed =>
+      'The 10 minutes to undo this update have passed.';
+
+  @override
+  String get progressErrorHasFollowup =>
+      'A later update depends on this one, so it cannot be undone.';
+
+  @override
+  String progressQuestionDeparted(String place) {
+    return 'Did you depart from $place?';
+  }
+
+  @override
+  String get progressQuestionDepartedBare => 'Did you depart?';
+
+  @override
+  String progressQuestionArrived(String place) {
+    return 'Did you arrive in $place?';
+  }
+
+  @override
+  String get progressQuestionArrivedBare => 'Did you arrive?';
+
+  @override
+  String progressQuestionAtPort(String place) {
+    return 'Are you at the port in $place?';
+  }
+
+  @override
+  String get progressQuestionAtPortBare => 'Are you at the port?';
+
+  @override
+  String get progressYesDeparted => 'Yes, departed';
+
+  @override
+  String get progressYesArrived => 'Yes, arrived';
+
+  @override
+  String get progressYesAtPort => 'Yes, I\'m here';
+
+  @override
+  String get progressNotYet => 'Not yet';
+
+  @override
+  String get progressQuestionBody =>
+      'Senders with a parcel on this leg will see your answer, marked as reported by you.';
+
+  @override
+  String get dealProgressAtPort => 'Your traveler is at the port';
+
+  @override
+  String get dealProgressDeparted => 'Your traveler has departed';
+
+  @override
+  String get dealProgressArrived => 'Your traveler has arrived';
+
+  @override
+  String get dealProgressReportedBy => 'Reported by the traveler';
+
+  @override
+  String get notificationProgressReported => 'Update from your traveler';
+
+  @override
+  String get notificationLegReminder => 'How is your trip going?';
 }

@@ -5271,4 +5271,132 @@ class LAr extends L {
 
   @override
   String get trackingNumberCopied => 'تم نسخ رقم التتبع';
+
+  @override
+  String get progressTitle => 'تقدّم الرحلة';
+
+  @override
+  String get progressIntro =>
+      'أخبر المرسلين كيف تسير رحلتك. يرون تحديثك مكتوبًا أنه أبلغتَ به أنت، ولا يحرّك أي دفعة أبدًا.';
+
+  @override
+  String get progressActionAtPort => 'أنا في الميناء';
+
+  @override
+  String get progressActionDeparted => 'لقد انطلقتُ';
+
+  @override
+  String get progressActionArrived => 'لقد وصلتُ';
+
+  @override
+  String get progressReportedAtPort => 'في الميناء';
+
+  @override
+  String get progressReportedDeparted => 'انطلقتَ';
+
+  @override
+  String get progressReportedArrived => 'وصلتَ';
+
+  @override
+  String progressAvailableFrom(String time) {
+    return 'يمكنك الإبلاغ عن هذا ابتداءً من $time.';
+  }
+
+  @override
+  String get progressNeedsNetwork =>
+      'يتطلب اتصالًا بالإنترنت. لا يُحفظ شيء لوقت لاحق.';
+
+  @override
+  String get progressUndo => 'تراجع';
+
+  @override
+  String get progressUndoHint => 'يمكنك التراجع عن التحديث خلال 10 دقائق.';
+
+  @override
+  String get progressSent => 'تمت مشاركة التحديث مع المرسلين.';
+
+  @override
+  String get progressUndone => 'تمت إزالة التحديث.';
+
+  @override
+  String get progressErrorOffline =>
+      'لا يوجد اتصال، لذلك لم يُرسل تحديثك. حاول مرة أخرى عند عودة الاتصال.';
+
+  @override
+  String get progressErrorTooEarly =>
+      'الوقت مبكر جدًا للإبلاغ عن هذا. يفتح الإبلاغ قبل الموعد المخطط بـ 24 ساعة.';
+
+  @override
+  String get progressErrorOutOfOrder =>
+      'هذه الخطوة ليست التالية. اسحب للأسفل للتحديث.';
+
+  @override
+  String get progressErrorNotReportable =>
+      'لا يمكن لهذه الرحلة استقبال تحديثات الآن.';
+
+  @override
+  String get progressErrorUndoClosed =>
+      'انتهت الدقائق العشر المتاحة للتراجع عن هذا التحديث.';
+
+  @override
+  String get progressErrorHasFollowup =>
+      'يعتمد عليه تحديث لاحق، لذلك لا يمكن التراجع عنه.';
+
+  @override
+  String progressQuestionDeparted(String place) {
+    return 'هل انطلقت من $place؟';
+  }
+
+  @override
+  String get progressQuestionDepartedBare => 'هل انطلقت؟';
+
+  @override
+  String progressQuestionArrived(String place) {
+    return 'هل وصلت إلى $place؟';
+  }
+
+  @override
+  String get progressQuestionArrivedBare => 'هل وصلت؟';
+
+  @override
+  String progressQuestionAtPort(String place) {
+    return 'هل أنت في ميناء $place؟';
+  }
+
+  @override
+  String get progressQuestionAtPortBare => 'هل أنت في الميناء؟';
+
+  @override
+  String get progressYesDeparted => 'نعم، انطلقتُ';
+
+  @override
+  String get progressYesArrived => 'نعم، وصلتُ';
+
+  @override
+  String get progressYesAtPort => 'نعم، أنا هنا';
+
+  @override
+  String get progressNotYet => 'ليس بعد';
+
+  @override
+  String get progressQuestionBody =>
+      'المرسلون الذين لديهم طرد على هذه المرحلة سيرون إجابتك مكتوبًا أنك أبلغتَ بها.';
+
+  @override
+  String get dealProgressAtPort => 'المسافر في الميناء';
+
+  @override
+  String get dealProgressDeparted => 'المسافر انطلق';
+
+  @override
+  String get dealProgressArrived => 'المسافر وصل';
+
+  @override
+  String get dealProgressReportedBy => 'أبلغ به المسافر';
+
+  @override
+  String get notificationProgressReported => 'تحديث من المسافر';
+
+  @override
+  String get notificationLegReminder => 'كيف تسير رحلتك؟';
 }

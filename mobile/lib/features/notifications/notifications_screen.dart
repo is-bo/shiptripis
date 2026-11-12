@@ -186,6 +186,8 @@ class NotificationsScreen extends ConsumerWidget {
           Routes.journeyDetail,
           pathParameters: {'id': '$journeyId'},
         );
+      case OpenProgressQuestion(:final journeyId, :final legId, :final kind):
+        context.openJourneyQuestion(journeyId, legId, kind);
       case OpenDispute(:final disputeId):
         context.pushNamed(
           Routes.disputeDetail,
@@ -392,6 +394,14 @@ class _Row extends StatelessWidget {
       NotificationChannel.discoveryTravelerInterested => (
         l.notificationTravelerInterested,
         Icons.back_hand_outlined,
+      ),
+      NotificationChannel.dealProgressReported => (
+        l.notificationProgressReported,
+        Icons.flag_outlined,
+      ),
+      NotificationChannel.journeyLegReminder => (
+        l.notificationLegReminder,
+        Icons.flight_takeoff_rounded,
       ),
       NotificationChannel.unknown => (
         l.notificationOther,
