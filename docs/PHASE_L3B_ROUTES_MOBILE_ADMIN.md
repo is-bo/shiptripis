@@ -77,9 +77,10 @@ Kept on purpose because they are stored in audit and role rows or are public pat
 ## 5. Tests
 
 - Mobile: `test/l3b_sea_route_model_test.dart` (30: wire, offers, never-silently-demoted, what is sent,
-  stop options, what I carry) and `test/l3b_sea_screens_test.dart` (18: Lille → Constantine in en and ar
+  stop options, what I carry) and `test/l3b_sea_screens_test.dart` (20: Lille → Constantine in en and ar
   at 360 px with no overflow and a clear footer, switch off, failed list with retry, refusal on the leg,
-  carry and stop options on the wire, editor by mode, proof screen per mode, pause, staff pause).
+  carry and stop options on the wire, editor by mode, the handover sheet above an open keyboard in en and ar,
+  proof screen per mode, pause, staff pause).
 - Backend: `apps/admin_panel/tests/test_l3b_console.py` (34: crossings page and permissions, add and
   toggle with audit rows, ticket queue mode filter, ferry detail, pause, resume, takeover, permissions)
   and `apps/discovery/tests/test_marketplace_policy.py` (the Sea legs switch in the saved policy).

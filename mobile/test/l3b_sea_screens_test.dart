@@ -189,6 +189,7 @@ Future<(FakeBackend, JourneyRouteDraft)> _pumpCreate(
   required FakeResponse crossings,
   Locale locale = const Locale('en'),
   DeviceProfile device = _phone360,
+  double? keyboardInset,
 }) async {
   final backend = FakeBackend()
     ..on('GET', '/api/geography/sea-crossings', crossings);
@@ -201,6 +202,7 @@ Future<(FakeBackend, JourneyRouteDraft)> _pumpCreate(
     container: container,
     locale: locale,
     device: device,
+    keyboardInset: keyboardInset,
     routed: true,
     extraRoutes: [
       GoRoute(
@@ -478,6 +480,45 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    for (final locale in const ['en', 'ar']) {
+      testWidgets('the handover sheet clears an open keyboard ($locale)', (
+        tester,
+      ) async {
+        await _pumpCreate(
+          tester,
+          crossings: FakeResponse(200, _crossings()),
+          locale: Locale(locale),
+          keyboardInset: 300,
+        );
+        final l = _l(tester);
+
+        final open = find.text(l.routeHandoverAction).at(1);
+        await _scrollTo(tester, open);
+        await tester.tap(open);
+        await tester.pumpAndSettle();
+
+        // The sheet is lifted whole: its pinned Done button sits above a
+        // 300 px keyboard, and a traveller can scroll to the note and type.
+        final done = find.text(l.actionDone);
+        expect(tester.getRect(done).bottom, lessThanOrEqualTo(640 - 300));
+        final note = find.widgetWithText(
+          AppTextField,
+          l.routeHandoverNoteLabel,
+        );
+        await tester.ensureVisible(note);
+        await tester.pumpAndSettle();
+        final rect = tester.getRect(note);
+        // The whole field cannot fit in what a 640 px phone leaves above a
+        // 300 px keyboard, but its label and first line of input must.
+        final title = tester.getRect(
+          find.text(l.routeHandoverSheetTitle('Marseille')),
+        );
+        expect(rect.top, greaterThanOrEqualTo(title.bottom));
+        expect(rect.top + 72, lessThanOrEqualTo(tester.getRect(done).top));
+        expect(tester.takeException(), isNull);
+      });
+    }
 
     testWidgets('the last kind of item cannot be switched off', (tester) async {
       final (_, draft) = await _pumpCreate(

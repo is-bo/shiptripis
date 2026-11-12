@@ -265,8 +265,8 @@ Detail: `docs/PHASE_L3B_ROUTES_MOBILE_ADMIN.md`.
   one-element list, and `stringExtra` is new: a refusal raised from a serializer wraps every value.
   (10) The "What you carry" section appears once two stops exist. (11) Ticket kinds on the proof
   screen stay ticket, boarding pass and booking for both modes; the server owns validation.
-- Tests (before and after counts): Flutter 1,303 passed before; 1,351 after (48 added: 30 in
-  `l3b_sea_route_model_test.dart`, 18 in `l3b_sea_screens_test.dart`; two existing tests updated for
+- Tests (before and after counts): Flutter 1,303 passed before; 1,353 after (50 added: 30 in
+  `l3b_sea_route_model_test.dart`, 20 in `l3b_sea_screens_test.dart`; two existing tests updated for
   the new fixture fields and the 20,000 kg ceiling, one replaced for the deleted `requiresProof`).
   `flutter analyze --fatal-infos` clean. Django: 2,615 passed before (L3A); L3B adds 36 (34 in
   `apps/admin_panel/tests/test_l3b_console.py`, 2 in `apps/discovery/tests/test_marketplace_policy.py`);
