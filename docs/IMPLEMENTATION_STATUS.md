@@ -2,8 +2,8 @@
 
 ## Wassla L9A — Problems and route changes, backend (2026-11-13)
 
-Status: **in review** (branch `claude/project-thread-qpwihm`, PR into
-`feature/discovery-professional-delivery`). Backend and console; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #37, `9ceb40e`). Backend and
+console; four additive migrations; `main` untouched.
 
 - **Problem reports** (`apps.problems`): either party reports a problem on a funded delivery
   (`GET`/`POST /api/deals/<id>/problems`); the other party is told on `deal.problem_reported`, and
