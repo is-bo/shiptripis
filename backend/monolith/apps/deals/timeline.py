@@ -72,6 +72,21 @@ PARTY_VISIBLE_PAYLOAD_KEYS = frozenset(
         "progress_id",
         "progress_kind",
         "leg_id",
+        # L9A problems and schedule changes: identifiers, closed sets of
+        # server tokens, booleans and ISO instants. Never the reporter's note
+        # and never a staff reason.
+        "problem_id",
+        "problem_kind",
+        "problem_status",
+        "reporter_role",
+        "schedule_change_id",
+        "consent_state",
+        "material",
+        "material_reasons",
+        "arrival_before",
+        "arrival_after",
+        "informed",
+        "caused_by",
         # protection and payout
         "protection_ends_at",
         "protection_window_seconds",

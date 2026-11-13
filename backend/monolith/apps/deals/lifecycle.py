@@ -346,6 +346,11 @@ def apply_pickup_confirmed(
         reason="pickup_confirmed",
         actor_id=actor_id,
     )
+    # A collected parcel is informed of new times, never asked: a change that
+    # waited on this sender's answer may now apply (L9A).
+    from apps.trips.schedule_changes import settle_after_commit
+
+    settle_after_commit(deal.journey_id)
 
     allocation_ids = [
         row.pk

@@ -454,6 +454,162 @@ class JourneyLegProgress(models.Model):
         return f"Progress #{self.pk} {self.kind} on leg #{self.leg_id}"
 
 
+class JourneyScheduleChange(models.Model):
+    """New times for an active journey, and the senders' answers (spec 12, L9A).
+
+    Times only: the legs, stops and places stay as they are. ``original`` and
+    ``proposed`` are the whole schedule before and after, one entry per leg
+    (``leg_id``, ``position``, ``depart_at``, ``arrive_at``), so the record of
+    the schedule that was replaced is kept for good. ``affected`` is the latest
+    classification of the parcels on the changed legs, written each time the
+    change is settled.
+
+    A change never writes a deal: the funded arrival floor, the arrival snapshot
+    and the agreed pickup time stay what funding froze.
+    """
+
+    class Status(models.TextChoices):
+        PENDING_SENDERS = "pending_senders", "Waiting for senders"
+        APPLIED = "applied", "Applied"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    class WithdrawnBy(models.TextChoices):
+        TRAVELER = "traveler", "The traveler"
+        #: The trip moved on while the change waited (a leg was reported
+        #: departed, or the journey stopped being live), so it can no longer
+        #: apply as proposed.
+        NO_LONGER_VALID = "no_longer_valid", "No longer fits the trip"
+
+    journey = models.ForeignKey(
+        Journey, on_delete=models.PROTECT, related_name="schedule_changes"
+    )
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING_SENDERS,
+        db_index=True,
+    )
+    #: The traveler's own words, shown to the senders asked to agree.
+    reason = models.CharField(max_length=500, blank=True, default="")
+    original = models.JSONField(default=list)
+    proposed = models.JSONField(default=list)
+    affected = models.JSONField(default=list, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_by = models.CharField(
+        max_length=16, choices=WithdrawnBy.choices, blank=True, default=""
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "trips_journey_schedule_change"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["journey", "-created_at"], name="journey_schedule_change_idx"
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["journey"],
+                condition=models.Q(status="pending_senders"),
+                name="journey_one_pending_schedule_change",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        status="pending_senders",
+                        applied_at__isnull=True,
+                        withdrawn_at__isnull=True,
+                        withdrawn_by="",
+                    )
+                    | models.Q(
+                        status="applied",
+                        applied_at__isnull=False,
+                        withdrawn_at__isnull=True,
+                        withdrawn_by="",
+                    )
+                    | (
+                        models.Q(
+                            status="withdrawn",
+                            applied_at__isnull=True,
+                            withdrawn_at__isnull=False,
+                        )
+                        & ~models.Q(withdrawn_by="")
+                    )
+                ),
+                name="journey_schedule_change_state_consistent",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Schedule change #{self.pk} on journey #{self.journey_id} ({self.status})"
+
+
+class JourneyScheduleChangeConsent(models.Model):
+    """One sender's answer to a material schedule change, for one parcel."""
+
+    class State(models.TextChoices):
+        PENDING = "pending", "Waiting for the sender"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+
+    class Reason(models.TextChoices):
+        #: The new arrival at the parcel's drop-off stop is after its deadline.
+        DEADLINE = "deadline", "Misses the deadline"
+        #: The arrival moved by more than `route_change.material_shift_minutes`
+        #: from the one the sender last agreed to.
+        SHIFT = "shift", "Moves the arrival"
+        #: For a parcel not collected yet: the departure from its pickup stop
+        #: moved by more than the same threshold from the pickup time the
+        #: sender last agreed to, or earlier than the agreed pickup time.
+        PICKUP = "pickup", "Moves the pickup"
+
+    change = models.ForeignKey(
+        JourneyScheduleChange, on_delete=models.PROTECT, related_name="consents"
+    )
+    deal = models.ForeignKey(
+        "deals.Deal", on_delete=models.PROTECT, related_name="schedule_change_consents"
+    )
+    state = models.CharField(
+        max_length=10, choices=State.choices, default=State.PENDING, db_index=True
+    )
+    reasons = models.JSONField(default=list)
+    arrival_before = models.DateTimeField()
+    arrival_after = models.DateTimeField()
+    #: The departure from the parcel's pickup stop, before and after.
+    pickup_before = models.DateTimeField()
+    pickup_after = models.DateTimeField()
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "trips_journey_schedule_change_consent"
+        ordering = ["change", "deal"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["change", "deal"], name="journey_schedule_consent_unique"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(state="pending", decided_at__isnull=True)
+                    | models.Q(
+                        state__in=["accepted", "declined"], decided_at__isnull=False
+                    )
+                ),
+                name="journey_schedule_consent_decided",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Consent of deal #{self.deal_id} to change #{self.change_id} ({self.state})"
+
+
 class JourneyLeg(models.Model):
     """One ordered segment of a V1 Journey.
 

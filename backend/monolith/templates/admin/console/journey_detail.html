@@ -93,6 +93,23 @@
       </table>
       <p class="st-keyvalues-note">Nothing is picked up at the last stop or dropped off at the first. The note and window are shown to the sender only after a deal that uses the stop is funded.</p>
     </section>
+    <section class="st-card" id="st-journey-schedule-changes">
+      <p class="st-eyebrow">Route changes</p>
+      <h2>Times changed by the traveler</h2>
+      {% for change in schedule_changes %}
+      <div class="st-record-block">
+        <strong>{{ change.created_at|date:"d M Y, H:i" }}</strong>
+        <span class="st-chip st-{{ change.status|status_tone }}">{{ change.get_status_display }}</span>
+        <small>{{ change.affected|length }} parcel{{ change.affected|length|pluralize }} affected{% if change.reason %} &middot; &ldquo;{{ change.reason }}&rdquo;{% endif %}</small>
+        <table class="st-keyvalues">
+          <thead><tr><th scope="col">Leg</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+          <tbody>{% for leg in change.console_legs %}<tr><th scope="row">{{ leg.position|add:1 }}</th><td>{{ leg.before_depart|date:"d M H:i" }} &rarr; {{ leg.before_arrive|date:"d M H:i" }}</td><td>{{ leg.after_depart|date:"d M H:i" }} &rarr; {{ leg.after_arrive|date:"d M H:i" }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      {% empty %}
+      <p class="st-muted">The times have not changed since publication. The original schedule of every change is kept here.</p>
+      {% endfor %}
+    </section>
     </div>
 
     <aside>

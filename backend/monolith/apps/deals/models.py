@@ -513,6 +513,27 @@ class DealEvent(models.Model):
             "traveler_progress_retracted",
             "Traveler retracted a progress report",
         )
+        # --- L9A problem reports and schedule changes (never a status) ---
+        PROBLEM_REPORTED = "problem_reported", "Problem reported"
+        PROBLEM_ACKNOWLEDGED = "problem_acknowledged", "Problem acknowledged by staff"
+        PROBLEM_CLOSED = "problem_closed", "Problem closed by staff"
+        SCHEDULE_CHANGE_PROPOSED = (
+            "schedule_change_proposed",
+            "Traveler proposed new times",
+        )
+        SCHEDULE_CHANGE_ACCEPTED = (
+            "schedule_change_accepted",
+            "Sender accepted the new times",
+        )
+        SCHEDULE_CHANGE_DECLINED = (
+            "schedule_change_declined",
+            "Sender declined the new times",
+        )
+        SCHEDULE_CHANGE_APPLIED = "schedule_change_applied", "New times applied"
+        SCHEDULE_CHANGE_WITHDRAWN = (
+            "schedule_change_withdrawn",
+            "New times withdrawn",
+        )
 
     deal = models.ForeignKey(Deal, on_delete=models.PROTECT, related_name="events")
     kind = models.CharField(max_length=32, choices=Kind.choices)

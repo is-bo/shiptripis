@@ -13,6 +13,11 @@ on who cancels and how close to the agreed pickup they are:
   (10% of their reward, capped at EUR 15, both admin-configurable) and every
   remaining cent goes back to the sender. The platform waives its commission at
   launch, which is a policy value rather than a hard-coded generosity.
+* **the sender cancels after declining the traveler's new times** (spec 12,
+  L9A) — the cancellation is caused by the traveler and settles exactly as the
+  traveler's own: full refund, no compensation. `caused_by` says so on the
+  quote and the timeline. It holds while the declined change still waits; a
+  withdrawn change leaves the original times, and the ordinary rule, in force.
 
 **After pickup there is no cancellation.** The parcel is in someone else's hands
 and the answer to "something went wrong" is a dispute with an evidence bundle,
@@ -69,6 +74,9 @@ class CancellationQuote:
 
     deal_id: int
     actor_role: str
+    #: Whose cancellation this is for the money: the actor's own role, except
+    #: a sender who declined the traveler's new times (then "traveler").
+    caused_by: str
     allowed: bool
     refusal_code: str
     collected_eur_cents: int
@@ -83,6 +91,7 @@ class CancellationQuote:
         return {
             "deal_id": self.deal_id,
             "actor_role": self.actor_role,
+            "caused_by": self.caused_by,
             "allowed": self.allowed,
             "refusal_code": self.refusal_code,
             "collected_eur_cents": self.collected_eur_cents,
@@ -137,6 +146,12 @@ def build_quote(
     deal = aggregate.deal
     at = at or timezone.now()
     role = _actor_role(deal, actor_id)
+    caused_by = role
+    if role == "sender":
+        from apps.trips.schedule_changes import declined_change_for
+
+        if declined_change_for(deal) is not None:
+            caused_by = "traveler"
     policy = _policy(deal)
     cutoff_seconds = _int_policy(policy, "sender_free_cutoff_seconds", 86_400)
     cutoff_at = (
@@ -149,6 +164,7 @@ def build_quote(
         return CancellationQuote(
             deal_id=deal.pk,
             actor_role=role,
+            caused_by=caused_by,
             allowed=False,
             refusal_code=code,
             collected_eur_cents=0,
@@ -172,7 +188,7 @@ def build_quote(
     money = read_deal_money(deal)
     compensation = 0
     is_late = False
-    if role == "sender":
+    if caused_by == "sender":
         # No agreed pickup instant means we cannot prove the sender is inside
         # the cutoff, and charging a penalty we cannot justify is the wrong
         # default. Treat it as early.
@@ -196,6 +212,7 @@ def build_quote(
     return CancellationQuote(
         deal_id=deal.pk,
         actor_role=role,
+        caused_by=caused_by,
         allowed=True,
         refusal_code="",
         collected_eur_cents=money.collected_eur_cents,
@@ -275,6 +292,7 @@ def cancel_funded_deal(
             note=(
                 f"Deal #{deal.pk} cancelled after funding by {quote.actor_role}"
                 f"{' (late)' if quote.is_late else ''}"
+                f"{' (declined new times; caused by the traveler)' if _declined_new_times(quote) else ''}"
             ),
             actor_id=actor_id,
         )
@@ -295,8 +313,12 @@ def cancel_funded_deal(
 
         deal.cancelled_at = at
         deal.cancelled_by_id = actor_id
+        # The reason a sender's cancellation is the traveler's is the server's
+        # to state, never the client's.
         deal.cancellation_reason = (
-            reason or f"{quote.actor_role}_cancelled_after_funding"
+            DECLINED_SCHEDULE_CHANGE_REASON
+            if _declined_new_times(quote)
+            else reason or f"{quote.actor_role}_cancelled_after_funding"
         )[:64]
         target = (
             Deal.Status.REFUNDED
@@ -321,6 +343,7 @@ def cancel_funded_deal(
             DealEvent.Kind.CANCELLED_AFTER_FUNDING,
             {
                 "actor_role": quote.actor_role,
+                "caused_by": quote.caused_by,
                 "status": deal.status,
                 **plan.as_dict(),
             },
@@ -333,7 +356,20 @@ def cancel_funded_deal(
             actor_id=actor_id,
         )
         _notify_cancelled(aggregate, quote)
+        # A waiting schedule change may have been waiting on this parcel.
+        from apps.trips.schedule_changes import settle_after_commit
+
+        settle_after_commit(deal.journey_id)
     return quote
+
+
+#: `Deal.cancellation_reason` of a sender's cancellation after declining the
+#: traveler's new times: caused by the traveler (spec 12).
+DECLINED_SCHEDULE_CHANGE_REASON = "declined_schedule_change"
+
+
+def _declined_new_times(quote: CancellationQuote) -> bool:
+    return quote.actor_role == "sender" and quote.caused_by == "traveler"
 
 
 def _refusal_message(code: str) -> str:
@@ -440,7 +476,9 @@ def _notify_cancelled(
     deal = aggregate.deal
     context = {
         "tracking_number": tracking.for_deal(deal),
-        "cancelled_by_role": quote.actor_role,
+        "cancelled_by_role": (
+            "declined_schedule_change" if _declined_new_times(quote) else quote.actor_role
+        ),
     }
     for user_id, email in (
         (deal.sender_id, getattr(deal.sender, "email", "")),
@@ -593,6 +631,9 @@ def record_no_show(
                 {"status": deal.status, "reason": deal.cancellation_reason},
                 actor_id=admin_actor_id,
             )
+            from apps.trips.schedule_changes import settle_after_commit
+
+            settle_after_commit(deal.journey_id)
     return {
         "deal_id": deal.pk,
         "party": party,

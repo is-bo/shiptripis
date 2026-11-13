@@ -20,7 +20,7 @@ def resolved_notifications(user, *, at=None):
     from apps.finance.models import Payout
     from apps.matching.models import Offer
     from apps.ratings.models import Rating
-    from apps.trips.models import JourneyLegProgress
+    from apps.trips.models import JourneyLegProgress, JourneyScheduleChangeConsent
     from apps.ratings.services import review_window_open_q, with_review_deadline
     from apps.deals.lifecycle import IN_CARRIAGE_STATUSES
 
@@ -28,7 +28,7 @@ def resolved_notifications(user, *, at=None):
     rows = Notification.objects.filter(recipient=user)
     # Legacy payloads are untyped. Bound and validate IDs before casting so a
     # malformed historic event cannot break the entire inbox.
-    for name in ("deal_id", "match_id", "message_id", "offer_id", "leg_id"):
+    for name in ("deal_id", "match_id", "message_id", "offer_id", "leg_id", "schedule_change_id"):
         rows = rows.alias(**{f"_{name}": Case(
             When(**{f"payload__{name}__regex": r"^[1-9][0-9]{0,17}$"},
                  then=Cast(KeyTextTransform(name, "payload"), BigIntegerField())),
@@ -38,6 +38,15 @@ def resolved_notifications(user, *, at=None):
         leg_id=OuterRef("_leg_id"),
         kind=OuterRef("_progress_kind"),
         retracted_at__isnull=True,
+    )
+    # L9A: new times wait on this sender's answer only while their consent is
+    # pending on a change that is still waiting.
+    awaiting_answer = JourneyScheduleChangeConsent.objects.filter(
+        change_id=OuterRef("_schedule_change_id"),
+        deal_id=OuterRef("_deal_id"),
+        deal__sender=user,
+        state=JourneyScheduleChangeConsent.State.PENDING,
+        change__status="pending_senders",
     )
     deals = Deal.objects.filter(Q(sender=user) | Q(traveler=user)).filter(
         Q(pk=OuterRef("_deal_id")) | Q(match_id=OuterRef("_match_id"))
@@ -75,6 +84,7 @@ def resolved_notifications(user, *, at=None):
         _delivery_code=Exists(deals.filter(sender=user, delivery_confirmed_at__isnull=True,
                                            funded_at__isnull=False).filter(activity_q("active"))),
         _leg_reported=Exists(reported.filter(leg__journey__traveler=user)),
+        _awaiting_answer=Exists(awaiting_answer),
         _chat=Exists(ChatMessage.objects.filter(pk=OuterRef("_message_id"), read_at__isnull=True)
                      .filter(Q(match__sender=user) | Q(match__traveler=user)).exclude(sender=user)),
         _offer=Exists(Offer.objects.filter(Q(match__sender=user) | Q(match__traveler=user))
@@ -86,6 +96,7 @@ def resolved_notifications(user, *, at=None):
         When(channel__in=["offer.accepted", "payment.failed", "payment.required"], _owned_deal=True,
              then=~Q(_payment=True)),
         When(channel="journey.leg_reminder", then=Q(_leg_reported=True)),
+        When(channel="journey.schedule_change_proposed", then=~Q(_awaiting_answer=True)),
         When(channel="deal.arrival_reported", then=~Q(_arrival=True)),
         When(channel__in=["rating.required", "rating.prompt"], then=~Q(_rating=True)),
         When(channel="dispute.action_required", then=~Q(_dispute=True)),

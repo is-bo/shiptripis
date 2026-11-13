@@ -143,7 +143,12 @@ NAVIGATION = (
                 ("view_journeys",),
                 ("journeys", "journey-detail"),
             ),
-            ("Deals", "admin_console:deals", ("view_deals",), ("deals", "deal-detail")),
+            (
+                "Deals",
+                "admin_console:deals",
+                ("view_deals",),
+                ("deals", "deal-detail", "deal-no-show"),
+            ),
         ),
     ),
     (
@@ -154,6 +159,14 @@ NAVIGATION = (
                 "admin_console:disputes",
                 ("view_disputes",),
                 ("disputes", "dispute-detail", "dispute-evidence"),
+            ),
+            # L9A. What parties reported on their deliveries; the no-show
+            # reports lead to a decision on the Deal.
+            (
+                "Problems",
+                "admin_console:problems",
+                ("view_disputes",),
+                ("problems", "problem-detail"),
             ),
         ),
     ),

@@ -103,6 +103,12 @@ var subscribeChannels = []string{
 	// L5A progress: the traveler's report reaches the sender; the reminder the traveler.
 	"deal.progress_reported",
 	"journey.leg_reminder",
+	// L9A problems and schedule changes.
+	"deal.problem_reported",
+	"journey.schedule_change_proposed",
+	"journey.schedule_change_answered",
+	"journey.schedule_change_applied",
+	"journey.schedule_change_withdrawn",
 }
 
 // targetsEnvelope is the shared shape every Django publish carries.

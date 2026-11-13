@@ -57,6 +57,10 @@ DEAL_ARRIVAL_DECLINED = "deal.arrival_declined"
 #: ("departed", "arrived", "at the port"). A statement by the traveler: it
 #: moves no deal status. Carries deal ids and the report kind, nothing else.
 DEAL_PROGRESS_REPORTED = "deal.progress_reported"
+#: L9A. A party reported a problem with the parcel; sent to the other party.
+#: Carries deal ids, the problem id and kind and the tracking number. A report
+#: moves no deal status.
+DEAL_PROBLEM_REPORTED = "deal.problem_reported"
 DISPUTE_OPENED = "dispute.opened"
 DISPUTE_RESOLVED = "dispute.resolved"
 PAYOUT_STATUS_CHANGED = "payout.status_changed"
@@ -75,6 +79,18 @@ DISCOVERY_TRAVELER_INTERESTED = "discovery.traveler_interested"
 #: a funded parcel passes its planned time with no report. Carries ids and the
 #: report kind asked about, never a city, a schedule or a parcel.
 JOURNEY_LEG_REMINDER = "journey.leg_reminder"
+
+# journey schedule changes (L9A). Each carries the journey and change ids;
+# those sent to a sender also carry their deal ids and tracking number. Never a
+# time, a place or the traveler's reason, so nothing reaches a lock screen.
+#: New times need this sender's answer (accept or decline).
+JOURNEY_SCHEDULE_CHANGE_PROPOSED = "journey.schedule_change_proposed"
+#: A sender accepted or declined; sent to the traveler.
+JOURNEY_SCHEDULE_CHANGE_ANSWERED = "journey.schedule_change_answered"
+#: The new times are in force; sent to every affected sender and the traveler.
+JOURNEY_SCHEDULE_CHANGE_APPLIED = "journey.schedule_change_applied"
+#: The traveler withdrew the change, or it no longer fit the trip.
+JOURNEY_SCHEDULE_CHANGE_WITHDRAWN = "journey.schedule_change_withdrawn"
 
 # chat (Django owns persistence; Go chat-service relays this to live sockets)
 CHAT_MESSAGE_NEW = "chat.message.new"

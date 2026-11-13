@@ -78,6 +78,12 @@ STATUS_TONES: dict[str, str] = {
     "unapplied": TONE_ATTENTION,
     "frozen": TONE_ATTENTION,
     "disputed": TONE_ATTENTION,
+    # L9A problem reports and schedule changes.
+    "escalated": TONE_ATTENTION,
+    "acknowledged": TONE_WAIT,
+    "pending_senders": TONE_WAIT,
+    "applied": TONE_OK,
+    "withdrawn": TONE_MUTE,
     # L6A: staff asked the person for a new upload; the person acts next.
     "resubmission_requested": TONE_ATTENTION,
     # gone wrong
