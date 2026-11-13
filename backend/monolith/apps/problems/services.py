@@ -356,8 +356,10 @@ def _staff_reason(reason: str) -> str:
 
 
 def _lock_problem(problem_id: int) -> ShipmentProblem:
+    # Only the report row: locking the joined deal here could deadlock with a
+    # no-show decision, which locks the deal first and then its reports.
     problem = (
-        ShipmentProblem.objects.select_for_update()
+        ShipmentProblem.objects.select_for_update(of=("self",))
         .select_related("deal")
         .filter(pk=problem_id)
         .first()
@@ -481,7 +483,7 @@ def close_no_show_reports(*, deal_id: int, actor, audit, party: str) -> list[int
 
     closed = []
     for problem in (
-        ShipmentProblem.objects.select_for_update()
+        ShipmentProblem.objects.select_for_update(of=("self",))
         .select_related("deal")
         .filter(
             deal_id=deal_id,

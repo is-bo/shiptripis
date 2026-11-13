@@ -263,6 +263,12 @@ parcel, whether it needed the sender and their answer); the journey page gains *
 (every change with its legs before and after and its parcels). `action_form.html` shows a Back
 button instead of the form when an action is not available.
 
+Gate screenshots, in `/mnt/project-files/l-series-screens/L9A/` (console, English only):
+`problems-queue-en.png`, `problems-queue-narrow-en.png` (390 px), `problem-no-show-en.png`,
+`problem-no-show-narrow-en.png` (390 px), `record-no-show-en.png` (party pre-selected),
+`deal-problems-route-changes-en.png` (a waiting declined change and an applied one),
+`journey-schedule-changes-en.png`, `overview-en.png` ("Problems to look at").
+
 ## 6. Tests
 
 `apps/problems/tests/test_l9a_problems.py` (26) and `apps/trips/tests/test_l9a_schedule_changes.py`

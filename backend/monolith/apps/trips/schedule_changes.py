@@ -816,7 +816,9 @@ def _lock_change(change_id: int) -> tuple[Change, Journey, list[JourneyLeg]] | N
         return None
     journey = Journey.objects.select_for_update(no_key=True).get(pk=journey_id)
     change = (
-        Change.objects.select_for_update().select_related("journey").get(pk=change_id)
+        Change.objects.select_for_update(of=("self",))
+        .select_related("journey")
+        .get(pk=change_id)
     )
     return change, journey, _ordered_legs(journey.pk, lock=True)
 
@@ -965,7 +967,7 @@ def withdraw(*, journey_id: int, change_id: int, actor) -> Change:
                 NOT_OWNED, "Only the journey owner can withdraw it.", http_status=403
             )
         change = (
-            Change.objects.select_for_update()
+            Change.objects.select_for_update(of=("self",))
             .select_related("journey")
             .filter(pk=change_id, journey=journey)
             .first()
