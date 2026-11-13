@@ -32,7 +32,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | merged | `claude/project-thread-s4d2gr` | #35 | `c078060` | `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md` |
 | L6A | Verification inbox (ID and Tickets) and removal of the parked switches | Opus | high | merged | `claude/project-thread-eqdiqe` | #36 | `a4f72db` | `docs/PHASE_L6A_VERIFICATION_INBOX.md` |
 | L9A | Problems and route changes, backend | Opus | high | merged | `claude/project-thread-qpwihm` | #37 | `9ceb40e` | `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md` |
-| L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
+| L9B | Problems and route changes, mobile | Sonnet | medium | merged | `claude/project-thread-18lfzs` | #38 | `b00260b` | `docs/PHASE_L9B_PROBLEMS_ROUTE_CHANGES_MOBILE.md` |
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | not_started | | | | |
 | L13A | Reviews, reports and moderation, backend | Opus | high | not_started | | | | |
@@ -64,9 +64,8 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L9B (Sonnet, medium effort; app screens on L9A's contract in
-`docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`, including the informed state for a collected parcel and
-the preview's `ticket_recheck` notice), then L12A (Opus, high). Section 3 order.
+**Next package:** L12A (Opus, high effort; proposal deadline 6 hours or the pickup time, whichever is first,
+reminder 1 hour before, and trip-fit alerts, backend). Section 3 order.
 
 **Closed carry-overs (2026-11-13):** L6B was to add the Pro badge and business name to L4B's trip
 cards; L6B is parked, so nothing is owed. L5A's note that route changes must call
@@ -725,3 +724,4 @@ Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`. Screenshots: `/mnt/project-
 | 2026-11-12 | Before the unattended run (plan 5.1d): added L4C (CI time limit, ferry distance cleanup) to run first; moved L11A and L11B to right after L4B and added rule 1.5.12; added the advisor role (1.1) and "When a package is blocked" (1.0); gate screenshots are kept in `/mnt/project-files/l-series-screens/` and L10 builds a gallery (1.6). |
 | 2026-11-13 | Scope narrowed to fast delivery (plan 5.1e, spec "Scope change of 2026-11-13"). Parked, with their complete text moved to `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`: the professional half of L6A, L6B, L7A, L7B, L8A, L8B; spec 7, 9, 10 and the professional column of spec 6. L6A is now the verification inbox with two tabs and removes the two unused policy sections. L9A's problems live in `apps.problems` and lose the courier kinds; it no longer depends on L8A. L12A's proposal deadline is 6 hours or the pickup time, reminder 1 hour. The helper's action table, the final acceptance scenarios, `CLAUDE.md`, `AGENTS.md` and the skill draft were aligned. The documents as they stood before: commit `50547be`. |
 | 2026-11-13 | Advisor answers for L9A's schedule changes, written into spec 12 and plan L9A, L9B and 5.1e: the baseline for "moved" is what the sender last agreed to; the pickup side counts for parcels not yet collected; collected parcels are informed and never block; a re-timed ticket leg goes back to review on apply through the existing path; the unreachable `ACTIVE` reminder branch in `replace_journey_route` is removed. |
+| 2026-11-13 | L9B merged (PR #38, `b00260b`): problem reports, no-show action and route changes on the app. No backend change. Next: L12A. |
