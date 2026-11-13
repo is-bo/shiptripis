@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.chat",
     "apps.discovery",
+    "apps.problems",
     "apps.admin_panel",
 ]
 

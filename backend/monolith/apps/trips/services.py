@@ -164,21 +164,6 @@ def _validate_leg_sequence(
                 "journey_leg_endpoints_invalid",
                 f"Leg {leg.position} origin and destination must differ.",
             )
-        # A leg with no arrival can never deliver: compatibility compares the
-        # arrival at the drop-off node with the sender's deadline, so every
-        # request ending there is refused. Publishing it would list a journey
-        # nobody can be matched with. Writes have required an arrival since
-        # J7B; this catches a draft written before that.
-        if leg.arrive_at is None:
-            raise JourneyDomainError(
-                "journey_leg_arrival_required",
-                f"Leg {leg.position} needs an arrival time before publication.",
-            )
-        if leg.arrive_at <= leg.depart_at:
-            raise JourneyDomainError(
-                "journey_leg_time_invalid",
-                f"Leg {leg.position} arrival must be after departure.",
-            )
         # A leg can become impossible after it was written: the catalogue can
         # move a place between countries, and a legacy row predates the rule
         # entirely.  Publication is the last gate before senders see it, so
@@ -213,6 +198,36 @@ def _validate_leg_sequence(
                 "journey_legs_disconnected",
                 "Each leg must begin where the previous leg ends.",
             )
+    validate_leg_times(legs)
+
+
+def validate_leg_times(legs) -> None:
+    """The time rules of a leg chain, in position order.
+
+    Shared by publication and by a schedule change (L9A), which moves times
+    only and so checks nothing else. ``legs`` needs ``position``,
+    ``depart_at`` and ``arrive_at``.
+    """
+
+    for index, leg in enumerate(legs):
+        # A leg with no arrival can never deliver: compatibility compares the
+        # arrival at the drop-off node with the sender's deadline, so every
+        # request ending there is refused. Publishing it would list a journey
+        # nobody can be matched with. Writes have required an arrival since
+        # J7B; this catches a draft written before that.
+        if leg.arrive_at is None:
+            raise JourneyDomainError(
+                "journey_leg_arrival_required",
+                f"Leg {leg.position} needs an arrival time before publication.",
+            )
+        if leg.arrive_at <= leg.depart_at:
+            raise JourneyDomainError(
+                "journey_leg_time_invalid",
+                f"Leg {leg.position} arrival must be after departure.",
+            )
+        if index == 0:
+            continue
+        previous = legs[index - 1]
         if leg.depart_at <= previous.depart_at:
             raise JourneyDomainError(
                 "journey_leg_time_order_invalid",
@@ -732,12 +747,6 @@ def replace_journey_route(
             .order_by("position", "pk")
         )
         _validate_leg_sequence(locked, rewritten)
-        if locked.status == Journey.Status.ACTIVE:
-            # New times or new legs need their own reminders; the old jobs find
-            # the planned time moved and do nothing.
-            from .progress import schedule_leg_reminders
-
-            schedule_leg_reminders(locked)
 
     locked.refresh_from_db()
     return JourneyRouteChange(

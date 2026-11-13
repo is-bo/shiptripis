@@ -30,7 +30,7 @@ from apps.accounts.models import User
 from apps.boosts.models import BoostPurchase
 from apps.core.business_settings import activate_business_settings
 from apps.core.models import BusinessSettingsVersion
-from apps.deals.cancellation import CancellationError, record_no_show
+from apps.deals.cancellation import CancellationError
 from apps.deals.models import Deal
 from apps.disputes.models import Dispute
 from apps.disputes.serializers import (
@@ -146,6 +146,7 @@ from .services import (
     change_admin_role,
     create_admin_invitation,
     record_admin_action,
+    record_deal_no_show,
     review_flight_proof,
     review_kyc_submission,
     revoke_admin_invitation,
@@ -772,23 +773,9 @@ class AdminDealNoShowView(APIView):
         serializer.is_valid(raise_exception=True)
         get_object_or_404(Deal, pk=pk)
         try:
-            with transaction.atomic():
-                result = record_no_show(
-                    deal_id=pk,
-                    admin_actor_id=request.user.pk,
-                    **serializer.validated_data,
-                )
-                record_admin_action(
-                    actor=request.user,
-                    action="deal.no_show_recorded",
-                    target_type="deals.deal",
-                    target_id=str(pk),
-                    after={
-                        "party": result["party"],
-                        "sender_refunded": result.get("sender_refunded", False),
-                    },
-                    reason=serializer.validated_data.get("note", ""),
-                )
+            result = record_deal_no_show(
+                actor=request.user, deal_id=pk, **serializer.validated_data
+            )
         except CancellationError as exc:
             return _domain_error(exc, fallback_code="no_show_not_permitted")
         return Response(result)

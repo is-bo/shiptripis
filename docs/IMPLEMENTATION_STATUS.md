@@ -1,5 +1,28 @@
 # Waçla V1 Implementation Status
 
+## Wassla L9A — Problems and route changes, backend (2026-11-13)
+
+Status: **in review** (branch `claude/project-thread-qpwihm`, PR into
+`feature/discovery-professional-delivery`). Backend and console; `main` untouched.
+
+- **Problem reports** (`apps.problems`): either party reports a problem on a funded delivery
+  (`GET`/`POST /api/deals/<id>/problems`); the other party is told on `deal.problem_reported`, and
+  damaged, mismatched and no-show reports go to staff at once. A report never changes the delivery
+  or its money. No-show reports open at the agreed pickup time and close at pickup; the read tells the
+  app whether one is possible and why not.
+- **Staff:** Disputes › Problems queue and page, acknowledge and close with an audited reason, and a
+  "Record a no-show" link to a new console page for the existing no-show action. Recording it closes
+  the open no-show reports with a reference to the audit row.
+- **Route changes:** a traveler changes leg times on a live journey. Small changes apply at once and
+  tell the senders; a change that misses a parcel's deadline, or moves its arrival or (before
+  collection) its pickup more than the setting (6 hours) from what its sender agreed, or moves the
+  pickup earlier than agreed, waits for that sender. A collected parcel's sender is told, not asked.
+  A decline keeps the old times and makes the sender's cancellation the traveler's (full refund, no
+  penalty). Applying reschedules leg reminders and sends a re-timed ticket back to review; the deal's
+  arrival snapshot and payout floor never change.
+
+Detail: `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`.
+
 ## Wassla L6A — Staff verification inbox (2026-11-13)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #36, `a4f72db`). Backend and

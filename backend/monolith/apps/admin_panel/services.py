@@ -91,6 +91,53 @@ def record_admin_action(
     )
 
 
+def record_deal_no_show(
+    *,
+    actor,
+    deal_id: int,
+    party: str,
+    note: str = "",
+    refund_sender: bool | None = None,
+) -> dict:
+    """The one staff path to a no-show decision (API and console alike).
+
+    Records it through the existing money rule
+    (`apps.deals.cancellation.record_no_show`), writes the audit row, and closes
+    the deal's open no-show reports with a reference to that row (spec 12,
+    L9A), all in one transaction. A replay of an existing decision changes
+    nothing and writes no second audit row.
+    """
+
+    from apps.deals.cancellation import record_no_show
+    from apps.problems.services import close_no_show_reports
+
+    with transaction.atomic():
+        result = record_no_show(
+            deal_id=deal_id,
+            party=party,
+            admin_actor_id=actor.pk,
+            note=note,
+            refund_sender=refund_sender,
+        )
+        if not result.get("changed"):
+            return result
+        audit = record_admin_action(
+            actor=actor,
+            action="deal.no_show_recorded",
+            target_type="deals.deal",
+            target_id=str(deal_id),
+            after={
+                "party": result["party"],
+                "sender_refunded": result.get("sender_refunded", False),
+            },
+            reason=note,
+        )
+        result["closed_problem_ids"] = close_no_show_reports(
+            deal_id=deal_id, actor=actor, audit=audit, party=result["party"]
+        )
+    return result
+
+
 def _require_admin_manager(actor, role: str | None = None):
     if not has_admin_permission(actor, "manage_admins"):
         raise PermissionDenied("Only an administrator with manage_admins may do this.")

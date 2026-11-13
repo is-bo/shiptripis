@@ -164,6 +164,10 @@ def release_pending_deal_reservation(
         deal_resources(deal),
         targets=[deal.sender_id, deal.traveler_id],
     )
+    # A waiting schedule change may have been waiting on this parcel (L9A).
+    from apps.trips.schedule_changes import settle_after_commit
+
+    settle_after_commit(deal.journey_id)
     return ReservationReleaseResult(deal.pk, released, True)
 
 

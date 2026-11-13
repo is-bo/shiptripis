@@ -78,6 +78,16 @@ from .progress import (
     retract_progress,
 )
 from .proofs import leg_requires_proof, proof_state_annotation
+from .schedule_changes import (
+    ScheduleChangeError,
+    change_view,
+    decide,
+    journey_changes,
+    preview_change,
+    propose_change,
+    sender_view,
+    withdraw,
+)
 from .services import (
     JourneyDomainError,
     cancel_journey,
@@ -703,3 +713,114 @@ class JourneyProgressPendingView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response({"results": pending_questions(request.user)})
+
+
+# --- schedule changes (spec 12, L9A) -----------------------------------------
+
+
+def _schedule_refusal(exc: ScheduleChangeError) -> Response:
+    return Response(exc.as_payload(), status=exc.http_status)
+
+
+def _owned_journey(request: Request, pk: int) -> Journey | Response:
+    journey = get_object_or_404(Journey, pk=pk)
+    if journey.traveler_id != request.user.pk:
+        return Response(
+            {"code": "journey_not_owned", "detail": "Only the journey owner can see this."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return journey
+
+
+class JourneyScheduleChangesView(APIView):
+    """`GET` the journey's schedule changes; `POST` new times. Owner only.
+
+    The body is `{"legs": [{"id", "depart_at", "arrive_at"}], "reason"}` with
+    the legs whose times change. The answer is the change: `applied` when no
+    parcel needed its sender's agreement, otherwise `pending_senders`.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        journey = _owned_journey(request, pk)
+        if isinstance(journey, Response):
+            return journey
+        return Response({"results": journey_changes(journey)})
+
+    def post(self, request: Request, pk: int) -> Response:
+        get_object_or_404(Journey, pk=pk)
+        try:
+            change = propose_change(
+                journey_id=pk,
+                actor=request.user,
+                legs=request.data.get("legs"),
+                reason=request.data.get("reason"),
+            )
+        except ScheduleChangeError as exc:
+            return _schedule_refusal(exc)
+        return Response(change_view(change), status=status.HTTP_201_CREATED)
+
+
+class JourneyScheduleChangePreviewView(APIView):
+    """`POST` the same body as a change: what it would do, nothing written."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        get_object_or_404(Journey, pk=pk)
+        try:
+            preview = preview_change(
+                journey_id=pk, actor=request.user, legs=request.data.get("legs")
+            )
+        except ScheduleChangeError as exc:
+            return _schedule_refusal(exc)
+        return Response(preview)
+
+
+class JourneyScheduleChangeWithdrawView(APIView):
+    """`POST`: the traveler takes back new times that are still waiting."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int, change_pk: int) -> Response:
+        get_object_or_404(Journey, pk=pk)
+        try:
+            change = withdraw(journey_id=pk, change_id=change_pk, actor=request.user)
+        except ScheduleChangeError as exc:
+            return _schedule_refusal(exc)
+        return Response(change_view(change))
+
+
+def _sender_deal(request: Request, pk: int):
+    from apps.deals.models import Deal
+
+    return get_object_or_404(
+        Deal.objects.select_related("delivery_request"), pk=pk, sender_id=request.user.pk
+    )
+
+
+class DealScheduleChangeView(APIView):
+    """`GET`, for the sender: the latest new times that touched this parcel."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request, pk: int) -> Response:
+        return Response(sender_view(_sender_deal(request, pk)))
+
+
+class DealScheduleChangeAnswerView(APIView):
+    """`POST .../schedule-change/accept|decline`. The action is in the path."""
+
+    permission_classes = (IsAuthenticated,)
+    ACTIONS = ("accept", "decline")
+
+    def post(self, request: Request, pk: int, action: str) -> Response:
+        if action not in self.ACTIONS:
+            raise Http404
+        deal = _sender_deal(request, pk)
+        try:
+            decide(deal_id=deal.pk, actor=request.user, accept=action == "accept")
+        except ScheduleChangeError as exc:
+            return _schedule_refusal(exc)
+        return Response(sender_view(_sender_deal(request, pk)))

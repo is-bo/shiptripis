@@ -672,6 +672,19 @@ def _attention_items(request, *, provider_rows=()) -> list[dict]:
         "attention=1",
         "bad",
     )
+    # L9A. Serious problem reports (damage, mismatch, no-shows) go to staff
+    # the moment they are reported.
+    if has_admin_permission(user, "view_disputes"):
+        from .console_problems import waiting_count
+
+        add(
+            "view_disputes",
+            "Problems to look at",
+            "Damaged or mismatched parcels and no-show reports waiting for staff.",
+            waiting_count(),
+            "admin_console:problems",
+            "attention=1",
+        )
     # J6.4. A submitted DZD payout method is operational work, not a Finance
     # metric, so it belongs here as well as on the Finance Overview. Both read
     # `awaiting_review_count`, so the two pages cannot disagree, and the count
@@ -1762,8 +1775,35 @@ def journey_detail(request, pk: int):
             "pause": pause_state(journey, may_manage=may_manage),
             "traveler_accepts": _traveler_accepts(journey),
             "traveler_price": _traveler_price(journey),
+            "schedule_changes": _journey_schedule_changes(journey),
         },
     )
+
+
+def _journey_schedule_changes(journey) -> list:
+    """Each change with the legs it moved, before and after (spec 13 visibility)."""
+
+    from apps.trips.models import JourneyScheduleChange
+
+    changes = list(
+        JourneyScheduleChange.objects.filter(journey=journey).order_by("-created_at", "-pk")
+    )
+    for change in changes:
+        before = {row["leg_id"]: row for row in change.original}
+        change.console_legs = [
+            {
+                "position": row["position"],
+                "before_depart": parse_datetime(before[row["leg_id"]]["depart_at"]),
+                "before_arrive": parse_datetime(before[row["leg_id"]]["arrive_at"] or ""),
+                "after_depart": parse_datetime(row["depart_at"]),
+                "after_arrive": parse_datetime(row["arrive_at"] or ""),
+            }
+            for row in change.proposed
+            if row["leg_id"] in before
+            and (row["depart_at"], row["arrive_at"])
+            != (before[row["leg_id"]]["depart_at"], before[row["leg_id"]]["arrive_at"])
+        ]
+    return changes
 
 
 def _deal_queryset(request):
@@ -1908,8 +1948,43 @@ def deal_detail(request, pk: int):
             "route_nodes": request_route_nodes(deal.delivery_request),
             "protection": _deal_protection_state(deal),
             "audits": audits,
+            # Spec 13 visibility: the problems and route changes of this deal.
+            "problems": deal.problems.select_related("reported_by").order_by("-created_at", "-pk"),
+            "schedule_changes": _deal_schedule_changes(deal),
+            "may_record_no_show": has_admin_permission(request.user, "record_no_show")
+            and not deal.no_show_party
+            and deal.pickup_confirmed_at is None
+            and deal.status in (Deal.Status.FUNDED, Deal.Status.PICKUP_READY),
         },
     )
+
+
+def _deal_schedule_changes(deal) -> list[dict]:
+    """Every schedule change that touched this deal, with this deal's line of it."""
+
+    from apps.trips.models import JourneyScheduleChange, JourneyScheduleChangeConsent
+
+    changes = JourneyScheduleChange.objects.filter(
+        journey_id=deal.journey_id, affected__contains=[{"deal_id": deal.pk}]
+    ).prefetch_related("consents").order_by("-created_at", "-pk")
+    rows = []
+    for change in changes:
+        line = next(row for row in change.affected if row["deal_id"] == deal.pk)
+        consent = next((row for row in change.consents.all() if row.deal_id == deal.pk), None)
+        rows.append(
+            {
+                "change": change,
+                "material": line["material"],
+                "informed": line["informed"],
+                "reasons": [
+                    JourneyScheduleChangeConsent.Reason(reason).label for reason in line["reasons"]
+                ],
+                "arrival_before": parse_datetime(line["arrival_before"]),
+                "arrival_after": parse_datetime(line["arrival_after"]),
+                "consent": consent,
+            }
+        )
+    return rows
 
 
 def _dispute_queryset(request=None):

@@ -947,6 +947,9 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         cancellation_labels = {
             "sender": _("cancelled by the sender"),
             "traveler": _("cancelled by the traveler"),
+            "declined_schedule_change": _(
+                "cancelled after the traveler changed the times"
+            ),
             "admin": _("cancelled by an administrator"),
         }
         cancellation_reason = cancellation_labels.get(

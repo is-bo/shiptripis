@@ -523,6 +523,9 @@ msgstr "annulée par l'expéditeur"
 msgid "cancelled by the traveler"
 msgstr "annulée par le voyageur"
 
+msgid "cancelled after the traveler changed the times"
+msgstr "annulée après le changement d'horaires du voyageur"
+
 msgid "cancelled by an administrator"
 msgstr "annulée par un administrateur"
 

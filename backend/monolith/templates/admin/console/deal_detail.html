@@ -98,6 +98,38 @@
     </section>
   </div>
 
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <div class="st-card-head">
+        <div><p class="st-eyebrow">Reported by the parties</p><h2>Problems</h2></div>
+        {% if may_record_no_show %}<a class="button st-button-quiet" href="{% url 'admin_console:deal-no-show' deal.pk %}">Record a no-show</a>{% endif %}
+      </div>
+      {% for problem in problems %}
+      <div class="st-record-block">
+        <strong><a href="{% url 'admin_console:problem-detail' problem.pk %}">{{ problem.get_kind_display }}</a></strong>
+        <span class="st-chip st-{{ problem.status|status_tone }}">{{ problem.get_status_display }}</span>
+        <small>By the {{ problem.get_reporter_role_display|lower }} &middot; {{ problem.created_at|date:"d M Y, H:i" }}</small>
+      </div>
+      {% empty %}
+      <p class="st-muted">Neither party has reported a problem on this delivery.</p>
+      {% endfor %}
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Times changed by the traveler</p>
+      <h2>Route changes</h2>
+      {% for row in schedule_changes %}
+      <div class="st-record-block">
+        <strong>Arrival {{ row.arrival_before|date:"d M Y, H:i" }} &rarr; {{ row.arrival_after|date:"d M Y, H:i" }}</strong>
+        <span class="st-chip st-{{ row.change.status|status_tone }}">{{ row.change.get_status_display }}</span>
+        <small>{% if row.material %}Needed the sender's answer ({{ row.reasons|join:", "|lower }}): {{ row.consent.get_state_display|default:"not asked yet" }}{% elif row.informed %}Already collected: the sender was told, not asked{% else %}Within the threshold: applied without asking{% endif %}</small>
+      </div>
+      {% empty %}
+      <p class="st-muted">The traveler has not changed the times of this delivery.</p>
+      {% endfor %}
+    </section>
+  </div>
+
   <section class="st-card">
     <p class="st-eyebrow">Lifecycle</p>
     <h2>What happened, in order</h2>

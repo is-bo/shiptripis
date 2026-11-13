@@ -1,12 +1,14 @@
 from django.urls import path
 
 from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
+from apps.problems.services import VIEW_PROBLEMS_PERMISSION
 
 from . import console_views as views
 from .console_discovery import profile_visibility
 from .console_identity_checks import identity_check_detail, identity_checks
 from .console_journey_pause import journey_pause_action
 from .console_people import person_profile
+from .console_problems import deal_no_show, problem_detail, problems
 from .console_payout_reviews import (
     payout_review_detail,
     payout_review_evidence,
@@ -94,8 +96,27 @@ urlpatterns = [
     ),
     path("marketplace/deals/", views.deals, name="deals"),
     path("marketplace/deals/<int:pk>/", views.deal_detail, name="deal-detail"),
+    # L9A. The console face of the existing no-show action, guarded by the
+    # capability that action checks; a no-show report links here.
+    path(
+        "marketplace/deals/<int:pk>/no-show/",
+        capability_required("record_no_show")(deal_no_show),
+        name="deal-no-show",
+    ),
     path("disputes/", views.disputes, name="disputes"),
     path("disputes/<int:pk>/", views.dispute_detail, name="dispute-detail"),
+    # L9A problem reports. Seen by everyone who sees disputes; acknowledging
+    # and closing are checked again (`manage_disputes`) by the domain service.
+    path(
+        "disputes/problems/",
+        capability_required(VIEW_PROBLEMS_PERMISSION)(problems),
+        name="problems",
+    ),
+    path(
+        "disputes/problems/<int:pk>/",
+        capability_required(VIEW_PROBLEMS_PERMISSION)(problem_detail),
+        name="problem-detail",
+    ),
     path(
         "disputes/<int:pk>/evidence/<int:evidence_id>/",
         views.dispute_evidence,

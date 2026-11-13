@@ -12,6 +12,7 @@
     </div>
   </header>
   <section class="st-card {% if danger %}st-decision-card{% endif %}">
+    {% if form %}
     <form method="post" class="st-form">{% csrf_token %}
       {{ form.as_p }}
       <div class="st-split-actions">
@@ -20,6 +21,10 @@
         <button{% if danger %} class="st-button-danger"{% endif %} type="submit">{{ submit_label }}</button>
       </div>
     </form>
+    {% else %}
+    {# Nothing to decide: the page explains why and offers the way back. #}
+    <div class="st-split-actions"><a class="button st-button-quiet" href="{{ back_url }}">Back</a></div>
+    {% endif %}
   </section>
 </main>
 {% endblock %}

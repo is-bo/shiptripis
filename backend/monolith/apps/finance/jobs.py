@@ -731,6 +731,14 @@ def handle_leg_reminder(payload: dict) -> str:
     return run(payload)
 
 
+def handle_schedule_change_settle(payload: dict) -> str:
+    """L9A: apply a waiting schedule change once nothing blocks it any more."""
+
+    from apps.trips.schedule_changes import handle_settle_job as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -751,6 +759,7 @@ HANDLERS = {
     ScheduledJob.Kind.PAYOUT_SWEEP: handle_payout_sweep,
     ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS: handle_discovery_route_alerts,
     ScheduledJob.Kind.LEG_REMINDER: handle_leg_reminder,
+    ScheduledJob.Kind.SCHEDULE_CHANGE_SETTLE: handle_schedule_change_settle,
 }
 
 

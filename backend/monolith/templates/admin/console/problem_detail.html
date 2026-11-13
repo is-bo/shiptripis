@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">Problems</a> &rsaquo; {{ problem.get_kind_display }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Problem report &middot; parcel <span class="st-tracking-number">{{ tracking_number }}</span></p>
+      <h1>{{ problem.get_kind_display }}</h1>
+      <p>Reported {{ reported_ago }} ago by the {{ problem.get_reporter_role_display|lower }}, {{ problem.reported_by.full_name|default:problem.reported_by.email }}.</p>
+    </div>
+    <div class="st-page-aside">
+      <span class="st-chip st-{{ problem.status|status_tone }}">{{ problem.get_status_display }}</span>
+    </div>
+  </header>
+
+  <div class="st-alert st-alert-info">
+    <strong>A report changes nothing on its own</strong>
+    <span>The delivery, its money and its codes are exactly as they were. Money moves only through a dispute, a cancellation or a recorded no-show.</span>
+  </div>
+
+  {% if no_show_link %}
+  <section class="st-card st-decision-card">
+    <p class="st-eyebrow">No-show report</p>
+    <h2>Decide whether the {{ no_show_link.party }} failed to come</h2>
+    <p class="st-muted">Talk to both people first. Recording a no-show uses the existing rule: a traveler no-show refunds the sender in full; a sender no-show is recorded without a refund. Recording it closes this report.</p>
+    <div class="st-split-actions"><a class="button" href="{{ no_show_link.url }}">{{ no_show_link.label }}</a></div>
+  </section>
+  {% endif %}
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">What was reported</p>
+      <h2>In the {{ problem.get_reporter_role_display|lower }}'s words</h2>
+      {% if problem.note %}<p class="st-case-reason">{{ problem.note }}</p>{% else %}<p class="st-muted">No note was added.</p>{% endif %}
+      <dl class="st-facts">
+        <div><dt>Sender</dt><dd>{% person_link deal.sender "problems" %}<small>{{ deal.sender.email }}</small></dd></div>
+        <div><dt>Traveler</dt><dd>{% person_link deal.traveler "problems" %}<small>{{ deal.traveler.email }}</small></dd></div>
+        <div><dt>Delivery state</dt><dd>{{ deal.get_status_display }}</dd></div>
+        <div><dt>Agreed pickup</dt><dd>{{ deal.agreed_pickup_at|date:"d M Y, H:i"|default:"Not recorded" }}</dd></div>
+        <div><dt>Pickup confirmed</dt><dd>{{ deal.pickup_confirmed_at|date:"d M Y, H:i"|default:"Not yet" }}</dd></div>
+      </dl>
+      <div class="st-split-actions"><a class="button st-button-quiet" href="{% url 'admin_console:deal-detail' deal.pk %}">Open the full Deal</a></div>
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Handling</p>
+      <h2>Who has looked at it</h2>
+      <dl class="st-facts">
+        <div><dt>Went to staff</dt><dd>{{ problem.escalated_at|date:"d M Y, H:i"|default:"Not escalated" }}</dd></div>
+        <div><dt>Acknowledged</dt><dd>{% if problem.acknowledged_at %}{{ problem.acknowledged_at|date:"d M Y, H:i" }}<small>{{ problem.acknowledged_by.email }} &middot; {{ problem.acknowledged_reason }}</small>{% else %}Not yet{% endif %}</dd></div>
+        <div><dt>Closed</dt><dd>{% if problem.closed_at %}{{ problem.closed_at|date:"d M Y, H:i" }}<small>{{ problem.closed_by.email }} &middot; {{ problem.closed_reason }}</small>{% else %}Not yet{% endif %}</dd></div>
+        {% if problem.closed_by_audit %}<div><dt>Decision</dt><dd>No-show recorded<small>Audit {{ problem.closed_by_audit.pk }}</small></dd></div>{% endif %}
+      </dl>
+    </section>
+  </div>
+
+  {% if can_acknowledge or can_close %}
+  <div class="st-grid st-grid-2">
+    {% if can_acknowledge %}
+    <section class="st-card">
+      <p class="st-eyebrow">Audited action</p>
+      <h2>Acknowledge</h2>
+      <p class="st-muted">Say that staff are on it. The parties see the new state, not your reason.</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="acknowledge">
+        {{ acknowledge_form.as_p }}
+        <div class="st-split-actions"><span class="st-spacer"></span><button type="submit">Acknowledge</button></div>
+      </form>
+    </section>
+    {% endif %}
+    {% if can_close %}
+    <section class="st-card">
+      <p class="st-eyebrow">Audited action</p>
+      <h2>Close</h2>
+      <p class="st-muted">Close the report when nothing more is needed. The delivery is not changed.</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="close">
+        {{ close_form.as_p }}
+        <div class="st-split-actions"><span class="st-spacer"></span><button type="submit">Close report</button></div>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if audits %}
+  <section class="st-card">
+    <p class="st-eyebrow">Audit</p>
+    <h2>Staff actions on this report</h2>
+    <ol class="st-timeline">
+      {% for audit in audits %}
+      <li><strong>{{ audit.action|admin_action }}</strong><span>{{ audit.created_at|date:"d M Y, H:i" }} &middot; {{ audit.actor.email|default:"System" }} &middot; {{ audit.reason }}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

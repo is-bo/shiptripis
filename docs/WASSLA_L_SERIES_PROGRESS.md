@@ -518,12 +518,46 @@ Parked on 2026-11-13, not part of this build. No handoff notes. Full text: `docs
 
 ### L9A. Problems and route changes, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`. Screenshots: `/mnt/project-files/l-series-screens/L9A/`.
+
+- Contract as built (names that differ from the plan): `problems.ShipmentProblem` adds
+  `reporter_role`, `escalated_at`, `acknowledged_by/at/reason`, `closed_at`, `closed_by_audit`;
+  statuses `open|escalated|acknowledged|closed`. `GET|POST /api/deals/<id>/problems` (the read adds
+  `no_show_kind`, `no_show_reason`, `no_show_available_at`, `reportable_kinds`). Console
+  `disputes/problems/` and `marketplace/deals/<id>/no-show/`; `admin_panel.services.record_deal_no_show`
+  is the one staff path (API and console). `trips.JourneyScheduleChange` adds `proposed_by`,
+  `affected`, `applied_at`, `withdrawn_at`, `withdrawn_by`; the consent adds `reasons`
+  (`deadline|shift|pickup`), `arrival_before/after`, `pickup_before/after`, `decided_at`; affected
+  rows carry `informed` for collected parcels; the preview carries `notices` (`ticket_recheck`); the
+  sender's view carries `informed`, `can_answer`, `actions`. Routes:
+  `journeys/<id>/schedule-changes` (GET list, POST propose), `.../preview`, `.../<change>/withdraw`,
+  `deals/<id>/schedule-change` (sender GET) and `.../accept|decline`. Channels
+  `deal.problem_reported`, `journey.schedule_change_proposed|answered|applied|withdrawn`. Job kind
+  `schedule_change_settle`. `CancellationQuote.caused_by`; `cancellation_reason`
+  `declined_schedule_change`. `apps.trips.services.validate_leg_times` extracted from the sequence check.
+- Left for a later package: L9B builds every app screen on this contract (problem report sheet and
+  list with the no-show button driven by `can_report_no_show`/`no_show_reason`; the traveler's
+  change-times flow using `preview` then propose, the waiting state and withdraw; the sender's
+  accept/decline card from `GET /api/deals/<id>/schedule-change`; the cancellation confirmation reads
+  `caused_by`). Push taps currently open Deliveries.
+- Switches added and their defaults: none (uses the existing `marketplace.route_change.material_shift_minutes`, 360).
+- Deviations from the plan (what, why, approved by): the advisor's answers of 2026-11-13 (commit
+  `2220b61`) are built as written: baseline is what the sender last agreed to, the pickup side counts
+  for parcels not collected, collected parcels are informed and never block, a re-timed ticket leg is
+  re-checked on apply, the unreachable reminder branch is removed. Own calls, for Ismail's end
+  review: (1) "earlier than the agreed pickup" counts only when the pickup moved earlier; (2) accepted
+  but unfunded deals are classified and asked too; (3) problem capabilities reuse
+  `view_disputes`/`manage_disputes`; (4) a repeat report returns the live one (200); (5) general
+  reports are accepted from funding to `delivery_ready`; (6) a console no-show page was added (the
+  existing action was API only) and the API path no longer writes a second audit row on a replay;
+  (7) informed senders are told when the change applies; (8) a waiting change is withdrawn as
+  `no_longer_valid` when the journey stops being live or progresses past the new times.
+- Tests (before and after counts): Django 2,824 collected before, 2,895 after, all passing locally in 4 shards (+26 in
+  `apps/problems/tests/test_l9a_problems.py`, +45 in `apps/trips/tests/test_l9a_schedule_changes.py`).
+  No existing assertion changed. `makemigrations --check` clean, ruff clean, `schema.sql` re-exported
+  (additions only), Go notification lockstep test passes.
+- Known limits: `agreed_pickup_at` keeps its funded value after a change, so the no-show window
+  still opens at the old pickup time; the console is English only.
 
 ### L9B. Problems and route changes, mobile
 

@@ -41,8 +41,10 @@ _SAFE_DATA_FIELDS = frozenset(
         "offer_id",
         "parcel_id",
         "payment_order_id",
+        "problem_id",
         "proof_id",
         "request_id",
+        "schedule_change_id",
         "submission_id",
         "thread_id",
         "trip_id",
@@ -261,6 +263,75 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Ouvrez Wassla pour mettre à jour votre progression.",
             ),
             "ar": ("كيف تسير رحلتك؟", "افتح Wassla لتحديث تقدمك."),
+        },
+    ),
+    # L9A. The other party of a delivery reported a problem. Essential: a
+    # no-show report or a damaged parcel needs an answer. Ids only.
+    "deal.problem_reported": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("A problem was reported", "Open Wassla to see it and reply in chat."),
+            "fr": (
+                "Un problème a été signalé",
+                "Ouvrez Wassla pour le voir et répondre dans la discussion.",
+            ),
+            "ar": ("تم الإبلاغ عن مشكلة", "افتح Wassla للاطلاع عليها والرد في المحادثة."),
+        },
+    ),
+    # L9A schedule changes. Essential: a parcel's times are moving, and the
+    # sender may have to answer. Ids only, never a time or a place.
+    "journey.schedule_change_proposed": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("New trip times", "Your traveler changed the times. Open Wassla to answer."),
+            "fr": (
+                "Nouveaux horaires",
+                "Votre voyageur a changé les horaires. Ouvrez Wassla pour répondre.",
+            ),
+            "ar": ("مواعيد جديدة للرحلة", "غيّر المسافر المواعيد. افتح Wassla للرد."),
+        },
+    ),
+    "journey.schedule_change_answered": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("A sender answered", "Open Wassla to see your new times."),
+            "fr": (
+                "Un expéditeur a répondu",
+                "Ouvrez Wassla pour voir vos nouveaux horaires.",
+            ),
+            "ar": ("ردّ أحد المرسلين", "افتح Wassla لرؤية مواعيدك الجديدة."),
+        },
+    ),
+    "journey.schedule_change_applied": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("Trip times updated", "Open Wassla to see the new times."),
+            "fr": (
+                "Horaires mis à jour",
+                "Ouvrez Wassla pour voir les nouveaux horaires.",
+            ),
+            "ar": ("تم تحديث مواعيد الرحلة", "افتح Wassla لرؤية المواعيد الجديدة."),
+        },
+    ),
+    "journey.schedule_change_withdrawn": (
+        "essential",
+        "deliveries",
+        "",
+        {
+            "en": ("Times unchanged", "The new times were withdrawn. Nothing changes."),
+            "fr": (
+                "Horaires inchangés",
+                "Les nouveaux horaires ont été retirés. Rien ne change.",
+            ),
+            "ar": ("المواعيد دون تغيير", "تم سحب المواعيد الجديدة. لا شيء يتغير."),
         },
     ),
     "deal.cancelled": (

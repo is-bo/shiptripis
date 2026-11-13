@@ -523,6 +523,9 @@ msgstr "ألغيت من قبل المرسل"
 msgid "cancelled by the traveler"
 msgstr "ألغيت من قبل المسافر"
 
+msgid "cancelled after the traveler changed the times"
+msgstr "أُلغيت بعد أن غيّر المسافر المواعيد"
+
 msgid "cancelled by an administrator"
 msgstr "ألغيت من قبل مسؤول"
 

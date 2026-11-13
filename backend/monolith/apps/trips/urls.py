@@ -1,6 +1,11 @@
 from django.urls import path
 
 from .views import (
+    DealScheduleChangeAnswerView,
+    DealScheduleChangeView,
+    JourneyScheduleChangePreviewView,
+    JourneyScheduleChangesView,
+    JourneyScheduleChangeWithdrawView,
     JourneyCancelView,
     JourneyDetailView,
     JourneyLegProofCreateView,
@@ -69,5 +74,30 @@ urlpatterns = [
         "journeys/<int:journey_pk>/legs/<int:leg_pk>/proof",
         JourneyLegProofCreateView.as_view(),
         name="journey-leg-proof-create",
+    ),
+    path(
+        "journeys/<int:pk>/schedule-changes",
+        JourneyScheduleChangesView.as_view(),
+        name="journey-schedule-changes",
+    ),
+    path(
+        "journeys/<int:pk>/schedule-changes/preview",
+        JourneyScheduleChangePreviewView.as_view(),
+        name="journey-schedule-change-preview",
+    ),
+    path(
+        "journeys/<int:pk>/schedule-changes/<int:change_pk>/withdraw",
+        JourneyScheduleChangeWithdrawView.as_view(),
+        name="journey-schedule-change-withdraw",
+    ),
+    path(
+        "deals/<int:pk>/schedule-change",
+        DealScheduleChangeView.as_view(),
+        name="deal-schedule-change",
+    ),
+    path(
+        "deals/<int:pk>/schedule-change/<slug:action>",
+        DealScheduleChangeAnswerView.as_view(),
+        name="deal-schedule-change-answer",
     ),
 ]

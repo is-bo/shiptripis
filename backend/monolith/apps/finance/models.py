@@ -1389,6 +1389,8 @@ class ScheduledJob(models.Model):
         DISCOVERY_ROUTE_ALERTS = "discovery_route_alerts", "Discovery route alerts"
         # --- L5A progress reminders ---
         LEG_REMINDER = "leg_reminder", "Leg progress reminder"
+        # --- L9A schedule changes ---
+        SCHEDULE_CHANGE_SETTLE = "schedule_change_settle", "Schedule change settle"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
