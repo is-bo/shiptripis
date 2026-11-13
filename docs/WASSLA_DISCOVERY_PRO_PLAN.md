@@ -1,7 +1,8 @@
 # Wassla Discovery and Professional Delivery Implementation Plan
 
-Written 2026-11-10, updated 2026-11-11 and 2026-11-12 (packages L4C and L11A to L17 added, order in section 3), for the orchestrator
-(the project coordinator). Product rules:
+Written 2026-11-10, updated 2026-11-11 and 2026-11-12 (packages L4C and L11A to L17 added, order in
+section 3) and 2026-11-13 (scope narrowed to fast delivery: professional transporters and courier
+handoff parked, see 5.1e), for the orchestrator (the project coordinator). Product rules:
 `docs/WASSLA_DISCOVERY_PRO_SPEC.md` ("the spec"). Live status: `docs/WASSLA_L_SERIES_PROGRESS.md`
 ("the progress file").
 Baseline: `feature/wassla-v3-baseline` at `dd7f820`. Integration branch:
@@ -9,6 +10,12 @@ Baseline: `feature/wassla-v3-baseline` at `dd7f820`. Integration branch:
 
 The spec says **what**. This plan says **how, in what order, by whom, and what proves it is done**.
 If the plan and the spec disagree, the spec wins and the disagreement is a plan bug to report.
+
+**Scope since 2026-11-13.** Wassla is for fast delivery: urgent parcels, mostly on flights and drives
+made the same day. Packages L6B, L7A, L7B, L8A and L8B and the professional half of L6A are
+**parked**: their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`. They are not
+started, and no package leaves a hook for them. What remains, in order: L6A (smaller), L9A, L9B,
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, L10.
 
 ---
 
@@ -75,10 +82,10 @@ build, and he is not watching it).
 Ismail's rule: quality first, save usage where possible. **Opus** for any package that touches
 matching, money or codes. **Sonnet** for the rest. Every package also has a reasoning **effort**:
 
-- **xhigh:** the packages where a mistake corrupts matching or delivery confirmation (L3A, L8A), and
-  the two that open a new door into staff authority (L15, L16).
+- **xhigh:** the package where a mistake corrupts matching (L3A), and the two that open a new door
+  into staff authority (L15, L16).
 - **high:** every other Opus package, and the Sonnet packages that carry the most user-facing design
-  (L2B, L3B, L7B, L8B).
+  (L2B, L3B).
 - **medium:** the remaining Sonnet packages, which follow an existing pattern closely.
 
 Nothing in this series runs at low effort, and nothing needs max. The gate review (1.6) runs on Opus
@@ -138,9 +145,8 @@ is rewritten to the new rule, and the pull request says which and why.
 2. **Money.** No package changes how a fee, total, refund, protection window, arrival floor or payout
    is calculated. EUR integer cents only. A package that needs a new amount derives it from the
    existing functions and snapshots it.
-3. **Beside the machine.** Custody, handoff, progress, problems and route changes never write
-   `Deal.status` and never call a lifecycle transition, with the single exception of the three
-   confirmed-delivery paths in L8A, which call the existing `apply_delivery_confirmed`.
+3. **Beside the machine.** Progress, problems and route changes never write `Deal.status` and never
+   call a lifecycle transition. There is no exception in this build.
 4. **Privacy.** Every public payload is built by an explicit allowlist and has a test that walks the
    JSON and fails on a forbidden key or substring (the pattern is the J4 privacy test for
    `find-travelers`).
@@ -202,7 +208,7 @@ reads it before anything else, so no agent depends on another agent's conversati
 - **The board** (one row per package: status, model, effort, branch, pull request, merge commit, phase
   doc) is edited **only by the orchestrator**, directly on the integration branch, in small docs-only
   commits. Statuses: `not_started`, `in_progress`, `in_review`, `changes_requested`, `merged`,
-  `blocked`.
+  `blocked`, and `parked` (not part of this build; never picked up by 1.0).
 - **Handoff notes** (one block per package) are written **by that package's agent, inside its own pull
   request**, and merge with it. They hold what the next agent cannot learn from the plan: the final
   names of endpoints, fields, error codes and channels where they differ from this plan; anything
@@ -252,8 +258,6 @@ A new section in `BusinessSettingsVersion.policy`, parsed by a typed reader in a
   "discovery":       {"listings_enabled": true, "profiles_enabled": true,
                       "interest_daily_cap": 10},
   "sea_legs_enabled": false,
-  "courier_handoff": {"enabled": false, "unconfirmed_review_days": 5, "link_valid_days": 30},
-  "professional":    {"applications_enabled": true},
   "traveler_pricing":{"enabled": true, "max_price_per_kg_eur_cents": 10000,
                       "max_min_price_eur_cents": 50000},
   "reminders":       {"enabled": true, "depart_after_minutes": 30, "arrive_after_minutes": 60,
@@ -262,14 +266,17 @@ A new section in `BusinessSettingsVersion.policy`, parsed by a typed reader in a
 }
 ```
 
+As merged in L2A the reader also carries two sections, `courier_handoff` and `professional`, that
+nothing reads. Their features were parked on 2026-11-13, so **L6A removes both** (1.5 rule 10).
+
 Added on 2026-11-12, by the package named: L12A adds `"offers": {"response_deadline_enabled": true,
-"response_hours": 48, "reminder_before_hours": 12}` and, inside `discovery`,
+"response_hours": 6, "reminder_before_hours": 1}` (6 and 1 since 2026-11-13) and, inside `discovery`,
 `"trip_fit_alerts_enabled": true, "trip_fit_max_travelers": 30, "trip_fit_daily_cap": 5`. The AI
 helper has its own top-level policy section, `admin_helper`, defined in L15.
 
 - A settings row with no `marketplace` section is valid and means the defaults above, so no existing
   row needs rewriting. Unknown keys are refused when a revision is saved.
-- The defaults are the spec's: sea legs and courier handoff ship **off**; everything else ships on.
+- The defaults are the spec's: sea legs ship **off**; everything else ships on.
 - `marketplace_policy()` returns a frozen dataclass. Every switch check goes through it.
 - The admin Settings page gets one form, "Marketplace features", saved through the existing
   `_save_settings_revision(..., path_updates=..., reason=...)` with permission `manage_settings`.
@@ -281,8 +288,10 @@ New module `backend/monolith/apps/trips/proofs.py`:
 
 - `PROOF_REQUIRED_MODES = frozenset({FLIGHT, SEA})`
 - `leg_requires_proof(leg) -> bool`
-- `leg_proof_satisfied(leg, *, traveler_is_verified_professional) -> bool`
-- `journey_proof_gaps(journey, *, at) -> list[leg]`
+- `leg_proof_satisfied(leg) -> bool`
+- `journey_proof_gaps(legs) -> list[leg]`
+
+(As built in L3A. Nobody is exempt: spec 6.)
 
 Every site that today tests `mode == FLIGHT` **to decide about proof** calls these instead. Sites that
 test it for a flight-specific reason (flight number, airport endpoints) stay as they are. The known
@@ -300,8 +309,8 @@ proof sites at the baseline are listed in section 6.1.
 
 ### 2.4 Verified professional
 
-`apps.professionals.services.is_verified_professional(user, *, at=None) -> bool` is the only answer.
-True when the user's `ProfessionalProfile.status` is `verified` and the user is not banned.
+Parked on 2026-11-13 (see `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`). No such notion
+exists in this build.
 
 ### 2.5 Listed price
 
@@ -310,22 +319,22 @@ True when the user's `ProfessionalProfile.status` is `verified` and the user is 
 `max(ceil(price_per_kg_eur_cents * chargeable_weight_kg), min_price_eur_cents, minimum_reward_eur_cents)`.
 Fee and sender total come from `calculate_offer_economics`. Nothing else computes a listed price.
 
-### 2.6 Custody is its own app
+### 2.6 Problems are their own app
 
-New Django app `apps.custody` owns custody events, courier handoffs, the recipient link and problems.
-It may read deals and call `deals.lifecycle.record_event` for the timeline. It may not write a deal.
+New Django app `apps.problems` owns problem reports (L9A). It may read deals and call
+`deals.lifecycle.record_event` for the timeline. It may not write a deal. (This section used to
+describe `apps.custody`, which was parked on 2026-11-13 with courier handoff.)
 
 ### 2.7 Durable timers
 
-Reminders and the 5-day review use the existing `finance.ScheduledJob` through
+Reminders and proposal deadlines use the existing `finance.ScheduledJob` through
 `finance.services.schedule_job`, with new kinds and handlers registered in `apps/finance/jobs.py`
 `HANDLERS`. Each handler re-reads state and does nothing if the work is no longer needed.
 
 ### 2.8 Pages for people without an account
 
-The courier page and the recipient page follow `apps/finance/guest_web.py`: a server-rendered Django
-page, the token in the path, only its hash stored, every failure rendering the same neutral page,
-language from the browser with a one-tap switch, no private data.
+Parked on 2026-11-13 with courier handoff (the courier page and the recipient page). This build adds
+no page for people without an account.
 
 ### 2.9 Names
 
@@ -358,8 +367,8 @@ by the privacy walk in L15:
   email.
 - **User-written text** appears only on `records/<type>/<id>`, under the key `untrusted_user_text`
   (an object of field name to text, each cut to 500 characters). No other key may hold it.
-- **Document reviews** (identity, ticket, professional, payout method, payout identity, courier
-  delivery) are a count and a console link. They have no record type.
+- **Document reviews** (identity, ticket, payout method, payout identity) are a count and a console
+  link. They have no record type.
 - **Authority** is the admin's own, read fresh on every call, through the permission code of the
   console page the payload mirrors. A helper key opens only `/api/admin/helper/`.
 
@@ -390,14 +399,9 @@ steps named in spec 19.1 are behind the second.
 | L11B | Tracking number, mobile | Sonnet | medium | L11A, L4B |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | L3A |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | L5A, L3B |
-| L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | L3A |
-| L6B | Professional Mode, mobile | Sonnet | medium | L6A |
-| L7A | Manifest, backend projections | Sonnet | medium | L6A |
-| L7B | Manifest dashboard, mobile | Sonnet | high | L7A, L6B |
-| L8A | Custody, courier handoff, recipient confirmation, backend and web pages | Opus | xhigh | L5A |
-| L8B | Custody and handoff, mobile | Sonnet | high | L8A, L7B |
-| L9A | Problems and route changes, backend | Opus | high | L8A |
-| L9B | Problems and route changes, mobile | Sonnet | medium | L9A, L8B |
+| L6A | Verification inbox (ID and Tickets) and removal of the parked switches (backend and console) | Opus | high | L3A |
+| L9A | Problems and route changes, backend | Opus | high | L5A, L6A |
+| L9B | Problems and route changes, mobile | Sonnet | medium | L9A, L5B |
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | L9A, L11A |
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | L12A, L9B, L11B |
 | L13A | Reviews, reports and moderation, backend | Opus | high | L12A |
@@ -408,14 +412,18 @@ steps named in spec 19.1 are behind the second.
 | L17 | AI helper skill | Sonnet | medium | L16, L13B |
 | L10 | Final acceptance | Opus | high | all, L17 included |
 
-This follows Ismail's order: cleanup, then discovery, then sea legs for everyone, then professional
-features. L11A to L17 were added on 2026-11-12 (spec 16 to 20). **The order of this table is the order
-of work, not the numbers:** L4C first, then L4B, then the tracking number (L11A, L11B) so that every
-later package uses it, then L5A to L9B, then L12A to L17, and **L10 last**. The no-show reports of spec
-12 were added to L9A and L9B, which had not started.
+L11A to L17 were added on 2026-11-12 (spec 16 to 20). **The order of this table is the order of
+work, not the numbers.** Everything down to L5B is merged. What remains, in order: **L6A, L9A, L9B,
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, and L10 last.** The no-show reports of spec 12 are inside
+L9A and L9B.
 
-Why some of the additions are Opus although they look small (rule 1.2): L11A edits reference strings
-inside `apps/finance`, `apps/handover` and `apps/deals/cancellation.py`; L12A changes offers and calls
+**Parked on 2026-11-13** (Ismail, 5.1e), not in this table and not to be started: L6B, L7A, L7B, L8A,
+L8B and the professional half of L6A. Their rows, models, effort and full text are in
+`docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`. The numbers L6B, L7 and L8 are not reused.
+
+Why some packages are Opus although they look small (rule 1.2): L6A changes the ticket and ID
+decisions that open or close matching for a journey, and the policy reader matching depends on;
+L11A edits reference strings inside `apps/finance`, `apps/handover` and `apps/deals/cancellation.py`; L12A changes offers and calls
 the matching engine; L13A changes `trust_signals`, which feeds ranking; L14, L15 and L16 are staff
 authority.
 
@@ -835,8 +843,8 @@ five times, then raises. Nothing else builds, parses or formats a tracking numbe
   instead, read through `for_deal`. Request-stage emails (posting deposit, guest payment receipt for a
   deposit) carry it through `for_request`. The outbox templates and facts are updated in EN, FR and
   AR. The key `deal_reference` and the string `ST-` no longer exist anywhere.
-- The delivery-code email to the recipient carries it. L8A's recipient and courier pages will show it
-  as "Wassla tracking number", with the courier's own reference labelled "courier reference".
+- The delivery-code email to the recipient carries it. (The recipient and courier pages that were
+  also to show it are parked.)
 - Finance control plane: the search that accepts `ST-<deal>` accepts a tracking number instead
   (`TR-<traveler>` is unchanged); the drill-down shows it.
 - Console: the requests, deals, disputes, payments, refunds and payouts lists search by tracking
@@ -911,179 +919,82 @@ running twice. The Go channel list test.
 - Sender's deal screen: progress lines in the timeline, each marked "reported by the traveler".
 - States, RTL, and an offline rule: a report needs the network; the button says so instead of queuing.
 
-### L6A. Professional profile, verification, admin inbox, proof skip (Opus, high effort)
+### L6A. Verification inbox and removal of the parked switches (Opus, high effort)
 
-**Schema.** New app `apps.professionals`.
-- `ProfessionalProfile(user one to one, business_name, registration_number, registration_country,
-  business_city place, document_kind, status: pending|needs_info|verified|rejected|suspended,
-  staff_message, reviewed_by, reviewed_at, verified_at, suspended_at, suspension_reason)`.
-- `ProfessionalDocument(profile, bucket, object_key, content_type, bytes, sha256, idempotency_key)`,
-  stored and served exactly like `JourneyLegProof` (private bucket, same size and type limits,
-  evidence viewed only through the audited staff redirect).
-- `ProfessionalProfileEvent` (append-only status history with actor and reason).
+Backend and console only. There is no mobile half. Until 2026-11-13 this package also built
+professional profiles and the ticket exemption; that half is parked
+(`docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`) and nothing here prepares for it.
 
-**API.**
-- `GET /api/professional/profile`, `PUT` (only while not verified and not suspended),
-  `POST /api/professional/profile/document`, `POST /api/professional/profile/submit`.
-- Submit needs an approved ID check and the applications switch on
-  (`professional_applications_closed`).
-- `/api/me` gains `professional: {status, business_name}`.
-- Verified fields are locked for the user. Staff can correct them with a reason.
-- Channel `professional.status_changed` and an email through the outbox, in the user's language.
+**Goal.** Spec 13: one verification inbox for staff with two tabs, ID and Tickets, and one review
+screen with three decisions. And remove the two policy sections that the parked features left behind.
 
-**Proof skip.** `is_verified_professional` (2.4) feeds `apps/trips/proofs.py`. Matching querysets get
-the fact as one annotation so query counts stay flat. The acceptance lock takes the professional
-profile row as a witness whenever the skip is what satisfies a leg, exactly as it does for KYC.
-Public payloads gain `traveler.professional: {business_name} | null` through one helper, and the match
-reason `professional_verified`. The reason `flight_proof_approved` is emitted only when a real
-approved proof exists. The offer `terms_snapshot` records whether the skip applied.
+**Inbox.**
+- One "Verification" entry in the console navigation, with the total number waiting across both
+  tabs. It replaces the two entries "KYC review" and "Ticket proofs". "Payout identity checks" stays a
+  separate entry: it is a step of dinar payout approval, not part of spec 13's inbox.
+- Two tabs with counters under one shared header: **ID** (the existing KYC queue) and **Tickets** (the
+  existing ticket-proof queue, flight and sea). The existing route names (`kyc-queue`, `kyc-detail`,
+  `proof-queue`, `proof-detail` and the evidence routes) are kept, so links from person pages, the
+  work list and old notifications still land. A staff member who holds only one of `view_kyc` and
+  `view_flight_proofs` sees only that tab.
+- Opening "Verification" lands on the first tab that has something waiting, otherwise on ID.
+- The counters and the navigation total come from the same query functions the queues use; no second
+  count exists (1.5 rule 10). The overview's work list keeps one item per tab.
 
-**Suspension.** `suspend_professional` and `reinstate_professional` (staff, reason, audit). On
-suspension the user's journeys are re-evaluated lazily by the gates; nothing is rewritten, and funded
-deals are untouched (spec 6).
+**One review screen.** Both detail pages already render `verification_detail.html`. Make it one
+screen in fact: the same header, evidence area, history and decision area for both kinds, with three
+decisions: **approve**, **ask for more**, **reject**. A reason is required for the last two.
+- "Ask for more" records the existing rejected status with the reason, and marks the audit entry and
+  the user's notification `outcome: "resubmission_requested"`, so the user reads "we need a new
+  upload" (EN, FR, AR in the push matrix and the email) and can submit again exactly as after a
+  rejection today. The KYC status enum, owned by the Go service, is not changed, and no status is
+  added to `JourneyLegProof`.
+- "Reject" keeps today's behaviour and copy.
+- Evidence is still viewed only through the audited staff redirect.
 
-**Admin: one verification inbox.**
-- One "Verification" entry with the total waiting count. Three tabs with counters: ID, Professional,
-  Tickets. The ID and Tickets tabs are the existing queues under a shared header.
-- One review screen (`verification_detail.html`) for all three, with three decisions: approve, ask for
-  more, reject. A reason is required for the last two.
-- Professional: "ask for more" sets `needs_info` and shows the staff message to the user.
-- ID and Tickets: "ask for more" records the existing rejected status with the reason and marks the
-  audit entry and the notification `outcome: "resubmission_requested"`, so the user reads "we need a
-  new upload" and can resubmit. The KYC status enum, owned by the Go service, is not changed.
-- New permission codes `view_professional_profiles`, `review_professional_profiles`, added to the
-  role matrix by a data migration that grants them wherever the KYC equivalents are held.
-- Person page: a Professional section with status, history, suspend and reinstate.
+**Removing the parked switches.**
+- In `apps/core/marketplace_policy.py`: delete `CourierHandoffPolicy`, `ProfessionalPolicy`, their
+  two fields on the policy dataclass, their parsing, `_COURIER_KEYS`, `_PROFESSIONAL_KEYS` and their
+  lines in the module docstring ("Sea legs ship off. Everything else ships on."). Update
+  `apps/discovery/tests/test_marketplace_policy.py` to match.
+- From then on a revision that carries `courier_handoff` or `professional` is refused as an unknown
+  key, like any other. Nothing ever wrote them: the "Marketplace features" form has no field for
+  either, and there is no production data. Add a test that says so: saving a revision with either key
+  is refused.
+- `apps/trips/proofs.py`: the module docstring's sentence about L6A adding an exemption is removed.
+  The functions are not touched.
+- No migration.
 
-**Tests.** The status machine. A verified professional publishes and is matched on flight and sea legs
-with no proof; the same journey is refused the moment they are suspended; funded deals are unchanged.
-Acceptance racing a suspension resolves to one consistent outcome. Privacy: registration number and
-document never appear in any non-staff payload. Permissions and audit for every staff action.
+**Tests.** The navigation total and each tab's counter equal the queue's own count, for each staff
+role. Tab visibility by permission. Landing tab. Each of the three decisions for both kinds: the
+status written, the audit row (with `outcome` on "ask for more"), the notification and its copy in
+three languages, the reason required. A user can resubmit after "ask for more". An approved ticket
+still makes its leg matchable and a rejected one still does not (the existing proof tests, unchanged
+and green). The policy tests above. Fixed query count for the inbox header.
 
-### L6B. Professional Mode, mobile (Sonnet, medium effort)
+**Done when.** `docs/PHASE_L6A_VERIFICATION_INBOX.md` holds the contract; a search of
+`backend/` and `mobile/` (code, not docs) for `professional` and for `courier_handoff` finds nothing;
+the console screenshots of both tabs and the review screen, EN, are saved (1.6);
+`docs/ADMIN_OPERATIONS.md` describes the inbox for staff.
 
-- Profile gains "Professional Mode". Screens: what it is and what it needs; the form (business name,
-  registration number, country, city with the place picker, document type, photo); pending;
-  more-information-needed with the staff message and a re-upload; verified, with what it unlocks;
-  suspended, with the reason and how to reach support; applications closed.
-- A Pro badge component in the design system, used on trip cards, Find Travelers, the public profile,
-  offers, deals and tracking.
-- Public professional profile screen (spec 7.3).
-- For a verified professional the ticket step is absent from publishing, with one line explaining why.
-- States, RTL, upload progress and failure, photo retake.
+### L6B, L7A, L7B, L8A, L8B. Parked
 
-### L7A. Manifest, backend projections (Sonnet, medium effort)
-
-Read-only. Verified professionals only (`professional_required`), except the deal filters.
-
-- `GET /api/pro/today`: offers awaiting an answer; collections due; parcels ready to deliver; counts
-  by state. Later packages add their own sections here.
-- `GET /api/journeys/<id>/manifest`: stops in order; at each, parcels to collect and to drop, each
-  with reference, title, weight, status and the next action; per leg, used and free weight, volume
-  and parcel slots.
-- `GET /api/deals` gains filters `journey_id`, `pickup_place_id`, `delivery_place_id`, `status`,
-  `expected_before`, and `q` (reference).
-- `GET /api/pro/earnings?journey_id=`: totals read from existing deal terms snapshots and payout rows,
-  grouped by payout state. Sums only. No new fee, FX or refund arithmetic.
-- Fixed query counts, asserted.
-
-### L7B. Manifest dashboard, mobile (Sonnet, high effort)
-
-- Home: a "Today" section for verified professionals, above discovery, listing actions in the order a
-  working day needs them.
-- Deliveries: a "Routes" view; the route manifest; the stop view, where each parcel row opens the
-  existing pickup or delivery screen and returns to the list. There is no "confirm all".
-- Shipments: filters and reference search on the existing deliveries list.
-- Profile: "Earnings by route" inside the existing payouts area.
-- At widths of 840 dp and more, the manifest uses two panes. The last opened manifest is readable
-  offline and marked as such; code entry needs the network and says so.
-
-### L8A. Custody, courier handoff, recipient confirmation (Opus, xhigh effort)
-
-**Schema.** App `apps.custody` (2.6).
-- `CustodyEvent(deal, kind, source, actor, occurred_at, data)`, append-only. Kinds: `collected`,
-  `condition_recorded`, `handed_to_courier`, `courier_accepted`, `handoff_cancelled`,
-  `courier_out_for_delivery`, `courier_reported_delivered`, `courier_delivery_failed`, `delivered`.
-  Sources as spec 10.1.
-- `CollectionRecord(deal one to one, condition, note)` with private photos.
-- `CourierHandoff(deal, status: reported|courier_confirmed|cancelled, courier_company, branch,
-  representative, tracking_reference, handed_at, receipt, link_token_hash, link_expires_at,
-  courier_name, courier_confirmed_at, confirm_ip, confirm_user_agent)`, at most one not-cancelled per
-  deal.
-- `RecipientLink(deal, token_hash, expires_at, revoked_at)`.
-- `CustodyReview(deal, reason, status: open|resolved, resolution, resolved_by, resolved_reason)`.
-- `HandoverAttempt.actor` becomes nullable and gains `channel` (`traveler_app` by default,
-  `recipient_page`).
-- New `DealEvent` kinds for the timeline. `Deal` gets no new field and no new status.
-
-**Handoff.**
-- `POST /api/deals/<id>/courier-handoff` by the deal's traveler. Needs: the switch on; pickup
-  confirmed; delivery not confirmed; no active dispute. Returns the record and the one-time link.
-- `POST /api/deals/<id>/courier-handoff/cancel` while not courier-confirmed.
-- `GET /api/deals/<id>/custody`: current holder, events with sources, the handoff, and server-authored
-  actions for the viewer.
-- `POST /api/deals/<id>/collection-record` by the traveler, once, after pickup.
-- Courier page `GET/POST /c/<token>` (2.8): confirm receipt with a name; afterwards report out for
-  delivery, delivered, or delivery failed. Throttled per token and per address.
-
-**Final delivery after a handoff.** Three functions in `apps/handover/services.py`, each taking the
-deal lifecycle lock and then calling the existing `apply_delivery_confirmed`:
-- `confirm_delivery_as_recipient(token, submitted_code)`: verifies the delivery code with the existing
-  hashing, attempt recording and lockout, on channel `recipient_page`.
-- `confirm_delivery_as_sender(deal_id, actor_id)`: the deal's sender, only while a handoff is active.
-- `confirm_delivery_as_staff(deal_id, actor_id, reason, evidence_note)`: permission `manage_lifecycle`,
-  only from an open `CustodyReview`, audited.
-All three need the deal to accept a delivery exactly as today (`DELIVERY_READY` with a released code).
-The delivery event records the method. The traveler-code path is unchanged.
-- Recipient page `GET/POST /r/<token>` (2.8): progress without private data; "I received my parcel"
-  with the code; "I have a problem", which notifies the sender and opens a `CustodyReview`.
-- When a handoff is recorded: an email to the recipient with the page link, in their language, through
-  the outbox; a notification to the sender.
-
-**The 5-day rule.** `ScheduledJob` kind `courier_delivery_review` at handoff time plus the policy
-days. The handler opens a `CustodyReview` when delivery is still unconfirmed, the handoff is not
-cancelled and no dispute is active, and notifies the sender. Staff see a "Courier deliveries to
-review" queue.
-
-**Channels.** `deal.courier_handoff`, `deal.courier_update`, `deal.delivery_review`.
-
-**Tests (all required).**
-- A handoff, a courier confirmation and every courier report leave the `Deal` row, the ledger, the
-  payout rows and the money-related scheduled jobs identical.
-- Each of the three new confirmations produces the same deal fields, protection end and scheduled jobs
-  as the traveler-code path at the same instant.
-- Wrong codes on the recipient page lock out exactly as in the app. Expired, revoked and unknown
-  tokens render the same page.
-- The sender cannot confirm without a handoff. Staff cannot confirm without an open review,
-  the permission and a reason.
-- Recipient and sender confirming at the same moment yield one transition.
-- An active dispute blocks handoff creation and all three confirmations.
-- The review job is idempotent and does nothing once delivery is confirmed.
-- Privacy tests for both pages and for the custody payload as seen by each party.
-- The handoff link, pickup code and delivery code are different secrets and none accepts another.
-
-**Done when.** The grep in L10 for writes to `Deal.status` finds none in `apps/custody`.
-
-### L8B. Custody and handoff, mobile (Sonnet, high effort)
-
-- Deal screen: a custody timeline where every line carries its source label.
-- After pickup: an optional "Record condition" sheet with photos; skipping is one tap.
-- Traveler: "Hand over to a local courier": a short form, then a full-screen QR code with the link,
-  the waiting state, the confirmed state, and "I took it back".
-- Sender: the banner "Handed to a local courier, awaiting final delivery", the courier's name and
-  tracking reference, and "The recipient has it", which opens a confirmation dialog stating that it
-  confirms delivery and starts the 48-hour protection period.
-- Manifest: handoffs awaiting courier confirmation appear in Today.
-- States including "courier handoff is not available" when the switch is off.
+Professional Mode in the app, the manifest (backend and app), and custody with courier handoff
+(backend and app). **Parked by Ismail on 2026-11-13. Not in this build.** Full text, with models and
+effort: `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`.
 
 ### L9A. Problems and route changes, backend (Opus, high effort)
 
-**Problems.** `custody.ShipmentProblem(deal, reported_by, kind, note, status: open|acknowledged|
-escalated|closed, closed_by, closed_reason)`. `POST` and `GET /api/deals/<id>/problems`. Kinds as spec
-12. `parcel_damaged`, `parcel_mismatch`, `courier_lost` and `courier_refused` escalate to staff at
-once. The other party is notified on `deal.problem_reported`. A problem changes nothing on the deal;
-the existing dispute and cancellation actions remain the only paths with money consequences. Staff
-queue with acknowledge and close, each with a reason.
+**Problems.** New app `apps.problems` (2.6). `problems.ShipmentProblem(deal, reported_by, kind,
+note, status: open|acknowledged|escalated|closed, closed_by, closed_reason)`. `POST` and
+`GET /api/deals/<id>/problems`. Kinds, as spec 12: `sender_unavailable`, `traveler_no_show`,
+`recipient_unavailable`, `parcel_mismatch`, `parcel_damaged`, `trip_disrupted` (the trip was
+cancelled or delayed: a flight, a drive or a crossing), `customs_delay`, `other`. There is no courier
+kind in this build. `parcel_damaged` and `parcel_mismatch` escalate to staff at once, as do the two
+no-show kinds below. The other party is notified on `deal.problem_reported`. Every payload and
+notification names the parcel by its tracking number (1.5 rule 12). A problem changes nothing on the
+deal; the existing dispute and cancellation actions remain the only paths with money consequences.
+Staff queue with acknowledge and close, each with a reason.
 
 **No-show reports** (spec 12, added 2026-11-12). Two of the kinds are no-show reports:
 `sender_unavailable` reported by the traveler and the new kind `traveler_no_show` reported by the
@@ -1119,16 +1030,21 @@ build.
   refund rule is written.** Ismail confirmed this on 2026-11-11.
 - `Deal.arrival_snapshot` and `funded_scheduled_arrival_floor_at` are never rewritten. The payout
   floor stays the one agreed at funding.
-- Applying a change reschedules leg reminders and is recorded with the original schedule.
+- Applying a change is recorded with the original schedule and reschedules leg reminders by calling
+  `apps.trips.progress.schedule_leg_reminders(journey)` (L5A's carry-over).
 
 **Tests.** Classification at each boundary. Apply, wait, accept, decline, withdraw. The arrival
 snapshot is untouched. Cancellation after a decline produces exactly the amounts the existing
 traveler-cancellation path produces. Pending offers are re-validated at acceptance against the new
-times.
+times. Leg reminders follow the new times.
+
+**Done when.** The contract is in `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`; a search for writes to
+`Deal.status` and for calls to a lifecycle transition finds none in `apps/problems` or in the
+schedule-change code.
 
 ### L9B. Problems and route changes, mobile (Sonnet, medium effort)
 
-- "Report a problem" from the deal screen and from a manifest row; the problem list on the deal.
+- "Report a problem" from the deal screen; the problem list on the deal.
 - **No-show** (spec 12): when the server says `can_report_no_show`, the deal screen shows one clear
   action above the pickup code area, "The sender did not come" for the traveler and "The traveler did
   not come" for the sender. One tap opens a sheet with an optional note and a line saying what happens
@@ -1146,15 +1062,22 @@ times.
 trip really fits a new request are told once.
 
 **Policy.** The marketplace policy (2.1) gains
-`"offers": {"response_deadline_enabled": true, "response_hours": 48, "reminder_before_hours": 12}`
-(hours 1 to 168; the reminder strictly smaller than the delay or 0 for none) and, inside `discovery`,
+`"offers": {"response_deadline_enabled": true, "response_hours": 6, "reminder_before_hours": 1}`
+(hours 1 to 168; the reminder strictly smaller than the delay or 0 for none; the defaults were 48 and
+12 until 2026-11-13, when Ismail shortened them for urgent delivery) and, inside `discovery`,
 `"trip_fit_alerts_enabled": true, "trip_fit_max_travelers": 30, "trip_fit_daily_cap": 5`. The
 "Marketplace features" form gains both groups.
 
 **Response deadline.**
 - `Offer.expires_at` already exists and is never set. Set it in the two places an offer row is created
-  (`create_sender_offer`, `counter_offer` in `apps/matching/v1_services.py`) to now plus
-  `response_hours` when the switch is on. An offer without a deadline never expires.
+  (`create_sender_offer`, `counter_offer` in `apps/matching/v1_services.py`) when the switch is on, to
+  **the earlier of** now plus `response_hours` **and the pickup time of this match**: the `pickup_at`
+  of the compatibility evaluation those two functions already run before writing the offer (spec
+  17.1: a proposal never outlives the pickup it is about). The engine already refuses a pair whose
+  pickup time is not in the future, so the deadline is always after now; L12A adds no time rule of its
+  own and does not compute a pickup time itself. The deadline is fixed when the offer is written; a
+  later schedule change (L9A) does not move it, and acceptance re-validates as it does today. An offer
+  without a deadline never expires.
 - Two new `ScheduledJob` kinds (2.7), keyed by offer id and the deadline: `offer_response_reminder` at
   the deadline minus `reminder_before_hours` (not scheduled when that moment is not in the future) and
   `offer_expiry` at the deadline. Both are scheduled in the transaction that creates the offer.
@@ -1184,7 +1107,9 @@ trip really fits a new request are told once.
   not paused.
 - Both new channels follow 1.5 rule 8.
 
-**Tests.** Deadline set from policy on a proposal and on a counter; none when the switch is off. The
+**Tests.** Deadline set from policy on a proposal and on a counter; the pickup time used instead
+when it comes first, on both; no reminder job when the deadline is less than the reminder delay away;
+none when the switch is off. The
 reminder in each no-op case and the notify case, run twice. Expiry: the row, the event, the match and
 request state compared with a decline; byte-identical deal, order and ledger tables. Accept racing
 expiry at the same instant: exactly one outcome, proven with two transactions. `offer_expired` on
@@ -1383,7 +1308,7 @@ to 60 minutes, validity 1 to 72 hours, rate 10 to 300. A missing section means t
 `code`, `permission`, `title`, `hint`, `count`, `oldest_waiting_since`, `severity: urgent|today|info`,
 `route`, `query`. The console overview and the helper briefing both render this list; neither builds
 its own (1.5 rule 10). It must cover every queue the overview shows when this package starts,
-including those added by L6A, L8A, L9A and L13A. `oldest_waiting_since` and `severity` are new;
+including those added by L6A, L9A and L13A. `oldest_waiting_since` and `severity` are new;
 severity is a fixed rule per item written next to it, not a model's guess.
 
 **API**, all under `/api/admin/helper/v1/`, JSON, read only:
@@ -1479,7 +1404,6 @@ call a model's `save`. The registry is the complete list:
 | `user.ban`, `user.unban` | prepared | `manage_users` | the console access action |
 | `profile.hide`, `profile.show` | prepared | `manage_users` | L2A profile visibility |
 | `journey.pause`, `journey.resume` | prepared | `manage_journeys` | L3A journey pause |
-| `professional.suspend`, `professional.restore` | prepared | as L6A | L6A suspend |
 | `sea_crossing.activate`, `sea_crossing.deactivate` | prepared | as L3A | L3A crossing toggle |
 | `job.retry`, `job.resolve` | prepared | `reconcile_finance` or `manage_lifecycle`, as the console decides per job | the console job actions |
 | `payout.retry` | prepared | `retry_payouts` | the console payout recovery |
@@ -1488,8 +1412,8 @@ call a model's `save`. The registry is the complete list:
 Anything not in this table cannot be done or prepared through the helper. In particular, and proven
 by a test that lists every console POST route and requires each to be either in this table or in an
 explicit "never through the helper" list: staff, roles and invitations; settings; helper keys;
-two-step; revealing payout details; identity, ticket, professional, payout-method, payout-identity and
-courier-delivery reviews; manual dinar payout steps; payment reconcile and resolve; refund settlement.
+two-step; revealing payout details; identity, ticket, payout-method and payout-identity reviews;
+manual dinar payout steps; payment reconcile and resolve; refund settlement.
 
 **API**, under `/api/admin/helper/v1/`, change key only (`403 admin_helper_change_key_required`
 for a read key):
@@ -1583,12 +1507,13 @@ L10 runs last, after L17.
 
 1. Whole suites on PostgreSQL, Go with race detection, and Flutter. Counts recorded against the
    baseline (Django 2,529 passed, Flutter 1,083 passed at `dd7f820`).
-2. Scripted end-to-end scenarios in test mode: the Karim route from Ismail's brief as a verified
-   professional; an individual traveler with a sea leg and a ticket; discovery to an offer at the
-   listed price, payment, pickup, courier handoff, recipient confirmation, protection, payout; the
-   same with nobody confirming, through the 5-day review. Added 2026-11-12: a request whose tracking
+2. Scripted end-to-end scenarios in test mode. The main one is the product's target (2026-11-13): **an
+   urgent parcel carried the same day**, once on a flight with an approved ticket and once on a drive
+   with two stops, from discovery to an offer at the listed price, payment, pickup, the progress
+   reports, delivery with the recipient's code, protection, payout. Also: a traveler with a sea leg
+   and a ticket, with the sea switch turned on for the test. Added 2026-11-12: a request whose tracking
    number is followed from creation to payout through every email and screen; a proposal that expires
-   after its reminder; a trip-fit alert leading to "I can carry this" and a proposal; a no-show report
+   after its reminder, and one that expires at the pickup time because that came first; a trip-fit alert leading to "I can carry this" and a proposal; a no-show report
    recorded by staff; a review reported, hidden, then removed and the average changing; a staff
    sign-in with enrolment, a wrong code, a recovery code and a reset; the three exports reconciled
    with the finance dashboard; the eight AI helper conversations of L17 run again on the final build.
@@ -1599,7 +1524,8 @@ L10 runs last, after L17.
    `apps/parcels/tracking.py`; no public rating average outside `apps/ratings/public.py`; no work-list
    query outside `apps/admin_panel/worklist.py`; every helper payload has the privacy walk; every
    console POST route is in the helper's action table or its "never" list; no staff route answers
-   without the second step.
+   without the second step; nothing in `backend/` or `mobile/` code names a professional, a courier
+   handoff or custody (the parked features left no hook).
 4. Switch matrix: with each switch off, the capability refuses on the server and the app shows the
    unavailable state. This includes the response deadline, trip-fit alerts and the AI helper (off:
    every key refused at once).
@@ -1669,13 +1595,49 @@ accepted four of six suggestions:
 He also asked that the coordinator be reminded to bring problems to the advisor and to use the model
 and effort of section 3 for every package, exactly.
 
+### 5.1e Scope narrowed to fast delivery (Ismail, 2026-11-13)
+
+Ismail stopped the build after L5B and said: Wassla will be only for fast delivery, mostly flights and
+drives made the same day; professional travelers are not needed for now and are planned later on a
+subdomain, so their plan must be kept in the repository, not thrown away; everything else stays. In
+the discussion that followed he decided:
+
+1. **Professional transporters are parked**: the professional half of L6A, and L6B, L7A, L7B.
+2. **Courier handoff is parked too**, with the custody history around it: L8A, L8B.
+3. **Sea legs stay as built and switched off.** No work on them.
+4. **"Same day" is the target, not a rule.** The app enforces nothing about a trip's length.
+5. **A proposal waits 6 hours for an answer, or until the pickup time if that comes first, with one
+   reminder 1 hour before** (was 48 and 12). Both stay admin settings.
+6. The staff verification inbox stays, with two tabs (ID, Tickets) instead of three.
+
+The parked text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`, word for word, with what
+to check before resuming.
+
+Choices the planner made while writing this change (not individually confirmed; any can be changed
+before its package starts):
+
+- The two unused switches the parked features left in the settings reader are **removed** by L6A,
+  not kept for later (1.5 rule 10). They return with the features.
+- Problem reports get their own small app, `apps.problems`, because the custody app they were going
+  to live in is parked.
+- The problem kind "crossing cancelled" became "trip cancelled or delayed", so that it also fits a
+  flight and a drive. The three courier kinds are gone.
+- The optional photo of the parcel's condition at pickup was part of L8A and is parked with it.
+- The filters and reference search on the deliveries list were part of the manifest and are parked
+  with it.
+- "The pickup time" in decision 5 is the time the matching engine already computes for that parcel on
+  that trip. For a flight it is the departure.
+- L6A keeps Opus at high effort although it is smaller, because ticket and ID decisions open and
+  close matching.
+
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 
 Told to Ismail on 2026-11-12. Any of them can be changed before its package starts.
 
 - The tracking number is random (`WSL-` plus 8 characters), not a counter, so it does not reveal how
   many parcels exist. It is not shown on public cards or on the page a relative pays from.
-- A proposal's deadline is 48 hours with one reminder 12 hours before; expiry leaves no mark on anyone.
+- A proposal's deadline was 48 hours with one reminder 12 hours before (now 6 hours and 1 hour,
+  decided by Ismail, 5.1e); expiry leaves no mark on anyone.
 - Trip-fit alerts go to at most 30 travelers per request and 5 per traveler per day.
 - A review shows whether a sender or a traveler wrote it, not the author's name. Staff can hide only
   the comment or remove the whole rating from the score.
@@ -1686,10 +1648,10 @@ Told to Ismail on 2026-11-12. Any of them can be changed before its package star
   text reaches it only on a single record, labelled as untrusted.
 - The helper can add internal notes and acknowledge a problem directly; internal notes are a new,
   small console feature added for that.
-- Reviews that need a document (identity, tickets, professionals, payout methods) cannot be decided or
+- Reviews that need a document (identity, tickets, payout methods) cannot be decided or
   even prepared through the helper.
 - A prepared action lasts 24 hours and only the admin whose key prepared it can confirm it.
-- L15 and L16 run at xhigh effort, like L3A and L8A, because they touch staff authority.
+- L15 and L16 run at xhigh effort, like L3A, because they touch staff authority.
 
 ### 5.2 Still open
 
@@ -1699,7 +1661,11 @@ Told to Ismail on 2026-11-12. Any of them can be changed before its package star
 
 ### 5.3 Later, not in this build
 
-Business logos and photos, courier API integrations, recurring routes, fleet management, analytics.
+Parked with a complete plan (`docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`): professional
+transporters, the manifest dashboard, custody history and courier handoff.
+
+Not planned at all: business logos and photos, courier API integrations, recurring routes, fleet
+management, analytics.
 
 ---
 

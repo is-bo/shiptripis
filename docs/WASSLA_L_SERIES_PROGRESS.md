@@ -6,7 +6,8 @@ Rules for this file: `docs/WASSLA_DISCOVERY_PRO_PLAN.md` section 1.8. In short:
 - **Read this file first**, the board and every handoff block above your package.
 - **The board is edited only by the orchestrator**, on the integration branch.
 - **Each agent fills in only its own handoff block**, inside its own pull request.
-- Statuses: `not_started`, `in_progress`, `in_review`, `changes_requested`, `merged`, `blocked`.
+- Statuses: `not_started`, `in_progress`, `in_review`, `changes_requested`, `merged`, `blocked`, and
+  `parked` (not part of this build; never picked up).
 
 When Ismail says "start", the orchestrator follows plan section 1.0: resume anything unfinished,
 otherwise take the first `not_started` package whose dependencies are all `merged`.
@@ -29,12 +30,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L11B | Tracking number, mobile | Sonnet | medium | merged | `claude/project-thread-14swqv` | #33 | `75640c0` | `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md` |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | merged | `claude/project-thread-lsol7m` | #34 | `73d5169` | `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md` |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | merged | `claude/project-thread-s4d2gr` | #35 | `c078060` | `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md` |
-| L6A | Professional profile, verification, admin inbox, proof skip | Opus | high | not_started | | | | |
-| L6B | Professional Mode, mobile | Sonnet | medium | not_started | | | | |
-| L7A | Manifest, backend projections | Sonnet | medium | not_started | | | | |
-| L7B | Manifest dashboard, mobile | Sonnet | high | not_started | | | | |
-| L8A | Custody, courier handoff, recipient confirmation | Opus | xhigh | not_started | | | | |
-| L8B | Custody and handoff, mobile | Sonnet | high | not_started | | | | |
+| L6A | Verification inbox (ID and Tickets) and removal of the parked switches | Opus | high | not_started | | | | |
 | L9A | Problems and route changes, backend | Opus | high | not_started | | | | |
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
@@ -47,13 +43,33 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L17 | AI helper skill | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
 
-**Added 2026-11-12 (approved by Ismail):** L11A to L17 above, and the no-show reports inside L9A and
-L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of this
-table is the order of work, as in plan section 3:** L4C, L4B, L11A, L11B, then L5A to L9B, then L12A
-to L17, and L10 last. These rows were added and ordered by the plan thread on Ismail's instruction;
-the board is otherwise still edited only by the orchestrator.
+**Parked on 2026-11-13 (Ismail's decision, plan 5.1e).** Wassla now targets fast delivery: urgent
+parcels, mostly on flights and drives made the same day. These packages are not part of this build and
+are never picked up. Their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`.
 
-**Next package:** L6A (Opus, high effort), then L6B (Sonnet, medium). Section 3 order.
+| Package | What | Model | Effort | Status |
+| --- | --- | --- | --- | --- |
+| L6A, professional half | Professional profile, business document check, ticket exemption, Professional tab | Opus | high | parked |
+| L6B | Professional Mode, mobile | Sonnet | medium | parked |
+| L7A | Manifest, backend projections | Sonnet | medium | parked |
+| L7B | Manifest dashboard, mobile | Sonnet | high | parked |
+| L8A | Custody, courier handoff, recipient confirmation | Opus | xhigh | parked |
+| L8B | Custody and handoff, mobile | Sonnet | high | parked |
+
+**Order of the remaining work (plan section 3):** L6A, L9A, L9B, L12A, L12B, L13A, L13B, L14, L15,
+L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's instruction of
+2026-11-13; the board is otherwise still edited only by the orchestrator.
+
+**Added 2026-11-12 (approved by Ismail):** L11A to L17 above, and the no-show reports inside L9A and
+L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
+board table is the order of work, as in plan section 3.**
+
+**Next package:** L6A (Opus, high effort; now the verification inbox only, read its new text in
+plan section 4), then L9A (Opus, high), then L9B (Sonnet, medium). Section 3 order.
+
+**Closed carry-overs (2026-11-13):** L6B was to add the Pro badge and business name to L4B's trip
+cards; L6B is parked, so nothing is owed. L5A's note that route changes must call
+`schedule_leg_reminders` is now written into L9A's text.
 
 **L11A judgment calls (accepted at the gate, for Ismail's end review):** (1) no guest payer email or page carries the tracking number, including the deposit receipt the plan mentions, because spec 16's list of who sees it leaves the guest out (spec wins over plan); (2) `GET /api/parcels/<id>` shows the number to the sender only, a traveler learns it from the proposal; (3) the console Payments and Payouts lists lead with the number, the payer or traveler moves to the second column; (4) background-job and technical-record pages keep record ids. The gate also fixed two console layout bugs that predate L11A: every list's search box was about 174 px wide instead of 340 px, and the deal heading lost its mono face.
 
@@ -459,7 +475,7 @@ Detail: `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md`. Screenshots: `l-series-scre
 - Known limits: no connectivity detection; the offline message appears after a failed attempt, and the
   "Needs a connection" line is always shown under the button.
 
-### L6A. Professional profile, verification, admin inbox, proof skip
+### L6A. Verification inbox and removal of the parked switches
 
 - Contract as built (names that differ from the plan):
 - Left for a later package:
@@ -468,50 +484,9 @@ Detail: `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md`. Screenshots: `l-series-scre
 - Tests (before and after counts):
 - Known limits:
 
-### L6B. Professional Mode, mobile
+### L6B, L7A, L7B, L8A, L8B. Parked
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
-
-### L7A. Manifest, backend projections
-
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
-
-### L7B. Manifest dashboard, mobile
-
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
-
-### L8A. Custody, courier handoff, recipient confirmation
-
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
-
-### L8B. Custody and handoff, mobile
-
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Parked on 2026-11-13, not part of this build. No handoff notes. Full text: `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`.
 
 ### L9A. Problems and route changes, backend
 
@@ -666,6 +641,7 @@ Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`. Screenshots: `/mnt/project-
 | 2026-11-12 | Which gaps against the cahier des charges should be built? | Tracking number; alert to travelers whose trip fits plus a reminder before a proposal expires; "the other person did not come"; reviews on profiles with report and hide; admin export and two-step sign-in. |
 | 2026-11-12 | Before the unattended run: fix the test time limit first? Tracking number right after L4B? AI helper shipped off? One question must not stop everything? A legal package (terms, prohibited items)? Keep the screenshots? | Yes, yes, **no** (the helper ships on), yes, **no**, yes. Plan 5.1d. |
 | 2026-11-12 | AI helper: may it read everything and act directly? | No documents, bank details, delivery codes or chat contents. Money, ban, role and settings actions are prepared and confirmed in the console. Read key expires 8 hours after creation even in use; change key 30 minutes. The skill is written last. |
+| 2026-11-13 | Ismail stopped the build after L5B: Wassla is for fast delivery, mostly flights and drives made the same day. What changes? | Professional travelers are parked for a later subdomain, their plan kept in the repository. Courier handoff is parked too. Sea legs stay built and switched off. "Same day" is the target, not a rule in the app. A proposal waits 6 hours (or until the pickup time) with a reminder 1 hour before, instead of 48 and 12. Everything else stays. Plan 5.1e. |
 
 ## Change log for the plan and spec
 
@@ -677,3 +653,4 @@ Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`. Screenshots: `/mnt/project-
 | 2026-11-12 | Added packages L11A to L17 and the no-show reports in L9A and L9B (spec 12 and 16 to 20; plan 2.10 to 2.12, section 3, 5.1b, 5.1c). L10 stays the last package and gains their acceptance checks. Correction recorded in plan 5.1b: proposals had no expiry at the baseline; L12A adds it. |
 | 2026-11-12 | Skill drafted early at Ismail's request: `docs/admin-helper-skill/` (`/wassla` plus the pasted line; briefing by default; how-to answers). Spec 20.5 and 20.7 updated; L15 gained `GET tasks` and the one-line copy block; L17 now verifies and proves the draft instead of writing it. |
 | 2026-11-12 | Before the unattended run (plan 5.1d): added L4C (CI time limit, ferry distance cleanup) to run first; moved L11A and L11B to right after L4B and added rule 1.5.12; added the advisor role (1.1) and "When a package is blocked" (1.0); gate screenshots are kept in `/mnt/project-files/l-series-screens/` and L10 builds a gallery (1.6). |
+| 2026-11-13 | Scope narrowed to fast delivery (plan 5.1e, spec "Scope change of 2026-11-13"). Parked, with their complete text moved to `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`: the professional half of L6A, L6B, L7A, L7B, L8A, L8B; spec 7, 9, 10 and the professional column of spec 6. L6A is now the verification inbox with two tabs and removes the two unused policy sections. L9A's problems live in `apps.problems` and lose the courier kinds; it no longer depends on L8A. L12A's proposal deadline is 6 hours or the pickup time, reminder 1 hour. The helper's action table, the final acceptance scenarios, `CLAUDE.md`, `AGENTS.md` and the skill draft were aligned. The documents as they stood before: commit `50547be`. |

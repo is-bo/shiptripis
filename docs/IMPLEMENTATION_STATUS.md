@@ -1,5 +1,24 @@
 # Waçla V1 Implementation Status
 
+## Wassla L-series scope narrowed to fast delivery (2026-11-13)
+
+Status: **planning only, no code changed.** Decided by the owner on 2026-11-13, after L5B was merged.
+
+- Wassla targets fast delivery: urgent parcels, mostly on flights and drives made the same day. This is
+  the target, not a rule the app enforces. Sea legs stay built and switched off.
+- **Parked, not part of this build:** professional transporters (profile, business document check,
+  Professional Mode, Pro badge, ticket exemption), the manifest dashboard, custody history and courier
+  handoff. Packages L6B, L7A, L7B, L8A, L8B and the professional half of L6A. Their complete text is in
+  `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`, kept for a later subdomain.
+- **Remaining order:** L6A (staff verification inbox with ID and Tickets tabs; removes two unused
+  policy sections), L9A, L9B, L12A, L12B, L13A, L13B, L14, L15, L16, L17, L10.
+- A proposal will wait 6 hours for an answer, or until the pickup time if that comes first, with one
+  reminder 1 hour before (was 48 and 12 hours). Built in L12A.
+- Final delivery stays the V1 rule: only the traveler confirms it, with the recipient's code.
+
+Detail: `docs/WASSLA_DISCOVERY_PRO_PLAN.md` section 5.1e; `docs/WASSLA_DISCOVERY_PRO_SPEC.md`,
+"Scope change of 2026-11-13".
+
 ## Wassla L5B — Progress updates and reminders, mobile (2026-11-12)
 
 Status: **merged** (PR #35, `c078060`, into `feature/discovery-professional-delivery`). No backend change; `main` untouched.

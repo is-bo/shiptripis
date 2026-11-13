@@ -38,9 +38,9 @@ Codex primarily owns Django/backend, Go services, database schema and migrations
 
 ## Discovery and professional delivery (L-series)
 
-Before any work on Home discovery, sea legs, traveler pricing, professional transporters, custody,
-courier handoff, progress reminders, tracking numbers, proposal deadlines, reviews, staff two-step
-sign-in, finance exports or the admin AI helper, also read:
+Before any work on Home discovery, sea legs, traveler pricing, progress reminders, the staff
+verification inbox, problem reports, route changes, tracking numbers, proposal deadlines, reviews,
+staff two-step sign-in, finance exports or the admin AI helper, also read:
 
 - `docs/WASSLA_DISCOVERY_PRO_SPEC.md` (owner-approved addendum; overrides the V1 specification for the topics it covers)
 - `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model and effort per package, and the checks that close each one)
@@ -48,5 +48,9 @@ sign-in, finance exports or the admin AI helper, also read:
 
 Work happens on `feature/discovery-professional-delivery`, one package per pull request into that
 branch. Never merge into `main` or deploy without the owner's explicit approval. For this series the
-owner assigned backend packages to Claude agents through the orchestrator. Until package L3A is
-merged the code still enforces FLIGHT and DRIVE only, with proof on flight legs only.
+owner assigned backend packages to Claude agents through the orchestrator.
+
+Since 2026-11-13 Wassla targets fast delivery: urgent parcels, mostly on flights and drives made the
+same day. Professional transporters, the manifest dashboard, custody history and courier handoff are
+**parked**, not part of this build: do not start them and do not leave hooks for them. Their complete
+plan is kept in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md` for a later subdomain.
