@@ -43,6 +43,8 @@ import '../../design/components/sheets.dart';
 import '../../design/components/status.dart';
 import '../../design/components/timeline.dart';
 import '../../domain/progress.dart';
+import '../../domain/schedule_change.dart';
+import '../problems/problem_widgets.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/deal.dart';
@@ -87,7 +89,10 @@ class DealScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(dealDetailProvider(dealId)),
+        onRefresh: () async => ref
+          ..invalidate(dealDetailProvider(dealId))
+          ..invalidate(dealProblemsProvider(dealId))
+          ..invalidate(dealScheduleChangeProvider(dealId)),
         child: AsyncView<Deal>(
           value: deal,
           onRetry: () => ref.invalidate(dealDetailProvider(dealId)),
@@ -115,7 +120,12 @@ class DealScreen extends ConsumerWidget {
 
                 _Urgent(deal: data, isSender: isSender),
 
+                if (isSender) _ScheduleChangeNotice(deal: data),
+
                 if (isSender) _SenderEarlyArrivalNotice(deal: data),
+
+                // "The other person did not come", above the code area.
+                NoShowBlock(deal: data),
 
                 _ArrivalSection(deal: data, isSender: isSender),
 
@@ -140,6 +150,8 @@ class DealScreen extends ConsumerWidget {
                 _ProtectionSection(deal: data, isSender: isSender),
 
                 _DisputeSection(deal: data),
+
+                ProblemsSection(dealId: data.id),
 
                 _RatingSection(deal: data, isSender: isSender),
 
@@ -906,6 +918,70 @@ class _Urgent extends StatelessWidget {
     }
 
     return const SizedBox.shrink();
+  }
+}
+
+/// New times on the traveler's trip, from the sender's side of the delivery:
+/// asked, answered, or told after pickup. Optional: it renders nothing while
+/// loading or on failure, so the delivery never waits on it.
+class _ScheduleChangeNotice extends ConsumerWidget {
+  const _ScheduleChangeNotice({required this.deal});
+
+  final Deal deal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final change = ref.watch(dealScheduleChangeProvider(deal.id)).value;
+    if (change == null) return const SizedBox.shrink();
+
+    final l = L.of(context);
+    void open() => context.openScheduleChange(deal.id);
+
+    final notice = switch (change) {
+      _ when change.declinedAndWaiting => InfoNotice(
+        title: l.scheduleYouDeclinedHeadline,
+        message: l.scheduleDealDeclinedBody,
+        tone: StatusTone.waiting,
+        icon: Icons.event_busy_outlined,
+        actionLabel: l.scheduleViewAction,
+        onAction: open,
+      ),
+      _ when change.canAnswer => InfoNotice(
+        title: l.scheduleAskedHeadline,
+        message: l.scheduleDealAskedBody,
+        tone: StatusTone.action,
+        icon: Icons.schedule_rounded,
+        actionLabel: l.scheduleReviewAction,
+        onAction: open,
+      ),
+      _ when change.isWaiting && change.consent == ConsentState.accepted =>
+        InfoNotice(
+          message: l.scheduleDealAcceptedBody,
+          tone: StatusTone.good,
+          icon: Icons.check_circle_outline_rounded,
+          actionLabel: l.scheduleViewAction,
+          onAction: open,
+        ),
+      // Collected parcels are told, not asked, for as long as the delivery is
+      // on its way.
+      _
+          when change.informed &&
+              change.status == ScheduleChangeStatus.applied &&
+              deal.deliveryConfirmedAt == null =>
+        InfoNotice(
+          title: l.scheduleInformedHeadline,
+          message: l.scheduleDealInformedBody,
+          icon: Icons.event_note_outlined,
+          actionLabel: l.scheduleViewAction,
+          onAction: open,
+        ),
+      _ => null,
+    };
+    if (notice == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xl),
+      child: notice,
+    );
   }
 }
 

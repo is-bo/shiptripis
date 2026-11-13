@@ -44,6 +44,11 @@ enum NotificationChannel {
   discoveryTravelerInterested,
   dealProgressReported,
   journeyLegReminder,
+  dealProblemReported,
+  journeyScheduleChangeProposed,
+  journeyScheduleChangeAnswered,
+  journeyScheduleChangeApplied,
+  journeyScheduleChangeWithdrawn,
   unknown;
 
   static NotificationChannel parse(String raw) => switch (raw) {
@@ -75,6 +80,11 @@ enum NotificationChannel {
     'discovery.traveler_interested' => discoveryTravelerInterested,
     'deal.progress_reported' => dealProgressReported,
     'journey.leg_reminder' => journeyLegReminder,
+    'deal.problem_reported' => dealProblemReported,
+    'journey.schedule_change_proposed' => journeyScheduleChangeProposed,
+    'journey.schedule_change_answered' => journeyScheduleChangeAnswered,
+    'journey.schedule_change_applied' => journeyScheduleChangeApplied,
+    'journey.schedule_change_withdrawn' => journeyScheduleChangeWithdrawn,
     _ => unknown,
   };
 }
@@ -91,6 +101,12 @@ class OpenMatch extends NotificationDestination {
 
 class OpenDeal extends NotificationDestination {
   const OpenDeal(this.dealId);
+  final int dealId;
+}
+
+/// A sender is asked about new times: opens the screen that answers.
+class OpenScheduleChange extends NotificationDestination {
+  const OpenScheduleChange(this.dealId);
   final int dealId;
 }
 
@@ -280,6 +296,7 @@ class AppNotification {
     NotificationChannel.dealArrivalReported ||
     NotificationChannel.dealArrivalConfirmed ||
     NotificationChannel.dealArrivalDeclined ||
+    NotificationChannel.dealProblemReported ||
     NotificationChannel.dealProgressReported => switch (dealId) {
       final int id => OpenDeal(id),
       _ => null,
@@ -305,6 +322,26 @@ class AppNotification {
         journeyId: journey,
       ),
       (final int request, _) => OpenRequest(request),
+      _ => null,
+    },
+    // Asked: the answer screen. Told, or the outcome of an answer: the
+    // delivery. The traveler's side has no deal: their journey.
+    NotificationChannel.journeyScheduleChangeProposed => switch ((
+      dealId,
+      journeyId,
+    )) {
+      (final int deal, _) => OpenScheduleChange(deal),
+      (_, final int journey) => OpenJourney(journey),
+      _ => null,
+    },
+    NotificationChannel.journeyScheduleChangeAnswered ||
+    NotificationChannel.journeyScheduleChangeApplied ||
+    NotificationChannel.journeyScheduleChangeWithdrawn => switch ((
+      dealId,
+      journeyId,
+    )) {
+      (final int deal, _) => OpenDeal(deal),
+      (_, final int journey) => OpenJourney(journey),
       _ => null,
     },
     NotificationChannel.journeyLegReminder => switch ((

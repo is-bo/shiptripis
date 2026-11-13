@@ -69,6 +69,7 @@ class CancellationQuote {
     required this.allowed,
     required this.refusalCode,
     required this.isLate,
+    this.causedBy = '',
     this.collected,
     this.senderRefund,
     this.travelerCompensation,
@@ -90,6 +91,7 @@ class CancellationQuote {
         ),
         platformFee: Money.eurCentsOrNull(json['platform_fee_eur_cents']),
         isLate: readBool(json['is_late']),
+        causedBy: readText(json['caused_by']),
         cutoffAt: readDate(json['cutoff_at']),
         agreedPickupAt: readDate(json['agreed_pickup_at']),
       );
@@ -115,6 +117,12 @@ class CancellationQuote {
   /// The platform's cut of the cancellation. Policy-configured and currently
   /// zero at launch, but **read the field** rather than assuming.
   final Money? platformFee;
+
+  /// Whose doing the cancellation is. `traveler` for a sender who declined new
+  /// times: no late penalty, and nothing is owed to the traveler.
+  final String causedBy;
+
+  bool get causedByTraveler => isSender && causedBy == 'traveler';
 
   /// True only for a sender cancelling after the free cutoff.
   final bool isLate;

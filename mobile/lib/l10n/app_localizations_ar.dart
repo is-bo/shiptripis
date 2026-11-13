@@ -5399,4 +5399,475 @@ class LAr extends L {
 
   @override
   String get notificationLegReminder => 'كيف تسير رحلتك؟';
+
+  @override
+  String get problemsTitle => 'المشكلات المبلَّغ عنها';
+
+  @override
+  String get problemReportAction => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get problemSheetTitle => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get problemSheetIntro => 'ما الذي حدث في هذا التوصيل؟';
+
+  @override
+  String get problemKindSenderUnavailable => 'المرسل لم يحضر';
+
+  @override
+  String get problemKindTravelerNoShow => 'المسافر لم يحضر';
+
+  @override
+  String get problemKindRecipientUnavailable => 'المستلم غير متاح';
+
+  @override
+  String get problemKindParcelMismatch => 'الطرد لا يطابق الوصف';
+
+  @override
+  String get problemKindParcelDamaged => 'الطرد تالف';
+
+  @override
+  String get problemKindTripDisrupted => 'الرحلة أُلغيت أو تأخرت';
+
+  @override
+  String get problemKindCustomsDelay => 'الطرد محتجز في الجمارك';
+
+  @override
+  String get problemKindOther => 'شيء آخر';
+
+  @override
+  String get problemNoteLabel => 'ملاحظة (اختياري)';
+
+  @override
+  String get problemNoteHint => 'أضف ما قد يفيد، مثل مكان وجودك.';
+
+  @override
+  String get problemNextBody =>
+      'يُبلَّغ الطرف الآخر. يراجع فريق وصلة حالات التلف وعدم المطابقة فورًا. الإبلاغ لا يلغي شيئًا ولا يسترد أي مبلغ.';
+
+  @override
+  String get problemSendAction => 'إرسال البلاغ';
+
+  @override
+  String get problemSent => 'تم إرسال البلاغ وإبلاغ الطرف الآخر.';
+
+  @override
+  String get problemReportedByYou => 'أبلغتَ عنها';
+
+  @override
+  String get problemReportedByOther => 'أبلغ عنها الطرف الآخر';
+
+  @override
+  String get problemStatusOpen => 'أُرسل';
+
+  @override
+  String get problemStatusEscalated => 'لدى فريق وصلة';
+
+  @override
+  String get problemStatusAcknowledged => 'قيد المراجعة';
+
+  @override
+  String get problemStatusClosed => 'مغلق';
+
+  @override
+  String get problemErrorOffline =>
+      'لا يوجد اتصال. لم يُرسل شيء. حاول مرة أخرى عند عودة الاتصال.';
+
+  @override
+  String get problemErrorNoShowClosed =>
+      'لا يمكن الإبلاغ الآن. قد لا يكون وقت التسليم قد حان، أو أن الطرد استُلم بالفعل.';
+
+  @override
+  String get problemErrorNotAllowed =>
+      'لا يمكن تقديم بلاغ عن هذا التوصيل الآن.';
+
+  @override
+  String get problemErrorNoteTooLong =>
+      'الملاحظة طويلة جدًا. اجعلها أقل من 1000 حرف.';
+
+  @override
+  String get noShowActionSender => 'المرسل لم يحضر';
+
+  @override
+  String get noShowActionTraveler => 'المسافر لم يحضر';
+
+  @override
+  String get noShowSheetIntro => 'أخبرنا إذا لم يحضر الطرف الآخر للتسليم.';
+
+  @override
+  String get noShowNextBody =>
+      'سيراجع فريق وصلة البلاغ. لم يُلغَ أو يُسترد أي شيء حتى الآن.';
+
+  @override
+  String get noShowSendAction => 'إرسال إلى وصلة';
+
+  @override
+  String get noShowReportedSender => 'أبلغتَ بأن المرسل لم يحضر';
+
+  @override
+  String get noShowReportedTraveler => 'أبلغتَ بأن المسافر لم يحضر';
+
+  @override
+  String get noShowMessageInChat => 'مراسلة في المحادثة';
+
+  @override
+  String get noShowReplyInChat => 'الرد في المحادثة';
+
+  @override
+  String get noShowAgainstSenderTitle => 'المسافر يقول إنك لم تحضر';
+
+  @override
+  String get noShowAgainstSenderBody =>
+      'إذا كان هناك سوء فهم، أخبره في المحادثة. سيراجع فريق وصلة الأمر. لم يُلغَ أو يُسترد أي شيء حتى الآن.';
+
+  @override
+  String get noShowAgainstTravelerTitle => 'المرسل يقول إنك لم تحضر';
+
+  @override
+  String get noShowAgainstTravelerBody =>
+      'إذا كان هناك سوء فهم، أخبره في المحادثة. سيراجع فريق وصلة الأمر. لم يُلغَ أو يُسترد أي شيء حتى الآن.';
+
+  @override
+  String get notificationProblemReported =>
+      'تم الإبلاغ عن مشكلة في أحد التوصيلات';
+
+  @override
+  String get notificationScheduleChangeProposed => 'مواعيد جديدة تنتظر ردك';
+
+  @override
+  String get notificationScheduleChangeAnswered =>
+      'ردّ أحد المرسلين على مواعيدك الجديدة';
+
+  @override
+  String get notificationScheduleChangeApplied => 'تغيّرت مواعيد إحدى الرحلات';
+
+  @override
+  String get notificationScheduleChangeWithdrawn => 'تم سحب المواعيد الجديدة';
+
+  @override
+  String get scheduleDeparture => 'المغادرة';
+
+  @override
+  String get scheduleArrival => 'الوصول';
+
+  @override
+  String get schedulePickup => 'استلام الطرد';
+
+  @override
+  String get scheduleParcelFallback => 'طرد';
+
+  @override
+  String get scheduleReasonDeadline => 'الوصول الجديد بعد موعدك النهائي.';
+
+  @override
+  String get scheduleReasonShift => 'يتغير وقت الوصول بأكثر من الحد المسموح.';
+
+  @override
+  String get scheduleReasonPickup => 'يتغير وقت استلام الطرد.';
+
+  @override
+  String get scheduleSectionTitle => 'مواعيد الرحلة';
+
+  @override
+  String get scheduleSectionIntro =>
+      'تغيّرت خططك؟ حدّث مواعيدك. يُبلَّغ المرسلون المتأثرون، وقد يحتاج بعضهم إلى الموافقة.';
+
+  @override
+  String get scheduleChangeAction => 'تغيير المواعيد';
+
+  @override
+  String scheduleWaitingPill(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'بانتظار $count مرسل',
+      many: 'بانتظار $count مرسلًا',
+      few: 'بانتظار $count مرسلين',
+      two: 'بانتظار مرسلين',
+      one: 'بانتظار مرسل واحد',
+      zero: 'لا أحد بانتظار الموافقة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitingBody =>
+      'تبقى مواعيد رحلتك كما هي إلى أن يرد كل مرسل مطلوب موافقته.';
+
+  @override
+  String get scheduleSendersTitle => 'المرسلون المطلوب ردهم';
+
+  @override
+  String get scheduleConsentPending => 'بالانتظار';
+
+  @override
+  String get scheduleConsentAccepted => 'وافق';
+
+  @override
+  String get scheduleConsentDeclined => 'رفض';
+
+  @override
+  String get scheduleWithdrawAction => 'سحب المواعيد الجديدة';
+
+  @override
+  String get scheduleWithdrawn => 'تم سحب المواعيد الجديدة.';
+
+  @override
+  String get scheduleWithdrawnByYou =>
+      'سحبتَ آخر مواعيد جديدة. تبقى رحلتك بمواعيدها السابقة.';
+
+  @override
+  String get scheduleWithdrawnNoLongerValid =>
+      'أُلغيت آخر مواعيد جديدة لأن الرحلة تقدمت. تبقى رحلتك بمواعيدها الحالية.';
+
+  @override
+  String get scheduleChangeTitle => 'تغيير المواعيد';
+
+  @override
+  String get scheduleChangeIntro =>
+      'اختر المغادرة والوصول الجدیدين للمراحل التي تغيّرت. سترى من يتأثر قبل إرسال أي شيء.';
+
+  @override
+  String get scheduleStopsNote =>
+      'يمكن تغيير المواعيد فقط في رحلة قائمة. لإضافة محطة أو إزالتها، ألغِ الرحلة وأنشئ رحلة جديدة.';
+
+  @override
+  String get scheduleReviewAction => 'مراجعة التغييرات';
+
+  @override
+  String get scheduleReviewTitle => 'مراجعة المواعيد الجديدة';
+
+  @override
+  String get scheduleEditTimes => 'تعديل المواعيد';
+
+  @override
+  String get scheduleSendAction => 'إرسال المواعيد الجديدة';
+
+  @override
+  String get scheduleApplyAction => 'تطبيق المواعيد الجديدة';
+
+  @override
+  String get scheduleAppliesAtOnceTitle => 'لا يحتاج أي مرسل إلى الموافقة';
+
+  @override
+  String get scheduleAppliesAtOnceBody =>
+      'تُطبَّق هذه المواعيد فور إرسالها. يُبلَّغ المرسلون المتأثرون.';
+
+  @override
+  String scheduleWaitsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'يجب أن يوافق $count مرسل أولًا',
+      many: 'يجب أن يوافق $count مرسلًا أولًا',
+      few: 'يجب أن يوافق $count مرسلين أولًا',
+      two: 'يجب أن يوافق مرسلان أولًا',
+      one: 'يجب أن يوافق مرسل واحد أولًا',
+      zero: 'لا يلزم موافقة أحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitsBody =>
+      'تُطبَّق المواعيد الجديدة عندما يوافقون جميعًا. حتى ذلك الحين تبقى مواعيد رحلتك كما هي. المرسل الذي يرفض يمكنه الإلغاء، ويُحتسب الإلغاء عليك.';
+
+  @override
+  String get scheduleNewTimesTitle => 'المواعيد الجديدة';
+
+  @override
+  String get scheduleAffectedTitle => 'الطرود المتأثرة';
+
+  @override
+  String get scheduleNoParcelsAffected => 'لا يتأثر أي طرد بهذه المواعيد.';
+
+  @override
+  String get scheduleMustAgreeTitle => 'المرسلون المطلوب موافقتهم';
+
+  @override
+  String get scheduleToldTitle => 'المرسلون الذين سيُبلَّغون';
+
+  @override
+  String get scheduleReasonLabel => 'ملاحظة للمرسلين (اختياري)';
+
+  @override
+  String get scheduleReasonHint => 'مثال: غيّرت شركة الطيران موعد الرحلة.';
+
+  @override
+  String get scheduleReasonHelper =>
+      'سيقرأ المرسلون المطلوب ردهم هذه الملاحظة.';
+
+  @override
+  String scheduleSentToSenders(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم الإرسال. بانتظار $count مرسل.',
+      many: 'تم الإرسال. بانتظار $count مرسلًا.',
+      few: 'تم الإرسال. بانتظار $count مرسلين.',
+      two: 'تم الإرسال. بانتظار مرسلين.',
+      one: 'تم الإرسال. بانتظار مرسل واحد.',
+      zero: 'تم الإرسال.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleApplied =>
+      'تم حفظ المواعيد الجديدة وإبلاغ المرسلين المتأثرين.';
+
+  @override
+  String get scheduleErrorOffline =>
+      'لا يوجد اتصال. لم يتغير شيء. حاول مرة أخرى عند عودة الاتصال.';
+
+  @override
+  String get scheduleErrorNotReschedulable =>
+      'لا يمكن تغيير المواعيد إلا في رحلة منشورة وغير منتهية.';
+
+  @override
+  String get scheduleErrorEmpty =>
+      'هذه هي المواعيد الحالية. غيّر موعدًا واحدًا على الأقل.';
+
+  @override
+  String get scheduleErrorPending =>
+      'هناك مواعيد جديدة بانتظار المرسلين. اسحبها أولًا لإرسال غيرها.';
+
+  @override
+  String get scheduleErrorLegArrived => 'لا يمكن تغيير مرحلة وصلت بالفعل.';
+
+  @override
+  String get scheduleErrorLegDeparted =>
+      'المرحلة التي غادرت بالفعل تحتفظ بموعد مغادرتها. يمكن تغيير وصولها فقط.';
+
+  @override
+  String get scheduleErrorDepartureInPast =>
+      'لا يمكن أن يكون موعد المغادرة في الماضي.';
+
+  @override
+  String get scheduleErrorNotWaiting =>
+      'لم تعد هذه المواعيد بالانتظار. تم تحديث الشاشة.';
+
+  @override
+  String get scheduleAnswerTitle => 'مواعيد جديدة';
+
+  @override
+  String get scheduleNoneTitle => 'لا تغيير في المواعيد';
+
+  @override
+  String get scheduleNoneBody => 'لم يغيّر المسافر مواعيد هذا التوصيل.';
+
+  @override
+  String get scheduleAskedHeadline => 'غيّر المسافر المواعيد';
+
+  @override
+  String get scheduleAskedBody =>
+      'توصيلك متأثر. راجع المواعيد الجديدة وأخبرنا إن كانت مناسبة لك.';
+
+  @override
+  String get scheduleYouAcceptedHeadline => 'وافقتَ على المواعيد الجديدة';
+
+  @override
+  String get scheduleYouDeclinedHeadline => 'رفضتَ المواعيد الجديدة';
+
+  @override
+  String get scheduleAppliedHeadline => 'المواعيد الجديدة سارية';
+
+  @override
+  String get scheduleAppliedBody =>
+      'تسير رحلة المسافر الآن وفق المواعيد أدناه.';
+
+  @override
+  String get scheduleWithdrawnHeadline => 'تم سحب المواعيد الجديدة';
+
+  @override
+  String get scheduleWithdrawnBody =>
+      'لا يتغير شيء في توصيلك. تبقى المواعيد السابقة سارية.';
+
+  @override
+  String get scheduleInformedHeadline => 'تغيّرت مواعيد المسافر';
+
+  @override
+  String get scheduleInformedBody =>
+      'تم استلام طردك بالفعل، لذا لا يُطلب موافقتك. يبقى موعد الوصول الذي اتفقتَ عليه عند الدفع يحميك. إذا حدث خطأ يمكنك الإبلاغ عن مشكلة أو فتح نزاع.';
+
+  @override
+  String get scheduleCompareTitle => 'المواعيد القديمة والجديدة';
+
+  @override
+  String scheduleYourDeadline(String date) {
+    return 'موعدك النهائي: $date';
+  }
+
+  @override
+  String get scheduleWhyTitle => 'لماذا نسألك';
+
+  @override
+  String get scheduleTravelerNote => 'ملاحظة من المسافر';
+
+  @override
+  String get scheduleLegsTitle => 'المراحل المتغيّرة';
+
+  @override
+  String get scheduleAcceptAction => 'قبول المواعيد الجديدة';
+
+  @override
+  String get scheduleAcceptInstead => 'قبول المواعيد الجديدة بدلًا من ذلك';
+
+  @override
+  String get scheduleDeclineAction => 'رفض';
+
+  @override
+  String get scheduleDeclineInstead => 'رفض بدلًا من ذلك';
+
+  @override
+  String get scheduleDeclineKeep => 'رجوع';
+
+  @override
+  String get scheduleDeclineConfirmTitle => 'رفض المواعيد الجديدة؟';
+
+  @override
+  String get scheduleDeclineConfirmBody =>
+      'لن يُلغى شيء. بعدها يمكنك إلغاء هذا التوصيل، ولأن المسافر هو من غيّر المواعيد لا يُحتسب الإلغاء عليك. يمكنك تغيير رأيك ما دام المسافر لم يقرر بعد.';
+
+  @override
+  String get scheduleAcceptedSnack => 'وافقتَ على المواعيد الجديدة.';
+
+  @override
+  String get scheduleDeclinedSnack => 'رفضتَ المواعيد الجديدة.';
+
+  @override
+  String get scheduleIfYouCancelTitle => 'إذا ألغيتَ الآن';
+
+  @override
+  String get scheduleCancelCountsAsTraveler =>
+      'يُحتسب كإلغاء من المسافر لأنه هو من غيّر المواعيد.';
+
+  @override
+  String get scheduleCancelNotAvailable => 'لا يمكن إلغاء هذا التوصيل الآن.';
+
+  @override
+  String get scheduleInformedActionsTitle => 'إذا حدث خطأ';
+
+  @override
+  String get scheduleErrorNoAnswerNeeded => 'لا حاجة إلى ردّ لهذا التوصيل.';
+
+  @override
+  String get scheduleViewAction => 'عرض';
+
+  @override
+  String get scheduleDealAskedBody =>
+      'راجع المواعيد الجديدة وأخبرنا إن كانت مناسبة لك.';
+
+  @override
+  String get scheduleDealDeclinedBody =>
+      'يمكنك إلغاء هذا التوصيل ولن يُحتسب عليك.';
+
+  @override
+  String get scheduleDealAcceptedBody =>
+      'وافقتَ على المواعيد الجديدة. بانتظار المرسلين الآخرين.';
+
+  @override
+  String get scheduleDealInformedBody =>
+      'تغيّرت مواعيد المسافر بعد استلام الطرد. اطّلع على المواعيد القديمة والجديدة.';
 }

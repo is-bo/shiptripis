@@ -537,7 +537,7 @@ class _HandoverSheet extends StatelessWidget {
   Future<void> _pick(BuildContext context, {required bool end}) async {
     final stop = draft.stops[index];
     final current = end ? stop.windowEnd : stop.windowStart;
-    final picked = await _pickDateTime(
+    final picked = await pickJourneyDateTime(
       context,
       current ?? stop.windowStart ?? _suggestedTime(),
     );
@@ -695,7 +695,10 @@ class _SegmentBlock extends StatelessWidget {
   Future<void> _pickTime(BuildContext context, {required bool arrival}) async {
     final segment = draft.segments[index];
     final current = arrival ? segment.arriveAt : segment.departAt;
-    final picked = await _pickDateTime(context, current ?? segment.departAt);
+    final picked = await pickJourneyDateTime(
+      context,
+      current ?? segment.departAt,
+    );
     if (picked == null) return;
     if (arrival) {
       draft.setSegmentArrival(index, picked);
@@ -1131,7 +1134,10 @@ class _EndpointField extends StatelessWidget {
   }
 }
 
-Future<DateTime?> _pickDateTime(BuildContext context, DateTime? initial) async {
+Future<DateTime?> pickJourneyDateTime(
+  BuildContext context,
+  DateTime? initial,
+) async {
   final now = DateTime.now();
   final seed = (initial == null || initial.isBefore(now)) ? now : initial;
 

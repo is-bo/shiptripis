@@ -48,6 +48,7 @@ import '../features/deals/payment_screen.dart';
 import '../features/deals/pickup_screen.dart';
 import '../features/deals/rate_screen.dart';
 import '../features/deals/recipient_screen.dart';
+import '../features/deals/schedule_change_answer_screen.dart';
 import '../features/deliveries/deliveries_screen.dart';
 import '../features/discovery/alerts_screen.dart';
 import '../features/discovery/browse_screens.dart';
@@ -57,6 +58,7 @@ import '../features/disputes/dispute_detail_screen.dart';
 import '../features/disputes/dispute_open_screen.dart';
 import '../features/guest/guest_pay_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/journeys/change_times_screen.dart';
 import '../features/journeys/journey_create_screen.dart';
 import '../features/journeys/journey_detail_screen.dart';
 import '../features/journeys/journey_edit_screen.dart';
@@ -118,6 +120,7 @@ abstract final class Routes {
   static const journeyDetail = 'journey-detail';
   static const journeyEdit = 'journey-edit';
   static const legProof = 'leg-proof';
+  static const journeyChangeTimes = 'journey-change-times';
 
   static const negotiation = 'negotiation';
 
@@ -128,6 +131,7 @@ abstract final class Routes {
   static const dealDelivery = 'deal-delivery';
   static const dealCancel = 'deal-cancel';
   static const dealRate = 'deal-rate';
+  static const dealScheduleChange = 'deal-schedule-change';
 
   static const disputeOpen = 'dispute-open';
   static const disputeDetail = 'dispute-detail';
@@ -443,6 +447,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               legId: _id(state, 'legId'),
             ),
           ),
+          GoRoute(
+            path: 'change-times',
+            name: Routes.journeyChangeTimes,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ChangeTimesScreen(journeyId: _id(state, 'id')),
+          ),
         ],
       ),
 
@@ -492,6 +503,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: Routes.dealCancel,
             parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => CancelScreen(dealId: _id(state, 'id')),
+          ),
+          GoRoute(
+            path: 'schedule-change',
+            name: Routes.dealScheduleChange,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ScheduleChangeAnswerScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'rate',
@@ -799,6 +817,15 @@ extension AppNavigation on BuildContext {
 
   void openCancel(int dealId) =>
       pushNamed(Routes.dealCancel, pathParameters: {'id': '$dealId'});
+
+  /// A sender's answer to new times, or what they were told about them.
+  void openScheduleChange(int dealId) =>
+      pushNamed(Routes.dealScheduleChange, pathParameters: {'id': '$dealId'});
+
+  void openChangeTimes(int journeyId) => pushNamed(
+    Routes.journeyChangeTimes,
+    pathParameters: {'id': '$journeyId'},
+  );
 
   void openRate(int dealId) =>
       pushNamed(Routes.dealRate, pathParameters: {'id': '$dealId'});

@@ -48,6 +48,7 @@ import 'journey_labels.dart';
 import 'journey_price_card.dart';
 import 'journey_route_draft.dart' show carryableCategories;
 import 'progress_widgets.dart';
+import 'schedule_change_widgets.dart';
 import '../../domain/progress.dart';
 
 final _compatibleRequestsProvider = FutureProvider.autoDispose
@@ -367,6 +368,11 @@ class _JourneyDetailScreenState extends ConsumerState<JourneyDetailScreen> {
                           // to report.
                           if (isOwner && data.status.isLive)
                             JourneyProgressSection(journeyId: data.id),
+
+                          // New times on a live journey, and the change that
+                          // is waiting for its senders.
+                          if (isOwner && data.status.isLive)
+                            ScheduleChangeSection(journeyId: data.id),
 
                           if (isOwner) ...[
                             _HandoverSummary(journey: data),
