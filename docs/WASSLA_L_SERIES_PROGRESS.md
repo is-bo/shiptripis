@@ -552,7 +552,7 @@ Detail: `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`. Screenshots: `/mnt/project-f
   existing action was API only) and the API path no longer writes a second audit row on a replay;
   (7) informed senders are told when the change applies; (8) a waiting change is withdrawn as
   `no_longer_valid` when the journey stops being live or progresses past the new times.
-- Tests (before and after counts): Django 2,824 collected before, AFTER_COUNT after (+26 in
+- Tests (before and after counts): Django 2,824 collected before, 2,895 after, all passing locally in 4 shards (+26 in
   `apps/problems/tests/test_l9a_problems.py`, +45 in `apps/trips/tests/test_l9a_schedule_changes.py`).
   No existing assertion changed. `makemigrations --check` clean, ruff clean, `schema.sql` re-exported
   (additions only), Go notification lockstep test passes.
