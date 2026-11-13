@@ -51,6 +51,9 @@ urlpatterns = [
         capability_required("manage_users")(profile_visibility),
         name="user-profile-visibility",
     ),
+    # Spec 13: the one inbox entry. The tabs are the two queues below, whose
+    # routes are kept so existing links still land.
+    path("verification/", views.verification, name="verification"),
     path("verification/kyc/", views.kyc_queue, name="kyc-queue"),
     path("verification/kyc/<int:pk>/", views.kyc_detail, name="kyc-detail"),
     path(

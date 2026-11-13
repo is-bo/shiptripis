@@ -15,6 +15,13 @@
     {% if actions %}<div class="st-page-actions">{% for action in actions %}<a class="button{% if action.variant == 'quiet' %} st-button-quiet{% endif %}{% if action.current %} is-current{% endif %}" href="{{ action.url }}"{% if action.current %} aria-current="page"{% endif %}>{{ action.label }}</a>{% endfor %}</div>{% endif %}
   </header>
 
+  {% if tabs %}
+  {% comment %}Spec 13: the verification inbox's shared header. Each counter is the number of rows waiting, and each tab opens its queue filtered to exactly those rows.{% endcomment %}
+  <nav class="st-review-tabs st-inbox-tabs" aria-label="Verification inbox">
+    {% for tab in tabs %}<a href="{{ tab.url }}" class="st-review-tab is-primary{% if tab.current %} is-current{% endif %}{% if tab.count %} has-work{% endif %}"{% if tab.current %} aria-current="page"{% endif %}><span>{{ tab.label }}</span><b>{{ tab.count }}<span class="st-visually-hidden"> waiting</span></b></a>{% endfor %}
+  </nav>
+  {% endif %}
+
   <form method="get" class="st-filters" role="search">
     <div class="st-filter">
       <label for="st-search">Search</label>

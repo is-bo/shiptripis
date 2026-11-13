@@ -17,6 +17,12 @@ from apps.finance.models import PaymentAttempt, PaymentRefund, ScheduledJob
 from apps.finance.money import CURRENCY_EXPONENTS
 
 from .permissions import ROLE_CHOICES
+from .verification_inbox import (
+    APPROVED,
+    REASON_REQUIRED,
+    REJECTED,
+    RESUBMISSION_REQUESTED,
+)
 
 
 def decimal_to_scaled_integer(value: Decimal, scale: int, *, label: str) -> int:
@@ -124,16 +130,25 @@ class PaymentAttentionResolutionForm(ConsoleForm):
 
 
 class ReviewDecisionForm(ConsoleForm):
+    """The verification inbox's one decision form, for ID and for tickets (spec 13)."""
+
     decision = forms.ChoiceField(
-        choices=(("approved", "Approve"), ("rejected", "Reject")),
+        choices=(
+            (APPROVED, "Approve"),
+            (RESUBMISSION_REQUESTED, "Ask for a new upload"),
+            (REJECTED, "Reject"),
+        ),
         widget=forms.HiddenInput,
     )
     reason = forms.CharField(
         required=False,
         max_length=2_000,
-        label="Rejection reason",
+        label="Reason",
         widget=forms.Textarea(attrs={"rows": 4}),
-        help_text="The applicant receives this reason when the submission is rejected.",
+        help_text=(
+            "Required to ask for a new upload or to reject. The person reads it "
+            "exactly as written."
+        ),
     )
     confirm = forms.BooleanField(
         label="I reviewed the evidence and understand this decision is audited.",
@@ -142,10 +157,13 @@ class ReviewDecisionForm(ConsoleForm):
     def clean(self):
         cleaned = super().clean()
         if (
-            cleaned.get("decision") == "rejected"
+            cleaned.get("decision") in REASON_REQUIRED
             and not (cleaned.get("reason") or "").strip()
         ):
-            self.add_error("reason", "Explain what the applicant must correct.")
+            self.add_error(
+                "reason",
+                "Say what is wrong, so the person knows what to send next time.",
+            )
         return cleaned
 
 

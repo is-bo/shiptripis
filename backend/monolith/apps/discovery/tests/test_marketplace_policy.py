@@ -28,12 +28,8 @@ class DefaultsTests(SimpleTestCase):
         self.assertTrue(policy.discovery.listings_enabled)
         self.assertTrue(policy.discovery.profiles_enabled)
         self.assertEqual(policy.discovery.interest_daily_cap, 10)
-        # Sea legs and courier handoff ship off; everything else ships on.
+        # Sea legs ship off; everything else ships on.
         self.assertFalse(policy.sea_legs_enabled)
-        self.assertFalse(policy.courier_handoff.enabled)
-        self.assertEqual(policy.courier_handoff.unconfirmed_review_days, 5)
-        self.assertEqual(policy.courier_handoff.link_valid_days, 30)
-        self.assertTrue(policy.professional.applications_enabled)
         self.assertTrue(policy.traveler_pricing.enabled)
         self.assertEqual(policy.traveler_pricing.max_price_per_kg_eur_cents, 10_000)
         self.assertEqual(policy.traveler_pricing.max_min_price_eur_cents, 50_000)
@@ -93,8 +89,6 @@ class RefusalTests(SimpleTestCase):
     def test_every_integer_field_enforces_its_bounds(self):
         bounds = {
             ("discovery", "interest_daily_cap"): (1, 100),
-            ("courier_handoff", "unconfirmed_review_days"): (1, 30),
-            ("courier_handoff", "link_valid_days"): (1, 90),
             ("traveler_pricing", "max_price_per_kg_eur_cents"): (100, 100_000),
             ("traveler_pricing", "max_min_price_eur_cents"): (100, 1_000_000),
             ("reminders", "depart_after_minutes"): (5, 1_440),
@@ -134,6 +128,18 @@ class SaveTimeValidationTests(TestCase):
         self.assertEqual(
             serializer.errors["policy"]["code"], InvalidMarketplacePolicy.code
         )
+
+    def test_a_revision_carrying_a_parked_section_cannot_be_saved(self):
+        # L6A. The two sections the parked features left behind are gone, so
+        # a revision naming either is refused like any other unknown key.
+        for section in ("courier_handoff", "professional"):
+            with self.subTest(section):
+                serializer = self._candidate({section: {"enabled": False}})
+
+                self.assertFalse(serializer.is_valid())
+                self.assertEqual(
+                    serializer.errors["policy"]["code"], InvalidMarketplacePolicy.code
+                )
 
     def test_a_valid_marketplace_section_saves(self):
         self.assertTrue(self._candidate({"discovery": {"listings_enabled": False}}).is_valid())

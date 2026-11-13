@@ -320,29 +320,62 @@ class AdminReviewError(RuntimeError):
     code = "admin_review_not_permitted"
 
 
+def _review_decision(decision: str, reason: str) -> tuple[str, str]:
+    """Check one verification decision; return the status it stores and the reason.
+
+    Spec 13: approve, ask for more, reject. The last two need a reason, which
+    the person reads. See `apps.admin_panel.verification_inbox`.
+    """
+
+    from .verification_inbox import DECISION_STATUS, REASON_REQUIRED
+
+    if decision not in DECISION_STATUS:
+        raise AdminReviewError(
+            "A decision must be approve, ask for a new upload, or reject."
+        )
+    clean_reason = (reason or "").strip()
+    if decision in REASON_REQUIRED and not clean_reason:
+        raise AdminReviewError("A reason is required.")
+    return DECISION_STATUS[decision], clean_reason
+
+
+def _is_replay(record, decision: str) -> bool:
+    """A decided row asked again for the same decision: a double-submitted form.
+
+    Answered as success without writing anything. A *different* decision on a
+    decided row, even one that stores the same status ("ask for more" against
+    "reject"), is refused, so a second reviewer never believes their choice was
+    saved when the first one's stands.
+    """
+
+    from .verification_inbox import recorded_decision
+
+    return recorded_decision(record) == decision
+
+
+def _notified_status(status: str) -> str:
+    return "approved" if status == "approved" else "action_required"
+
+
 @transaction.atomic
 def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: str = ""):
-    """Review one pending KYC submission through an auditable locked flow."""
+    """Decide one pending KYC submission through an auditable locked flow."""
 
     from apps.accounts.models import User
     from apps.kyc.models import KycSubmission
 
     if not has_admin_permission(actor, "review_kyc"):
         raise PermissionDenied("KYC review permission is required.")
-    if decision not in (KycSubmission.Status.APPROVED, KycSubmission.Status.REJECTED):
-        raise AdminReviewError("KYC decisions must be approved or rejected.")
-    clean_reason = (reason or "").strip()
-    if decision == KycSubmission.Status.REJECTED and not clean_reason:
-        raise AdminReviewError("A rejection reason is required.")
+    status, clean_reason = _review_decision(decision, reason)
 
     submission = KycSubmission.objects.select_for_update(no_key=True).get(pk=submission_id)
-    if submission.status == decision:
-        return submission
     if submission.status != KycSubmission.Status.PENDING:
+        if _is_replay(submission, decision):
+            return submission
         raise AdminReviewError("Only a pending KYC submission may be reviewed.")
     before = {"status": submission.status, "rejection_reason": submission.rejection_reason}
-    submission.status = decision
-    submission.rejection_reason = clean_reason if decision == KycSubmission.Status.REJECTED else ""
+    submission.status = status
+    submission.rejection_reason = clean_reason if status == KycSubmission.Status.REJECTED else ""
     submission.reviewed_by_id = actor.pk
     submission.reviewed_at = timezone.now()
     submission.save(
@@ -363,26 +396,24 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
     User.objects.filter(pk=submission.user_id).update(is_kyc_verified=verified)
     record_admin_action(
         actor=actor,
-        action=f"kyc.{decision}",
+        action=f"kyc.{status}",
         target=submission,
         before=before,
         after={"status": submission.status, "rejection_reason": submission.rejection_reason},
         reason=clean_reason,
+        metadata={"outcome": decision},
     )
     from apps.notifications.models import OutboundMessage
     from apps.notifications.outbox import enqueue_message
 
     enqueue_message(
         kind=OutboundMessage.Kind.KYC_STATUS,
-        key=f"kyc_status:{submission.pk}:{decision}",
+        key=f"kyc_status:{submission.pk}:{status}",
         to_email=submission.user.email,
         recipient_user_id=submission.user_id,
         context={
-            "status": (
-                "approved"
-                if decision == KycSubmission.Status.APPROVED
-                else "action_required"
-            ),
+            "status": _notified_status(status),
+            "outcome": decision,
             "reason": submission.rejection_reason,
         },
     )
@@ -391,7 +422,7 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
 
     publish_after_commit(
         KYC_STATUS_CHANGED,
-        {"submission_id": submission.pk, "status": submission.status},
+        {"submission_id": submission.pk, "status": submission.status, "outcome": decision},
         targets=[submission.user_id],
     )
     return submission
@@ -399,7 +430,7 @@ def review_kyc_submission(*, actor, submission_id: int, decision: str, reason: s
 
 @transaction.atomic
 def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""):
-    """Review one pending ticket proof (flight or sea) without a generic status edit.
+    """Decide one pending ticket proof (flight or sea) without a generic status edit.
 
     The name and the `review_flight_proofs` permission predate sea legs and
     are kept: the permission code is stored in role rows (plan 2.9).
@@ -408,16 +439,69 @@ def review_flight_proof(*, actor, proof_id: int, decision: str, reason: str = ""
     from apps.trips.models import JourneyLegProof
 
     if not has_admin_permission(actor, "review_flight_proofs"):
-        raise PermissionDenied("Flight-proof review permission is required.")
-    if decision not in (JourneyLegProof.Status.APPROVED, JourneyLegProof.Status.REJECTED):
-        raise AdminReviewError("Flight-proof decisions must be approved or rejected.")
-    clean_reason = (reason or "").strip()
-    if decision == JourneyLegProof.Status.REJECTED and not clean_reason:
-        raise AdminReviewError("A rejection reason is required.")
+        raise PermissionDenied("Ticket review permission is required.")
+    status, clean_reason = _review_decision(decision, reason)
 
     proof = JourneyLegProof.objects.select_for_update(no_key=True).get(pk=proof_id)
-    if proof.status == decision:
-        return proof
+    if proof.status != JourneyLegProof.Status.PENDING:
+        if _is_replay(proof, decision):
+            return proof
+        raise AdminReviewError("Only a pending ticket proof may be reviewed.")
+    before = {"status": proof.status, "rejection_reason": proof.rejection_reason}
+    proof.status = status
+    proof.rejection_reason = clean_reason if status == JourneyLegProof.Status.REJECTED else ""
+    proof.reviewer = actor
+    proof.reviewed_at = timezone.now()
+    proof.save(
+        update_fields=(
+            "status",
+            "rejection_reason",
+            "reviewer",
+            "reviewed_at",
+            "updated_at",
+        )
+    )
+    record_admin_action(
+        actor=actor,
+        action=f"flight_proof.{status}",
+        target=proof,
+        before=before,
+        after={"status": proof.status, "rejection_reason": proof.rejection_reason},
+        reason=clean_reason,
+        metadata={"outcome": decision},
+    )
+    from apps.notifications.models import OutboundMessage
+    from apps.notifications.outbox import enqueue_message
+
+    traveler = proof.leg.journey.traveler
+    enqueue_message(
+        kind=OutboundMessage.Kind.LEG_PROOF_STATUS,
+        key=f"leg_proof_status:{proof.pk}:{status}",
+        to_email=traveler.email,
+        recipient_user_id=traveler.pk,
+        context={
+            "status": _notified_status(status),
+            "outcome": decision,
+            "reason": proof.rejection_reason,
+            "journey_reference": f"J-{proof.leg.journey_id}",
+            "mode": proof.leg.mode,
+        },
+    )
+    from apps.core.channels import LEG_PROOF_STATUS_CHANGED
+    from apps.core.redis_bus import publish_after_commit
+
+    publish_after_commit(
+        LEG_PROOF_STATUS_CHANGED,
+        {
+            "proof_id": proof.pk,
+            "journey_id": proof.leg.journey_id,
+            "mode": proof.leg.mode,
+            "status": proof.status,
+            "outcome": decision,
+        },
+        targets=[traveler.pk],
+    )
+    return proof
     if proof.status != JourneyLegProof.Status.PENDING:
         raise AdminReviewError("Only a pending flight proof may be reviewed.")
     before = {"status": proof.status, "rejection_reason": proof.rejection_reason}

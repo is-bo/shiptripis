@@ -1,5 +1,21 @@
 # Waçla V1 Implementation Status
 
+## Wassla L6A — Staff verification inbox (2026-11-13)
+
+Status: **in review** (pull request into `feature/discovery-professional-delivery`). Backend and console
+only; no migration; `main` untouched.
+
+- The console's **Verification** entry is one inbox with two tabs, ID and Tickets (flight and sea),
+  each with the number waiting; the entry shows the total. Opening it lands on the first tab with work.
+  The old "KYC review" and "Ticket proofs" entries are gone; their routes stay, so existing links land.
+- One review screen for both kinds with three decisions: approve, ask for a new upload, reject. The last
+  two need a reason. "Ask for a new upload" stores the existing rejected status and tells the person "we
+  need a new upload" (push and email, EN, FR, AR); every decision is audited with its `outcome`.
+- The two unused settings sections left by the parked features (`courier_handoff`, `professional`) are
+  removed; a settings revision that names either is refused.
+
+Detail: `docs/PHASE_L6A_VERIFICATION_INBOX.md`. Staff guide: `docs/ADMIN_OPERATIONS.md`.
+
 ## Wassla L-series scope narrowed to fast delivery (2026-11-13)
 
 Status: **planning only, no code changed.** Decided by the owner on 2026-11-13, after L5B was merged.

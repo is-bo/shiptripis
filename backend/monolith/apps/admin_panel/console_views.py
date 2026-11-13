@@ -156,6 +156,7 @@ from .console_presenters import (
     text_cell,
 )
 from . import tracking_search
+from . import verification_inbox as inbox
 from .console_journey_pause import pause_state
 from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
@@ -340,6 +341,7 @@ def _table(
     bulk_action_url: str = "",
     bulk_form=None,
     extra_filters: tuple[dict, ...] = (),
+    tabs: list[dict] = (),
 ):
     # A column of amounts has to line up under a header that agrees with it, or
     # the alignment reads as an accident. The cell kind already says which
@@ -404,6 +406,7 @@ def _table(
             "actions": actions,
             "bulk_action_url": bulk_action_url,
             "bulk_form": bulk_form,
+            "tabs": tabs,
         },
     )
 
@@ -616,7 +619,8 @@ def _provider_rows() -> list[dict]:
     return rows
 
 
-def _attention_items(user, *, provider_rows=()) -> list[dict]:
+def _attention_items(request, *, provider_rows=()) -> list[dict]:
+    user = request.user
     items: list[dict] = []
 
     def add(permission, title, hint, count, route, query="", tone="attn"):
@@ -635,22 +639,30 @@ def _attention_items(user, *, provider_rows=()) -> list[dict]:
             }
         )
 
-    add(
-        "view_kyc",
-        "KYC submissions to review",
-        "Travelers remain blocked from publishing until these are decided.",
-        KycSubmission.objects.filter(status=KycSubmission.Status.PENDING).count(),
-        "admin_console:kyc-queue",
-        "status=pending",
-    )
-    add(
-        "view_flight_proofs",
-        "Ticket proofs to review",
-        "Flight and ferry legs are not matchable until their ticket is approved.",
-        JourneyLegProof.objects.filter(status=JourneyLegProof.Status.PENDING).count(),
-        "admin_console:proof-queue",
-        "status=pending",
-    )
+    # Spec 13: one work item per verification tab, counted by the inbox
+    # itself, so this page, the tab counters and the navigation total agree.
+    waiting = inbox.waiting_counts(request)
+    hints = {
+        "id": (
+            "ID checks to review",
+            "Travelers remain blocked from publishing until these are decided.",
+        ),
+        "tickets": (
+            "Tickets to review",
+            "Flight and ferry legs are not matchable until their ticket is approved.",
+        ),
+    }
+    for tab in inbox.TABS:
+        if tab.key in waiting:
+            title, hint = hints[tab.key]
+            add(
+                tab.permission,
+                title,
+                hint,
+                waiting[tab.key],
+                tab.route,
+                f"status={inbox.WAITING_STATUS}",
+            )
     add(
         "view_disputes",
         "Open disputes",
@@ -760,7 +772,7 @@ def overview(request):
         if has_admin_permission(request.user, "view_provider_health")
         else []
     )
-    attention = _attention_items(request.user, provider_rows=provider_rows)
+    attention = _attention_items(request, provider_rows=provider_rows)
     # "Nothing to do" and "not checked" must never look the same, so a cleared
     # queue stays on the page - filed below the work rather than mixed into it.
     raised_items = [item for item in attention if item["count"]]
@@ -952,10 +964,17 @@ def _kyc_queryset(request):
     return _search(queryset, request, ("user__email", "user__full_name"))
 
 
+@capability_required("view_kyc", "view_flight_proofs")
+def verification(request):
+    """Spec 13's one inbox entry: open the first tab with work waiting, else ID."""
+
+    return redirect(inbox.landing_url(request))
+
+
 @capability_required("view_kyc")
 def kyc_queue(request):
     page_obj = _page(request, _kyc_queryset(request))
-    rows = []
+    pairs = []
     for submission in page_obj.object_list:
         previous = next(
             (
@@ -969,6 +988,13 @@ def kyc_queue(request):
             ),
             None,
         )
+        pairs.append((submission, previous))
+    requested = inbox.resubmission_requested(
+        KycSubmission,
+        [row.pk for pair in pairs for row in pair if row is not None],
+    )
+    rows = []
+    for submission, previous in pairs:
         rows.append(
             {
                 "cells": (
@@ -985,9 +1011,9 @@ def kyc_queue(request):
                         kind="strong",
                     ),
                     text_cell(submission.get_document_type_display()),
-                    status_cell(submission.status, submission.get_status_display()),
+                    status_cell(*inbox.decision_label(submission, requested)),
                     text_cell(
-                        previous.get_status_display()
+                        inbox.decision_label(previous, requested)[1]
                         if previous
                         else "First submission",
                         (
@@ -1002,20 +1028,25 @@ def kyc_queue(request):
         )
     return _table(
         request,
-        title="KYC review",
+        title="Verification",
         description="Review a Traveler's identity evidence without leaving the submission.",
-        eyebrow="Verification",
+        eyebrow="Trust",
         columns=("Applicant", "Document", "State", "Previous attempt", "Submitted"),
         rows=rows,
         page_obj=page_obj,
         empty_title=(
-            "No KYC submissions waiting"
-            if request.GET.get("status") == "pending"
-            else "No KYC submissions"
+            "No ID checks waiting"
+            if request.GET.get("status") == inbox.WAITING_STATUS
+            else "No ID checks"
         ),
-        empty_text="Nothing is waiting on an identity decision right now.",
+        empty_text=(
+            "Nothing is waiting on an identity decision right now."
+            if request.GET.get("status") == inbox.WAITING_STATUS
+            else "No submission matches these filters."
+        ),
         filter_choices=tuple(KycSubmission.Status.choices),
         search_placeholder="Search applicant",
+        tabs=inbox.inbox_header(request, "id"),
     )
 
 
@@ -1074,6 +1105,14 @@ def kyc_detail(request, pk: int):
     evidence, evidence_unavailable = kyc_evidence_slots(
         submission, user=request.user, request=request
     )
+    previous = list(
+        submission.user.kyc_submissions.exclude(pk=submission.pk).order_by(
+            "-created_at"
+        )[:8]
+    )
+    requested = inbox.resubmission_requested(
+        KycSubmission, [submission.pk, *(item.pk for item in previous)]
+    )
     return _render(
         request,
         "admin/console/verification_detail.html",
@@ -1095,11 +1134,20 @@ def kyc_detail(request, pk: int):
                 "admin_console:kyc-queue",
                 preserve_query=KYC_QUEUE_QUERY,
             ),
-            "previous": submission.user.kyc_submissions.exclude(
-                pk=submission.pk
-            ).order_by("-created_at")[:8],
+            "state": _decision_state(submission, requested),
+            "previous": [
+                {"record": item, "state": _decision_state(item, requested)}
+                for item in previous
+            ],
         },
     )
+
+
+def _decision_state(record, requested) -> dict:
+    """The state chip of a verification record, "ask for more" included."""
+
+    key, label = inbox.decision_label(record, requested)
+    return {"key": key, "label": label}
 
 
 def _evidence_unavailable(request, *, target, action: str):
@@ -1256,6 +1304,9 @@ def _ticket_reference(proof) -> str:
 @capability_required("view_flight_proofs")
 def flight_proof_queue(request):
     page_obj = _page(request, _proof_queryset(request))
+    requested = inbox.resubmission_requested(
+        JourneyLegProof, [proof.pk for proof in page_obj.object_list]
+    )
     rows = []
     for proof in page_obj.object_list:
         leg = proof.leg
@@ -1280,27 +1331,32 @@ def flight_proof_queue(request):
                         _ticket_reference(proof),
                         f"Departs {leg.depart_at.strftime('%d %b %Y, %H:%M')}",
                     ),
-                    status_cell(proof.status, proof.get_status_display()),
+                    status_cell(*inbox.decision_label(proof, requested)),
                     datetime_cell(proof.created_at, relative=True),
                 )
             }
         )
     return _table(
         request,
-        title="Ticket proofs",
+        title="Verification",
         description=(
             "Review each flight or ferry ticket next to its Traveler, route and date."
         ),
-        eyebrow="Verification",
+        eyebrow="Trust",
         columns=("Traveler", "Leg route", "Mode", "Ticket", "State", "Submitted"),
         rows=rows,
         page_obj=page_obj,
         empty_title=(
-            "No ticket proofs waiting"
-            if request.GET.get("status") == "pending"
-            else "No ticket proofs"
+            "No tickets waiting"
+            if request.GET.get("status") == inbox.WAITING_STATUS
+            else "No tickets"
         ),
-        empty_text="No flight or ferry leg is waiting on a ticket decision.",
+        empty_text=(
+            "No flight or ferry leg is waiting on a ticket decision."
+            if request.GET.get("status") == inbox.WAITING_STATUS
+            else "No ticket matches these filters."
+        ),
+        tabs=inbox.inbox_header(request, "tickets"),
         filter_choices=tuple(JourneyLegProof.Status.choices),
         extra_filters=(
             {
@@ -1396,6 +1452,9 @@ def flight_proof_detail(request, pk: int):
             "form": form,
             "may_review": has_admin_permission(request.user, "review_flight_proofs"),
             "may_view_evidence": may_view_evidence,
+            "state": _decision_state(
+                proof, inbox.resubmission_requested(JourneyLegProof, (proof.pk,))
+            ),
             "queue_url": admin_url(
                 request,
                 "admin_console:proof-queue",

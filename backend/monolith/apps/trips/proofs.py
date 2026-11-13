@@ -5,10 +5,8 @@ a leg's proof requirement by comparing its mode. Publication, compatibility,
 the acceptance lock, listings, Find Travelers, journey payloads and the admin
 console all ask here (plan 2.2, code map 6.1).
 
-Today a ticket is required on every flight and sea leg, and a road leg needs
-none. L6A adds the verified-professional exemption; it changes
-`leg_proof_satisfied` and the SQL twin `proof_gap_exists` together, so every
-caller follows without being touched.
+A ticket is required on every flight and sea leg, and a road leg needs none.
+Nobody is exempt (spec 6).
 
 Three representations of the same rule live here, and they must agree:
 

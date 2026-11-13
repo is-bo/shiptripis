@@ -334,6 +334,14 @@ def resolve_secret(message: OutboundMessage) -> str:
 # --- rendering ----------------------------------------------------------------
 
 
+def _reason(context: dict) -> str:
+    """The reviewer's reason, as the person reads it, or nothing."""
+
+    if not context.get("reason"):
+        return ""
+    return _("Reason: %(reason)s") % {"reason": context["reason"]}
+
+
 def _facts(context: dict, *extra: tuple[str, str]) -> tuple[tuple[str, str], ...]:
     """Reference rows. Deliberately a small allow-list of context keys.
 
@@ -472,6 +480,19 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
     # The inventory below renders from a small allow-list of context fields.
     if kind == OutboundMessage.Kind.KYC_STATUS:
         approved = context.get("status") == "approved"
+        if context.get("outcome") == "resubmission_requested":
+            # L6A: staff asked for a new upload rather than rejecting.
+            return EmailDocument(
+                subject=_("Wassla identity verification update"),
+                preheader=_("We need a new upload of your identity document."),
+                eyebrow=_("Verification"),
+                heading=_("We need a new upload of your identity document"),
+                paragraphs=(
+                    _("Please read the reason below and upload your document again."),
+                    _reason(context),
+                    _("Open the Wassla app to upload it again."),
+                ),
+            )
         return EmailDocument(
             subject=_("Wassla identity verification update"),
             preheader=(
@@ -491,11 +512,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                     if approved
                     else _("Please review the reason and submit updated documents.")
                 ),
-                (
-                    _("Reason: %(reason)s") % {"reason": context["reason"]}
-                    if context.get("reason")
-                    else ""
-                ),
+                _reason(context),
                 _("Open the Wassla app to see the next step."),
             ),
         )
@@ -504,6 +521,28 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
         # The copy names the ticket (L3A). Whole sentences per mode, never a
         # spliced noun, so each language can phrase its own grammar.
         sea = context.get("mode") == "SEA"
+        if context.get("outcome") == "resubmission_requested":
+            # L6A: staff asked for a new upload rather than rejecting.
+            if sea:
+                subject = _("Wassla ferry ticket update")
+                heading = _("We need a new upload of your ferry ticket")
+            else:
+                subject = _("Wassla flight ticket update")
+                heading = _("We need a new upload of your flight ticket")
+            return EmailDocument(
+                subject=subject,
+                preheader=heading,
+                eyebrow=_("Verification"),
+                heading=heading,
+                paragraphs=(
+                    _("Please read the reason below and upload the ticket again."),
+                    _reason(context),
+                    _("Open the Wassla app to upload it again."),
+                ),
+                facts=(
+                    (_("Journey reference"), str(context.get("journey_reference", ""))),
+                ),
+            )
         if sea:
             subject = _("Wassla ferry ticket update")
             preheader = (
@@ -541,11 +580,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                     if approved
                     else _("Please review the reason and submit updated proof.")
                 ),
-                (
-                    _("Reason: %(reason)s") % {"reason": context["reason"]}
-                    if context.get("reason")
-                    else ""
-                ),
+                _reason(context),
                 _("Open the Wassla app to see the next step."),
             ),
             facts=(

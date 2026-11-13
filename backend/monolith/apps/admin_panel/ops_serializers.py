@@ -28,6 +28,7 @@ from apps.ratings.models import Rating
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .permissions import ROLE_GROUP_NAMES, has_admin_permission, user_admin_roles
+from .verification_inbox import DECISIONS, REASON_REQUIRED
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
@@ -841,14 +842,14 @@ class AdminSettingsSerializer(serializers.ModelSerializer):
 
 
 class AdminReviewSerializer(serializers.Serializer):
-    decision = serializers.ChoiceField(choices=("approved", "rejected"))
+    """Spec 13's three decisions: approve, ask for a new upload, reject."""
+
+    decision = serializers.ChoiceField(choices=DECISIONS)
     reason = serializers.CharField(required=False, allow_blank=True, max_length=2_000)
 
     def validate(self, attrs):
-        if attrs["decision"] == "rejected" and not attrs.get("reason", "").strip():
-            raise serializers.ValidationError(
-                {"reason": "A rejection reason is required."}
-            )
+        if attrs["decision"] in REASON_REQUIRED and not attrs.get("reason", "").strip():
+            raise serializers.ValidationError({"reason": "A reason is required."})
         return attrs
 
 

@@ -13,8 +13,9 @@ The header is filtered to the signed-in staff member's capabilities:
   offers, Deals, payments, payout setup and payouts, disputes, revealed ratings,
   notifications and audit history, each section gated on the capability that
   owns it (J6.4). Names elsewhere in the console link to it.
-- **Verification** contains KYC and flight-proof queues, private evidence review
-  and the payout identity checks Finance asks Trust for.
+- **Verification** is the staff verification inbox (ID and Tickets, with the
+  number waiting shown on the entry), private evidence review, and the payout
+  identity checks Finance asks Trust for.
 - **Marketplace** contains Delivery requests, ordered Journeys and Deals.
 - **Disputes** keeps the case, evidence, participants, protection and money in
   one review flow.
@@ -31,13 +32,37 @@ them through the owner-only **Technical records** escape hatch when required.
 
 ## Verification workflow
 
-Open **Verification → KYC review** or **Flight proofs**, filter to **Pending**,
-and open a row. The detail page puts the applicant/Traveler, document or
-flight metadata, canonical route, history and evidence together. **View
-evidence** creates a short-lived authorized object-store URL and writes an
-audit event; storage keys are never displayed. Trust-capable staff choose
-**Approve** or **Reject**. A rejection requires a reason and every decision is
-audited through the existing review service.
+**Verification** is one inbox with two tabs (L6A, spec 13):
+
+- **ID**: identity documents people send before they can publish a journey.
+- **Tickets**: the ticket for each flight leg and each ferry crossing. A leg
+  cannot be matched until its ticket is approved.
+
+The number on the **Verification** entry in the header is the total waiting
+across both tabs, and each tab shows its own number. Each tab opens its queue
+filtered to exactly the rows it counted (state **Pending**); clear the filter
+to see decided ones. Opening **Verification** lands on the first tab that has
+something waiting, otherwise on ID. A staff role that can see only one of the
+two kinds sees only that tab.
+
+Open a row to review it. The review screen is the same for both kinds: who
+sent it, the document or the leg (route, date, flight number), earlier
+submissions, the evidence, and the decision. **View evidence** creates a
+short-lived authorized object-store URL and writes an audit event; storage
+keys are never displayed. Trust-capable staff choose one of three decisions:
+
+| Decision | Use it when | What the person is told |
+| --- | --- | --- |
+| **Approve** | The evidence is good. | Approved; they can publish, or the leg can be matched. |
+| **Ask for a new upload** | It is unreadable, incomplete or the wrong document. | "We need a new upload", with your reason. |
+| **Reject** | It cannot be accepted. | It "needs attention", with your reason. |
+
+The last two need a reason, which the person reads exactly as written, and
+both let them send a new document; the new one arrives as a new row in the
+same tab. Every decision is audited (the audit entry's `outcome` says which of
+the three it was), and a decided row reads **New upload requested** or
+**Rejected** in the queue and on its page. If two reviewers decide the same row
+at once, the second is told it was already decided.
 
 Image evidence is also previewed directly in the review screen through the
 same authorized endpoint. PDFs and original-size images open in a separate
@@ -223,7 +248,7 @@ checkbox on Background jobs only ticks it, and clicking a job's related object
 opens that object rather than the job. Selecting text in a row does not
 navigate.
 
-The queues whose rows open are Users, KYC review, Flight proofs, Journeys,
+The queues whose rows open are Users, Verification (ID and Tickets), Journeys,
 Deals, Disputes, Payments, Refunds, Payouts and Background jobs. Delivery
 requests, Ledger, Transactional email, Audit log and Staff have no per-record
 page, so their rows are deliberately inert rather than pretending otherwise. Status is always a word plus a mark, never colour alone, and the

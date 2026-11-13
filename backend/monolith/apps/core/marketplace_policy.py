@@ -12,9 +12,6 @@ section stands for::
       "discovery":        {"listings_enabled": true, "profiles_enabled": true,
                            "interest_daily_cap": 10},
       "sea_legs_enabled": false,
-      "courier_handoff":  {"enabled": false, "unconfirmed_review_days": 5,
-                           "link_valid_days": 30},
-      "professional":     {"applications_enabled": true},
       "traveler_pricing": {"enabled": true, "max_price_per_kg_eur_cents": 10000,
                            "max_min_price_eur_cents": 50000},
       "reminders":        {"enabled": true, "depart_after_minutes": 30,
@@ -32,7 +29,7 @@ Three rules, all from the plan (section 2.1):
   ignored and the operator would believe a capability was off when it is on.
   The refusal happens when a revision is saved (`AdminSettingsCreateSerializer`
   runs this parser), so a bad revision never becomes active.
-* **Sea legs and courier handoff ship off.** Everything else ships on.
+* **Sea legs ship off.** Everything else ships on.
 """
 
 from __future__ import annotations
@@ -54,18 +51,6 @@ class DiscoveryPolicy:
     profiles_enabled: bool
     #: How many "I can carry this" signals one traveler may send in 24 hours.
     interest_daily_cap: int
-
-
-@dataclass(frozen=True, slots=True)
-class CourierHandoffPolicy:
-    enabled: bool
-    unconfirmed_review_days: int
-    link_valid_days: int
-
-
-@dataclass(frozen=True, slots=True)
-class ProfessionalPolicy:
-    applications_enabled: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,8 +78,6 @@ class RouteChangePolicy:
 class MarketplacePolicy:
     discovery: DiscoveryPolicy
     sea_legs_enabled: bool
-    courier_handoff: CourierHandoffPolicy
-    professional: ProfessionalPolicy
     traveler_pricing: TravelerPricingPolicy
     reminders: ReminderPolicy
     route_change: RouteChangePolicy
@@ -113,16 +96,6 @@ class MarketplacePolicy:
         section = _Section(raw, "marketplace", keys=_SCHEMA.keys())
         discovery = _Section(
             section.raw("discovery"), "marketplace.discovery", keys=_DISCOVERY_KEYS
-        )
-        courier = _Section(
-            section.raw("courier_handoff"),
-            "marketplace.courier_handoff",
-            keys=_COURIER_KEYS,
-        )
-        professional = _Section(
-            section.raw("professional"),
-            "marketplace.professional",
-            keys=_PROFESSIONAL_KEYS,
         )
         pricing = _Section(
             section.raw("traveler_pricing"),
@@ -146,20 +119,6 @@ class MarketplacePolicy:
                 ),
             ),
             sea_legs_enabled=section.boolean("sea_legs_enabled", False),
-            courier_handoff=CourierHandoffPolicy(
-                enabled=courier.boolean("enabled", False),
-                unconfirmed_review_days=courier.integer(
-                    "unconfirmed_review_days", 5, minimum=1, maximum=30
-                ),
-                link_valid_days=courier.integer(
-                    "link_valid_days", 30, minimum=1, maximum=90
-                ),
-            ),
-            professional=ProfessionalPolicy(
-                applications_enabled=professional.boolean(
-                    "applications_enabled", True
-                ),
-            ),
             traveler_pricing=TravelerPricingPolicy(
                 enabled=pricing.boolean("enabled", True),
                 # The same ceiling every sender-chosen money field carries is
@@ -194,8 +153,6 @@ class MarketplacePolicy:
 
 
 _DISCOVERY_KEYS = frozenset({"listings_enabled", "profiles_enabled", "interest_daily_cap"})
-_COURIER_KEYS = frozenset({"enabled", "unconfirmed_review_days", "link_valid_days"})
-_PROFESSIONAL_KEYS = frozenset({"applications_enabled"})
 _PRICING_KEYS = frozenset(
     {"enabled", "max_price_per_kg_eur_cents", "max_min_price_eur_cents"}
 )
@@ -212,8 +169,6 @@ _ROUTE_CHANGE_KEYS = frozenset({"material_shift_minutes"})
 _SCHEMA = {
     "discovery": _DISCOVERY_KEYS,
     "sea_legs_enabled": None,
-    "courier_handoff": _COURIER_KEYS,
-    "professional": _PROFESSIONAL_KEYS,
     "traveler_pricing": _PRICING_KEYS,
     "reminders": _REMINDER_KEYS,
     "route_change": _ROUTE_CHANGE_KEYS,
