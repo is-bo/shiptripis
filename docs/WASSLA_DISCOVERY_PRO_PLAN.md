@@ -1021,10 +1021,33 @@ build.
 - `POST /api/journeys/<id>/schedule-changes` by the owner with new leg times. The server validates the
   sequence with the existing leg-sequence rules, finds the affected funded deals, and classifies each:
   **material** when the new arrival at its drop-off stop is after the request's deadline or moved by
-  more than `route_change.material_shift_minutes`.
+  more than `route_change.material_shift_minutes`. The details below were settled by the advisor on
+  2026-11-13 (5.1e):
+  - **Baseline.** "Moved" compares the new time with the one that sender last agreed to: the latest
+    applied change they accepted for that deal, else the arrival frozen at funding
+    (`arrival_snapshot`), else the one in force. A change that applied at once does not reset it. The
+    threshold counts in both directions. The deadline test counts only when the new arrival is later
+    than the baseline.
+  - **Pickup side**, for a deal whose pickup is not confirmed: also material when the time at its
+    pickup stop moves by more than the same threshold in either direction (baseline: the accepted
+    change, else the `pickup_at` of the match's compatibility snapshot), or when the leg would now
+    leave that stop before the deal's `agreed_pickup_at`.
+  - **Already collected** (pickup confirmed, delivery not): no consent row. The deal is listed on the
+    change as `informed`, its sender is notified with the old and new times and the server-authored
+    actions that exist today (report a problem, open a dispute), and it never holds the change back.
+    A pending or declined consent whose deal is then picked up stops blocking in the same way.
+  - **Ticket proof.** When a change **applies** (not when it is proposed), each flight or sea leg
+    whose proven fields changed goes through the existing `_invalidate_leg_proofs` path of
+    `apps/trips/services.py`, the one a route edit uses. No second rule. The preview the traveler
+    confirms says so ("your ticket will be checked again; until then this trip takes no new
+    proposals"), as server text.
+  - The default of `material_shift_minutes` stays 360. It is a setting.
+  - The reminder re-schedule inside `replace_journey_route` (the `ACTIVE` branch L5A added) is
+    unreachable, because only draft and pending journeys are editable. L9A removes it, with a test
+    that an active journey's route edit is refused, since the schedule change now owns re-timing.
 - No material deal: the change applies at once and affected senders are notified.
-- Otherwise it waits. Each affected sender accepts or declines. It applies when every material deal is
-  accepted or no longer active. The traveler may withdraw it.
+- Otherwise it waits. Each affected sender who is asked accepts or declines. It applies when every
+  material deal is accepted, no longer active, or already collected. The traveler may withdraw it.
 - A sender who declines may cancel through the existing cancellation flow. **The cancellation is
   recorded as caused by the traveler and uses the existing traveler-cancellation outcome; no new
   refund rule is written.** Ismail confirmed this on 2026-11-11.
@@ -1033,7 +1056,10 @@ build.
 - Applying a change is recorded with the original schedule and reschedules leg reminders by calling
   `apps.trips.progress.schedule_leg_reminders(journey)` (L5A's carry-over).
 
-**Tests.** Classification at each boundary. Apply, wait, accept, decline, withdraw. The arrival
+**Tests.** Classification at each boundary, including three small changes that together pass the
+threshold, the pickup side, and a collected parcel that is informed and never blocks. Apply, wait,
+accept, decline, withdraw, and a pickup confirmed while a consent is pending. The ticket of a re-timed
+flight leg returns to pending on apply and the trip stops taking proposals. The arrival
 snapshot is untouched. Cancellation after a decline produces exactly the amounts the existing
 traveler-cancellation path produces. Pending offers are re-validated at acceptance against the new
 times. Leg reminders follow the new times.
@@ -1054,7 +1080,10 @@ schedule-change code.
 - Traveler: "Change times" on an active journey, a review step listing the affected parcels and which
   senders must agree, and the pending state.
 - Sender: a screen comparing the old and new times with "Accept" and "Decline", and, on decline, the
-  cancellation consequence text from the existing cancellation quote endpoint.
+  cancellation consequence text from the existing cancellation quote endpoint. For a parcel already
+  collected the same screen informs only: no "Accept" or "Decline", and the two existing actions the
+  server names (report a problem, open a dispute).
+- Traveler's review step also shows the server's line about the ticket being checked again.
 
 ### L12A. Proposal deadline and trip-fit alerts, backend (Opus, high effort)
 
@@ -1629,6 +1658,11 @@ before its package starts):
   that trip. For a flight it is the departure.
 - L6A keeps Opus at high effort although it is smaller, because ticket and ID decisions open and
   close matching.
+- Schedule changes (L9A, asked by its agent): whether a change is "large" is measured against what
+  the sender last agreed to; a large move of the pickup time also needs the sender's agreement; a
+  sender whose parcel is already collected is told, not asked, because they can no longer cancel; a
+  re-timed flight or sea ticket is checked again. The threshold stays 6 hours by default. With a
+  same-day target Ismail may want it lower; it is an admin setting.
 
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 
