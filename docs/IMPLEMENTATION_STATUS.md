@@ -2,8 +2,8 @@
 
 ## Wassla L6A — Staff verification inbox (2026-11-13)
 
-Status: **in review** (pull request into `feature/discovery-professional-delivery`). Backend and console
-only; no migration; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #36, `a4f72db`). Backend and
+console only; no migration; `main` untouched.
 
 - The console's **Verification** entry is one inbox with two tabs, ID and Tickets (flight and sea),
   each with the number waiting; the entry shows the total. Opening it lands on the first tab with work.

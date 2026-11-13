@@ -30,7 +30,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L11B | Tracking number, mobile | Sonnet | medium | merged | `claude/project-thread-14swqv` | #33 | `75640c0` | `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md` |
 | L5A | Progress updates and reminders, backend | Sonnet | medium | merged | `claude/project-thread-lsol7m` | #34 | `73d5169` | `docs/PHASE_L5A_PROGRESS_UPDATES_BACKEND.md` |
 | L5B | Progress updates and reminders, mobile | Sonnet | medium | merged | `claude/project-thread-s4d2gr` | #35 | `c078060` | `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md` |
-| L6A | Verification inbox (ID and Tickets) and removal of the parked switches | Opus | high | not_started | | | | |
+| L6A | Verification inbox (ID and Tickets) and removal of the parked switches | Opus | high | merged | `claude/project-thread-eqdiqe` | #36 | `a4f72db` | `docs/PHASE_L6A_VERIFICATION_INBOX.md` |
 | L9A | Problems and route changes, backend | Opus | high | not_started | | | | |
 | L9B | Problems and route changes, mobile | Sonnet | medium | not_started | | | | |
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
@@ -64,14 +64,17 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L6A (Opus, high effort; now the verification inbox only, read its new text in
-plan section 4), then L9A (Opus, high), then L9B (Sonnet, medium). Section 3 order.
+**Next package:** L9A (Opus, high effort; problems live in `apps.problems`, no courier kinds, and
+route changes must call `schedule_leg_reminders`), then L9B (Sonnet, medium), then L12A (Opus, high).
+Section 3 order.
 
 **Closed carry-overs (2026-11-13):** L6B was to add the Pro badge and business name to L4B's trip
 cards; L6B is parked, so nothing is owed. L5A's note that route changes must call
 `schedule_leg_reminders` is now written into L9A's text.
 
 **L11A judgment calls (accepted at the gate, for Ismail's end review):** (1) no guest payer email or page carries the tracking number, including the deposit receipt the plan mentions, because spec 16's list of who sees it leaves the guest out (spec wins over plan); (2) `GET /api/parcels/<id>` shows the number to the sender only, a traveler learns it from the proposal; (3) the console Payments and Payouts lists lead with the number, the payer or traveler moves to the second column; (4) background-job and technical-record pages keep record ids. The gate also fixed two console layout bugs that predate L11A: every list's search box was about 174 px wide instead of 340 px, and the deal heading lost its mono face.
+
+**L6A judgment calls (accepted at the gate, for Ismail's end review):** (1) a different decision on an already-decided row is refused even when it stores the same status (reject against ask for a new upload), so a second reviewer is never told their choice was saved; (2) the waiting total shows on the Verification section tab and on its entry; (3) the admin API takes the same three decisions as the console; (4) the app's notification list keeps the generic "Account" row for both kinds of decision (it renders by channel), and the push and the email carry the difference, so no mobile change was needed.
 
 **L5A judgment calls (accepted at the gate, for Ismail's end review):** (1) paused journeys still take progress reports and get reminders, because funded deals continue; (2) a report that a later report depends on cannot be retracted (`progress_has_followup`); (3) a late `departed` report re-arms the arrival question under its own job key; (4) no reminder for `at_port`; (5) a retraction sends a neutral `deal.updated` refresh, no push. L9A's route changes must call `schedule_leg_reminders` after re-timing legs.
 
