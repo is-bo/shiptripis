@@ -348,6 +348,18 @@ a parcel delivered.
   agreement; a sender who does not agree may cancel, and that cancellation is treated as caused by the
   traveler under the existing cancellation rules (confirmed by Ismail on 2026-11-11). Adding or
   removing stops on an active journey is not part of this build.
+  - "Moved" is measured against **what that sender last agreed to**, not against the schedule of the
+    moment, so several small changes cannot add up to a large one unnoticed.
+  - For a parcel **not yet collected**, a change that moves the time at its pickup stop by more than
+    the same threshold, or to before the pickup time the two people agreed, also needs the sender's
+    agreement.
+  - For a parcel **already collected**, the sender can no longer cancel, so they are not asked: they
+    are told at once, with the old and new times, and can report a problem or open a dispute as
+    today. Such a parcel never holds a change back. The arrival agreed at funding stays the one that
+    protects them.
+  - A flight or sea leg whose times change has its ticket checked again, exactly as when a route is
+    edited before publication: until staff approve it the trip takes no new proposals; funded
+    deliveries continue.
 
 ## 13. Admin
 
