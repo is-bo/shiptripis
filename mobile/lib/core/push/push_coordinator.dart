@@ -442,6 +442,12 @@ String? pushLocation(Map<String, String> data) {
         ? '/requests/$requestId'
         : '/requests/$requestId/discovery?journey=$journeyId';
   }
+  if (channel == 'journey.schedule_change_proposed') {
+    // A sender is asked: straight to the answer. The traveler's copy of the
+    // channel carries no delivery and opens their journey.
+    final dealId = positive('deal_id');
+    if (dealId != null) return '/deals/$dealId/schedule-change';
+  }
   if (channel == 'journey.leg_reminder') {
     // The traveler's own journey, with the question for that leg. A payload
     // missing the leg or the step still opens the journey.

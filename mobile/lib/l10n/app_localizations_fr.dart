@@ -5471,4 +5471,490 @@ class LFr extends L {
 
   @override
   String get notificationLegReminder => 'Où en est votre trajet ?';
+
+  @override
+  String get problemsTitle => 'Problèmes signalés';
+
+  @override
+  String get problemReportAction => 'Signaler un problème';
+
+  @override
+  String get problemSheetTitle => 'Signaler un problème';
+
+  @override
+  String get problemSheetIntro =>
+      'Qu’est-ce qui ne va pas avec cette livraison ?';
+
+  @override
+  String get problemKindSenderUnavailable => 'L’expéditeur n’est pas venu';
+
+  @override
+  String get problemKindTravelerNoShow => 'Le voyageur n’est pas venu';
+
+  @override
+  String get problemKindRecipientUnavailable =>
+      'Le destinataire n’est pas disponible';
+
+  @override
+  String get problemKindParcelMismatch =>
+      'Le colis ne correspond pas à la description';
+
+  @override
+  String get problemKindParcelDamaged => 'Le colis est abîmé';
+
+  @override
+  String get problemKindTripDisrupted => 'Le trajet est annulé ou retardé';
+
+  @override
+  String get problemKindCustomsDelay => 'Retenu à la douane';
+
+  @override
+  String get problemKindOther => 'Autre chose';
+
+  @override
+  String get problemNoteLabel => 'Note (facultatif)';
+
+  @override
+  String get problemNoteHint =>
+      'Ajoutez ce qui peut aider, par exemple où vous êtes.';
+
+  @override
+  String get problemNextBody =>
+      'L’autre personne est prévenue. L’équipe Wassla examine tout de suite les colis abîmés ou non conformes. Un signalement n’annule ni ne rembourse rien.';
+
+  @override
+  String get problemSendAction => 'Envoyer le signalement';
+
+  @override
+  String get problemSent =>
+      'Signalement envoyé. L’autre personne est prévenue.';
+
+  @override
+  String get problemReportedByYou => 'Signalé par vous';
+
+  @override
+  String get problemReportedByOther => 'Signalé par l’autre personne';
+
+  @override
+  String get problemStatusOpen => 'Envoyé';
+
+  @override
+  String get problemStatusEscalated => 'Chez l’équipe Wassla';
+
+  @override
+  String get problemStatusAcknowledged => 'En cours d’examen';
+
+  @override
+  String get problemStatusClosed => 'Clos';
+
+  @override
+  String get problemErrorOffline =>
+      'Pas de connexion. Rien n’a été envoyé. Réessayez une fois en ligne.';
+
+  @override
+  String get problemErrorNoShowClosed =>
+      'Impossible de le signaler pour le moment. L’heure de remise n’est peut-être pas encore arrivée, ou le colis est déjà récupéré.';
+
+  @override
+  String get problemErrorNotAllowed =>
+      'Cette livraison ne peut pas recevoir de signalement pour le moment.';
+
+  @override
+  String get problemErrorNoteTooLong =>
+      'La note est trop longue. Gardez moins de 1 000 caractères.';
+
+  @override
+  String get noShowActionSender => 'L’expéditeur n’est pas venu';
+
+  @override
+  String get noShowActionTraveler => 'Le voyageur n’est pas venu';
+
+  @override
+  String get noShowSheetIntro =>
+      'Dites-nous si l’autre personne ne s’est pas présentée pour la remise.';
+
+  @override
+  String get noShowNextBody =>
+      'L’équipe Wassla va l’examiner. Rien n’est annulé ni remboursé pour le moment.';
+
+  @override
+  String get noShowSendAction => 'Envoyer à Wassla';
+
+  @override
+  String get noShowReportedSender =>
+      'Vous avez signalé que l’expéditeur n’est pas venu';
+
+  @override
+  String get noShowReportedTraveler =>
+      'Vous avez signalé que le voyageur n’est pas venu';
+
+  @override
+  String get noShowMessageInChat => 'Écrire dans la discussion';
+
+  @override
+  String get noShowReplyInChat => 'Répondre dans la discussion';
+
+  @override
+  String get noShowAgainstSenderTitle =>
+      'Le voyageur dit que vous n’êtes pas venu';
+
+  @override
+  String get noShowAgainstSenderBody =>
+      'En cas de malentendu, écrivez-lui dans la discussion. L’équipe Wassla va l’examiner. Rien n’est annulé ni remboursé pour le moment.';
+
+  @override
+  String get noShowAgainstTravelerTitle =>
+      'L’expéditeur dit que vous n’êtes pas venu';
+
+  @override
+  String get noShowAgainstTravelerBody =>
+      'En cas de malentendu, écrivez-lui dans la discussion. L’équipe Wassla va l’examiner. Rien n’est annulé ni remboursé pour le moment.';
+
+  @override
+  String get notificationProblemReported =>
+      'Un problème a été signalé sur une livraison';
+
+  @override
+  String get notificationScheduleChangeProposed =>
+      'De nouveaux horaires attendent votre réponse';
+
+  @override
+  String get notificationScheduleChangeAnswered =>
+      'Un expéditeur a répondu à vos nouveaux horaires';
+
+  @override
+  String get notificationScheduleChangeApplied =>
+      'Les horaires d’un trajet ont changé';
+
+  @override
+  String get notificationScheduleChangeWithdrawn =>
+      'Les nouveaux horaires ont été retirés';
+
+  @override
+  String get scheduleDeparture => 'Départ';
+
+  @override
+  String get scheduleArrival => 'Arrivée';
+
+  @override
+  String get schedulePickup => 'Remise du colis';
+
+  @override
+  String get scheduleParcelFallback => 'Un colis';
+
+  @override
+  String get scheduleReasonDeadline =>
+      'La nouvelle arrivée est après votre date limite.';
+
+  @override
+  String get scheduleReasonShift =>
+      'L’arrivée se décale de plus que la marge autorisée.';
+
+  @override
+  String get scheduleReasonPickup => 'L’heure de remise change.';
+
+  @override
+  String get scheduleSectionTitle => 'Horaires du trajet';
+
+  @override
+  String get scheduleSectionIntro =>
+      'Vos plans ont changé ? Mettez à jour vos horaires. Les expéditeurs concernés sont prévenus, et certains devront donner leur accord.';
+
+  @override
+  String get scheduleChangeAction => 'Changer les horaires';
+
+  @override
+  String scheduleWaitingPill(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'En attente de $count expéditeurs',
+      one: 'En attente d’1 expéditeur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitingBody =>
+      'Votre trajet garde ses horaires actuels tant que chaque expéditeur concerné n’a pas répondu.';
+
+  @override
+  String get scheduleSendersTitle => 'Expéditeurs sollicités';
+
+  @override
+  String get scheduleConsentPending => 'En attente';
+
+  @override
+  String get scheduleConsentAccepted => 'D’accord';
+
+  @override
+  String get scheduleConsentDeclined => 'Refusé';
+
+  @override
+  String get scheduleWithdrawAction => 'Retirer les nouveaux horaires';
+
+  @override
+  String get scheduleWithdrawn => 'Les nouveaux horaires ont été retirés.';
+
+  @override
+  String get scheduleWithdrawnByYou =>
+      'Vous avez retiré les derniers nouveaux horaires. Votre trajet garde ses horaires précédents.';
+
+  @override
+  String get scheduleWithdrawnNoLongerValid =>
+      'Les derniers nouveaux horaires ont été abandonnés car le trajet a avancé. Votre trajet garde ses horaires actuels.';
+
+  @override
+  String get scheduleChangeTitle => 'Changer les horaires';
+
+  @override
+  String get scheduleChangeIntro =>
+      'Choisissez le nouveau départ et la nouvelle arrivée des étapes qui changent. Vous verrez qui est concerné avant tout envoi.';
+
+  @override
+  String get scheduleStopsNote =>
+      'Seuls les horaires peuvent changer sur un trajet en cours. Pour ajouter ou retirer une étape, annulez le trajet et créez-en un nouveau.';
+
+  @override
+  String get scheduleReviewAction => 'Vérifier les changements';
+
+  @override
+  String get scheduleReviewTitle => 'Vérifier les nouveaux horaires';
+
+  @override
+  String get scheduleEditTimes => 'Modifier les horaires';
+
+  @override
+  String get scheduleSendAction => 'Envoyer les nouveaux horaires';
+
+  @override
+  String get scheduleApplyAction => 'Appliquer les nouveaux horaires';
+
+  @override
+  String get scheduleAppliesAtOnceTitle =>
+      'Aucun expéditeur n’a à donner son accord';
+
+  @override
+  String get scheduleAppliesAtOnceBody =>
+      'Ces horaires s’appliquent dès l’envoi. Les expéditeurs concernés sont prévenus.';
+
+  @override
+  String scheduleWaitsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count expéditeurs doivent d’abord donner leur accord',
+      one: '1 expéditeur doit d’abord donner son accord',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitsBody =>
+      'Les nouveaux horaires s’appliquent quand tous ont donné leur accord. D’ici là, votre trajet garde ses horaires actuels. Un expéditeur qui refuse peut annuler, et cette annulation vous est imputée.';
+
+  @override
+  String get scheduleNewTimesTitle => 'Nouveaux horaires';
+
+  @override
+  String get scheduleAffectedTitle => 'Colis concernés';
+
+  @override
+  String get scheduleNoParcelsAffected =>
+      'Aucun colis n’est concerné par ces horaires.';
+
+  @override
+  String get scheduleMustAgreeTitle =>
+      'Expéditeurs qui doivent donner leur accord';
+
+  @override
+  String get scheduleToldTitle => 'Expéditeurs qui seront prévenus';
+
+  @override
+  String get scheduleReasonLabel => 'Note aux expéditeurs (facultatif)';
+
+  @override
+  String get scheduleReasonHint =>
+      'Par exemple : le vol a été déplacé par la compagnie.';
+
+  @override
+  String get scheduleReasonHelper => 'Les expéditeurs sollicités la liront.';
+
+  @override
+  String scheduleSentToSenders(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Envoyé. En attente de $count expéditeurs.',
+      one: 'Envoyé. En attente d’1 expéditeur.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleApplied =>
+      'Nouveaux horaires enregistrés. Les expéditeurs concernés sont prévenus.';
+
+  @override
+  String get scheduleErrorOffline =>
+      'Pas de connexion. Rien n’a été modifié. Réessayez une fois en ligne.';
+
+  @override
+  String get scheduleErrorNotReschedulable =>
+      'Les horaires ne peuvent changer que sur un trajet publié et non terminé.';
+
+  @override
+  String get scheduleErrorEmpty =>
+      'Ce sont déjà les horaires en vigueur. Modifiez-en au moins un.';
+
+  @override
+  String get scheduleErrorPending =>
+      'De nouveaux horaires attendent déjà les expéditeurs. Retirez-les d’abord pour en envoyer d’autres.';
+
+  @override
+  String get scheduleErrorLegArrived =>
+      'Une étape déjà arrivée ne peut plus changer.';
+
+  @override
+  String get scheduleErrorLegDeparted =>
+      'Une étape déjà partie garde son départ. Seule son arrivée peut changer.';
+
+  @override
+  String get scheduleErrorDepartureInPast =>
+      'Un départ ne peut pas être dans le passé.';
+
+  @override
+  String get scheduleErrorNotWaiting =>
+      'Ces nouveaux horaires ne sont plus en attente. L’écran a été actualisé.';
+
+  @override
+  String get scheduleAnswerTitle => 'Nouveaux horaires';
+
+  @override
+  String get scheduleNoneTitle => 'Aucun changement d’horaires';
+
+  @override
+  String get scheduleNoneBody =>
+      'Le voyageur n’a pas changé les horaires de cette livraison.';
+
+  @override
+  String get scheduleAskedHeadline => 'Le voyageur a changé les horaires';
+
+  @override
+  String get scheduleAskedBody =>
+      'Votre livraison est concernée. Vérifiez les nouveaux horaires et dites-nous s’ils vous conviennent.';
+
+  @override
+  String get scheduleYouAcceptedHeadline =>
+      'Vous avez accepté les nouveaux horaires';
+
+  @override
+  String get scheduleYouDeclinedHeadline =>
+      'Vous avez refusé les nouveaux horaires';
+
+  @override
+  String get scheduleAppliedHeadline => 'Les nouveaux horaires sont en vigueur';
+
+  @override
+  String get scheduleAppliedBody =>
+      'Le trajet du voyageur suit désormais les horaires ci-dessous.';
+
+  @override
+  String get scheduleWithdrawnHeadline =>
+      'Les nouveaux horaires ont été retirés';
+
+  @override
+  String get scheduleWithdrawnBody =>
+      'Rien ne change pour votre livraison. Les horaires précédents restent valables.';
+
+  @override
+  String get scheduleInformedHeadline => 'Les horaires du voyageur ont changé';
+
+  @override
+  String get scheduleInformedBody =>
+      'Votre colis a déjà été récupéré, votre accord n’est donc pas demandé. L’arrivée convenue au paiement continue de vous protéger. En cas de souci, vous pouvez signaler un problème ou ouvrir un litige.';
+
+  @override
+  String get scheduleCompareTitle => 'Anciens et nouveaux horaires';
+
+  @override
+  String scheduleYourDeadline(String date) {
+    return 'Votre date limite : $date';
+  }
+
+  @override
+  String get scheduleWhyTitle => 'Pourquoi nous vous demandons';
+
+  @override
+  String get scheduleTravelerNote => 'Note du voyageur';
+
+  @override
+  String get scheduleLegsTitle => 'Étapes modifiées';
+
+  @override
+  String get scheduleAcceptAction => 'Accepter les nouveaux horaires';
+
+  @override
+  String get scheduleAcceptInstead =>
+      'Accepter finalement les nouveaux horaires';
+
+  @override
+  String get scheduleDeclineAction => 'Refuser';
+
+  @override
+  String get scheduleDeclineInstead => 'Refuser finalement';
+
+  @override
+  String get scheduleDeclineKeep => 'Revenir';
+
+  @override
+  String get scheduleDeclineConfirmTitle => 'Refuser les nouveaux horaires ?';
+
+  @override
+  String get scheduleDeclineConfirmBody =>
+      'Rien n’est annulé. Vous pourrez ensuite annuler cette livraison, et comme le voyageur a changé les horaires, cette annulation ne vous est pas imputée. Vous pouvez encore changer d’avis tant que le voyageur n’a pas décidé.';
+
+  @override
+  String get scheduleAcceptedSnack =>
+      'Vous avez accepté les nouveaux horaires.';
+
+  @override
+  String get scheduleDeclinedSnack => 'Vous avez refusé les nouveaux horaires.';
+
+  @override
+  String get scheduleIfYouCancelTitle => 'Si vous annulez maintenant';
+
+  @override
+  String get scheduleCancelCountsAsTraveler =>
+      'Compté comme une annulation du voyageur, car il a changé les horaires.';
+
+  @override
+  String get scheduleCancelNotAvailable =>
+      'Cette livraison ne peut pas être annulée pour le moment.';
+
+  @override
+  String get scheduleInformedActionsTitle => 'En cas de souci';
+
+  @override
+  String get scheduleErrorNoAnswerNeeded =>
+      'Aucune réponse n’est nécessaire pour cette livraison.';
+
+  @override
+  String get scheduleViewAction => 'Voir';
+
+  @override
+  String get scheduleDealAskedBody =>
+      'Vérifiez les nouveaux horaires et dites-nous s’ils vous conviennent.';
+
+  @override
+  String get scheduleDealDeclinedBody =>
+      'Vous pouvez annuler cette livraison, et elle ne vous sera pas imputée.';
+
+  @override
+  String get scheduleDealAcceptedBody =>
+      'Vous avez accepté les nouveaux horaires. Nous attendons les autres expéditeurs.';
+
+  @override
+  String get scheduleDealInformedBody =>
+      'Les horaires du voyageur ont changé après la remise. Voir les anciens et nouveaux horaires.';
 }

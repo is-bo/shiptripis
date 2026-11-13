@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla L9B — Problems and route changes, mobile (2026-11-13)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
+
+- Deal screen: the "did not come" action (driven by the server's `can_report_no_show`), the other person's
+  banner with "Reply in chat", the report list and the "Report a problem" sheet. Reports change nothing and
+  refund nothing; the sheet says so first.
+- Traveler "Change times" with a server preview (who must agree, who is told, the ticket re-check line),
+  waiting state and withdraw. Sender answer screen (old vs new, Accept, Decline with the server's cancellation
+  quote and "counted as the traveler's"); a collected parcel is told only, with the two actions the server names.
+- New channels reach the right screen from push, bell and live events. EN, FR, AR, 360 px screenshots.
+
+Detail: `docs/PHASE_L9B_PROBLEMS_ROUTE_CHANGES_MOBILE.md`.
+
 ## Wassla L9A — Problems and route changes, backend (2026-11-13)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #37, `9ceb40e`). Backend and

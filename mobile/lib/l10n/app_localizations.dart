@@ -9410,6 +9410,798 @@ abstract class L {
   /// In en, this message translates to:
   /// **'How is your trip going?'**
   String get notificationLegReminder;
+
+  /// No description provided for @problemsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Problems reported'**
+  String get problemsTitle;
+
+  /// No description provided for @problemReportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report a problem'**
+  String get problemReportAction;
+
+  /// No description provided for @problemSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report a problem'**
+  String get problemSheetTitle;
+
+  /// No description provided for @problemSheetIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'What went wrong with this delivery?'**
+  String get problemSheetIntro;
+
+  /// No description provided for @problemKindSenderUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender did not come'**
+  String get problemKindSenderUnavailable;
+
+  /// No description provided for @problemKindTravelerNoShow.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler did not come'**
+  String get problemKindTravelerNoShow;
+
+  /// No description provided for @problemKindRecipientUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The recipient is not available'**
+  String get problemKindRecipientUnavailable;
+
+  /// No description provided for @problemKindParcelMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The parcel is not what was described'**
+  String get problemKindParcelMismatch;
+
+  /// No description provided for @problemKindParcelDamaged.
+  ///
+  /// In en, this message translates to:
+  /// **'The parcel is damaged'**
+  String get problemKindParcelDamaged;
+
+  /// No description provided for @problemKindTripDisrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'The trip is cancelled or delayed'**
+  String get problemKindTripDisrupted;
+
+  /// No description provided for @problemKindCustomsDelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Held up at customs'**
+  String get problemKindCustomsDelay;
+
+  /// No description provided for @problemKindOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get problemKindOther;
+
+  /// No description provided for @problemNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get problemNoteLabel;
+
+  /// No description provided for @problemNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add anything that helps, such as where you are.'**
+  String get problemNoteHint;
+
+  /// No description provided for @problemNextBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The other person is told. Wassla staff look at damage and mismatches right away. Reporting does not cancel or refund anything.'**
+  String get problemNextBody;
+
+  /// No description provided for @problemSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get problemSendAction;
+
+  /// No description provided for @problemSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Report sent. The other person has been told.'**
+  String get problemSent;
+
+  /// No description provided for @problemReportedByYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported by you'**
+  String get problemReportedByYou;
+
+  /// No description provided for @problemReportedByOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported by the other person'**
+  String get problemReportedByOther;
+
+  /// No description provided for @problemStatusOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get problemStatusOpen;
+
+  /// No description provided for @problemStatusEscalated.
+  ///
+  /// In en, this message translates to:
+  /// **'With Wassla staff'**
+  String get problemStatusEscalated;
+
+  /// No description provided for @problemStatusAcknowledged.
+  ///
+  /// In en, this message translates to:
+  /// **'Being looked at'**
+  String get problemStatusAcknowledged;
+
+  /// No description provided for @problemStatusClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get problemStatusClosed;
+
+  /// No description provided for @problemErrorOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection. Nothing was sent. Try again when you are online.'**
+  String get problemErrorOffline;
+
+  /// No description provided for @problemErrorNoShowClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'This can’t be reported right now. The pickup time may not have come yet, or the parcel may already be collected.'**
+  String get problemErrorNoShowClosed;
+
+  /// No description provided for @problemErrorNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'This delivery can’t take a report right now.'**
+  String get problemErrorNotAllowed;
+
+  /// No description provided for @problemErrorNoteTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'The note is too long. Keep it under 1,000 characters.'**
+  String get problemErrorNoteTooLong;
+
+  /// No description provided for @noShowActionSender.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender did not come'**
+  String get noShowActionSender;
+
+  /// No description provided for @noShowActionTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler did not come'**
+  String get noShowActionTraveler;
+
+  /// No description provided for @noShowSheetIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us if the other person has not shown up for the handover.'**
+  String get noShowSheetIntro;
+
+  /// No description provided for @noShowNextBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla staff will look at it. Nothing is cancelled or refunded yet.'**
+  String get noShowNextBody;
+
+  /// No description provided for @noShowSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to Wassla'**
+  String get noShowSendAction;
+
+  /// No description provided for @noShowReportedSender.
+  ///
+  /// In en, this message translates to:
+  /// **'You reported that the sender did not come'**
+  String get noShowReportedSender;
+
+  /// No description provided for @noShowReportedTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'You reported that the traveler did not come'**
+  String get noShowReportedTraveler;
+
+  /// No description provided for @noShowMessageInChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Message in chat'**
+  String get noShowMessageInChat;
+
+  /// No description provided for @noShowReplyInChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply in chat'**
+  String get noShowReplyInChat;
+
+  /// No description provided for @noShowAgainstSenderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler says you did not come'**
+  String get noShowAgainstSenderTitle;
+
+  /// No description provided for @noShowAgainstSenderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'If there is a mix-up, tell them in chat. Wassla staff will look at it. Nothing is cancelled or refunded yet.'**
+  String get noShowAgainstSenderBody;
+
+  /// No description provided for @noShowAgainstTravelerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender says you did not come'**
+  String get noShowAgainstTravelerTitle;
+
+  /// No description provided for @noShowAgainstTravelerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'If there is a mix-up, tell them in chat. Wassla staff will look at it. Nothing is cancelled or refunded yet.'**
+  String get noShowAgainstTravelerBody;
+
+  /// No description provided for @notificationProblemReported.
+  ///
+  /// In en, this message translates to:
+  /// **'A problem was reported on a delivery'**
+  String get notificationProblemReported;
+
+  /// No description provided for @notificationScheduleChangeProposed.
+  ///
+  /// In en, this message translates to:
+  /// **'New times need your answer'**
+  String get notificationScheduleChangeProposed;
+
+  /// No description provided for @notificationScheduleChangeAnswered.
+  ///
+  /// In en, this message translates to:
+  /// **'A sender answered your new times'**
+  String get notificationScheduleChangeAnswered;
+
+  /// No description provided for @notificationScheduleChangeApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'The times of a trip changed'**
+  String get notificationScheduleChangeApplied;
+
+  /// No description provided for @notificationScheduleChangeWithdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'New times were withdrawn'**
+  String get notificationScheduleChangeWithdrawn;
+
+  /// No description provided for @scheduleDeparture.
+  ///
+  /// In en, this message translates to:
+  /// **'Departure'**
+  String get scheduleDeparture;
+
+  /// No description provided for @scheduleArrival.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrival'**
+  String get scheduleArrival;
+
+  /// No description provided for @schedulePickup.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup'**
+  String get schedulePickup;
+
+  /// No description provided for @scheduleParcelFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'A parcel'**
+  String get scheduleParcelFallback;
+
+  /// No description provided for @scheduleReasonDeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The new arrival is after your deadline.'**
+  String get scheduleReasonDeadline;
+
+  /// No description provided for @scheduleReasonShift.
+  ///
+  /// In en, this message translates to:
+  /// **'The arrival moves by more than the allowed margin.'**
+  String get scheduleReasonShift;
+
+  /// No description provided for @scheduleReasonPickup.
+  ///
+  /// In en, this message translates to:
+  /// **'The pickup time moves.'**
+  String get scheduleReasonPickup;
+
+  /// No description provided for @scheduleSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trip times'**
+  String get scheduleSectionTitle;
+
+  /// No description provided for @scheduleSectionIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans changed? Update your times. Senders whose parcel is affected are told, and some may need to agree.'**
+  String get scheduleSectionIntro;
+
+  /// No description provided for @scheduleChangeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change times'**
+  String get scheduleChangeAction;
+
+  /// No description provided for @scheduleWaitingPill.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Waiting for 1 sender} other{Waiting for {count} senders}}'**
+  String scheduleWaitingPill(int count);
+
+  /// No description provided for @scheduleWaitingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your trip keeps its current times until every sender who must agree has answered.'**
+  String get scheduleWaitingBody;
+
+  /// No description provided for @scheduleSendersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders asked'**
+  String get scheduleSendersTitle;
+
+  /// No description provided for @scheduleConsentPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get scheduleConsentPending;
+
+  /// No description provided for @scheduleConsentAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Agreed'**
+  String get scheduleConsentAccepted;
+
+  /// No description provided for @scheduleConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Declined'**
+  String get scheduleConsentDeclined;
+
+  /// No description provided for @scheduleWithdrawAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdraw the new times'**
+  String get scheduleWithdrawAction;
+
+  /// No description provided for @scheduleWithdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'The new times were withdrawn.'**
+  String get scheduleWithdrawn;
+
+  /// No description provided for @scheduleWithdrawnByYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You withdrew the last new times. Your trip keeps its earlier times.'**
+  String get scheduleWithdrawnByYou;
+
+  /// No description provided for @scheduleWithdrawnNoLongerValid.
+  ///
+  /// In en, this message translates to:
+  /// **'The last new times were dropped because the trip had moved on. Your trip keeps its current times.'**
+  String get scheduleWithdrawnNoLongerValid;
+
+  /// No description provided for @scheduleChangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change times'**
+  String get scheduleChangeTitle;
+
+  /// No description provided for @scheduleChangeIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick the new departure and arrival for the legs that changed. You will see who is affected before anything is sent.'**
+  String get scheduleChangeIntro;
+
+  /// No description provided for @scheduleStopsNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Only times can change on a live trip. To add or remove a stop, cancel the trip and create a new one.'**
+  String get scheduleStopsNote;
+
+  /// No description provided for @scheduleReviewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Review the changes'**
+  String get scheduleReviewAction;
+
+  /// No description provided for @scheduleReviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review new times'**
+  String get scheduleReviewTitle;
+
+  /// No description provided for @scheduleEditTimes.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit times'**
+  String get scheduleEditTimes;
+
+  /// No description provided for @scheduleSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send new times'**
+  String get scheduleSendAction;
+
+  /// No description provided for @scheduleApplyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply new times'**
+  String get scheduleApplyAction;
+
+  /// No description provided for @scheduleAppliesAtOnceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No sender needs to agree'**
+  String get scheduleAppliesAtOnceTitle;
+
+  /// No description provided for @scheduleAppliesAtOnceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'These times apply as soon as you send them. Affected senders are told.'**
+  String get scheduleAppliesAtOnceBody;
+
+  /// No description provided for @scheduleWaitsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 sender must agree first} other{{count} senders must agree first}}'**
+  String scheduleWaitsTitle(int count);
+
+  /// No description provided for @scheduleWaitsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The new times apply once they all agree. Until then your trip keeps its current times. A sender who declines can cancel, and that cancellation is counted as yours.'**
+  String get scheduleWaitsBody;
+
+  /// No description provided for @scheduleNewTimesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New times'**
+  String get scheduleNewTimesTitle;
+
+  /// No description provided for @scheduleAffectedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Parcels affected'**
+  String get scheduleAffectedTitle;
+
+  /// No description provided for @scheduleNoParcelsAffected.
+  ///
+  /// In en, this message translates to:
+  /// **'No parcel is affected by these times.'**
+  String get scheduleNoParcelsAffected;
+
+  /// No description provided for @scheduleMustAgreeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders who must agree'**
+  String get scheduleMustAgreeTitle;
+
+  /// No description provided for @scheduleToldTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders who will be told'**
+  String get scheduleToldTitle;
+
+  /// No description provided for @scheduleReasonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note to senders (optional)'**
+  String get scheduleReasonLabel;
+
+  /// No description provided for @scheduleReasonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For example: the flight was moved by the airline.'**
+  String get scheduleReasonHint;
+
+  /// No description provided for @scheduleReasonHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders who are asked will read this.'**
+  String get scheduleReasonHelper;
+
+  /// No description provided for @scheduleSentToSenders.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Sent. Waiting for 1 sender.} other{Sent. Waiting for {count} senders.}}'**
+  String scheduleSentToSenders(int count);
+
+  /// No description provided for @scheduleApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'New times saved. Affected senders have been told.'**
+  String get scheduleApplied;
+
+  /// No description provided for @scheduleErrorOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection. Nothing was changed. Try again when you are online.'**
+  String get scheduleErrorOffline;
+
+  /// No description provided for @scheduleErrorNotReschedulable.
+  ///
+  /// In en, this message translates to:
+  /// **'Times can only change on a trip that is live and not finished.'**
+  String get scheduleErrorNotReschedulable;
+
+  /// No description provided for @scheduleErrorEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'These are the times already in force. Change at least one.'**
+  String get scheduleErrorEmpty;
+
+  /// No description provided for @scheduleErrorPending.
+  ///
+  /// In en, this message translates to:
+  /// **'New times are already waiting for senders. Withdraw them first to send others.'**
+  String get scheduleErrorPending;
+
+  /// No description provided for @scheduleErrorLegArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'A leg that has already arrived can’t change.'**
+  String get scheduleErrorLegArrived;
+
+  /// No description provided for @scheduleErrorLegDeparted.
+  ///
+  /// In en, this message translates to:
+  /// **'A leg that has already departed keeps its departure. Only its arrival can move.'**
+  String get scheduleErrorLegDeparted;
+
+  /// No description provided for @scheduleErrorDepartureInPast.
+  ///
+  /// In en, this message translates to:
+  /// **'A departure can’t be in the past.'**
+  String get scheduleErrorDepartureInPast;
+
+  /// No description provided for @scheduleErrorNotWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'These new times are no longer waiting. The screen has been refreshed.'**
+  String get scheduleErrorNotWaiting;
+
+  /// No description provided for @scheduleAnswerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New times'**
+  String get scheduleAnswerTitle;
+
+  /// No description provided for @scheduleNoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No change to the times'**
+  String get scheduleNoneTitle;
+
+  /// No description provided for @scheduleNoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler has not changed the times of this delivery.'**
+  String get scheduleNoneBody;
+
+  /// No description provided for @scheduleAskedHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler changed the times'**
+  String get scheduleAskedHeadline;
+
+  /// No description provided for @scheduleAskedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your delivery is affected. Check the new times and tell us if they work for you.'**
+  String get scheduleAskedBody;
+
+  /// No description provided for @scheduleYouAcceptedHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'You agreed to the new times'**
+  String get scheduleYouAcceptedHeadline;
+
+  /// No description provided for @scheduleYouDeclinedHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'You declined the new times'**
+  String get scheduleYouDeclinedHeadline;
+
+  /// No description provided for @scheduleAppliedHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The new times are in force'**
+  String get scheduleAppliedHeadline;
+
+  /// No description provided for @scheduleAppliedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler’s trip now runs on the times below.'**
+  String get scheduleAppliedBody;
+
+  /// No description provided for @scheduleWithdrawnHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The new times were withdrawn'**
+  String get scheduleWithdrawnHeadline;
+
+  /// No description provided for @scheduleWithdrawnBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing changes for your delivery. The earlier times still stand.'**
+  String get scheduleWithdrawnBody;
+
+  /// No description provided for @scheduleInformedHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler’s times changed'**
+  String get scheduleInformedHeadline;
+
+  /// No description provided for @scheduleInformedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your parcel has already been collected, so you are not asked to agree. The arrival you agreed to when you paid still protects you. If something is wrong, you can report a problem or open a dispute.'**
+  String get scheduleInformedBody;
+
+  /// No description provided for @scheduleCompareTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Old and new times'**
+  String get scheduleCompareTitle;
+
+  /// No description provided for @scheduleYourDeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Your deadline: {date}'**
+  String scheduleYourDeadline(String date);
+
+  /// No description provided for @scheduleWhyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Why we are asking'**
+  String get scheduleWhyTitle;
+
+  /// No description provided for @scheduleTravelerNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Note from the traveler'**
+  String get scheduleTravelerNote;
+
+  /// No description provided for @scheduleLegsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed legs'**
+  String get scheduleLegsTitle;
+
+  /// No description provided for @scheduleAcceptAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept the new times'**
+  String get scheduleAcceptAction;
+
+  /// No description provided for @scheduleAcceptInstead.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept the new times instead'**
+  String get scheduleAcceptInstead;
+
+  /// No description provided for @scheduleDeclineAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get scheduleDeclineAction;
+
+  /// No description provided for @scheduleDeclineInstead.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline instead'**
+  String get scheduleDeclineInstead;
+
+  /// No description provided for @scheduleDeclineKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Go back'**
+  String get scheduleDeclineKeep;
+
+  /// No description provided for @scheduleDeclineConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline the new times?'**
+  String get scheduleDeclineConfirmTitle;
+
+  /// No description provided for @scheduleDeclineConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is cancelled. You will then be able to cancel this delivery, and because the traveler changed the times, that cancellation is not counted as yours. You can still change your mind until the traveler decides.'**
+  String get scheduleDeclineConfirmBody;
+
+  /// No description provided for @scheduleAcceptedSnack.
+  ///
+  /// In en, this message translates to:
+  /// **'You agreed to the new times.'**
+  String get scheduleAcceptedSnack;
+
+  /// No description provided for @scheduleDeclinedSnack.
+  ///
+  /// In en, this message translates to:
+  /// **'You declined the new times.'**
+  String get scheduleDeclinedSnack;
+
+  /// No description provided for @scheduleIfYouCancelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'If you cancel now'**
+  String get scheduleIfYouCancelTitle;
+
+  /// No description provided for @scheduleCancelCountsAsTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'Counted as the traveler’s cancellation, because they changed the times.'**
+  String get scheduleCancelCountsAsTraveler;
+
+  /// No description provided for @scheduleCancelNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This delivery can’t be cancelled right now.'**
+  String get scheduleCancelNotAvailable;
+
+  /// No description provided for @scheduleInformedActionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'If something is wrong'**
+  String get scheduleInformedActionsTitle;
+
+  /// No description provided for @scheduleErrorNoAnswerNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'No answer is needed for this delivery.'**
+  String get scheduleErrorNoAnswerNeeded;
+
+  /// No description provided for @scheduleViewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get scheduleViewAction;
+
+  /// No description provided for @scheduleDealAskedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the new times and tell us if they work for you.'**
+  String get scheduleDealAskedBody;
+
+  /// No description provided for @scheduleDealDeclinedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can cancel this delivery, and it won’t be counted as yours.'**
+  String get scheduleDealDeclinedBody;
+
+  /// No description provided for @scheduleDealAcceptedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You agreed to the new times. We are waiting for the other senders.'**
+  String get scheduleDealAcceptedBody;
+
+  /// No description provided for @scheduleDealInformedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The traveler’s times changed after pickup. See the old and new times.'**
+  String get scheduleDealInformedBody;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

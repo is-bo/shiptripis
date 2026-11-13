@@ -5417,4 +5417,476 @@ class LEn extends L {
 
   @override
   String get notificationLegReminder => 'How is your trip going?';
+
+  @override
+  String get problemsTitle => 'Problems reported';
+
+  @override
+  String get problemReportAction => 'Report a problem';
+
+  @override
+  String get problemSheetTitle => 'Report a problem';
+
+  @override
+  String get problemSheetIntro => 'What went wrong with this delivery?';
+
+  @override
+  String get problemKindSenderUnavailable => 'The sender did not come';
+
+  @override
+  String get problemKindTravelerNoShow => 'The traveler did not come';
+
+  @override
+  String get problemKindRecipientUnavailable =>
+      'The recipient is not available';
+
+  @override
+  String get problemKindParcelMismatch =>
+      'The parcel is not what was described';
+
+  @override
+  String get problemKindParcelDamaged => 'The parcel is damaged';
+
+  @override
+  String get problemKindTripDisrupted => 'The trip is cancelled or delayed';
+
+  @override
+  String get problemKindCustomsDelay => 'Held up at customs';
+
+  @override
+  String get problemKindOther => 'Something else';
+
+  @override
+  String get problemNoteLabel => 'Note (optional)';
+
+  @override
+  String get problemNoteHint =>
+      'Add anything that helps, such as where you are.';
+
+  @override
+  String get problemNextBody =>
+      'The other person is told. Wassla staff look at damage and mismatches right away. Reporting does not cancel or refund anything.';
+
+  @override
+  String get problemSendAction => 'Send report';
+
+  @override
+  String get problemSent => 'Report sent. The other person has been told.';
+
+  @override
+  String get problemReportedByYou => 'Reported by you';
+
+  @override
+  String get problemReportedByOther => 'Reported by the other person';
+
+  @override
+  String get problemStatusOpen => 'Sent';
+
+  @override
+  String get problemStatusEscalated => 'With Wassla staff';
+
+  @override
+  String get problemStatusAcknowledged => 'Being looked at';
+
+  @override
+  String get problemStatusClosed => 'Closed';
+
+  @override
+  String get problemErrorOffline =>
+      'No connection. Nothing was sent. Try again when you are online.';
+
+  @override
+  String get problemErrorNoShowClosed =>
+      'This can’t be reported right now. The pickup time may not have come yet, or the parcel may already be collected.';
+
+  @override
+  String get problemErrorNotAllowed =>
+      'This delivery can’t take a report right now.';
+
+  @override
+  String get problemErrorNoteTooLong =>
+      'The note is too long. Keep it under 1,000 characters.';
+
+  @override
+  String get noShowActionSender => 'The sender did not come';
+
+  @override
+  String get noShowActionTraveler => 'The traveler did not come';
+
+  @override
+  String get noShowSheetIntro =>
+      'Tell us if the other person has not shown up for the handover.';
+
+  @override
+  String get noShowNextBody =>
+      'Wassla staff will look at it. Nothing is cancelled or refunded yet.';
+
+  @override
+  String get noShowSendAction => 'Send to Wassla';
+
+  @override
+  String get noShowReportedSender =>
+      'You reported that the sender did not come';
+
+  @override
+  String get noShowReportedTraveler =>
+      'You reported that the traveler did not come';
+
+  @override
+  String get noShowMessageInChat => 'Message in chat';
+
+  @override
+  String get noShowReplyInChat => 'Reply in chat';
+
+  @override
+  String get noShowAgainstSenderTitle => 'The traveler says you did not come';
+
+  @override
+  String get noShowAgainstSenderBody =>
+      'If there is a mix-up, tell them in chat. Wassla staff will look at it. Nothing is cancelled or refunded yet.';
+
+  @override
+  String get noShowAgainstTravelerTitle => 'The sender says you did not come';
+
+  @override
+  String get noShowAgainstTravelerBody =>
+      'If there is a mix-up, tell them in chat. Wassla staff will look at it. Nothing is cancelled or refunded yet.';
+
+  @override
+  String get notificationProblemReported =>
+      'A problem was reported on a delivery';
+
+  @override
+  String get notificationScheduleChangeProposed => 'New times need your answer';
+
+  @override
+  String get notificationScheduleChangeAnswered =>
+      'A sender answered your new times';
+
+  @override
+  String get notificationScheduleChangeApplied => 'The times of a trip changed';
+
+  @override
+  String get notificationScheduleChangeWithdrawn => 'New times were withdrawn';
+
+  @override
+  String get scheduleDeparture => 'Departure';
+
+  @override
+  String get scheduleArrival => 'Arrival';
+
+  @override
+  String get schedulePickup => 'Pickup';
+
+  @override
+  String get scheduleParcelFallback => 'A parcel';
+
+  @override
+  String get scheduleReasonDeadline =>
+      'The new arrival is after your deadline.';
+
+  @override
+  String get scheduleReasonShift =>
+      'The arrival moves by more than the allowed margin.';
+
+  @override
+  String get scheduleReasonPickup => 'The pickup time moves.';
+
+  @override
+  String get scheduleSectionTitle => 'Trip times';
+
+  @override
+  String get scheduleSectionIntro =>
+      'Plans changed? Update your times. Senders whose parcel is affected are told, and some may need to agree.';
+
+  @override
+  String get scheduleChangeAction => 'Change times';
+
+  @override
+  String scheduleWaitingPill(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Waiting for $count senders',
+      one: 'Waiting for 1 sender',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitingBody =>
+      'Your trip keeps its current times until every sender who must agree has answered.';
+
+  @override
+  String get scheduleSendersTitle => 'Senders asked';
+
+  @override
+  String get scheduleConsentPending => 'Waiting';
+
+  @override
+  String get scheduleConsentAccepted => 'Agreed';
+
+  @override
+  String get scheduleConsentDeclined => 'Declined';
+
+  @override
+  String get scheduleWithdrawAction => 'Withdraw the new times';
+
+  @override
+  String get scheduleWithdrawn => 'The new times were withdrawn.';
+
+  @override
+  String get scheduleWithdrawnByYou =>
+      'You withdrew the last new times. Your trip keeps its earlier times.';
+
+  @override
+  String get scheduleWithdrawnNoLongerValid =>
+      'The last new times were dropped because the trip had moved on. Your trip keeps its current times.';
+
+  @override
+  String get scheduleChangeTitle => 'Change times';
+
+  @override
+  String get scheduleChangeIntro =>
+      'Pick the new departure and arrival for the legs that changed. You will see who is affected before anything is sent.';
+
+  @override
+  String get scheduleStopsNote =>
+      'Only times can change on a live trip. To add or remove a stop, cancel the trip and create a new one.';
+
+  @override
+  String get scheduleReviewAction => 'Review the changes';
+
+  @override
+  String get scheduleReviewTitle => 'Review new times';
+
+  @override
+  String get scheduleEditTimes => 'Edit times';
+
+  @override
+  String get scheduleSendAction => 'Send new times';
+
+  @override
+  String get scheduleApplyAction => 'Apply new times';
+
+  @override
+  String get scheduleAppliesAtOnceTitle => 'No sender needs to agree';
+
+  @override
+  String get scheduleAppliesAtOnceBody =>
+      'These times apply as soon as you send them. Affected senders are told.';
+
+  @override
+  String scheduleWaitsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count senders must agree first',
+      one: '1 sender must agree first',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleWaitsBody =>
+      'The new times apply once they all agree. Until then your trip keeps its current times. A sender who declines can cancel, and that cancellation is counted as yours.';
+
+  @override
+  String get scheduleNewTimesTitle => 'New times';
+
+  @override
+  String get scheduleAffectedTitle => 'Parcels affected';
+
+  @override
+  String get scheduleNoParcelsAffected =>
+      'No parcel is affected by these times.';
+
+  @override
+  String get scheduleMustAgreeTitle => 'Senders who must agree';
+
+  @override
+  String get scheduleToldTitle => 'Senders who will be told';
+
+  @override
+  String get scheduleReasonLabel => 'Note to senders (optional)';
+
+  @override
+  String get scheduleReasonHint =>
+      'For example: the flight was moved by the airline.';
+
+  @override
+  String get scheduleReasonHelper => 'Senders who are asked will read this.';
+
+  @override
+  String scheduleSentToSenders(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sent. Waiting for $count senders.',
+      one: 'Sent. Waiting for 1 sender.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get scheduleApplied =>
+      'New times saved. Affected senders have been told.';
+
+  @override
+  String get scheduleErrorOffline =>
+      'No connection. Nothing was changed. Try again when you are online.';
+
+  @override
+  String get scheduleErrorNotReschedulable =>
+      'Times can only change on a trip that is live and not finished.';
+
+  @override
+  String get scheduleErrorEmpty =>
+      'These are the times already in force. Change at least one.';
+
+  @override
+  String get scheduleErrorPending =>
+      'New times are already waiting for senders. Withdraw them first to send others.';
+
+  @override
+  String get scheduleErrorLegArrived =>
+      'A leg that has already arrived can’t change.';
+
+  @override
+  String get scheduleErrorLegDeparted =>
+      'A leg that has already departed keeps its departure. Only its arrival can move.';
+
+  @override
+  String get scheduleErrorDepartureInPast =>
+      'A departure can’t be in the past.';
+
+  @override
+  String get scheduleErrorNotWaiting =>
+      'These new times are no longer waiting. The screen has been refreshed.';
+
+  @override
+  String get scheduleAnswerTitle => 'New times';
+
+  @override
+  String get scheduleNoneTitle => 'No change to the times';
+
+  @override
+  String get scheduleNoneBody =>
+      'The traveler has not changed the times of this delivery.';
+
+  @override
+  String get scheduleAskedHeadline => 'The traveler changed the times';
+
+  @override
+  String get scheduleAskedBody =>
+      'Your delivery is affected. Check the new times and tell us if they work for you.';
+
+  @override
+  String get scheduleYouAcceptedHeadline => 'You agreed to the new times';
+
+  @override
+  String get scheduleYouDeclinedHeadline => 'You declined the new times';
+
+  @override
+  String get scheduleAppliedHeadline => 'The new times are in force';
+
+  @override
+  String get scheduleAppliedBody =>
+      'The traveler’s trip now runs on the times below.';
+
+  @override
+  String get scheduleWithdrawnHeadline => 'The new times were withdrawn';
+
+  @override
+  String get scheduleWithdrawnBody =>
+      'Nothing changes for your delivery. The earlier times still stand.';
+
+  @override
+  String get scheduleInformedHeadline => 'The traveler’s times changed';
+
+  @override
+  String get scheduleInformedBody =>
+      'Your parcel has already been collected, so you are not asked to agree. The arrival you agreed to when you paid still protects you. If something is wrong, you can report a problem or open a dispute.';
+
+  @override
+  String get scheduleCompareTitle => 'Old and new times';
+
+  @override
+  String scheduleYourDeadline(String date) {
+    return 'Your deadline: $date';
+  }
+
+  @override
+  String get scheduleWhyTitle => 'Why we are asking';
+
+  @override
+  String get scheduleTravelerNote => 'Note from the traveler';
+
+  @override
+  String get scheduleLegsTitle => 'Changed legs';
+
+  @override
+  String get scheduleAcceptAction => 'Accept the new times';
+
+  @override
+  String get scheduleAcceptInstead => 'Accept the new times instead';
+
+  @override
+  String get scheduleDeclineAction => 'Decline';
+
+  @override
+  String get scheduleDeclineInstead => 'Decline instead';
+
+  @override
+  String get scheduleDeclineKeep => 'Go back';
+
+  @override
+  String get scheduleDeclineConfirmTitle => 'Decline the new times?';
+
+  @override
+  String get scheduleDeclineConfirmBody =>
+      'Nothing is cancelled. You will then be able to cancel this delivery, and because the traveler changed the times, that cancellation is not counted as yours. You can still change your mind until the traveler decides.';
+
+  @override
+  String get scheduleAcceptedSnack => 'You agreed to the new times.';
+
+  @override
+  String get scheduleDeclinedSnack => 'You declined the new times.';
+
+  @override
+  String get scheduleIfYouCancelTitle => 'If you cancel now';
+
+  @override
+  String get scheduleCancelCountsAsTraveler =>
+      'Counted as the traveler’s cancellation, because they changed the times.';
+
+  @override
+  String get scheduleCancelNotAvailable =>
+      'This delivery can’t be cancelled right now.';
+
+  @override
+  String get scheduleInformedActionsTitle => 'If something is wrong';
+
+  @override
+  String get scheduleErrorNoAnswerNeeded =>
+      'No answer is needed for this delivery.';
+
+  @override
+  String get scheduleViewAction => 'View';
+
+  @override
+  String get scheduleDealAskedBody =>
+      'Check the new times and tell us if they work for you.';
+
+  @override
+  String get scheduleDealDeclinedBody =>
+      'You can cancel this delivery, and it won’t be counted as yours.';
+
+  @override
+  String get scheduleDealAcceptedBody =>
+      'You agreed to the new times. We are waiting for the other senders.';
+
+  @override
+  String get scheduleDealInformedBody =>
+      'The traveler’s times changed after pickup. See the old and new times.';
 }

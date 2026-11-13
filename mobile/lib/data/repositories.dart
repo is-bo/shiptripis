@@ -41,7 +41,9 @@ import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
 import '../domain/pricing.dart';
+import '../domain/problems.dart';
 import '../domain/progress.dart';
+import '../domain/schedule_change.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
 import '../domain/sea_crossings.dart';
@@ -482,6 +484,60 @@ class JourneyRepository {
     required int journeyId,
     required int progressId,
   }) => _api.postVoid('/api/journeys/$journeyId/progress/$progressId/retract');
+
+  // New times on a live journey (L9A). Needs the network; nothing is queued.
+
+  Map<String, Object?> _changeBody(List<LegTimesInput> legs, String? reason) =>
+      {
+        'legs': [for (final leg in legs) leg.toJson()],
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      };
+
+  /// Every change on the journey, newest first. Owner only.
+  Future<List<ScheduleChange>> scheduleChanges(
+    int journeyId, {
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.getObject(
+      '/api/journeys/$journeyId/schedule-changes',
+      cancelToken: cancelToken,
+    );
+    return readObjectList(
+      body['results'],
+    ).map(ScheduleChange.maybe).nonNulls.toList(growable: false);
+  }
+
+  /// What these times would do, writing nothing: the review step.
+  Future<SchedulePreview> previewScheduleChange(
+    int journeyId,
+    List<LegTimesInput> legs,
+  ) async => SchedulePreview.fromJson(
+    await _api.postObject(
+      '/api/journeys/$journeyId/schedule-changes/preview',
+      body: _changeBody(legs, null),
+    ),
+  );
+
+  /// Applies at once when no sender must agree, otherwise waits for them.
+  Future<ScheduleChange?> proposeScheduleChange(
+    int journeyId,
+    List<LegTimesInput> legs, {
+    String? reason,
+  }) async => ScheduleChange.maybe(
+    await _api.postObject(
+      '/api/journeys/$journeyId/schedule-changes',
+      body: _changeBody(legs, reason),
+    ),
+  );
+
+  Future<ScheduleChange?> withdrawScheduleChange(
+    int journeyId,
+    int changeId,
+  ) async => ScheduleChange.maybe(
+    await _api.postObject(
+      '/api/journeys/$journeyId/schedule-changes/$changeId/withdraw',
+    ),
+  );
 
   /// Idempotent: publishing an already-active journey returns it unchanged.
   Future<Journey> publish(int id) async =>
@@ -1140,6 +1196,30 @@ class DealRepository {
     );
   }
 
+  /// The latest new times that touched this parcel, for its sender. `null`
+  /// when none ever did.
+  Future<SenderScheduleChange?> scheduleChange(
+    int dealId, {
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.getObject(
+      '/api/deals/$dealId/schedule-change',
+      cancelToken: cancelToken,
+    );
+    return SenderScheduleChange.maybe(dealId, body['change']);
+  }
+
+  /// The sender's answer. May be changed while the change waits.
+  Future<SenderScheduleChange?> answerScheduleChange(
+    int dealId, {
+    required bool accept,
+  }) async {
+    final body = await _api.postObject(
+      '/api/deals/$dealId/schedule-change/${accept ? 'accept' : 'decline'}',
+    );
+    return SenderScheduleChange.maybe(dealId, body['change']);
+  }
+
   /// What cancelling would cost, before the user commits to it.
   ///
   /// Returns `200` even when cancellation is refused — the refusal is the
@@ -1650,6 +1730,41 @@ class PaymentRepository {
 }
 
 // ---------------------------------------------------------------------------
+// Problem reports
+// ---------------------------------------------------------------------------
+
+class ProblemRepository {
+  const ProblemRepository(this._api);
+
+  final ApiClient _api;
+
+  /// Both people read every report on their delivery, and the server says
+  /// which kinds can be reported now.
+  Future<DealProblems> forDeal(int dealId, {CancelToken? cancelToken}) async =>
+      DealProblems.fromJson(
+        await _api.getObject(
+          '/api/deals/$dealId/problems',
+          cancelToken: cancelToken,
+        ),
+      );
+
+  /// Idempotent: the same person reporting the same kind again gets the live
+  /// report back. A report changes no status and moves no money.
+  Future<ShipmentProblem?> report({
+    required int dealId,
+    required ProblemKind kind,
+    String note = '',
+  }) async {
+    final body = await _api.postObject(
+      '/api/deals/$dealId/problems',
+      body: {'kind': kind.wire, 'note': note.trim()},
+    );
+    final row = readObject(body['problem']);
+    return row == null ? null : ShipmentProblem.maybe(row);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Disputes
 // ---------------------------------------------------------------------------
 
@@ -2091,6 +2206,10 @@ final handoverRepositoryProvider = Provider<HandoverRepository>(
 
 final paymentRepositoryProvider = Provider<PaymentRepository>(
   (ref) => PaymentRepository(ref.watch(apiClientProvider)),
+);
+
+final problemRepositoryProvider = Provider<ProblemRepository>(
+  (ref) => ProblemRepository(ref.watch(apiClientProvider)),
 );
 
 final disputeRepositoryProvider = Provider<DisputeRepository>(

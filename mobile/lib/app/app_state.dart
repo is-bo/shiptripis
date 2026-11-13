@@ -32,7 +32,9 @@ import '../domain/journey.dart';
 import '../domain/offer.dart';
 import '../domain/payment.dart';
 import '../domain/payout.dart';
+import '../domain/problems.dart';
 import '../domain/progress.dart';
+import '../domain/schedule_change.dart';
 import '../domain/rating.dart';
 import '../domain/sea_crossings.dart';
 
@@ -576,6 +578,73 @@ final dealDetailProvider = Provider.autoDispose.family<AsyncValue<Deal>, int>((
   );
 });
 
+/// A delivery's problem reports and which ones the server lets this person
+/// make now. Refreshed with the deal itself: a report from the other person,
+/// a staff decision or a pickup that closes the no-show window all arrive as a
+/// deal event.
+final _dealProblemsQuery = FutureProvider.autoDispose
+    .family<DealProblems, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(problemRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.deal(key.argument),
+        (cancel) => repo.forDeal(key.argument, cancelToken: cancel),
+      );
+    }, retry: (_, _) => null);
+final dealProblemsProvider = Provider.autoDispose
+    .family<AsyncValue<DealProblems>, int>((ref, dealId) {
+      return _projectLiveQuery(
+        ref,
+        _dealProblemsQuery((accountId: _watchAccountId(ref), argument: dealId)),
+      );
+    });
+
+/// The newest new times that touched a parcel, for its sender. A failure here
+/// must never fail the delivery screen, so the screen reads `.value` only.
+final _dealScheduleChangeQuery = FutureProvider.autoDispose
+    .family<SenderScheduleChange?, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(dealRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.deal(key.argument),
+        (cancel) => repo.scheduleChange(key.argument, cancelToken: cancel),
+      );
+    }, retry: (_, _) => null);
+final dealScheduleChangeProvider = Provider.autoDispose
+    .family<AsyncValue<SenderScheduleChange?>, int>((ref, dealId) {
+      return _projectLiveQuery(
+        ref,
+        _dealScheduleChangeQuery((
+          accountId: _watchAccountId(ref),
+          argument: dealId,
+        )),
+      );
+    });
+
+/// The traveler's own changes on a journey, newest first.
+final _journeyScheduleChangesQuery = FutureProvider.autoDispose
+    .family<List<ScheduleChange>, _AccountArgument<int>>((ref, key) async {
+      final repo = ref.watch(journeyRepositoryProvider);
+      return _liveRead(
+        ref,
+        key.accountId,
+        LiveResource.journey(key.argument),
+        (cancel) => repo.scheduleChanges(key.argument, cancelToken: cancel),
+      );
+    }, retry: (_, _) => null);
+final journeyScheduleChangesProvider = Provider.autoDispose
+    .family<AsyncValue<List<ScheduleChange>>, int>((ref, journeyId) {
+      return _projectLiveQuery(
+        ref,
+        _journeyScheduleChangesQuery((
+          accountId: _watchAccountId(ref),
+          argument: journeyId,
+        )),
+      );
+    });
+
 final _matchesQuery = FutureProvider.autoDispose.family<List<Match>, int?>((
   ref,
   accountId,
@@ -1025,6 +1094,9 @@ void refreshVolatileState(WidgetRef ref) {
     ..invalidate(dealHistoryProvider)
     ..invalidate(completedDealsCountProvider)
     ..invalidate(dealDetailProvider)
+    ..invalidate(dealProblemsProvider)
+    ..invalidate(dealScheduleChangeProvider)
+    ..invalidate(journeyScheduleChangesProvider)
     ..invalidate(matchesProvider)
     ..invalidate(matchDetailProvider)
     ..invalidate(matchOffersProvider)

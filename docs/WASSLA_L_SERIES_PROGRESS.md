@@ -563,12 +563,18 @@ Detail: `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md`. Screenshots: `/mnt/project-f
 
 ### L9B. Problems and route changes, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L9B_PROBLEMS_ROUTE_CHANGES_MOBILE.md`. Screenshots: `/mnt/project-files/l-series-screens/L9B/`.
+
+- Contract as built (names that differ from the plan): no backend change. New live-event channels are mapped
+  (`deal.problem_reported`, `journey.schedule_change_*`); a `journey.schedule_change_proposed` push with a
+  `deal_id` opens `/deals/<id>/schedule-change`. `CancellationQuote.causedBy` reads `caused_by`. Routes
+  `/deals/:id/schedule-change` and `/journeys/:id/change-times`.
+- Left for a later package: nothing from this package.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): none. The optional reads (problems, schedule change)
+  do not retry on failure and render nothing, so a failed side read never fails the delivery page.
+- Tests (before and after counts): Flutter 1,428 before, 1,461 after (33 new). No Django or Go change.
+- Known limits: the leg editor cannot tell departed or arrived legs; the server refuses and the screen says why.
 
 ### L11A. Tracking number, backend
 

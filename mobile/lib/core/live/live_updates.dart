@@ -315,6 +315,15 @@ Set<LiveResource> resourcesForLiveEvent(
     // before it, because the payload names a journey, not a deal).
     'deal.progress_reported',
     'journey.leg_reminder',
+    // L9A. A report on a delivery refreshes that delivery (the `deal.` case).
+    // New times touch a journey and, for each asked sender, a delivery: they
+    // are handled just before the `journey.`/`deal.` ladder because the
+    // payload names both.
+    'deal.problem_reported',
+    'journey.schedule_change_proposed',
+    'journey.schedule_change_answered',
+    'journey.schedule_change_applied',
+    'journey.schedule_change_withdrawn',
   };
   if (!knownEvents.contains(type)) return const {};
 
@@ -386,6 +395,11 @@ Set<LiveResource> resourcesForLiveEvent(
     // question on Home. No deal, match or request is involved.
     addJourney();
     resources.add(const LiveResource.progress());
+  } else if (type.startsWith('journey.schedule_change_')) {
+    // The traveler's journey and its legs, and the sender's delivery when the
+    // payload names one. Nothing about money: these never move a deal.
+    addJourney();
+    if (dealId != null) addDeal();
   } else if (type.startsWith('parcel.')) {
     addRequest(deposit: true);
   } else if (type.startsWith('leg_proof.')) {

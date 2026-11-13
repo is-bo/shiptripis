@@ -173,6 +173,9 @@ class NotificationsScreen extends ConsumerWidget {
       case OpenDeal(:final dealId):
         ref.invalidate(dealDetailProvider(dealId));
         context.openDeal(dealId);
+      case OpenScheduleChange(:final dealId):
+        ref.invalidate(dealScheduleChangeProvider(dealId));
+        context.openScheduleChange(dealId);
       case OpenRequest(:final requestId):
         context.openRequest(requestId);
       case OpenPayments():
@@ -402,6 +405,26 @@ class _Row extends StatelessWidget {
       NotificationChannel.journeyLegReminder => (
         l.notificationLegReminder,
         Icons.flight_takeoff_rounded,
+      ),
+      NotificationChannel.dealProblemReported => (
+        l.notificationProblemReported,
+        Icons.report_problem_outlined,
+      ),
+      NotificationChannel.journeyScheduleChangeProposed => (
+        l.notificationScheduleChangeProposed,
+        Icons.schedule_rounded,
+      ),
+      NotificationChannel.journeyScheduleChangeAnswered => (
+        l.notificationScheduleChangeAnswered,
+        Icons.how_to_reg_outlined,
+      ),
+      NotificationChannel.journeyScheduleChangeApplied => (
+        l.notificationScheduleChangeApplied,
+        Icons.event_available_outlined,
+      ),
+      NotificationChannel.journeyScheduleChangeWithdrawn => (
+        l.notificationScheduleChangeWithdrawn,
+        Icons.event_busy_outlined,
       ),
       NotificationChannel.unknown => (
         l.notificationOther,
