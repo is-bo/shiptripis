@@ -58,7 +58,7 @@ class QueuePanelTests(TestCase):
         assert "Every queue is empty right now." in body
         # A queue at zero stays on the page: an operator has to be able to see
         # that it was checked.
-        assert "KYC submissions to review" in body
+        assert "ID checks to review" in body
 
     def test_a_waiting_submission_is_counted_and_announced(self):
         applicant = User.objects.create_user(

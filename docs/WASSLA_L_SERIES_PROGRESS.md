@@ -477,12 +477,37 @@ Detail: `docs/PHASE_L5B_PROGRESS_UPDATES_MOBILE.md`. Screenshots: `l-series-scre
 
 ### L6A. Verification inbox and removal of the parked switches
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L6A_VERIFICATION_INBOX.md`. Screenshots: `l-series-screens/L6A/` (console EN; emails EN, FR, AR).
+
+- Contract as built (names that differ from the plan): `apps/admin_panel/verification_inbox.py` owns
+  "waiting" (`waiting_counts(request)`, once per request), the tabs, the landing URL and the decision
+  values. New console route `verification` (`/admin/verification/`, landing redirect). Decision values
+  `approved`, `resubmission_requested`, `rejected`, accepted by the console form, both review services
+  and `POST /api/admin/kyc|flight-proofs/<id>/review`. Audit actions keep their names
+  (`kyc.rejected`, `flight_proof.rejected`); the outcome is `metadata.outcome` on every decision. Both
+  status channels and both email contexts carry `outcome`. Tab links are the queues filtered to
+  `?status=pending`.
+- Left for a later package: nothing owed. When L15's helper reports document reviews as a count
+  (plan 2.11), it should read `verification_inbox.waiting(tab)` so its number matches the inbox.
+- Switches added and their defaults: none. Removed: `marketplace.courier_handoff`,
+  `marketplace.professional` (a revision naming either is refused on save).
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) A
+  different decision on an already-decided row is refused even when it stores the same status, so a
+  second reviewer is never told their choice was saved; the same decision replayed stays a silent
+  success. (2) The navigation shows the total on the Verification section tab and on the entry.
+  (3) "New upload requested" is shown on decided rows (queue, previous attempt, history, header), read
+  from the audit entry, one query per page. (4) The admin API takes the three decisions too, so there
+  is one rule. (5) The plan's "a search of `backend/` for `professional` and `courier_handoff` finds
+  nothing" holds for code; the one remaining hit is the test the plan asks for, which saves a revision
+  naming those two keys and expects the refusal. (6) Console labels renamed to the spec's words: overview
+  items "ID checks to review" and "Tickets to review", breadcrumbs "Verification › ID|Tickets"; the
+  technical Django-admin queue panel uses the same two labels.
+- Tests (before and after counts): Django 2,795 collected before, 2,824 after (+28 in
+  `test_l6a_verification_inbox.py`, +1 policy test; the two policy tests that read the removed sections
+  lost those lines). Six existing assertions rewritten to the new labels or the email context's
+  `outcome` (listed in the phase doc). `makemigrations --check` clean; ruff clean; no migration.
+- Known limits: the app's notification list keeps one generic "Account" row for both decisions (it
+  renders by channel); the push and email carry the difference. The console is English only.
 
 ### L6B, L7A, L7B, L8A, L8B. Parked
 

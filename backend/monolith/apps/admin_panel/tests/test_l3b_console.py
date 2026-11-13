@@ -222,7 +222,7 @@ class TicketProofConsoleTests(ConsoleWorld, TestCase):
     def test_the_queue_is_ticket_proofs_with_a_mode_column(self):
         body = self.body(self.get(self.trust, self.queue))
 
-        self.assertIn("Ticket proofs", body)
+        self.assertIn(">Tickets<", body)
         self.assertNotIn("Flight-proof review", body)
         self.assertIn("<th scope=\"col\">Mode</th>", body)
         self.assertIn("Sea", body)
@@ -250,7 +250,7 @@ class TicketProofConsoleTests(ConsoleWorld, TestCase):
     def test_an_unknown_mode_shows_nothing_rather_than_everything(self):
         body = self.body(self.get(self.trust, self.queue, mode="ROCKET"))
 
-        self.assertIn("No ticket proofs", body)
+        self.assertIn("No tickets", body)
 
     def test_the_mode_and_state_filters_combine_and_can_be_cleared(self):
         self.sea_proof.delete()
@@ -258,7 +258,7 @@ class TicketProofConsoleTests(ConsoleWorld, TestCase):
 
         body = self.body(self.get(self.trust, self.queue, mode="SEA", status="pending"))
 
-        self.assertIn("No ticket proofs waiting", body)
+        self.assertIn("No tickets waiting", body)
         self.assertIn("Clear filters", body)
 
     def test_a_ferry_ticket_detail_says_ferry(self):

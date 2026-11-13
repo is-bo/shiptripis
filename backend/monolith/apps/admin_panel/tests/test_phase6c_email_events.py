@@ -44,7 +44,10 @@ class KycStatusEmailTests(TestCase):
         message = OutboundMessage.objects.get(
             key=f"kyc_status:{submission.pk}:approved"
         )
-        self.assertEqual(message.context, {"status": "approved", "reason": ""})
+        self.assertEqual(
+            message.context,
+            {"status": "approved", "outcome": "approved", "reason": ""},
+        )
         self.assertEqual(message.language, "fr")
         self.assertEqual(
             OutboundMessage.objects.filter(

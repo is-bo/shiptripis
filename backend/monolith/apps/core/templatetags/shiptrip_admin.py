@@ -87,7 +87,7 @@ SECTION_ICONS = {
 
 #: ``(section, ((label, route, capabilities, highlight_routes), ...))``.
 #: ``highlight_routes`` lists every url name that should keep the destination
-#: lit, so opening one KYC submission never makes the console look like it
+#: lit, so opening one ID submission never makes the console look like it
 #: left Verification. ``__superuser__`` is the owner-only escape hatch.
 NAVIGATION = (
     (
@@ -101,17 +101,22 @@ NAVIGATION = (
     (
         "Verification",
         (
+            # Spec 13: one inbox with two tabs (ID and Tickets). Its entry
+            # stays lit on either tab's queue and on every record opened
+            # from one, and carries the number waiting across both.
             (
-                "KYC review",
-                "admin_console:kyc-queue",
-                ("view_kyc",),
-                ("kyc-queue", "kyc-detail", "kyc-evidence"),
-            ),
-            (
-                "Ticket proofs",
-                "admin_console:proof-queue",
-                ("view_flight_proofs",),
-                ("proof-queue", "proof-detail", "proof-evidence"),
+                "Verification",
+                "admin_console:verification",
+                ("view_kyc", "view_flight_proofs"),
+                (
+                    "verification",
+                    "kyc-queue",
+                    "kyc-detail",
+                    "kyc-evidence",
+                    "proof-queue",
+                    "proof-detail",
+                    "proof-evidence",
+                ),
             ),
             # J6.4. The Trust side of DZD payout approval: confirming a
             # Traveler's legal name from their approved ID.
@@ -346,9 +351,24 @@ def _is_enabled(route: str) -> bool:
     return superseded is None or not getattr(settings, superseded, False)
 
 
-def _navigation_sections(user):
+def _waiting_count(request, route: str) -> int:
+    """How many items wait behind a destination; 0 for one that counts nothing.
+
+    Only the verification inbox counts, and it counts through its own module,
+    so this number is the sum of the tab counters on the page it opens.
+    """
+
+    if route != "admin_console:verification":
+        return 0
+    from apps.admin_panel.verification_inbox import waiting_total
+
+    return waiting_total(request) or 0
+
+
+def _navigation_sections(request):
     """The destinations this staff role may reach, grouped into sections."""
 
+    user = request.user
     sections = []
     for label, entries in NAVIGATION:
         items = []
@@ -365,11 +385,29 @@ def _navigation_sections(user):
                     "url": url,
                     "route": route.split(":")[-1],
                     "routes": routes,
+                    "waiting": _waiting_count(request, route),
                 }
             )
         if items:
-            sections.append({"label": label, "items": tuple(items)})
+            sections.append(
+                {
+                    "label": label,
+                    "items": tuple(items),
+                    "waiting": sum(item["waiting"] for item in items),
+                }
+            )
     return tuple(sections)
+
+
+def _waiting_badge(count: int):
+    """A count of work waiting, read as "4 waiting" by a screen reader."""
+
+    if not count:
+        return ""
+    return format_html(
+        '<span class="st-nav-count">{}<span class="st-visually-hidden"> waiting</span></span>',
+        count,
+    )
 
 
 def _section_icon(name: str):
@@ -392,7 +430,7 @@ def operations_navigation(context):
     user = getattr(request, "user", None)
     if request is None or not getattr(user, "is_authenticated", False):
         return ""
-    sections = _navigation_sections(user)
+    sections = _navigation_sections(request)
     if not sections:
         return ""
     match = getattr(request, "resolver_match", None)
@@ -406,12 +444,13 @@ def operations_navigation(context):
 
     tabs = [
         format_html(
-            '<a class="st-nav-tab{}" href="{}"{}>{}<span>{}</span></a>',
+            '<a class="st-nav-tab{}" href="{}"{}>{}<span>{}</span>{}</a>',
             " is-current" if section is active else "",
             section["items"][0]["url"],
             mark_safe(' aria-current="true"' if section is active else ""),
             _section_icon(section["label"]),
             section["label"],
+            _waiting_badge(section["waiting"]),
         )
         for section in sections
     ]
@@ -424,11 +463,12 @@ def operations_navigation(context):
     if active and len(active["items"]) > 1:
         links = [
             format_html(
-                '<a class="st-nav-link{}" href="{}"{}>{}</a>',
+                '<a class="st-nav-link{}" href="{}"{}>{}{}</a>',
                 " is-current" if current in item["routes"] else "",
                 item["url"],
                 mark_safe(' aria-current="page"' if current in item["routes"] else ""),
                 item["label"],
+                _waiting_badge(item["waiting"]),
             )
             for item in active["items"]
         ]
@@ -459,7 +499,7 @@ def operations_destinations(context):
     user = getattr(request, "user", None)
     if request is None or not getattr(user, "is_authenticated", False):
         return ()
-    return _navigation_sections(user)
+    return _navigation_sections(request)
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +599,7 @@ QUEUES: tuple[Queue, ...] = (
         filters=Q(status="eligible", method="manual"),
     ),
     Queue(
-        label="KYC submissions to review",
+        label="ID checks to review",
         hint="A traveler cannot be matched until this is decided.",
         app_label="kyc",
         model_name="kycsubmission",
@@ -567,7 +607,7 @@ QUEUES: tuple[Queue, ...] = (
         filters=Q(status="pending"),
     ),
     Queue(
-        label="Ticket proofs to review",
+        label="Tickets to review",
         hint="A flight or ferry leg is unmatchable until its ticket is approved.",
         app_label="trips",
         model_name="journeylegproof",

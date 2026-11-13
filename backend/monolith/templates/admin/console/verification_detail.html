@@ -1,7 +1,14 @@
 {% extends "admin/base_site.html" %}
 {% load shiptrip_admin %}
 
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">{% if kind == 'kyc' %}KYC review{% else %}Ticket proofs{% endif %}</a> &rsaquo; {{ title }}</div>{% endblock %}
+{% comment %}
+  Spec 13's one review screen, for an ID submission and for a ticket alike:
+  the same header, evidence, context, history and decision. Three decisions:
+  approve, ask for a new upload, reject; the last two need a reason, which
+  the person reads. Evidence opens only through the audited staff redirect.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:verification' %}">Verification</a> &rsaquo; <a href="{{ queue_url }}">{% if kind == 'kyc' %}ID{% else %}Tickets{% endif %}</a> &rsaquo; {{ title }}</div>{% endblock %}
 
 {% block content %}
 <main class="st-console">
@@ -12,7 +19,7 @@
       <p>{% if kind == 'kyc' %}Decide whether this person's identity evidence is good enough to let them carry.{% else %}Decide whether this evidence proves the Traveler is actually booked on this {{ leg_noun }}.{% endif %}</p>
     </div>
     <div class="st-page-aside">
-      <span class="st-chip st-{{ record.status|status_tone }}">{{ record.get_status_display }}</span>
+      <span class="st-chip st-{{ state.key|status_tone }}">{{ state.label }}</span>
     </div>
   </header>
 
@@ -126,7 +133,7 @@
             <div><dt>File</dt><dd>{{ record.content_type|default:"Type not recorded" }}<small>{{ record.bytes|default:0|filesizeformat }}</small></dd></div>
           {% endif %}
           {% if record.reviewed_at %}<div><dt>Decided</dt><dd>{{ record.reviewed_at|date:"d M Y, H:i" }}</dd></div>{% endif %}
-          {% if record.rejection_reason %}<div class="st-fact-wide"><dt>Reason given last time</dt><dd>{{ record.rejection_reason }}</dd></div>{% endif %}
+          {% if record.rejection_reason %}<div class="st-fact-wide"><dt>Reason sent to them</dt><dd>{{ record.rejection_reason }}</dd></div>{% endif %}
         </dl>
       </section>
 
@@ -137,8 +144,8 @@
         <ol class="st-timeline">
           {% for item in previous %}
           <li>
-            <strong><a href="{% url 'admin_console:kyc-detail' item.pk %}">{{ item.get_document_type_display }}</a></strong>
-            <span><span class="st-chip st-{{ item.status|status_tone }}">{{ item.get_status_display }}</span> &middot; {{ item.created_at|date:"d M Y" }}</span>
+            <strong><a href="{% url 'admin_console:kyc-detail' item.record.pk %}">{{ item.record.get_document_type_display }}</a></strong>
+            <span><span class="st-chip st-{{ item.state.key|status_tone }}">{{ item.state.label }}</span> &middot; {{ item.record.created_at|date:"d M Y" }}</span>
           </li>
           {% endfor %}
         </ol>
@@ -149,25 +156,31 @@
     <aside>
       <section class="st-card st-sticky{% if may_review and record.status == 'pending' %} st-decision-card{% endif %}" aria-labelledby="st-decision-head">
         <p class="st-eyebrow">Decision</p>
-        <h2 id="st-decision-head">{% if kind == 'kyc' %}Approve or reject this identity{% else %}Approve or reject this proof{% endif %}</h2>
+        <h2 id="st-decision-head">{% if kind == 'kyc' %}Decide on this ID{% else %}Decide on this ticket{% endif %}</h2>
         {% if may_review and record.status == 'pending' %}
-        <p>Approving lets this {% if kind == 'kyc' %}Traveler publish journeys{% else %}{{ leg_noun }} leg be matched{% endif %}. Rejecting sends the reason below to them. Both decisions are audited.</p>
+        <dl class="st-decision-guide">
+          <div><dt>Approve</dt><dd>{% if kind == 'kyc' %}This Traveler can publish journeys.{% else %}This {{ leg_noun }} leg can be matched.{% endif %}</dd></div>
+          <div><dt>Ask for a new upload</dt><dd>The {% if kind == 'kyc' %}document{% else %}ticket{% endif %} is unreadable, incomplete or not the right one. They are told we need a new upload.</dd></div>
+          <div><dt>Reject</dt><dd>It cannot be accepted. They are told it needs attention.</dd></div>
+        </dl>
+        <p class="st-muted st-decision-note">Asking for a new upload and rejecting both send your reason, and both let them submit again. Every decision is audited.</p>
         <form method="post" action="#st-decision-head" class="st-form">{% csrf_token %}
           {{ form.non_field_errors }}
           <div class="st-field">
-            <label for="{{ form.reason.id_for_label }}">Reason, required to reject</label>
+            <label for="{{ form.reason.id_for_label }}">Reason, required unless you approve</label>
             {{ form.reason }}
             {{ form.reason.errors }}
             <small>{{ form.reason.help_text }}</small>
           </div>
           <div class="st-check">{{ form.confirm }}<label for="{{ form.confirm.id_for_label }}">{{ form.confirm.label }}</label>{{ form.confirm.errors }}</div>
-          <div class="st-decide">
-            <button class="st-button-ok" type="submit" name="decision" value="approved">Approve</button>
+          <div class="st-decide st-decide-three">
+            <button class="st-button-ok st-decide-approve" type="submit" name="decision" value="approved">Approve</button>
+            <button class="st-button-attn" type="submit" name="decision" value="resubmission_requested">Ask for a new upload</button>
             <button class="st-button-danger" type="submit" name="decision" value="rejected">Reject</button>
           </div>
         </form>
         {% elif record.status != 'pending' %}
-        <p>This submission was already decided as <strong>{{ record.get_status_display|lower }}</strong>. The record and its evidence stay available for audit.</p>
+        <p>Already decided: <strong>{{ state.label|lower }}</strong>{% if record.reviewed_at %} on {{ record.reviewed_at|date:"d M Y, H:i" }}{% endif %}. The record and its evidence stay available for audit.</p>
         {% else %}
         <p>Your role can inspect this submission but cannot decide it. Ask a Trust / Verification operator or the owner.</p>
         {% endif %}

@@ -597,3 +597,24 @@ msgstr "Si un autre compte est connecté, déconnectez-vous avant d’accepter."
 
 msgid "Enable JavaScript to load your private invitation link."
 msgstr "Activez JavaScript pour ouvrir votre lien d’invitation privé."
+
+msgid "We need a new upload of your identity document."
+msgstr "Nous avons besoin d’un nouvel envoi de votre pièce d’identité."
+
+msgid "We need a new upload of your identity document"
+msgstr "Nous avons besoin d’un nouvel envoi de votre pièce d’identité"
+
+msgid "Please read the reason below and upload your document again."
+msgstr "Lisez le motif ci-dessous et envoyez de nouveau votre document."
+
+msgid "Open the Wassla app to upload it again."
+msgstr "Ouvrez l’application Wassla pour l’envoyer de nouveau."
+
+msgid "We need a new upload of your ferry ticket"
+msgstr "Nous avons besoin d’un nouvel envoi de votre billet de ferry"
+
+msgid "We need a new upload of your flight ticket"
+msgstr "Nous avons besoin d’un nouvel envoi de votre billet d’avion"
+
+msgid "Please read the reason below and upload the ticket again."
+msgstr "Lisez le motif ci-dessous et envoyez de nouveau le billet."

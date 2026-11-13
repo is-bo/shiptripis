@@ -597,3 +597,24 @@ msgstr "إذا كان هناك حساب آخر مسجل الدخول، فسجّ�
 
 msgid "Enable JavaScript to load your private invitation link."
 msgstr "فعّل JavaScript لفتح رابط دعوتك الخاص."
+
+msgid "We need a new upload of your identity document."
+msgstr "نحتاج إلى رفع جديد لوثيقة هويتك."
+
+msgid "We need a new upload of your identity document"
+msgstr "نحتاج إلى رفع جديد لوثيقة هويتك"
+
+msgid "Please read the reason below and upload your document again."
+msgstr "يرجى قراءة السبب أدناه وإعادة رفع وثيقتك."
+
+msgid "Open the Wassla app to upload it again."
+msgstr "افتح تطبيق Wassla لإعادة رفعها."
+
+msgid "We need a new upload of your ferry ticket"
+msgstr "نحتاج إلى رفع جديد لتذكرة العبّارة الخاصة بك"
+
+msgid "We need a new upload of your flight ticket"
+msgstr "نحتاج إلى رفع جديد لتذكرة الطيران الخاصة بك"
+
+msgid "Please read the reason below and upload the ticket again."
+msgstr "يرجى قراءة السبب أدناه وإعادة رفع التذكرة."

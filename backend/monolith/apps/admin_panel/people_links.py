@@ -51,12 +51,12 @@ RETURN_CONTEXTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Payout method reviews", "admin_console:payout-reviews"),
     ),
     "identity-checks": (
-        ("Verification", "admin_console:kyc-queue"),
+        ("Verification", "admin_console:verification"),
         ("Payout identity checks", "admin_console:identity-checks"),
     ),
     "deals": (("Marketplace", "admin_console:deals"), ("Deals", "admin_console:deals")),
     "disputes": (("Disputes", "admin_console:disputes"),),
-    "kyc": (("Verification", "admin_console:kyc-queue"), ("KYC review", "admin_console:kyc-queue")),
+    "kyc": (("Verification", "admin_console:verification"), ("ID", "admin_console:kyc-queue")),
     "payouts": (("Finance", "admin_console:finance-dashboard"), ("Payouts", "admin_console:payouts")),
 }
 

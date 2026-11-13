@@ -56,7 +56,7 @@
         </div>
       </div>
       <dl class="st-review-facts">
-        <div><dt>ID</dt><dd>{% if review.identity.kyc_state == "approved" %}<span class="st-chip st-ok">Approved</span>{% elif review.identity.kyc_state == "pending" %}<span class="st-chip st-attn">Waiting for KYC review</span>{% elif review.identity.kyc_state == "expired" %}<span class="st-chip st-bad">Expired</span>{% else %}<span class="st-chip st-bad">Not approved</span>{% endif %}</dd></div>
+        <div><dt>ID</dt><dd>{% if review.identity.kyc_state == "approved" %}<span class="st-chip st-ok">Approved</span>{% elif review.identity.kyc_state == "pending" %}<span class="st-chip st-attn">Waiting for an ID check</span>{% elif review.identity.kyc_state == "expired" %}<span class="st-chip st-bad">Expired</span>{% else %}<span class="st-chip st-bad">Not approved</span>{% endif %}</dd></div>
         <div><dt>Name on account</dt><dd><span class="st-chip st-{{ review.identity.comparison_tone }}">{{ review.identity.comparison_label }}</span></dd></div>
         <div><dt>Member since</dt><dd>{{ review.traveler.joined|date:"d M Y" }}</dd></div>
       </dl>
@@ -232,8 +232,8 @@
         <p class="st-eyebrow">Before this can be decided</p>
         <h2 id="st-decision-head">ID not approved yet</h2>
         {% if review.identity.kyc_state == "pending" %}
-        <p>This Traveler's ID is waiting for KYC review. Their legal name can only be confirmed against an approved ID.</p>
-        {% if review.identity.kyc_url %}<div class="st-review-actions"><a class="button" href="{{ review.identity.kyc_url }}">Open KYC review</a></div>{% endif %}
+        <p>This Traveler's ID is still waiting for a decision in Verification. Their legal name can only be confirmed against an approved ID.</p>
+        {% if review.identity.kyc_url %}<div class="st-review-actions"><a class="button" href="{{ review.identity.kyc_url }}">Open the ID check</a></div>{% endif %}
         {% elif review.identity.kyc_state == "expired" %}
         <p>This Traveler's approved ID has expired. They have to submit a current ID before their payout method can be decided.</p>
         {% else %}

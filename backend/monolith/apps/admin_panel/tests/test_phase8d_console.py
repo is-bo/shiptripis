@@ -110,8 +110,8 @@ class ConsoleAccessTests(ConsoleHttpMixin, TestCase):
         body = self.dispatch("/admin/", user=support).content.decode()
         self.assertIn("Users", body)
         self.assertIn("Disputes", body)
-        self.assertNotIn("KYC review", body)
-        self.assertNotIn("Ticket proofs", body)
+        self.assertNotIn('href="/admin/verification/"', body)
+        self.assertNotIn("ID checks to review", body)
         self.assertNotIn("Business settings", body)
         self.assertNotIn("Payments", body)
         self.assertEqual(
@@ -345,8 +345,8 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
             "/admin/verification/flight-proofs/?status=pending", user=trust
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Ticket proofs", response.content.decode())
-        self.assertIn("No ticket proofs waiting", response.content.decode())
+        self.assertIn(">Tickets<", response.content.decode())
+        self.assertIn("No tickets waiting", response.content.decode())
 
         support = User.objects.create_user(
             username="support-proof-console@example.com",

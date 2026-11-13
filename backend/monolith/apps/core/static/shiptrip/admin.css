@@ -484,6 +484,23 @@ body .st-primary-nav {
   opacity: 1;
 }
 .st-nav-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+/* Work waiting behind a destination (L6A: the verification inbox). A count,
+   not an alarm: the same quiet weight on the dark shell as the label beside it. */
+#header .st-nav-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--st-seal);
+  color: var(--st-shell);
+  font-size: var(--st-fs-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+#header .st-nav-link.is-current .st-nav-count { background: var(--st-ink); color: var(--st-canvas); }
 #header .st-nav-tab.is-current .st-nav-icon { color: var(--st-seal); }
 
 /* -- Row 2: the destinations inside the current section ------------------- */
@@ -2836,6 +2853,22 @@ button[disabled], .st-form button[disabled] {
 .st-decide { display: grid; grid-template-columns: 1fr 1fr; gap: var(--st-2); margin-top: var(--st-4); }
 .st-decide button { justify-content: center; padding: 11px 12px; font-size: var(--st-fs-sm); }
 
+/* L6A: three decisions (spec 13). Approve is the one that unblocks a person, so
+   it spans the row; asking for a new upload and rejecting share the row under
+   it, in the attention and destructive tones, never the same as each other. */
+.st-decide-three .st-decide-approve { grid-column: 1 / -1; }
+.st-button-attn {
+  border: 1px solid var(--st-attn-line) !important;
+  background: var(--st-attn-bg) !important;
+  color: var(--st-attn) !important;
+}
+.st-button-attn:hover { border-color: var(--st-attn) !important; }
+.st-decision-guide { display: grid; gap: var(--st-2); margin: var(--st-3) 0; }
+.st-decision-guide div { display: grid; gap: 2px; }
+.st-decision-guide dt { color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 650; }
+.st-decision-guide dd { margin: 0; color: var(--st-ink-2); font-size: var(--st-fs-sm); }
+.st-decision-note { margin: 0 0 var(--st-4); }
+
 .st-inline-actions form { display: flex; align-items: center; gap: var(--st-1); }
 .st-inline-actions select { max-width: 150px; }
 
@@ -3290,6 +3323,7 @@ a.st-person-link:hover { color: var(--st-accent); text-decoration-color: current
 .st-review-tab.is-primary.has-work:not(.is-current) b { color: var(--st-bad); }
 .st-review-tab.is-current { border-color: var(--st-btn); background: var(--st-btn); color: var(--st-btn-fg); }
 .st-review-tab.is-current b { color: var(--st-btn-fg); }
+.st-inbox-tabs .st-review-tab { min-width: 120px; justify-content: space-between; }
 .st-review-tabs-label {
   margin-left: var(--st-3);
   color: var(--st-ink-3);

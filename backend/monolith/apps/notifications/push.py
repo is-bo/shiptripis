@@ -420,7 +420,18 @@ _STATUS_PUSH_COPY: dict[
         "fr": ("Votre KYC nécessite votre attention", "Ouvrez Wassla pour consulter la décision et la prochaine étape."),
         "ar": ("يتطلب التحقق انتباهك", "افتح Wassla لمراجعة القرار والخطوة التالية."),
     },
+    # L6A: staff asked for a new upload rather than rejecting (spec 13). The
+    # stored status is still rejected; the payload's `outcome` says which.
+    ("kyc.status_changed", "resubmission_requested"): {
+        "en": ("We need a new upload", "Open Wassla to see why and upload your ID again."),
+        "fr": ("Nous avons besoin d'un nouvel envoi", "Ouvrez Wassla pour voir pourquoi et renvoyer votre pièce d'identité."),
+        "ar": ("نحتاج إلى رفع جديد", "افتح Wassla لمعرفة السبب وإعادة رفع وثيقة هويتك."),
+    },
 }
+
+_VERIFICATION_CHANNELS = frozenset(
+    {channels.KYC_STATUS_CHANGED, channels.LEG_PROOF_STATUS_CHANGED}
+)
 
 #: Ticket review copy names the mode it is about (L3A): a traveler with a
 #: flight and a ferry on one journey must be told which ticket was decided.
@@ -444,6 +455,16 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
         "en": ("Ferry ticket needs attention", "Open Wassla to review the decision."),
         "fr": ("Votre billet de ferry nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
         "ar": ("تذكرة العبّارة تتطلب انتباهك", "افتح Wassla لمراجعة القرار."),
+    },
+    ("FLIGHT", "resubmission_requested"): {
+        "en": ("We need a new flight ticket", "Open Wassla to see why and upload it again."),
+        "fr": ("Nous avons besoin d'un nouveau billet d'avion", "Ouvrez Wassla pour voir pourquoi et le renvoyer."),
+        "ar": ("نحتاج إلى تذكرة طيران جديدة", "افتح Wassla لمعرفة السبب وإعادة رفعها."),
+    },
+    ("SEA", "resubmission_requested"): {
+        "en": ("We need a new ferry ticket", "Open Wassla to see why and upload it again."),
+        "fr": ("Nous avons besoin d'un nouveau billet de ferry", "Ouvrez Wassla pour voir pourquoi et le renvoyer."),
+        "ar": ("نحتاج إلى تذكرة عبّارة جديدة", "افتح Wassla لمعرفة السبب وإعادة رفعها."),
     },
 }
 
@@ -585,6 +606,10 @@ def enqueue_fcm_for_event(
 
     category, android_channel, collapse_key, localized = spec
     status = str(payload.get("status", "")).strip().lower()
+    if channel in _VERIFICATION_CHANNELS:
+        # A verification decision is worded by its outcome: "ask for more"
+        # stores the rejected status but must not read as a rejection (L6A).
+        status = str(payload.get("outcome") or status).strip().lower()
     localized = _STATUS_PUSH_COPY.get((channel, status), localized)
     if channel == channels.LEG_PROOF_STATUS_CHANGED:
         mode = str(payload.get("mode", "")).strip().upper()
