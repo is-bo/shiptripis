@@ -1261,6 +1261,22 @@ Backend and console only. There is no mobile half.
   JSON staff API under `/api/admin/` answers only inside a two-step-verified console session. A bearer
   token alone is refused with `admin_two_step_required`. Before changing this, list every caller of
   `/api/admin/` in the repository in the handoff notes; if one is outside the console, stop (1.7).
+  Settled by the advisor on 2026-11-14, after the agent found two callers (a developer load probe and
+  an operator's health check in the deployment runbook):
+  - The staff API is session-authenticated only, with CSRF on writes, and both callers go through a
+    two-step-verified console session. The probe may mark its own session verified only with the
+    in-process helper the tests use, because it already runs with database access. No setting, header,
+    query parameter or route may mark a session verified from outside the process.
+  - The gate lives in `HasAdminPermission`, **not** in a rule on the `/api/admin/` path prefix. The
+    route inventory test lists the staff API routes and a short, named list of routes that answer
+    without the second step. That list holds `invitations/accept` (it creates the account, before any
+    enrolment, and returns nothing that opens another route). **L15 adds the AI helper routes to it:**
+    they live under `/api/admin/helper/`, accept only a helper key, and that key can be created only
+    behind a fresh second step.
+  - Texts in the technical admin and in docstrings that tell staff to call a staff API route with a
+    token are changed to name the console page that does the same thing.
+  - The verification in the session is bound to the user's id. A reset (console or server command)
+    deletes the target's rows and ends their sessions. Every password sign-in clears it.
 - Pages under `/admin/two-step/`: enrol (QR, text key, confirm), verify, recovery code, and the
   one-time display of 10 recovery codes. Signing out or a new session asks again.
 - `fresh_two_step(request, minutes=10)` for the steps of spec 19.1. Staff role changes and the reset
@@ -1300,7 +1316,7 @@ the finance dashboard's for the same range; the formula guard; the range limit; 
 fixed query count per 1,000 lines.
 
 **Done when.** No console page, technical admin page or `/api/admin/` route answers without the second
-step; `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` holds the route inventory, the export columns and the
+step, except the named list above; `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` holds the route inventory, the export columns and the
 recovery procedure; `docs/ADMIN_OPERATIONS.md` explains enrolment, reset and exports for staff.
 
 ### L15. AI helper: keys and read access (Opus, xhigh effort)
@@ -1337,7 +1353,9 @@ to 60 minutes, validity 1 to 72 hours, rate 10 to 300. A missing section means t
 **Authentication and authority.**
 - A DRF authentication class reads `Authorization: Bearer <key>` and nothing else: not a query
   parameter, not a cookie. It is installed only on the helper's views, and the helper's views accept
-  nothing else. A helper key opens no other route in the system.
+  nothing else. A helper key opens no other route in the system. The helper routes do not use
+  `HasAdminPermission` and are added to L14's named list of routes that answer without a session's
+  second step; nothing else is added to that list.
 - Each endpoint and each resource names the admin permission code of the console page it mirrors and
   checks it with `has_all_admin_permissions` (the fresh check) on every call.
 - Throttle per key from policy; `429 admin_helper_rate_limited`.
@@ -1564,7 +1582,8 @@ L10 runs last, after L17.
    `apps/parcels/tracking.py`; no public rating average outside `apps/ratings/public.py`; no work-list
    query outside `apps/admin_panel/worklist.py`; every helper payload has the privacy walk; every
    console POST route is in the helper's action table or its "never" list; no staff route answers
-   without the second step; nothing in `backend/` or `mobile/` code names a professional, a courier
+   without the second step, except L14's named list (invitation acceptance, and the helper API, whose
+   keys are created behind a fresh second step); nothing in `backend/` or `mobile/` code names a professional, a courier
    handoff or custody (the parked features left no hook).
 4. Switch matrix: with each switch off, the capability refuses on the server and the app shows the
    unavailable state. This includes the response deadline, trip-fit alerts and the AI helper (off:
