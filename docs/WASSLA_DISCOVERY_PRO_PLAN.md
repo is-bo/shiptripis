@@ -1487,6 +1487,23 @@ different parameters answer `409 admin_helper_action_already_waiting` with the e
 expires its waiting actions at once; a replaced or naturally expired key leaves them for the console
 click. Internal notes appear in no helper read payload.
 
+**Further points settled the same day.**
+- Console actions whose service and audit sit inside a view (dispute status and resolve, refund
+  request, job retry and resolve) move, unchanged in behaviour, into one function each in
+  `apps/admin_panel/staff_actions.py`; the console view and the registry both call it. The existing
+  console tests pass without an assertion changed.
+- The "via AI helper" audit metadata is set by a context around `run`, merged by
+  `record_admin_action`, reset in a `finally`, and set nowhere else. A test proves that an ordinary
+  console action handled right after a helper-confirmed one carries none.
+- `refund.request` targets the payment. The console's audit reason stays the refund reason code; the
+  admin's typed confirm reason goes into the audit row's metadata and the prepared action's outcome.
+- `dispute.resolve`: the summary carries the settlement preview, and its amounts are part of the
+  basis. The confirm page shows a fresh preview; if its amounts differ, the action is refused as
+  "This no longer applies". An admin never confirms a money outcome other than the one prepared.
+- `problem.acknowledge` needs `manage_disputes`, the permission L9A's service checks.
+- Confirming needs a two-step-verified session, not a fresh code (spec 19.1 names the steps that do).
+- The work list gains "Changes waiting for your confirmation": the admin's own, count and link only.
+
 Anything not in this table cannot be done or prepared through the helper. In particular, and proven
 by a test that lists every console POST route and requires each to be either in this table or in an
 explicit "never through the helper" list: staff, roles and invitations; settings; helper keys;
