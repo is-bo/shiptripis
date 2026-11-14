@@ -32,8 +32,9 @@ server. `_PagedList` moved to `PagedFeedList` (shared, with a scrolling header).
 
 ## Screenshots
 
-`/mnt/project-files/l-series-screens/L13B/` (EN and AR): reviews, menu, report sheet, empty, person
-link, My ratings.
+`/mnt/project-files/l-series-screens/L13B/`, 360 px wide, each as `-en` and `-ar`:
+`reviews-list`, `reviews-menu`, `reviews-empty`, `reviews-off`, `reviews-gone`, `reviews-error`,
+`report-sheet`, `report-sheet-keyboard`, `person-rating-link`, `my-ratings-moderated`.
 
 ## Tests
 
