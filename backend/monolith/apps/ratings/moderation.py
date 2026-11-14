@@ -116,9 +116,9 @@ def _staff_reason(reason: str) -> str:
     return reason[:MAX_REASON_LENGTH]
 
 
-def _close_open_reports(rating: Rating, *, status: str, actor, at, reason: str) -> int:
+def _close_reports(report_ids, *, status: str, actor, at, reason: str) -> int:
     return RatingReport.objects.filter(
-        rating=rating, status=RatingReport.Status.OPEN
+        pk__in=report_ids, status=RatingReport.Status.OPEN
     ).update(status=status, decided_by=actor, decided_at=at, decision_reason=reason)
 
 
@@ -148,9 +148,17 @@ def decide(*, rating_id: int, actor, action: str, reason: str) -> Decision:
             raise ModerationError("rating_not_found", "No such review.", status=404)
         current = RatingModeration.objects.filter(rating=rating).first()
         before_state = current.state if current else None
-        open_reports = RatingReport.objects.filter(
-            rating=rating, status=RatingReport.Status.OPEN
-        ).count()
+        # The open reports this decision closes, read once under the lock. A
+        # report filed while the decision runs is not locked out by the row
+        # lock (its insert only takes a key-share lock), so it stays open for
+        # the next decision instead of being closed unseen, and the audit's
+        # before and after counts always add up.
+        open_ids = list(
+            RatingReport.objects.filter(
+                rating=rating, status=RatingReport.Status.OPEN
+            ).values_list("pk", flat=True)
+        )
+        open_reports = len(open_ids)
         at = timezone.now()
 
         if action == ACTION_DISMISS:
@@ -196,8 +204,8 @@ def decide(*, rating_id: int, actor, action: str, reason: str) -> Decision:
             )
             closed_as = RatingReport.Status.ACTIONED
 
-        closed = _close_open_reports(
-            rating, status=closed_as, actor=actor, at=at, reason=reason
+        closed = _close_reports(
+            open_ids, status=closed_as, actor=actor, at=at, reason=reason
         )
         record_admin_action(
             actor=actor,
