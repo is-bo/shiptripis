@@ -33,7 +33,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L6A | Verification inbox (ID and Tickets) and removal of the parked switches | Opus | high | merged | `claude/project-thread-eqdiqe` | #36 | `a4f72db` | `docs/PHASE_L6A_VERIFICATION_INBOX.md` |
 | L9A | Problems and route changes, backend | Opus | high | merged | `claude/project-thread-qpwihm` | #37 | `9ceb40e` | `docs/PHASE_L9A_PROBLEMS_ROUTE_CHANGES.md` |
 | L9B | Problems and route changes, mobile | Sonnet | medium | merged | `claude/project-thread-18lfzs` | #38 | `b00260b` | `docs/PHASE_L9B_PROBLEMS_ROUTE_CHANGES_MOBILE.md` |
-| L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | not_started | | | | |
+| L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | merged | `claude/project-thread-ef7f2z` | #39 | `05ab258` | `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md` |
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | not_started | | | | |
 | L13A | Reviews, reports and moderation, backend | Opus | high | not_started | | | | |
 | L13B | Reviews, mobile | Sonnet | medium | not_started | | | | |
@@ -64,12 +64,14 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L12A (Opus, high effort; proposal deadline 6 hours or the pickup time, whichever is first,
-reminder 1 hour before, and trip-fit alerts, backend). Section 3 order.
+**Next package:** L12B (Sonnet, medium effort; proposal deadline and trip-fit alerts on the app, built on
+L12A's contract and the "Left for a later package" line of the L12A block below). Section 3 order.
 
 **Closed carry-overs (2026-11-13):** L6B was to add the Pro badge and business name to L4B's trip
 cards; L6B is parked, so nothing is owed. L5A's note that route changes must call
 `schedule_leg_reminders` is now written into L9A's text.
+
+**L12A judgment calls (accepted at the gate, for Ismail's end review):** (1) withdraw and match cancel also refuse after the deadline, so expiry is the single ending; (2) one trip-fit alert per traveler per request (the better ranked trip), since the cap counts travelers; (3) trip-fit alerts also need the listings switch, because the alert opens the public preview; (4) the offer payload reads `expired` from the deadline on, before the job stores it; (5) the reminder and the trip-fit alert are push class `marketplace`; (6) the trip-fit push copy names no cities. The gate also updated L4A's console pricing test, which posted the marketplace form without the new fields.
 
 **L9A judgment calls (accepted at the gate, for Ismail's end review):** (1) "earlier than the agreed pickup" counts only when the pickup moved earlier; (2) accepted but unfunded deals are classified and asked too; (3) problems reuse `view_disputes`/`manage_disputes`; (4) a repeat report returns the live one; (5) general reports from funding to `delivery_ready`; (6) a console no-show page for the existing action, and no second audit row on an API replay; (7) informed senders are told when the change applies. The advisor's answers (commit `2220b61`) are built as written. Known limit: the no-show window keeps the funded `agreed_pickup_at`.
 
@@ -652,8 +654,9 @@ Detail: `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md`. Screenshots: `/mnt/proj
 - Tests (before and after counts): Django 2,895 collected before, 2,941 after (+34
   `test_l12a_offer_deadlines.py`, +12 `test_l12a_trip_fit.py`), all passing locally in 4 shards.
   Rewritten to the new rule: `test_alerts.py::test_a_request_opening_notifies_request_watchers`
-  (its watcher was the fitting traveler, who now gets the trip-fit alert instead) and the two
-  `test_marketplace_policy.py` form tests (they post and expect the new fields).
+  (its watcher was the fitting traveler, who now gets the trip-fit alert instead), the two
+  `test_marketplace_policy.py` form tests and `test_l4a_journey_price.py`'s console test (they post
+  the new fields).
   `makemigrations --check` clean, ruff clean, `schema.sql` re-exported (additions only), Go
   `go test -race ./...` passes.
 - Known limits: between the deadline and the expiry job (normally under a minute) the match still
@@ -758,3 +761,4 @@ Detail: `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md`. Screenshots: `/mnt/proj
 | 2026-11-13 | Scope narrowed to fast delivery (plan 5.1e, spec "Scope change of 2026-11-13"). Parked, with their complete text moved to `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`: the professional half of L6A, L6B, L7A, L7B, L8A, L8B; spec 7, 9, 10 and the professional column of spec 6. L6A is now the verification inbox with two tabs and removes the two unused policy sections. L9A's problems live in `apps.problems` and lose the courier kinds; it no longer depends on L8A. L12A's proposal deadline is 6 hours or the pickup time, reminder 1 hour. The helper's action table, the final acceptance scenarios, `CLAUDE.md`, `AGENTS.md` and the skill draft were aligned. The documents as they stood before: commit `50547be`. |
 | 2026-11-13 | Advisor answers for L9A's schedule changes, written into spec 12 and plan L9A, L9B and 5.1e: the baseline for "moved" is what the sender last agreed to; the pickup side counts for parcels not yet collected; collected parcels are informed and never block; a re-timed ticket leg goes back to review on apply through the existing path; the unreachable `ACTIVE` reminder branch in `replace_journey_route` is removed. |
 | 2026-11-13 | L9B merged (PR #38, `b00260b`): problem reports, no-show action and route changes on the app. No backend change. Next: L12A. |
+| 2026-11-14 | L12A merged (PR #39, `05ab258`): proposal deadline (6 hours or the pickup time, reminder 1 hour before), expiry, `offer_expired` refusals and trip-fit alerts, with their console switches. Next: L12B. |

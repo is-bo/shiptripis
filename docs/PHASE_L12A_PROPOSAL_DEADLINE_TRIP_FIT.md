@@ -186,9 +186,9 @@ at 20 journeys: choosing whom to tell is flat, and each traveler told costs exac
 
 One existing test rewritten to the new rule: `test_alerts.py::test_a_request_opening_notifies_request_watchers`
 used the request's fitting traveler as the route-alert watcher; under spec 17.2 that traveler now
-gets the trip-fit alert instead, so the watcher is a traveler without a fitting trip. Two existing
-console tests (`test_marketplace_policy.py`) post the new form fields and expect the saved policy to
-carry them.
+gets the trip-fit alert instead, so the watcher is a traveler without a fitting trip. Three existing
+console tests post the new form fields: the two in `test_marketplace_policy.py` (which also expect
+the saved policy to carry them) and the console pricing test in `test_l4a_journey_price.py`.
 
 Counts: Django 2,895 collected before, 2,941 after (+46), all passing locally in 4 shards.
 `makemigrations --check` clean, ruff clean, `schema.sql` re-exported (additions only), Go

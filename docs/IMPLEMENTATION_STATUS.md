@@ -2,7 +2,7 @@
 
 ## Wassla L12A — Proposal deadline and trip-fit alerts, backend (2026-11-14)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). Backend and console; two
+Status: **merged** into `feature/discovery-professional-delivery` (PR #39, `05ab258`). Backend and console; two
 additive migrations; `main` untouched.
 
 - **Response deadline:** every proposal and counter-proposal must be answered within 6 hours, or by
