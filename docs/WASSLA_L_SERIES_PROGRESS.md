@@ -38,7 +38,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L13A | Reviews, reports and moderation, backend | Opus | high | merged | `claude/project-thread-aa9nb5` | #41 | `2624cdf` | `docs/PHASE_L13A_REVIEWS.md` |
 | L13B | Reviews, mobile | Sonnet | medium | merged | `claude/project-thread-j3f6qz` | #42 | `c5ec718` | `docs/PHASE_L13B_REVIEWS_MOBILE.md` |
 | L14 | Staff two-step sign-in and finance exports | Opus | high | merged | `claude/project-thread-udx9bx` | #43 | `15d5f9e` | `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` |
-| L15 | AI helper: keys and read access | Opus | xhigh | not_started | | | | |
+| L15 | AI helper: keys and read access | Opus | xhigh | merged | `claude/project-thread-jm20wy` | #44 | `db32121` | `docs/PHASE_L15_ADMIN_HELPER_READ.md` |
 | L16 | AI helper: changes | Opus | xhigh | not_started | | | | |
 | L17 | AI helper skill | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
@@ -64,9 +64,23 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L15 (Opus, xhigh effort; AI helper: keys and read access). Section 3 order. L15 adds
-its helper routes to `OPEN_STAFF_API_ROUTES` and the frozen `STAFF_API_ROUTES` inventory in
-`apps/admin_panel/tests/test_l14_two_step.py`, and calls `fresh_two_step` before creating a key.
+**Next package:** L16 (Opus, xhigh effort; AI helper: changes). Section 3 order. Read the L15 handoff
+block first: the review actions target the Rating id; `issue_key` already takes `kind="change"`; new
+helper routes go into `HELPER_API_ROUTES` and the frozen `STAFF_API_ROUTES` inventory in
+`apps/admin_panel/tests/test_l14_two_step.py`; `guide.actions`, `tasks[].action` and the guide's
+read-only rule become kind-dependent; keep the lock order admin row, settings revision, keys.
+
+**L15 judgment calls (accepted by the advisor on 2026-11-14, for Ismail's end review):** the seven
+calls in phase doc section 11 (work item gate = console page gate, so Ops now sees background jobs;
+switch-off stops every key for good; a two-step reset stops the admin's keys; the `person` record's
+frozen fields; count and link only for document reviews, email and providers; `review_report` keyed
+by the Rating id). **The severity thresholds are Ismail's to confirm:** tickets urgent after 2 h, ID
+checks and payouts after 24 h, payout methods and payout identity after 48 h, reported reviews after
+72 h, failed email always "today", disputes, problems, payments, refunds, jobs and providers always
+urgent. The second review found three races and leaks (Accept header printing the admin's email, a
+key surviving a reset, a key surviving a switch-off), all fixed before merge. First CI run: one
+Flutter teardown race in `profile_passport_test.dart` (no mobile change); all eleven checks green on
+the next push, Schema drift included.
 
 **L14 judgment calls (accepted at the gate, for Ismail's end review):** the twelve calls listed in the
 L14 handoff block below. The one that touches deployment: production refuses to start without the
@@ -922,3 +936,4 @@ Screenshots: `/mnt/project-files/l-series-screens/L15/` (console EN and 390 px, 
 | 2026-11-14 | Advisor answer for L14, written into plan L14, L15 and L10: the staff API becomes session-only behind the second step (the two callers found, a developer load probe and the runbook's health check, go through a verified console session); the gate is in `HasAdminPermission`, not on the path prefix, with a named list of open routes (`invitations/accept` now, the AI helper routes from L15); no outside way to mark a session verified. |
 | 2026-11-14 | L14 merged (PR #43, `15d5f9e`): staff two-step sign-in (console, technical admin and staff API; the staff API is session-only, open list `invitations/accept`), fresh-code rule, reset, finance exports. Django 2,990 to 3,046 tests. Next: L15. |
 | 2026-11-14 | Advisor answer for L15: its seven judgment calls stand. Written into plan 2.11: a person named inside a payload is still first name, last initial, id and link only; the `person` record adds only account state, "member since" (month and year) and activity counts. Also accepted: switching the helper off stops every key for good; a two-step reset stops that admin's keys; the severity thresholds as built, for Ismail's end review. |
+| 2026-11-14 | L15 merged (PR #44, `db32121`): AI helper keys and read API (guide, briefing, queues, records, search, tasks), one work list with severity for the overview and the briefing, console card, page and settings form; helper routes on L14's open staff list. Django 3,046 to 3,123 tests. Next: L16. |

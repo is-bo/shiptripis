@@ -2,8 +2,9 @@
 
 ## Wassla L15 — AI helper, keys and read access (2026-11-14)
 
-Status: **in review** into `feature/discovery-professional-delivery`. Backend and console only; new app
-`apps.admin_helper` (`admin_helper/0001`) and one job kind (`finance/0031`); `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #44, `db32121`). Backend and
+console only; new app `apps.admin_helper` (`admin_helper/0001`) and one job kind (`finance/0031`);
+`main` untouched.
 
 - **Keys:** each admin creates their own read key on the Overview's AI helper card, after a two-step
   code from the last 10 minutes. It is shown once as one line, `/wassla <address> <key>`; only its
