@@ -1199,7 +1199,18 @@ feeds ranking (1.2).
 - `POST /api/ratings/<id>/reports` with `reason` and `note`. The caller must be able to see the
   review, or be its ratee. A second report by the same person answers the first one's state.
 - `GET /api/users/me/ratings` marks each row `moderation: null | "comment_hidden" | "removed"`.
-- Switched-off profiles or listings (2.1) answer `state: "disabled"` as the other discovery endpoints.
+- Switched-off profiles answer `state: "disabled"` on the people endpoint, as the other discovery
+  endpoints do.
+- The trips endpoint (settled by the advisor on 2026-11-14, because Find Travelers shows a rating and
+  is not governed by the listings switch): the listings switch closes only the **public** path. The
+  owner, and a viewer who shares a match with the owner, always get the reviews. A viewer coming from
+  Find Travelers passes `?request=<id>`, their own open request; the server checks the pair with the
+  existing `explain_candidate` (the single-pair verdict "I can carry this" uses) and, when the journey
+  is a compatible candidate, answers the reviews whatever the switch says. Only a viewer whose sole
+  path is the public listing gets `state: "disabled"` when listings are off. Every failure of the
+  `request` path (not the viewer's request, not open, not compatible, unknown journey) answers exactly
+  what an unknown journey answers, so it reveals nothing about the pair. No compatibility decision is
+  made outside `apps/matching`; the query count is fixed with and without the parameter.
 
 **Staff.** New permission `moderate_ratings` for Trust / Verification and Super Admin. Console page
 "Reported reviews" (`trust/reviews/`): open reports first, with the review, the delivery link, the
@@ -1220,7 +1231,7 @@ outside `countable`.
 ### L13B. Reviews, mobile (Sonnet, medium effort)
 
 - A "Reviews" screen opened by tapping the rating on the Person page, the Trip preview and a Find
-  Travelers candidate: the average and count from the card, then the list with lazy paging. A removed
+  Travelers candidate (from Find Travelers the app sends the request's id as `request`, see L13A): the average and count from the card, then the list with lazy paging. A removed
   comment shows "Comment removed by Wassla".
 - "Report" in each review's menu: a sheet with the five reasons and an optional note, then "Thanks,
   we will review it". A review already reported by the viewer says so and offers nothing more.
