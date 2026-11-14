@@ -38,6 +38,7 @@ import '../../domain/offer.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
+import '../offers/offer_deadline.dart';
 import '../requests/request_labels.dart';
 import '../shell/app_shell.dart';
 
@@ -362,6 +363,10 @@ class _NegotiationRow extends StatelessWidget {
                 ),
             ],
           ),
+          if (offer != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            OfferDeadline(offer: offer, viewerId: viewerId, dense: true),
+          ],
           if (amount != null && perspective != null) ...[
             const SizedBox(height: AppSpace.sm),
             Row(

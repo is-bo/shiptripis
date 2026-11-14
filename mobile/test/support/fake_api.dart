@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shiptrip/core/api/api_client.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/time/clock.dart';
 import 'package:shiptrip/core/session/token_store.dart';
 
 /// One request the client actually made.
@@ -264,12 +265,17 @@ class FakeTokenStore extends TokenStore {
 /// A container whose HTTP layer is [backend] and whose keystore is in memory.
 ///
 /// Everything else — repositories, session, providers — is the real thing.
-ProviderContainer containerFor(FakeBackend backend, {FakeTokenStore? tokens}) {
+ProviderContainer containerFor(
+  FakeBackend backend, {
+  FakeTokenStore? tokens,
+  DateTime Function()? now,
+}) {
   final store = tokens ?? FakeTokenStore();
   return ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
       apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+      if (now != null) clockProvider.overrideWithValue(now),
     ],
   );
 }

@@ -283,6 +283,10 @@ Set<LiveResource> resourcesForLiveEvent(
     'offer.updated',
     'offer.accepted',
     'offer.economics_changed',
+    // L12B. The reminder re-reads the proposal like any `offer.` event; the
+    // trip-fit alert only adds a row to the bell inbox.
+    'offer.response_reminder',
+    'discovery.request_fits_trip',
     'payment.captured',
     'payment.failed',
     'payment.refunded',

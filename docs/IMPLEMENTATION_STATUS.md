@@ -1,5 +1,18 @@
 # Waçla V1 Implementation Status
 
+## Wassla L12B — Proposal deadline and trip-fit alerts, mobile (2026-11-14)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
+
+- Proposal screen, Open offers and a request's proposals show "Answer by" or "Waiting for an answer until",
+  and a calm countdown in the last hour. An expired proposal is a designed state: nothing was reserved, and
+  the next step is "Propose to another traveler" (sender) or "Browse parcels" (traveler). The server's
+  `offer_expired` refusal lands there, not in an error banner.
+- The reminder opens the proposal. "A parcel fits your trip" opens that parcel's preview with "I can carry
+  this" for the named trip, and says so when the parcel is gone.
+
+Detail: `docs/PHASE_L12B_PROPOSAL_DEADLINE_MOBILE.md`.
+
 ## Wassla L12A — Proposal deadline and trip-fit alerts, backend (2026-11-14)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #39, `05ab258`). Backend and console; two

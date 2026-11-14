@@ -5870,4 +5870,88 @@ class LAr extends L {
   @override
   String get scheduleDealInformedBody =>
       'تغيّرت مواعيد المسافر بعد استلام الطرد. اطّلع على المواعيد القديمة والجديدة.';
+
+  @override
+  String offerAnswerBy(String when) {
+    return 'أجب قبل $when';
+  }
+
+  @override
+  String offerWaitingUntil(String when) {
+    return 'بانتظار الرد حتى $when';
+  }
+
+  @override
+  String offerAnswerWithin(String time) {
+    return 'أجب خلال $time';
+  }
+
+  @override
+  String offerWaitingWithin(String time) {
+    return 'بانتظار الرد، تبقّى $time';
+  }
+
+  @override
+  String offerMinutesLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count دقيقة',
+      many: '$count دقيقة',
+      few: '$count دقائق',
+      two: 'دقيقتين',
+      one: 'دقيقة واحدة',
+      zero: 'أقل من دقيقة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get offerDeadlinePassed => 'انتهت مهلة الرد';
+
+  @override
+  String offerExpiredOn(String when) {
+    return 'انتهت الصلاحية في $when';
+  }
+
+  @override
+  String get offerExpiredTitle => 'انتهت صلاحية هذا العرض';
+
+  @override
+  String get offerExpiredBodySender =>
+      'لم يصل رد في الوقت المناسب. لم يُحجز أو يُخصم شيء، وطردك ما زال متاحًا لمسافرين آخرين.';
+
+  @override
+  String get offerExpiredBodyTraveler =>
+      'لم يصل رد في الوقت المناسب. لم يُحجز أو يُخصم شيء. قد تناسب رحلتك طرود أخرى.';
+
+  @override
+  String get offerExpiredActionSender => 'اقترح على مسافر آخر';
+
+  @override
+  String get offerExpiredActionTraveler => 'تصفّح الطرود';
+
+  @override
+  String get notificationOfferReminder => 'عرض على وشك أن تنتهي صلاحيته';
+
+  @override
+  String get notificationFitsTrip => 'طرد يناسب رحلتك';
+
+  @override
+  String requestFitsTripHint(String route) {
+    return 'مقترح لرحلتك $route';
+  }
+
+  @override
+  String get discoveryFocusGoneRequestTitle => 'هذا الطرد لم يعد متاحًا';
+
+  @override
+  String get discoveryFocusGoneRequestBody =>
+      'ربما تم قبوله أو سحبه. هذه هي الطرود المتاحة الآن.';
+
+  @override
+  String get discoveryFocusGoneTripTitle => 'هذه الرحلة لم تعد معروضة';
+
+  @override
+  String get discoveryFocusGoneTripBody => 'هذه هي الرحلات المعروضة الآن.';
 }

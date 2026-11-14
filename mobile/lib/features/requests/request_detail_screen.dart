@@ -46,6 +46,7 @@ import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+import '../offers/offer_deadline.dart';
 import 'request_labels.dart';
 
 final _requestPricingProvider = FutureProvider.autoDispose
@@ -627,6 +628,10 @@ class _MatchRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (offer != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  OfferDeadline(offer: offer, viewerId: viewerId, dense: true),
+                ],
                 if (offer?.senderTotal != null) ...[
                   const SizedBox(height: AppSpace.xs),
                   Row(

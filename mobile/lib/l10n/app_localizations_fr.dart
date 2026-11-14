@@ -5957,4 +5957,87 @@ class LFr extends L {
   @override
   String get scheduleDealInformedBody =>
       'Les horaires du voyageur ont changé après la remise. Voir les anciens et nouveaux horaires.';
+
+  @override
+  String offerAnswerBy(String when) {
+    return 'Répondez avant $when';
+  }
+
+  @override
+  String offerWaitingUntil(String when) {
+    return 'En attente d’une réponse jusqu’à $when';
+  }
+
+  @override
+  String offerAnswerWithin(String time) {
+    return 'Répondez dans les $time';
+  }
+
+  @override
+  String offerWaitingWithin(String time) {
+    return 'En attente d’une réponse, encore $time';
+  }
+
+  @override
+  String offerMinutesLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minutes',
+      one: '1 minute',
+      zero: 'moins d’une minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get offerDeadlinePassed => 'Le délai de réponse est écoulé';
+
+  @override
+  String offerExpiredOn(String when) {
+    return 'Expirée le $when';
+  }
+
+  @override
+  String get offerExpiredTitle => 'Cette proposition a expiré';
+
+  @override
+  String get offerExpiredBodySender =>
+      'Aucune réponse n’est arrivée à temps. Rien n’a été réservé ni débité, et votre colis reste ouvert aux autres voyageurs.';
+
+  @override
+  String get offerExpiredBodyTraveler =>
+      'Aucune réponse n’est arrivée à temps. Rien n’a été réservé ni débité. D’autres colis peuvent convenir à votre trajet.';
+
+  @override
+  String get offerExpiredActionSender => 'Proposer à un autre voyageur';
+
+  @override
+  String get offerExpiredActionTraveler => 'Parcourir les colis';
+
+  @override
+  String get notificationOfferReminder =>
+      'Une proposition est sur le point d’expirer';
+
+  @override
+  String get notificationFitsTrip => 'Un colis correspond à votre trajet';
+
+  @override
+  String requestFitsTripHint(String route) {
+    return 'Proposé pour votre trajet $route';
+  }
+
+  @override
+  String get discoveryFocusGoneRequestTitle => 'Ce colis n’est plus ouvert';
+
+  @override
+  String get discoveryFocusGoneRequestBody =>
+      'Il a peut-être été pris ou retiré. Voici les colis ouverts en ce moment.';
+
+  @override
+  String get discoveryFocusGoneTripTitle => 'Ce trajet n’est plus listé';
+
+  @override
+  String get discoveryFocusGoneTripBody =>
+      'Voici les trajets listés en ce moment.';
 }

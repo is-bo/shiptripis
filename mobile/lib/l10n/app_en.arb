@@ -3069,5 +3069,73 @@
   "scheduleDealAskedBody": "Check the new times and tell us if they work for you.",
   "scheduleDealDeclinedBody": "You can cancel this delivery, and it won’t be counted as yours.",
   "scheduleDealAcceptedBody": "You agreed to the new times. We are waiting for the other senders.",
-  "scheduleDealInformedBody": "The traveler’s times changed after pickup. See the old and new times."
+  "scheduleDealInformedBody": "The traveler’s times changed after pickup. See the old and new times.",
+  "offerAnswerBy": "Answer by {when}",
+  "@offerAnswerBy": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "offerWaitingUntil": "Waiting for an answer until {when}",
+  "@offerWaitingUntil": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "offerAnswerWithin": "Answer within {time}",
+  "@offerAnswerWithin": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "offerWaitingWithin": "Waiting for an answer, {time} left",
+  "@offerWaitingWithin": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "offerMinutesLeft": "{count, plural, =0{less than a minute} =1{1 minute} other{{count} minutes}}",
+  "@offerMinutesLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "offerDeadlinePassed": "The time to answer has passed",
+  "offerExpiredOn": "Expired {when}",
+  "@offerExpiredOn": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "offerExpiredTitle": "This proposal expired",
+  "offerExpiredBodySender": "No answer came in time. Nothing was reserved or charged, and your parcel is still open for other travelers.",
+  "offerExpiredBodyTraveler": "No answer came in time. Nothing was reserved or charged. Other parcels may fit your trip.",
+  "offerExpiredActionSender": "Propose to another traveler",
+  "offerExpiredActionTraveler": "Browse parcels",
+  "notificationOfferReminder": "A proposal is about to expire",
+  "notificationFitsTrip": "A parcel fits your trip",
+  "requestFitsTripHint": "Suggested for your trip {route}",
+  "@requestFitsTripHint": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "discoveryFocusGoneRequestTitle": "This parcel is no longer open",
+  "discoveryFocusGoneRequestBody": "It may have been taken or withdrawn. Here are the parcels that are open now.",
+  "discoveryFocusGoneTripTitle": "This trip is no longer listed",
+  "discoveryFocusGoneTripBody": "Here are the trips that are listed now."
 }

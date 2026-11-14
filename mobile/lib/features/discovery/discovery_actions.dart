@@ -421,18 +421,28 @@ class _LegRow extends StatelessWidget {
 
 /// Opens the full request card with the "I can carry this" action. A traveler
 /// with no live trip is offered the publish screen instead.
-Future<void> showRequestPreview(BuildContext context, RequestCard card) async {
+///
+/// [carryJourneyId] is the trip a "a parcel fits your trip" alert named. It is
+/// the one "I can carry this" speaks for, and the server still decides whether
+/// the pair works: a refusal is shown with its reasons, as for any other trip.
+Future<void> showRequestPreview(
+  BuildContext context,
+  RequestCard card, {
+  int? carryJourneyId,
+}) async {
   final publish = await showAppSheet<bool>(
     context,
-    builder: (_) => _RequestPreviewSheet(card: card),
+    builder: (_) =>
+        _RequestPreviewSheet(card: card, carryJourneyId: carryJourneyId),
   );
   if (publish == true && context.mounted) await context.openJourneyCreate();
 }
 
 class _RequestPreviewSheet extends ConsumerStatefulWidget {
-  const _RequestPreviewSheet({required this.card});
+  const _RequestPreviewSheet({required this.card, this.carryJourneyId});
 
   final RequestCard card;
+  final int? carryJourneyId;
 
   @override
   ConsumerState<_RequestPreviewSheet> createState() =>
@@ -445,8 +455,13 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
 
   Future<void> _carry(List<Journey> journeys) async {
     final l = L.of(context);
+    final named = journeys
+        .where((j) => j.id == widget.carryJourneyId)
+        .firstOrNull;
     final Journey journey;
-    if (journeys.length == 1) {
+    if (named != null) {
+      journey = named;
+    } else if (journeys.length == 1) {
       journey = journeys.single;
     } else {
       final picked = await showAppSheet<Journey>(
@@ -501,6 +516,9 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
     final journeys = ref.watch(activeJourneysProvider);
     final sent = _outcome is CarrySent;
     final stops = placeStops([card.pickup, card.delivery]);
+    final suggested = journeys
+        .where((j) => j.id == widget.carryJourneyId)
+        .firstOrNull;
 
     Widget? footer;
     if (sent) {
@@ -530,6 +548,14 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (suggested != null) ...[
+            InfoNotice(
+              message: l.requestFitsTripHint(journeyOptionLabel(suggested)),
+              tone: StatusTone.progress,
+              icon: Icons.luggage_outlined,
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           InlineRoute(stops: stops),
           const SizedBox(height: AppSpace.md),
           if (card.fragile)

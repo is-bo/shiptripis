@@ -348,6 +348,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           focusRequestId: int.tryParse(
             state.uri.queryParameters['focus'] ?? '',
           ),
+          carryJourneyId: int.tryParse(
+            state.uri.queryParameters['journey'] ?? '',
+          ),
         ),
       ),
       GoRoute(
@@ -718,10 +721,14 @@ extension AppNavigation on BuildContext {
     },
   );
 
+  /// [carryJourneyId] is the traveler's own trip named by a "a parcel fits
+  /// your trip" alert: the preview of [focusRequestId] offers to carry it on
+  /// that trip.
   void openBrowseRequests({
     Corridor? corridor,
     int? alertId,
     int? focusRequestId,
+    int? carryJourneyId,
   }) => pushNamed(
     Routes.browseRequests,
     queryParameters: {
@@ -729,6 +736,7 @@ extension AppNavigation on BuildContext {
       if (corridor != null) 'to': corridor.destinationCountry,
       if (alertId != null) 'alert': '$alertId',
       if (focusRequestId != null) 'focus': '$focusRequestId',
+      if (carryJourneyId != null) 'journey': '$carryJourneyId',
     },
   );
 

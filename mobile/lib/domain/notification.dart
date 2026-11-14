@@ -22,6 +22,7 @@ enum NotificationChannel {
   offerUpdated,
   offerEconomicsChanged,
   offerAccepted,
+  offerResponseReminder,
   matchInTransit,
   matchCompleted,
   paymentCaptured,
@@ -42,6 +43,7 @@ enum NotificationChannel {
   payoutStatusChanged,
   discoveryRouteAlert,
   discoveryTravelerInterested,
+  discoveryRequestFitsTrip,
   dealProgressReported,
   journeyLegReminder,
   dealProblemReported,
@@ -58,6 +60,7 @@ enum NotificationChannel {
     'offer.updated' => offerUpdated,
     'offer.economics_changed' => offerEconomicsChanged,
     'offer.accepted' => offerAccepted,
+    'offer.response_reminder' => offerResponseReminder,
     'match.in_transit' => matchInTransit,
     'match.completed' => matchCompleted,
     'payment.captured' => paymentCaptured,
@@ -78,6 +81,7 @@ enum NotificationChannel {
     'payout.status_changed' => payoutStatusChanged,
     'discovery.route_alert' => discoveryRouteAlert,
     'discovery.traveler_interested' => discoveryTravelerInterested,
+    'discovery.request_fits_trip' => discoveryRequestFitsTrip,
     'deal.progress_reported' => dealProgressReported,
     'journey.leg_reminder' => journeyLegReminder,
     'deal.problem_reported' => dealProblemReported,
@@ -179,6 +183,15 @@ class OpenTravelerInterest extends NotificationDestination {
   final int journeyId;
 }
 
+/// "A parcel fits your trip": opens that parcel's preview, with the trip the
+/// server named in focus. Both ids are the traveler's to read: the request is
+/// public and the journey is their own.
+class OpenRequestFit extends NotificationDestination {
+  const OpenRequestFit({required this.requestId, required this.journeyId});
+  final int requestId;
+  final int journeyId;
+}
+
 class AppNotification {
   const AppNotification({
     required this.id,
@@ -252,6 +265,7 @@ class AppNotification {
     },
     NotificationChannel.offerCreated ||
     NotificationChannel.offerUpdated ||
+    NotificationChannel.offerResponseReminder ||
     NotificationChannel.offerEconomicsChanged => switch (matchId) {
       final int id => OpenMatch(id),
       _ => null,
@@ -322,6 +336,16 @@ class AppNotification {
         journeyId: journey,
       ),
       (final int request, _) => OpenRequest(request),
+      _ => null,
+    },
+    NotificationChannel.discoveryRequestFitsTrip => switch ((
+      requestId,
+      journeyId,
+    )) {
+      (final int request, final int journey) => OpenRequestFit(
+        requestId: request,
+        journeyId: journey,
+      ),
       _ => null,
     },
     // Asked: the answer screen. Told, or the outcome of an answer: the
