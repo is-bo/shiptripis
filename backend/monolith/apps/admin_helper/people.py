@@ -2,7 +2,7 @@
 
 ``{"id": 42, "display": "Amina B.", "console_url": "https://.../admin/users/42/"}``
 and nothing else, ever. The short name is the first name and the last initial.
-A name that does not look like a name (it holds an ``@``, a digit or a symbol)
+A name that does not look like a name (it holds an ``@``, a digit, a dot or a symbol)
 is never sent, because people do type an email or a phone number into a name
 field; the person is then "Member 42".
 """
@@ -11,13 +11,21 @@ from __future__ import annotations
 
 import unicodedata
 
-#: Characters a name may hold besides letters.
-_NAME_JOINERS = frozenset("-'’.")
-_MAX_FIRST_NAME = 40
+#: Characters a name may hold between letters ("Jean-Luc", "O'Neil").
+_NAME_JOINERS = frozenset("-'’")
+_MAX_NAME_PART = 30
 
 
 def _looks_like_a_name(token: str) -> bool:
-    if not token or len(token) > _MAX_FIRST_NAME:
+    """Letters joined by hyphens or apostrophes, or one initial with its dot.
+
+    A dot anywhere else is refused, so a handle such as ``amina.benali.mail``
+    is never sent as a name.
+    """
+
+    if token.endswith(".") and len(token) == 2:
+        token = token[0]
+    if not token or len(token) > _MAX_NAME_PART:
         return False
     letters = 0
     for char in token:
@@ -38,5 +46,5 @@ def short_name(user) -> str:
     first = parts[0]
     if len(parts) == 1:
         return first
-    initial = next(char for char in parts[-1] if char not in _NAME_JOINERS)
+    initial = next(char for char in parts[-1] if char not in _NAME_JOINERS and char != ".")
     return f"{first} {initial.upper()}."

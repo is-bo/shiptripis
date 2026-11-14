@@ -11,7 +11,7 @@ Status: **in review** into `feature/discovery-professional-delivery`. Backend an
   admin, by a Super Admin with a reason, by a two-step reset, and all at once for good when the helper
   is switched off. Every refusal is the same `401 admin_helper_key_invalid`.
 - **Read API** `/api/admin/helper/v1/`: `guide`, `briefing`, `queues/<code>`, `records/<type>/<id>`
-  (11 types), `search`, `tasks` (38 how-tos covering every console page). Bearer header only, GET
+  (11 types), `search`, `tasks` (38 how-tos covering every console page). Bearer header only, JSON and GET
   only, `no-store`, a per-key rate limit and a 30-day call log without query strings. Each call
   answers exactly when the admin's console page would, checked fresh every call. Plan 2.11 holds for
   every payload: a person is a short name, an id and a link; no contact, document, address, payout,

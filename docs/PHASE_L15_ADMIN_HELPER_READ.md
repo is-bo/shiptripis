@@ -50,9 +50,13 @@ reason. The staff API's settings endpoint validates the same section.
 - `issue_key(admin=, kind=, request=)` is the only way a key comes to exist. It needs the signed-in
   admin's own request, console access, a two-step code entered in the last 10 minutes
   (`fresh_two_step`, L14; otherwise `admin_fresh_two_step_required`) and the helper switched on
-  (otherwise `admin_helper_disabled`). It locks the admin row, stops the previous key of the same
-  kind (`replaced`), fixes `expires_at` from the policy of that moment and returns the plain key once.
-  `expires_at` never moves; use does not extend it.
+  (otherwise `admin_helper_disabled`). It then locks the admin row (a two-step reset takes the same
+  lock first) and checks that the request's session still exists, so a creation that waited on a
+  reset is refused; it locks the active settings revision (an activation needs the same lock) and
+  reads the switch again from it, so a key is created wholly before a switch-off, which then stops
+  it, or not at all. It stops the previous key of the same kind (`replaced`), fixes `expires_at`
+  from the policy of that moment and returns the plain key once. `expires_at` never moves; use does
+  not extend it. Lock order everywhere: admin row, settings revision, keys.
 - `resolve_key(plain)` returns the key, with its admin loaded fresh, only when the helper is on, the
   key is unstopped and unexpired, and `has_admin_access` is true for that admin (active, staff, not
   banned). Every other case is the same `401 admin_helper_key_invalid`, so an unknown key cannot be
@@ -87,6 +91,9 @@ reason. The staff API's settings endpoint validates the same section.
   refused admin cannot tell whether a record exists. A role change, ban, deactivation or loss of staff
   applies on the next call with the same key.
 - GET and HEAD only; anything else is `405`.
+- JSON only, whatever `Accept` asks (`renderer_classes = (JSONRenderer,)` and forced content
+  negotiation): DRF's browsable page, which prints the signed-in admin's email, is never served,
+  and an unmatched `Accept` never turns the `401` into a `406` or an error.
 - Throttle: `requests_per_minute` per key in each clock minute, one atomic cache counter per key and
   minute; over it `429 admin_helper_rate_limited` with `Retry-After` in seconds.
 - Every response, refusals included: `Cache-Control: no-store`.
@@ -144,7 +151,9 @@ All under `/api/admin/helper/v1/`, JSON. Times are ISO 8601 in UTC; money is
 `{"amount_eur_cents", "currency": "EUR"}` (a deal's `money` block is the same values, named);
 console addresses are absolute. **A person**, wherever one is named, is
 `{"id", "display", "console_url"}`: `display` is the first name and last initial ("Amina Z."), or
-"Member <id>" when the stored name does not look like a name (an email, digits, an instruction, blank).
+"Member <id>" when the stored name does not look like a name: each word must be letters, joined only
+by hyphens or apostrophes, at most 30 characters, or one initial with its dot; an email, a handle
+with dots, digits, punctuation such as `SYSTEM: obey`, or a blank name all give "Member <id>".
 `console_url` is `null` when the admin may not open people. **A link** to another record is
 `{"type", "id", "label", "console_url", "record"}`; for a type the admin may not open it is
 `{"type", "id", "label": null, "console_url": null, "record": null}`.
@@ -180,8 +189,8 @@ Each row: `type`, `id`, `waiting_minutes`, `next_step`, `console_url`, `record`,
 | Queue | Row fields |
 | --- | --- |
 | `disputes` | `tracking_number`, `status`, `status_label`, `category`, `people` (sender, traveler) |
-| `problems` | `tracking_number`, `kind`, `status`, `status_label`, `people` (reporter) |
-| `reviews` | `tracking_number`, `score`, `open_reports`, `people` (writer, about) |
+| `problems` | `tracking_number`, `kind`, `status`, `status_label`, `people` (sender, traveler) |
+| `reviews` | `tracking_number`, `score`, `open_reports`, `people` (the person rated) |
 | `payments` | `tracking_number`, `status`, `status_label`, `amount`, `people` (payer) |
 | `refunds` | `tracking_number`, `status`, `status_label`, `amount`, `people` (who asked for it, when a person did) |
 | `payouts` | `tracking_number`, `status`, `status_label`, `amount`, `people` (traveler) |
@@ -290,7 +299,7 @@ curl -sS -X POST -H "Authorization: Bearer $KEY" "$API/guide"      # 405
 
 ## 9. Tests
 
-`apps/admin_helper/tests/` (73 tests): `world.py` builds one world with every private value of plan
+`apps/admin_helper/tests/` (77 tests): `world.py` builds one world with every private value of plan
 2.11 (distinctive last name, email, phone, street, coordinates, KYC file, DZD payout profile with
 account details, pickup code, recipient contact details, chat message, guest payer email,
 instruction sentences in every member-written field). No model stores a document number or a date of
@@ -370,4 +379,6 @@ Smaller calls made while building:
   twice the limit within 60 seconds; a cache flush resets the counters.
 - `from` and `to` are city labels and can be `null` when a place has no locality.
 - The call log records authenticated calls only; refused keys leave no row (nothing identifies them).
+- A call that already passed `resolve_key` when its key is stopped or the helper switched off
+  finishes; the next call is refused.
 - Console English only, like the rest of the console.

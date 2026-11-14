@@ -29,6 +29,7 @@ from django.utils import timezone
 from apps.admin_panel.permissions import has_admin_access, has_admin_permission
 from apps.admin_panel.services import record_admin_action
 from apps.admin_panel.two_step import fresh_two_step
+from apps.admin_panel.two_step import required as two_step_required
 from apps.core.business_settings import NoActiveBusinessSettings
 
 from .models import AdminHelperKey
@@ -101,20 +102,27 @@ def issue_key(*, admin, kind: str, request) -> IssuedKey:
     if not has_admin_access(admin):
         raise PermissionDenied("Only staff with console access have helper keys.")
     if not fresh_two_step(request):
-        raise HelperKeyError(
-            FRESH_TWO_STEP_CODE,
-            "Creating a key needs a two-step code entered in the last 10 minutes.",
-        )
+        raise _stale_code()
     policy = current_policy()
     if policy is None or not policy.enabled:
-        raise HelperKeyError(DISABLED_CODE, "The AI helper is switched off.")
+        raise _switched_off()
 
     plain = PREFIXES[kind] + secrets.token_urlsafe(RANDOM_BYTES)
     now = timezone.now()
     with transaction.atomic():
         # One creation at a time per admin, so two clicks cannot race past
-        # the one-live-key constraint.
+        # the one-live-key constraint. A two-step reset takes the same lock
+        # first, so a creation never slips past one: if the reset won, it
+        # ended this session and the check below refuses.
         get_user_model().objects.select_for_update().only("pk").get(pk=admin.pk)
+        if two_step_required() and not _session_alive(request):
+            raise _stale_code()
+        # The switch, read again under the lock an activation also needs: a
+        # key is created wholly before a switch-off (which then stops it) or
+        # not at all, never in between where the switch-off cannot see it.
+        policy = _locked_policy()
+        if policy is None or not policy.enabled:
+            raise _switched_off()
         replaced = list(
             AdminHelperKey.objects.select_for_update().filter(
                 admin=admin, kind=kind, revoked_at__isnull=True
@@ -140,6 +148,50 @@ def issue_key(*, admin, kind: str, request) -> IssuedKey:
             metadata={"replaced": [str(old.pk) for old in replaced]},
         )
     return IssuedKey(key=key, plain=plain)
+
+
+def _stale_code() -> HelperKeyError:
+    return HelperKeyError(
+        FRESH_TWO_STEP_CODE,
+        "Creating a key needs a two-step code entered in the last 10 minutes.",
+    )
+
+
+def _switched_off() -> HelperKeyError:
+    return HelperKeyError(DISABLED_CODE, "The AI helper is switched off.")
+
+
+def _session_alive(request) -> bool:
+    """The request's session still exists: a reset or sign-out has not ended it."""
+
+    session = getattr(request, "session", None)
+    session_key = getattr(session, "session_key", None)
+    return bool(session_key) and session.exists(session_key)
+
+
+def _locked_policy() -> AdminHelperPolicy | None:
+    """The active revision's policy, with that revision locked until commit.
+
+    `activate_business_settings` locks the same row before it retires it, so
+    the two run one after the other. When an activation committed while this
+    waited, the row is no longer active and is skipped; the second read sees
+    the new active revision.
+    """
+
+    from apps.core.models import BusinessSettingsVersion
+
+    for _attempt in range(2):
+        active = (
+            BusinessSettingsVersion.objects.select_for_update(no_key=True)
+            .filter(status=BusinessSettingsVersion.Status.ACTIVE)
+            .first()
+        )
+        if active is not None:
+            try:
+                return AdminHelperPolicy.from_settings(active)
+            except InvalidAdminHelperPolicy:
+                return None
+    return None
 
 
 _UNSET = object()

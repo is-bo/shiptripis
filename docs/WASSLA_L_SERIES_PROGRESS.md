@@ -846,13 +846,19 @@ Screenshots: `/mnt/project-files/l-series-screens/L15/` (console EN and 390 px, 
   reviews after 72 h, email always today, the rest always urgent). Smaller calls (phase doc 8 to 15):
   digits search a person id first; helper pages gated like Overview; call log without query string;
   no key hint in the guide; the one-time line only in the POST's own response.
-- Tests (before and after counts): Django 3,046 before, FULL_AFTER after (+73 in
-  `apps/admin_helper/tests/`: privacy walk, authority matrix, keys, API). Two L14 tests updated for
+- Tests (before and after counts): Django 3,046 before, 3,123 after (+77 in
+  `apps/admin_helper/tests/`: privacy walk, authority matrix, keys, API; the full local run passed at
+  3,118 before the second review's fixes added five). Two L14 tests updated for
   `helper_keys_stopped` and the open list. ruff and `makemigrations --check` clean, `schema.sql`
   re-exported (the two helper tables and pg_dump's `\restrict` line, nothing else). No Go or mobile
   change.
+- Second review (plan 1.6) found three races and leaks, all fixed in the PR: DRF's browsable page
+  (it printed the admin's email) is never served and an odd `Accept` keeps the 401; a key created
+  while a two-step reset runs is refused (the reset locks the admin row first, the creation checks
+  its session still exists); a key created while the switch goes off is refused (the creation locks
+  the active settings revision and reads the switch again).
 - Known limits: the throttle counts per clock minute (up to twice the limit across a minute's edge);
-  refused keys leave no call row; `from` and `to` can be `null` when a place has no locality; console
+  a call already past the key check finishes after a stop; refused keys leave no call row; `from` and `to` can be `null` when a place has no locality; console
   English only.
 
 ### L16. AI helper: changes

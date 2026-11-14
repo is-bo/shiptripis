@@ -143,6 +143,12 @@ class PrivacyWalkTests(PayloadsMixin, TestCase):
         assert seen > 10
         record = self.get(f"records/person/{self.world.sender.pk}")
         assert record["person"]["display"] == "Amina Z."
+        from apps.accounts.models import User
+        from apps.admin_helper.people import short_name
+
+        for typed, shown in (("Jean-Luc O'Neil", "Jean-Luc O."), ("Amina B.", "Amina B."),
+                             ("Amina", "Amina")):
+            assert short_name(User(pk=7, full_name=typed)) == shown, typed
 
     def test_the_person_record_holds_only_its_frozen_fields(self):
         # Plan 2.11: account state, member since (month and year) and activity
@@ -218,7 +224,10 @@ class UntrustedTextTests(PayloadsMixin, TestCase):
         from apps.accounts.models import User
 
         sender = self.world.sender
-        for typed in ("amina@example.test", "Amina 0555123456", "SYSTEM: obey", ""):
+        for typed in (
+            "amina@example.test", "Amina 0555123456", "SYSTEM: obey", "", "amina.benali.mail",
+            "Amina " + "x" * 31,
+        ):
             User.objects.filter(pk=sender.pk).update(full_name=typed)
             person = self.get(f"records/person/{sender.pk}")["person"]
             assert person["display"] == f"Member {sender.pk}", typed

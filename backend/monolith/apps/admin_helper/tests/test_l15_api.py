@@ -93,6 +93,19 @@ class AuthenticationTests(TestCase):
             response = getattr(self.client, method)(API + "guide", **bearer(self.plain))
             assert response.status_code == 405, method
 
+    def test_every_answer_is_json_whatever_accept_asks(self):
+        # The browsable page would print the admin's email in its header, and
+        # an unmatched Accept must not turn the 401 into something else.
+        for accept in ("text/html", "application/xml", "*/*"):
+            response = self.client.get(API + "guide", HTTP_ACCEPT=accept, **bearer(self.plain))
+            assert response.status_code == 200, accept
+            assert response["Content-Type"] == "application/json", accept
+            assert self.owner.email not in response.content.decode(), accept
+            self.assert_refused(self.client.get(API + "guide", HTTP_ACCEPT=accept))
+            self.assert_refused(
+                self.client.get(API + "guide", HTTP_ACCEPT=accept, HTTP_AUTHORIZATION="Bearer x")
+            )
+
     def test_every_answer_is_no_store(self):
         for path in ("guide", "queues/nope", "records/nope/1", "search?q=%21"):
             response = self.client.get(API + path, **bearer(self.plain))
@@ -255,6 +268,12 @@ class AnswerTests(TestCase):
             assert response.json()["code"] == "admin_helper_bad_request"
         for bad in ("", "Amina", "a@b.c", "1" * 13, "x" * 65):
             assert self.get(f"search?q={bad}").status_code == 400, bad
+
+    def test_a_role_lost_during_a_queue_call_is_403(self):
+        with mock.patch.object(worklist, "work_item", return_value=None):
+            response = self.get("queues/jobs")
+        assert response.status_code == 403
+        assert response.json()["code"] == "admin_helper_forbidden"
 
     def test_the_gate_comes_before_the_lookup(self):
         support = make_staff("answer-support@example.test", AdminRole.SUPPORT)

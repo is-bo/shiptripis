@@ -268,7 +268,7 @@ class KeyTests(TestCase):
         plain = new_key(self.admin)
         owner = make_staff("keys-reset-owner@example.test", AdminRole.SUPER_ADMIN)
         result = two_step.reset(actor=owner, target=self.admin, reason="Lost phone.")
-        assert result["sessions_ended"] == 0
+        assert result["sessions_ended"] == 1  # The session that created the key.
         assert self.call(plain).status_code == 401
         key = AdminHelperKey.objects.get(admin=self.admin)
         assert key.revoked_reason == AdminHelperKey.StopReason.TWO_STEP_RESET
@@ -276,6 +276,30 @@ class KeyTests(TestCase):
         assert audit.metadata["helper_keys_stopped"] == 1
         assert result["helper_keys_stopped"] == 1
         assert not AdminAuditLog.objects.filter(action="ai_helper.key_stopped").exists()
+
+    def test_a_creation_that_waited_on_a_reset_is_refused(self):
+        # The reset won the lock and ended the session that entered the code;
+        # the creation, checked again under the same lock, makes no key.
+        request = _FreshRequest(self.admin)
+        owner = make_staff("keys-race-owner@example.test", AdminRole.SUPER_ADMIN)
+        assert two_step.reset(actor=owner, target=self.admin, reason="Lost phone.")[
+            "sessions_ended"
+        ] == 1
+        with self.assertRaises(keys.HelperKeyError) as caught:
+            keys.issue_key(admin=self.admin, kind=AdminHelperKey.Kind.READ, request=request)
+        assert caught.exception.code == keys.FRESH_TWO_STEP_CODE
+        assert not AdminHelperKey.objects.filter(admin=self.admin).exists()
+
+    def test_a_creation_reads_the_switch_again_under_its_lock(self):
+        # A switch-off committed after the first, unlocked read: the locked
+        # read sees it, so no key appears that the switch-off could not stop.
+        on = AdminHelperPolicy.from_section({})
+        set_helper_policy(enabled=False)
+        with mock.patch.object(keys, "current_policy", return_value=on):
+            with self.assertRaises(keys.HelperKeyError) as caught:
+                new_key(self.admin)
+        assert caught.exception.code == keys.DISABLED_CODE
+        assert not AdminHelperKey.objects.exists()
 
     def test_the_server_reset_for_the_last_super_admin_stops_their_keys(self):
         owner = make_staff("keys-last-owner@example.test", AdminRole.SUPER_ADMIN)

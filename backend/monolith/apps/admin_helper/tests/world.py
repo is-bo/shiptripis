@@ -89,11 +89,18 @@ class _FreshRequest:
     """The parts of a console request `issue_key` reads."""
 
     def __init__(self, user, *, at=None):
+        from django.contrib.auth import SESSION_KEY as AUTH_SESSION_KEY
+        from django.contrib.sessions.backends.db import SessionStore
+
         from apps.admin_panel.tests.two_step_helpers import verified_session_value
         from apps.admin_panel.two_step import SESSION_KEY
 
         self.user = user
-        self.session = {SESSION_KEY: verified_session_value(user, at=at)}
+        # A stored session signed in as ``user``, so a reset can end it.
+        self.session = SessionStore()
+        self.session[AUTH_SESSION_KEY] = str(user.pk)
+        self.session[SESSION_KEY] = verified_session_value(user, at=at)
+        self.session.create()
 
 
 def new_key(admin, *, at=None) -> str:

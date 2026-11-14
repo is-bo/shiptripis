@@ -21,6 +21,7 @@ from django.utils import timezone
 from rest_framework import exceptions, status
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.permissions import BasePermission
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.throttling import BaseThrottle
 from rest_framework.views import APIView
@@ -117,12 +118,17 @@ class HelperKeyThrottle(BaseThrottle):
         now = timezone.now().timestamp()
         minute = int(now // 60)
         counter = f"admin_helper:rate:{key.pk}:{minute}"
-        cache.add(counter, 0, timeout=120)
-        try:
-            used = cache.incr(counter)
-        except ValueError:  # evicted between add and incr
-            cache.set(counter, 1, timeout=120)
-            used = 1
+        used = None
+        for _attempt in range(2):
+            cache.add(counter, 0, timeout=120)
+            try:
+                used = cache.incr(counter)
+                break
+            except ValueError:  # evicted between add and incr: add again
+                continue
+        if used is None:
+            # The cache keeps losing the counter: refuse rather than not count.
+            used = policy.requests_per_minute + 1
         if used > policy.requests_per_minute:
             self.wait_seconds = max(1.0, (minute + 1) * 60 - now)
             return False
@@ -166,7 +172,14 @@ class HelperView(APIView):
     authentication_classes = (HelperKeyAuthentication,)
     permission_classes = (HelperKeyRequired,)
     throttle_classes = (HelperKeyThrottle,)
+    #: JSON only, whatever ``Accept`` asks: the browsable page would print the
+    #: admin's email in its header.
+    renderer_classes = (JSONRenderer,)
     http_method_names = ("get", "head")
+
+    def perform_content_negotiation(self, request, force=False):
+        # Never a 406 before the key is checked: every caller gets JSON.
+        return super().perform_content_negotiation(request, force=True)
 
     def throttled(self, request, wait):
         raise HelperRateLimited(wait)
@@ -175,7 +188,9 @@ class HelperView(APIView):
         response = super().finalize_response(request, response, *args, **kwargs)
         response["Cache-Control"] = "no-store"
         response["Pragma"] = "no-cache"
-        key = getattr(request, "auth", None)
+        # The key authentication already accepted, if it ran: reading
+        # ``request.auth`` here would run it again outside the error handling.
+        key = getattr(request, "_auth", None)
         if isinstance(key, AdminHelperKey):
             record_call(key, method=request.method, path=request.path, status=response.status_code)
         return response

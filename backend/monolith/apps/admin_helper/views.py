@@ -260,6 +260,8 @@ class QueueView(HelperView):
         now = timezone.now()
         ctx = Context(request, admin, now)
         item = worklist.work_item(code, admin, now=now)
+        if item is None:  # The role changed since the check above.
+            return forbidden()
         summary = {
             "code": item.code,
             "title": item.title,

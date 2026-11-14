@@ -1,6 +1,6 @@
 /* Wassla operations console — the AI helper card, right after a key is made.
  *
- * Loaded only by the response that shows a new key, and only for two things:
+ * Loaded only by the response that shows a new key, and only for three things:
  *
  * 1. "Copy" writes the one line on screen (`/wassla <address> <key>`) to the
  *    clipboard and says "Copied". The line is selectable text beside the
@@ -88,4 +88,9 @@
   if (back && window.history && window.history.replaceState) {
     window.history.replaceState(null, "", back + "#st-ai-helper");
   }
+  // 3. Leaving the page drops the line, so Back or Forward from the
+  //    browser's page cache cannot show it again.
+  window.addEventListener("pagehide", function () {
+    if (issued && issued.parentNode) issued.parentNode.removeChild(issued);
+  });
 })();

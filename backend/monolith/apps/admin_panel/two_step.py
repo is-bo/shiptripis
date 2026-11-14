@@ -534,6 +534,9 @@ def reset(*, actor, target, reason: str, via: str = "console") -> dict:
                 "You cannot reset your own second step.", code="own_account"
             )
     with transaction.atomic():
+        # The lock `issue_key` takes too, so no helper key is created while
+        # this reset runs (L15).
+        type(target).objects.select_for_update().only("pk").get(pk=target.pk)
         was_enrolled = AdminTwoStep.objects.filter(
             user_id=target.pk, confirmed_at__isnull=False
         ).exists()
