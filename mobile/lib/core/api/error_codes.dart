@@ -139,6 +139,10 @@ class ApiErrorCode {
   static const requestNotFound = ApiErrorCode('request_not_found');
   static const journeyNotFound = ApiErrorCode('journey_not_found');
   static const profileNotFound = ApiErrorCode('profile_not_found');
+  static const tripNotFound = ApiErrorCode('trip_not_found');
+  static const reviewNotFound = ApiErrorCode('review_not_found');
+  static const ownReview = ApiErrorCode('own_review');
+  static const reviewRemoved = ApiErrorCode('review_removed');
   static const placeNotFound = ApiErrorCode('place_not_found');
   static const interestDailyCapReached = ApiErrorCode(
     'interest_daily_cap_reached',

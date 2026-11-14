@@ -3137,5 +3137,56 @@
   "discoveryFocusGoneRequestTitle": "This parcel is no longer open",
   "discoveryFocusGoneRequestBody": "It may have been taken or withdrawn. Here are the parcels that are open now.",
   "discoveryFocusGoneTripTitle": "This trip is no longer listed",
-  "discoveryFocusGoneTripBody": "Here are the trips that are listed now."
+  "discoveryFocusGoneTripBody": "Here are the trips that are listed now.",
+  "reviewsTitle": "Reviews",
+  "reviewsCount": "{count, plural, =1{1 review} other{{count} reviews}}",
+  "@reviewsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewsOpenHint": "See reviews",
+  "reviewsRatingA11y": "Rated {rating} out of 5, {count, plural, =1{1 review} other{{count} reviews}}. Opens the reviews.",
+  "@reviewsRatingA11y": {
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewsNewSummary": "No reviews yet",
+  "reviewsEmptyTitle": "No reviews yet",
+  "reviewsEmptyBody": "A review shows here once a delivery has been rated and the review is open to both sides.",
+  "reviewsOffTitle": "Reviews are not available",
+  "reviewsOffBody": "Reviews are switched off for now. Please check back later.",
+  "reviewsGoneTitle": "This is not available any more",
+  "reviewsGoneBody": "The person or trip is no longer listed, so its reviews cannot be shown.",
+  "reviewsFromSender": "From a sender",
+  "reviewsFromTraveler": "From a traveler",
+  "reviewsCommentRemoved": "Comment removed by Wassla",
+  "reviewsMenuLabel": "Review options",
+  "reviewsReportAction": "Report",
+  "reviewsReportReceived": "You reported this. We have received it.",
+  "reviewsReportReviewed": "You reported this. We have reviewed it.",
+  "reviewReportSheetTitle": "Report this review",
+  "reviewReportSheetIntro": "Tell us what is wrong. We will look at it, and the person is not told that you reported it.",
+  "reviewReasonOffensive": "Offensive or abusive",
+  "reviewReasonPersonalInformation": "Shares personal information",
+  "reviewReasonUnrelated": "Not about the delivery",
+  "reviewReasonUntrue": "Not true",
+  "reviewReasonOther": "Something else",
+  "reviewReportNoteLabel": "Note (optional)",
+  "reviewReportNoteHint": "Anything that helps us understand",
+  "reviewReportSend": "Send report",
+  "reviewReportThanks": "Thanks, we will review it",
+  "reviewReportOwn": "You cannot report your own review.",
+  "reviewReportRemoved": "Wassla has already removed this review.",
+  "reviewReportGone": "This review is not available any more.",
+  "ratingRemovedByWassla": "Removed by Wassla, not counted",
+  "ratingCommentHiddenByWassla": "Wassla hid the comment from others. The score still counts."
 }

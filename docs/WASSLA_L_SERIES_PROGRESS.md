@@ -730,12 +730,26 @@ Detail: `docs/PHASE_L13A_REVIEWS.md`. Screenshots: `/mnt/project-files/l-series-
 
 ### L13B. Reviews, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): `docs/PHASE_L13B_REVIEWS_MOBILE.md`. Routes
+  `reviews-person` (`/reviews/person/:id`) and `reviews-trip` (`/reviews/trip/:id?request=`); provider
+  `reviewsFeedProvider(ReviewsSubject)`; `ReviewsPage`, `PublicReview`, `MyReport`, `ReviewReason`,
+  `ReviewModeration` in `domain/reviews.dart`; `RatingRepository.report`,
+  `DiscoveryRepository.reviews`. `PublicPerson.rating` is now the server's `{state, average, count}`
+  (it was parsed as a number, so every card read "New"). `_PagedList` is now `PagedFeedList`.
+- Left for a later package: nothing owed. L17 may read the same reviews through the admin API.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): judgment calls for Ismail's end review: (1) the
+  rating is a link only when the person has a score; "New" has nothing to open. (2) Cards from Home and
+  Browse show the average only; the count appears with the link inside the preview or person page.
+  (3) My ratings leaves removed ratings out of its average on the client, using the server's
+  `moderation` mark. (4) The report context (`journey` + `request`) is sent only when the screen was
+  opened with a request. (5) Reporting is not offered on a removed rating (the server would answer
+  `review_removed`).
+- Tests (before and after counts): Flutter 1,493 before, 1,521 after (27 in `l13b_reviews_test.dart`,
+  1 in `phase_j5_find_travelers_test.dart`). Analyze and format clean. No backend change.
+- Known limits: the Reviews screen reads `rating` from the first page only; a staff removal between
+  two pages shows on the next pull to refresh. Screenshots in
+  `/mnt/project-files/l-series-screens/L13B/` (names in the phase doc).
 
 ### L14. Staff two-step sign-in and finance exports
 

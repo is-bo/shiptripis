@@ -5971,4 +5971,127 @@ class LEn extends L {
   @override
   String get discoveryFocusGoneTripBody =>
       'Here are the trips that are listed now.';
+
+  @override
+  String get reviewsTitle => 'Reviews';
+
+  @override
+  String reviewsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reviews',
+      one: '1 review',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewsOpenHint => 'See reviews';
+
+  @override
+  String reviewsRatingA11y(String rating, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reviews',
+      one: '1 review',
+    );
+    return 'Rated $rating out of 5, $_temp0. Opens the reviews.';
+  }
+
+  @override
+  String get reviewsNewSummary => 'No reviews yet';
+
+  @override
+  String get reviewsEmptyTitle => 'No reviews yet';
+
+  @override
+  String get reviewsEmptyBody =>
+      'A review shows here once a delivery has been rated and the review is open to both sides.';
+
+  @override
+  String get reviewsOffTitle => 'Reviews are not available';
+
+  @override
+  String get reviewsOffBody =>
+      'Reviews are switched off for now. Please check back later.';
+
+  @override
+  String get reviewsGoneTitle => 'This is not available any more';
+
+  @override
+  String get reviewsGoneBody =>
+      'The person or trip is no longer listed, so its reviews cannot be shown.';
+
+  @override
+  String get reviewsFromSender => 'From a sender';
+
+  @override
+  String get reviewsFromTraveler => 'From a traveler';
+
+  @override
+  String get reviewsCommentRemoved => 'Comment removed by Wassla';
+
+  @override
+  String get reviewsMenuLabel => 'Review options';
+
+  @override
+  String get reviewsReportAction => 'Report';
+
+  @override
+  String get reviewsReportReceived => 'You reported this. We have received it.';
+
+  @override
+  String get reviewsReportReviewed => 'You reported this. We have reviewed it.';
+
+  @override
+  String get reviewReportSheetTitle => 'Report this review';
+
+  @override
+  String get reviewReportSheetIntro =>
+      'Tell us what is wrong. We will look at it, and the person is not told that you reported it.';
+
+  @override
+  String get reviewReasonOffensive => 'Offensive or abusive';
+
+  @override
+  String get reviewReasonPersonalInformation => 'Shares personal information';
+
+  @override
+  String get reviewReasonUnrelated => 'Not about the delivery';
+
+  @override
+  String get reviewReasonUntrue => 'Not true';
+
+  @override
+  String get reviewReasonOther => 'Something else';
+
+  @override
+  String get reviewReportNoteLabel => 'Note (optional)';
+
+  @override
+  String get reviewReportNoteHint => 'Anything that helps us understand';
+
+  @override
+  String get reviewReportSend => 'Send report';
+
+  @override
+  String get reviewReportThanks => 'Thanks, we will review it';
+
+  @override
+  String get reviewReportOwn => 'You cannot report your own review.';
+
+  @override
+  String get reviewReportRemoved => 'Wassla has already removed this review.';
+
+  @override
+  String get reviewReportGone => 'This review is not available any more.';
+
+  @override
+  String get ratingRemovedByWassla => 'Removed by Wassla, not counted';
+
+  @override
+  String get ratingCommentHiddenByWassla =>
+      'Wassla hid the comment from others. The score still counts.';
 }

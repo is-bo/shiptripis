@@ -13,6 +13,7 @@
 library;
 
 import 'json.dart';
+import 'reviews.dart';
 
 class Rating {
   const Rating({
@@ -29,6 +30,8 @@ class Rating {
     this.revealedAt,
     this.createdAt,
     this.isMine = false,
+    this.moderation,
+    this.myReport,
   });
 
   factory Rating.fromJson(Map<String, dynamic> json) => Rating(
@@ -46,6 +49,9 @@ class Rating {
     createdAt: readDate(json['created_at']),
     // Present only on the per-deal state projection.
     isMine: readBool(json['is_mine']),
+    // Only on "ratings I received" (L13A).
+    moderation: ReviewModeration.parse(json['moderation']),
+    myReport: MyReport.parse(json['my_report']),
   );
 
   final int id;
@@ -70,6 +76,33 @@ class Rating {
   /// True when the viewer wrote this one. Only meaningful on the per-deal
   /// state; the "ratings I received" list omits the field entirely.
   final bool isMine;
+
+  /// A staff decision about this rating. The rated person still reads it as
+  /// written; a removed one is not counted anywhere.
+  final ReviewModeration? moderation;
+
+  /// What became of this person's own report of it, when they made one.
+  final MyReport? myReport;
+
+  bool get isRemoved => moderation == ReviewModeration.removed;
+
+  Rating withReport(MyReport report) => Rating(
+    id: id,
+    dealId: dealId,
+    score: score,
+    tags: tags,
+    isRevealed: isRevealed,
+    raterId: raterId,
+    rateeId: rateeId,
+    raterRole: raterRole,
+    comment: comment,
+    reviewWindowEndsAt: reviewWindowEndsAt,
+    revealedAt: revealedAt,
+    createdAt: createdAt,
+    isMine: isMine,
+    moderation: moderation,
+    myReport: report,
+  );
 }
 
 /// The server's authoritative rating lifecycle for one viewer.

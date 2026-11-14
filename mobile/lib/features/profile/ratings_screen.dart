@@ -17,7 +17,10 @@ import '../../design/components/primitives.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/rating.dart';
+import '../../domain/reviews.dart';
 import '../../l10n/app_localizations.dart';
+import '../reviews/report_review_sheet.dart';
+import '../reviews/review_widgets.dart';
 
 class RatingsScreen extends ConsumerWidget {
   const RatingsScreen({super.key});
@@ -52,16 +55,22 @@ class RatingsScreen extends ConsumerWidget {
               );
             }
 
-            // Built lazily: ratings accumulate with every completed Deal.
+            // Built lazily: ratings accumulate with every completed Deal. A
+            // removed rating is listed, as such, but is not counted.
+            final counted = all
+                .where((rating) => !rating.isRemoved)
+                .toList(growable: false);
             return ListView.builder(
               padding: AppScrollPadding.page(context),
               itemCount: all.length + 1,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpace.xl),
-                    child: _Summary(ratings: all),
-                  );
+                  return counted.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpace.xl),
+                          child: _Summary(ratings: counted),
+                        );
                 }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: AppSpace.md),
@@ -78,9 +87,10 @@ class RatingsScreen extends ConsumerWidget {
 
 /// The average, and how many it is based on.
 ///
-/// Averaging received scores is arithmetic on a list the server already handed
-/// over in full — it is presentation, not a business rule, and there is no
-/// server field that supplies it.
+/// Averaging the counted scores is arithmetic on a list the server already
+/// handed over in full; which ratings count (not the removed ones) is the
+/// server's mark on each row, and there is no server field that supplies the
+/// average here.
 class _Summary extends StatelessWidget {
   const _Summary({required this.ratings});
 
@@ -118,97 +128,146 @@ class _Summary extends StatelessWidget {
   }
 }
 
-class _RatingCard extends StatelessWidget {
+class _RatingCard extends ConsumerWidget {
   const _RatingCard({required this.rating});
 
   final Rating rating;
 
+  Future<void> _report(BuildContext context, WidgetRef ref) async {
+    final reported = await showReportReviewSheet(
+      context,
+      ratingId: rating.id,
+      onStale: () => ref.invalidate(receivedRatingsProvider),
+    );
+    if (reported != null) ref.invalidate(receivedRatingsProvider);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context);
     final when = rating.createdAt;
+    final removed = rating.isRemoved;
+    final reported = rating.myReport;
+    final canReport = !removed && reported == null;
 
     return AppCard(
+      padding: const EdgeInsetsDirectional.fromSTEB(
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.xs,
+        AppSpace.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _Stars(score: rating.score),
+              ReviewStars(score: rating.score),
               const Spacer(),
               if (when != null)
                 Text(
                   LocaleFormats.dayMonth(locale, when),
                   style: text.bodySmall?.copyWith(color: c.textTertiary),
                 ),
+              if (canReport)
+                PopupMenuButton<void>(
+                  tooltip: l.reviewsMenuLabel,
+                  icon: Icon(Icons.more_vert_rounded, color: c.textSecondary),
+                  itemBuilder: (_) => [
+                    PopupMenuItem<void>(
+                      onTap: () => _report(context, ref),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.flag_outlined,
+                            size: 20,
+                            color: c.textSecondary,
+                          ),
+                          const SizedBox(width: AppSpace.md),
+                          Text(l.reviewsReportAction),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              else
+                const SizedBox(width: AppSpace.md),
             ],
           ),
-          if (rating.tags.isNotEmpty) ...[
-            const SizedBox(height: AppSpace.md),
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.sm,
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: AppSpace.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final tag in rating.tags)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.md,
-                      vertical: AppSpace.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.neutralSoft,
-                      borderRadius: AppRadius.rPill,
-                    ),
-                    child: Text(
-                      // Server-authored vocabulary. Rendered as given rather
-                      // than mapped through a local table that would drift.
-                      tag.replaceAll('_', ' '),
-                      style: text.labelSmall?.copyWith(color: c.onNeutralSoft),
+                if (removed) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  _Note(
+                    icon: Icons.block_rounded,
+                    text: l.ratingRemovedByWassla,
+                    color: c.danger,
+                  ),
+                ] else if (rating.moderation ==
+                    ReviewModeration.commentHidden) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  _Note(
+                    icon: Icons.visibility_off_outlined,
+                    text: l.ratingCommentHiddenByWassla,
+                    color: c.textTertiary,
+                  ),
+                ],
+                if (rating.tags.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.md),
+                  ReviewTags(tags: rating.tags),
+                ],
+                if (rating.comment != null && rating.comment!.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.md),
+                  Text(
+                    rating.comment!,
+                    style: text.bodyMedium?.copyWith(
+                      color: removed ? c.textTertiary : c.textSecondary,
                     ),
                   ),
+                ],
+                if (reported != null) ...[
+                  const SizedBox(height: AppSpace.md),
+                  _Note(
+                    icon: Icons.flag_rounded,
+                    text: reported == MyReport.reviewed
+                        ? l.reviewsReportReviewed
+                        : l.reviewsReportReceived,
+                    color: c.textTertiary,
+                  ),
+                ],
               ],
             ),
-          ],
-          if (rating.comment != null && rating.comment!.isNotEmpty) ...[
-            const SizedBox(height: AppSpace.md),
-            Text(
-              rating.comment!,
-              style: text.bodyMedium?.copyWith(color: c.textSecondary),
-            ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _Stars extends StatelessWidget {
-  const _Stars({required this.score});
+class _Note extends StatelessWidget {
+  const _Note({required this.icon, required this.text, required this.color});
 
-  final int score;
+  final IconData icon;
+  final String text;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      label: '$score / 5',
-      excludeSemantics: true,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 1; i <= 5; i++)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: 2),
-              child: Icon(
-                i <= score ? Icons.star_rounded : Icons.star_outline_rounded,
-                size: 18,
-                color: i <= score ? c.attention : c.hairlineStrong,
-              ),
-            ),
-        ],
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: AppSpace.sm),
+      Expanded(
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+        ),
       ),
-    );
-  }
+    ],
+  );
 }

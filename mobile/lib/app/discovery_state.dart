@@ -28,6 +28,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/session/session.dart';
 import '../data/discovery_repository.dart';
 import '../domain/public_discovery.dart';
+import '../domain/find_travelers.dart' show TravelerRating;
+import '../domain/reviews.dart';
 import 'app_state.dart';
 
 /// A read that has nobody to ask for. Signed out there is no account to read
@@ -371,4 +373,54 @@ final requestFeedProvider = AsyncNotifierProvider.autoDispose
 final peopleFeedProvider = AsyncNotifierProvider.autoDispose
     .family<PeopleFeedController, DiscoveryFeed<ProfileCard>, bool>(
       PeopleFeedController.new,
+    );
+
+/// The reviews of one person or trip, paged on the server's cursor.
+///
+/// The summary above the list is the `rating` the server sent with the first
+/// page (the same number the card showed); it is never averaged here.
+class ReviewsFeedController extends FeedController<PublicReview> {
+  ReviewsFeedController(this.subject);
+
+  final ReviewsSubject subject;
+
+  /// The summary of the first page, or null while the tier is off.
+  TravelerRating? rating;
+
+  @override
+  Future<DiscoveryPage<PublicReview>> fetch(
+    DiscoveryRepository repo,
+    int offset,
+    CancelToken cancel,
+  ) async {
+    final page = await repo.reviews(
+      subject,
+      offset: offset,
+      cancelToken: cancel,
+    );
+    if (offset == 0) rating = page.rating;
+    return page;
+  }
+
+  @override
+  Object keyOf(PublicReview item) => item.id;
+
+  /// Marks one review as reported by this viewer, without a re-read.
+  void markReported(int ratingId, MyReport report) {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        items: [
+          for (final review in current.items)
+            review.id == ratingId ? review.withReport(report) : review,
+        ],
+      ),
+    );
+  }
+}
+
+final reviewsFeedProvider = AsyncNotifierProvider.autoDispose
+    .family<ReviewsFeedController, DiscoveryFeed<PublicReview>, ReviewsSubject>(
+      ReviewsFeedController.new,
     );

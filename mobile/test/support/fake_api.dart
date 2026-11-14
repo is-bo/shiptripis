@@ -401,7 +401,11 @@ Map<String, dynamic> tripCardFixture(
   Map<String, dynamic>? price,
 }) => {
   'journey_id': id,
-  'traveler': discoveryPersonFields(name: name, rating: 4.8, deliveries: 3),
+  'traveler': discoveryPersonFields(
+    name: name,
+    rating: {'state': 'rated', 'average': 4.8, 'count': 24},
+    deliveries: 3,
+  ),
   'stops': [discoveryPlace(1, from), discoveryPlace(2, to, 'DZ')],
   'legs': [
     {

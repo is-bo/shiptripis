@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/discovery_state.dart';
+import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
@@ -25,6 +26,7 @@ import '../../design/tokens.dart';
 import '../../domain/public_discovery.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/traveler_candidate_card.dart';
+import '../reviews/review_widgets.dart';
 import 'discovery_actions.dart';
 import 'discovery_widgets.dart';
 
@@ -95,7 +97,7 @@ class _PersonBody extends ConsumerWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: AppScrollPadding.page(context),
       children: [
-        _PersonHeader(card: profile),
+        _PersonHeader(card: profile, profileId: profileId),
         SectionHeader(
           title: l.personUsualRoutes,
           subtitle: profile.usualRoutes.isEmpty
@@ -150,9 +152,10 @@ class _PersonBody extends ConsumerWidget {
 }
 
 class _PersonHeader extends StatelessWidget {
-  const _PersonHeader({required this.card});
+  const _PersonHeader({required this.card, required this.profileId});
 
   final ProfileCard card;
+  final String profileId;
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +187,13 @@ class _PersonHeader extends StatelessWidget {
                   style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: AppSpace.xs),
-                RatingOrNew(person: person, l: l),
+                if (person.hasRating)
+                  ReviewsLink(
+                    rating: person.rating,
+                    onTap: () => context.openPersonReviews(profileId),
+                  )
+                else
+                  RatingOrNew(person: person, l: l),
                 if (person.identityVerified) ...[
                   const SizedBox(height: AppSpace.sm),
                   Row(

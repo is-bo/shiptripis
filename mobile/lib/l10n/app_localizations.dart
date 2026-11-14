@@ -10316,6 +10316,210 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Here are the trips that are listed now.'**
   String get discoveryFocusGoneTripBody;
+
+  /// No description provided for @reviewsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviews'**
+  String get reviewsTitle;
+
+  /// No description provided for @reviewsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 review} other{{count} reviews}}'**
+  String reviewsCount(int count);
+
+  /// No description provided for @reviewsOpenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'See reviews'**
+  String get reviewsOpenHint;
+
+  /// No description provided for @reviewsRatingA11y.
+  ///
+  /// In en, this message translates to:
+  /// **'Rated {rating} out of 5, {count, plural, =1{1 review} other{{count} reviews}}. Opens the reviews.'**
+  String reviewsRatingA11y(String rating, int count);
+
+  /// No description provided for @reviewsNewSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'No reviews yet'**
+  String get reviewsNewSummary;
+
+  /// No description provided for @reviewsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No reviews yet'**
+  String get reviewsEmptyTitle;
+
+  /// No description provided for @reviewsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A review shows here once a delivery has been rated and the review is open to both sides.'**
+  String get reviewsEmptyBody;
+
+  /// No description provided for @reviewsOffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviews are not available'**
+  String get reviewsOffTitle;
+
+  /// No description provided for @reviewsOffBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviews are switched off for now. Please check back later.'**
+  String get reviewsOffBody;
+
+  /// No description provided for @reviewsGoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This is not available any more'**
+  String get reviewsGoneTitle;
+
+  /// No description provided for @reviewsGoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The person or trip is no longer listed, so its reviews cannot be shown.'**
+  String get reviewsGoneBody;
+
+  /// No description provided for @reviewsFromSender.
+  ///
+  /// In en, this message translates to:
+  /// **'From a sender'**
+  String get reviewsFromSender;
+
+  /// No description provided for @reviewsFromTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'From a traveler'**
+  String get reviewsFromTraveler;
+
+  /// No description provided for @reviewsCommentRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment removed by Wassla'**
+  String get reviewsCommentRemoved;
+
+  /// No description provided for @reviewsMenuLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Review options'**
+  String get reviewsMenuLabel;
+
+  /// No description provided for @reviewsReportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reviewsReportAction;
+
+  /// No description provided for @reviewsReportReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'You reported this. We have received it.'**
+  String get reviewsReportReceived;
+
+  /// No description provided for @reviewsReportReviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'You reported this. We have reviewed it.'**
+  String get reviewsReportReviewed;
+
+  /// No description provided for @reviewReportSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report this review'**
+  String get reviewReportSheetTitle;
+
+  /// No description provided for @reviewReportSheetIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us what is wrong. We will look at it, and the person is not told that you reported it.'**
+  String get reviewReportSheetIntro;
+
+  /// No description provided for @reviewReasonOffensive.
+  ///
+  /// In en, this message translates to:
+  /// **'Offensive or abusive'**
+  String get reviewReasonOffensive;
+
+  /// No description provided for @reviewReasonPersonalInformation.
+  ///
+  /// In en, this message translates to:
+  /// **'Shares personal information'**
+  String get reviewReasonPersonalInformation;
+
+  /// No description provided for @reviewReasonUnrelated.
+  ///
+  /// In en, this message translates to:
+  /// **'Not about the delivery'**
+  String get reviewReasonUnrelated;
+
+  /// No description provided for @reviewReasonUntrue.
+  ///
+  /// In en, this message translates to:
+  /// **'Not true'**
+  String get reviewReasonUntrue;
+
+  /// No description provided for @reviewReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get reviewReasonOther;
+
+  /// No description provided for @reviewReportNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get reviewReportNoteLabel;
+
+  /// No description provided for @reviewReportNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Anything that helps us understand'**
+  String get reviewReportNoteHint;
+
+  /// No description provided for @reviewReportSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get reviewReportSend;
+
+  /// No description provided for @reviewReportThanks.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks, we will review it'**
+  String get reviewReportThanks;
+
+  /// No description provided for @reviewReportOwn.
+  ///
+  /// In en, this message translates to:
+  /// **'You cannot report your own review.'**
+  String get reviewReportOwn;
+
+  /// No description provided for @reviewReportRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla has already removed this review.'**
+  String get reviewReportRemoved;
+
+  /// No description provided for @reviewReportGone.
+  ///
+  /// In en, this message translates to:
+  /// **'This review is not available any more.'**
+  String get reviewReportGone;
+
+  /// No description provided for @ratingRemovedByWassla.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed by Wassla, not counted'**
+  String get ratingRemovedByWassla;
+
+  /// No description provided for @ratingCommentHiddenByWassla.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla hid the comment from others. The score still counts.'**
+  String get ratingCommentHiddenByWassla;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {
