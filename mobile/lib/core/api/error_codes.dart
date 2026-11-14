@@ -109,6 +109,10 @@ class ApiErrorCode {
   static const matchNotPending = ApiErrorCode('match_not_pending');
   static const matchLegRangeMissing = ApiErrorCode('match_leg_range_missing');
   static const offerNotPending = ApiErrorCode('offer_not_pending');
+
+  /// L12A. The proposal's deadline has passed. Not a failure to report: the
+  /// screen re-reads and shows the expired state with its next step.
+  static const offerExpired = ApiErrorCode('offer_expired');
   static const offerEconomicsMissing = ApiErrorCode('offer_economics_missing');
 
   /// J6.1. The offer's Boost-inclusive totals moved after the user read them,
@@ -382,6 +386,7 @@ class ApiErrorCode {
     'deal_cancellation_not_available',
     'parcel_not_cancellable',
     'guest_link_invalid',
+    'offer_expired',
   };
 
   bool get impliesStaleClientState => _staleStateCodes.contains(raw);

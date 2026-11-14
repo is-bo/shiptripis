@@ -40,6 +40,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/error_codes.dart';
 import '../../core/live/live_updates.dart';
 import '../../core/money/money.dart';
 import '../../core/session/session.dart';
@@ -60,6 +61,7 @@ import '../../domain/money_perspective.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
+import 'offer_deadline.dart';
 
 class NegotiationScreen extends ConsumerStatefulWidget {
   const NegotiationScreen({required this.matchId, super.key});
@@ -152,6 +154,9 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
       // A stale-state refusal means this screen's picture of the world moved
       // on. Refreshing is the fix, and the explanation comes from the code.
       if (error.code.impliesStaleClientState) refreshVolatileState(ref);
+      // The deadline passed under the user's finger. That is not an error to
+      // report: the refresh above shows the expired state and its next step.
+      if (error.code == ApiErrorCode.offerExpired) return;
       AppSnack.failure(context, error);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -316,6 +321,7 @@ class _NegotiationScreenState extends ConsumerState<NegotiationScreen> {
                     viewerId: account.id,
                     perspective: perspective,
                     updated: _updatedOfferId == current.id,
+                    onDeadlinePassed: () => refreshVolatileState(ref),
                   ),
                   const SizedBox(height: AppSpace.xl),
                 ],
@@ -429,12 +435,16 @@ class _CurrentOffer extends StatelessWidget {
     required this.offer,
     required this.viewerId,
     required this.perspective,
+    required this.onDeadlinePassed,
     this.updated = false,
   });
 
   final Offer offer;
   final int viewerId;
   final MoneyPerspective perspective;
+
+  /// The countdown reached zero while this offer was on screen.
+  final VoidCallback onDeadlinePassed;
 
   /// The figures changed while this offer was on screen.
   final bool updated;
@@ -512,7 +522,31 @@ class _CurrentOffer extends StatelessWidget {
             ],
           ),
         ),
+        // The expired state below says it in full; a line for the deadline
+        // would say it twice.
+        if (offer.status != OfferStatus.expired) ...[
+          const SizedBox(height: AppSpace.md),
+          OfferDeadline(
+            offer: offer,
+            viewerId: viewerId,
+            onElapsed: onDeadlinePassed,
+          ),
+        ],
         const SizedBox(height: AppSpace.lg),
+
+        // The designed end of a proposal nobody answered in time. The next
+        // step is on the action bar below.
+        if (offer.status == OfferStatus.expired) ...[
+          InfoNotice(
+            title: l.offerExpiredTitle,
+            message: isSender
+                ? l.offerExpiredBodySender
+                : l.offerExpiredBodyTraveler,
+            tone: StatusTone.neutral,
+            icon: Icons.timer_off_rounded,
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
 
         // Quiet, in place, and announced: the values below already are the new
         // ones. No dialog, no navigation, nothing accepted on anyone's behalf.
@@ -748,7 +782,11 @@ class _Actions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
-    final offer = ref.watch(matchDetailProvider(matchId)).value?.latestOffer;
+    final match = ref.watch(matchDetailProvider(matchId)).value;
+    final offer = match?.latestOffer;
+    if (offer != null && offer.status == OfferStatus.expired) {
+      return _ExpiredNextStep(parcelId: match!.parcelId, matchId: matchId);
+    }
     if (offer == null || !offer.hasAnyAction) return const SizedBox.shrink();
 
     return Column(
@@ -784,6 +822,39 @@ class _Actions extends ConsumerWidget {
           ),
       ],
     );
+  }
+}
+
+/// What to do after a proposal expired. Not an action on the proposal: it is
+/// over, and nothing was reserved. The sender goes back to the travelers for
+/// their parcel (the same one may be proposed to again); the traveler to the
+/// parcels that are open.
+class _ExpiredNextStep extends ConsumerWidget {
+  const _ExpiredNextStep({required this.parcelId, required this.matchId});
+
+  final int parcelId;
+  final int matchId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final account = ref.watch(accountProvider);
+    final match = ref.watch(matchDetailProvider(matchId)).value;
+    final perspective = account == null
+        ? null
+        : match?.moneyPerspectiveFor(account.id);
+    if (perspective == null) return const SizedBox.shrink();
+    return perspective.isSender
+        ? AppButton(
+            label: l.offerExpiredActionSender,
+            icon: Icons.person_search_outlined,
+            onPressed: () => context.openDiscovery(parcelId),
+          )
+        : AppButton(
+            label: l.offerExpiredActionTraveler,
+            icon: Icons.inventory_2_outlined,
+            onPressed: context.openBrowseRequests,
+          );
   }
 }
 

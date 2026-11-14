@@ -442,6 +442,16 @@ String? pushLocation(Map<String, String> data) {
         ? '/requests/$requestId'
         : '/requests/$requestId/discovery?journey=$journeyId';
   }
+  if (channel == 'discovery.request_fits_trip') {
+    // A parcel for the traveler's own trip: its preview, trip in focus.
+    final requestId = positive('request_id');
+    final journeyId = positive('journey_id');
+    if (requestId == null || journeyId == null) return '/notifications';
+    return Uri(
+      path: '/discover/requests',
+      queryParameters: {'focus': '$requestId', 'journey': '$journeyId'},
+    ).toString();
+  }
   if (channel == 'journey.schedule_change_proposed') {
     // A sender is asked: straight to the answer. The traveler's copy of the
     // channel carries no delivery and opens their journey.

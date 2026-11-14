@@ -10202,6 +10202,120 @@ abstract class L {
   /// In en, this message translates to:
   /// **'The traveler’s times changed after pickup. See the old and new times.'**
   String get scheduleDealInformedBody;
+
+  /// No description provided for @offerAnswerBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer by {when}'**
+  String offerAnswerBy(String when);
+
+  /// No description provided for @offerWaitingUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for an answer until {when}'**
+  String offerWaitingUntil(String when);
+
+  /// No description provided for @offerAnswerWithin.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer within {time}'**
+  String offerAnswerWithin(String time);
+
+  /// No description provided for @offerWaitingWithin.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for an answer, {time} left'**
+  String offerWaitingWithin(String time);
+
+  /// No description provided for @offerMinutesLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{less than a minute} =1{1 minute} other{{count} minutes}}'**
+  String offerMinutesLeft(int count);
+
+  /// No description provided for @offerDeadlinePassed.
+  ///
+  /// In en, this message translates to:
+  /// **'The time to answer has passed'**
+  String get offerDeadlinePassed;
+
+  /// No description provided for @offerExpiredOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired {when}'**
+  String offerExpiredOn(String when);
+
+  /// No description provided for @offerExpiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This proposal expired'**
+  String get offerExpiredTitle;
+
+  /// No description provided for @offerExpiredBodySender.
+  ///
+  /// In en, this message translates to:
+  /// **'No answer came in time. Nothing was reserved or charged, and your parcel is still open for other travelers.'**
+  String get offerExpiredBodySender;
+
+  /// No description provided for @offerExpiredBodyTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'No answer came in time. Nothing was reserved or charged. Other parcels may fit your trip.'**
+  String get offerExpiredBodyTraveler;
+
+  /// No description provided for @offerExpiredActionSender.
+  ///
+  /// In en, this message translates to:
+  /// **'Propose to another traveler'**
+  String get offerExpiredActionSender;
+
+  /// No description provided for @offerExpiredActionTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse parcels'**
+  String get offerExpiredActionTraveler;
+
+  /// No description provided for @notificationOfferReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'A proposal is about to expire'**
+  String get notificationOfferReminder;
+
+  /// No description provided for @notificationFitsTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'A parcel fits your trip'**
+  String get notificationFitsTrip;
+
+  /// No description provided for @requestFitsTripHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested for your trip {route}'**
+  String requestFitsTripHint(String route);
+
+  /// No description provided for @discoveryFocusGoneRequestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This parcel is no longer open'**
+  String get discoveryFocusGoneRequestTitle;
+
+  /// No description provided for @discoveryFocusGoneRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'It may have been taken or withdrawn. Here are the parcels that are open now.'**
+  String get discoveryFocusGoneRequestBody;
+
+  /// No description provided for @discoveryFocusGoneTripTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This trip is no longer listed'**
+  String get discoveryFocusGoneTripTitle;
+
+  /// No description provided for @discoveryFocusGoneTripBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Here are the trips that are listed now.'**
+  String get discoveryFocusGoneTripBody;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

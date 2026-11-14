@@ -665,12 +665,29 @@ Detail: `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md`. Screenshots: `/mnt/proj
 
 ### L12B. Proposal deadline and trip-fit alerts, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L12B_PROPOSAL_DEADLINE_MOBILE.md`. Screenshots: `/mnt/project-files/l-series-screens/L12B/`.
+
+- Contract as built (names that differ from the plan): widget `OfferDeadline` in
+  `mobile/lib/features/offers/offer_deadline.dart`; `clockProvider` in `core/time/clock.dart` (the one clock
+  for countdowns); `ApiErrorCode.offerExpired` (a stale-state code); channels `offerResponseReminder` and
+  `discoveryRequestFitsTrip`; destination `OpenRequestFit(requestId, journeyId)`; Browse requests takes
+  `carryJourneyId` (query `journey`) next to `focus`; `showRequestPreview(..., carryJourneyId:)`. Push for the
+  trip-fit alert is `/discover/requests?focus=<request>&journey=<journey>`.
+- Left for a later package: nothing owed. The reminder's bell row uses the generic proposal wording; an
+  `offer.updated` with `status: expired` keeps the generic "Offer" bell row.
+- Switches added and their defaults: none (both channels follow the existing marketplace push class).
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail. (1) No endpoint
+  returns one request card, so Browse reads the public list on (up to 8 pages) to find the named parcel and
+  says "no longer open" if it is not there; `GET /api/discovery/requests/<id>` would be exact and is a backend
+  change left to Codex if wanted. (2) The same "no longer listed" notice now also covers a trip named by a
+  route alert, which used to miss silently. (3) The expired proposal screen hides the deadline line, because
+  the notice says it.
+- Tests (before and after counts): Flutter 1,461 before, 1,493 after (32 new in
+  `test/l12b_proposal_deadline_test.dart`). Test support gained an optional `now` on `containerFor`,
+  `discoveryContainer` and `pumpDiscovery`. No Django or Go change.
+- Known limits: the countdown is minutes, rounded up, and re-checks every 15 seconds in the last hour; at
+  zero the screen re-reads, so for a moment the line says "The time to answer has passed" before the server's
+  "expired" arrives. The match still reads pending until the expiry job runs (L12A's known limit).
 
 ### L13A. Reviews, reports and moderation, backend
 

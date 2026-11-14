@@ -21,6 +21,7 @@ import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/canonical_place.dart';
@@ -67,6 +68,8 @@ class BrowseTripsScreen extends ConsumerWidget {
         onTap: () => showTripPreview(context, card),
       ),
       openItem: showTripPreview,
+      focusGoneTitle: l.discoveryFocusGoneTripTitle,
+      focusGoneBody: l.discoveryFocusGoneTripBody,
       alertWatches: AlertWatch.trips,
       emptyTitle: l.browseTripsEmptyTitle,
       emptyBody: l.browseTripsEmptyBody,
@@ -86,12 +89,17 @@ class BrowseRequestsScreen extends ConsumerWidget {
     this.corridor,
     this.alertId,
     this.focusRequestId,
+    this.carryJourneyId,
     super.key,
   });
 
   final Corridor? corridor;
   final int? alertId;
   final int? focusRequestId;
+
+  /// The traveler's own trip a "a parcel fits your trip" alert named: the
+  /// preview of [focusRequestId] offers to carry on that trip.
+  final int? carryJourneyId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -110,7 +118,10 @@ class BrowseRequestsScreen extends ConsumerWidget {
         card: card,
         onTap: () => showRequestPreview(context, card),
       ),
-      openItem: showRequestPreview,
+      openItem: (context, card) =>
+          showRequestPreview(context, card, carryJourneyId: carryJourneyId),
+      focusGoneTitle: l.discoveryFocusGoneRequestTitle,
+      focusGoneBody: l.discoveryFocusGoneRequestBody,
       alertWatches: AlertWatch.requests,
       emptyTitle: l.browseRequestsEmptyTitle,
       emptyBody: l.browseRequestsEmptyBody,
@@ -137,6 +148,8 @@ class _BrowseView<T> extends ConsumerStatefulWidget {
     required this.idOf,
     required this.itemBuilder,
     required this.openItem,
+    required this.focusGoneTitle,
+    required this.focusGoneBody,
     required this.alertWatches,
     required this.emptyTitle,
     required this.emptyBody,
@@ -155,6 +168,11 @@ class _BrowseView<T> extends ConsumerStatefulWidget {
   final int Function(T) idOf;
   final Widget Function(BuildContext, T) itemBuilder;
   final Future<void> Function(BuildContext, T) openItem;
+
+  /// Said when the listing a notification pointed at is not on the list any
+  /// more (taken, withdrawn, past its time).
+  final String focusGoneTitle;
+  final String focusGoneBody;
   final AlertWatch alertWatches;
   final String emptyTitle;
   final String emptyBody;
@@ -173,6 +191,12 @@ class _BrowseViewState<T> extends ConsumerState<_BrowseView<T>> {
   /// is fetched: an unfiltered first page would be thrown away a moment later.
   late bool _alertResolved = widget.alertId == null;
   bool _focusDone = false;
+  bool _focusGone = false;
+  int _focusPagesRead = 0;
+
+  /// Newest first, so a listing a notification names is almost always on the
+  /// first page. Reading on is for the ones that are not, and it stops here.
+  static const _focusPageLimit = 8;
 
   void _resolveAlert(AsyncValue<List<RouteAlert>> alerts) {
     if (_alertResolved) return;
@@ -196,10 +220,30 @@ class _BrowseViewState<T> extends ConsumerState<_BrowseView<T>> {
 
   void _openFocus(DiscoveryFeed<T> feed) {
     final focus = widget.focusId;
-    if (focus == null || _focusDone) return;
-    _focusDone = true;
+    if (focus == null || _focusDone || feed.disabled) return;
     final item = feed.items.where((i) => widget.idOf(i) == focus).firstOrNull;
-    if (item == null) return;
+    if (item == null) {
+      if (feed.loadingMore || feed.loadMoreError != null) return;
+      if (feed.hasMore) {
+        if (_focusPagesRead >= _focusPageLimit) {
+          _focusDone = true;
+          return;
+        }
+        _focusPagesRead++;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(widget.loadMore(ref, _filter));
+        });
+        return;
+      }
+      // The whole list was read and it is not there: say so instead of
+      // leaving the member on an unexplained list.
+      _focusDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _focusGone = true);
+      });
+      return;
+    }
+    _focusDone = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(widget.openItem(context, item));
     });
@@ -283,6 +327,21 @@ class _BrowseViewState<T> extends ConsumerState<_BrowseView<T>> {
             onClearDate: () =>
                 setState(() => _filter = _filter.copyWith(clearDate: true)),
           ),
+          if (_focusGone)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.gutter,
+                AppSpace.md,
+                AppSpace.gutter,
+                0,
+              ),
+              child: InfoNotice(
+                title: widget.focusGoneTitle,
+                message: widget.focusGoneBody,
+                tone: StatusTone.waiting,
+                icon: Icons.info_outline_rounded,
+              ),
+            ),
           Expanded(
             child: DiscoverySection<DiscoveryFeed<T>>(
               value: feed,

@@ -5889,4 +5889,86 @@ class LEn extends L {
   @override
   String get scheduleDealInformedBody =>
       'The traveler’s times changed after pickup. See the old and new times.';
+
+  @override
+  String offerAnswerBy(String when) {
+    return 'Answer by $when';
+  }
+
+  @override
+  String offerWaitingUntil(String when) {
+    return 'Waiting for an answer until $when';
+  }
+
+  @override
+  String offerAnswerWithin(String time) {
+    return 'Answer within $time';
+  }
+
+  @override
+  String offerWaitingWithin(String time) {
+    return 'Waiting for an answer, $time left';
+  }
+
+  @override
+  String offerMinutesLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minutes',
+      one: '1 minute',
+      zero: 'less than a minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get offerDeadlinePassed => 'The time to answer has passed';
+
+  @override
+  String offerExpiredOn(String when) {
+    return 'Expired $when';
+  }
+
+  @override
+  String get offerExpiredTitle => 'This proposal expired';
+
+  @override
+  String get offerExpiredBodySender =>
+      'No answer came in time. Nothing was reserved or charged, and your parcel is still open for other travelers.';
+
+  @override
+  String get offerExpiredBodyTraveler =>
+      'No answer came in time. Nothing was reserved or charged. Other parcels may fit your trip.';
+
+  @override
+  String get offerExpiredActionSender => 'Propose to another traveler';
+
+  @override
+  String get offerExpiredActionTraveler => 'Browse parcels';
+
+  @override
+  String get notificationOfferReminder => 'A proposal is about to expire';
+
+  @override
+  String get notificationFitsTrip => 'A parcel fits your trip';
+
+  @override
+  String requestFitsTripHint(String route) {
+    return 'Suggested for your trip $route';
+  }
+
+  @override
+  String get discoveryFocusGoneRequestTitle => 'This parcel is no longer open';
+
+  @override
+  String get discoveryFocusGoneRequestBody =>
+      'It may have been taken or withdrawn. Here are the parcels that are open now.';
+
+  @override
+  String get discoveryFocusGoneTripTitle => 'This trip is no longer listed';
+
+  @override
+  String get discoveryFocusGoneTripBody =>
+      'Here are the trips that are listed now.';
 }

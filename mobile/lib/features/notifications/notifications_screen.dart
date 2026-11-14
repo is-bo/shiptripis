@@ -211,6 +211,11 @@ class NotificationsScreen extends ConsumerWidget {
         }
       case OpenTravelerInterest(:final requestId, :final journeyId):
         context.openDiscovery(requestId, focusJourneyId: journeyId);
+      case OpenRequestFit(:final requestId, :final journeyId):
+        context.openBrowseRequests(
+          focusRequestId: requestId,
+          carryJourneyId: journeyId,
+        );
     }
   }
 
@@ -337,6 +342,10 @@ class _Row extends StatelessWidget {
         l.notificationOffer,
         Icons.swap_horiz_rounded,
       ),
+      NotificationChannel.offerResponseReminder => (
+        l.notificationOfferReminder,
+        Icons.hourglass_bottom_rounded,
+      ),
       NotificationChannel.paymentCaptured ||
       NotificationChannel.paymentRefunded ||
       NotificationChannel.paymentFailed => (
@@ -397,6 +406,10 @@ class _Row extends StatelessWidget {
       NotificationChannel.discoveryTravelerInterested => (
         l.notificationTravelerInterested,
         Icons.back_hand_outlined,
+      ),
+      NotificationChannel.discoveryRequestFitsTrip => (
+        l.notificationFitsTrip,
+        Icons.inventory_2_outlined,
       ),
       NotificationChannel.dealProgressReported => (
         l.notificationProgressReported,

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/time/clock.dart';
 import 'package:shiptrip/domain/canonical_place.dart';
 
 import 'fake_api.dart';
@@ -30,13 +31,17 @@ FakeBackend discoveryBackend() => FakeBackend()
 
 /// A container over [backend] that does not retry a failed read, so an error
 /// a test provokes is the state the test looks at, not a timer still ticking.
-ProviderContainer discoveryContainer(FakeBackend backend) {
+ProviderContainer discoveryContainer(
+  FakeBackend backend, {
+  DateTime Function()? now,
+}) {
   final store = FakeTokenStore();
   return ProviderContainer(
     retry: (_, _) => null,
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
       apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+      if (now != null) clockProvider.overrideWithValue(now),
     ],
   );
 }
@@ -123,8 +128,9 @@ Future<ProviderContainer> pumpDiscovery(
   bool settle = true,
   double? keyboardInset,
   List<RouteBase> extraRoutes = const [],
+  DateTime Function()? now,
 }) async {
-  final container = discoveryContainer(backend);
+  final container = discoveryContainer(backend, now: now);
   addTearDown(container.dispose);
   await tester.runAsync(
     () => container.read(sessionProvider.notifier).restore(),
