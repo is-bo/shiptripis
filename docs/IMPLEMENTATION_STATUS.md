@@ -2,7 +2,8 @@
 
 ## Wassla L14 — Staff two-step sign-in and finance exports (2026-11-14)
 
-Backend and console only; one additive migration (`admin_panel/0007`); `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #43, `15d5f9e`). Backend and
+console only; one additive migration (`admin_panel/0007`); `main` untouched.
 
 - **Two-step sign-in:** every staff sign-in needs a 6-digit code from an authenticator app (RFC 6238,
   standard library, replay refused, five wrong codes lock it for 15 minutes). First sign-in shows a QR

@@ -37,7 +37,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | merged | `claude/project-thread-y6l5b8` | #40 | `8f81454` | `docs/PHASE_L12B_PROPOSAL_DEADLINE_MOBILE.md` |
 | L13A | Reviews, reports and moderation, backend | Opus | high | merged | `claude/project-thread-aa9nb5` | #41 | `2624cdf` | `docs/PHASE_L13A_REVIEWS.md` |
 | L13B | Reviews, mobile | Sonnet | medium | merged | `claude/project-thread-j3f6qz` | #42 | `c5ec718` | `docs/PHASE_L13B_REVIEWS_MOBILE.md` |
-| L14 | Staff two-step sign-in and finance exports | Opus | high | not_started | | | | |
+| L14 | Staff two-step sign-in and finance exports | Opus | high | merged | `claude/project-thread-udx9bx` | #43 | `15d5f9e` | `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` |
 | L15 | AI helper: keys and read access | Opus | xhigh | not_started | | | | |
 | L16 | AI helper: changes | Opus | xhigh | not_started | | | | |
 | L17 | AI helper skill | Sonnet | medium | not_started | | | | |
@@ -64,7 +64,14 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L14 (Opus, high effort; staff two-step sign-in and finance exports). Section 3 order.
+**Next package:** L15 (Opus, xhigh effort; AI helper: keys and read access). Section 3 order. L15 adds
+its helper routes to `OPEN_STAFF_API_ROUTES` and the frozen `STAFF_API_ROUTES` inventory in
+`apps/admin_panel/tests/test_l14_two_step.py`, and calls `fresh_two_step` before creating a key.
+
+**L14 judgment calls (accepted at the gate, for Ismail's end review):** the twelve calls listed in the
+L14 handoff block below. The one that touches deployment: production refuses to start without the
+payout keyring, because staff two-step keys are sealed with it. All eleven checks passed on the first
+run, Schema drift included.
 
 **L12B judgment calls (accepted at the gate, for Ismail's end review):** (1) no endpoint returns one request card, so Browse reads the public list on (up to 8 pages) to find the parcel a trip-fit alert names; `GET /api/discovery/requests/<id>` would be exact and is a backend change left to Codex if wanted; (2) the "no longer listed" notice also covers a trip named by a route alert, which used to miss silently; (3) the expired proposal screen hides the deadline line, because its notice says it. The gate's first CI run failed every job in about a second with no logs (a runner or account fault, not the code); after re-runs on 2026-11-14 all ten checks passed.
 
@@ -866,3 +873,4 @@ Screenshots: `/mnt/project-files/l-series-screens/L14/` (console EN, names in th
 | 2026-11-14 | L13A merged (PR #41, `2624cdf`): public reviews on person and trip, one `countable` rule for every average and count (incl. `trust_signals`), reports once per person, staff dismiss/hide/remove/lift with audited reasons, console "Reported reviews". Next: L13B. |
 | 2026-11-14 | L13B merged (PR #42, `c5ec718`): Reviews screen from the rating on a person, a trip preview and a Find Travelers trip, report sheet, reported state, My ratings with removed and hidden marks. Also fixed person cards reading `rating` as a number (every card showed "New"). All ten checks green. Next: L14. |
 | 2026-11-14 | Advisor answer for L14, written into plan L14, L15 and L10: the staff API becomes session-only behind the second step (the two callers found, a developer load probe and the runbook's health check, go through a verified console session); the gate is in `HasAdminPermission`, not on the path prefix, with a named list of open routes (`invitations/accept` now, the AI helper routes from L15); no outside way to mark a session verified. |
+| 2026-11-14 | L14 merged (PR #43, `15d5f9e`): staff two-step sign-in (console, technical admin and staff API; the staff API is session-only, open list `invitations/accept`), fresh-code rule, reset, finance exports. Django 2,990 to 3,046 tests. Next: L15. |
