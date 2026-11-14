@@ -1,0 +1,110 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; AI helper</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-helper-page">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Overview</p>
+      <h1>AI helper</h1>
+      <p>Your keys and what your assistant asked with them in the last 30 days. A key acts as you, with your rights at the moment of each call, and reads only.</p>
+    </div>
+  </header>
+
+  {% include "admin/console/_ai_helper_card.html" with from="page" %}
+
+  <section class="st-card" aria-labelledby="st-helper-own-title">
+    <p class="st-eyebrow">Your keys</p>
+    <h2 id="st-helper-own-title">Keys you created</h2>
+    {% if own_keys %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Key</th><th scope="col">State</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Calls</th><th scope="col"><span class="st-visually-hidden">Action</span></th></tr></thead>
+        <tbody>
+        {% for key in own_keys %}
+        <tr>
+          <td><strong>{{ key.kind }}</strong><small>ends in <code translate="no">{{ key.hint }}</code></small></td>
+          <td><span class="st-chip st-{{ key.state.tone }}">{{ key.state.label }}</span></td>
+          <td>{{ key.created_at|date:"d M, H:i" }}</td>
+          <td>{% if key.last_used_at %}{{ key.last_used_at|date:"d M, H:i" }}{% else %}Never{% endif %}</td>
+          <td>{{ key.use_count }}</td>
+          <td>{% if key.state.live %}
+            <form method="post" action="{% url 'admin_console:ai-helper-stop' key.id %}">{% csrf_token %}
+              <input type="hidden" name="from" value="page">
+              <button type="submit" class="st-button-quiet">Stop key</button>
+            </form>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="st-muted">You have not created a key yet. Create one on the card above, then paste the line it gives you into your assistant.</p>
+    {% endif %}
+  </section>
+
+  <section class="st-card" aria-labelledby="st-helper-calls-title">
+    <p class="st-eyebrow">Record</p>
+    <h2 id="st-helper-calls-title">Your recent calls</h2>
+    <p>Every call your keys made, newest first, kept 30 days. The address is what your assistant asked for; what it searched for is not kept.</p>
+    {% if calls %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Time</th><th scope="col">Key</th><th scope="col">Address</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+        {% for call in calls %}
+        <tr>
+          <td>{{ call.at|date:"d M, H:i:s" }}</td>
+          <td><code translate="no">{{ call.hint }}</code></td>
+          <td><code translate="no">{{ call.method }} {{ call.path }}</code></td>
+          <td><span class="st-chip {% if call.ok %}st-ok{% else %}st-attn{% endif %}">{{ call.status }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="st-muted">No calls in the last 30 days.</p>
+    {% endif %}
+  </section>
+
+  {% if may_stop_any %}
+  <section class="st-card" aria-labelledby="st-helper-all-title">
+    <p class="st-eyebrow">Super Admin</p>
+    <h2 id="st-helper-all-title">Other admins' live keys</h2>
+    <p>Only the last four characters of a key are ever shown. Stopping one ends it at once and is written to the audit log with your reason.</p>
+    {% if everyone %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">Admin</th><th scope="col">Key</th><th scope="col">State</th><th scope="col">Last used</th><th scope="col">Stop</th></tr></thead>
+        <tbody>
+        {% for key in everyone %}
+        <tr>
+          <td><strong>{{ key.admin.name }}</strong><small>{{ key.admin.email }}</small></td>
+          <td>{{ key.kind }}<small>ends in <code translate="no">{{ key.hint }}</code></small></td>
+          <td><span class="st-chip st-{{ key.state.tone }}">{{ key.state.label }}</span></td>
+          <td>{% if key.last_used_at %}{{ key.last_used_at|date:"d M, H:i" }}{% else %}Never{% endif %}</td>
+          <td>
+            <details class="st-disclosure">
+              <summary>Stop this key</summary>
+              <form method="post" action="{% url 'admin_console:ai-helper-stop' key.id %}" class="st-form">{% csrf_token %}
+                <input type="hidden" name="from" value="page">
+                <p><label for="stop-{{ key.id }}">Why stop this admin's key?</label><input id="stop-{{ key.id }}" type="text" name="reason" maxlength="500" required></p>
+                <div class="st-split-actions"><button class="st-button-danger" type="submit">Stop key</button></div>
+              </form>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="st-muted">No other admin has a live key.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

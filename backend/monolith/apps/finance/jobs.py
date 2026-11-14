@@ -755,6 +755,14 @@ def handle_offer_expiry(payload: dict) -> str:
     return run(payload)
 
 
+def handle_admin_helper_call_prune(payload: dict) -> str:
+    """L15: remove AI helper calls older than 30 days."""
+
+    from apps.admin_helper.calls import handle_prune_job as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -778,6 +786,7 @@ HANDLERS = {
     ScheduledJob.Kind.SCHEDULE_CHANGE_SETTLE: handle_schedule_change_settle,
     ScheduledJob.Kind.OFFER_RESPONSE_REMINDER: handle_offer_response_reminder,
     ScheduledJob.Kind.OFFER_EXPIRY: handle_offer_expiry,
+    ScheduledJob.Kind.ADMIN_HELPER_CALL_PRUNE: handle_admin_helper_call_prune,
 }
 
 

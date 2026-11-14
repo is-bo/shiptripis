@@ -283,16 +283,21 @@ def bucket_counts() -> dict:
     return counts
 
 
-def awaiting_review_count() -> int:
-    """How many payout methods are Finance's move, in one indexed query.
+def awaiting_review():
+    """The payout methods that are Finance's move.
 
     The one authority for "payout methods awaiting approval": the Finance
-    Overview and the main Overview both publish this number, so the two cannot
-    disagree. A profile sent back for correction is the Traveler's move and is
-    not counted.
+    Overview and the work list both read it, so the two cannot disagree. A
+    profile sent back for correction is the Traveler's move and is not counted.
     """
 
-    return reviewable_methods().filter(bucket="waiting").count()
+    return reviewable_methods().filter(bucket="waiting")
+
+
+def awaiting_review_count() -> int:
+    """`awaiting_review`, counted in one indexed query."""
+
+    return awaiting_review().count()
 
 
 def _bucket(reviews):

@@ -92,7 +92,16 @@ SECTION_ICONS = {
 NAVIGATION = (
     (
         "Overview",
-        (("Overview", "admin_console:overview", ("view_dashboard",), ("overview",)),),
+        (
+            ("Overview", "admin_console:overview", ("view_dashboard",), ("overview",)),
+            # L15, spec 20. Each admin's own keys for their AI assistant.
+            (
+                "AI helper",
+                "admin_console:ai-helper",
+                ("view_dashboard",),
+                ("ai-helper", "ai-helper-create", "ai-helper-stop"),
+            ),
+        ),
     ),
     (
         "People",

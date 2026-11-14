@@ -1383,7 +1383,7 @@ td .st-money, th .st-money { width: 100%; }
 }
 .st-attention-row a:hover { background: var(--st-surface-2); }
 .st-attention-count {
-  grid-row: span 2;
+  grid-row: span 3;
   align-self: center;
   color: var(--st-ink-3);
   font-size: 1.55rem;
@@ -1394,6 +1394,20 @@ td .st-money, th .st-money { width: 100%; }
 }
 .st-attention-label { color: var(--st-ink); font-size: var(--st-fs-sm); font-weight: 650; }
 .st-attention-hint { color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+/* Spec 20.5: how urgent the item is and how long its oldest row has waited,
+   both decided by the server (`apps/admin_panel/worklist.py`). */
+.st-attention-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--st-2);
+  margin-top: 2px;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-micro);
+}
+.st-attention-meta:empty { display: none; }
+.st-attention-severity { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.st-attention-bad .st-attention-severity { color: var(--st-bad); }
+.st-attention-attn .st-attention-severity { color: var(--st-attn); }
 .st-attention-bad { box-shadow: inset 3px 0 0 var(--st-bad); }
 .st-attention-bad .st-attention-count { color: var(--st-bad); }
 .st-attention-attn { box-shadow: inset 3px 0 0 var(--st-attn); }
@@ -2871,6 +2885,55 @@ button[disabled], .st-form button[disabled] {
 
 .st-inline-actions form { display: flex; align-items: center; gap: var(--st-1); }
 .st-inline-actions select { max-width: 150px; }
+
+/* --- AI helper (spec 20, plan L15) -----------------------------------------
+   The card on the overview and the AI helper page. The one-time block is the
+   loudest thing on the card because it is the only time the key exists on a
+   screen; the line wraps anywhere so a phone never scrolls sideways. */
+
+.st-helper-card { margin: 0 0 var(--st-5); }
+.st-helper-lede { max-width: 72ch; color: var(--st-ink-2); }
+.st-helper-off { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2); color: var(--st-ink-2); }
+.st-helper-keys { display: grid; gap: var(--st-2); margin: var(--st-3) 0; }
+.st-helper-keys > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2) var(--st-3); }
+.st-helper-keys dt { min-width: 9ch; color: var(--st-ink-3); font-size: var(--st-fs-xs); font-weight: 700; }
+.st-helper-keys dd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2); margin: 0; }
+.st-helper-keys small { color: var(--st-ink-3); }
+.st-helper-actions { flex-wrap: wrap; justify-content: flex-start; gap: var(--st-2); }
+.st-helper-actions form { margin: 0; }
+.st-helper-note { margin: var(--st-2) 0 0; color: var(--st-ink-3); font-size: var(--st-fs-xs); }
+.st-helper-card.is-issued { border-color: var(--st-ok-line); box-shadow: 0 0 0 3px var(--st-ok-bg); }
+.st-helper-issued {
+  margin: var(--st-3) 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-ok-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-ok-bg);
+}
+.st-helper-issued h3 { margin: 0 0 var(--st-1); color: var(--st-ok); font-size: var(--st-fs-body); }
+.st-helper-issued p { margin: 0 0 var(--st-2); color: var(--st-ink-2); }
+.st-helper-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-2);
+  margin: var(--st-2) 0;
+  padding: var(--st-2) var(--st-3);
+  border: 1px solid var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+}
+.st-helper-line code {
+  flex: 1 1 24ch;
+  min-width: 0;
+  color: var(--st-ink);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-sm);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.st-helper-copy { padding: 5px 14px; font-size: var(--st-fs-xs); }
+.st-helper-once { color: var(--st-ink) !important; }
 
 /* Small shared utilities. */
 .st-rule { margin: var(--st-4) 0; border: 0; border-top: 1px solid var(--st-line); }

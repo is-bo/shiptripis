@@ -52,6 +52,11 @@ def activate_business_settings(
         candidate.status = BusinessSettingsVersion.Status.ACTIVE
         candidate.activated_at = now
         candidate.save(update_fields=["status", "activated_at"])
+    # Spec 20.8: turning the AI helper off stops every key at once, whichever
+    # path activated the revision. Imported lazily, like the check above.
+    from apps.admin_helper.keys import stop_keys_if_switched_off  # noqa: WPS433
+
+    stop_keys_if_switched_off(candidate)
     return candidate
 
 

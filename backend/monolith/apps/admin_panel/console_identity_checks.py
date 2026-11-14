@@ -68,10 +68,10 @@ def open_checks():
     ).annotate(confirmed=_already_confirmed())
 
 
-def waiting_for(user) -> int:
-    """Open checks assigned to this operator that still need them. One query."""
+def waiting_rows(user):
+    """Open checks assigned to this operator that still need them (the work list)."""
 
-    return open_checks().filter(reviewer=user, confirmed=False).count()
+    return open_checks().filter(reviewer=user, confirmed=False)
 
 
 def identity_checks(request):
@@ -111,7 +111,7 @@ def identity_checks(request):
             "rows": rows,
             "page_obj": page,
             "scope": scope,
-            "mine_count": waiting_for(request.user),
+            "mine_count": waiting_rows(request.user).count(),
         },
     )
 

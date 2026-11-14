@@ -275,6 +275,13 @@ STAFF_API_ROUTES = frozenset(
         "api/admin/payout-identity-reviews/<uuid:reference>",
         "api/admin/payments/orders/<uuid:reference>/refund",
         "api/admin/payments/refunds/<int:pk>/settle",
+        # L15. The AI helper: a helper key only, on `OPEN_STAFF_API_ROUTES`.
+        "api/admin/helper/v1/guide",
+        "api/admin/helper/v1/briefing",
+        "api/admin/helper/v1/queues/<slug:code>",
+        "api/admin/helper/v1/records/<slug:record_type>/<int:pk>",
+        "api/admin/helper/v1/search",
+        "api/admin/helper/v1/tasks",
     }
 )
 
@@ -296,7 +303,15 @@ class StaffApiGateTests(TestCase):
             pattern.name for route, pattern in _routes("api/admin") if pattern.name
         }
         assert OPEN_STAFF_API_ROUTES <= names
-        assert OPEN_STAFF_API_ROUTES == {"admin-invitation-accept"}
+        assert OPEN_STAFF_API_ROUTES == {
+            "admin-invitation-accept",
+            "admin-helper-guide",
+            "admin-helper-briefing",
+            "admin-helper-queue",
+            "admin-helper-record",
+            "admin-helper-search",
+            "admin-helper-tasks",
+        }
 
     def _assert_refused(self, client, path, **extra):
         for method in ("get", "post"):
@@ -544,7 +559,8 @@ class ResetAndFreshCodeTests(TestCase):
         assert (audit.actor, audit.reason, audit.target_id) == (
             self.owner, "Lost phone", str(self.target.pk)
         )
-        assert audit.metadata == {"via": "console", "sessions_ended": 1}
+        # L15: a reset also stops the target's AI helper keys (none here).
+        assert audit.metadata == {"via": "console", "sessions_ended": 1, "helper_keys_stopped": 0}
         # The owner's own session survives, and the target enrols again.
         assert self.client.get("/admin/staff/").status_code == 200
         self.target_client.force_login(self.target)
@@ -615,7 +631,7 @@ class ResetAndFreshCodeTests(TestCase):
         ).exists()
         audit = AdminAuditLog.objects.get(action="admin.two_step_reset")
         assert audit.actor is None
-        assert audit.metadata == {"via": "manage.py", "sessions_ended": 1}
+        assert audit.metadata == {"via": "manage.py", "sessions_ended": 1, "helper_keys_stopped": 0}
         with self.assertRaises(CommandError):
             call_command("reset_admin_two_step", "nobody@example.test", reason="x")
 

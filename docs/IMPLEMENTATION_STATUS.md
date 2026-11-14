@@ -1,5 +1,27 @@
 # Waçla V1 Implementation Status
 
+## Wassla L15 — AI helper, keys and read access (2026-11-14)
+
+Status: **in review** into `feature/discovery-professional-delivery`. Backend and console only; new app
+`apps.admin_helper` (`admin_helper/0001`) and one job kind (`finance/0031`); `main` untouched.
+
+- **Keys:** each admin creates their own read key on the Overview's AI helper card, after a two-step
+  code from the last 10 minutes. It is shown once as one line, `/wassla <address> <key>`; only its
+  SHA-256 is stored. One per admin, 1 to 8 hours from Business settings, never extended. Stopped by its
+  admin, by a Super Admin with a reason, by a two-step reset, and all at once for good when the helper
+  is switched off. Every refusal is the same `401 admin_helper_key_invalid`.
+- **Read API** `/api/admin/helper/v1/`: `guide`, `briefing`, `queues/<code>`, `records/<type>/<id>`
+  (11 types), `search`, `tasks` (38 how-tos covering every console page). Bearer header only, GET
+  only, `no-store`, a per-key rate limit and a 30-day call log without query strings. Each call
+  answers exactly when the admin's console page would, checked fresh every call. Plan 2.11 holds for
+  every payload: a person is a short name, an id and a link; no contact, document, address, payout,
+  code, chat or key data; member-written text only under `untrusted_user_text` on records.
+- **One work list:** `apps/admin_panel/worklist.py` builds the overview and the briefing from the
+  same items, each with its console page's gate, oldest wait and a fixed severity rule; the overview
+  now shows the most urgent first.
+
+Detail: `docs/PHASE_L15_ADMIN_HELPER_READ.md`. Staff guide: `docs/ADMIN_OPERATIONS.md` (AI helper).
+
 ## Wassla L14 — Staff two-step sign-in and finance exports (2026-11-14)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #43, `15d5f9e`). Backend and

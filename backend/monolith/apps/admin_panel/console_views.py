@@ -158,8 +158,11 @@ from .console_presenters import (
 )
 from . import tracking_search
 from . import two_step
+from . import worklist
 from . import verification_inbox as inbox
 from .console_two_step import require_fresh_two_step
+from apps.admin_helper.console import AdminHelperSettingsForm
+from apps.admin_helper.policy import AdminHelperPolicy, InvalidAdminHelperPolicy
 from .console_journey_pause import pause_state
 from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
@@ -622,185 +625,39 @@ def _provider_rows() -> list[dict]:
     return rows
 
 
-def _attention_items(request, *, provider_rows=()) -> list[dict]:
-    user = request.user
-    items: list[dict] = []
+#: How a work item's severity reads on the overview (spec 20.5).
+_SEVERITY_TONE = {worklist.URGENT: "bad", worklist.TODAY: "attn", worklist.INFO: "mute"}
+_SEVERITY_LABEL = {worklist.URGENT: "Urgent", worklist.TODAY: "Today", worklist.INFO: ""}
 
-    def add(permission, title, hint, count, route, query="", tone="attn"):
-        if not has_admin_permission(user, permission):
-            return
-        url = reverse(route)
-        if query:
-            url = f"{url}{query}" if query.startswith("#") else f"{url}?{query}"
-        items.append(
-            {
-                "title": title,
-                "hint": hint,
-                "count": int(count),
-                "url": url,
-                "tone": tone if count else "mute",
-            }
-        )
 
-    # Spec 13: one work item per verification tab, counted by the inbox
-    # itself, so this page, the tab counters and the navigation total agree.
-    waiting = inbox.waiting_counts(request)
-    hints = {
-        "id": (
-            "ID checks to review",
-            "Travelers remain blocked from publishing until these are decided.",
-        ),
-        "tickets": (
-            "Tickets to review",
-            "Flight and ferry legs are not matchable until their ticket is approved.",
-        ),
-    }
-    for tab in inbox.TABS:
-        if tab.key in waiting:
-            title, hint = hints[tab.key]
-            add(
-                tab.permission,
-                title,
-                hint,
-                waiting[tab.key],
-                tab.route,
-                f"status={inbox.WAITING_STATUS}",
-            )
-    add(
-        "view_disputes",
-        "Open disputes",
-        "Payout stays frozen while an active dispute needs a decision.",
-        Dispute.objects.filter(status__in=Dispute.ACTIVE_STATUSES).count(),
-        "admin_console:disputes",
-        "attention=1",
-        "bad",
+def _work_rows(items) -> list[dict]:
+    """The shared work list (`worklist.work_items`) as overview rows."""
+
+    return [
+        {
+            "code": item.code,
+            "title": item.title,
+            "hint": item.hint,
+            "count": item.count,
+            "url": item.url,
+            "tone": _SEVERITY_TONE[item.severity],
+            "severity": _SEVERITY_LABEL[item.severity],
+            "oldest": age_label(item.oldest_waiting_since) if item.oldest_waiting_since else "",
+        }
+        for item in items
+    ]
+
+
+def overview_context(request) -> dict:
+    """The overview's context. The AI helper's key creation renders the same
+    page, with the new key on its card, from this."""
+
+    from apps.admin_helper import console as helper_console
+
+    provider_rows = _provider_rows() if worklist.sees_providers(request.user) else []
+    attention = _work_rows(
+        worklist.work_items(request.user, provider_rows=provider_rows)
     )
-    # L9A. Serious problem reports (damage, mismatch, no-shows) go to staff
-    # the moment they are reported.
-    if has_admin_permission(user, "view_disputes"):
-        from .console_problems import waiting_count
-
-        add(
-            "view_disputes",
-            "Problems to look at",
-            "Damaged or mismatched parcels and no-show reports waiting for staff.",
-            waiting_count(),
-            "admin_console:problems",
-            "attention=1",
-        )
-    # L13A, spec 18. Reviews with an open report wait for a Trust decision.
-    if has_admin_permission(user, "moderate_ratings"):
-        from .console_reviews import waiting_count as reviews_waiting
-
-        add(
-            "moderate_ratings",
-            "Reported reviews",
-            "Members reported these reviews. Dismiss, hide the comment or remove the rating.",
-            reviews_waiting(),
-            "admin_console:reviews",
-            "status=open",
-        )
-    # J6.4. A submitted DZD payout method is operational work, not a Finance
-    # metric, so it belongs here as well as on the Finance Overview. Both read
-    # `awaiting_review_count`, so the two pages cannot disagree, and the count
-    # is read on every render, so it falls the moment a decision is recorded.
-    if has_admin_permission(user, "review_payout_profiles"):
-        from .console_payout_reviews import awaiting_review_count
-
-        add(
-            "review_payout_profiles",
-            "Payout methods awaiting approval",
-            "Travelers submitted DZD payout details that need review.",
-            awaiting_review_count(),
-            "admin_console:payout-reviews",
-            "",
-            "bad",
-        )
-    if has_admin_permission(user, "attest_payout_identity"):
-        from .console_identity_checks import waiting_for
-
-        add(
-            "attest_payout_identity",
-            "Payout identity checks assigned to you",
-            "Confirm a Traveler's legal name so their payout method can be decided.",
-            waiting_for(user),
-            "admin_console:identity-checks",
-        )
-    add(
-        "view_payment_attempts",
-        "Payments needing finance review",
-        "Unapplied captures and amount/currency anomalies need a decision.",
-        payment_attention_queryset().count(),
-        "admin_console:payments",
-        "attention=1",
-        "bad",
-    )
-    add(
-        "issue_refunds",
-        "Refunds requiring operator action",
-        "Automatic settlement is blocked or has exhausted retries.",
-        PaymentRefund.objects.filter(
-            requires_manual_action=True,
-            status__in=(PaymentRefund.Status.PENDING, PaymentRefund.Status.PROCESSING),
-        ).count(),
-        "admin_console:refunds",
-        "manual=1",
-        "bad",
-    )
-    add(
-        "view_payouts",
-        "Payouts requiring action",
-        "Eligible manual payouts and failed releases are waiting.",
-        Payout.objects.filter(
-            Q(status=Payout.Status.FAILED)
-            | Q(status=Payout.Status.ELIGIBLE, method=Payout.Method.MANUAL)
-        ).count(),
-        "admin_console:payouts",
-        "attention=1",
-        "bad",
-    )
-    add(
-        "view_provider_health",
-        "Failed transactional email",
-        "The obligation is durable, but delivery has not succeeded.",
-        OutboundMessage.objects.filter(status=OutboundMessage.Status.FAILED).count(),
-        "admin_console:email",
-        "status=failed",
-        "bad",
-    )
-    add(
-        "view_scheduled_jobs",
-        "Background jobs needing attention",
-        "Terminal, unresolved work needs retry or an audited resolution.",
-        ScheduledJob.objects.filter(
-            status=ScheduledJob.Status.FAILED, resolution=""
-        ).count(),
-        "admin_console:jobs",
-        "status=failed",
-        "bad",
-    )
-    if has_admin_permission(user, "view_provider_health"):
-        warnings = sum(1 for row in provider_rows if row["tone"] == "bad")
-        add(
-            "view_provider_health",
-            "Provider configuration warnings",
-            "A provider is enabled without the configuration required to operate.",
-            warnings,
-            "admin_console:system",
-            "#providers",
-            "bad",
-        )
-    return items
-
-
-@capability_required("view_dashboard")
-def overview(request):
-    provider_rows = (
-        _provider_rows()
-        if has_admin_permission(request.user, "view_provider_health")
-        else []
-    )
-    attention = _attention_items(request, provider_rows=provider_rows)
     # "Nothing to do" and "not checked" must never look the same, so a cleared
     # queue stays on the page - filed below the work rather than mixed into it.
     raised_items = [item for item in attention if item["count"]]
@@ -809,19 +666,25 @@ def overview(request):
     recent = []
     if has_admin_permission(request.user, "view_audit_log"):
         recent = list(AdminAuditLog.objects.select_related("actor")[:6])
-    return _render(
-        request,
-        "admin/console/overview.html",
-        {
-            "title": "What needs attention",
-            "attention": attention,
-            "raised_items": raised_items,
-            "clear_items": clear_items,
-            "raised": raised,
-            "providers": provider_rows,
-            "recent_audit": recent,
-        },
-    )
+    return {
+        "title": "What needs attention",
+        "attention": attention,
+        "raised_items": raised_items,
+        "clear_items": clear_items,
+        "raised": raised,
+        "providers": (
+            provider_rows
+            if has_admin_permission(request.user, "view_provider_health")
+            else []
+        ),
+        "recent_audit": recent,
+        "helper": helper_console.card(request),
+    }
+
+
+@capability_required("view_dashboard")
+def overview(request):
+    return _render(request, "admin/console/overview.html", overview_context(request))
 
 
 @capability_required("view_users")
@@ -3469,11 +3332,15 @@ def staff_two_step_reset(request, pk: int):
                 actor=request.user, target=member, reason=form.cleaned_data["reason"]
             )
             ended = result["sessions_ended"]
+            keys = result["helper_keys_stopped"]
+            stopped = (
+                f" {keys} AI helper key{'s' if keys != 1 else ''} stopped." if keys else ""
+            )
             messages.success(
                 request,
                 f"{member.email}'s two-step sign-in was reset and audited. "
                 f"{ended} session{'s' if ended != 1 else ''} ended; they set it up "
-                "again at their next sign-in.",
+                f"again at their next sign-in.{stopped}",
             )
         except (PermissionDenied, ValidationError) as exc:
             messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
@@ -3712,6 +3579,15 @@ def business_settings(request):
         },
         auto_id="id_marketplace_%s",
     )
+    try:
+        helper_now = AdminHelperPolicy.from_settings(active)
+    except InvalidAdminHelperPolicy:
+        helper_now = AdminHelperPolicy.from_section(None)
+    helper_form = AdminHelperSettingsForm(
+        request.POST if action == "admin_helper" else None,
+        initial=AdminHelperSettingsForm.initial_from(helper_now),
+        auto_id="id_helper_%s",
+    )
     may_manage = has_admin_permission(request.user, "manage_settings")
     if not may_manage:
         for form in (
@@ -3720,6 +3596,7 @@ def business_settings(request):
             fx_form,
             provider_form,
             marketplace_form,
+            helper_form,
         ):
             for field in form.fields.values():
                 field.disabled = True
@@ -3855,6 +3732,24 @@ def business_settings(request):
                     "admin_console:settings",
                     fragment="st-settings-marketplace",
                 )
+            if action == "admin_helper" and helper_form.is_valid():
+                _save_settings_revision(
+                    request,
+                    path_updates=helper_form.path_updates(),
+                    commission_rate_bps=None,
+                    reason=helper_form.cleaned_data["reason"],
+                )
+                switched_off = helper_now.enabled and not helper_form.cleaned_data["enabled"]
+                messages.success(
+                    request,
+                    "AI helper settings were saved as a new audited version."
+                    + (" The AI helper is off: every key stopped." if switched_off else ""),
+                )
+                return admin_redirect(
+                    request,
+                    "admin_console:settings",
+                    fragment="st-settings-helper",
+                )
             if action == "providers" and provider_form.is_valid():
                 _save_settings_revision(
                     request,
@@ -3936,6 +3831,7 @@ def business_settings(request):
             "fx_form": fx_form,
             "provider_form": provider_form,
             "marketplace_form": marketplace_form,
+            "helper_form": helper_form,
             "may_manage": may_manage,
             "rows": policy_rows(
                 active.policy, commission_rate_bps=active.commission_rate_bps

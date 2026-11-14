@@ -114,6 +114,12 @@ ACTION_WORDS = {
     "url": "URL",
     "sms": "SMS",
     "smtp": "SMTP",
+    "ai": "AI",
+}
+#: Model names the prefix rule below would split wrongly.
+OBJECT_NAMES = {
+    "adminhelperkey": "AI helper key",
+    "businesssettingsversion": "Business settings version",
 }
 
 
@@ -142,6 +148,8 @@ def humanize_object(value) -> str:
     if not text:
         return "System"
     tail = text.split(".")[-1]
+    if tail in OBJECT_NAMES:
+        return OBJECT_NAMES[tail]
     for prefix in (
         "kyc",
         "admin",

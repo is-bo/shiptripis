@@ -4,6 +4,8 @@ from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
 from apps.problems.services import VIEW_PROBLEMS_PERMISSION
 from apps.ratings.moderation import MODERATE_PERMISSION
 
+from apps.admin_helper import console as helper_console
+
 from . import console_two_step as two_step
 from . import console_views as views
 from .console_discovery import profile_visibility
@@ -61,6 +63,23 @@ urlpatterns = [
     # L14, spec 19.2. Streamed CSV downloads, `export_finance` only.
     path("finance/exports/", finance_exports, name="finance-exports"),
     path("", views.overview, name="overview"),
+    # L15, spec 20. The AI helper's keys: created behind a fresh two-step code,
+    # shown once, stopped by their admin or by a Super Admin.
+    path(
+        "ai-helper/",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.page),
+        name="ai-helper",
+    ),
+    path(
+        "ai-helper/keys/new/",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.create),
+        name="ai-helper-create",
+    ),
+    path(
+        "ai-helper/keys/<uuid:pk>/stop/",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.stop),
+        name="ai-helper-stop",
+    ),
     path("users/", views.users, name="users"),
     # J6.4. The Person profile replaces the old four-count user page at the same
     # route and name, so every existing link lands on the complete profile.

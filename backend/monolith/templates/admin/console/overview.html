@@ -9,7 +9,7 @@
     <div>
       <p class="st-eyebrow">Wassla operations</p>
       <h1>What needs attention</h1>
-      <p>Live work queues for your role. Every count opens the records behind it.</p>
+      <p>Live work queues for your role, most urgent first. Every count opens the records behind it.</p>
     </div>
     <div class="st-page-aside">
       <div class="st-head-signal{% if raised %} has-alerts{% endif %}">
@@ -17,6 +17,8 @@
       </div>
     </div>
   </header>
+
+  {% if helper.issued %}{% include "admin/console/_ai_helper_card.html" with from="overview" %}{% endif %}
 
   {% comment %}The action panel is the operator's anchor. It stays on the page when it is empty, because a panel that disappears reads as a broken page rather than as a clear queue.{% endcomment %}
   <section class="st-attention" aria-labelledby="attention-title">
@@ -32,6 +34,7 @@
           <span class="st-attention-count">{{ item.count }}</span>
           <span class="st-attention-label">{{ item.title }}</span>
           <span class="st-attention-hint">{{ item.hint }}</span>
+          <span class="st-attention-meta">{% if item.severity %}<span class="st-attention-severity">{{ item.severity }}</span>{% endif %}{% if item.oldest %}<span>Oldest waiting {{ item.oldest }}</span>{% endif %}</span>
         </a>
       </li>
       {% endfor %}
@@ -56,6 +59,8 @@
     </ul>
   </section>
   {% endif %}
+
+  {% if helper and not helper.issued %}{% include "admin/console/_ai_helper_card.html" with from="overview" %}{% endif %}
 
   {% operations_destinations as sections %}
   {% if sections %}
