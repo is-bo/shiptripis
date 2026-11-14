@@ -385,6 +385,11 @@ class ConsolePriceTests(PricedRouteMixin, TestCase):
                 "interest_daily_cap": "10",
                 "max_price_per_kg_eur": "25.50",
                 "max_min_price_eur": "120.00",
+                # L12A put trip-fit alerts and the proposal deadline in the same form.
+                "trip_fit_max_travelers": "30",
+                "trip_fit_daily_cap": "5",
+                "response_hours": "6",
+                "reminder_before_hours": "1",
                 "reason": "Pricing review",
                 "confirm": "on",
             },
