@@ -359,8 +359,11 @@ it; `ST-<id>` and the context key `deal_reference` are gone.
 One rule for every payload of `apps.admin_helper` (spec 20.3), enforced by allowlist serializers and
 by the privacy walk in L15:
 
-- **A person** is `{"id", "display": "<first name> <last initial>.", "console_url"}`. Nothing else
-  about a person is ever sent.
+- **A person**, wherever one is named inside another payload, is
+  `{"id", "display": "<first name> <last initial>.", "console_url"}` and nothing else. The `person`
+  record itself (`records/person/<id>`) adds only: the account state (active, banned, deactivated),
+  "member since" as month and year, and activity counts. Its field list is frozen by a test (advisor,
+  2026-11-14, on L15's question).
 - **Never present, under any key:** a file, a file name, a storage key or a signed address; a document
   number; a date of birth; an email; a phone; a street address or coordinates; payout, bank or card
   data; a pickup or delivery code; a key, token, secret or password; a chat message; a guest payer's
