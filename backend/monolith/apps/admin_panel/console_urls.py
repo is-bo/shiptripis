@@ -8,10 +8,12 @@ from apps.admin_helper import console as helper_console
 
 from . import console_two_step as two_step
 from . import console_views as views
+from .console_account import account_ban
 from .console_discovery import profile_visibility
 from .console_exports import finance_exports
 from .console_identity_checks import identity_check_detail, identity_checks
 from .console_journey_pause import journey_pause_action
+from .console_notes import NOTE_ROUTE_CAPABILITIES, note_add
 from .console_people import person_profile
 from .console_problems import deal_no_show, problem_detail, problems
 from .console_reviews import review_detail, reviews
@@ -80,10 +82,30 @@ urlpatterns = [
         capability_required(helper_console.PAGE_PERMISSION)(helper_console.stop),
         name="ai-helper-stop",
     ),
+    # L16. One change the helper prepared: read, confirmed or rejected by its
+    # own admin, from this two-step-verified session.
+    path(
+        "ai-helper/changes/<uuid:pk>/",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.change),
+        name="ai-helper-change",
+    ),
     path("users/", views.users, name="users"),
     # J6.4. The Person profile replaces the old four-count user page at the same
     # route and name, so every existing link lands on the complete profile.
     path("users/<int:pk>/", person_profile, name="user-detail"),
+    # L16. Ban a member's account or restore it, with a reason (Super Admin).
+    path(
+        "users/<int:pk>/ban/",
+        capability_required("manage_users")(account_ban),
+        name="user-ban",
+    ),
+    # L16. An internal note on a delivery, a dispute or a person; the view
+    # checks the capability of the page the note is for.
+    path(
+        "notes/<slug:target_type>/<int:pk>/",
+        capability_required(*NOTE_ROUTE_CAPABILITIES)(note_add),
+        name="note-add",
+    ),
     path(
         "users/<int:pk>/public-profile/",
         capability_required("manage_users")(profile_visibility),

@@ -258,3 +258,64 @@ class AdminRecoveryCode(models.Model):
 
     def __str__(self) -> str:
         return f"Recovery code for user {self.user_id}"
+
+
+class AdminNote(models.Model):
+    """An internal staff note on a delivery, a dispute or a person (plan L16).
+
+    Append only: a note is never edited or deleted, so what a colleague read
+    stays what was written. Notes are staff-only. They are in no member
+    payload, and in none of the AI helper's read payloads either, because staff
+    may type contact details into them (plan 2.11). The only writer is
+    `apps.admin_panel.staff_actions.add_note`, which also writes the audit row.
+    """
+
+    class TargetType(models.TextChoices):
+        DEAL = "deal", "Delivery"
+        DISPUTE = "dispute", "Dispute"
+        PERSON = "person", "Person"
+
+    BODY_MAX_LENGTH = 2000
+
+    target_type = models.CharField(max_length=8, choices=TargetType.choices)
+    target_id = models.PositiveBigIntegerField()
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="admin_notes_written",
+    )
+    body = models.CharField(max_length=BODY_MAX_LENGTH)
+    #: Added by the author's AI helper with a change key, not typed on the console.
+    via_helper = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "admin_panel_note"
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(
+                fields=("target_type", "target_id", "-created_at"),
+                name="admin_note_target_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(target_type__in=("deal", "dispute", "person")),
+                name="admin_note_target_type_valid",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(body=""),
+                name="admin_note_body_not_empty",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValidationError("Staff notes are append only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Staff notes are append only.")
+
+    def __str__(self) -> str:
+        return f"Note on {self.target_type} {self.target_id} ({self.created_at:%Y-%m-%d %H:%M})"

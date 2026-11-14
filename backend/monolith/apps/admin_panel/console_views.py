@@ -57,8 +57,6 @@ from apps.disputes.services import (
     DisputeError,
     evidence_download_url,
     preview_dispute_resolution,
-    resolve_dispute,
-    set_dispute_status,
 )
 from apps.finance.models import (
     LedgerEntry,
@@ -89,7 +87,6 @@ from apps.finance.providers import (
 )
 from apps.finance.services import (
     complete_manual_payout,
-    request_refund as request_payment_refund,
     settle_refund_manually,
 )
 from apps.finance.settlement import read_deal_money
@@ -156,6 +153,7 @@ from .console_presenters import (
     status_cell,
     text_cell,
 )
+from . import staff_actions
 from . import tracking_search
 from . import two_step
 from . import worklist
@@ -164,9 +162,11 @@ from .console_two_step import require_fresh_two_step
 from apps.admin_helper.console import AdminHelperSettingsForm
 from apps.admin_helper.policy import AdminHelperPolicy, InvalidAdminHelperPolicy
 from .console_journey_pause import pause_state
+from .staff_actions import can_manage_job
 from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
-from .models import AdminAuditLog, AdminInvitation, AdminTwoStep
+from .console_notes import notes_panel
+from .models import AdminAuditLog, AdminInvitation, AdminNote, AdminTwoStep
 from .ops_serializers import AdminSettingsCreateSerializer
 from .people_links import may_open_people, person_href
 from .permissions import (
@@ -1829,6 +1829,7 @@ def deal_detail(request, pk: int):
             # Spec 13 visibility: the problems and route changes of this deal.
             "problems": deal.problems.select_related("reported_by").order_by("-created_at", "-pk"),
             "schedule_changes": _deal_schedule_changes(deal),
+            "notes": notes_panel(request, AdminNote.TargetType.DEAL, deal.pk),
             "may_record_no_show": has_admin_permission(request.user, "record_no_show")
             and not deal.no_show_party
             and deal.pickup_confirmed_at is None
@@ -1999,6 +2000,7 @@ def _dispute_context(
         "audits": audits,
         "terms": getattr(dispute.deal, "terms", None),
         "money": _dispute_money(dispute),
+        "notes": notes_panel(request, AdminNote.TargetType.DISPUTE, dispute.pk),
         "queue_url": admin_url(
             request,
             "admin_console:disputes",
@@ -2039,22 +2041,12 @@ def dispute_detail(request, pk: int):
             status_form = DisputeStatusForm(request.POST, auto_id="id_status_%s")
             if status_form.is_valid():
                 try:
-                    before = dispute.status
-                    with transaction.atomic():
-                        updated = set_dispute_status(
-                            dispute_id=dispute.pk,
-                            status=status_form.cleaned_data["status"],
-                            admin_actor_id=request.user.pk,
-                            note=status_form.cleaned_data.get("note", ""),
-                        )
-                        record_admin_action(
-                            actor=request.user,
-                            action="dispute.status_changed",
-                            target=updated,
-                            before={"status": before},
-                            after={"status": updated.status},
-                            reason=status_form.cleaned_data.get("note", ""),
-                        )
+                    staff_actions.change_dispute_status(
+                        actor=request.user,
+                        dispute_id=dispute.pk,
+                        status=status_form.cleaned_data["status"],
+                        note=status_form.cleaned_data.get("note", ""),
+                    )
                     messages.success(
                         request,
                         "Dispute review state updated and audited. Continue in Resolution.",
@@ -2085,30 +2077,9 @@ def dispute_detail(request, pk: int):
                             ],
                         )
                     elif request.POST.get("confirm_resolution") == "yes":
-                        before = {
-                            "status": dispute.status,
-                            "resolution": dispute.resolution,
-                        }
-                        with transaction.atomic():
-                            updated = resolve_dispute(
-                                dispute_id=dispute.pk,
-                                admin_actor_id=request.user.pk,
-                                **values,
-                            )
-                            record_admin_action(
-                                actor=request.user,
-                                action="dispute.resolved",
-                                target=updated,
-                                before=before,
-                                after={
-                                    "status": updated.status,
-                                    "resolution": updated.resolution,
-                                    "sender_refund_eur_cents": updated.sender_refund_eur_cents,
-                                    "traveler_payout_eur_cents": updated.traveler_payout_eur_cents,
-                                    "platform_fee_eur_cents": updated.platform_fee_eur_cents,
-                                },
-                                reason=values.get("note", ""),
-                            )
+                        staff_actions.resolve_dispute(
+                            actor=request.user, dispute_id=dispute.pk, **values
+                        )
                         messages.success(
                             request,
                             "Dispute resolved and settlement audited. Review the result and financial ledger.",
@@ -2316,11 +2287,7 @@ def payment_detail(request, pk: int):
                     "variant": "quiet",
                 }
             )
-    if (
-        has_admin_permission(request.user, "issue_refunds")
-        and attempt.status == PaymentAttempt.Status.SUCCEEDED
-        and not attempt.is_unapplied
-    ):
+    if has_admin_permission(request.user, "issue_refunds") and refund_offered(attempt):
         actions.append(
             {
                 "label": "Request refund",
@@ -2474,6 +2441,13 @@ def payment_resolve(request, pk: int):
     )
 
 
+def refund_offered(attempt: PaymentAttempt) -> bool:
+    """A captured payment some order took: the payment page offers "Request
+    refund" (and the AI helper may prepare one)."""
+
+    return attempt.status == PaymentAttempt.Status.SUCCEEDED and not attempt.is_unapplied
+
+
 @capability_required("issue_refunds")
 def refund_request(request, attempt_id: int):
     attempt = get_object_or_404(
@@ -2486,24 +2460,12 @@ def refund_request(request, attempt_id: int):
     )
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                refund = request_payment_refund(
-                    order_id=attempt.order_id,
-                    attempt_id=attempt.pk,
-                    amount_eur_cents=form.amount_eur_cents(),
-                    reason=form.cleaned_data["reason"],
-                    requested_by_id=request.user.pk,
-                )
-                record_admin_action(
-                    actor=request.user,
-                    action="refund.requested",
-                    target=refund,
-                    after={
-                        "status": refund.status,
-                        "amount_eur_cents": refund.amount_eur_cents,
-                    },
-                    reason=form.cleaned_data["reason"],
-                )
+            refund = staff_actions.request_refund(
+                actor=request.user,
+                attempt_id=attempt.pk,
+                amount_eur_cents=form.amount_eur_cents(),
+                reason=form.cleaned_data["reason"],
+            )
             messages.success(request, "The refund request was created and audited.")
             return redirect("admin_console:refund-detail", pk=refund.pk)
         except Exception as exc:
@@ -2985,14 +2947,24 @@ def payout_detail(request, pk: int):
             and payout.payout_currency != "DZD",
             "may_refresh": bool(stripe_panel)
             and has_admin_permission(request.user, "reconcile_finance"),
-            "may_retry_bank": bool(stripe_panel)
-            and has_admin_permission(request.user, "retry_payouts")
-            and payout.status == Payout.Status.FAILED
-            and not stripe_panel["unresolved"]
-            and not stripe_panel["holds"],
+            "may_retry_bank": has_admin_permission(request.user, "retry_payouts")
+            and bank_retry_offered(payout, stripe_panel),
             "may_flag": bool(stripe_panel)
             and has_admin_permission(request.user, "manage_payout_holds"),
         },
+    )
+
+
+def bank_retry_offered(payout: Payout, panel: dict | None) -> bool:
+    """A failed Stripe bank payout with nothing in flight and no hold: the
+    payout page offers "Retry bank payout" (and the AI helper may prepare it).
+    ``panel`` is `_stripe_payout_panel(payout)`."""
+
+    return (
+        bool(panel)
+        and payout.status == Payout.Status.FAILED
+        and not panel["unresolved"]
+        and not panel["holds"]
     )
 
 
@@ -4196,37 +4168,12 @@ def _job_error_category(job: ScheduledJob) -> str:
     return "None"
 
 
-_FINANCE_JOB_KINDS = frozenset(
-    {
-        ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND,
-        ScheduledJob.Kind.PAYMENT_GRACE_RELEASE,
-        ScheduledJob.Kind.ATTEMPT_EXPIRY,
-        ScheduledJob.Kind.PROVIDER_RECONCILE,
-        ScheduledJob.Kind.PROVIDER_EVENT_PROCESS,
-        ScheduledJob.Kind.REFUND_RECONCILE,
-        ScheduledJob.Kind.PAYOUT_RELEASE_CHECK,
-    }
-)
-
-
-def _can_manage_job(user, job: ScheduledJob) -> bool:
-    if job.kind in _FINANCE_JOB_KINDS:
-        return has_admin_permission(user, "reconcile_finance")
-    return has_admin_permission(user, "manage_lifecycle") or has_admin_permission(
-        user, "reconcile_finance"
-    )
-
-
 @capability_required("view_scheduled_jobs", "view_operational_incidents")
 def background_job_detail(request, pk: int):
     job = get_object_or_404(ScheduledJob.objects.select_related("resolved_by"), pk=pk)
     related_label, related_url = _job_related_object(job)
     state, state_code = _job_operational_state(job)
-    may_act = (
-        job.status == ScheduledJob.Status.FAILED
-        and not job.resolution
-        and _can_manage_job(request.user, job)
-    )
+    may_act = staff_actions.needs_decision(job) and can_manage_job(request.user, job)
     actions = []
     if related_url:
         actions.append(
@@ -4295,26 +4242,14 @@ def background_job_detail(request, pk: int):
 @capability_required("reconcile_finance", "manage_lifecycle")
 def background_job_retry(request, pk: int):
     job = get_object_or_404(ScheduledJob, pk=pk)
-    if not _can_manage_job(request.user, job):
+    if not can_manage_job(request.user, job):
         raise PermissionDenied("Your role cannot retry this kind of job.")
     form = JobRetryForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                before = {
-                    "status": job.status,
-                    "attempts": job.attempts,
-                    "error_code": job.last_error_code,
-                }
-                requeued = retry_failed_job(job_id=job.pk)
-                record_admin_action(
-                    actor=request.user,
-                    action="scheduled_job.retry_queued",
-                    target=requeued,
-                    before=before,
-                    after={"status": requeued.status, "run_at": requeued.run_at},
-                    reason=form.cleaned_data["reason"],
-                )
+            staff_actions.retry_job(
+                actor=request.user, job_id=job.pk, reason=form.cleaned_data["reason"]
+            )
             messages.success(request, "The job was queued for an immediate retry.")
             return redirect("admin_console:job-detail", pk=job.pk)
         except Exception as exc:
@@ -4338,29 +4273,17 @@ def background_job_retry(request, pk: int):
 @capability_required("reconcile_finance", "manage_lifecycle")
 def background_job_resolve(request, pk: int):
     job = get_object_or_404(ScheduledJob, pk=pk)
-    if not _can_manage_job(request.user, job):
+    if not can_manage_job(request.user, job):
         raise PermissionDenied("Your role cannot resolve this kind of job.")
     form = JobResolutionForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                resolved = resolve_failed_job(
-                    job_id=job.pk,
-                    actor_id=request.user.pk,
-                    resolution=form.cleaned_data["resolution"],
-                    reason=form.cleaned_data["reason"],
-                )
-                record_admin_action(
-                    actor=request.user,
-                    action="scheduled_job.resolved",
-                    target=resolved,
-                    before={"status": job.status, "resolution": job.resolution},
-                    after={
-                        "status": resolved.status,
-                        "resolution": resolved.resolution,
-                    },
-                    reason=form.cleaned_data["reason"],
-                )
+            staff_actions.resolve_job(
+                actor=request.user,
+                job_id=job.pk,
+                resolution=form.cleaned_data["resolution"],
+                reason=form.cleaned_data["reason"],
+            )
             messages.success(
                 request, "The failure left the active queue; its history was retained."
             )
@@ -4412,7 +4335,7 @@ def background_job_bulk(request):
                 for row in locked
             ):
                 raise ValueError("selected_jobs_changed")
-            if any(not _can_manage_job(request.user, row) for row in locked):
+            if any(not can_manage_job(request.user, row) for row in locked):
                 raise PermissionDenied(
                     "Your role cannot manage every selected job kind."
                 )

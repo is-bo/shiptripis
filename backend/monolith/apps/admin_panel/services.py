@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import timedelta
 from typing import Any
 
@@ -60,6 +63,28 @@ def _target_parts(target=None, *, target_type: str = "", target_id: str = ""):
     return target_type[:128], str(target_id)[:128]
 
 
+#: Metadata every audit row written inside `audit_via` carries. Set only by
+#: the AI helper around an action it runs (plan L16), so the rows the
+#: console's own action writes, however deep in a service, say "via AI
+#: helper"; empty everywhere else.
+_AUDIT_VIA: ContextVar[dict | None] = ContextVar("admin_audit_via", default=None)
+
+
+@contextmanager
+def audit_via(metadata: dict) -> Iterator[None]:
+    """Mark every audit row written inside the block with ``metadata``.
+
+    The mark is reset in a ``finally``, so nothing written after the block,
+    by this thread or a later request it serves, carries it.
+    """
+
+    token = _AUDIT_VIA.set(dict(metadata))
+    try:
+        yield
+    finally:
+        _AUDIT_VIA.reset(token)
+
+
 def record_admin_action(
     *,
     actor=None,
@@ -78,6 +103,9 @@ def record_admin_action(
     target_type, target_id = _target_parts(
         target, target_type=target_type, target_id=target_id
     )
+    via = _AUDIT_VIA.get()
+    if via:
+        metadata = {**(metadata or {}), **via}
     return AdminAuditLog.objects.create(
         actor=actor,
         action=action,

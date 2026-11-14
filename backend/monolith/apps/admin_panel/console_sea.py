@@ -148,7 +148,7 @@ class CrossingReasonForm(ConsoleForm):
     )
 
 
-def _line(crossing: SeaCrossing) -> str:
+def crossing_line(crossing: SeaCrossing) -> str:
     origin, destination = crossing.origin_locality, crossing.destination_locality
     return (
         f"{origin.name}, {origin.country_id} → {destination.name}, "
@@ -179,7 +179,7 @@ def sea_crossing_new(request):
         else:
             messages.success(
                 request,
-                f"{_line(crossing)} was added"
+                f"{crossing_line(crossing)} was added"
                 f"{' and is on' if crossing.is_active else ', switched off'}.",
             )
             return redirect(back)
@@ -215,7 +215,7 @@ def sea_crossing_toggle(request, pk: int, action: str):
     turning_on = action == "activate"
     form = CrossingReasonForm(request.POST or None)
     back = reverse(BACK_URL_NAME) + ANCHOR
-    line = _line(crossing)
+    line = crossing_line(crossing)
     if request.method == "POST" and form.is_valid():
         change = activate_crossing if turning_on else deactivate_crossing
         try:

@@ -348,11 +348,12 @@ class ConsoleTests(TestCase):
     def create(self, **data):
         return self.client.post(reverse("admin_console:ai-helper-create"), data)
 
-    def test_the_card_offers_a_read_key_and_none_exists(self):
+    def test_the_card_offers_both_keys_and_none_exists(self):
+        # L15 held the change key off the card until L16 built it; L16 offers it.
         page = self.client.get(reverse("admin_console:overview")).content.decode()
         assert "AI helper" in page and "Create read key (8 hours)" in page
+        assert "Create change key (30 minutes)" in page
         assert "None" in page and "Stop key" not in page
-        assert "change key" not in page.lower()
 
     def test_creating_shows_the_line_once(self):
         response = self.create()

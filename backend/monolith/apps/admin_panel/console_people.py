@@ -95,8 +95,9 @@ from .console_presenters import (
     status_cell,
     text_cell,
 )
+from .console_notes import notes_panel
 from .console_views import _query_without_page, _render, capability_required
-from .models import AdminAuditLog
+from .models import AdminAuditLog, AdminNote
 from .people_links import (
     PROFILE_CAPABILITIES,
     RETURN_CONTEXTS,
@@ -320,6 +321,10 @@ def _header(request, person, caps, *, source):
                 "primary": not actions,
             }
         )
+    from .console_account import header_action
+
+    if (access := header_action(request, person)) is not None:
+        actions.append(access)
 
     return {
         "name": display_name(person),
@@ -1436,6 +1441,10 @@ def person_profile(request, pk: int):
                 for key, label in tabs
             ],
             "body": body,
+            # L16: staff notes on this person, on the Overview tab.
+            "notes": notes_panel(request, AdminNote.TargetType.PERSON, person.pk)
+            if tab == "overview"
+            else None,
             "source": source,
             "page_query": _query_without_page(request),
             "caps": {

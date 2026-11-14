@@ -2934,6 +2934,84 @@ button[disabled], .st-form button[disabled] {
 }
 .st-helper-copy { padding: 5px 14px; font-size: var(--st-fs-xs); }
 .st-helper-once { color: var(--st-ink) !important; }
+.st-helper-keys dd form { margin: 0; }
+.st-helper-keys dd .st-button-quiet { padding: 3px 10px; font-size: var(--st-fs-xs); }
+.st-helper-waiting-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2); margin: var(--st-3) 0 0; font-weight: 600; }
+
+/* --- AI helper changes (plan L16) ----------------------------------------------
+   A prepared change reads as the server's sentence first, then its values,
+   then the assistant's own reason in a box that says whose words they are. */
+
+.st-change-list { display: grid; gap: var(--st-3); margin: var(--st-3) 0 0; padding: 0; list-style: none; }
+.st-change {
+  display: grid;
+  gap: var(--st-2);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface);
+}
+.st-change-summary { margin: 0; color: var(--st-ink); max-width: 72ch; overflow-wrap: anywhere; }
+.st-change-meta { display: flex; flex-wrap: wrap; gap: var(--st-1) var(--st-3); margin: 0; font-size: var(--st-fs-sm); }
+.st-change-meta span { color: var(--st-ink-3); }
+.st-change-details { display: grid; gap: var(--st-1); margin: 0; }
+.st-change-details div { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: var(--st-2); }
+.st-change-details dt { color: var(--st-ink-3); font-size: var(--st-fs-sm); font-weight: 650; }
+.st-change-details dd { margin: 0; color: var(--st-ink); font-size: var(--st-fs-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.st-change-problem {
+  margin: 0 0 var(--st-3);
+  padding: var(--st-2) var(--st-3);
+  border: 1px solid var(--st-bad-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+}
+.st-change .st-change-problem { margin: 0; }
+.st-change-actions { flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: var(--st-3); }
+.st-change-actions form { margin: 0; }
+.st-change-reject {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-2);
+  margin: var(--st-4) 0 0;
+  padding-top: var(--st-3);
+  border-top: 1px solid var(--st-line);
+}
+.st-change-reject p { margin: 0; color: var(--st-ink-2); }
+.st-helper-change .st-change-details { margin-bottom: var(--st-3); }
+.st-helper-change .st-change-meta { margin-bottom: var(--st-3); }
+.st-helper-reason {
+  margin: 0;
+  padding: var(--st-2) var(--st-3);
+  border: 1px dashed var(--st-wait-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-wait-bg);
+}
+.st-helper-reason figcaption {
+  margin: 0 0 var(--st-1);
+  color: var(--st-wait);
+  font-size: var(--st-fs-xs);
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.st-helper-reason blockquote { margin: 0; color: var(--st-ink); overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .st-change { padding: var(--st-3); }
+  .st-change-details div { grid-template-columns: 1fr; gap: 0; }
+}
+
+/* --- Internal notes (plan L16) ----------------------------------------------------
+   Staff only and append only: a plain list, newest first, and one form. */
+
+.st-note-list { display: grid; gap: var(--st-3); margin: var(--st-2) 0 var(--st-4); padding: 0; list-style: none; }
+.st-note-list li { padding: 0 0 var(--st-3); border-bottom: 1px solid var(--st-line); }
+.st-note-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.st-note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-1) var(--st-2); margin: 0 0 var(--st-1); font-size: var(--st-fs-sm); }
+.st-note-meta span { color: var(--st-ink-3); }
+.st-note-body { margin: 0; max-width: 72ch; color: var(--st-ink); overflow-wrap: anywhere; }
+.st-note-form textarea { width: 100%; min-height: 5.5rem; box-sizing: border-box; }
 
 /* Small shared utilities. */
 .st-rule { margin: var(--st-4) 0; border: 0; border-top: 1px solid var(--st-line); }

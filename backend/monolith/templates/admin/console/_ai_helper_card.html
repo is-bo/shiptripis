@@ -1,6 +1,6 @@
 {% load static %}
 {% comment %}
-The AI helper card (spec 20.2, plan L15). `helper` comes from
+The AI helper card (spec 20.2, plans L15 and L16). `helper` comes from
 `apps.admin_helper.console.card`; `from` says which page posted, so creating or
 stopping a key comes back to it. The plain key exists only in `helper.issued`,
 in the one response that created it.
@@ -10,7 +10,11 @@ in the one response that created it.
     <div><p class="st-eyebrow">AI helper</p><h2 id="st-ai-helper-title">Your own AI assistant</h2></div>
     {% if from != "page" %}<a href="{% url 'admin_console:ai-helper' %}">Keys and recent calls</a>{% endif %}
   </div>
-  <p class="st-helper-lede">Connect an assistant you use (for example Claude Code) to read your work list and records, with your rights at the moment of each call. It can change nothing, and it never sees documents, contact details or payout details.</p>
+  <p class="st-helper-lede">Connect an assistant you use (for example Claude Code) to your work list and records, with your rights at the moment of each call. A read key reads only. A change key can also add internal notes and acknowledge problems, and prepares every other change for you to confirm here. It never sees documents, contact details or payout details.</p>
+
+  {% if helper.waiting %}
+  <p class="st-helper-waiting-line"><span class="st-chip st-wait">{{ helper.waiting }} waiting</span> <a href="{% url 'admin_console:ai-helper' %}#st-helper-waiting">{% if helper.waiting == 1 %}A change waits{% else %}{{ helper.waiting }} changes wait{% endif %} for your confirmation</a></p>
+  {% endif %}
 
   {% if not helper.enabled %}
   <p class="st-helper-off"><span class="st-chip st-mute">Switched off</span> The AI helper is switched off in Business settings. No key works and none can be created.</p>
@@ -19,7 +23,7 @@ in the one response that created it.
   {% if helper.issued %}
   <div class="st-helper-issued" data-helper-issued data-helper-return="{% if from == 'page' %}{% url 'admin_console:ai-helper' %}{% else %}{% url 'admin_console:overview' %}{% endif %}">
     <h3>Copy this into your assistant</h3>
-    <p>Paste it as your first message. It is your read key and this server's address, on one line.</p>
+    <p>Paste it as your first message. It is your {% if helper.issued.kind == "change" %}change{% else %}read{% endif %} key and this server's address, on one line.</p>
     <div class="st-helper-line">
       <code id="st-helper-line" translate="no">{{ helper.issued.line }}</code>
       <button type="button" class="st-copy st-helper-copy" data-helper-copy="st-helper-line" aria-label="Copy the line for your assistant" autofocus>Copy</button>
@@ -32,23 +36,35 @@ in the one response that created it.
   <dl class="st-helper-keys">
     <div>
       <dt>Read key</dt>
-      <dd>{% if helper.read_key %}<span class="st-chip st-ok">Active until {{ helper.read_key.until }}</span> <small>ends in <code translate="no">{{ helper.read_key.hint }}</code></small>{% else %}<span class="st-chip st-mute">None</span>{% endif %}</dd>
+      <dd>{% if helper.read_key %}<span class="st-chip st-ok">Active until {{ helper.read_key.until }}</span> <small>ends in <code translate="no">{{ helper.read_key.hint }}</code></small>
+        <form method="post" action="{% url 'admin_console:ai-helper-stop' helper.read_key.id %}">{% csrf_token %}
+          <input type="hidden" name="from" value="{{ from|default:'overview' }}">
+          <button type="submit" class="st-button-quiet" aria-label="Stop the read key">Stop key</button>
+        </form>{% else %}<span class="st-chip st-mute">None</span>{% endif %}</dd>
+    </div>
+    <div>
+      <dt>Change key</dt>
+      <dd>{% if helper.change_key %}<span class="st-chip st-ok">Active until {{ helper.change_key.until }}</span> <small>ends in <code translate="no">{{ helper.change_key.hint }}</code></small>
+        <form method="post" action="{% url 'admin_console:ai-helper-stop' helper.change_key.id %}">{% csrf_token %}
+          <input type="hidden" name="from" value="{{ from|default:'overview' }}">
+          <button type="submit" class="st-button-quiet" aria-label="Stop the change key">Stop key</button>
+        </form>{% else %}<span class="st-chip st-mute">None</span>{% endif %}</dd>
     </div>
   </dl>
 
   <div class="st-split-actions st-helper-actions">
     <form method="post" action="{% url 'admin_console:ai-helper-create' %}">{% csrf_token %}
       <input type="hidden" name="from" value="{{ from|default:'overview' }}">
+      <input type="hidden" name="kind" value="read">
       <button type="submit">Create read key ({{ helper.read_hours }} hour{{ helper.read_hours|pluralize }})</button>
     </form>
-    {% if helper.read_key %}
-    <form method="post" action="{% url 'admin_console:ai-helper-stop' helper.read_key.id %}">{% csrf_token %}
+    <form method="post" action="{% url 'admin_console:ai-helper-create' %}">{% csrf_token %}
       <input type="hidden" name="from" value="{{ from|default:'overview' }}">
-      <button type="submit" class="st-button-quiet">Stop key</button>
+      <input type="hidden" name="kind" value="change">
+      <button type="submit" class="st-button-quiet">Create change key ({{ helper.change_minutes }} minute{{ helper.change_minutes|pluralize }})</button>
     </form>
-    {% endif %}
   </div>
-  <p class="st-helper-note">{% if helper.read_key %}Creating a new key stops the one you have. {% endif %}You enter a two-step code first if you have not entered one in the last 10 minutes.</p>
+  <p class="st-helper-note">{% if helper.read_key or helper.change_key %}A new key stops the one you have of the same kind. {% endif %}You enter a two-step code first if you have not entered one in the last 10 minutes. Stopping a change key early expires what it prepared.</p>
   {% endif %}
   {% if helper.issued %}<script src="{% static 'admin_helper/helper.js' %}" defer></script>{% endif %}
 </section>

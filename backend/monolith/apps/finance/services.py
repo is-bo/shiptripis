@@ -2184,6 +2184,54 @@ def reconcile_attempt(
 # --- refunds -----------------------------------------------------------------
 
 
+def refund_capacity_refusal(
+    attempt: PaymentAttempt, amount_eur_cents: int
+) -> RefundExceedsCapture | None:
+    """Why ``attempt`` cannot fund a new refund of ``amount_eur_cents``, or ``None``.
+
+    `request_refund` asks this under the order and attempt locks and raises
+    the answer; the AI helper asks it without a lock, to refuse a refund it is
+    preparing that could not succeed (plan L16), and asks again, through
+    `request_refund`, when the admin confirms.
+    """
+
+    already = int(
+        PaymentRefund.objects.filter(
+            attempt=attempt,
+            status__in=(
+                PaymentRefund.Status.PENDING,
+                PaymentRefund.Status.PROCESSING,
+                PaymentRefund.Status.SUCCEEDED,
+            ),
+        ).aggregate(total=Sum("amount_eur_cents"))["total"]
+        or 0
+    )
+    captured = int(attempt.amount_eur_cents)
+    if already + amount_eur_cents > captured:
+        return RefundExceedsCapture(
+            "A refund cannot exceed the captured amount.",
+            captured=captured,
+            already_refunded=already,
+        )
+    # The same euro can fund a Traveler payout or a Sender refund, never
+    # both. A live payout reservation on this capture is money that is
+    # already committed — or already gone — so it is subtracted here, under
+    # the same lock the dispatch path takes, rather than discovered later
+    # when the ledger no longer balances.
+    from .payout_domain import source_reserved_cents
+
+    reserved = source_reserved_cents(attempt)
+    if already + reserved + amount_eur_cents > captured:
+        return RefundExceedsCapture(
+            "This capture is reserved for a Traveler payout and cannot also "
+            "fund a refund of this size.",
+            captured=captured,
+            already_refunded=already,
+            reserved_for_payout=reserved,
+        )
+    return None
+
+
 def request_refund(
     *,
     order_id: int,
@@ -2250,40 +2298,9 @@ def request_refund(
                 _schedule_refund_reconciliation(duplicate.pk, run_at=timezone.now())
             return duplicate
 
-        already = int(
-            PaymentRefund.objects.filter(
-                attempt=attempt,
-                status__in=(
-                    PaymentRefund.Status.PENDING,
-                    PaymentRefund.Status.PROCESSING,
-                    PaymentRefund.Status.SUCCEEDED,
-                ),
-            ).aggregate(total=Sum("amount_eur_cents"))["total"]
-            or 0
-        )
-        captured = int(attempt.amount_eur_cents)
-        if already + amount_eur_cents > captured:
-            raise RefundExceedsCapture(
-                "A refund cannot exceed the captured amount.",
-                captured=captured,
-                already_refunded=already,
-            )
-        # The same euro can fund a Traveler payout or a Sender refund, never
-        # both. A live payout reservation on this capture is money that is
-        # already committed — or already gone — so it is subtracted here, under
-        # the same lock the dispatch path takes, rather than discovered later
-        # when the ledger no longer balances.
-        from .payout_domain import source_reserved_cents
-
-        reserved = source_reserved_cents(attempt)
-        if already + reserved + amount_eur_cents > captured:
-            raise RefundExceedsCapture(
-                "This capture is reserved for a Traveler payout and cannot also "
-                "fund a refund of this size.",
-                captured=captured,
-                already_refunded=already,
-                reserved_for_payout=reserved,
-            )
+        exceeded = refund_capacity_refusal(attempt, amount_eur_cents)
+        if exceeded is not None:
+            raise exceeded
 
         try:
             refund = PaymentRefund.objects.create(

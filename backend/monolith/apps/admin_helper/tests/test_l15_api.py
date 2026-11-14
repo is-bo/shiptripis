@@ -342,7 +342,9 @@ class AnswerTests(TestCase):
         readable = {row["type"] for row in guide["may_read"]["records"]}
         assert readable == {"person", "request", "journey", "deal", "dispute", "problem"}
         queues = {row["code"]: row["count_only"] for row in guide["may_read"]["queues"]}
-        assert queues == {"disputes": False, "problems": False}
+        # L16 adds "Changes waiting for your confirmation" to every work list:
+        # the admin's own, a count and a link only.
+        assert queues == {"disputes": False, "problems": False, "helper_changes": True}
         assert len(guide["rules"]) >= 5
 
 
@@ -461,7 +463,9 @@ class TaskCoverageTests(TestCase):
             assert task.route.startswith("admin_console:"), task.code
             reverse(task.route)
             assert task.permission and set(task.permission) <= set(ADMIN_PERMISSION_CODES), task.code
-            assert task.asks and task.steps and task.action is None, task.code
+            # L16: the helper changes name their task (`actions.Action.task`);
+            # a task no longer carries an action code of its own.
+            assert task.asks and task.steps, task.code
 
     def test_the_answer_lists_only_what_the_role_may_do(self):
         cache.clear()

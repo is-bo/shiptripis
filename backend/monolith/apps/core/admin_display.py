@@ -119,6 +119,8 @@ ACTION_WORDS = {
 #: Model names the prefix rule below would split wrongly.
 OBJECT_NAMES = {
     "adminhelperkey": "AI helper key",
+    "preparedaction": "AI helper prepared change",
+    "adminnote": "Internal note",
     "businesssettingsversion": "Business settings version",
 }
 

@@ -763,6 +763,14 @@ def handle_admin_helper_call_prune(payload: dict) -> str:
     return run(payload)
 
 
+def handle_admin_helper_action_expiry(payload: dict) -> str:
+    """L16: a prepared change nobody confirmed in time stops waiting."""
+
+    from apps.admin_helper.prepared import handle_expiry_job as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -787,6 +795,7 @@ HANDLERS = {
     ScheduledJob.Kind.OFFER_RESPONSE_REMINDER: handle_offer_response_reminder,
     ScheduledJob.Kind.OFFER_EXPIRY: handle_offer_expiry,
     ScheduledJob.Kind.ADMIN_HELPER_CALL_PRUNE: handle_admin_helper_call_prune,
+    ScheduledJob.Kind.ADMIN_HELPER_ACTION_EXPIRY: handle_admin_helper_action_expiry,
 }
 
 

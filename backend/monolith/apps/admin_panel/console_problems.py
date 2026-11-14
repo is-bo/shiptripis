@@ -85,6 +85,22 @@ class NoShowForm(ConsoleForm):
     )
 
 
+def acknowledgeable(problem: ShipmentProblem) -> bool:
+    """The report waits for staff, so "Acknowledge" is offered."""
+
+    return problem.status in (ShipmentProblem.Status.OPEN, ShipmentProblem.Status.ESCALATED)
+
+
+def no_show_recordable(deal: Deal) -> bool:
+    """A funded delivery whose pickup was never confirmed and has no no-show yet."""
+
+    return (
+        not deal.no_show_party
+        and deal.pickup_confirmed_at is None
+        and deal.status in PRE_PICKUP_STATUSES
+    )
+
+
 def _queryset(request):
     from .console_views import _filter_choice, _search
 
@@ -244,9 +260,7 @@ def problem_detail(request, pk: int):
             "deal": problem.deal,
             "tracking_number": tracking.for_deal(problem.deal),
             "may_manage": may_manage,
-            "can_acknowledge": may_manage
-            and problem.status
-            in (ShipmentProblem.Status.OPEN, ShipmentProblem.Status.ESCALATED),
+            "can_acknowledge": may_manage and acknowledgeable(problem),
             "can_close": may_manage and live,
             "acknowledge_form": acknowledge_form,
             "close_form": close_form,
@@ -274,11 +288,7 @@ def deal_no_show(request, pk: int):
     initial = {"party": party} if party in Deal.NoShowParty.values else {}
     form = NoShowForm(request.POST or None, initial=initial)
     back = reverse("admin_console:deal-detail", args=(deal.pk,))
-    recordable = (
-        not deal.no_show_party
-        and deal.pickup_confirmed_at is None
-        and deal.status in PRE_PICKUP_STATUSES
-    )
+    recordable = no_show_recordable(deal)
     if request.method == "POST" and form.is_valid():
         try:
             result = record_deal_no_show(

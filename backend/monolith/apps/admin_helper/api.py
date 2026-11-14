@@ -8,6 +8,8 @@
   is loaded fresh by `resolve_key`, and each endpoint checks the permission of
   the console page it mirrors with `has_all_admin_permissions`.
 * **Rate limit** per key, from the policy (`429 admin_helper_rate_limited`).
+* **Changes** (L16) go through ``POST actions`` only, with a change key
+  (`403 admin_helper_change_key_required` for a read key).
 * **Every response** is ``Cache-Control: no-store``, and every call made with
   a valid key is recorded in `AdminHelperCall` once the response is built.
 """
@@ -39,6 +41,7 @@ RATE_LIMITED_CODE = "admin_helper_rate_limited"
 FORBIDDEN_CODE = "admin_helper_forbidden"
 NOT_FOUND_CODE = "admin_helper_not_found"
 BAD_REQUEST_CODE = "admin_helper_bad_request"
+CHANGE_KEY_REQUIRED_CODE = "admin_helper_change_key_required"
 
 
 class HelperKeyInvalid(exceptions.AuthenticationFailed):
@@ -158,6 +161,15 @@ def bad_request(detail: str) -> Response:
     return refusal(BAD_REQUEST_CODE, detail, status.HTTP_400_BAD_REQUEST)
 
 
+def change_key_required() -> Response:
+    return refusal(
+        CHANGE_KEY_REQUIRED_CODE,
+        "This needs a change key. The admin creates one on the AI helper card of the "
+        "Wassla console, behind a fresh two-step code.",
+        status.HTTP_403_FORBIDDEN,
+    )
+
+
 def permitted(admin, gate: tuple[str, ...]) -> bool:
     """The fresh check (`has_all_admin_permissions`, which reloads the account)
     for any of the codes the mirrored console page accepts, as that page's
@@ -167,7 +179,8 @@ def permitted(admin, gate: tuple[str, ...]) -> bool:
 
 
 class HelperView(APIView):
-    """The base of every helper endpoint. Read only in L15: GET (and HEAD)."""
+    """The base of every helper endpoint: GET (and HEAD) only. ``actions``
+    (L16) is the one endpoint that also takes a POST, with a change key."""
 
     authentication_classes = (HelperKeyAuthentication,)
     permission_classes = (HelperKeyRequired,)

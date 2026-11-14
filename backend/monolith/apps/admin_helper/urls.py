@@ -1,4 +1,4 @@
-"""The AI helper's read API, mounted at ``/api/admin/helper/v1/`` (plan L15).
+"""The AI helper's API, mounted at ``/api/admin/helper/v1/`` (plans L15 and L16).
 
 The route names are on L14's `OPEN_STAFF_API_ROUTES`: they take a helper key,
 never a console session, so the session's second step does not apply to them.
@@ -19,4 +19,5 @@ urlpatterns = [
     ),
     path("search", views.SearchView.as_view(), name="admin-helper-search"),
     path("tasks", views.TasksView.as_view(), name="admin-helper-tasks"),
+    path("actions", views.ActionsView.as_view(), name="admin-helper-actions"),
 ]

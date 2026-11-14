@@ -1,0 +1,69 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+One change the AI helper prepared (spec 20.4, plan L16), from
+`apps.admin_helper.console.change`. The summary and the values are the
+server's words; the reason is the assistant's, boxed. Confirm runs the
+console's own action as the signed-in admin after checking everything again.
+{% endcomment %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{% url 'admin_console:ai-helper' %}">AI helper</a> &rsaquo; Prepared change</div>{% endblock %}
+
+{% block content %}
+<main class="st-console st-narrow st-helper-change">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Prepared by your AI helper</p>
+      <h1>{{ title }}</h1>
+      <p class="st-change-summary">{{ change.summary }}</p>
+    </div>
+    <span class="st-chip st-{{ tone }}">{{ status }}</span>
+  </header>
+
+  <section class="st-card" aria-labelledby="st-change-what">
+    <h2 id="st-change-what" class="st-visually-hidden">What it changes</h2>
+    {% if problem %}<p class="st-change-problem" role="alert"><strong>{{ problem }}</strong> Confirming checks again and runs nothing while it differs.</p>{% endif %}
+    {% if details %}
+    <dl class="st-change-details">{% for label, value in details %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
+    {% if fresh_note %}<p class="st-helper-note">{{ fresh_note }}</p>{% endif %}
+    {% endif %}
+    <p class="st-change-meta"><a href="{{ record.url }}">{{ record.label }}</a> <span>Prepared {{ change.created_at|date:"d M Y, H:i" }}{% if waiting %} · expires {{ until }}{% endif %}</span></p>
+    {% include "admin/console/_helper_reason.html" with reason=change.helper_reason %}
+  </section>
+
+  {% if may_decide %}
+  <section class="st-card st-decision-card" aria-labelledby="st-change-decide">
+    <h2 id="st-change-decide">Confirm or reject</h2>
+    <p>Confirming does it now, as you, with your rights now. The server first checks again that the record is as it was when the change was prepared.</p>
+    <form method="post" class="st-form">{% csrf_token %}
+      <input type="hidden" name="decision" value="confirm">
+      {{ form.as_p }}
+      <div class="st-split-actions">
+        <a class="button st-button-quiet" href="{{ back_url }}">Back</a>
+        <span class="st-spacer"></span>
+        <button type="submit">Confirm</button>
+      </div>
+    </form>
+    <form method="post" class="st-change-reject">{% csrf_token %}
+      <input type="hidden" name="decision" value="reject">
+      <p>Not what you want? Reject it: nothing is done and no reason is needed.</p>
+      <button type="submit" class="st-button-quiet">Reject</button>
+    </form>
+  </section>
+  {% else %}
+  <section class="st-card" aria-labelledby="st-change-done">
+    <h2 id="st-change-done">{% if waiting %}Read only{% else %}{{ status }}{% endif %}</h2>
+    {% if waiting and switched_off %}
+    <p>The AI helper is switched off, so nothing it prepared can be confirmed.</p>
+    {% elif outcome %}
+    <p>{{ outcome }}</p>
+    {% else %}
+    <p>Nobody confirmed it in time, so nothing was done.</p>
+    {% endif %}
+    {% if your_reason %}<p class="st-muted">Your reason: {{ your_reason }}</p>{% endif %}
+    {% if change.decided_at %}<p class="st-muted">Decided {{ change.decided_at|date:"d M Y, H:i" }}.</p>{% endif %}
+    <div class="st-split-actions"><a class="button st-button-quiet" href="{{ back_url }}">Back to AI helper</a></div>
+  </section>
+  {% endif %}
+  {% if others %}<p class="st-helper-note"><a href="{{ back_url }}">{% if others == 1 %}One more change waits{% else %}{{ others }} more changes wait{% endif %} for your confirmation.</a></p>{% endif %}
+</main>
+{% endblock %}

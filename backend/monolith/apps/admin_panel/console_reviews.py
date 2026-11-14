@@ -236,6 +236,20 @@ def reviews(request):
     )
 
 
+def available_decisions(rating, moderation, open_reports: int) -> dict[str, bool]:
+    """Which of the four decisions the review page offers now (and the AI
+    helper may prepare): the same answer for both."""
+
+    state = moderation.state if moderation else None
+    return {
+        ACTION_DISMISS: bool(open_reports),
+        ACTION_HIDE_COMMENT: state != RatingModeration.State.COMMENT_HIDDEN
+        and bool((rating.comment or "").strip()),
+        ACTION_REMOVE: state != RatingModeration.State.REMOVED,
+        ACTION_LIFT: moderation is not None,
+    }
+
+
 def review_detail(request, pk: int):
     from .console_views import _operation_error, _render
 
@@ -281,14 +295,7 @@ def review_detail(request, pk: int):
                 messages.success(request, DECISIONS[action][2])
                 return redirect("admin_console:review-detail", pk=rating.pk)
 
-    state = moderation.state if moderation else None
-    available = {
-        ACTION_DISMISS: bool(open_reports),
-        ACTION_HIDE_COMMENT: state != RatingModeration.State.COMMENT_HIDDEN
-        and bool((rating.comment or "").strip()),
-        ACTION_REMOVE: state != RatingModeration.State.REMOVED,
-        ACTION_LIFT: moderation is not None,
-    }
+    available = available_decisions(rating, moderation, open_reports)
     decisions = [
         {
             "action": key,
