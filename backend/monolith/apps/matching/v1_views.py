@@ -21,6 +21,7 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
+from apps.core.marketplace_policy import InvalidMarketplacePolicy
 from apps.deals.serializers import DealSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.trips.models import Journey
@@ -96,7 +97,7 @@ def _domain_error_response(exc: Exception) -> Response:
         response_status = status.HTTP_409_CONFLICT
     elif isinstance(exc, NoActiveBusinessSettings):
         response_status = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif isinstance(exc, InvalidPhase2Policy):
+    elif isinstance(exc, (InvalidPhase2Policy, InvalidMarketplacePolicy)):
         response_status = status.HTTP_503_SERVICE_UNAVAILABLE
     elif isinstance(exc, PricingError):
         response_status = status.HTTP_409_CONFLICT
@@ -161,6 +162,7 @@ class SenderProposeV1View(APIView):
             IntegrityError,
             NoActiveBusinessSettings,
             InvalidPhase2Policy,
+            InvalidMarketplacePolicy,
             PricingError,
         ) as exc:
             return _domain_error_response(exc)
@@ -192,6 +194,7 @@ class CounterOfferV1View(APIView):
             IntegrityError,
             NoActiveBusinessSettings,
             InvalidPhase2Policy,
+            InvalidMarketplacePolicy,
             PricingError,
         ) as exc:
             return _domain_error_response(exc)
@@ -234,6 +237,7 @@ class OfferAcceptV1View(APIView):
             IntegrityError,
             NoActiveBusinessSettings,
             InvalidPhase2Policy,
+            InvalidMarketplacePolicy,
             PricingError,
         ) as exc:
             return _domain_error_response(exc)

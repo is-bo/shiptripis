@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla L12A — Proposal deadline and trip-fit alerts, backend (2026-11-14)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). Backend and console; two
+additive migrations; `main` untouched.
+
+- **Response deadline:** every proposal and counter-proposal must be answered within 6 hours, or by
+  the pickup time of that trip if that comes first (the time the matching engine already computed).
+  One reminder 1 hour before, to the person who must answer (`offer.response_reminder`). At the
+  deadline it expires for both, exactly as a decline ends it, and nothing else moves. From the
+  deadline on, accept, counter, decline, withdraw and cancel answer `offer_expired`, even before the
+  expiry job runs. Admin settings, switch on.
+- **Trip-fit alerts:** when a request opens, travelers whose published trip really fits it (the
+  engine's own list and ranking) are told once (`discovery.request_fits_trip`): at most 30 per
+  request, 5 per traveler a day, never twice for one request and trip; they get no route alert for
+  the same request. Admin settings, switch on.
+
+Detail: `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md`.
+
 ## Wassla L9B — Problems and route changes, mobile (2026-11-13)
 
 Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.

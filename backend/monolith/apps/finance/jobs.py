@@ -739,6 +739,22 @@ def handle_schedule_change_settle(payload: dict) -> str:
     return run(payload)
 
 
+def handle_offer_response_reminder(payload: dict) -> str:
+    """L12A: remind the person who must answer a proposal before its deadline."""
+
+    from apps.matching.offer_deadlines import handle_response_reminder as run
+
+    return run(payload)
+
+
+def handle_offer_expiry(payload: dict) -> str:
+    """L12A: expire a proposal nobody answered by its deadline."""
+
+    from apps.matching.offer_deadlines import handle_offer_expiry as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -760,6 +776,8 @@ HANDLERS = {
     ScheduledJob.Kind.DISCOVERY_ROUTE_ALERTS: handle_discovery_route_alerts,
     ScheduledJob.Kind.LEG_REMINDER: handle_leg_reminder,
     ScheduledJob.Kind.SCHEDULE_CHANGE_SETTLE: handle_schedule_change_settle,
+    ScheduledJob.Kind.OFFER_RESPONSE_REMINDER: handle_offer_response_reminder,
+    ScheduledJob.Kind.OFFER_EXPIRY: handle_offer_expiry,
 }
 
 

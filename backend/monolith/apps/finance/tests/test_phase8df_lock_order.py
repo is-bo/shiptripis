@@ -98,6 +98,9 @@ CANONICAL_LOCK_MODULES = (
     # The routed cancel, decline and withdraw writes. They lock the same Match
     # and Offer rows as the V1 negotiation services, so they take the same mode.
     "apps/matching/views.py",
+    # L12A. The offer expiry and reminder jobs lock Match then Offer, the
+    # decline path's rows in its order.
+    "apps/matching/offer_deadlines.py",
 )
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]

@@ -3626,6 +3626,9 @@ def business_settings(request):
             "listings_enabled": marketplace.discovery.listings_enabled,
             "profiles_enabled": marketplace.discovery.profiles_enabled,
             "interest_daily_cap": marketplace.discovery.interest_daily_cap,
+            "trip_fit_alerts_enabled": marketplace.discovery.trip_fit_alerts_enabled,
+            "trip_fit_max_travelers": marketplace.discovery.trip_fit_max_travelers,
+            "trip_fit_daily_cap": marketplace.discovery.trip_fit_daily_cap,
             "sea_legs_enabled": marketplace.sea_legs_enabled,
             "traveler_pricing_enabled": marketplace.traveler_pricing.enabled,
             "max_price_per_kg_eur": decimal_eur(
@@ -3634,6 +3637,9 @@ def business_settings(request):
             "max_min_price_eur": decimal_eur(
                 marketplace.traveler_pricing.max_min_price_eur_cents
             ),
+            "response_deadline_enabled": marketplace.offers.response_deadline_enabled,
+            "response_hours": marketplace.offers.response_hours,
+            "reminder_before_hours": marketplace.offers.reminder_before_hours,
         },
         auto_id="id_marketplace_%s",
     )
@@ -3740,6 +3746,15 @@ def business_settings(request):
                         "marketplace.discovery.interest_daily_cap": data[
                             "interest_daily_cap"
                         ],
+                        "marketplace.discovery.trip_fit_alerts_enabled": data[
+                            "trip_fit_alerts_enabled"
+                        ],
+                        "marketplace.discovery.trip_fit_max_travelers": data[
+                            "trip_fit_max_travelers"
+                        ],
+                        "marketplace.discovery.trip_fit_daily_cap": data[
+                            "trip_fit_daily_cap"
+                        ],
                         "marketplace.sea_legs_enabled": data["sea_legs_enabled"],
                         "marketplace.traveler_pricing.enabled": data[
                             "traveler_pricing_enabled"
@@ -3749,6 +3764,13 @@ def business_settings(request):
                         ],
                         "marketplace.traveler_pricing.max_min_price_eur_cents": bounds[
                             "max_min_price_eur_cents"
+                        ],
+                        "marketplace.offers.response_deadline_enabled": data[
+                            "response_deadline_enabled"
+                        ],
+                        "marketplace.offers.response_hours": data["response_hours"],
+                        "marketplace.offers.reminder_before_hours": data[
+                            "reminder_before_hours"
                         ],
                     },
                     commission_rate_bps=None,

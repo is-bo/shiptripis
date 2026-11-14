@@ -1391,6 +1391,9 @@ class ScheduledJob(models.Model):
         LEG_REMINDER = "leg_reminder", "Leg progress reminder"
         # --- L9A schedule changes ---
         SCHEDULE_CHANGE_SETTLE = "schedule_change_settle", "Schedule change settle"
+        # --- L12A proposal deadlines ---
+        OFFER_RESPONSE_REMINDER = "offer_response_reminder", "Offer response reminder"
+        OFFER_EXPIRY = "offer_expiry", "Offer expiry"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

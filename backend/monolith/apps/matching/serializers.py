@@ -7,6 +7,7 @@ publish logic. These just validate shape.
 from __future__ import annotations
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.parcels.models import ParcelRequest
@@ -14,6 +15,7 @@ from apps.parcels import tracking
 
 from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
 from .models import Match, Offer
+from .offer_deadlines import deadline_passed, effective_status
 from .offer_economics import OfferEconomicsReader
 from .public_contract import public_compatibility_payload, public_terms_snapshot
 
@@ -47,6 +49,8 @@ def allowed_offer_actions(offer: Offer, match: Match, *, user_id: int | None) ->
         return []
     if offer.status != Offer.Status.PENDING or match.status != Match.Status.PENDING:
         return []
+    if deadline_passed(offer, at=timezone.now()):
+        return []
     if offer.proposer_id == user_id:
         return ["withdraw"]
     actions = []
@@ -71,6 +75,8 @@ def offer_economics_reader(context: dict) -> OfferEconomicsReader:
 
 def awaiting_party(offer: Offer, match: Match) -> tuple[str | None, int | None]:
     if offer.status != Offer.Status.PENDING or match.status != Match.Status.PENDING:
+        return None, None
+    if deadline_passed(offer, at=timezone.now()):
         return None, None
     if offer.proposed_by == Offer.ProposedBy.SENDER:
         return "traveler", match.traveler_id
@@ -149,6 +155,9 @@ class OfferSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance: Offer) -> dict:
         data = super().to_representation(instance)
+        # L12A: from the deadline on the offer reads as expired, even in the
+        # moment before the expiry job stores it (spec 17.1).
+        data["status"] = effective_status(instance, at=timezone.now())
         if instance.economics_version == Offer.EconomicsVersion.V1_EUR:
             for field in LEGACY_DZD_FIELDS:
                 data.pop(field, None)

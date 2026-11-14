@@ -31,6 +31,7 @@ from apps.trips.proofs import leg_requires_proof
 from .compatibility import leg_reservations, request_volume_litres
 from .discovery import evaluate_candidate, phase2_policy
 from .models import Match, MatchEvent, Offer
+from .offer_deadlines import deadline_passed, response_deadline, schedule_deadline_jobs
 from .offer_economics import commitment_terms
 from .policy import Phase2Policy
 
@@ -96,6 +97,23 @@ class JourneyPaused(OfferStateError):
 
 class OfferNotPending(OfferStateError):
     code = "offer_not_pending"
+
+
+class OfferExpired(OfferStateError):
+    """The offer's response deadline has passed (spec 17.1).
+
+    Raised from the deadline on, whether or not the expiry job has run, so an
+    answer one second late is refused the same way as one a day late.
+    """
+
+    code = "offer_expired"
+
+    def __init__(self, message: str, *, expires_at):
+        super().__init__(message)
+        self.expires_at = expires_at
+
+    def details(self) -> dict:
+        return {"expires_at": self.expires_at.isoformat()}
 
 
 class MatchNotPending(OfferStateError):
@@ -439,6 +457,28 @@ def _v1_offer_values(
     }
 
 
+def _refuse_lapsed(offer: Offer, *, at) -> None:
+    if deadline_passed(offer, at=at):
+        raise OfferExpired(
+            "The response deadline of this offer has passed.",
+            expires_at=offer.expires_at,
+        )
+
+
+def _deadline_for(evaluation, *, policy: Phase2Policy, sent_at):
+    """The response deadline of an offer written from this evaluation.
+
+    The pickup time is the engine's own, from the evaluation that just passed;
+    the revision is the one the offer is priced under.
+    """
+
+    return response_deadline(
+        sent_at=sent_at,
+        pickup_at=evaluation.compatibility.pickup_at,
+        settings_version=policy.settings_version,
+    )
+
+
 def _validate_evaluation(
     *,
     delivery_request: DeliveryRequest,
@@ -704,6 +744,7 @@ def _create_sender_offer_locked(
 
     locked_legs = _lock_journey_legs(journey_row)
     journey_row._matching_legs = locked_legs
+    sent_at = timezone.now()
     policy, evaluation = _validate_evaluation(
         delivery_request=request_row,
         journey=journey_row,
@@ -711,6 +752,7 @@ def _create_sender_offer_locked(
         expected_start_leg_id=start_leg_id,
         expected_end_leg_id=end_leg_id,
         route_provider=replay_provider,
+        at=sent_at,
     )
     legs = list(evaluation.compatibility.covered_legs)
     offer_values = _v1_offer_values(
@@ -718,6 +760,7 @@ def _create_sender_offer_locked(
         evaluation=evaluation,
         policy=policy,
     )
+    deadline = _deadline_for(evaluation, policy=policy, sent_at=sent_at)
     match = Match.objects.create(
         parcel=request_row.parcelrequest_ptr,
         journey=journey_row,
@@ -736,8 +779,11 @@ def _create_sender_offer_locked(
         proposed_by=Offer.ProposedBy.SENDER,
         proposer=sender,
         note=note,
+        expires_at=deadline.expires_at if deadline else None,
         **offer_values,
     )
+    if deadline is not None:
+        schedule_deadline_jobs(offer, deadline)
     MatchEvent.objects.create(
         match=match,
         offer=offer,
@@ -775,6 +821,7 @@ def counter_offer(
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
         raise OfferAuthorizationError("The proposer cannot counter their own offer.")
+    _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
@@ -841,6 +888,7 @@ def _counter_offer_locked(
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
         raise OfferAuthorizationError("The proposer cannot counter their own offer.")
+    _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
@@ -865,6 +913,7 @@ def _counter_offer_locked(
         .get(pk=match.journey_id)
     )
     journey._matching_legs = _lock_journey_legs(journey)
+    sent_at = timezone.now()
     policy, evaluation = _validate_evaluation(
         delivery_request=request_row,
         journey=journey,
@@ -872,9 +921,11 @@ def _counter_offer_locked(
         expected_start_leg_id=match.start_leg_id,
         expected_end_leg_id=match.end_leg_id,
         route_provider=replay_provider,
+        at=sent_at,
     )
+    deadline = _deadline_for(evaluation, policy=policy, sent_at=sent_at)
     current.status = Offer.Status.COUNTERED
-    current.responded_at = timezone.now()
+    current.responded_at = sent_at
     current.save(update_fields=["status", "responded_at", "updated_at"])
     side = (
         Offer.ProposedBy.SENDER
@@ -887,12 +938,15 @@ def _counter_offer_locked(
         proposed_by=side,
         proposer=actor,
         note=note,
+        expires_at=deadline.expires_at if deadline else None,
         **_v1_offer_values(
             traveler_reward_eur_cents,
             evaluation=evaluation,
             policy=policy,
         ),
     )
+    if deadline is not None:
+        schedule_deadline_jobs(child, deadline)
     MatchEvent.objects.create(
         match=match,
         offer=child,
@@ -939,6 +993,7 @@ def accept_offer(
         raise LegacyContractNotSupported(
             "Use the legacy acceptance path for a legacy DZD offer."
         )
+    _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
@@ -1030,6 +1085,7 @@ def _accept_offer_locked(
         raise LegacyContractNotSupported(
             "Use the legacy acceptance path for a legacy DZD offer."
         )
+    _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
