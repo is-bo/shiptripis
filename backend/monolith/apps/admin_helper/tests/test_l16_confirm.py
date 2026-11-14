@@ -293,7 +293,6 @@ class ConfirmTests(TestCase):
         assert item.url == f"{reverse('admin_console:ai-helper')}#st-helper-waiting"
         overview = self.console.get(reverse("admin_console:overview")).content.decode()
         assert "Changes waiting for your confirmation" in overview
-        assert "A change waits for your confirmation" in overview
         briefing = Client().get(API + "briefing", **bearer(new_key(self.owner))).json()
         assert [row["count"] for row in briefing["items"] if row["code"] == "helper_changes"] == [1]
         queue = Client().get(API + "queues/helper_changes", **bearer(new_key(self.owner))).json()

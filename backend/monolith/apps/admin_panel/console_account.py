@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 
 from .console_forms import ConsoleForm
+from .people_links import display_name
 from .permissions import has_admin_permission
 from .staff_actions import BAN_PERMISSION, StaffActionError, ban_refusal, set_account_ban
 
@@ -70,15 +71,16 @@ def account_ban(request, pk: int):
                 else "The account is restored. The person can sign in again.",
             )
             return redirect(back)
+    who = f"{display_name(person)} (person {person.pk})"
     if refusal is not None:
         description = str(refusal)
     elif banning:
         description = (
-            "The person is signed out at once and cannot sign in, including in the middle "
+            f"{who} is signed out at once and cannot sign in, including in the middle "
             "of a delivery. Their deliveries, payments and payouts are not changed."
         )
     else:
-        description = "The account becomes active again and the person can sign in."
+        description = f"{who} becomes active again and can sign in."
     return _render(
         request,
         "admin/console/action_form.html",

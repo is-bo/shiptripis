@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from django import forms
@@ -68,17 +69,11 @@ def _until(moment: datetime, now: datetime) -> str:
     return f"{local:%d %b, %H:%M}"
 
 
-def _live_key(admin, kind: str, now: datetime) -> AdminHelperKey | None:
-    return (
-        AdminHelperKey.objects.filter(
-            admin=admin,
-            kind=kind,
-            revoked_at__isnull=True,
-            expires_at__gt=now,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+def _live_keys(admin, now: datetime) -> dict[str, AdminHelperKey]:
+    """The admin's live key of each kind, in one query (at most one per kind)."""
+
+    live = AdminHelperKey.objects.filter(admin=admin, revoked_at__isnull=True, expires_at__gt=now)
+    return {key.kind: key for key in live.order_by("created_at")}
 
 
 def _key_line(key: AdminHelperKey | None, now: datetime) -> dict | None:
@@ -93,24 +88,17 @@ def card(request, *, issued=None) -> dict:
 
     now = timezone.now()
     policy = current_policy()
-    waiting = changes.waiting_for(request.user, at=now).count()
     if policy is None or not policy.enabled:
-        return {"enabled": False, "waiting": waiting}
-    keys = {
-        kind: (
-            issued.key
-            if issued is not None and issued.key.kind == kind
-            else _live_key(request.user, kind, now)
-        )
-        for kind in AdminHelperKey.Kind.values
-    }
+        return {"enabled": False}
+    keys = _live_keys(request.user, now)
+    if issued is not None:
+        keys[issued.key.kind] = issued.key
     return {
         "enabled": True,
         "read_hours": policy.read_key_hours,
         "change_minutes": policy.change_key_minutes,
-        "read_key": _key_line(keys[AdminHelperKey.Kind.READ], now),
-        "change_key": _key_line(keys[AdminHelperKey.Kind.CHANGE], now),
-        "waiting": waiting,
+        "read_key": _key_line(keys.get(AdminHelperKey.Kind.READ), now),
+        "change_key": _key_line(keys.get(AdminHelperKey.Kind.CHANGE), now),
         "issued": (
             {
                 # One line, exactly what the assistant needs (spec 20.7).
@@ -425,6 +413,14 @@ class ConfirmChangeForm(ConsoleForm):
         )
 
 
+def _heading(title: str) -> str:
+    """A registry title as a page heading: its first clause, without the full
+    stop ("Ban a member's account. They are signed out at once." reads "Ban a
+    member's account"). The server's summary below says the rest."""
+
+    return re.split(r"\. |: |; | \(", title, maxsplit=1)[0].rstrip(".")
+
+
 @never_cache
 def change(request, pk):
     """One prepared change: read it, then confirm it or reject it. Only its own admin."""
@@ -475,7 +471,7 @@ def change(request, pk):
         request,
         "admin/console/ai_helper_change.html",
         {
-            "title": look.entry.title if look.entry else "A change your AI helper prepared",
+            "title": _heading(look.entry.title) if look.entry else "A change your AI helper prepared",
             "change": prepared,
             "status": PreparedAction.Status.EXPIRED.label
             if prepared.status == PreparedAction.Status.WAITING and not waiting

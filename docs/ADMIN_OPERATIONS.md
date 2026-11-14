@@ -9,12 +9,13 @@ audited domain services remain authoritative.
 The header is filtered to the signed-in staff member's capabilities:
 
 - **Overview** answers “what needs attention?” with live queue counts, most
-  urgent first (rules below, under “AI helper (L15)”), and holds the AI helper
+  urgent first (rules below, under “AI helper”), and holds the AI helper
   card.
 - **People** opens one complete profile per user: identity, requests, journeys,
   offers, Deals, payments, payout setup and payouts, disputes, revealed ratings,
   notifications and audit history, each section gated on the capability that
-  owns it (J6.4). Names elsewhere in the console link to it.
+  owns it (J6.4), plus internal notes and, for a Super Admin, **Ban account** or
+  **Restore account**. Names elsewhere in the console link to it.
 - **Verification** is the staff verification inbox (ID and Tickets, with the
   number waiting shown on the entry), private evidence review, and the payout
   identity checks Finance asks Trust for.
@@ -213,23 +214,31 @@ nothing is recalculated. People appear by their Wassla id and name only.
 Every download writes one audit row (who, kind, money, range and number of
 lines) before the file is sent; the page lists the ten most recent.
 
-## AI helper (L15)
+## AI helper
 
-An admin can connect an AI assistant they use (for example Claude Code) to read
+An admin can connect an AI assistant they use (for example Claude Code) to
 their own work list and records. The assistant acts as that admin, with that
-admin's rights at the moment of each call, and **reads only**: it changes
-nothing, and it never sees documents, contact details, addresses, payout or
-bank details, codes, chat or keys. Document reviews (ID, tickets, payout
-methods, payout identity) reach it as a count and a link to the console.
+admin's rights at the moment of each call. It never sees documents, contact
+details, addresses, payout or bank details, codes, chat, internal notes or
+keys. Document reviews (ID, tickets, payout methods, payout identity) reach it
+as a count and a link to the console.
+
+There are two kinds of key. A **read key** reads only. A **change key** can
+also add an internal note and acknowledge a problem report at once, and
+**prepares** every other change it may make for you to confirm on the console;
+nothing it prepares happens before you confirm it (see “Changes your assistant
+prepares” below).
 
 **Create a key.** On **Overview**, the **AI helper** card, choose **Create read
-key (8 hours)**. If you have not entered a two-step code in the last 10 minutes
+key (8 hours)** or **Create change key (30 minutes)**. If you have not entered
+a two-step code in the last 10 minutes
 the console asks for one first. The card then shows one line,
 `/wassla <address> <key>`, with a **Copy** button: paste it into your assistant
 as your first message. **It is shown once**; Wassla keeps only a scrambled form
-of it. If you lose it, create a new one. Each admin has one read key at a time:
-creating a new one stops the old one. A key lasts the hours set in Business
-settings at the moment it was created (1 to 8) and is never extended by use.
+of it. If you lose it, create a new one. Each admin has one key of each kind at
+a time: creating a new one stops the old one of that kind. A key lasts the time
+set in Business settings at the moment it was created (read key 1 to 8 hours,
+change key 5 to 60 minutes) and is never extended by use.
 
 **Stop a key.** **Stop key** on the card, or on **Overview → AI helper** (the
 page linked from the card as “Keys and recent calls”). That page also lists
@@ -242,14 +251,41 @@ which goes to the audit log.
 **What stops every key at once.** Switching the helper off in **Settings → AI
 helper** stops every live key for good, with one audit row giving the number of
 keys stopped; switching it back on does not bring them back. A two-step reset
-stops that admin's keys. A key also stops working at once, without being
-stopped, when its admin is banned, deactivated or loses staff access, and it
-answers only what their current role opens.
+stops that admin's keys. Stopping a change key early, in any of these ways,
+also expires the changes it prepared; a key that was replaced or simply ran
+out leaves them for you to decide. A key also stops working at once, without
+being stopped, when its admin is banned, deactivated or loses staff access, and
+it answers only what their current role opens.
+
+**Changes your assistant prepares.** They wait on **Overview → AI helper**,
+under **Waiting for your confirmation**, and the Overview shows “Changes
+waiting for your confirmation” with their number. Each shows Wassla's own
+sentence for what will happen, the record as a link, the values in words, and
+the assistant's reason in a box marked “Written by the AI helper, check it”.
+**Review and confirm** opens the change: write your own reason (the
+assistant's is filled in; change it if the words are not yours) and choose
+**Confirm**. Wassla then checks again that your role allows it, that the page
+would still offer it and that the record has not changed since it was
+prepared (for a dispute decision, that the settlement engine gives the same
+amounts), and does it as you, exactly as the console's own button would, with
+the same audit row marked as via the AI helper. If anything differs it says
+“This no longer applies” and does nothing. **Reject** needs no reason. Only
+you can confirm the changes your keys prepared, only once, and only from a
+console session that passed the second step. A change you do not decide
+expires after the hours set in Business settings (24 by default). With the
+helper switched off, the list stays readable but nothing can be confirmed.
+
+What a change key can never do or prepare: staff, roles and invitations;
+settings; helper keys; two-step sign-in; identity, ticket, payout-method and
+payout-identity reviews; revealing payout details; manual dinar payout steps,
+re-reading Stripe or opening a Finance hold; payment reconcile and resolve;
+settling a refund by hand; closing a problem report; deciding jobs in bulk;
+adding a sea crossing; finance exports.
 
 **Settings → AI helper** (`manage_settings`): on or off, read key hours (1 to
-8), change key minutes (5 to 60) and prepared change validity (1 to 72 hours),
-which L16 uses, and calls per key per minute (10 to 300; over it the assistant
-is told to wait a minute). Saved as one audited settings revision with a reason.
+8), change key minutes (5 to 60), how long a prepared change waits (1 to 72
+hours), and calls per key per minute (10 to 300; over it the assistant is told
+to wait a minute). Saved as one audited settings revision with a reason.
 
 **How the Overview orders work.** Raised items are shown most urgent first,
 then by the longest wait. The urgency is a fixed rule per item, the same in the
@@ -274,6 +310,23 @@ console and for the assistant; it is never a guess:
 An item with nothing waiting is not raised. Each item shows only to an admin
 who can open the page it links to. These thresholds are a judgment call kept
 for the owner's end review.
+
+## Internal notes
+
+The delivery, dispute and person pages have **Internal notes**: what a
+colleague needs to know, with the author and time. Anyone who can open the page
+can add one. A note cannot be edited or deleted, is written to the audit log,
+and is never shown to members or to an AI assistant. A note added by an
+admin's assistant is marked “Added by their AI helper”.
+
+## Banning an account
+
+On the person page a Super Admin (`manage_users`) has **Ban account**, or
+**Restore account** for a banned one. Both ask for a reason, which goes to the
+audit log and is never shown to the person. A ban signs the person out at once
+and stops them signing in; it does not cancel deliveries, move money or release
+a payout. Staff accounts are changed on Staff & access, and nobody bans their
+own account. The technical records no longer offer a bulk ban.
 
 ## Approving a Traveler's DZD payout method
 

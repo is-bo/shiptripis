@@ -12,10 +12,6 @@ in the one response that created it.
   </div>
   <p class="st-helper-lede">Connect an assistant you use (for example Claude Code) to your work list and records, with your rights at the moment of each call. A read key reads only. A change key can also add internal notes and acknowledge problems, and prepares every other change for you to confirm here. It never sees documents, contact details or payout details.</p>
 
-  {% if helper.waiting %}
-  <p class="st-helper-waiting-line"><span class="st-chip st-wait">{{ helper.waiting }} waiting</span> <a href="{% url 'admin_console:ai-helper' %}#st-helper-waiting">{% if helper.waiting == 1 %}A change waits{% else %}{{ helper.waiting }} changes wait{% endif %} for your confirmation</a></p>
-  {% endif %}
-
   {% if not helper.enabled %}
   <p class="st-helper-off"><span class="st-chip st-mute">Switched off</span> The AI helper is switched off in Business settings. No key works and none can be created.</p>
   {% else %}

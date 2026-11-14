@@ -2936,7 +2936,6 @@ button[disabled], .st-form button[disabled] {
 .st-helper-once { color: var(--st-ink) !important; }
 .st-helper-keys dd form { margin: 0; }
 .st-helper-keys dd .st-button-quiet { padding: 3px 10px; font-size: var(--st-fs-xs); }
-.st-helper-waiting-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--st-2); margin: var(--st-3) 0 0; font-weight: 600; }
 
 /* --- AI helper changes (plan L16) ----------------------------------------------
    A prepared change reads as the server's sentence first, then its values,
@@ -2982,6 +2981,7 @@ button[disabled], .st-form button[disabled] {
 .st-change-reject p { margin: 0; color: var(--st-ink-2); }
 .st-helper-change .st-change-details { margin-bottom: var(--st-3); }
 .st-helper-change .st-change-meta { margin-bottom: var(--st-3); }
+.st-helper-change .st-change-details + .st-helper-note { margin: calc(-1 * var(--st-1)) 0 var(--st-3); }
 .st-helper-reason {
   margin: 0;
   padding: var(--st-2) var(--st-3);
