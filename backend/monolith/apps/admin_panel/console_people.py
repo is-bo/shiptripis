@@ -77,7 +77,9 @@ from apps.notifications.models import Notification
 from apps.parcels import tracking
 from apps.parcels.lifecycle import with_lifecycle
 from apps.parcels.models import DeliveryRequest, ParcelRequest
-from apps.ratings.models import Rating
+from apps.ratings.models import Rating, RatingModeration
+from apps.ratings.moderation import MODERATE_PERMISSION
+from apps.ratings.public import countable
 from apps.trips.models import Journey, JourneyLeg
 
 from .console_presenters import (
@@ -118,7 +120,11 @@ TABS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deliveries", "Deliveries", ("view_deals",)),
     ("payments", "Payments", ("view_payment_orders", "view_payment_attempts")),
     ("payouts", "Payouts", ("view_payouts", "view_finance_summary", "review_payout_profiles")),
-    ("trust", "Trust & support", ("view_disputes", "view_ratings", "view_support_context")),
+    (
+        "trust",
+        "Trust & support",
+        ("view_disputes", "view_ratings", MODERATE_PERMISSION, "view_support_context"),
+    ),
     ("discovery", "Discovery", ("view_users",)),
     ("audit", "Audit", ("view_audit_log",)),
 )
@@ -131,7 +137,8 @@ ACTIVITY_VIEWS = (
 
 TRUST_VIEWS = (
     ("disputes", "Disputes", ("view_disputes",)),
-    ("ratings", "Ratings", ("view_ratings",)),
+    # L13A: whoever decides reported reviews also reads a person's ratings.
+    ("ratings", "Ratings", ("view_ratings", MODERATE_PERMISSION)),
     ("notifications", "Notifications", ("view_support_context",)),
 )
 
@@ -414,14 +421,20 @@ def _ratings_base(person):
 
 
 def _rating_summary(person):
+    """The rating every card shows (L13A `countable`), and what is left out of it."""
+
     now = timezone.now()
-    revealed = _revealed_q(now)
-    return _ratings_base(person).aggregate(
-        received_average=Avg("score", filter=revealed & Q(ratee_id=person.pk)),
-        received=Count("pk", filter=revealed & Q(ratee_id=person.pk)),
-        given=Count("pk", filter=revealed & Q(rater_id=person.pk)),
-        hidden=Count("pk", filter=~revealed),
+    received = countable(Rating.objects.filter(ratee=person), at=now).aggregate(
+        average=Avg("score"), count=Count("pk")
     )
+    removed = RatingModeration.objects.filter(
+        rating__ratee=person, state=RatingModeration.State.REMOVED
+    ).count()
+    return {
+        "received_average": received["average"],
+        "received": received["count"],
+        "removed": removed,
+    }
 
 
 def _payout_readiness(person):
@@ -504,14 +517,15 @@ def build_overview(request, person, caps, header, source):
                 "detail": "Payout stays frozen until it is decided.",
                 "url": _tab_url(person, "trust", source=source, view="disputes"), "tone": "bad",
             })
-    if caps("view_ratings"):
+    if caps("view_ratings", MODERATE_PERMISSION):
         ratings = _rating_summary(person)
         average = ratings["received_average"]
         facts.append({
             "label": "Rating received",
             "value": f"{average:.1f}" if average is not None else "New",
             "unit": "/ 5" if average is not None else "",
-            "detail": f"{ratings['received']} revealed rating{'s' if ratings['received'] != 1 else ''}",
+            "detail": f"{ratings['received']} counted rating{'s' if ratings['received'] != 1 else ''}"
+            + (f", {ratings['removed']} removed by staff" if ratings["removed"] else ""),
             "url": _tab_url(person, "trust", source=source, view="ratings"),
         })
 
@@ -1141,9 +1155,10 @@ def _ratings_list(request, person, caps, source):
     base = _ratings_base(person)
     queryset = (
         base.filter(_revealed_q(now))
-        .select_related("rater", "ratee", "deal__delivery_request")
+        .select_related("rater", "ratee", "deal__delivery_request", "moderation")
         .order_by("-created_at", "-pk")
     )
+    may_moderate = caps(MODERATE_PERMISSION)
     page = _page(request, queryset)
     hidden = base.exclude(_revealed_q(now)).count()
     rows = []
@@ -1154,7 +1169,13 @@ def _ratings_list(request, person, caps, source):
             "cells": (
                 text_cell("Received" if received else "Given", kind="strong"),
                 _person_cell(other),
-                text_cell(f"{rating.score} / 5", "★" * rating.score),
+                text_cell(
+                    f"{rating.score} / 5",
+                    _MODERATION_NOTES.get(_moderation_state(rating), "★" * rating.score),
+                    href=reverse("admin_console:review-detail", args=(rating.pk,))
+                    if may_moderate
+                    else "",
+                ),
                 datetime_cell(rating.created_at),
                 ref_cell(tracking.for_deal(rating.deal),
                          href=reverse("admin_console:deal-detail", args=(rating.deal_id,)) if caps("view_deals") else ""),
@@ -1169,6 +1190,20 @@ def _ratings_list(request, person, caps, source):
         rows, page_obj=page, layout="ratings",
         empty="No revealed ratings yet.", note=note,
     )
+
+
+#: How a staff decision reads under a score in the person's ratings list.
+_MODERATION_NOTES = {
+    RatingModeration.State.COMMENT_HIDDEN: "Comment hidden by staff",
+    RatingModeration.State.REMOVED: "Removed by staff, not counted",
+}
+
+
+def _moderation_state(rating) -> str | None:
+    try:
+        return rating.moderation.state
+    except RatingModeration.DoesNotExist:
+        return None
 
 
 def _notifications_list(request, person, caps, source):

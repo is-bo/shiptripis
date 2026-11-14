@@ -101,6 +101,9 @@ CANONICAL_LOCK_MODULES = (
     # L12A. The offer expiry and reminder jobs lock Match then Offer, the
     # decline path's rows in its order.
     "apps/matching/offer_deadlines.py",
+    # L13A. Staff decisions on a review lock its Rating row, a row of the deal
+    # aggregate `lock_deal_lifecycle` also locks.
+    "apps/ratings/moderation.py",
 )
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]

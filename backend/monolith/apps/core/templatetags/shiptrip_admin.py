@@ -126,6 +126,13 @@ NAVIGATION = (
                 ("attest_payout_identity",),
                 ("identity-checks", "identity-check-detail"),
             ),
+            # L13A, spec 18. Reviews members reported, decided by Trust.
+            (
+                "Reported reviews",
+                "admin_console:reviews",
+                ("moderate_ratings",),
+                ("reviews", "review-detail"),
+            ),
         ),
     ),
     (

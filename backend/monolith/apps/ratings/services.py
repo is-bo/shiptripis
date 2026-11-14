@@ -34,7 +34,7 @@ import logging
 from datetime import datetime
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.core.financial_locks import lock_deal_lifecycle
@@ -42,7 +42,7 @@ from apps.core.phase4_policy import RatingPolicy, phase4_policy
 from apps.deals import lifecycle
 from apps.deals.models import Deal, DealEvent
 
-from .models import Rating
+from .models import Rating, RatingModeration, RatingReport
 
 logger = logging.getLogger(__name__)
 
@@ -594,6 +594,9 @@ def received_ratings(*, user_id: int, at: datetime | None = None, limit: int = 1
     recent page is all still-blind ratings would see nothing older. Callers
     apply `is_revealed` to the rows they get back; that, not this queryset, is
     the authority on visibility.
+
+    The rows also carry what "My ratings" marks (L13A): `moderation_state`,
+    staff's standing decision, and `my_report_status`, the user's own report.
     """
 
     at = at or timezone.now()
@@ -601,7 +604,19 @@ def received_ratings(*, user_id: int, at: datetime | None = None, limit: int = 1
         Rating.objects.filter(ratee_id=user_id)
         .select_related("deal")
         .prefetch_related("deal__ratings")
-        .annotate(sides_on_file=Count("deal__ratings"))
+        .annotate(
+            sides_on_file=Count("deal__ratings"),
+            moderation_state=Subquery(
+                RatingModeration.objects.filter(rating_id=OuterRef("pk")).values(
+                    "state"
+                )[:1]
+            ),
+            my_report_status=Subquery(
+                RatingReport.objects.filter(
+                    rating_id=OuterRef("pk"), reporter_id=user_id
+                ).values("status")[:1]
+            ),
+        )
         .filter(Q(review_window_ends_at__lte=at) | Q(sides_on_file__gte=2))
         .order_by("-created_at")[:limit]
     )

@@ -1,0 +1,108 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">Reported reviews</a> &rsaquo; Review {{ rating.pk }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Review &middot; parcel <span class="st-tracking-number">{{ tracking_number }}</span></p>
+      <h1>{{ rating.score }} / 5 from the {{ written_by }}</h1>
+      <p>About {{ rating.ratee.full_name|default:rating.ratee.email }}, written {{ rating.created_at|date:"d M Y" }} by {{ rating.rater.full_name|default:rating.rater.email }}.</p>
+    </div>
+    <div class="st-page-aside">
+      {% if moderation %}
+        <span class="st-chip st-{% if moderation.state == 'removed' %}bad{% else %}info{% endif %}">{{ moderation.get_state_display }}</span>
+      {% elif open_reports %}
+        <span class="st-chip st-attn">{{ open_reports }} open report{{ open_reports|pluralize }}</span>
+      {% else %}
+        <span class="st-chip st-mute">Shown as written</span>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="st-alert st-alert-info">
+    <strong>The rating itself is never edited</strong>
+    <span>A decision stands beside it and can be lifted. Members see “Comment removed by Wassla” for a hidden comment; a removed rating leaves every public average, count and list. The author is never told who reported.</span>
+  </div>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">The review</p>
+      <h2>As written</h2>
+      {% if rating.comment %}<p class="st-case-reason">{{ rating.comment }}</p>{% else %}<p class="st-muted">No comment was written.</p>{% endif %}
+      <dl class="st-facts">
+        <div><dt>Score</dt><dd>{{ rating.score }} / 5</dd></div>
+        <div><dt>Tags</dt><dd>{% if rating.tags %}{{ rating.tags|join:", " }}{% else %}None{% endif %}</dd></div>
+        <div><dt>Written by</dt><dd>{% person_link rating.rater "reviews" %}<small>the {{ written_by }} &middot; {{ rating.rater.email }}</small></dd></div>
+        <div><dt>About</dt><dd>{% person_link rating.ratee "reviews" %}<small>{{ rating.ratee.email }}</small></dd></div>
+        <div><dt>Visible to members</dt><dd>{% if revealed %}Yes{% else %}Not yet<small>Still inside the blind review window</small>{% endif %}</dd></div>
+      </dl>
+      {% if may_view_deal %}<div class="st-split-actions"><a class="button st-button-quiet" href="{% url 'admin_console:deal-detail' deal.pk %}">Open the delivery</a></div>{% endif %}
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">Standing decision</p>
+      <h2>{% if moderation %}{{ moderation.get_state_display }}{% else %}None{% endif %}</h2>
+      {% if moderation %}
+      <dl class="st-facts">
+        <div><dt>Decided</dt><dd>{{ moderation.decided_at|date:"d M Y, H:i" }}<small>{{ moderation.decided_by.email }}</small></dd></div>
+        <div><dt>Reason</dt><dd>{{ moderation.reason }}</dd></div>
+      </dl>
+      {% else %}
+      <p class="st-muted">The review is shown and counted as written.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Reports &middot; staff only</p>
+    <h2>{{ reports|length }} report{{ reports|length|pluralize }}</h2>
+    {% if reports %}
+    <ol class="st-timeline">
+      {% for report in reports %}
+      <li>
+        <strong>{{ report.get_reason_display }} &middot; {{ report.get_status_display }}</strong>
+        <span>{{ report.created_at|date:"d M Y, H:i" }} &middot; {% person_link report.reporter "reviews" %} ({{ report.reporter.email }}){% if report.decided_at %} &middot; decided {{ report.decided_at|date:"d M Y, H:i" }} by {{ report.decided_by.email|default:"—" }}{% endif %}</span>
+        {% if report.note %}<span class="st-muted">“{{ report.note }}”</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="st-muted">Nobody has reported this review.</p>
+    {% endif %}
+  </section>
+
+  {% if decisions %}
+  <div class="st-grid st-grid-2">
+    {% for decision in decisions %}
+    <section class="st-card">
+      <p class="st-eyebrow">Audited action</p>
+      <h2>{{ decision.title }}</h2>
+      <p class="st-muted">{{ decision.help }}{% if open_reports %} Its {{ open_reports }} open report{{ open_reports|pluralize }} {{ open_reports|pluralize:"is,are" }} closed with this decision.{% endif %}</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="{{ decision.action }}">
+        {{ decision.form.as_p }}
+        <div class="st-split-actions"><span class="st-spacer"></span><button type="submit"{% if decision.danger %} class="st-button-danger"{% endif %}>{{ decision.title }}</button></div>
+      </form>
+    </section>
+    {% endfor %}
+  </div>
+  {% elif not may_moderate %}
+  <p class="st-muted">You can read this review but not decide on it.</p>
+  {% endif %}
+
+  {% if audits %}
+  <section class="st-card">
+    <p class="st-eyebrow">Audit</p>
+    <h2>Staff decisions on this review</h2>
+    <ol class="st-timeline">
+      {% for audit in audits %}
+      <li><strong>{{ audit.action|admin_action }}</strong><span>{{ audit.created_at|date:"d M Y, H:i" }} &middot; {{ audit.actor.email|default:"System" }} &middot; {{ audit.reason }}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

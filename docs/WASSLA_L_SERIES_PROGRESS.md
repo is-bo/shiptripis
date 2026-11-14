@@ -692,12 +692,39 @@ Detail: `docs/PHASE_L12B_PROPOSAL_DEADLINE_MOBILE.md`. Screenshots: `/mnt/projec
 
 ### L13A. Reviews, reports and moderation, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L13A_REVIEWS.md`. Screenshots: `/mnt/project-files/l-series-screens/L13A/` (console EN).
+
+- Contract as built (names that differ from the plan): `apps/ratings/public.py` (`countable`,
+  `public_reviews`, `reviews_visible_to`, `trip_reviews_access`), `apps/ratings/moderation.py`
+  (`file_report`, `decide`), models `RatingReport` and `RatingModeration` (migration `ratings/0002`),
+  capability `moderate_ratings` (`admin_panel/0006`). Endpoints as planned, plus a `rating` summary
+  (the card's own `trust_signals` block) on both reviews payloads. The plan's `reported_by_me` is
+  `my_report: null | "received" | "reviewed"`, one field, because spec 18 has the reporter see
+  "received" then "reviewed". Report answers: `201`/`200` with `{rating_id, state, reported_at}`;
+  `404 review_not_found` for every review the caller cannot read; `409 own_review`; `409
+  review_removed` (ratee only). Decisions refuse a no-op with `moderation_unchanged`. Console routes
+  `reviews` (`/admin/trust/reviews/`) and `review-detail`, in the Verification section.
+- Left for a later package: L13B renders the Reviews screen from the two endpoints (from Find
+  Travelers it passes `request`; the report body then carries `journey` and `request` too), the report
+  sheet, `my_report`, and `moderation` on My ratings. Nothing else owed.
+- Switches added and their defaults: none (the people endpoint follows `discovery.profiles_enabled`,
+  the trip endpoint's public path `discovery.listings_enabled`).
+- Deviations from the plan (what, why, approved by): trips endpoint access when listings are off was
+  **settled by the advisor on 2026-11-14** (plan commit `f058265`) and is built as written. Judgment
+  calls, not reviewed by Ismail: (1) the rated person keeps reading their own rating as written in My
+  ratings and on the delivery; hiding a comment is about the public. (2) Reporting from Find
+  Travelers while listings are off takes the same `journey` + `request` context as the trip endpoint,
+  so the report rule and the read rule cannot differ. (3) Lifting a decision, or dismissing, closes
+  open reports as `dismissed`; hiding or removing as `actioned`. (4) Staff may switch directly
+  between hidden and removed. (5) The console person page and the admin user API now show the
+  countable rating (it was every rating, blind ones included), and holders of `moderate_ratings` see
+  the person's ratings tab. (6) No member is notified of a decision.
+- Tests (before and after counts): Django 2,941 collected before, 2,990 after (+49 in
+  `apps/ratings/tests/test_l13a_reviews.py`); the finance lock-order gate lists
+  `apps/ratings/moderation.py`. `makemigrations --check` clean, ruff clean, `schema.sql` re-exported
+  (additions only). No Go change.
+- Known limits: the reviews of a trip reached through Find Travelers cost 13 queries (6 are the
+  engine's single-pair verdict); the other two reads cost 7. The console is English only.
 
 ### L13B. Reviews, mobile
 

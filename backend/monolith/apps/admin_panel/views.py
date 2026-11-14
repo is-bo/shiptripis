@@ -66,6 +66,7 @@ from apps.matching.models import Match, Offer
 from apps.notifications.models import OutboundMessage
 from apps.parcels.models import DeliveryRequest
 from apps.ratings.models import Rating
+from apps.ratings.public import countable
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
@@ -465,10 +466,14 @@ class AdminUserDetailView(APIView):
                 filter=Q(deals_as_traveler__no_show_party="traveler"),
                 distinct=True,
             ),
-            ratings_received_count=Count("ratings_received", distinct=True),
-            average_rating=Avg("ratings_received__score"),
         )
         user = get_object_or_404(queryset, pk=pk)
+        # L13A: the same number every card shows, over `countable` only.
+        rating = countable(Rating.objects.filter(ratee_id=user.pk), at=timezone.now()).aggregate(
+            count=Count("pk"), average=Avg("score")
+        )
+        user.ratings_received_count = rating["count"]
+        user.average_rating = rating["average"]
         return Response(
             AdminUserDetailSerializer(user, context={"request": request}).data
         )
@@ -986,7 +991,7 @@ class AdminRatingListView(APIView):
     permission_classes = (CanViewRatings,)
 
     def get(self, request):
-        queryset = Rating.objects.select_related("rater", "ratee").order_by(
+        queryset = Rating.objects.select_related("rater", "ratee", "moderation").order_by(
             "-created_at"
         )
         if user_id := request.query_params.get("user_id"):

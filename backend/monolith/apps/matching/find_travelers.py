@@ -42,13 +42,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from django.db.models import Avg, Count, Exists, OuterRef, Q
+from django.db.models import Avg, Count
 from django.utils import timezone
 
 from apps.deals.models import Deal
 from apps.locations.models import AirportLocalityMapping, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.ratings.models import Rating
+from apps.ratings.public import countable
 from apps.trips.models import JourneyLeg
 from apps.trips.proofs import STATE_APPROVED, leg_proof_state
 
@@ -251,10 +252,9 @@ def trust_signals(
     aggregate is keyed by the already-filtered IDs rather than correlated per
     row. A list of one and a list of forty cost the same.
 
-    **Ratings respect the blind window.** `apps.ratings.services.is_revealed` is
-    "the window frozen on the row has passed, or both sides have spoken"; both
-    halves are expressible in SQL, so an unrevealed rating is excluded here
-    exactly as it is excluded from the rating API.
+    **Ratings are the countable ones** (`apps.ratings.public.countable`, L13A):
+    revealed under the blind rule exactly as the rating API reveals them, and
+    not removed by staff. A rating whose comment staff hid still counts.
 
     With `side=TRUST_AS_TRAVELER` only ratings written by a Sender and deals
     the person carried count; with `None`, both sides of every deal do.
@@ -265,15 +265,11 @@ def trust_signals(
     if side not in (TRUST_AS_TRAVELER, None):
         raise ValueError(f"Unknown trust side {side!r}.")
 
-    counterpart = Rating.objects.filter(deal_id=OuterRef("deal_id")).exclude(
-        rater_role=OuterRef("rater_role")
-    )
     rating_scope = Rating.objects.filter(ratee_id__in=user_ids)
     if side == TRUST_AS_TRAVELER:
         rating_scope = rating_scope.filter(rater_role=Rating.RaterRole.SENDER)
     rating_rows = (
-        rating_scope.annotate(counterpart_submitted=Exists(counterpart))
-        .filter(Q(review_window_ends_at__lte=at) | Q(counterpart_submitted=True))
+        countable(rating_scope, at=at)
         .values("ratee_id")
         .annotate(average=Avg("score"), rated_count=Count("id"))
     )

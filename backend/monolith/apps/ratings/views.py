@@ -3,6 +3,7 @@
     POST /api/deals/<id>/ratings     rate the counterparty, once
     GET  /api/deals/<id>/ratings     this Deal's rating state for the caller
     GET  /api/users/me/ratings       the revealed ratings I have received
+    POST /api/ratings/<id>/reports   report a review, once (L13A, spec 18)
 
 Authorization is object-level and derived from the Deal. A party may read the
 state and submit exactly one rating; staff may read everything; anyone else --
@@ -32,7 +33,22 @@ from apps.core.phase4_policy import InvalidPhase4Policy
 from apps.deals.lifecycle import DealLifecycleError
 from apps.deals.models import Deal
 
-from .serializers import RatingSerializer, RatingSubmitSerializer
+from .models import Rating, RatingReport
+from .moderation import ModerationError, file_report
+from .public import (
+    ACCESS_OK,
+    SIDE_TRAVELER,
+    countable,
+    report_state,
+    reviews_visible_to,
+    trip_reviews_access,
+)
+from .serializers import (
+    MyRatingSerializer,
+    RatingSerializer,
+    RatingSubmitSerializer,
+    ReportCreateSerializer,
+)
 from .services import (
     NotAuthorized,
     RatingError,
@@ -159,11 +175,138 @@ class MyRatingsView(APIView):
 
     def get(self, request: Request) -> Response:
         at = timezone.now()
-        rows = [
-            row
-            for row in received_ratings(user_id=request.user.id, at=at)
-            if is_revealed(row, deal=row.deal, at=at)
-        ]
+        queryset = received_ratings(user_id=request.user.id, at=at)
+        rows = [row for row in queryset if is_revealed(row, deal=row.deal, at=at)]
         return Response(
-            RatingSerializer(rows, many=True, context={"at": at}).data
+            MyRatingSerializer(rows, many=True, context={"at": at}).data
         )
+
+
+def _policy_failures() -> tuple[type[Exception], ...]:
+    from apps.core.marketplace_policy import InvalidMarketplacePolicy
+    from apps.matching.policy import InvalidPhase2Policy
+    from apps.matching.pricing import PricingError
+
+    return (
+        NoActiveBusinessSettings,
+        InvalidMarketplacePolicy,
+        InvalidPhase2Policy,
+        PricingError,
+    )
+
+
+_REVIEW_NOT_FOUND = {"code": "review_not_found", "detail": "This review is not available."}
+
+
+class RatingReportsView(APIView):
+    """`POST /api/ratings/<id>/reports`: report a review, once (spec 18).
+
+    The caller must be able to read the review where the app shows it, or be
+    the person it is about. Everything else, including a review that does not
+    exist, is still blind, or was removed, answers the same 404, so this route
+    cannot be used to probe ratings. A second report by the same person answers
+    the first one's state (`received`, then `reviewed`) with 200.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        from apps.core.marketplace_policy import marketplace_policy
+
+        body = ReportCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        viewer_id = request.user.id
+        rating = (
+            Rating.objects.select_related("deal").prefetch_related("deal__ratings")
+            .filter(pk=pk)
+            .first()
+        )
+        if rating is None:
+            return Response(_REVIEW_NOT_FOUND, status=http.HTTP_404_NOT_FOUND)
+        if rating.rater_id == viewer_id:
+            return Response(
+                {"code": "own_review", "detail": "You cannot report your own review."},
+                status=http.HTTP_409_CONFLICT,
+            )
+        existing = RatingReport.objects.filter(rating=rating, reporter_id=viewer_id).first()
+        if existing is not None:
+            return Response(_report_payload(existing), status=http.HTTP_200_OK)
+
+        at = timezone.now()
+        is_public = countable(Rating.objects.filter(pk=rating.pk), at=at).exists()
+        if rating.ratee_id == viewer_id:
+            if not is_revealed(rating, deal=rating.deal, at=at):
+                return Response(_REVIEW_NOT_FOUND, status=http.HTTP_404_NOT_FOUND)
+            if not is_public:
+                return Response(
+                    {
+                        "code": "review_removed",
+                        "detail": "Wassla already removed this review.",
+                    },
+                    status=http.HTTP_409_CONFLICT,
+                )
+        else:
+            try:
+                policy = marketplace_policy()
+                readable = is_public and _may_read(
+                    rating, viewer_id, data, policy=policy, at=at
+                )
+            except _policy_failures():
+                logger.warning("ratings: policy unavailable", exc_info=True)
+                return Response(
+                    {"code": "reports_unavailable", "detail": "Reporting is unavailable."},
+                    status=http.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            if not readable:
+                return Response(_REVIEW_NOT_FOUND, status=http.HTTP_404_NOT_FOUND)
+
+        try:
+            report, created = file_report(
+                rating=rating,
+                reporter=request.user,
+                reason=data["reason"],
+                note=data.get("note", ""),
+            )
+        except ModerationError as exc:
+            return Response({"code": exc.code, "detail": str(exc)}, status=exc.status)
+        return Response(
+            _report_payload(report),
+            status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
+        )
+
+
+def _may_read(rating: Rating, viewer_id: int, data: dict, *, policy, at) -> bool:
+    """Can this viewer read this (countable) review where the app shows it?"""
+
+    side = SIDE_TRAVELER if rating.rater_role == Rating.RaterRole.SENDER else None
+    discovery = policy.discovery
+    if reviews_visible_to(
+        viewer_id,
+        rating.ratee_id,
+        side=side,
+        at=at,
+        profiles_enabled=discovery.profiles_enabled,
+        listings_enabled=discovery.listings_enabled,
+        sea_legs_enabled=policy.sea_legs_enabled,
+    ):
+        return True
+    if side != SIDE_TRAVELER or "journey" not in data:
+        return False
+    access, owner_id = trip_reviews_access(
+        viewer_id=viewer_id,
+        journey_id=data["journey"],
+        request_id=data["request"],
+        at=at,
+        listings_enabled=discovery.listings_enabled,
+        sea_legs_enabled=policy.sea_legs_enabled,
+    )
+    return access == ACCESS_OK and owner_id == rating.ratee_id
+
+
+def _report_payload(report: RatingReport) -> dict:
+    return {
+        "rating_id": report.rating_id,
+        "state": report_state(report.status),
+        "reported_at": report.created_at,
+    }

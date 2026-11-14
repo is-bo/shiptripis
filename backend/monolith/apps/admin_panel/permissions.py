@@ -103,6 +103,9 @@ ADMIN_PERMISSION_CODES: tuple[str, ...] = (
     "attest_payout_identity",
     "manage_payout_holds",
     "retry_payouts",
+    # L13A, spec 18: decide reported reviews (dismiss, hide the comment,
+    # remove the rating, lift a decision).
+    "moderate_ratings",
 )
 
 # Explicit least-privilege matrix.  ``super_admin`` receives every code in the
@@ -189,6 +192,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "view_audit_log",
             "view_disputes",
             "manage_disputes",
+            "moderate_ratings",
         }
     ),
     AdminRole.SUPER_ADMIN: frozenset(ADMIN_PERMISSION_CODES),
