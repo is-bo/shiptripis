@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/design/components/route.dart';
 import 'package:shiptrip/domain/find_travelers.dart';
@@ -352,6 +354,55 @@ void main() {
 
       expect(find.text('4.8'), findsOneWidget);
       expect(find.byIcon(Icons.star_rounded), findsOneWidget);
+    });
+
+    testWidgets('the trip sheet opens the reviews with the request id', (
+      tester,
+    ) async {
+      final repo = FakeMatchingRepository(
+        findTravelersHandler:
+            ({required parcelId, limit, offset, sort, cancelToken}) async {
+              return FindTravelersPage.fromJson(
+                pageFixture(
+                  candidates: [
+                    candidateFixture(
+                      actions: [
+                        {'code': 'view_journey', 'available': true},
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+      );
+      final container = ProviderContainer(
+        overrides: [matchingRepositoryProvider.overrideWithValue(repo)],
+      );
+
+      await pumpApp(
+        tester,
+        const DiscoveryScreen(requestId: 5),
+        container: container,
+        routed: true,
+        extraRoutes: [
+          GoRoute(
+            path: '/reviews/trip/:id',
+            name: Routes.reviewsTrip,
+            builder: (_, state) => Text(
+              'reviews ${state.pathParameters['id']} '
+              '${state.uri.queryParameters['request']}',
+            ),
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Karim'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4.8 · 24 reviews'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('reviews 101 5'), findsOneWidget);
     });
 
     testWidgets('unrated traveler renders New badge and no fabricated score', (

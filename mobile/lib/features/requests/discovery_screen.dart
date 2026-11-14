@@ -42,6 +42,7 @@ import '../../domain/find_travelers.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
 import '../common/traveler_candidate_card.dart';
+import '../reviews/review_widgets.dart';
 import '../discovery/discovery_actions.dart' show rejectionReasons;
 import 'checkout_section.dart';
 
@@ -526,6 +527,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
       builder: (sheetContext) => _TripDetailSheet(
         candidate: candidate,
         requestSummary: state.requestSummary,
+        requestId: requestId,
         onPropose: () => Navigator.of(sheetContext).pop(true),
       ),
     );
@@ -827,11 +829,16 @@ class _TripDetailSheet extends StatelessWidget {
   const _TripDetailSheet({
     required this.candidate,
     required this.requestSummary,
+    required this.requestId,
     required this.onPropose,
   });
 
   final TravelerCandidate candidate;
   final DiscoveryRequestSummary? requestSummary;
+
+  /// The sender's own open request: it lets the server answer this trip's
+  /// reviews even when public listings are off.
+  final int requestId;
   final VoidCallback onPropose;
 
   @override
@@ -905,28 +912,12 @@ class _TripDetailSheet extends StatelessWidget {
                         runSpacing: AppSpace.xxs,
                         children: [
                           if (traveler.rating.hasScore) ...[
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.star_rounded,
-                                  size: 15,
-                                  color: c.attention,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  traveler.rating.average!.toStringAsFixed(1),
-                                  style: text.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  ' (${traveler.rating.count})',
-                                  style: text.bodySmall?.copyWith(
-                                    color: c.textTertiary,
-                                  ),
-                                ),
-                              ],
+                            ReviewsLink(
+                              rating: traveler.rating,
+                              onTap: () => context.openTripReviews(
+                                candidate.journeyId,
+                                requestId: requestId,
+                              ),
                             ),
                           ] else
                             Text(

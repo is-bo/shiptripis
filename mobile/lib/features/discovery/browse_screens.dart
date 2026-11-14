@@ -389,58 +389,12 @@ class _BrowseViewState<T> extends ConsumerState<_BrowseView<T>> {
               onAction: () => setState(() => _filter = const BrowseFilter()),
             );
     }
-    return _PagedList<T>(
+    return PagedFeedList<T>(
       feed: feed,
       itemBuilder: widget.itemBuilder,
       onLoadMore: () => widget.loadMore(ref, _filter),
     );
   }
-}
-
-/// A lazy list that asks for the next page when the end comes into reach.
-class _PagedList<T> extends StatelessWidget {
-  const _PagedList({
-    required this.feed,
-    required this.itemBuilder,
-    required this.onLoadMore,
-  });
-
-  final DiscoveryFeed<T> feed;
-  final Widget Function(BuildContext, T) itemBuilder;
-  final Future<void> Function() onLoadMore;
-
-  @override
-  Widget build(BuildContext context) =>
-      NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (feed.hasMore &&
-              !feed.loadingMore &&
-              feed.loadMoreError == null &&
-              notification.metrics.pixels >=
-                  notification.metrics.maxScrollExtent - 240) {
-            unawaited(onLoadMore());
-          }
-          return false;
-        },
-        child: ListView.builder(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppScrollPadding.page(context, top: AppSpace.sm),
-          itemCount: feed.items.length + 1,
-          itemBuilder: (context, index) {
-            if (index == feed.items.length) {
-              return FeedFooter(
-                loadingMore: feed.loadingMore,
-                error: feed.loadMoreError,
-                onRetry: () => unawaited(onLoadMore()),
-              );
-            }
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpace.md),
-              child: itemBuilder(context, feed.items[index]),
-            );
-          },
-        ),
-      );
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +609,7 @@ class BrowsePeopleScreen extends ConsumerWidget {
                     body: l.homePeopleEmptyBody,
                     icon: Icons.groups_2_outlined,
                   )
-                : _PagedList<ProfileCard>(
+                : PagedFeedList<ProfileCard>(
                     feed: data,
                     onLoadMore: () => ref
                         .read(peopleFeedProvider(isSender).notifier)

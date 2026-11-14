@@ -1,5 +1,15 @@
 # Waçla V1 Implementation Status
 
+## Wassla L13B — Reviews, mobile (2026-11-14)
+
+The Reviews screen (person and trip), reached by tapping the rating on the Person page, Trip preview
+and Find Travelers trip sheet; lazy paging on the server cursor; "Comment removed by Wassla"; report
+sheet with five reasons and a note; reported state; My ratings shows "Removed by Wassla, not counted",
+hidden comments and report. No review text on any card. Also fixes cards always reading "New": the
+person card's `rating` is the server's `{state, average, count}` object. Flutter 1,521 tests pass.
+
+Detail: `docs/PHASE_L13B_REVIEWS_MOBILE.md`.
+
 ## Wassla L13A — Reviews, reports and moderation, backend (2026-11-14)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #41, `2624cdf`). Backend and

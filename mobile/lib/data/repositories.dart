@@ -46,6 +46,7 @@ import '../domain/progress.dart';
 import '../domain/schedule_change.dart';
 import '../domain/push.dart';
 import '../domain/rating.dart';
+import '../domain/reviews.dart';
 import '../domain/sea_crossings.dart';
 
 // ---------------------------------------------------------------------------
@@ -1889,6 +1890,32 @@ class RatingRepository {
         .map((r) => Rating.fromJson(Map<String, dynamic>.from(r)))
         .toList(growable: false);
   }
+
+  /// Reports a review. A second report of the same review is answered with the
+  /// first one's state, so a double tap or a retry is harmless.
+  ///
+  /// [journeyId] and [requestId] are the Find Travelers context (together or
+  /// not at all): they let a sender report a traveler's review while public
+  /// listings are off, under the same rule that lets them read it.
+  Future<ReportReceipt> report({
+    required int ratingId,
+    required ReviewReason reason,
+    String note = '',
+    int? journeyId,
+    int? requestId,
+  }) async => ReportReceipt.fromJson(
+    await _api.postObject(
+      '/api/ratings/$ratingId/reports',
+      body: {
+        'reason': reason.wire,
+        if (note.trim().isNotEmpty) 'note': note.trim(),
+        if (journeyId != null && requestId != null) ...{
+          'journey': journeyId,
+          'request': requestId,
+        },
+      },
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

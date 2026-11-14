@@ -134,29 +134,32 @@ class PlaceRef {
 /// The summary of a person on a card: first name, whether their identity is
 /// verified, and the same trust summary Find Travelers shows.
 ///
-/// [rating] is null for somebody with no revealed rating, and the UI must show
-/// "New" rather than a number for it.
+/// [rating] is the server's `{state, average, count}` summary; an unrated
+/// person is "New" and the UI must never show a number for it.
 class PublicPerson {
   const PublicPerson({
     required this.displayName,
     this.identityVerified = false,
-    this.rating,
+    this.rating = const TravelerRating(
+      state: TravelerRatingState.unrated,
+      count: 0,
+    ),
     this.completedDeliveries = 0,
   });
 
   factory PublicPerson.fromJson(Map<String, dynamic> json) => PublicPerson(
     displayName: readText(json['display_name']),
     identityVerified: readBool(json['identity_verified']),
-    rating: readDouble(json['rating']),
+    rating: TravelerRating.fromJson(readObject(json['rating'])),
     completedDeliveries: readInt(json['completed_deliveries']) ?? 0,
   );
 
   final String displayName;
   final bool identityVerified;
-  final double? rating;
+  final TravelerRating rating;
   final int completedDeliveries;
 
-  bool get hasRating => rating != null;
+  bool get hasRating => rating.hasScore;
 }
 
 /// A route a member chose to show on their profile, as a pair of cities.

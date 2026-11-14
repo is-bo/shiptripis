@@ -36,6 +36,7 @@ import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
 import '../common/traveler_candidate_card.dart';
+import '../reviews/review_widgets.dart';
 import '../journeys/journey_labels.dart';
 import '../requests/request_labels.dart';
 import 'discovery_widgets.dart';
@@ -269,6 +270,14 @@ class _TripPreviewSheet extends ConsumerWidget {
               style: text.bodySmall?.copyWith(color: c.textSecondary),
             ),
           ],
+          if (card.traveler.hasRating)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ReviewsLink(
+                rating: card.traveler.rating,
+                onTap: () => context.openTripReviews(card.journeyId),
+              ),
+            ),
           const SizedBox(height: AppSpace.lg),
           InlineRoute(stops: stops),
           const SizedBox(height: AppSpace.md),

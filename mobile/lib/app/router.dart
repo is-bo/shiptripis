@@ -35,6 +35,7 @@ import '../domain/canonical_place.dart';
 import '../domain/location.dart';
 import '../domain/progress.dart';
 import '../domain/public_discovery.dart';
+import '../domain/reviews.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/auth/sign_up_screen.dart';
@@ -79,6 +80,7 @@ import '../features/profile/payout_methods_screen.dart';
 import '../features/profile/payouts_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/ratings_screen.dart';
+import '../features/reviews/reviews_screen.dart';
 import '../features/requests/boost_screen.dart';
 import '../features/requests/deposit_screen.dart';
 import '../features/requests/discovery_screen.dart';
@@ -109,6 +111,8 @@ abstract final class Routes {
   static const browseRequests = 'browse-requests';
   static const browsePeople = 'browse-people';
   static const person = 'person';
+  static const reviewsPerson = 'reviews-person';
+  static const reviewsTrip = 'reviews-trip';
 
   static const requestCreate = 'request-create';
   static const requestDetail = 'request-detail';
@@ -367,6 +371,27 @@ final routerProvider = Provider<GoRouter>((ref) {
                 PersonScreen(profileId: state.pathParameters['id'] ?? ''),
           ),
         ],
+      ),
+
+      GoRoute(
+        path: '/reviews/person/:id',
+        name: Routes.reviewsPerson,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ReviewsScreen(
+          subject: PersonReviews(state.pathParameters['id'] ?? ''),
+        ),
+      ),
+      GoRoute(
+        path: '/reviews/trip/:id',
+        name: Routes.reviewsTrip,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ReviewsScreen(
+          subject: TripReviews(
+            _id(state, 'id'),
+            // Only Find Travelers passes the sender's own open request.
+            requestId: int.tryParse(state.uri.queryParameters['request'] ?? ''),
+          ),
+        ),
       ),
 
       GoRoute(
@@ -744,6 +769,15 @@ extension AppNavigation on BuildContext {
 
   void openPerson(String profileId) =>
       pushNamed(Routes.person, pathParameters: {'id': profileId});
+
+  void openPersonReviews(String profileId) =>
+      pushNamed(Routes.reviewsPerson, pathParameters: {'id': profileId});
+
+  void openTripReviews(int journeyId, {int? requestId}) => pushNamed(
+    Routes.reviewsTrip,
+    pathParameters: {'id': '$journeyId'},
+    queryParameters: {if (requestId != null) 'request': '$requestId'},
+  );
 
   void openPublicProfile() => pushNamed(Routes.profilePublic);
 

@@ -5954,4 +5954,132 @@ class LAr extends L {
 
   @override
   String get discoveryFocusGoneTripBody => 'هذه هي الرحلات المعروضة الآن.';
+
+  @override
+  String get reviewsTitle => 'التقييمات';
+
+  @override
+  String reviewsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تقييم',
+      many: '$count تقييمًا',
+      few: '$count تقييمات',
+      two: 'تقييمان',
+      one: 'تقييم واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewsOpenHint => 'عرض التقييمات';
+
+  @override
+  String reviewsRatingA11y(String rating, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تقييم',
+      many: '$count تقييمًا',
+      few: '$count تقييمات',
+      two: 'تقييمان',
+      one: 'تقييم واحد',
+    );
+    return 'التقييم $rating من 5، $_temp0. يفتح التقييمات.';
+  }
+
+  @override
+  String get reviewsNewSummary => 'لا توجد تقييمات بعد';
+
+  @override
+  String get reviewsEmptyTitle => 'لا توجد تقييمات بعد';
+
+  @override
+  String get reviewsEmptyBody =>
+      'يظهر التقييم هنا بعد تقييم التوصيل وفتح التقييم للطرفين.';
+
+  @override
+  String get reviewsOffTitle => 'التقييمات غير متاحة';
+
+  @override
+  String get reviewsOffBody => 'التقييمات متوقفة حاليًا. يُرجى العودة لاحقًا.';
+
+  @override
+  String get reviewsGoneTitle => 'لم يعد هذا متاحًا';
+
+  @override
+  String get reviewsGoneBody =>
+      'لم يعد هذا الشخص أو الرحلة معروضًا، لذا لا يمكن عرض تقييماته.';
+
+  @override
+  String get reviewsFromSender => 'من مرسل';
+
+  @override
+  String get reviewsFromTraveler => 'من مسافر';
+
+  @override
+  String get reviewsCommentRemoved => 'أزالت Wassla التعليق';
+
+  @override
+  String get reviewsMenuLabel => 'خيارات التقييم';
+
+  @override
+  String get reviewsReportAction => 'إبلاغ';
+
+  @override
+  String get reviewsReportReceived => 'لقد أبلغتَ عن هذا التقييم. وصلنا بلاغك.';
+
+  @override
+  String get reviewsReportReviewed => 'لقد أبلغتَ عن هذا التقييم. راجعناه.';
+
+  @override
+  String get reviewReportSheetTitle => 'الإبلاغ عن هذا التقييم';
+
+  @override
+  String get reviewReportSheetIntro =>
+      'أخبرنا بما هو خاطئ. سنراجعه، ولن يُبلَّغ الشخص بأنك أبلغت عنه.';
+
+  @override
+  String get reviewReasonOffensive => 'مسيء أو مهين';
+
+  @override
+  String get reviewReasonPersonalInformation => 'يكشف معلومات شخصية';
+
+  @override
+  String get reviewReasonUnrelated => 'لا علاقة له بالتوصيل';
+
+  @override
+  String get reviewReasonUntrue => 'غير صحيح';
+
+  @override
+  String get reviewReasonOther => 'سبب آخر';
+
+  @override
+  String get reviewReportNoteLabel => 'ملاحظة (اختيارية)';
+
+  @override
+  String get reviewReportNoteHint => 'أي شيء يساعدنا على الفهم';
+
+  @override
+  String get reviewReportSend => 'إرسال البلاغ';
+
+  @override
+  String get reviewReportThanks => 'شكرًا، سنراجعه';
+
+  @override
+  String get reviewReportOwn => 'لا يمكنك الإبلاغ عن تقييمك.';
+
+  @override
+  String get reviewReportRemoved => 'أزالت Wassla هذا التقييم بالفعل.';
+
+  @override
+  String get reviewReportGone => 'لم يعد هذا التقييم متاحًا.';
+
+  @override
+  String get ratingRemovedByWassla => 'أزالته Wassla، ولا يُحتسب';
+
+  @override
+  String get ratingCommentHiddenByWassla =>
+      'أخفت Wassla التعليق عن الآخرين. ما زالت الدرجة محتسبة.';
 }

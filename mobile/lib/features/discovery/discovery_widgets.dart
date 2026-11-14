@@ -10,10 +10,12 @@
 /// listing recognised in one place is recognised in the next.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/discovery_state.dart' show AccountScopedValue;
+import '../../app/discovery_state.dart' show AccountScopedValue, DiscoveryFeed;
 import '../../core/format/locale_formats.dart';
 import '../../core/money/money.dart';
 import '../../design/components/feedback.dart';
@@ -21,6 +23,7 @@ import '../../design/components/money.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/route.dart';
 import '../../design/components/status.dart';
+import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/discovery.dart' show DiscoveryCandidate;
 import '../../domain/public_discovery.dart';
@@ -129,8 +132,8 @@ class RatingOrNew extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final rating = person.rating;
 
-    if (rating != null) {
-      final value = rating.toStringAsFixed(1);
+    if (rating.hasScore) {
+      final value = rating.average!.toStringAsFixed(1);
       return Semantics(
         label: l.publicRatingA11y(value),
         excludeSemantics: true,
@@ -854,5 +857,61 @@ class FeedFooter extends StatelessWidget {
       );
     }
     return const SizedBox(height: AppSpace.xl);
+  }
+}
+
+/// A lazy list that asks for the next page when the end comes into reach.
+///
+/// [header] scrolls with the rows, so a summary above a list is not a second
+/// scroll view.
+class PagedFeedList<T> extends StatelessWidget {
+  const PagedFeedList({
+    required this.feed,
+    required this.itemBuilder,
+    required this.onLoadMore,
+    this.header,
+    super.key,
+  });
+
+  final DiscoveryFeed<T> feed;
+  final Widget Function(BuildContext, T) itemBuilder;
+  final Future<void> Function() onLoadMore;
+  final Widget? header;
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = header == null ? 0 : 1;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (feed.hasMore &&
+            !feed.loadingMore &&
+            feed.loadMoreError == null &&
+            notification.metrics.pixels >=
+                notification.metrics.maxScrollExtent - 240) {
+          unawaited(onLoadMore());
+        }
+        return false;
+      },
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppScrollPadding.page(context, top: AppSpace.sm),
+        itemCount: lead + feed.items.length + 1,
+        itemBuilder: (context, index) {
+          if (lead == 1 && index == 0) return header;
+          final row = index - lead;
+          if (row == feed.items.length) {
+            return FeedFooter(
+              loadingMore: feed.loadingMore,
+              error: feed.loadMoreError,
+              onRetry: () => unawaited(onLoadMore()),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.md),
+            child: itemBuilder(context, feed.items[row]),
+          );
+        },
+      ),
+    );
   }
 }

@@ -6040,4 +6040,131 @@ class LFr extends L {
   @override
   String get discoveryFocusGoneTripBody =>
       'Voici les trajets listés en ce moment.';
+
+  @override
+  String get reviewsTitle => 'Avis';
+
+  @override
+  String reviewsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count avis',
+      one: '1 avis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewsOpenHint => 'Voir les avis';
+
+  @override
+  String reviewsRatingA11y(String rating, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count avis',
+      one: '1 avis',
+    );
+    return 'Noté $rating sur 5, $_temp0. Ouvre les avis.';
+  }
+
+  @override
+  String get reviewsNewSummary => 'Pas encore d\'avis';
+
+  @override
+  String get reviewsEmptyTitle => 'Pas encore d\'avis';
+
+  @override
+  String get reviewsEmptyBody =>
+      'Un avis apparaît ici une fois la livraison notée et l\'avis ouvert aux deux parties.';
+
+  @override
+  String get reviewsOffTitle => 'Les avis ne sont pas disponibles';
+
+  @override
+  String get reviewsOffBody =>
+      'Les avis sont désactivés pour le moment. Revenez plus tard.';
+
+  @override
+  String get reviewsGoneTitle => 'Ce n\'est plus disponible';
+
+  @override
+  String get reviewsGoneBody =>
+      'Cette personne ou ce trajet n\'est plus listé, ses avis ne peuvent donc pas être affichés.';
+
+  @override
+  String get reviewsFromSender => 'D\'un expéditeur';
+
+  @override
+  String get reviewsFromTraveler => 'D\'un voyageur';
+
+  @override
+  String get reviewsCommentRemoved => 'Commentaire retiré par Wassla';
+
+  @override
+  String get reviewsMenuLabel => 'Options de l\'avis';
+
+  @override
+  String get reviewsReportAction => 'Signaler';
+
+  @override
+  String get reviewsReportReceived =>
+      'Vous l\'avez signalé. Nous l\'avons reçu.';
+
+  @override
+  String get reviewsReportReviewed =>
+      'Vous l\'avez signalé. Nous l\'avons examiné.';
+
+  @override
+  String get reviewReportSheetTitle => 'Signaler cet avis';
+
+  @override
+  String get reviewReportSheetIntro =>
+      'Dites-nous ce qui ne va pas. Nous l\'examinerons, et la personne n\'est pas informée de votre signalement.';
+
+  @override
+  String get reviewReasonOffensive => 'Offensant ou injurieux';
+
+  @override
+  String get reviewReasonPersonalInformation =>
+      'Partage des informations personnelles';
+
+  @override
+  String get reviewReasonUnrelated => 'Sans rapport avec la livraison';
+
+  @override
+  String get reviewReasonUntrue => 'Faux';
+
+  @override
+  String get reviewReasonOther => 'Autre chose';
+
+  @override
+  String get reviewReportNoteLabel => 'Note (facultative)';
+
+  @override
+  String get reviewReportNoteHint => 'Tout ce qui nous aide à comprendre';
+
+  @override
+  String get reviewReportSend => 'Envoyer le signalement';
+
+  @override
+  String get reviewReportThanks => 'Merci, nous allons l\'examiner';
+
+  @override
+  String get reviewReportOwn =>
+      'Vous ne pouvez pas signaler votre propre avis.';
+
+  @override
+  String get reviewReportRemoved => 'Wassla a déjà retiré cet avis.';
+
+  @override
+  String get reviewReportGone => 'Cet avis n\'est plus disponible.';
+
+  @override
+  String get ratingRemovedByWassla => 'Retiré par Wassla, non compté';
+
+  @override
+  String get ratingCommentHiddenByWassla =>
+      'Wassla a masqué le commentaire pour les autres. La note compte toujours.';
 }

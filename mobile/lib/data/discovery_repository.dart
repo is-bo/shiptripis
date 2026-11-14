@@ -13,10 +13,14 @@ import '../core/api/api_client.dart';
 import '../core/session/session.dart';
 import '../domain/json.dart';
 import '../domain/public_discovery.dart';
+import '../domain/reviews.dart';
 
 /// Rows per Browse page. The server's default is 20 and its ceiling 50; 20
 /// keeps each read small and the scroll lazy.
 const browsePageSize = 20;
+
+/// Reviews per page; the server's ceiling is 50.
+const reviewsPageSize = 20;
 
 class DiscoveryRepository {
   const DiscoveryRepository(this._api);
@@ -121,6 +125,34 @@ class DiscoveryRepository {
       return const PersonDisabled();
     }
     return PersonFound(PersonPage.fromJson(json));
+  }
+
+  /// One page of reviews, newest first. Only countable ratings come back, and
+  /// no author, deal or tracking number; the server's `rating` summary is the
+  /// number the card showed.
+  Future<ReviewsPage> reviews(
+    ReviewsSubject subject, {
+    int limit = reviewsPageSize,
+    int offset = 0,
+    CancelToken? cancelToken,
+  }) async {
+    final (path, extra) = switch (subject) {
+      PersonReviews(:final profileId) => (
+        '/api/discovery/people/$profileId/reviews',
+        const <String, dynamic>{},
+      ),
+      TripReviews(:final journeyId, :final requestId) => (
+        '/api/discovery/trips/$journeyId/reviews',
+        {'request': ?requestId},
+      ),
+    };
+    return ReviewsPage.fromJson(
+      await _api.getObject(
+        path,
+        query: {...extra, 'limit': limit, if (offset > 0) 'offset': offset},
+        cancelToken: cancelToken,
+      ),
+    );
   }
 
   Future<OwnProfile> ownProfile({CancelToken? cancelToken}) async =>
