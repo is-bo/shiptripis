@@ -2,8 +2,8 @@
 
 ## Wassla L13A — Reviews, reports and moderation, backend (2026-11-14)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). Backend and console; two
-additive migrations; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #41, `2624cdf`). Backend and
+console; two additive migrations; `main` untouched.
 
 - **Reviews:** wherever a card shows a rating, its reviews can be read: score, tags, comment, month and
   which side wrote it, never the author. `GET /api/discovery/people/<id>/reviews` (both sides) and
