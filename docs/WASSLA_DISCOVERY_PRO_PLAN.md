@@ -1462,13 +1462,30 @@ call a model's `save`. The registry is the complete list:
 | `refund.request` | prepared | `issue_refunds` | the console refund request |
 | `dispute.set_status`, `dispute.resolve` | prepared | `manage_disputes`, `resolve_disputes` | the console dispute actions |
 | `deal.record_no_show` | prepared | `record_no_show` | `record_no_show` |
-| `user.ban`, `user.unban` | prepared | `manage_users` | the console access action |
+| `user.ban`, `user.unban` | prepared | `manage_users` | `set_account_ban`, added by this package (see below) |
 | `profile.hide`, `profile.show` | prepared | `manage_users` | L2A profile visibility |
 | `journey.pause`, `journey.resume` | prepared | `manage_journeys` | L3A journey pause |
 | `sea_crossing.activate`, `sea_crossing.deactivate` | prepared | as L3A | L3A crossing toggle |
 | `job.retry`, `job.resolve` | prepared | `reconcile_finance` or `manage_lifecycle`, as the console decides per job | the console job actions |
 | `payout.retry` | prepared | `retry_payouts` | the console payout recovery |
 | `review.hide_comment`, `review.remove`, `review.dismiss_report`, `review.lift` | prepared | `moderate_ratings` | L13A moderation |
+
+**Account ban** (advisor, 2026-11-14). The plan assumed a console ban action; none existed, only an
+unaudited bulk update in the technical admin. L16 adds one audited service,
+`set_account_ban(actor, user_id, banned, reason)`: permission `manage_users`, reason required, refuses
+staff accounts and the actor's own account, and changes exactly the flags the bulk update changed
+(no new consequence for deliveries or money). The person page gets "Ban account" and "Restore
+account". The technical admin's bulk actions are removed, with a line pointing to the person page,
+because an action without a reason breaks 1.5 rule 7.
+
+**Preparing and confirming** (advisor, 2026-11-14). At preparation the server stores a `basis`: the
+target's decision-relevant state. Confirm compares it and also runs `validate` again; any difference
+is "This no longer applies". The basis never leaves the server. A second `POST actions` for the same
+action and target while one waits: identical parameters answer the waiting one again (no new row);
+different parameters answer `409 admin_helper_action_already_waiting` with the existing
+`confirm_url`. A key stopped early (by its admin, a Super Admin, a two-step reset or the switch)
+expires its waiting actions at once; a replaced or naturally expired key leaves them for the console
+click. Internal notes appear in no helper read payload.
 
 Anything not in this table cannot be done or prepared through the helper. In particular, and proven
 by a test that lists every console POST route and requires each to be either in this table or in an
