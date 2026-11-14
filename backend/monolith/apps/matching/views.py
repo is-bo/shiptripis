@@ -40,6 +40,7 @@ from apps.core.pagination import paginated_array_response
 from apps.parcels.models import ParcelRequest
 
 from .models import Match, MatchEvent, Offer
+from .offer_deadlines import deadline_passed
 from .offer_economics import OfferEconomicsReader
 from .serializers import (
     MatchListSerializer,
@@ -83,6 +84,17 @@ def _domain_error(
     payload: dict[str, object] = {"code": code, "detail": detail}
     payload.update(extra)
     return Response(payload, status=status_code)
+
+
+def _offer_expired_response(offer: Offer) -> Response:
+    """Spec 17.1: from the deadline on, an offer takes no answer and no withdrawal."""
+
+    return _domain_error(
+        code="offer_expired",
+        detail="The response deadline of this offer has passed.",
+        status_code=http.HTTP_409_CONFLICT,
+        expires_at=offer.expires_at.isoformat(),
+    )
 
 
 def _refetch_match(pk: int) -> Match:
@@ -196,13 +208,26 @@ class MatchCancelView(APIView):
                     {"detail": f"Cannot cancel match in status '{match.status}'."},
                     status=http.HTTP_409_CONFLICT,
                 )
+            now = timezone.now()
+            lapsed = next(
+                (
+                    offer
+                    for offer in Offer.objects.select_for_update(no_key=True)
+                    .filter(match=match, status=Offer.Status.PENDING)
+                    .order_by("pk")
+                    if deadline_passed(offer, at=now)
+                ),
+                None,
+            )
+            if lapsed is not None:
+                return _offer_expired_response(lapsed)
 
             match.status = Match.Status.CANCELLED
             match.save(update_fields=["status", "updated_at"])
             # Cancel any still-pending offer.
             Offer.objects.filter(match=match, status=Offer.Status.PENDING).update(
                 status=Offer.Status.WITHDRAWN,
-                responded_at=timezone.now(),
+                responded_at=now,
             )
             MatchEvent.objects.create(
                 match=match,
@@ -279,6 +304,8 @@ class OfferDeclineView(APIView):
                     detail="Cannot decline your own offer; withdraw instead.",
                     status_code=http.HTTP_403_FORBIDDEN,
                 )
+            if deadline_passed(offer, at=timezone.now()):
+                return _offer_expired_response(offer)
             if offer.status != Offer.Status.PENDING:
                 return _domain_error(
                     code="offer_not_pending",
@@ -388,6 +415,8 @@ class OfferWithdrawView(APIView):
                 )
             if initial_offer.match.parcel.kind == ParcelRequest.Kind.PRODUCT:
                 return _product_retired_response()
+            if deadline_passed(offer, at=timezone.now()):
+                return _offer_expired_response(offer)
             if offer.status != Offer.Status.PENDING:
                 return _domain_error(
                     code="offer_not_pending",

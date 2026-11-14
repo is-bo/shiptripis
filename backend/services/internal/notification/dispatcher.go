@@ -75,6 +75,8 @@ var subscribeChannels = []string{
 	"offer.accepted",
 	// J6.2 neutral refresh: a pending offer's Boost-inclusive totals moved.
 	"offer.economics_changed",
+	// L12A: a proposal's answer is due soon (sent to the person who must answer).
+	"offer.response_reminder",
 	// payments
 	"payment.captured",
 	"payment.refunded",
@@ -100,6 +102,8 @@ var subscribeChannels = []string{
 	// L2A discovery: route alerts and "I can carry this".
 	"discovery.route_alert",
 	"discovery.traveler_interested",
+	// L12A trip-fit alert: a new request fits one of the traveler's trips.
+	"discovery.request_fits_trip",
 	// L5A progress: the traveler's report reaches the sender; the reminder the traveler.
 	"deal.progress_reported",
 	"journey.leg_reminder",

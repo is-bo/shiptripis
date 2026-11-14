@@ -11,6 +11,10 @@ derived from the alert and the item, and the inbox is unique per event.
 At most one notification per alert per `ALERT_QUIET_PERIOD`. The check is a
 single guarded UPDATE, so two items published at the same instant cannot both
 pass it.
+
+For a request, the trip-fit alerts (`apps.discovery.trip_fit`, spec 17.2) run
+first, and a traveler they told is left out of the route alerts for that
+request: one notification about one parcel, the more specific one.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from .listings import listable_journeys, listable_requests
 from .models import MAX_ACTIVE_ALERTS, RouteAlert
 from .places import PlaceNotFound, resolve_locality
 from .profiles import visible_profiles
+from .trip_fit import notify_fitting_travelers
 
 ALERT_QUIET_PERIOD = timedelta(hours=6)
 
@@ -68,6 +73,7 @@ def handle_route_alert_fanout(payload: dict) -> str:
     if not policy.discovery.listings_enabled:
         return "listings_disabled"
     at = timezone.now()
+    told_trip_fit: frozenset[int] = frozenset()
     if journey_id is not None:
         journey = (
             listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
@@ -85,6 +91,7 @@ def handle_route_alert_fanout(payload: dict) -> str:
         if delivery_request is None:
             return "not_listed"
         owner_id = delivery_request.sender_id
+        told_trip_fit = notify_fitting_travelers(delivery_request, policy=policy, at=at)
         origin = delivery_request.pickup_place.resolve_matching_locality()
         destination = delivery_request.delivery_place.resolve_matching_locality()
         pairs = {(origin.pk, destination.pk)} if origin and destination else set()
@@ -107,6 +114,7 @@ def handle_route_alert_fanout(payload: dict) -> str:
         RouteAlert.objects.filter(route, subject, watches=watches, is_active=True)
         .filter(user__is_active=True, user__is_banned=False)
         .exclude(user_id=owner_id)
+        .exclude(user_id__in=told_trip_fit)
         .order_by("pk")
     )
     sent = 0

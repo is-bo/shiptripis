@@ -24,6 +24,11 @@ OFFER_ACCEPTED = "offer.accepted"
 #: the figures. Resolved on arrival and deliberately ineligible for FCM display:
 #: it moves no badge and wakes no phone.
 OFFER_ECONOMICS_CHANGED = "offer.economics_changed"
+#: L12A. A pending proposal's response deadline is near; sent once to the
+#: person who must answer it. Carries the match and offer ids and the tracking
+#: number, never an amount or a time. An expiry travels on `offer.updated`
+#: with `status: "expired"`, to both people.
+OFFER_RESPONSE_REMINDER = "offer.response_reminder"
 
 # payments / wallet
 PAYMENT_CAPTURED = "payment.captured"
@@ -73,6 +78,10 @@ DISCOVERY_ROUTE_ALERT = "discovery.route_alert"
 #: "I can carry this": a traveler says one of their journeys fits the
 #: sender's request. Carries `request_id` and `journey_id`, never a price.
 DISCOVERY_TRAVELER_INTERESTED = "discovery.traveler_interested"
+#: L12A trip-fit alert: a newly open request really fits one of the
+#: traveler's published trips (spec 17.2). Carries `request_id` and
+#: `journey_id` only: no place, no price, no person.
+DISCOVERY_REQUEST_FITS_TRIP = "discovery.request_fits_trip"
 
 # journey progress (L5A)
 #: "Did you depart from {city}?": asked of the traveler when a leg that carries

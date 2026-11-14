@@ -414,6 +414,27 @@ class MarketplaceFeaturesForm(ConsoleForm):
         label="\u201cI can carry this\u201d signals per traveler per day",
         help_text="Counted over the last 24 hours. Each signal sends the sender one notification.",
     )
+    trip_fit_alerts_enabled = forms.BooleanField(
+        required=False,
+        label="Tell travelers when a new parcel fits their trip",
+        help_text=(
+            "When a request opens, travelers whose published trip really fits it "
+            "(the same check as Find Travelers) are told once. It is not an offer: "
+            "the sender still proposes first."
+        ),
+    )
+    trip_fit_max_travelers = forms.IntegerField(
+        min_value=1,
+        max_value=100,
+        label="Travelers told about one parcel, at most",
+        help_text="The best matched travelers first.",
+    )
+    trip_fit_daily_cap = forms.IntegerField(
+        min_value=1,
+        max_value=50,
+        label="\u201cA parcel fits your trip\u201d alerts per traveler per day",
+        help_text="Counted over the last 24 hours.",
+    )
     sea_legs_enabled = forms.BooleanField(
         required=False,
         label="Allow sea legs",
@@ -453,6 +474,28 @@ class MarketplaceFeaturesForm(ConsoleForm):
         label="Largest minimum per parcel a traveler may set (€)",
         help_text="A typo guard, applied when a price is set. Stored prices are not changed.",
     )
+    response_deadline_enabled = forms.BooleanField(
+        required=False,
+        label="Give proposals a response deadline",
+        help_text=(
+            "On: a proposal or counter-proposal must be answered within the delay "
+            "below, and never after the pickup time of that trip. Unanswered, it "
+            "expires for both people; nothing was reserved or charged. Off: new "
+            "proposals have no deadline; those that already have one keep it."
+        ),
+    )
+    response_hours = forms.IntegerField(
+        min_value=1,
+        max_value=7 * 24,
+        label="Hours to answer a proposal",
+        help_text="Applies to proposals sent from now on.",
+    )
+    reminder_before_hours = forms.IntegerField(
+        min_value=0,
+        max_value=7 * 24 - 1,
+        label="Remind the person who must answer, hours before the deadline",
+        help_text="0 for no reminder. Must be shorter than the hours to answer.",
+    )
     reason = forms.CharField(
         max_length=500,
         label="Reason for change",
@@ -461,6 +504,18 @@ class MarketplaceFeaturesForm(ConsoleForm):
     confirm = forms.BooleanField(
         label="I understand this changes what every member sees from the next request."
     )
+
+    def clean(self):
+        cleaned = super().clean()
+        response = cleaned.get("response_hours")
+        reminder = cleaned.get("reminder_before_hours")
+        if response is not None and reminder is not None and reminder >= response:
+            self.add_error(
+                "reminder_before_hours",
+                "The reminder must come before the deadline: use fewer hours than "
+                "the hours to answer, or 0 for no reminder.",
+            )
+        return cleaned
 
     def price_bounds_cents(self) -> dict[str, int]:
         return {

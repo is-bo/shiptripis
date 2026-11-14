@@ -104,6 +104,21 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("تم تحديث العرض", "افتح Wassla لمراجعة التغييرات."),
         },
     ),
+    # L12A. Sent once to the person who must answer a pending proposal, before
+    # its deadline. Same class as the proposal itself.
+    "offer.response_reminder": (
+        "marketplace",
+        "deliveries",
+        "shiptrip_activity",
+        {
+            "en": ("A proposal is waiting for your answer", "Answer soon: it expires shortly."),
+            "fr": (
+                "Une proposition attend votre réponse",
+                "Répondez vite : elle expire bientôt.",
+            ),
+            "ar": ("عرض بانتظار ردك", "أجب قريبًا: ستنتهي صلاحيته بعد قليل."),
+        },
+    ),
     "offer.accepted": (
         "essential",
         "deliveries",
@@ -466,6 +481,21 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             "ar": ("مسافر يمكنه نقل طردك", "افتح Wassla لرؤية رحلته وإرسال عرض."),
         },
     ),
+    # L12A trip-fit alert (spec 17.2). Ids only, so a lock screen never shows
+    # a route; the app reads the request's public preview.
+    "discovery.request_fits_trip": (
+        "marketplace",
+        "deliveries",
+        "shiptrip_activity",
+        {
+            "en": ("A parcel fits your trip", "Open Wassla to see it. The sender proposes first."),
+            "fr": (
+                "Un colis correspond à votre trajet",
+                "Ouvrez Wassla pour le voir. L'expéditeur propose en premier.",
+            ),
+            "ar": ("طرد يناسب رحلتك", "افتح Wassla لرؤيته. المرسل هو من يقترح أولًا."),
+        },
+    ),
     "chat.message.new": (
         "messages",
         "messages",
@@ -481,6 +511,16 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
 _STATUS_PUSH_COPY: dict[
     tuple[str, str], dict[str, tuple[str, str]]
 ] = {
+    # L12A: a proposal reached its deadline unanswered. Told to both people;
+    # neutral, because expiry leaves no mark on anyone (spec 17.1).
+    ("offer.updated", "expired"): {
+        "en": ("Proposal expired", "It was not answered in time. Nothing was reserved or charged."),
+        "fr": (
+            "Proposition expirée",
+            "Elle n'a pas reçu de réponse à temps. Rien n'a été réservé ni facturé.",
+        ),
+        "ar": ("انتهت صلاحية العرض", "لم يتم الرد عليه في الوقت المحدد. لم يُحجز أو يُدفع أي شيء."),
+    },
     ("kyc.status_changed", "approved"): {
         "en": ("Your KYC was approved", "You can now publish journeys."),
         "fr": ("Votre KYC a été approuvé", "Vous pouvez maintenant publier des trajets."),

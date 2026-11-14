@@ -236,8 +236,10 @@ class AlertFanOutTests(DiscoveryWorld, TestCase):
         self.assertEqual(self.fan_out(journey_id=self.journey.pk)[0], "notified:0")
 
     def test_a_request_opening_notifies_request_watchers(self):
+        # A watcher with no fitting trip: one who has one is told by the
+        # trip-fit alert instead (L12A, spec 17.2; see test_l12a_trip_fit).
         alert = RouteAlert.objects.create(
-            user=self.traveler,
+            user=self.new_traveler("l2a-request-watcher@example.com"),
             watches=RouteAlert.Watches.REQUESTS,
             origin_locality=self.paris,
             destination_locality=self.jijel,

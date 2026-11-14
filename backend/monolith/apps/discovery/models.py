@@ -230,3 +230,50 @@ class TravelerInterest(models.Model):
                 fields=("traveler", "created_at"), name="disc_interest_cap_idx"
             ),
         ]
+
+
+class TripFitAlert(models.Model):
+    """One trip-fit alert sent: a new request really fits this journey (spec 17.2).
+
+    The row is the record that the traveler was told, written in the same
+    transaction as the notification. It makes the alert once-only per request
+    and journey, counts toward the traveler's daily cap, and tells the
+    route-alert step whom to leave out. Like "I can carry this", it is not an
+    offer and reserves nothing.
+    """
+
+    delivery_request = models.ForeignKey(
+        "parcels.DeliveryRequest",
+        on_delete=models.CASCADE,
+        related_name="trip_fit_alerts",
+    )
+    journey = models.ForeignKey(
+        "trips.Journey", on_delete=models.CASCADE, related_name="trip_fit_alerts"
+    )
+    traveler = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="trip_fit_alerts",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "discovery_trip_fit_alert"
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("delivery_request", "journey"),
+                name="disc_trip_fit_request_journey_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("traveler", "created_at"), name="disc_trip_fit_cap_idx"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"TripFitAlert request={self.delivery_request_id} "
+            f"journey={self.journey_id}"
+        )

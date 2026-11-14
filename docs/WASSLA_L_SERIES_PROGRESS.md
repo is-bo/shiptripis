@@ -620,12 +620,45 @@ Detail: `docs/PHASE_L11B_TRACKING_NUMBER_MOBILE.md`. Screenshots: `/mnt/project-
 
 ### L12A. Proposal deadline and trip-fit alerts, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md`. Screenshots: `/mnt/project-files/l-series-screens/L12A/` (console EN).
+
+- Contract as built (names that differ from the plan): `apps/matching/offer_deadlines.py`
+  (`response_deadline`, `schedule_deadline_jobs`, `deadline_passed`, `effective_status`, the two
+  handlers). Job kinds `offer_response_reminder`, `offer_expiry` (migration `finance/0030`), keys
+  `<kind>:<offer id>:<expires_at>`, payload `{offer_id, expires_at}`. Refusal code `offer_expired`
+  (409, with `expires_at`) on accept, counter, decline, withdraw and match cancel. Channels
+  `offer.response_reminder` (`match_id`, `parcel_id`, `journey_id`, `offer_id`, `tracking_number`)
+  and `discovery.request_fits_trip` (`request_id`, `journey_id`); expiry is `offer.updated` with
+  `status: "expired"` to both. The plan's `awaiting` is the existing `awaiting_party`
+  (`sender|traveler`, with `awaiting_user_id`); no second field. From the deadline on an offer
+  payload reads `status: "expired"`, `allowed_actions: []`, `awaiting_party: null`. Trip-fit:
+  `apps/discovery/trip_fit.py`, model `discovery.TripFitAlert` (migration `discovery/0002`), called
+  by `handle_route_alert_fanout` for a request.
+- Left for a later package: L12B maps the two new channels and the `offer.updated` expired status
+  in the app (`domain/notification.dart`, `live_updates.dart`, `push_coordinator.dart`), renders
+  "Answer by" / "Waiting for an answer until" from `expires_at` and `awaiting_party`, the expired
+  state and the `offer_expired` refusal; the trip-fit push opens `/requests/<id>/discovery?journey=<jid>`.
+- Switches added and their defaults: `marketplace.offers.response_deadline_enabled` (on),
+  `response_hours` (6), `reminder_before_hours` (1, must be smaller than the delay, 0 for none);
+  `marketplace.discovery.trip_fit_alerts_enabled` (on), `trip_fit_max_travelers` (30),
+  `trip_fit_daily_cap` (5). All on the console's "Marketplace features" form.
+- Deviations from the plan (what, why, approved by): judgment calls, not reviewed by Ismail.
+  (1) Withdraw and match cancel also refuse after the deadline, so expiry is the single ending.
+  (2) One trip-fit alert per traveler per request (the better ranked trip), since the cap counts
+  travelers. (3) Trip-fit alerts also need the listings switch, because the alert opens the public
+  preview. (4) The offer payload reads `expired` from the deadline on, before the job stores it.
+  (5) The reminder and the trip-fit alert are push class `marketplace`, like the proposal itself.
+  (6) The trip-fit push copy names no cities (ids only on a lock screen).
+- Tests (before and after counts): Django 2,895 collected before, 2,941 after (+34
+  `test_l12a_offer_deadlines.py`, +12 `test_l12a_trip_fit.py`), all passing locally in 4 shards.
+  Rewritten to the new rule: `test_alerts.py::test_a_request_opening_notifies_request_watchers`
+  (its watcher was the fitting traveler, who now gets the trip-fit alert instead) and the two
+  `test_marketplace_policy.py` form tests (they post and expect the new fields).
+  `makemigrations --check` clean, ruff clean, `schema.sql` re-exported (additions only), Go
+  `go test -race ./...` passes.
+- Known limits: between the deadline and the expiry job (normally under a minute) the match still
+  reads `pending` while its offer reads `expired`. Choosing whom to alert is a flat number of
+  queries; each traveler told costs one inbox write (8 queries).
 
 ### L12B. Proposal deadline and trip-fit alerts, mobile
 

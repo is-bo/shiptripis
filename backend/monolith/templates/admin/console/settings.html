@@ -103,8 +103,8 @@
   {# --- Marketplace features: L-series switches, one audited revision ----- #}
   <section class="st-card" id="st-settings-marketplace">
     <p class="st-eyebrow">Marketplace features</p>
-    <h2>Discovery, routes and traveler prices</h2>
-    <p>What members can browse beyond their own matches, which kinds of route they can offer, and whether travelers can set their own price. A switched-off feature disappears from the app for everyone at the next request; nothing a member already did is undone.</p>
+    <h2>Discovery, routes, prices and proposals</h2>
+    <p>What members can browse beyond their own matches, who is told when a parcel fits their trip, which kinds of route they can offer, whether travelers can set their own price, and how long a proposal waits for an answer. A switched-off feature disappears from the app for everyone at the next request; nothing a member already did is undone.</p>
     <form method="post" action="#st-settings-marketplace" class="st-form">{% csrf_token %}
       <input type="hidden" name="action" value="marketplace">
       {{ marketplace_form.as_p }}

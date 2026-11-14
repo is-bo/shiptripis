@@ -174,6 +174,13 @@ class MarketplaceFormTests(TestCase):
             "traveler_pricing_enabled": "on",
             "max_price_per_kg_eur": "100.00",
             "max_min_price_eur": "500.00",
+            # L12A put trip-fit alerts and the proposal deadline in the same form.
+            "trip_fit_alerts_enabled": "on",
+            "trip_fit_max_travelers": "30",
+            "trip_fit_daily_cap": "5",
+            "response_deadline_enabled": "on",
+            "response_hours": "6",
+            "reminder_before_hours": "1",
             "reason": "Pausing public profiles during review",
             "confirm": "on",
         }
@@ -200,6 +207,9 @@ class MarketplaceFormTests(TestCase):
                     "listings_enabled": True,
                     "profiles_enabled": False,
                     "interest_daily_cap": 4,
+                    "trip_fit_alerts_enabled": True,
+                    "trip_fit_max_travelers": 30,
+                    "trip_fit_daily_cap": 5,
                 },
                 "sea_legs_enabled": False,
                 # L4A put traveler pricing in the same form.
@@ -207,6 +217,11 @@ class MarketplaceFormTests(TestCase):
                     "enabled": True,
                     "max_price_per_kg_eur_cents": 10_000,
                     "max_min_price_eur_cents": 50_000,
+                },
+                "offers": {
+                    "response_deadline_enabled": True,
+                    "response_hours": 6,
+                    "reminder_before_hours": 1,
                 },
             },
         )
